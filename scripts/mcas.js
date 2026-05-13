@@ -26,7 +26,8 @@ const COMMANDS = [
   'github issue',
   'queue manual',
   'run-next',
-  'run-task'
+  'run-task',
+  'smoke'
 ];
 
 export async function runMcasCli({
@@ -81,6 +82,17 @@ export async function runMcasCli({
       const result = await runTaskFileWorkflow({
         args: [subcommand, ...rest].filter((value) => value !== undefined),
         adapterFactory
+      });
+
+      writeJson(stdout, result.output);
+      return result.exitCode;
+    }
+
+    if (command === 'smoke') {
+      const result = await runSmokeCommand({
+        adapter: subcommand,
+        args: rest,
+        runner: runner ?? new NodeProcessRunner()
       });
 
       writeJson(stdout, result.output);
@@ -228,6 +240,52 @@ async function runTaskFileWorkflow({ args, adapterFactory }) {
       ...summarizeWorkflowResult(result)
     }
   };
+}
+
+async function runSmokeCommand({ adapter, args, runner }) {
+  const script = smokeScriptFor({ adapter, args });
+  const result = await runner.run({
+    executable: 'pnpm',
+    args: [script]
+  });
+  const exitCode = result.exitCode;
+
+  return {
+    exitCode,
+    output: {
+      version: '1',
+      command: 'smoke',
+      adapter,
+      smoke: smokeModeFor({ adapter, args }),
+      script,
+      status: exitCode === 0 ? 'passed' : 'failed',
+      exitCode,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? ''
+    }
+  };
+}
+
+function smokeScriptFor({ adapter, args }) {
+  if (!['codex', 'claude', 'kiro'].includes(adapter)) {
+    throw new UsageError('smoke adapter must be one of: codex, claude, kiro');
+  }
+
+  const smokeMode = smokeModeFor({ adapter, args });
+
+  return `smoke:${adapter}:${smokeMode}`;
+}
+
+function smokeModeFor({ adapter, args }) {
+  if (args.includes('--writer')) {
+    if (adapter !== 'codex') {
+      throw new UsageError('--writer smoke is only available for codex');
+    }
+
+    return 'writer';
+  }
+
+  return args.includes('--real') ? 'real' : 'help';
 }
 
 async function buildWorkflowRuntime({ paths, adapterFactory, taskQueue }) {

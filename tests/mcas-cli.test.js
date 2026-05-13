@@ -33,7 +33,8 @@ describe('Phase 8 user-facing CLI', () => {
       'github issue',
       'queue manual',
       'run-next',
-      'run-task'
+      'run-task',
+      'smoke'
     ]);
   });
 
@@ -311,6 +312,96 @@ describe('Phase 8 user-facing CLI', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('dispatches smoke checks through existing package scripts', async () => {
+    const runner = new QueueRunner([
+      {
+        exitCode: 0,
+        stdout: 'codex help ok',
+        stderr: ''
+      },
+      {
+        exitCode: 0,
+        stdout: 'claude help ok',
+        stderr: ''
+      },
+      {
+        exitCode: 0,
+        stdout: 'kiro help ok',
+        stderr: ''
+      }
+    ]);
+    const outputs = [];
+
+    for (const adapter of ['codex', 'claude', 'kiro']) {
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: ['smoke', adapter],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      outputs.push(JSON.parse(output.stdoutText()));
+    }
+
+    assert.deepEqual(runner.calls, [
+      {
+        executable: 'pnpm',
+        args: ['smoke:codex:help']
+      },
+      {
+        executable: 'pnpm',
+        args: ['smoke:claude:help']
+      },
+      {
+        executable: 'pnpm',
+        args: ['smoke:kiro:help']
+      }
+    ]);
+    assert.deepEqual(outputs.map((output) => output.script), [
+      'smoke:codex:help',
+      'smoke:claude:help',
+      'smoke:kiro:help'
+    ]);
+    assert.deepEqual(outputs.map((output) => output.status), [
+      'passed',
+      'passed',
+      'passed'
+    ]);
+  });
+
+  it('propagates smoke command exit codes', async () => {
+    const runner = new FakeRunner({
+      exitCode: 2,
+      stdout: '',
+      stderr: 'codex missing'
+    });
+    const output = createOutput();
+
+    const exitCode = await runMcasCli({
+      argv: ['smoke', 'codex'],
+      stdout: output.stdout,
+      stderr: output.stderr,
+      runner
+    });
+
+    assert.equal(exitCode, 2);
+    assert.equal(output.stderrText(), '');
+    assert.deepEqual(JSON.parse(output.stdoutText()), {
+      version: '1',
+      command: 'smoke',
+      adapter: 'codex',
+      smoke: 'help',
+      script: 'smoke:codex:help',
+      status: 'failed',
+      exitCode: 2,
+      stdout: '',
+      stderr: 'codex missing'
+    });
+  });
 });
 
 const manualTask = {
@@ -356,6 +447,18 @@ class FakeRunner {
   async run(invocation) {
     this.calls.push(invocation);
     return this.result;
+  }
+}
+
+class QueueRunner {
+  constructor(results) {
+    this.results = [...results];
+    this.calls = [];
+  }
+
+  async run(invocation) {
+    this.calls.push(invocation);
+    return this.results.shift();
   }
 }
 

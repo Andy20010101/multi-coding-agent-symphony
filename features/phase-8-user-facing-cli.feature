@@ -35,3 +35,9 @@ Feature: Phase 8 user-facing CLI
     When the user runs the run-task command
     Then the CLI runs the existing dry-run workflow without queue state
     And it prints command artifact ids and verifier status
+
+  Scenario: Dispatch smoke checks through the CLI
+    Given an injected command runner for package scripts
+    When the user runs smoke checks for Codex, Claude Code, and Kiro CLI
+    Then the CLI calls the existing package smoke scripts
+    And it propagates smoke command exit codes
