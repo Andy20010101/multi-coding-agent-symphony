@@ -61,7 +61,8 @@ Implemented and tested:
 - Phase I eval report artifact slice: `writeEvalReportArtifact` stores eval reports in ArtifactStore and returns the task/artifact reference without mutating routing config.
 - Phase I eval resource/tradeoff slice: eval reports qualify baseline/candidate resource mismatches and recommendations can include higher-cost tradeoffs plus affected files/contracts.
 - Phase I eval release-gate slice: `pnpm eval:replay` builds a replay sample from stored artifacts, writes an eval report artifact, and returns the report reference without mutating router config.
-- Test baseline: `pnpm test` currently covers 101 tests across 16 suites.
+- Phase I eval fixture/task-class slice: bundled model-upgrade and adapter-regression fixtures drive task-class success summaries and failure deltas.
+- Test baseline: `pnpm test` currently covers 102 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -411,7 +412,7 @@ Acceptance:
 
 ### Phase I: Eval/Replay Productionization
 
-Status: in progress. Session-log sample building from stored evidence artifacts, eval report artifact writing, resource comparison qualification, richer recommendation metadata, and the external release-gate command are complete; resource profile capture from real runs, task-class comparison summaries, and fixtures remain.
+Status: in progress. Session-log sample building from stored evidence artifacts, eval report artifact writing, resource comparison qualification, richer recommendation metadata, the external release-gate command, task-class summaries, and model-upgrade/adapter-regression fixtures are complete; resource profile capture from real runs remains.
 
 Goal: make external eval useful for model updates, adapter changes, and harness refactors.
 
@@ -723,15 +724,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase I with task-class comparison summaries and model-upgrade/adapter-regression fixtures.
+Continue Phase I with resource profile capture from real runs.
 
 First red test:
 
-- Add eval fixture tests proving model-upgrade and adapter-regression samples report per-task-class success and failure deltas.
+- Add a real-smoke resource profile test proving run evidence records CPU, memory, timeout, concurrency, network, and version fields.
 
 First implementation:
 
-- Add fixture JSON under the eval plugin and task-class summaries to `runEvalReplay`.
+- Add a shared resource profile helper and attach its output to real smoke evidence where eval can consume it.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

@@ -1,0 +1,68 @@
+{
+  "reason": "adapter-change",
+  "baseline": "codex-adapter.v1",
+  "candidate": "codex-adapter.v2",
+  "affectedFiles": [
+    "src/adapters/codex-adapter.js"
+  ],
+  "affectedContracts": [
+    "RuntimeAdapter"
+  ],
+  "resourceProfile": {
+    "cpu": "4",
+    "memoryMb": 8192,
+    "timeoutSeconds": 3600,
+    "concurrency": 1,
+    "network": "restricted",
+    "version": "1"
+  },
+  "sample": {
+    "id": "fixture-adapter-regression",
+    "resultsByTask": {
+      "task-adapter-1": [
+        {
+          "taskId": "task-adapter-1",
+          "variant": "baseline",
+          "verified": true,
+          "costUsd": 0.8,
+          "latencySeconds": 18,
+          "failureCategory": null,
+          "command": "implement",
+          "taskClass": "adapter-regression"
+        },
+        {
+          "taskId": "task-adapter-1",
+          "variant": "candidate",
+          "verified": false,
+          "costUsd": 0.9,
+          "latencySeconds": 18,
+          "failureCategory": "adapter-crashed",
+          "command": "implement",
+          "taskClass": "adapter-regression"
+        }
+      ],
+      "task-adapter-2": [
+        {
+          "taskId": "task-adapter-2",
+          "variant": "baseline",
+          "verified": true,
+          "costUsd": 0.7,
+          "latencySeconds": 16,
+          "failureCategory": null,
+          "command": "qa",
+          "taskClass": "adapter-regression"
+        },
+        {
+          "taskId": "task-adapter-2",
+          "variant": "candidate",
+          "verified": true,
+          "costUsd": 0.7,
+          "latencySeconds": 15,
+          "failureCategory": null,
+          "command": "qa",
+          "taskClass": "adapter-regression"
+        }
+      ]
+    }
+  }
+}

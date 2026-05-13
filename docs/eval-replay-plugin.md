@@ -7,6 +7,7 @@ Current implementation path: `plugins/eval-replay/index.js`.
 Implemented entrypoints:
 
 - `loadReplaySample({ artifactStore, tasks })` loads explicit artifact IDs.
+- `loadReplayFixture({ name })` loads bundled model-upgrade or adapter-regression replay fixtures.
 - `buildReplaySampleFromSession({ artifactStore, eventLog, taskIds })` reads `artifact.written` session events and normalizes evidence artifacts into replay results without adapter state.
 - `runEvalReplay(...)` scores baseline and candidate variants and emits recommendations without mutating core config.
 - `writeEvalReportArtifact({ artifactStore, report, taskId, artifactId })` writes reports back to ArtifactStore and returns the artifact reference.
@@ -86,6 +87,27 @@ The plugin writes an eval report:
     }
   },
   "failureDelta": {},
+  "taskClassSummary": {
+    "model-upgrade": {
+      "scores": {
+        "baseline": {
+          "verifiedSuccessRate": 0.5,
+          "meanCostUsd": 0.0,
+          "p50LatencySeconds": 0,
+          "p95LatencySeconds": 0
+        },
+        "candidate": {
+          "verifiedSuccessRate": 1.0,
+          "meanCostUsd": 0.0,
+          "p50LatencySeconds": 0,
+          "p95LatencySeconds": 0
+        }
+      },
+      "failureDelta": {
+        "model-off-task": -1
+      }
+    }
+  },
   "recommendations": [
     {
       "type": "review-routing",
@@ -132,6 +154,7 @@ Primary metrics:
 - Time to verified success.
 - Retry count.
 - Failure category distribution.
+- Per-task-class success and failure deltas.
 
 Secondary metrics:
 

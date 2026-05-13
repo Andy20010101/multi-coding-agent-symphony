@@ -18,6 +18,12 @@ Feature: Phase 5 external eval replay plugin
     Then it reports verified success rate for both variants
     And it reports cost and latency for both variants
 
+  Scenario: Compare replay fixtures by task class
+    Given model-upgrade and adapter-regression replay fixtures
+    When the Eval Replay plugin scores each fixture
+    Then the report includes task-class success rates
+    And the report includes task-class failure deltas
+
   Scenario: Report success and cost tradeoffs
     Given the candidate has higher verified success and higher cost
     When the Eval Replay plugin creates recommendations

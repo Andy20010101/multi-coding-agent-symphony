@@ -1,0 +1,68 @@
+{
+  "reason": "model-upgrade",
+  "baseline": "gpt-codex-default.v1",
+  "candidate": "gpt-codex-default.v2",
+  "affectedFiles": [
+    "src/router-scheduler.js"
+  ],
+  "affectedContracts": [
+    "ModelProfile"
+  ],
+  "resourceProfile": {
+    "cpu": "4",
+    "memoryMb": 8192,
+    "timeoutSeconds": 3600,
+    "concurrency": 1,
+    "network": "restricted",
+    "version": "1"
+  },
+  "sample": {
+    "id": "fixture-model-upgrade",
+    "resultsByTask": {
+      "task-model-1": [
+        {
+          "taskId": "task-model-1",
+          "variant": "baseline",
+          "verified": false,
+          "costUsd": 1,
+          "latencySeconds": 24,
+          "failureCategory": "model-off-task",
+          "command": "implement",
+          "taskClass": "model-upgrade"
+        },
+        {
+          "taskId": "task-model-1",
+          "variant": "candidate",
+          "verified": true,
+          "costUsd": 1.4,
+          "latencySeconds": 21,
+          "failureCategory": null,
+          "command": "implement",
+          "taskClass": "model-upgrade"
+        }
+      ],
+      "task-model-2": [
+        {
+          "taskId": "task-model-2",
+          "variant": "baseline",
+          "verified": true,
+          "costUsd": 1.1,
+          "latencySeconds": 30,
+          "failureCategory": null,
+          "command": "review",
+          "taskClass": "model-upgrade"
+        },
+        {
+          "taskId": "task-model-2",
+          "variant": "candidate",
+          "verified": true,
+          "costUsd": 1.5,
+          "latencySeconds": 26,
+          "failureCategory": null,
+          "command": "review",
+          "taskClass": "model-upgrade"
+        }
+      ]
+    }
+  }
+}

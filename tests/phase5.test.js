@@ -9,6 +9,7 @@ import { ArtifactStore } from '../src/artifact-store.js';
 import { SessionEventLog } from '../src/session-event-log.js';
 import {
   buildReplaySampleFromSession,
+  loadReplayFixture,
   loadReplaySample,
   runEvalReplay,
   writeEvalReportArtifact
@@ -222,6 +223,38 @@ describe('Phase 5 external eval replay plugin', () => {
     assert.deepEqual(report.resourceProfile, resourceProfile);
     assert.deepEqual(report.failureDelta, {
       'test-failed': -1
+    });
+  });
+
+  it('compares bundled replay fixtures by task class', async () => {
+    const modelUpgradeFixture = await loadReplayFixture({ name: 'model-upgrade' });
+    const modelUpgradeReport = runEvalReplay(modelUpgradeFixture);
+
+    assert.equal(
+      modelUpgradeReport.taskClassSummary['model-upgrade'].scores.baseline.verifiedSuccessRate,
+      0.5
+    );
+    assert.equal(
+      modelUpgradeReport.taskClassSummary['model-upgrade'].scores.candidate.verifiedSuccessRate,
+      1
+    );
+    assert.deepEqual(modelUpgradeReport.taskClassSummary['model-upgrade'].failureDelta, {
+      'model-off-task': -1
+    });
+
+    const adapterRegressionFixture = await loadReplayFixture({ name: 'adapter-regression' });
+    const adapterRegressionReport = runEvalReplay(adapterRegressionFixture);
+
+    assert.equal(
+      adapterRegressionReport.taskClassSummary['adapter-regression'].scores.baseline.verifiedSuccessRate,
+      1
+    );
+    assert.equal(
+      adapterRegressionReport.taskClassSummary['adapter-regression'].scores.candidate.verifiedSuccessRate,
+      0.5
+    );
+    assert.deepEqual(adapterRegressionReport.taskClassSummary['adapter-regression'].failureDelta, {
+      'adapter-crashed': 1
     });
   });
 

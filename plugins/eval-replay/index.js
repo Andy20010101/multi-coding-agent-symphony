@@ -1,3 +1,16 @@
+import { readFile } from 'node:fs/promises';
+
+export async function loadReplayFixture({ name }) {
+  assertSafeFixtureName(name);
+
+  const content = await readFile(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8');
+  const fixture = JSON.parse(content);
+
+  validateReplayFixture(fixture);
+
+  return structuredClone(fixture);
+}
+
 export async function loadReplaySample({ artifactStore, tasks }) {
   if (!artifactStore || typeof artifactStore.readArtifact !== 'function') {
     throw new TypeError('artifactStore must provide readArtifact');
@@ -110,6 +123,10 @@ export function runEvalReplay({
     taskSample: sample.id,
     scores,
     failureDelta: compareFailures(baselineResults, candidateResults),
+    taskClassSummary: summarizeByTaskClass({
+      baselineResults,
+      candidateResults
+    }),
     recommendations: buildRecommendations({
       scores,
       candidate,
@@ -235,6 +252,35 @@ function compareFailures(baselineResults, candidateResults) {
   return delta;
 }
 
+function summarizeByTaskClass({ baselineResults, candidateResults }) {
+  const taskClasses = new Set([
+    ...baselineResults.map(taskClassOf),
+    ...candidateResults.map(taskClassOf)
+  ]);
+  const summary = {};
+
+  for (const taskClass of taskClasses) {
+    const baselineForClass = baselineResults.filter((result) => taskClassOf(result) === taskClass);
+    const candidateForClass = candidateResults.filter((result) => taskClassOf(result) === taskClass);
+
+    summary[taskClass] = {
+      scores: {
+        baseline: scoreVariant(baselineForClass),
+        candidate: scoreVariant(candidateForClass)
+      },
+      failureDelta: compareFailures(baselineForClass, candidateForClass)
+    };
+  }
+
+  return summary;
+}
+
+function taskClassOf(result) {
+  return typeof result.taskClass === 'string' && result.taskClass.trim() !== ''
+    ? result.taskClass
+    : 'uncategorized';
+}
+
 function buildRecommendations({ scores, candidate, affectedFiles, affectedContracts }) {
   if (scores.candidate.verifiedSuccessRate > scores.baseline.verifiedSuccessRate) {
     const recommendation = {
@@ -334,6 +380,27 @@ function validateSample(sample) {
   }
 }
 
+function validateReplayFixture(fixture) {
+  if (fixture === null || typeof fixture !== 'object' || Array.isArray(fixture)) {
+    throw new TypeError('fixture must be an object');
+  }
+
+  assertNonEmptyString(fixture.reason, 'fixture.reason');
+  assertNonEmptyString(fixture.baseline, 'fixture.baseline');
+  assertNonEmptyString(fixture.candidate, 'fixture.candidate');
+  validateSample(fixture.sample);
+  assertStringArray(fixture.affectedFiles ?? [], 'fixture.affectedFiles');
+  assertStringArray(fixture.affectedContracts ?? [], 'fixture.affectedContracts');
+
+  if (fixture.resourceProfile !== undefined) {
+    validateResourceProfile(fixture.resourceProfile);
+    return;
+  }
+
+  validateResourceProfile(fixture.baselineResourceProfile);
+  validateResourceProfile(fixture.candidateResourceProfile);
+}
+
 function validateResourceProfile(resourceProfile) {
   if (resourceProfile === null || typeof resourceProfile !== 'object' || Array.isArray(resourceProfile)) {
     throw new TypeError('resourceProfile must be an object');
@@ -345,6 +412,12 @@ function validateResourceProfile(resourceProfile) {
   assertNumber(resourceProfile.concurrency, 'resourceProfile.concurrency');
   assertNonEmptyString(resourceProfile.network, 'resourceProfile.network');
   assertNonEmptyString(resourceProfile.version, 'resourceProfile.version');
+}
+
+function assertSafeFixtureName(value) {
+  if (typeof value !== 'string' || value.trim() === '' || value.includes('/') || value.includes('..')) {
+    throw new TypeError('name must be a safe fixture name');
+  }
 }
 
 function assertNonEmptyString(value, field) {
