@@ -1,6 +1,6 @@
 # Multi Coding Agent Symphony
 
-Multi Coding Agent Symphony is a planned orchestration layer for running multiple coding CLIs through stable task contracts.
+Multi Coding Agent Symphony is an orchestration layer for running multiple coding CLIs through stable task contracts.
 
 The target CLIs are:
 
@@ -19,8 +19,24 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [BDD and TDD Workflow](docs/bdd-tdd-workflow.md)
 - [Eval Replay Plugin](docs/eval-replay-plugin.md)
 - [Real CLI Integration](docs/real-cli-integration.md)
+- [Security Checklist](docs/security-checklist.md)
+- [Release Checklist](docs/release-checklist.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
 - [ADR 0001: Use BDD and TDD](docs/adr/0001-use-bdd-tdd.md)
+
+## Current Status
+
+Implemented:
+
+- Contract validation for task, command, adapter, model, evidence, policy, and routing objects.
+- Durable artifacts, session events, queue state, workspace allocation, and workflow run records.
+- Real adapter paths for Codex, Claude Code, and Kiro CLI with opt-in model smokes.
+- User-facing `pnpm mcas` commands for doctor, GitHub issue intake, manual queueing, task execution, smoke dispatch, and eval replay dispatch.
+- Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
+- External eval replay plugin flow for stored artifacts.
+
+Current baseline: `pnpm test` covers 133 tests across 20 suites.
 
 ## Design Center
 
@@ -47,9 +63,13 @@ This repository currently uses Node.js built-in tooling with no third-party runt
 Run checks:
 
 ```sh
-pnpm test
 pnpm check
+pnpm test
+git diff --check
+pnpm mcas doctor
 pnpm smoke:codex:help
+pnpm smoke:claude:help
+pnpm smoke:kiro:help
 ```
 
 Run the project CLI:
