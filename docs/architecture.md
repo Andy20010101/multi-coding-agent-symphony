@@ -63,6 +63,7 @@ The context window should be rebuilt each run by `ContextBuilder`, using selecti
 
 Core harness modules:
 
+- Task Queue
 - Capability Registry
 - Artifact Store
 - Session Event Log
