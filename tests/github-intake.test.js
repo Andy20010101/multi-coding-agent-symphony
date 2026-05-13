@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { validateTaskSpec } from '../src/contracts.js';
 import {
+  githubCheckRunsToCiStatusArtifact,
   githubIssueToTaskSpec,
   githubPullRequestToTaskSpec
 } from '../src/trackers/github-intake.js';
@@ -98,6 +99,75 @@ describe('Phase 7 GitHub intake and CI feedback', () => {
       priority: 'normal',
       createdAt: '2026-05-13T13:00:00.000Z',
       version: '1'
+    });
+  });
+
+  it('normalizes GitHub check runs into a CI status artifact', () => {
+    const artifact = githubCheckRunsToCiStatusArtifact({
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      ref: 'refs/pull/17/head',
+      sha: 'abc123',
+      checkRuns: [
+        {
+          name: 'test',
+          status: 'completed',
+          conclusion: 'success',
+          detailsUrl: 'https://github.com/example/checks/1',
+          startedAt: '2026-05-13T13:01:00.000Z',
+          completedAt: '2026-05-13T13:02:00.000Z'
+        },
+        {
+          name: 'lint',
+          status: 'completed',
+          conclusion: 'failure',
+          htmlUrl: 'https://github.com/example/checks/2'
+        },
+        {
+          name: 'deploy',
+          status: 'queued',
+          conclusion: null,
+          detailsUrl: 'https://github.com/example/checks/3'
+        }
+      ]
+    });
+
+    assert.deepEqual(artifact, {
+      version: '1',
+      provider: 'github',
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      ref: 'refs/pull/17/head',
+      sha: 'abc123',
+      status: 'failed',
+      conclusion: 'failure',
+      summary: {
+        total: 3,
+        passed: 1,
+        failed: 1,
+        pending: 1
+      },
+      failingChecks: ['lint'],
+      checks: [
+        {
+          name: 'test',
+          status: 'completed',
+          conclusion: 'success',
+          url: 'https://github.com/example/checks/1',
+          startedAt: '2026-05-13T13:01:00.000Z',
+          completedAt: '2026-05-13T13:02:00.000Z'
+        },
+        {
+          name: 'lint',
+          status: 'completed',
+          conclusion: 'failure',
+          url: 'https://github.com/example/checks/2'
+        },
+        {
+          name: 'deploy',
+          status: 'queued',
+          conclusion: 'pending',
+          url: 'https://github.com/example/checks/3'
+        }
+      ]
     });
   });
 });

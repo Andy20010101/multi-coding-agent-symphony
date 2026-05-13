@@ -11,3 +11,8 @@ Feature: Phase 7 GitHub intake and CI feedback
     When GitHub intake converts the pull request
     Then the result is a valid read-only review TaskSpec
     And it preserves PR number, base ref, head ref, and acceptance criteria
+
+  Scenario: Normalize GitHub check runs into a CI status artifact
+    Given GitHub check runs for a pull request head SHA
+    When GitHub intake normalizes the check runs
+    Then the artifact records status, conclusion, URLs, and failing check names

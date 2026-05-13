@@ -60,6 +60,47 @@ export function githubPullRequestToTaskSpec({ repository, pullRequest }) {
   return task;
 }
 
+export function githubCheckRunsToCiStatusArtifact({
+  repository,
+  ref,
+  sha,
+  checkRuns
+}) {
+  assertNonEmptyString(repository, 'repository');
+  assertNonEmptyString(ref, 'ref');
+  assertNonEmptyString(sha, 'sha');
+
+  if (!Array.isArray(checkRuns)) {
+    throw new TypeError('checkRuns must be an array');
+  }
+
+  const checks = checkRuns.map(normalizeCheckRun);
+  const failingChecks = checks
+    .filter((check) => check.conclusion === 'failure')
+    .map((check) => check.name);
+  const pending = checks.filter((check) => check.conclusion === 'pending').length;
+  const failed = failingChecks.length;
+  const passed = checks.filter((check) => check.conclusion === 'success').length;
+
+  return {
+    version: '1',
+    provider: 'github',
+    repository,
+    ref,
+    sha,
+    status: failed > 0 ? 'failed' : pending > 0 ? 'pending' : 'passed',
+    conclusion: failed > 0 ? 'failure' : pending > 0 ? 'pending' : 'success',
+    summary: {
+      total: checks.length,
+      passed,
+      failed,
+      pending
+    },
+    failingChecks,
+    checks
+  };
+}
+
 function buildObjective(issue) {
   assertNonEmptyString(issue.title, 'issue.title');
 
@@ -111,6 +152,44 @@ function extractPriority(labels) {
   }
 
   return 'normal';
+}
+
+function normalizeCheckRun(checkRun) {
+  if (checkRun === null || typeof checkRun !== 'object' || Array.isArray(checkRun)) {
+    throw new TypeError('checkRun must be an object');
+  }
+
+  assertNonEmptyString(checkRun.name, 'checkRun.name');
+  assertNonEmptyString(checkRun.status, 'checkRun.status');
+
+  const url = checkRun.detailsUrl ?? checkRun.details_url ?? checkRun.htmlUrl ?? checkRun.html_url;
+
+  assertNonEmptyString(url, 'checkRun.url');
+
+  const normalized = {
+    name: checkRun.name,
+    status: checkRun.status,
+    conclusion: normalizeConclusion(checkRun),
+    url
+  };
+
+  if (checkRun.startedAt ?? checkRun.started_at) {
+    normalized.startedAt = checkRun.startedAt ?? checkRun.started_at;
+  }
+
+  if (checkRun.completedAt ?? checkRun.completed_at) {
+    normalized.completedAt = checkRun.completedAt ?? checkRun.completed_at;
+  }
+
+  return normalized;
+}
+
+function normalizeConclusion(checkRun) {
+  if (typeof checkRun.conclusion === 'string' && checkRun.conclusion.trim() !== '') {
+    return checkRun.conclusion;
+  }
+
+  return checkRun.status === 'completed' ? 'success' : 'pending';
 }
 
 function assertNonEmptyString(value, field) {

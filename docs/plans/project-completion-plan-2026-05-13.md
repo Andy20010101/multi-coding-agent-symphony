@@ -69,7 +69,8 @@ Implemented and tested:
 - Phase J eval approval slice: eval recommendations stay advisory unless a release approval explicitly names the candidate model profile.
 - Phase K GitHub issue intake slice: pure GitHub issue metadata conversion produces validated `TaskSpec` objects with source, repository, objective, acceptance, priority, and created timestamp.
 - Phase K GitHub PR intake slice: pure pull request metadata conversion produces read-only review `TaskSpec` objects with PR number, base/head refs, and acceptance criteria.
-- Test baseline: `pnpm test` currently covers 109 tests across 18 suites.
+- Phase K GitHub CI status slice: GitHub check runs normalize into artifact-ready CI summaries with aggregate status, conclusion, URLs, and failing check names.
+- Test baseline: `pnpm test` currently covers 110 tests across 18 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -491,7 +492,7 @@ Acceptance:
 
 ### Phase K: GitHub Intake and CI Feedback
 
-Status: in progress. Pure GitHub issue and PR metadata to `TaskSpec` conversion is complete; live `gh` intake, CI status artifact capture, optional PR/comment summary, and branch/workspace naming policy remain.
+Status: in progress. Pure GitHub issue/PR metadata conversion and CI status artifact normalization are complete; live `gh` intake, optional PR/comment summary, and branch/workspace naming policy remain.
 
 Goal: support one real tracker first. Choose GitHub for V1 because the repository already uses GitHub and `gh` is available.
 
@@ -734,15 +735,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase K with CI status artifact capture.
+Continue Phase K with live `gh` intake wrapper.
 
 First red test:
 
-- Add a CI status capture test proving GitHub check runs normalize into an artifact-ready summary with conclusion, URL, status, and failing check names.
+- Add an injected-runner test proving GitHub issue intake calls `gh issue view --json ...`, parses JSON, and returns a validated `TaskSpec`.
 
 First implementation:
 
-- Add pure CI normalization helpers in `src/trackers/github-intake.js`; keep live `gh` collection as a later wrapper.
+- Add a small live-wrapper helper around `gh` while keeping pure conversion functions testable and reusable.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
