@@ -17,3 +17,15 @@ Feature: Phase 8 user-facing CLI
     When the user runs the manual task queue command
     Then it persists a validated TaskSpec
     And it prints the queued task id and lifecycle event id
+
+  Scenario: Run the next queued task through the CLI
+    Given a persisted queued task and runtime directories
+    When the user runs the run-next command
+    Then the CLI runs the existing dry-run workflow
+    And it prints command artifact ids and verifier status
+
+  Scenario: Return nonzero when run-next fails verification
+    Given a persisted queued task and failing verifier evidence
+    When the user runs the run-next command
+    Then the CLI returns a verifier failure exit code
+    And it leaves the task queued with retry metadata

@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { validateTaskSpec } from '../src/contracts.js';
+import { CodexAdapter } from '../src/adapters/codex-adapter.js';
+import { TaskQueue } from '../src/task-queue.js';
 import { runMcasCli } from '../scripts/mcas.js';
 
 describe('Phase 8 user-facing CLI', () => {
@@ -29,7 +31,8 @@ describe('Phase 8 user-facing CLI', () => {
     assert.deepEqual(doctor.commands, [
       'doctor',
       'github issue',
-      'queue manual'
+      'queue manual',
+      'run-next'
     ]);
   });
 
@@ -151,7 +154,121 @@ describe('Phase 8 user-facing CLI', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('runs the next queued task through the CLI dry-run workflow', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-cli-run-next-'));
+
+    try {
+      const stateFile = join(root, 'queue.json');
+      const queue = new TaskQueue({ stateFile });
+
+      queue.enqueue(manualTask, {
+        now: '2026-05-13T00:00:00.000Z'
+      });
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'run-next',
+          '--state-file',
+          stateFile,
+          '--runtime-dir',
+          root,
+          '--session-id',
+          'session-cli',
+          '--now',
+          '2026-05-13T00:00:01.000Z'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const run = JSON.parse(output.stdoutText());
+
+      assert.equal(run.version, '1');
+      assert.equal(run.command, 'run-next');
+      assert.equal(run.status, 'passed');
+      assert.equal(run.exitCode, 0);
+      assert.equal(run.stateFile, stateFile);
+      assert.equal(run.artifactDirectory, join(root, 'artifacts'));
+      assert.equal(run.eventDirectory, join(root, 'events'));
+      assert.equal(run.workspaceDirectory, join(root, 'workspaces'));
+      assert.equal(run.taskId, 'manual-release-checklist');
+      assert.deepEqual(run.commands.map((command) => command.command), [
+        'implement',
+        'review',
+        'qa'
+      ]);
+      assert.deepEqual(run.commands.map((command) => command.verificationStatus), [
+        'passed',
+        'passed',
+        'passed'
+      ]);
+      assert.equal(new TaskQueue({ stateFile }).get('manual-release-checklist').status, 'completed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns nonzero when run-next fails verification', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-cli-run-next-failure-'));
+
+    try {
+      const stateFile = join(root, 'queue.json');
+      const queue = new TaskQueue({ stateFile });
+
+      queue.enqueue(manualTask, {
+        now: '2026-05-13T00:00:00.000Z'
+      });
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'run-next',
+          '--state-file',
+          stateFile,
+          '--runtime-dir',
+          root,
+          '--session-id',
+          'session-cli',
+          '--now',
+          '2026-05-13T00:00:01.000Z'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        adapterFactory: () => new FailingRunNextAdapter()
+      });
+
+      assert.equal(exitCode, 70);
+      assert.equal(output.stderrText(), '');
+
+      const run = JSON.parse(output.stdoutText());
+      const record = new TaskQueue({ stateFile }).get('manual-release-checklist');
+
+      assert.equal(run.status, 'failed');
+      assert.equal(run.exitCode, 70);
+      assert.equal(run.failedCommand, 'implement');
+      assert.equal(record.status, 'queued');
+      assert.equal(record.failedEventId, 'task-queue-1-failed-1');
+      assert.equal(record.retryPlan.retry, true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
+
+const manualTask = {
+  id: 'manual-release-checklist',
+  source: 'manual',
+  repository: 'Andy20010101/multi-coding-agent-symphony',
+  objective: 'Create a release checklist',
+  acceptance: ['release checklist exists'],
+  priority: 'high',
+  version: '1'
+};
 
 function createOutput() {
   const stdout = [];
@@ -186,5 +303,25 @@ class FakeRunner {
   async run(invocation) {
     this.calls.push(invocation);
     return this.result;
+  }
+}
+
+class FailingRunNextAdapter extends CodexAdapter {
+  constructor() {
+    super({ cliVersion: 'synthetic-failing' });
+  }
+
+  async collectEvidence(handle) {
+    return {
+      command: handle.command,
+      taskId: handle.taskId,
+      workspaceId: handle.workspaceId,
+      diffSummary: [],
+      changedFiles: [],
+      checks: [],
+      knownRisks: ['synthetic-verifier-failure'],
+      agentSummary: 'Synthetic failing evidence.',
+      version: '1'
+    };
   }
 }

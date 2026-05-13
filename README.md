@@ -58,7 +58,9 @@ Run the project CLI:
 pnpm mcas doctor
 pnpm mcas github issue --repo OWNER/REPO --number 123
 pnpm mcas queue manual --state-file .mcas/queue.json --id task-1 --repo OWNER/REPO --objective "Do the work" --acceptance "Verifier evidence is written"
+pnpm mcas run-next --state-file .mcas/queue.json --runtime-dir .mcas
 ```
 
 `github issue` is read-only intake. It calls `gh issue view`, converts the response into a validated `TaskSpec`, and does not invoke a model.
 `queue manual` writes a validated manual `TaskSpec` into a persistent `TaskQueue` state file without invoking adapters.
+`run-next` leases the next queued task and runs the existing standard dry-run workflow, returning verifier status and artifact ids.
