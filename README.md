@@ -37,3 +37,14 @@ V1 should prove a single-writer, multi-review flow:
 - Shared state is stored as artifacts, session events, traces, and evidence.
 - The first tracker should be one of GitHub or Linear, not both.
 - The first adapters should be Codex plus one of Claude Code or Kiro CLI.
+
+## Development
+
+This repository currently uses Node.js built-in tooling with no third-party runtime or test dependencies.
+
+Run checks:
+
+```sh
+npm test
+npm run check
+```
