@@ -28,3 +28,16 @@ Feature: Codex real CLI integration
     Then the harness-owned task and workspace metadata are applied
     And the structured checks are preserved
     And the verifier accepts the evidence when all checks passed
+
+  Scenario: Guard real model smoke tests
+    Given the real Codex smoke flag is not set
+    When the smoke script runs
+    Then no model is invoked
+    And the script reports how to enable the real smoke
+
+  Scenario: Run a read-only real model smoke test
+    Given the real Codex smoke flag is set
+    When the smoke script runs
+    Then Codex runs in real execution mode
+    And the workspace policy is read-only
+    And the verifier accepts the structured smoke evidence

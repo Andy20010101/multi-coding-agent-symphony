@@ -1,7 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CodexAdapter } from '../src/adapters/codex-adapter.js';
+import {
+  CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+  CodexAdapter
+} from '../src/adapters/codex-adapter.js';
 import { validateEvidencePackage } from '../src/contracts.js';
 import { verifyEvidence } from '../src/verifier.js';
 
@@ -71,6 +74,21 @@ describe('Codex real CLI integration', () => {
     assert.equal(handle.dryRun, false);
     assert.equal(handle.status, 'completed');
     assert.equal(handle.exitCode, 0);
+  });
+
+  it('can defer real model selection to Codex CLI config', async () => {
+    const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
+
+    const prepared = await adapter.prepare({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+
+    assert.equal(prepared.args.includes('--model'), false);
+    assert.equal(prepared.args.includes('--output-schema'), true);
   });
 
   it('streams parsed Codex JSONL output as adapter events', async () => {

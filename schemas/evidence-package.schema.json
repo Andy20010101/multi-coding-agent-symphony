@@ -2,11 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EvidencePackage",
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "required": [
     "command",
     "taskId",
     "workspaceId",
+    "diffSummary",
     "changedFiles",
     "checks",
     "knownRisks",
@@ -43,8 +44,8 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "additionalProperties": true,
-        "required": ["name", "status"],
+        "additionalProperties": false,
+        "required": ["name", "status", "output"],
         "properties": {
           "name": {
             "type": "string",

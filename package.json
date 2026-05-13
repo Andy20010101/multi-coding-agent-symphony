@@ -7,8 +7,9 @@
   "description": "A BDD and TDD built orchestrator for multiple coding CLIs.",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/*.js src/adapters/*.js plugins/eval-replay/*.js tests/*.test.js",
-    "smoke:codex:help": "codex exec --help"
+    "check": "node --check src/*.js src/adapters/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js",
+    "smoke:codex:help": "codex exec --help",
+    "smoke:codex:real": "node scripts/smoke-codex-real.js"
   },
   "engines": {
     "node": ">=20"

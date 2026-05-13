@@ -10,6 +10,7 @@ import { NodeProcessRunner } from '../process-runner.js';
 const DEFAULT_EVIDENCE_SCHEMA_PATH = fileURLToPath(
   new URL('../../schemas/evidence-package.schema.json', import.meta.url)
 );
+export const CODEX_CONFIG_DEFAULT_MODEL_PROFILE = 'codex-config-default';
 
 export class CodexAdapter extends BaseAdapter {
   constructor({
@@ -24,7 +25,7 @@ export class CodexAdapter extends BaseAdapter {
       cliName: 'codex',
       cliVersion,
       executable,
-      modelProfiles: ['gpt-codex-default'],
+      modelProfiles: ['gpt-codex-default', CODEX_CONFIG_DEFAULT_MODEL_PROFILE],
       workspaceIsolation: 'external-workspace',
       logStrategy: 'jsonl-stdout'
     });
@@ -44,10 +45,12 @@ export class CodexAdapter extends BaseAdapter {
       '--cd',
       input.workspace,
       '--sandbox',
-      sandboxFor(input.commandSpec.workspacePolicy),
-      '--model',
-      input.modelProfile
+      sandboxFor(input.commandSpec.workspacePolicy)
     ];
+
+    if (input.modelProfile !== CODEX_CONFIG_DEFAULT_MODEL_PROFILE) {
+      args.push('--model', input.modelProfile);
+    }
 
     if (outputSchemaPath) {
       args.push('--output-schema', outputSchemaPath);

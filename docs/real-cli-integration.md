@@ -10,6 +10,7 @@ Implemented:
 - The prompt is sent on stdin.
 - Real runs pass `--output-schema schemas/evidence-package.schema.json`.
 - Real runs pass `--output-last-message` and capture the final Codex message from a temp file.
+- The schema is strict structured-output compatible: object schemas use `additionalProperties: false`.
 - `--json` output is parsed as JSONL and streamed as `tool.observed` adapter events.
 - stdout and stderr are preserved in evidence.
 - A final JSON `EvidencePackage` is normalized with harness-owned `command`, `taskId`, and `workspaceId` metadata before verification.
@@ -25,9 +26,16 @@ pnpm smoke:codex:help
 
 This checks the installed Codex CLI help path and does not invoke a model.
 
+Guarded real model smoke check:
+
+```sh
+MCAS_RUN_REAL_CODEX=1 pnpm smoke:codex:real
+```
+
+This invokes the configured Codex model in read-only mode, captures the final message through `--output-last-message`, parses `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CODEX_MODEL=<model>` to override the Codex CLI config model; when unset, the smoke uses the CLI config default and does not pass `--model`.
+
 ## Remaining CLI Work
 
-- Add a guarded manual smoke path that invokes a cheap read-only Codex prompt.
 - Wire real cancellation for an active child process.
 - Repeat the real process-runner pattern for Claude Code.
 - Repeat the real process-runner pattern for Kiro CLI.
