@@ -21,7 +21,9 @@ export class RouterScheduler {
     adapterMappings,
     modelProfiles = [],
     failureHistory = [],
-    explicitModelProfile
+    explicitModelProfile,
+    evalRecommendations = [],
+    releaseApprovals = []
   }) {
     validateCommandSpec(commandSpec);
 
@@ -54,7 +56,11 @@ export class RouterScheduler {
       };
     }
 
-    validateRoutingInputs({ adapterMappings, modelProfiles, failureHistory });
+    validateRoutingInputs({ adapterMappings, modelProfiles, evalRecommendations, releaseApprovals });
+    const approvedEvalRecommendation = findApprovedEvalRecommendation({
+      evalRecommendations,
+      releaseApprovals
+    });
 
     const profileById = new Map(modelProfiles.map((profile) => [profile.id, profile]));
     const reportByAdapter = new Map(capableReports.map((report) => [report.adapterId, report]));
@@ -70,7 +76,8 @@ export class RouterScheduler {
     const selected = selectCandidate({
       candidates,
       commandName: commandSpec.name,
-      explicitModelProfile
+      explicitModelProfile,
+      approvedEvalRecommendation
     });
 
     if (!selected) {
@@ -85,9 +92,11 @@ export class RouterScheduler {
       reason: decisionReason({
         commandName: commandSpec.name,
         explicitModelProfile,
+        approvedEvalRecommendation,
         excludedAdapters,
         excluded
-      })
+      }),
+      approvedEvalRecommendation
     });
   }
 
@@ -128,13 +137,21 @@ function buildExcludedAdapters({ excludedAdapters, failureHistory }) {
   return excluded;
 }
 
-function validateRoutingInputs({ adapterMappings, modelProfiles }) {
+function validateRoutingInputs({ adapterMappings, modelProfiles, evalRecommendations, releaseApprovals }) {
   if (!Array.isArray(adapterMappings)) {
     throw new TypeError('adapterMappings must be an array');
   }
 
   if (!Array.isArray(modelProfiles)) {
     throw new TypeError('modelProfiles must be an array');
+  }
+
+  if (!Array.isArray(evalRecommendations)) {
+    throw new TypeError('evalRecommendations must be an array');
+  }
+
+  if (!Array.isArray(releaseApprovals)) {
+    throw new TypeError('releaseApprovals must be an array');
   }
 
   for (const mapping of adapterMappings) {
@@ -153,9 +170,39 @@ function isCapableReport({ report, commandName, excluded }) {
     report.supportedCommands.includes(commandName);
 }
 
-function selectCandidate({ candidates, commandName, explicitModelProfile }) {
+function findApprovedEvalRecommendation({ evalRecommendations, releaseApprovals }) {
+  const approvalsByModelProfile = new Map(releaseApprovals
+    .filter((approval) => approval?.approved !== false &&
+      typeof approval.modelProfile === 'string' &&
+      approval.modelProfile.trim() !== '')
+    .map((approval) => [approval.modelProfile, approval]));
+
+  for (const recommendation of evalRecommendations) {
+    if (recommendation?.type !== 'review-routing' ||
+      typeof recommendation.candidate !== 'string' ||
+      !approvalsByModelProfile.has(recommendation.candidate)) {
+      continue;
+    }
+
+    const approval = approvalsByModelProfile.get(recommendation.candidate);
+
+    return {
+      candidate: recommendation.candidate,
+      recommendationId: recommendation.id,
+      approvalId: approval.approvalId
+    };
+  }
+
+  return null;
+}
+
+function selectCandidate({ candidates, commandName, explicitModelProfile, approvedEvalRecommendation }) {
   if (typeof explicitModelProfile === 'string' && explicitModelProfile.trim() !== '') {
     return candidates.find((candidate) => candidate.mapping.modelProfile === explicitModelProfile);
+  }
+
+  if (approvedEvalRecommendation) {
+    return candidates.find((candidate) => candidate.mapping.modelProfile === approvedEvalRecommendation.candidate);
   }
 
   if (commandName === 'review') {
@@ -171,7 +218,7 @@ function compareByCostThenStableFields(left, right) {
     left.mapping.modelProfile.localeCompare(right.mapping.modelProfile);
 }
 
-function buildRouteDecision({ selected, commandName, excluded, candidateCount, reason }) {
+function buildRouteDecision({ selected, commandName, excluded, candidateCount, reason, approvedEvalRecommendation }) {
   return {
     ...structuredClone(selected.report),
     adapterId: selected.mapping.adapter,
@@ -185,14 +232,24 @@ function buildRouteDecision({ selected, commandName, excluded, candidateCount, r
       reason,
       excludedAdapters: Array.from(excluded).sort(),
       candidateCount,
+      ...(approvedEvalRecommendation
+        ? {
+            approvalId: approvedEvalRecommendation.approvalId,
+            recommendationId: approvedEvalRecommendation.recommendationId
+          }
+        : {}),
       version: '1'
     }
   };
 }
 
-function decisionReason({ commandName, explicitModelProfile, excludedAdapters, excluded }) {
+function decisionReason({ commandName, explicitModelProfile, approvedEvalRecommendation, excludedAdapters, excluded }) {
   if (typeof explicitModelProfile === 'string' && explicitModelProfile.trim() !== '') {
     return 'explicit-model-override';
+  }
+
+  if (approvedEvalRecommendation) {
+    return 'approved-eval-recommendation';
   }
 
   if (excluded.size > excludedAdapters.length) {

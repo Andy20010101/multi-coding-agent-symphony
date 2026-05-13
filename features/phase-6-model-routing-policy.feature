@@ -24,3 +24,10 @@ Feature: Phase 6 model profiles and routing policy
     When it runs the command
     Then it writes a route decision artifact
     And the command run record references the route decision artifact
+
+  Scenario: Keep eval recommendations advisory until release approval
+    Given an eval recommendation names a candidate model profile
+    When the route request has no matching release approval
+    Then the router keeps the normal route policy
+    When the route request includes a matching release approval
+    Then the router selects the approved candidate model profile

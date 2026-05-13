@@ -190,6 +190,73 @@ describe('Phase 6 model profiles and routing policy', () => {
     assert.equal(explicitRoute.modelProfile, 'gpt-review-high');
     assert.equal(explicitRoute.routeDecision.reason, 'explicit-model-override');
   });
+
+  it('keeps eval recommendations advisory until release approval names the candidate model profile', () => {
+    const scheduler = new RouterScheduler({
+      capabilityReports: [
+        capabilityReport({ adapterId: 'codex', supportedCommands: ['review'] }),
+        capabilityReport({ adapterId: 'kiro-cli', supportedCommands: ['review'] })
+      ]
+    });
+    const modelProfiles = [
+      modelProfile({
+        id: 'gpt-review-high',
+        model: 'gpt-5.5',
+        costClass: 'high'
+      }),
+      modelProfile({
+        id: 'claude-review-low',
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        costClass: 'low'
+      })
+    ];
+    const adapterMappings = [
+      adapterMapping({
+        adapter: 'codex',
+        command: 'review',
+        modelProfile: 'gpt-review-high'
+      }),
+      adapterMapping({
+        adapter: 'kiro-cli',
+        command: 'review',
+        modelProfile: 'claude-review-low'
+      })
+    ];
+    const evalRecommendations = [{
+      id: 'eval-model-upgrade-sample-1',
+      type: 'review-routing',
+      reason: 'candidate-verified-success-rate-improved',
+      candidate: 'gpt-review-high'
+    }];
+
+    const advisoryRoute = scheduler.route({
+      commandSpec: commandSpec('review'),
+      adapterMappings,
+      modelProfiles,
+      evalRecommendations
+    });
+
+    assert.equal(advisoryRoute.modelProfile, 'claude-review-low');
+    assert.equal(advisoryRoute.routeDecision.reason, 'lower-cost-review-profile');
+
+    const approvedRoute = scheduler.route({
+      commandSpec: commandSpec('review'),
+      adapterMappings,
+      modelProfiles,
+      evalRecommendations,
+      releaseApprovals: [{
+        approvalId: 'release-approval-1',
+        modelProfile: 'gpt-review-high',
+        approvedBy: 'release-manager'
+      }]
+    });
+
+    assert.equal(approvedRoute.adapterId, 'codex');
+    assert.equal(approvedRoute.modelProfile, 'gpt-review-high');
+    assert.equal(approvedRoute.routeDecision.reason, 'approved-eval-recommendation');
+    assert.equal(approvedRoute.routeDecision.approvalId, 'release-approval-1');
+  });
 });
 
 function modelProfile({ id, provider = 'openai', model, costClass }) {

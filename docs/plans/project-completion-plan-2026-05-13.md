@@ -66,13 +66,13 @@ Implemented and tested:
 - Phase J registry slice: `ModelProfileRegistry` and `AdapterMappingRegistry` persist contract-validated JSON and reload/query profiles or CLI mappings by command and capability inputs.
 - Phase J routing policy slice: `RouterScheduler.route` can exclude retryable adapter failures, prefer lower-cost review models, honor explicit model overrides, and return an explainable route decision.
 - Phase J route decision artifact slice: orchestrator command runs write `<command>-route-decision` artifacts and link them from command run records.
-- Test baseline: `pnpm test` currently covers 106 tests across 17 suites.
+- Phase J eval approval slice: eval recommendations stay advisory unless a release approval explicitly names the candidate model profile.
+- Test baseline: `pnpm test` currently covers 107 tests across 17 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Eval plugin scores stored artifact samples through an external gate, but model profile decisions remain manual.
 - No tracker intake is implemented for GitHub or Linear.
 - No user-facing CLI entrypoint exists for orchestrator runs.
 
@@ -453,7 +453,7 @@ Acceptance:
 
 ### Phase J: Model Profiles and Routing Policy
 
-Status: in progress. Persisted model profile and adapter mapping registries, deterministic route selection policy, and route decision artifact persistence are complete; eval-advisory approval boundaries remain.
+Status: completed for V1 model profiles and routing policy. Persisted model profile and adapter mapping registries, deterministic route selection policy, route decision artifact persistence, explicit model override behavior, and eval recommendation approval boundaries are complete.
 
 Goal: route based on adapter capability, model profile, prior failures, cost class, and eval recommendations.
 
@@ -730,15 +730,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase J with eval recommendation approval boundaries.
+Continue Phase K with GitHub task intake.
 
 First red test:
 
-- Add a routing test proving eval recommendations are ignored unless an explicit release approval names the candidate model profile.
+- Add a GitHub intake test proving issue metadata converts into a valid `TaskSpec` with source, repository, objective, acceptance, priority, and created timestamp.
 
 First implementation:
 
-- Add an approved recommendation input to `RouterScheduler.route`; keep unapproved eval recommendations advisory and non-mutating.
+- Add `src/trackers/github-intake.js` with pure conversion helpers before adding any live `gh` command wrapper.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
