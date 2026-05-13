@@ -20,6 +20,7 @@ export class BaseAdapter {
     this.modelProfiles = modelProfiles;
     this.workspaceIsolation = workspaceIsolation;
     this.logStrategy = logStrategy;
+    this.runs = new Map();
   }
 
   async probe() {
@@ -56,6 +57,87 @@ export class BaseAdapter {
 
     return classifyFailure('adapter-crashed');
   }
+
+  async start(input) {
+    if (typeof this.prepare !== 'function') {
+      throw new TypeError(`${this.adapterId} adapter must implement prepare`);
+    }
+
+    const preparedRun = await this.prepare(input);
+    const runId = `${this.adapterId}-${input.contextPack.task.id}-${this.runs.size + 1}`;
+    const handle = {
+      runId,
+      adapterId: this.adapterId,
+      status: 'completed',
+      dryRun: true,
+      preparedRun,
+      command: input.commandSpec.name,
+      taskId: input.contextPack.task.id,
+      workspaceId: input.workspace
+    };
+
+    this.runs.set(runId, handle);
+    return structuredClone(handle);
+  }
+
+  async *streamEvents(handle) {
+    const stored = this.#getRun(handle.runId);
+
+    yield {
+      type: 'adapter.started',
+      runId: stored.runId,
+      adapterId: stored.adapterId,
+      dryRun: stored.dryRun
+    };
+    yield {
+      type: 'command.finished',
+      runId: stored.runId,
+      adapterId: stored.adapterId,
+      status: stored.status
+    };
+  }
+
+  async cancel(handle) {
+    const stored = this.#getRun(handle.runId);
+    stored.status = 'cancelled';
+    this.runs.set(stored.runId, stored);
+
+    return {
+      runId: stored.runId,
+      status: 'cancelled'
+    };
+  }
+
+  async resume({ runId }) {
+    return structuredClone(this.#getRun(runId));
+  }
+
+  async collectEvidence(handle) {
+    const stored = this.#getRun(handle.runId);
+
+    return {
+      command: stored.command,
+      taskId: stored.taskId,
+      workspaceId: stored.workspaceId,
+      changedFiles: [],
+      checks: [],
+      knownRisks: ['dry-run-only'],
+      agentSummary: 'Dry-run command rendered but no CLI execution occurred.',
+      version: '1'
+    };
+  }
+
+  async cleanup(handle) {
+    this.runs.delete(handle.runId);
+  }
+
+  #getRun(runId) {
+    if (typeof runId !== 'string' || runId.trim() === '' || !this.runs.has(runId)) {
+      throw new Error(`Unknown run id: ${runId}`);
+    }
+
+    return this.runs.get(runId);
+  }
 }
 
 export function validatePrepareInput(input) {
@@ -89,4 +171,3 @@ export function buildRunPrompt({ commandSpec, contextPack }) {
     `Done criteria: ${commandSpec.doneCriteria.join('; ')}`
   ].join('\n');
 }
-
