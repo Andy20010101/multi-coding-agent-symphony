@@ -35,6 +35,12 @@ Feature: Phase 4 routing, workspace, and verification modules
     When a workspace is allocated and cleaned up
     Then the manifest, lock, and cleanup result include lifecycle event ids and timestamps
 
+  Scenario: Clone primary writer workspace for review
+    Given a materialized primary writer workspace with implementation content
+    When a review workspace is cloned from it
+    Then the review workspace contains the implementation content
+    And the cloned workspace remains non-writable
+
   Scenario: Route a command to a capable adapter
     Given capability reports for Codex and Kiro CLI
     When the Router Scheduler routes an implement command

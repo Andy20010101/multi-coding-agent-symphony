@@ -31,12 +31,12 @@ Implemented and tested:
 - Phase B workspace cleanup slice: `WorkspaceManager` can remove temporary workspace content while retaining the workspace manifest and a cleanup record.
 - Phase B workspace lock slice: materialized primary-writer locks survive `WorkspaceManager` restart and block duplicate writer allocation for the same task.
 - Phase B lifecycle metadata slice: queue and workspace lifecycle changes expose event IDs and deterministic timestamps when provided.
-- Test baseline: `pnpm test` currently covers 54 tests across 11 suites.
+- Phase B workspace clone slice: review workspaces can clone primary-writer content while retaining non-writable ownership metadata.
+- Test baseline: `pnpm test` currently covers 55 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- `WorkspaceManager` materialization, cleanup retention, and durable primary-writer locks exist, but clone behavior is still pending.
 - `TaskQueue` persistence exists, but it is not yet integrated into orchestrator workflow recovery.
 - `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
 - Claude Code and Kiro CLI adapters are dry-run only.
@@ -107,7 +107,7 @@ Acceptance:
 
 ### Phase B: Durable State and Workspace Materialization
 
-Status: in progress. Queue persistence, expired lease recovery, workspace materialization, manifests, cleanup, retained cleanup records, primary-writer locks, and lifecycle event IDs are complete; clone policy remains.
+Status: completed for V1 durable state primitives. Queue persistence, expired lease recovery, workspace materialization, manifests, cleanup, retained cleanup records, primary-writer locks, lifecycle event IDs, and review clone policy are complete.
 
 Goal: turn in-memory primitives into recoverable harness state.
 
@@ -139,6 +139,7 @@ BDD/TDD:
 - Add scenario: cleanup removes temporary workspace content but preserves artifacts.
 - Add scenario: materialized primary-writer lock survives manager restart.
 - Add scenario: queue and workspace lifecycle metadata is recorded.
+- Add scenario: review workspace clones primary-writer content while staying non-writable.
 
 Acceptance:
 
@@ -671,16 +672,16 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase B with workspace clone policy.
+Continue Phase C with the orchestrator command loop.
 
 First red test:
 
-- Add a workspace clone test proving a review workspace can be materialized from a primary writer workspace without becoming writable.
+- Add an orchestrator workflow test proving one task can run at least two commands in sequence.
 
 First implementation:
 
-- Add the smallest `cloneFrom` behavior to `WorkspaceManager` or document why clone remains outside V1.
-- Preserve manifest, lock, and read-only ownership metadata in the cloned workspace.
+- Add the smallest `runTaskWorkflow` entrypoint that executes `implement -> review` using existing routing, artifacts, events, and verification.
+- Feed implementation evidence into the review command context through artifact refs.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 

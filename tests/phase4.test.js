@@ -240,6 +240,51 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
     }
   });
 
+  it('clones primary writer content into a non-writable review workspace', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-workspaces-'));
+
+    try {
+      const manager = new WorkspaceManager({
+        rootDirectory: root,
+        materialize: true
+      });
+      const primary = manager.allocate({
+        taskId: 'task-123',
+        role: 'primary-writer',
+        adapterId: 'codex',
+        now: '2026-05-13T00:00:00.000Z'
+      });
+
+      await writeFile(join(primary.path, 'implementation.txt'), 'ready for review');
+
+      const review = manager.cloneFrom({
+        sourceWorkspaceId: primary.workspaceId,
+        role: 'review',
+        adapterId: 'claude-code',
+        now: '2026-05-13T00:00:01.000Z'
+      });
+
+      assert.equal(review.sourceWorkspaceId, primary.workspaceId);
+      assert.equal(review.writable, false);
+      assert.equal(await readFile(join(review.path, 'implementation.txt'), 'utf8'), 'ready for review');
+      assert.deepEqual(JSON.parse(await readFile(review.lockPath, 'utf8')), {
+        version: '1',
+        workspaceId: review.workspaceId,
+        taskId: 'task-123',
+        role: 'review',
+        adapterId: 'claude-code',
+        path: review.path,
+        writable: false,
+        accessMode: 'read-only',
+        allocatedAt: '2026-05-13T00:00:01.000Z',
+        allocatedEventId: `workspace-${review.workspaceId}-allocated`,
+        sourceWorkspaceId: primary.workspaceId
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('routes commands to capable adapters while honoring exclusions', () => {
     const scheduler = new RouterScheduler({ capabilityReports });
 

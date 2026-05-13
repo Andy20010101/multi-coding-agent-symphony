@@ -1,10 +1,15 @@
-import { existsSync, readdirSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const WORKSPACE_MANIFEST_FILE = 'workspace-manifest.json';
 const WORKSPACE_LOCK_FILE = 'workspace-lock.json';
 const WORKSPACE_CLEANUP_FILE = 'workspace-cleanup.json';
 const RETAINED_WORKSPACE_FILES = [WORKSPACE_MANIFEST_FILE, WORKSPACE_CLEANUP_FILE];
+const WORKSPACE_METADATA_FILES = new Set([
+  WORKSPACE_MANIFEST_FILE,
+  WORKSPACE_LOCK_FILE,
+  WORKSPACE_CLEANUP_FILE
+]);
 
 export class WorkspaceConflictError extends Error {
   constructor(message, details = {}) {
@@ -30,10 +35,13 @@ export class WorkspaceManager {
     this.allocations = [];
   }
 
-  allocate({ taskId, role, adapterId, now }) {
+  allocate({ taskId, role, adapterId, now, sourceWorkspaceId }) {
     assertNonEmptyString(taskId, 'taskId');
     assertNonEmptyString(role, 'role');
     assertNonEmptyString(adapterId, 'adapterId');
+    if (sourceWorkspaceId !== undefined) {
+      assertNonEmptyString(sourceWorkspaceId, 'sourceWorkspaceId');
+    }
 
     if (role === 'primary-writer' && this.#hasPrimaryWriter(taskId)) {
       throw new WorkspaceConflictError(`Task ${taskId} already has a primary writer`, {
@@ -56,7 +64,8 @@ export class WorkspaceManager {
       lockPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_LOCK_FILE),
       writable: role === 'primary-writer',
       allocatedAt,
-      allocatedEventId: workspaceEventId(workspaceId, 'allocated')
+      allocatedEventId: workspaceEventId(workspaceId, 'allocated'),
+      sourceWorkspaceId
     };
 
     this.allocations.push(allocation);
@@ -66,6 +75,32 @@ export class WorkspaceManager {
     }
 
     return structuredClone(allocation);
+  }
+
+  cloneFrom({ sourceWorkspaceId, role, adapterId, now }) {
+    assertNonEmptyString(sourceWorkspaceId, 'sourceWorkspaceId');
+    assertNonEmptyString(role, 'role');
+    assertNonEmptyString(adapterId, 'adapterId');
+
+    const source = this.allocations.find((allocation) => allocation.workspaceId === sourceWorkspaceId);
+    if (!source) {
+      throw new Error(`Source workspace ${sourceWorkspaceId} is not allocated`);
+    }
+
+    const clone = this.allocate({
+      taskId: source.taskId,
+      role,
+      adapterId,
+      now,
+      sourceWorkspaceId
+    });
+
+    if (this.materialize) {
+      copyWorkspaceContentsExceptMetadata(source.path, clone.path);
+      materializeWorkspace(clone);
+    }
+
+    return clone;
   }
 
   listByTask(taskId) {
@@ -166,7 +201,8 @@ function materializeWorkspace(allocation) {
     path: allocation.path,
     writable: allocation.writable,
     allocatedAt: allocation.allocatedAt,
-    allocatedEventId: allocation.allocatedEventId
+    allocatedEventId: allocation.allocatedEventId,
+    sourceWorkspaceId: allocation.sourceWorkspaceId
   }, null, 2));
   writeFileSync(allocation.lockPath, JSON.stringify({
     version: '1',
@@ -178,8 +214,24 @@ function materializeWorkspace(allocation) {
     writable: allocation.writable,
     accessMode: accessModeForRole(allocation.role),
     allocatedAt: allocation.allocatedAt,
-    allocatedEventId: allocation.allocatedEventId
+    allocatedEventId: allocation.allocatedEventId,
+    sourceWorkspaceId: allocation.sourceWorkspaceId
   }, null, 2));
+}
+
+function copyWorkspaceContentsExceptMetadata(sourcePath, targetPath) {
+  mkdirSync(targetPath, { recursive: true });
+
+  for (const entry of readdirSync(sourcePath, { withFileTypes: true })) {
+    if (WORKSPACE_METADATA_FILES.has(entry.name)) {
+      continue;
+    }
+
+    cpSync(join(sourcePath, entry.name), join(targetPath, entry.name), {
+      recursive: true,
+      force: true
+    });
+  }
 }
 
 function removeWorkspaceContentsExcept(workspacePath, retainedFileNames) {
