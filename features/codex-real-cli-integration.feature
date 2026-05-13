@@ -59,3 +59,10 @@ Feature: Codex real CLI integration
     When the orchestrator stores command results
     Then raw JSONL, stderr, parsed events, and final message are written as artifacts
     And the command run record links those artifacts
+
+  Scenario: Map structured Codex error events
+    Given Codex real execution emits a structured error event
+    When the adapter normalizes the failed run
+    Then permission errors map to permission-denied
+    And off-task errors map to model-off-task
+    And unknown structured errors map to adapter-crashed

@@ -66,6 +66,7 @@ Codex:
 - Codex model profile IDs are resolved adapter-side before CLI execution: `gpt-codex-default` defaults to local Codex config, constructor-provided `modelProfileMappings` can map project profile IDs to concrete Codex `--model` names, and unmapped IDs remain direct CLI model names for smoke overrides.
 - Codex prompts are rendered per command role, so `implement`, `review`, `qa`, `plan`, and `fix-ci` receive different instructions while preserving the same verifier-readable EvidencePackage requirement.
 - Codex exposes raw execution artifacts for stdout JSONL, stderr, parsed JSONL events, and final message capture; the orchestrator stores them as artifacts and links them from the command run record.
+- Codex structured error events map into the shared failure taxonomy: permission errors become `permission-denied`, off-task errors become `model-off-task`, and unknown structured errors become `adapter-crashed`.
 
 Claude Code:
 

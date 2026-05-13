@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { BaseAdapter, validatePrepareInput } from './base-adapter.js';
 import { extractEvidencePackageFromSources } from '../evidence-parser.js';
+import { classifyFailure } from '../failure-taxonomy.js';
 import { NodeProcessRunner } from '../process-runner.js';
 
 const DEFAULT_EVIDENCE_SCHEMA_PATH = fileURLToPath(
@@ -143,6 +144,7 @@ export class CodexAdapter extends BaseAdapter {
       }
     });
     const status = result.exitCode === 0 ? 'completed' : 'failed';
+    const parsedEvents = parseJsonl(result.stdout);
     const handle = {
       runId,
       adapterId: this.adapterId,
@@ -159,9 +161,9 @@ export class CodexAdapter extends BaseAdapter {
       durationMs: result.durationMs,
       timedOut: result.timedOut,
       outputFiles: result.outputFiles ?? {},
-      parsedEvents: parseJsonl(result.stdout),
+      parsedEvents,
       failure: status === 'failed'
-        ? this.normalizeFailure(result.timedOut ? { code: 'ETIMEDOUT' } : { code: 'EEXIT' })
+        ? this.normalizeFailure(buildCodexFailureInput({ result, parsedEvents }))
         : null
     };
 
@@ -314,6 +316,16 @@ export class CodexAdapter extends BaseAdapter {
 
     return buildCodexArtifacts(stored);
   }
+
+  normalizeFailure(error) {
+    const category = mapCodexFailureCategory(error);
+
+    if (category) {
+      return classifyFailure(category);
+    }
+
+    return super.normalizeFailure(error);
+  }
 }
 
 async function finalizeActiveRun(stored) {
@@ -445,6 +457,82 @@ function buildCodexArtifacts(stored) {
   return artifacts;
 }
 
+function buildCodexFailureInput({ result, parsedEvents }) {
+  if (result.timedOut) {
+    return {
+      code: 'ETIMEDOUT',
+      signal: result.signal
+    };
+  }
+
+  const structuredError = findStructuredErrorEvent(parsedEvents);
+
+  if (structuredError) {
+    return {
+      code: structuredError.code,
+      message: structuredError.message,
+      event: structuredError
+    };
+  }
+
+  return {
+    code: 'EEXIT',
+    exitCode: result.exitCode,
+    signal: result.signal,
+    message: result.stderr || result.stdout
+  };
+}
+
+function findStructuredErrorEvent(parsedEvents) {
+  for (const event of [...parsedEvents].reverse()) {
+    if (!isPlainObject(event)) {
+      continue;
+    }
+
+    const type = typeof event.type === 'string' ? event.type.toLowerCase() : '';
+
+    if (type.includes('error') || type.includes('fatal') || typeof event.code === 'string') {
+      return event;
+    }
+  }
+
+  return null;
+}
+
+function mapCodexFailureCategory(error) {
+  const normalized = [
+    error?.category,
+    error?.code,
+    error?.message,
+    error?.event?.type,
+    error?.event?.code,
+    error?.event?.message
+  ]
+    .filter((value) => typeof value === 'string')
+    .join(' ')
+    .toLowerCase()
+    .replace(/[_\s]+/g, '-');
+
+  if (
+    normalized.includes('permission-denied')
+    || normalized.includes('unauthorized')
+    || normalized.includes('forbidden')
+    || normalized.includes('eacces')
+  ) {
+    return 'permission-denied';
+  }
+
+  if (normalized.includes('model-off-task') || normalized.includes('off-task')) {
+    return 'model-off-task';
+  }
+
+  if (isPlainObject(error?.event)) {
+    return 'adapter-crashed';
+  }
+
+  return null;
+}
+
 function safeForPath(value) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
 }
@@ -495,4 +583,8 @@ function parseJsonl(output) {
         };
       }
     });
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

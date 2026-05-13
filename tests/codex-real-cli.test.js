@@ -398,6 +398,63 @@ describe('Codex real CLI integration', () => {
     });
   });
 
+  it('maps structured Codex error events to failure taxonomy categories', async () => {
+    const cases = [
+      {
+        code: 'permission_denied',
+        expected: {
+          category: 'permission-denied',
+          retryable: false,
+          owner: 'policy',
+          recommendedNextCommand: 'plan'
+        }
+      },
+      {
+        code: 'model_off_task',
+        expected: {
+          category: 'model-off-task',
+          retryable: true,
+          owner: 'router',
+          recommendedNextCommand: 'plan'
+        }
+      },
+      {
+        code: 'internal_error',
+        expected: {
+          category: 'adapter-crashed',
+          retryable: true,
+          owner: 'adapter',
+          recommendedNextCommand: 'qa'
+        }
+      }
+    ];
+
+    for (const testCase of cases) {
+      const adapter = new CodexAdapter({
+        cliVersion: '0.130.0',
+        processRunner: new FakeProcessRunner({
+          exitCode: 1,
+          stdout: JSON.stringify({
+            type: 'error',
+            code: testCase.code,
+            message: `${testCase.code} from Codex`
+          }),
+          stderr: '',
+          durationMs: 12
+        })
+      });
+      const handle = await adapter.start({
+        commandSpec,
+        contextPack,
+        workspace: '/work/repo',
+        modelProfile: 'gpt-codex-default',
+        executionMode: 'real'
+      });
+
+      assert.deepEqual(handle.failure, testCase.expected);
+    }
+  });
+
   it('cancels active real Codex process handles through adapter lifecycle', async () => {
     const runner = new FakeActiveProcessRunner();
     const adapter = new CodexAdapter({
