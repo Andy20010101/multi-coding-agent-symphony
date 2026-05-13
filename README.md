@@ -57,6 +57,8 @@ Run the project CLI:
 ```sh
 pnpm mcas doctor
 pnpm mcas github issue --repo OWNER/REPO --number 123
+pnpm mcas queue manual --state-file .mcas/queue.json --id task-1 --repo OWNER/REPO --objective "Do the work" --acceptance "Verifier evidence is written"
 ```
 
 `github issue` is read-only intake. It calls `gh issue view`, converts the response into a validated `TaskSpec`, and does not invoke a model.
+`queue manual` writes a validated manual `TaskSpec` into a persistent `TaskQueue` state file without invoking adapters.

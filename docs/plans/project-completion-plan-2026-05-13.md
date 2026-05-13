@@ -74,14 +74,14 @@ Implemented and tested:
 - Phase K GitHub PR/CI `gh` wrapper slice: injected-runner PR intake calls `gh pr view --json ...`, and CI capture calls `gh api .../check-runs` through the pure normalizer.
 - Phase K GitHub PR summary slice: PR summaries combine the validated review task, CI status, failing checks, and artifact references into an artifact-ready object plus markdown.
 - Phase K GitHub naming policy slice: PR branch and workspace names are deterministic ASCII safe path segments derived from repository, PR number, and head ref.
-- Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, and `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model.
-- Test baseline: `pnpm test` currently covers 116 tests across 19 suites.
+- Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, and `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`.
+- Test baseline: `pnpm test` currently covers 117 tests across 19 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- CLI currently covers doctor and GitHub issue intake; queue, run-next, run-task, smoke, eval, and config commands remain.
+- CLI currently covers doctor, GitHub issue intake, and manual queue intake; run-next, run-task, smoke, eval, and config commands remain.
 
 ## Target V1
 
@@ -531,7 +531,7 @@ Acceptance:
 
 ### Phase L: User-Facing CLI
 
-Status: in progress. The first CLI slice is complete: `scripts/mcas.js` exposes `doctor` plus read-only GitHub issue intake through `pnpm mcas`.
+Status: in progress. The first CLI slices are complete: `scripts/mcas.js` exposes `doctor`, read-only GitHub issue intake, and persistent manual task queue intake through `pnpm mcas`.
 
 Goal: expose project workflows without requiring ad hoc Node imports.
 
@@ -741,15 +741,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase L with persistent queue intake.
+Continue Phase L with `run-next`.
 
 First red test:
 
-- Add CLI tests proving a manual task can be queued to a configured state file and prints the task id.
+- Add CLI tests proving `run-next` loads queue state, runs the existing dry-run workflow, and returns nonzero when verifier failure prevents completion.
 
 First implementation:
 
-- Add a `queue manual` command that validates a `TaskSpec`, persists through `TaskQueue`, and reports queue state without invoking adapters.
+- Add `run-next` wiring that builds the existing orchestrator runtime from configured state/artifact directories and maps verifier failure to a clear exit code.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

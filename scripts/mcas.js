@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { NodeProcessRunner } from '../src/process-runner.js';
+import { TaskQueue } from '../src/task-queue.js';
 import { fetchGitHubIssueTaskSpec } from '../src/trackers/github-intake.js';
 
 const EXIT_CODES = {
@@ -14,7 +15,8 @@ const EXIT_CODES = {
 
 const COMMANDS = [
   'doctor',
-  'github issue'
+  'github issue',
+  'queue manual'
 ];
 
 export async function runMcasCli({
@@ -39,6 +41,15 @@ export async function runMcasCli({
       const result = await runGitHubIssueIntake({
         args: rest,
         runner: runner ?? new NodeProcessRunner()
+      });
+
+      writeJson(stdout, result);
+      return EXIT_CODES.ok;
+    }
+
+    if (command === 'queue' && subcommand === 'manual') {
+      const result = runManualTaskQueue({
+        args: rest
       });
 
       writeJson(stdout, result);
@@ -88,6 +99,33 @@ async function runGitHubIssueIntake({ args, runner }) {
   };
 }
 
+function runManualTaskQueue({ args }) {
+  const stateFile = readOption(args, '--state-file');
+  const task = {
+    id: readOption(args, '--id'),
+    source: 'manual',
+    repository: readOption(args, '--repo'),
+    objective: readOption(args, '--objective'),
+    acceptance: readOptions(args, '--acceptance'),
+    priority: readOptionalOption(args, '--priority') ?? 'normal',
+    version: '1'
+  };
+  const queue = new TaskQueue({ stateFile });
+  const record = queue.enqueue(task);
+
+  return {
+    version: '1',
+    command: 'queue manual',
+    status: 'queued',
+    modelInvocation: false,
+    stateFile,
+    taskId: record.task.id,
+    queueStatus: record.status,
+    sequence: record.sequence,
+    createdEventId: record.createdEventId
+  };
+}
+
 function readOption(args, optionName) {
   const optionIndex = args.indexOf(optionName);
 
@@ -102,6 +140,46 @@ function readOption(args, optionName) {
   }
 
   return value;
+}
+
+function readOptionalOption(args, optionName) {
+  const optionIndex = args.indexOf(optionName);
+
+  if (optionIndex === -1) {
+    return undefined;
+  }
+
+  const value = args[optionIndex + 1];
+
+  if (typeof value !== 'string' || value.trim() === '' || value.startsWith('--')) {
+    throw new UsageError(`${optionName} requires a value`);
+  }
+
+  return value;
+}
+
+function readOptions(args, optionName) {
+  const values = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== optionName) {
+      continue;
+    }
+
+    const value = args[index + 1];
+
+    if (typeof value !== 'string' || value.trim() === '' || value.startsWith('--')) {
+      throw new UsageError(`${optionName} requires a value`);
+    }
+
+    values.push(value);
+  }
+
+  if (values.length === 0) {
+    throw new UsageError(`${optionName} is required`);
+  }
+
+  return values;
 }
 
 function toPositiveInteger(value, field) {

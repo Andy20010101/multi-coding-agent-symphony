@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { validateTaskSpec } from '../src/contracts.js';
 import { runMcasCli } from '../scripts/mcas.js';
@@ -25,7 +28,8 @@ describe('Phase 8 user-facing CLI', () => {
     assert.equal(typeof doctor.nodeVersion, 'string');
     assert.deepEqual(doctor.commands, [
       'doctor',
-      'github issue'
+      'github issue',
+      'queue manual'
     ]);
   });
 
@@ -81,6 +85,71 @@ describe('Phase 8 user-facing CLI', () => {
     assert.equal(intake.taskSpec.id, 'github-issue-42');
     assert.equal(intake.taskSpec.priority, 'high');
     assert.deepEqual(intake.taskSpec.acceptance, ['release checklist exists']);
+  });
+
+  it('queues a manual task to a configured state file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-cli-queue-'));
+
+    try {
+      const stateFile = join(root, 'queue.json');
+      const output = createOutput();
+
+      const exitCode = await runMcasCli({
+        argv: [
+          'queue',
+          'manual',
+          '--state-file',
+          stateFile,
+          '--id',
+          'manual-release-checklist',
+          '--repo',
+          'Andy20010101/multi-coding-agent-symphony',
+          '--objective',
+          'Create a release checklist',
+          '--acceptance',
+          'release checklist exists',
+          '--priority',
+          'high'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const queued = JSON.parse(output.stdoutText());
+
+      assert.deepEqual(queued, {
+        version: '1',
+        command: 'queue manual',
+        status: 'queued',
+        modelInvocation: false,
+        stateFile,
+        taskId: 'manual-release-checklist',
+        queueStatus: 'queued',
+        sequence: 1,
+        createdEventId: 'task-queue-1-created'
+      });
+
+      const queueState = JSON.parse(await readFile(stateFile, 'utf8'));
+
+      assert.equal(queueState.version, '1');
+      assert.equal(queueState.sequence, 1);
+      assert.equal(queueState.records.length, 1);
+      assert.equal(validateTaskSpec(queueState.records[0].task), queueState.records[0].task);
+      assert.deepEqual(queueState.records[0].task, {
+        id: 'manual-release-checklist',
+        source: 'manual',
+        repository: 'Andy20010101/multi-coding-agent-symphony',
+        objective: 'Create a release checklist',
+        acceptance: ['release checklist exists'],
+        priority: 'high',
+        version: '1'
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 
