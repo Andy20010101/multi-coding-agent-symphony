@@ -25,7 +25,7 @@ export class KiroCliAdapter extends BaseAdapter {
   async prepare(input) {
     validatePrepareInput(input);
 
-    const trustTools = trustToolsFor(input.commandSpec.allowedTools);
+    const trustTools = trustToolsFor(input.commandSpec.allowedTools, input.policyDecisions ?? []);
     const args = [
       'chat',
       '--no-interactive',
@@ -165,7 +165,7 @@ export class KiroCliAdapter extends BaseAdapter {
   }
 }
 
-function trustToolsFor(allowedTools) {
+function trustToolsFor(allowedTools, policyDecisions = []) {
   const categories = new Set();
 
   for (const tool of allowedTools) {
@@ -183,7 +183,53 @@ function trustToolsFor(allowedTools) {
     }
   }
 
+  const deniedCategories = deniedTrustCategoriesFor(policyDecisions);
+
+  for (const deniedCategory of deniedCategories) {
+    categories.delete(deniedCategory);
+  }
+
   return Array.from(categories);
+}
+
+function deniedTrustCategoriesFor(policyDecisions) {
+  const deniedCategories = new Set();
+
+  for (const decision of policyDecisions) {
+    if (decision?.decision !== 'deny') {
+      continue;
+    }
+
+    if (deniesShell(decision) || deniesNetwork(decision)) {
+      deniedCategories.add('bash');
+    }
+  }
+
+  return deniedCategories;
+}
+
+function deniesShell(decision) {
+  return decisionHasAnyValue(decision, ['shell', 'test']) ||
+    decision.reason === 'command-not-allowed' ||
+    decision.reason === 'invalid-command';
+}
+
+function deniesNetwork(decision) {
+  return decisionHasAnyValue(decision, ['network']) ||
+    decision.reason === 'network-denied';
+}
+
+function decisionHasAnyValue(decision, values) {
+  const normalizedValues = new Set(values);
+  const candidates = [
+    decision.action,
+    decision.tool,
+    decision.toolName,
+    decision.requestedTool,
+    decision.matchedRule
+  ];
+
+  return candidates.some((candidate) => typeof candidate === 'string' && normalizedValues.has(candidate));
 }
 
 function parseJsonl(output) {

@@ -80,6 +80,7 @@ Kiro CLI:
 - Native surfaces include custom agents, MCP, hooks, steering files, spec-driven workflows, and headless automation.
 - Good fit for spec-heavy planning, requirements, and acceptance-criteria workflows.
 - Phase 3 dry-run mapping uses `kiro-cli chat --no-interactive --trust-tools=<categories>` and optional `--require-mcp-startup`.
+- Policy deny overrides are applied adapter-side; denied shell or network requests remove unsafe trusted categories such as `bash`.
 - Real execution uses an injected `NodeProcessRunner` to spawn `kiro-cli chat --no-interactive`, parse stdout for structured EvidencePackage content, and preserve raw stdout/stderr as verification-insufficient evidence when structure is missing.
 
 ## Phase 3 Source Notes

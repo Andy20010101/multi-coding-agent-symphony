@@ -53,12 +53,12 @@ Implemented and tested:
 - Phase F Claude smoke slice: `pnpm smoke:claude:help` checks local CLI assumptions, and gated `pnpm smoke:claude:real` defaults to no model call unless `MCAS_RUN_REAL_CLAUDE=1` is set.
 - Phase G Kiro real runner slice: `KiroCliAdapter` can run real mode through an injected `NodeProcessRunner`, parse stdout structured evidence, and preserve raw output as verification-insufficient evidence.
 - Phase G Kiro smoke slice: `pnpm smoke:kiro:help` checks local CLI assumptions, and gated `pnpm smoke:kiro:real` defaults to no model call unless `MCAS_RUN_REAL_KIRO=1` is set.
-- Test baseline: `pnpm test` currently covers 86 tests across 16 suites.
+- Phase G Kiro trust-tool policy slice: denied shell or network policy decisions remove unsafe Kiro trusted tool categories while preserving read-only trust categories.
+- Test baseline: `pnpm test` currently covers 87 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- Kiro CLI trust-tool policy deny hardening remains.
 - Verifier accepts any check with `status: "passed"`; it does not yet verify provenance, command output, CI status, or changed-file scope.
 - Eval plugin scores synthetic samples but is not wired into release gates, model profile decisions, or artifact sampling.
 - No tracker intake is implemented for GitHub or Linear.
@@ -330,7 +330,7 @@ Acceptance:
 
 ### Phase G: Kiro CLI Real Adapter
 
-Status: in progress. Real process-runner execution, stdout evidence parsing, and smoke gates are complete; trust-tool deny hardening remains.
+Status: completed for V1 Kiro real adapter coverage.
 
 Goal: connect Kiro CLI as the spec-heavy Claude-backed lane.
 
@@ -695,8 +695,8 @@ For every phase:
 Additional gates:
 
 - Real Codex: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real`.
-- Claude Code real smoke: gated script to be added in Phase F.
-- Kiro real smoke: gated script to be added in Phase G.
+- Claude Code real smoke: `MCAS_RUN_REAL_CLAUDE=1 pnpm smoke:claude:real`.
+- Kiro real smoke: `MCAS_RUN_REAL_KIRO=1 pnpm smoke:kiro:real`.
 - Eval release gate: script to be added in Phase I.
 
 ## Risk Register

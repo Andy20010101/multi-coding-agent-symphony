@@ -31,9 +31,15 @@ Feature: Phase 3 runtime adapter dry-run foundations
     And allowed tools are mapped to Kiro trust tool categories
     And MCP startup can be required for pipeline runs
 
+  Scenario: Kiro CLI adapter honors policy deny overrides
+    Given a qa CommandSpec with shell and test tools
+    And policy decisions deny shell or network access
+    When the Kiro CLI adapter prepares the run
+    Then unsafe trusted tool categories are removed
+    And read-only trust categories remain available
+
   Scenario: Adapter failures normalize into the shared taxonomy
     Given a CLI exits because it timed out
     When an adapter normalizes the failure
     Then the failure category is "cli-timeout"
     And the result includes retry metadata
-

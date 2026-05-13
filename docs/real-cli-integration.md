@@ -84,6 +84,7 @@ Implemented:
 - The prompt is sent on stdin.
 - stdout is parsed for structured `EvidencePackage` content.
 - If no valid structured evidence is found, raw Kiro output is marked with `real-cli-output-unverified` and contains no passing checks.
+- Policy deny overrides remove unsafe trusted tool categories, such as `bash` for denied shell or network requests, before `--trust-tools` is rendered.
 
 Local binary smoke check:
 
@@ -103,4 +104,4 @@ This invokes the configured Kiro CLI model in read-only mode with trusted read t
 
 ## Remaining CLI Work
 
-- Harden Kiro trust-tool policy deny mapping.
+- No adapter-specific Phase G work remains; verifier, eval, CLI entrypoint, and operations gates are tracked in `docs/plans/project-completion-plan-2026-05-13.md`.

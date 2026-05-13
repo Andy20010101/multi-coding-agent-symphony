@@ -134,6 +134,31 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
     assert.match(prepared.prompt, /Command: qa/);
   });
 
+  it('removes unsafe Kiro trusted tool categories when policy denies shell or network', async () => {
+    const adapter = new KiroCliAdapter({ cliVersion: '2.2.2' });
+
+    const prepared = await adapter.prepare({
+      commandSpec: qaCommand,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-kiro-default',
+      policyDecisions: [
+        {
+          decision: 'deny',
+          reason: 'command-not-allowed',
+          matchedRule: null
+        },
+        {
+          decision: 'deny',
+          reason: 'unsupported-action',
+          matchedRule: 'network'
+        }
+      ]
+    });
+
+    assert.deepEqual(prepared.args.slice(0, 3), ['chat', '--no-interactive', '--trust-tools=read,grep']);
+  });
+
   it('normalizes timeout failures through the shared failure taxonomy', () => {
     const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
 
@@ -145,4 +170,3 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
     });
   });
 });
-
