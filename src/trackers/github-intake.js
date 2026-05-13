@@ -7,6 +7,8 @@ export function githubIssueToTaskSpec({ repository, issue }) {
     throw new TypeError('issue must be an object');
   }
 
+  assertPositiveInteger(issue.number, 'issue.number');
+
   const task = {
     id: `github-issue-${issue.number}`,
     source: 'github',
@@ -23,12 +25,55 @@ export function githubIssueToTaskSpec({ repository, issue }) {
   return task;
 }
 
+export function githubPullRequestToTaskSpec({ repository, pullRequest }) {
+  assertNonEmptyString(repository, 'repository');
+
+  if (pullRequest === null || typeof pullRequest !== 'object' || Array.isArray(pullRequest)) {
+    throw new TypeError('pullRequest must be an object');
+  }
+
+  assertPositiveInteger(pullRequest.number, 'pullRequest.number');
+
+  const baseRef = pullRequest.baseRefName ?? pullRequest.base?.ref;
+  const headRef = pullRequest.headRefName ?? pullRequest.head?.ref;
+  const task = {
+    id: `github-pr-${pullRequest.number}`,
+    source: 'github',
+    repository,
+    objective: buildPullRequestObjective(pullRequest),
+    constraints: [
+      'mode:read-only-pr-review',
+      `pr:${pullRequest.number}`,
+      `base:${baseRef}`,
+      `head:${headRef}`
+    ],
+    acceptance: extractAcceptance(pullRequest.body),
+    priority: extractPriority(pullRequest.labels),
+    createdAt: pullRequest.createdAt ?? pullRequest.created_at,
+    version: '1'
+  };
+
+  assertNonEmptyString(baseRef, 'pullRequest.baseRefName');
+  assertNonEmptyString(headRef, 'pullRequest.headRefName');
+  validateTaskSpec(task);
+
+  return task;
+}
+
 function buildObjective(issue) {
   assertNonEmptyString(issue.title, 'issue.title');
 
   const body = typeof issue.body === 'string' ? issue.body.trim() : '';
 
   return [issue.title.trim(), body].filter(Boolean).join('\n\n');
+}
+
+function buildPullRequestObjective(pullRequest) {
+  assertNonEmptyString(pullRequest.title, 'pullRequest.title');
+
+  const body = typeof pullRequest.body === 'string' ? pullRequest.body.trim() : '';
+
+  return [`Review PR #${pullRequest.number}: ${pullRequest.title.trim()}`, body].filter(Boolean).join('\n\n');
 }
 
 function extractAcceptance(body) {
@@ -71,5 +116,11 @@ function extractPriority(labels) {
 function assertNonEmptyString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new TypeError(`${field} must be a non-empty string`);
+  }
+}
+
+function assertPositiveInteger(value, field) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new TypeError(`${field} must be a positive integer`);
   }
 }

@@ -68,7 +68,8 @@ Implemented and tested:
 - Phase J route decision artifact slice: orchestrator command runs write `<command>-route-decision` artifacts and link them from command run records.
 - Phase J eval approval slice: eval recommendations stay advisory unless a release approval explicitly names the candidate model profile.
 - Phase K GitHub issue intake slice: pure GitHub issue metadata conversion produces validated `TaskSpec` objects with source, repository, objective, acceptance, priority, and created timestamp.
-- Test baseline: `pnpm test` currently covers 108 tests across 18 suites.
+- Phase K GitHub PR intake slice: pure pull request metadata conversion produces read-only review `TaskSpec` objects with PR number, base/head refs, and acceptance criteria.
+- Test baseline: `pnpm test` currently covers 109 tests across 18 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -490,7 +491,7 @@ Acceptance:
 
 ### Phase K: GitHub Intake and CI Feedback
 
-Status: in progress. Pure GitHub issue metadata to `TaskSpec` conversion is complete; live `gh` intake, PR conversion, CI status artifact capture, optional PR/comment summary, and branch/workspace naming policy remain.
+Status: in progress. Pure GitHub issue and PR metadata to `TaskSpec` conversion is complete; live `gh` intake, CI status artifact capture, optional PR/comment summary, and branch/workspace naming policy remain.
 
 Goal: support one real tracker first. Choose GitHub for V1 because the repository already uses GitHub and `gh` is available.
 
@@ -733,15 +734,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase K with GitHub PR intake conversion.
+Continue Phase K with CI status artifact capture.
 
 First red test:
 
-- Add a GitHub PR intake test proving PR metadata converts into a read-only review `TaskSpec` with PR number, branch refs, and acceptance criteria.
+- Add a CI status capture test proving GitHub check runs normalize into an artifact-ready summary with conclusion, URL, status, and failing check names.
 
 First implementation:
 
-- Extend `src/trackers/github-intake.js` with PR conversion helpers before adding any live `gh` command wrapper.
+- Add pure CI normalization helpers in `src/trackers/github-intake.js`; keep live `gh` collection as a later wrapper.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
