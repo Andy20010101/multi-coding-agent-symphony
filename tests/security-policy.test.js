@@ -183,6 +183,117 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       matchedRule: null
     });
   });
+
+  it('enforces configured network policy decisions', () => {
+    const policy = new PolicyEngine({
+      network: 'restricted',
+      allowedNetworkHosts: ['api.github.com'],
+      deniedNetworkHosts: ['*.internal']
+    });
+
+    assert.deepEqual(policy.decide({
+      action: 'network',
+      target: 'https://api.github.com/repos'
+    }), {
+      decision: 'allow',
+      reason: 'network-host-allowed',
+      matchedRule: 'api.github.com'
+    });
+    assert.deepEqual(policy.decide({
+      action: 'network',
+      target: 'https://build.internal/jobs'
+    }), {
+      decision: 'deny',
+      reason: 'network-denied',
+      matchedRule: '*.internal'
+    });
+    assert.deepEqual(new PolicyEngine({ network: 'disabled' }).decide({
+      action: 'network',
+      target: 'https://api.github.com'
+    }), {
+      decision: 'deny',
+      reason: 'network-denied',
+      matchedRule: 'disabled'
+    });
+  });
+
+  it('blocks denied network requests before adapter start and records allowed decisions', async () => {
+    const deniedRoot = await mkdtemp(join(tmpdir(), 'mcas-security-network-deny-'));
+    const allowedRoot = await mkdtemp(join(tmpdir(), 'mcas-security-network-allow-'));
+    const networkRequest = {
+      action: 'network',
+      target: 'https://api.github.com/repos'
+    };
+
+    try {
+      const deniedAdapter = new CapturingAdapter();
+      const deniedReport = await deniedAdapter.probe();
+      const deniedOrchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(deniedRoot, 'artifacts')),
+        eventLog: new SessionEventLog(join(deniedRoot, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(deniedRoot, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [deniedReport] }),
+        policyEngine: new PolicyEngine({ network: 'disabled' }),
+        adapters: {
+          codex: deniedAdapter
+        }
+      });
+
+      await assert.rejects(
+        () => deniedOrchestrator.runCommand({
+          taskSpec,
+          commandSpec: networkCommandSpec,
+          policyRequests: [networkRequest]
+        }),
+        PolicyDeniedError
+      );
+      assert.equal(deniedAdapter.starts.length, 0);
+
+      const allowedAdapter = new CapturingAdapter();
+      const allowedReport = await allowedAdapter.probe();
+      const allowedEventLog = new SessionEventLog(join(allowedRoot, 'events'), 'session-allowed');
+      const allowedOrchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(allowedRoot, 'artifacts')),
+        eventLog: allowedEventLog,
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(allowedRoot, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [allowedReport] }),
+        policyEngine: new PolicyEngine({
+          network: 'restricted',
+          allowedNetworkHosts: ['api.github.com']
+        }),
+        adapters: {
+          codex: allowedAdapter
+        }
+      });
+
+      await allowedOrchestrator.runCommand({
+        taskSpec: {
+          ...taskSpec,
+          id: 'task-security-policy-network'
+        },
+        commandSpec: networkCommandSpec,
+        policyRequests: [networkRequest]
+      });
+
+      const policyEvent = (await allowedEventLog.readAll()).find((event) => {
+        return event.type === 'policy.decision';
+      });
+
+      assert.deepEqual(policyEvent.payload, {
+        request: networkRequest,
+        decision: {
+          decision: 'allow',
+          reason: 'network-host-allowed',
+          matchedRule: 'api.github.com'
+        }
+      });
+      assert.equal(allowedAdapter.starts.length, 1);
+      assert.deepEqual(allowedAdapter.starts[0].policyDecisions, [policyEvent.payload.decision]);
+    } finally {
+      await rm(deniedRoot, { recursive: true, force: true });
+      await rm(allowedRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 const taskSpec = {
@@ -201,6 +312,11 @@ const commandSpec = {
   workspacePolicy: 'primary-writer',
   doneCriteria: ['diff-created', 'tests-run', 'evidence-written'],
   evidenceSchema: 'implementation-evidence.v1'
+};
+
+const networkCommandSpec = {
+  ...commandSpec,
+  allowedTools: [...commandSpec.allowedTools, 'network']
 };
 
 class CapturingAdapter extends CodexAdapter {

@@ -57,6 +57,20 @@ Required fields:
 }
 ```
 
+## PolicyRequest and PolicyDecision
+
+`PolicyRequest` is evaluated before adapter start. Denied decisions stop execution and are also written to the Session Event Log.
+
+Supported request shapes:
+
+```json
+{ "action": "read|write", "target": "/repo/path" }
+{ "action": "shell", "command": "pnpm test" }
+{ "action": "network", "target": "https://api.github.com/repos" }
+```
+
+Network policy lives in execution policy config. `network: "disabled"` denies all network requests, `network: "enabled"` allows all non-denied hosts, and `network: "restricted"` allows only `allowedNetworkHosts`; `deniedNetworkHosts` takes precedence.
+
 ## AdapterMapping
 
 `AdapterMapping` translates a command into a concrete CLI run.

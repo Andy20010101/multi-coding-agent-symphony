@@ -78,13 +78,14 @@ Implemented and tested:
 - Phase M redaction slice: ArtifactStore and SessionEventLog redact token-looking strings, authorization headers, `.env` paths, and auth file paths before persistence without mutating caller objects.
 - Phase M denied path slice: PolicyEngine denies default sensitive paths such as `.env.*`, `.ssh`, `.npmrc`, `.netrc`, and `secrets`, and Orchestrator blocks adapter start on those denials.
 - Phase M shell command policy slice: PolicyEngine supports denied exact commands, denied command patterns, allowed exact commands, and allowed command patterns with deny precedence and default-deny fallback.
-- Test baseline: `pnpm test` currently covers 130 tests across 20 suites.
+- Phase M network policy slice: PolicyEngine supports `network` policy requests with disabled, enabled, and restricted host modes; Orchestrator blocks denied network access before adapter start and records allowed decisions.
+- Test baseline: `pnpm test` currently covers 132 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Phase M still needs network policy, adapter permission mapping, and security checklist docs.
+- Phase M still needs adapter permission mapping and security checklist docs.
 - Phase N release gate docs remain.
 
 ## Target V1
@@ -568,7 +569,7 @@ Acceptance:
 
 ### Phase M: Security, Redaction, and Policy Enforcement
 
-Status: in progress. Artifact/session event redaction, default denied path policy, and shell command allow/deny pattern policy are complete.
+Status: in progress. Artifact/session event redaction, default denied path policy, shell command allow/deny pattern policy, and network policy are complete.
 
 Goal: prevent adapters and artifacts from leaking secrets or bypassing policy.
 
@@ -747,15 +748,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase M with network policy.
+Continue Phase M with adapter permission mapping.
 
 First red test:
 
-- Add tests proving commands with denied network access fail before adapter start and commands with allowed network access emit auditable policy decisions.
+- Add tests proving Codex, Claude Code, and Kiro receive adapter-local permission restrictions derived from denied path, shell, and network decisions without changing `CommandSpec` semantics.
 
 First implementation:
 
-- Add a network policy request shape to PolicyEngine and Orchestrator policy gates without weakening existing path or shell denials.
+- Extend adapter prepare/config rendering so each CLI gets the strongest supported local permission mapping from existing `PolicyDecision` objects.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

@@ -7,6 +7,7 @@ const DEFAULT_DENIED_PATHS = [
   '**/secrets/**'
 ];
 const COMMAND_PATTERN_WILDCARD = '[^\\s;&|<>`$()\\n\\r]+';
+const NETWORK_STATES = new Set(['enabled', 'disabled', 'restricted']);
 
 export class PolicyEngine {
   constructor(policy = {}) {
@@ -15,6 +16,9 @@ export class PolicyEngine {
     this.deniedCommands = [...(policy.deniedCommands ?? [])];
     this.allowedCommandPatterns = [...(policy.allowedCommandPatterns ?? [])];
     this.deniedCommandPatterns = [...(policy.deniedCommandPatterns ?? [])];
+    this.network = policy.network ?? 'disabled';
+    this.allowedNetworkHosts = [...(policy.allowedNetworkHosts ?? [])];
+    this.deniedNetworkHosts = [...(policy.deniedNetworkHosts ?? [])];
   }
 
   decide(request) {
@@ -28,6 +32,10 @@ export class PolicyEngine {
 
     if (request.action === 'shell') {
       return this.#decideCommand(request.command);
+    }
+
+    if (request.action === 'network') {
+      return this.#decideNetwork(request.target);
     }
 
     return {
@@ -122,6 +130,72 @@ export class PolicyEngine {
       matchedRule: null
     };
   }
+
+  #decideNetwork(target) {
+    const host = normalizeNetworkTarget(target);
+
+    if (!host) {
+      return {
+        decision: 'deny',
+        reason: 'invalid-network-target',
+        matchedRule: null
+      };
+    }
+
+    if (!NETWORK_STATES.has(this.network)) {
+      return {
+        decision: 'deny',
+        reason: 'invalid-network-policy',
+        matchedRule: this.network
+      };
+    }
+
+    const deniedHost = this.deniedNetworkHosts.find((pattern) => matchesHostPattern(pattern, host));
+
+    if (deniedHost) {
+      return {
+        decision: 'deny',
+        reason: 'network-denied',
+        matchedRule: deniedHost
+      };
+    }
+
+    if (this.network === 'disabled') {
+      return {
+        decision: 'deny',
+        reason: 'network-denied',
+        matchedRule: 'disabled'
+      };
+    }
+
+    if (this.network === 'enabled') {
+      return {
+        decision: 'allow',
+        reason: 'network-allowed',
+        matchedRule: 'enabled'
+      };
+    }
+
+    if (this.network === 'restricted') {
+      const allowedHost = this.allowedNetworkHosts.find((pattern) => matchesHostPattern(pattern, host));
+
+      if (allowedHost) {
+        return {
+          decision: 'allow',
+          reason: 'network-host-allowed',
+          matchedRule: allowedHost
+        };
+      }
+
+      return {
+        decision: 'deny',
+        reason: 'network-denied',
+        matchedRule: 'restricted'
+      };
+    }
+
+    throw new Error(`Unhandled network policy: ${this.network}`);
+  }
 }
 
 function matchesPathPattern(pattern, target) {
@@ -162,4 +236,51 @@ function escapeCommandPattern(pattern) {
 
 function escapeRegExp(value) {
   return value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+}
+
+function normalizeNetworkTarget(target) {
+  if (typeof target !== 'string' || target.trim() === '') {
+    return null;
+  }
+
+  const value = target.trim();
+
+  try {
+    const url = new URL(value.includes('://') ? value : `https://${value}`);
+    return normalizeHost(url.hostname);
+  } catch {
+    return normalizeHost(value.replace(/:\d+$/, ''));
+  }
+}
+
+function matchesHostPattern(pattern, host) {
+  if (typeof pattern !== 'string' || pattern.trim() === '') {
+    return false;
+  }
+
+  const normalizedPattern = normalizeHostPattern(pattern);
+
+  if (!normalizedPattern) {
+    return false;
+  }
+
+  if (normalizedPattern.startsWith('*.')) {
+    return host.endsWith(normalizedPattern.slice(1));
+  }
+
+  return host === normalizedPattern;
+}
+
+function normalizeHostPattern(pattern) {
+  const value = pattern.trim().toLowerCase();
+
+  if (value.startsWith('*.')) {
+    return normalizeHost(value);
+  }
+
+  return normalizeNetworkTarget(value);
+}
+
+function normalizeHost(host) {
+  return host.toLowerCase().replace(/\.$/, '');
 }

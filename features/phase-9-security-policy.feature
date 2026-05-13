@@ -24,3 +24,10 @@ Feature: Phase 9 security, redaction, and policy enforcement
     Then exact denied commands override allowed commands
     And matching command patterns are allowed
     And unmatched shell commands are denied
+
+  Scenario: Gate network access through policy decisions
+    Given an orchestrator with configured network policy
+    When a command requests denied network access
+    Then the adapter is not started
+    When a command requests allowed network access
+    Then the session event log records the network policy decision
