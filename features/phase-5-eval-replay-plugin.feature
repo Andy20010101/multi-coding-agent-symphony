@@ -6,6 +6,12 @@ Feature: Phase 5 external eval replay plugin
     Then it returns task results grouped by task id
     And the plugin does not require runtime adapter state
 
+  Scenario: Build replay samples from prior command artifacts
+    Given the Session Event Log references baseline and candidate evidence artifacts
+    When the Eval Replay plugin builds a sample from the event log
+    Then it reads evidence artifacts from the Artifact Store
+    And it normalizes verified status, failure category, command, and task class
+
   Scenario: Compare model profiles on the same task sample
     Given baseline and candidate results for the same tasks
     When the Eval Replay plugin scores the sample
@@ -22,4 +28,3 @@ Feature: Phase 5 external eval replay plugin
     When the Eval Replay plugin creates recommendations
     Then the report recommends reviewing routing for the candidate
     And the core router configuration is not mutated
-

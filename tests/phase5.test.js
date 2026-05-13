@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { ArtifactStore } from '../src/artifact-store.js';
+import { SessionEventLog } from '../src/session-event-log.js';
 import {
+  buildReplaySampleFromSession,
   loadReplaySample,
   runEvalReplay
 } from '../plugins/eval-replay/index.js';
@@ -60,6 +62,90 @@ describe('Phase 5 external eval replay plugin', () => {
               costUsd: 0.8,
               latencySeconds: 8,
               failureCategory: null
+            }
+          ]
+        }
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('builds replay samples from session log artifact events and evidence artifacts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-eval-session-'));
+
+    try {
+      const store = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'session-1');
+
+      await store.writeArtifact('task-1', 'baseline-implement-evidence', {
+        command: 'implement',
+        taskId: 'task-1',
+        workspaceId: 'workspace-1',
+        variant: 'baseline',
+        taskClass: 'adapter-regression',
+        diffSummary: [],
+        changedFiles: ['src/example.js'],
+        checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }],
+        knownRisks: [],
+        costUsd: 1.4,
+        latencySeconds: 32,
+        agentSummary: 'Baseline completed.',
+        version: '1'
+      });
+      await store.writeArtifact('task-1', 'candidate-implement-evidence', {
+        command: 'implement',
+        taskId: 'task-1',
+        workspaceId: 'workspace-2',
+        variant: 'candidate',
+        taskClass: 'adapter-regression',
+        diffSummary: [],
+        changedFiles: ['src/example.js'],
+        checks: [{ name: 'pnpm test', status: 'failed', artifactId: 'test-log', output: 'failed' }],
+        knownRisks: [],
+        costUsd: 1.1,
+        latencySeconds: 28,
+        agentSummary: 'Candidate failed tests.',
+        version: '1'
+      });
+      await store.writeArtifact('task-1', 'implement-run', {
+        command: 'implement',
+        verificationStatus: 'passed',
+        version: '1'
+      });
+      await appendArtifactEvent(eventLog, 'event-1', 'task-1', 'baseline-implement-evidence');
+      await appendArtifactEvent(eventLog, 'event-2', 'task-1', 'candidate-implement-evidence');
+      await appendArtifactEvent(eventLog, 'event-3', 'task-1', 'implement-run');
+
+      assert.deepEqual(await buildReplaySampleFromSession({
+        artifactStore: store,
+        eventLog,
+        taskIds: ['task-1']
+      }), {
+        id: 'sample-task-1',
+        resultsByTask: {
+          'task-1': [
+            {
+              taskId: 'task-1',
+              variant: 'baseline',
+              verified: true,
+              costUsd: 1.4,
+              latencySeconds: 32,
+              failureCategory: null,
+              command: 'implement',
+              taskClass: 'adapter-regression',
+              evidenceArtifactId: 'baseline-implement-evidence'
+            },
+            {
+              taskId: 'task-1',
+              variant: 'candidate',
+              verified: false,
+              costUsd: 1.1,
+              latencySeconds: 28,
+              failureCategory: 'check-failed',
+              command: 'implement',
+              taskClass: 'adapter-regression',
+              evidenceArtifactId: 'candidate-implement-evidence'
             }
           ]
         }
@@ -196,3 +282,16 @@ describe('Phase 5 external eval replay plugin', () => {
   });
 });
 
+async function appendArtifactEvent(eventLog, id, taskId, artifactId) {
+  await eventLog.append({
+    id,
+    type: 'artifact.written',
+    timestamp: '2026-05-13T00:00:00.000Z',
+    actor: 'orchestrator',
+    payload: {
+      taskId,
+      artifactId
+    },
+    version: '1'
+  });
+}

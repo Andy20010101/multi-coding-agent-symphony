@@ -30,6 +30,46 @@ export async function loadReplaySample({ artifactStore, tasks }) {
   };
 }
 
+export async function buildReplaySampleFromSession({ artifactStore, eventLog, taskIds }) {
+  if (!artifactStore || typeof artifactStore.readArtifact !== 'function') {
+    throw new TypeError('artifactStore must provide readArtifact');
+  }
+
+  if (!eventLog || typeof eventLog.readAll !== 'function') {
+    throw new TypeError('eventLog must provide readAll');
+  }
+
+  if (!Array.isArray(taskIds) || taskIds.length === 0) {
+    throw new TypeError('taskIds must be a non-empty array');
+  }
+
+  const selectedTaskIds = new Set(taskIds);
+  const resultsByTask = Object.fromEntries(taskIds.map((taskId) => {
+    assertNonEmptyString(taskId, 'taskId');
+    return [taskId, []];
+  }));
+  const events = await eventLog.readAll();
+  const artifactEvents = events.filter((event) => event.type === 'artifact.written' &&
+    selectedTaskIds.has(event.payload.taskId) &&
+    typeof event.payload.artifactId === 'string');
+
+  for (const event of artifactEvents) {
+    const { taskId, artifactId } = event.payload;
+    const artifact = await artifactStore.readArtifact(taskId, artifactId);
+
+    if (!isEvidenceArtifact(artifact)) {
+      continue;
+    }
+
+    resultsByTask[taskId].push(normalizeReplayResult({ taskId, artifactId, artifact }));
+  }
+
+  return {
+    id: `sample-${taskIds.join('-')}`,
+    resultsByTask
+  };
+}
+
 export function runEvalReplay({
   reason,
   baseline,
@@ -64,6 +104,48 @@ export function runEvalReplay({
     mutatedCoreConfig: didMutateCoreConfig(coreRouterConfig),
     version: '1'
   };
+}
+
+function isEvidenceArtifact(artifact) {
+  return artifact !== null &&
+    typeof artifact === 'object' &&
+    !Array.isArray(artifact) &&
+    typeof artifact.command === 'string' &&
+    Array.isArray(artifact.checks);
+}
+
+function normalizeReplayResult({ taskId, artifactId, artifact }) {
+  return {
+    taskId,
+    variant: inferVariant({ artifactId, artifact }),
+    verified: artifact.verified ?? artifact.checks.every((check) => check.status === 'passed'),
+    costUsd: numberOrZero(artifact.costUsd),
+    latencySeconds: numberOrZero(artifact.latencySeconds),
+    failureCategory: artifact.failureCategory ?? inferFailureCategory(artifact),
+    command: artifact.command,
+    taskClass: artifact.taskClass ?? artifact.command,
+    evidenceArtifactId: artifactId
+  };
+}
+
+function inferVariant({ artifactId, artifact }) {
+  if (typeof artifact.variant === 'string' && artifact.variant.trim() !== '') {
+    return artifact.variant;
+  }
+
+  if (artifactId.includes('baseline')) {
+    return 'baseline';
+  }
+
+  if (artifactId.includes('candidate')) {
+    return 'candidate';
+  }
+
+  return 'sample';
+}
+
+function inferFailureCategory(artifact) {
+  return artifact.checks.some((check) => check.status !== 'passed') ? 'check-failed' : null;
 }
 
 function collectVariant(sample, variant) {
@@ -179,4 +261,3 @@ function assertNumber(value, field) {
     throw new TypeError(`${field} must be a finite number`);
   }
 }
-

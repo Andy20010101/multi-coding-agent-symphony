@@ -57,7 +57,8 @@ Implemented and tested:
 - Phase H verifier provenance slice: production checks require command-plus-exit-code or artifact provenance, read-only changed-file scope violations fail verification, and failed check lists contain only failed checks.
 - Phase H command evidence slice: implementation evidence requires changed files or no-op rationale, review evidence requires findings or no-finding rationale, and production QA evidence requires at least one check artifact.
 - Phase H workspace boundary slice: verifier rejects changed files that resolve outside the provided workspace manifest path, and the orchestrator passes the allocated workspace into verification.
-- Test baseline: `pnpm test` currently covers 96 tests across 16 suites.
+- Phase I eval sample-builder slice: `buildReplaySampleFromSession` builds replay samples from `artifact.written` session events and evidence artifacts without adapter state.
+- Test baseline: `pnpm test` currently covers 97 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -406,6 +407,8 @@ Acceptance:
 - Verification failures are actionable and machine-readable.
 
 ### Phase I: Eval/Replay Productionization
+
+Status: in progress. Session-log sample building from stored evidence artifacts is complete; report artifact writing, resource comparison qualification, release-gate script, richer recommendations, and fixtures remain.
 
 Goal: make external eval useful for model updates, adapter changes, and harness refactors.
 

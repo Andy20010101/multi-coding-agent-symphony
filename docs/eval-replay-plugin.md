@@ -4,6 +4,12 @@ Eval/Replay is an external plugin, not part of the hot execution path.
 
 Current implementation path: `plugins/eval-replay/index.js`.
 
+Implemented entrypoints:
+
+- `loadReplaySample({ artifactStore, tasks })` loads explicit artifact IDs.
+- `buildReplaySampleFromSession({ artifactStore, eventLog, taskIds })` reads `artifact.written` session events and normalizes evidence artifacts into replay results without adapter state.
+- `runEvalReplay(...)` scores baseline and candidate variants and emits recommendations without mutating core config.
+
 ## Purpose
 
 The plugin answers these questions:
@@ -47,6 +53,8 @@ Required inputs:
 - Session event logs.
 - Artifacts and evidence.
 - ResourceProfile.
+
+`buildReplaySampleFromSession` ignores non-evidence run records and normalizes evidence fields into `variant`, `verified`, `failureCategory`, `command`, `taskClass`, `costUsd`, `latencySeconds`, and `evidenceArtifactId`.
 
 ## Outputs
 
