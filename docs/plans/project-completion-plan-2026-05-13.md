@@ -76,13 +76,14 @@ Implemented and tested:
 - Phase K GitHub naming policy slice: PR branch and workspace names are deterministic ASCII safe path segments derived from repository, PR number, and head ref.
 - Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`, `pnpm mcas run-next ...` executes the standard dry-run workflow with verifier exit-code mapping, `pnpm mcas run-task ...` runs TaskSpec JSON files without queue state, `pnpm mcas smoke <adapter>` dispatches existing package smoke scripts, `pnpm mcas eval replay -- ...` dispatches the eval replay package script, and `--config` loads runtime path defaults with flag override precedence.
 - Phase M redaction slice: ArtifactStore and SessionEventLog redact token-looking strings, authorization headers, `.env` paths, and auth file paths before persistence without mutating caller objects.
-- Test baseline: `pnpm test` currently covers 127 tests across 20 suites.
+- Phase M denied path slice: PolicyEngine denies default sensitive paths such as `.env.*`, `.ssh`, `.npmrc`, `.netrc`, and `secrets`, and Orchestrator blocks adapter start on those denials.
+- Test baseline: `pnpm test` currently covers 129 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Phase M still needs shell command allow/deny matching, network policy, adapter permission mapping, and security checklist docs.
+- Phase M still needs shell command allow/deny pattern matching, network policy, adapter permission mapping, and security checklist docs.
 - Phase N release gate docs remain.
 
 ## Target V1
@@ -566,7 +567,7 @@ Acceptance:
 
 ### Phase M: Security, Redaction, and Policy Enforcement
 
-Status: in progress. Artifact and session event redaction is complete for token-looking strings, authorization headers, `.env` paths, and auth file paths.
+Status: in progress. Artifact/session event redaction and default denied path policy are complete.
 
 Goal: prevent adapters and artifacts from leaking secrets or bypassing policy.
 
@@ -745,15 +746,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase M with denied path policy enforcement.
+Continue Phase M with shell command policy patterns.
 
 First red test:
 
-- Add tests proving denied file paths block adapter start before real CLI execution.
+- Add tests proving exact allowed shell commands still pass, denied shell commands fail, and configured shell patterns allow expected command families only.
 
 First implementation:
 
-- Extend policy checks so sensitive path requests are represented as denial decisions and orchestrator policy gates stop adapter start.
+- Extend PolicyEngine shell matching with explicit allow patterns while retaining default-deny behavior.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

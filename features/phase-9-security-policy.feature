@@ -11,3 +11,9 @@ Feature: Phase 9 security, redaction, and policy enforcement
     When the session event log appends the event
     Then the persisted event does not contain the raw token or env path
     And the returned event payload is redacted
+
+  Scenario: Deny sensitive file paths before adapter start
+    Given an orchestrator with the default policy engine
+    When a command requests access to a sensitive file path
+    Then the policy decision denies the path
+    And the adapter is not started

@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { ArtifactStore } from '../src/artifact-store.js';
+import { CodexAdapter } from '../src/adapters/codex-adapter.js';
+import { Orchestrator, PolicyDeniedError } from '../src/orchestrator.js';
+import { PolicyEngine } from '../src/policy-engine.js';
+import { RouterScheduler } from '../src/router-scheduler.js';
 import { SessionEventLog } from '../src/session-event-log.js';
+import { WorkspaceManager } from '../src/workspace-manager.js';
 
 describe('Phase 9 security, redaction, and policy enforcement', () => {
   it('redacts secret-looking artifact output before persistence', async () => {
@@ -73,4 +78,89 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('denies default sensitive paths before adapter start', async () => {
+    const policy = new PolicyEngine();
+
+    assert.deepEqual(policy.decide({
+      action: 'read',
+      target: '/repo/.env.local'
+    }), {
+      decision: 'deny',
+      reason: 'sensitive-path',
+      matchedRule: '.env.*'
+    });
+    assert.deepEqual(policy.decide({
+      action: 'write',
+      target: '/home/user/.ssh/id_rsa'
+    }), {
+      decision: 'deny',
+      reason: 'sensitive-path',
+      matchedRule: '**/.ssh/**'
+    });
+  });
+
+  it('blocks sensitive path policy requests before adapter start', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-security-policy-'));
+
+    try {
+      const adapter = new CapturingAdapter();
+      const report = await adapter.probe();
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        policyEngine: new PolicyEngine(),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      await assert.rejects(
+        () => orchestrator.runCommand({
+          taskSpec,
+          commandSpec,
+          policyRequests: [{
+            action: 'read',
+            target: '/repo/.env'
+          }]
+        }),
+        PolicyDeniedError
+      );
+      assert.equal(adapter.starts.length, 0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
+
+const taskSpec = {
+  id: 'task-security-policy',
+  source: 'manual',
+  repository: 'Andy20010101/multi-coding-agent-symphony',
+  objective: 'Verify policy gate',
+  acceptance: ['adapter is not started'],
+  version: '1'
+};
+
+const commandSpec = {
+  name: 'implement',
+  version: '1',
+  allowedTools: ['read', 'write', 'shell', 'test'],
+  workspacePolicy: 'primary-writer',
+  doneCriteria: ['diff-created', 'tests-run', 'evidence-written'],
+  evidenceSchema: 'implementation-evidence.v1'
+};
+
+class CapturingAdapter extends CodexAdapter {
+  constructor() {
+    super({ cliVersion: 'synthetic-policy-test' });
+    this.starts = [];
+  }
+
+  async start(input) {
+    this.starts.push(structuredClone(input));
+    return super.start(input);
+  }
+}

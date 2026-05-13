@@ -1,6 +1,15 @@
+const DEFAULT_DENIED_PATHS = [
+  '.env',
+  '.env.*',
+  '**/.ssh/**',
+  '.npmrc',
+  '.netrc',
+  '**/secrets/**'
+];
+
 export class PolicyEngine {
   constructor(policy = {}) {
-    this.deniedPaths = [...(policy.deniedPaths ?? [])];
+    this.deniedPaths = [...DEFAULT_DENIED_PATHS, ...(policy.deniedPaths ?? [])];
     this.allowedCommands = [...(policy.allowedCommands ?? [])];
   }
 
@@ -78,12 +87,13 @@ export class PolicyEngine {
 }
 
 function matchesPathPattern(pattern, target) {
-  if (pattern === target) {
+  if (pattern === target || target.endsWith(`/${pattern}`)) {
     return true;
   }
 
   if (pattern.endsWith('.*')) {
-    return target.startsWith(pattern.slice(0, -1));
+    const prefix = pattern.slice(0, -1);
+    return target.startsWith(prefix) || target.includes(`/${prefix}`);
   }
 
   if (pattern.startsWith('**/') && pattern.endsWith('/**')) {
@@ -92,4 +102,3 @@ function matchesPathPattern(pattern, target) {
 
   return false;
 }
-
