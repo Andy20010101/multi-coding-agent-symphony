@@ -22,3 +22,16 @@ Feature: Kiro CLI real integration
     Then stdout and stderr are preserved
     And the evidence contains no passing checks by default
     And the known risks include real CLI output requiring verification
+
+  Scenario: Guard real Kiro CLI smoke tests
+    Given the real Kiro CLI smoke flag is not set
+    When the smoke script runs
+    Then no model is invoked
+    And the script reports how to enable the real smoke
+
+  Scenario: Run a read-only real Kiro CLI smoke test
+    Given the real Kiro CLI smoke flag is set
+    When the smoke script runs
+    Then Kiro CLI runs in real execution mode
+    And the command trusts read tools only
+    And the verifier accepts the structured smoke evidence

@@ -12,7 +12,9 @@
     "smoke:codex:real": "node scripts/smoke-codex-real.js",
     "smoke:codex:writer": "node scripts/smoke-codex-writer.js",
     "smoke:claude:help": "claude --help",
-    "smoke:claude:real": "node scripts/smoke-claude-real.js"
+    "smoke:claude:real": "node scripts/smoke-claude-real.js",
+    "smoke:kiro:help": "kiro-cli --help",
+    "smoke:kiro:real": "node scripts/smoke-kiro-real.js"
   },
   "engines": {
     "node": ">=20"

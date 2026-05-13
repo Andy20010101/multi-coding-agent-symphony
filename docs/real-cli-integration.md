@@ -85,7 +85,22 @@ Implemented:
 - stdout is parsed for structured `EvidencePackage` content.
 - If no valid structured evidence is found, raw Kiro output is marked with `real-cli-output-unverified` and contains no passing checks.
 
+Local binary smoke check:
+
+```sh
+pnpm smoke:kiro:help
+```
+
+Local `kiro-cli --help` and `kiro-cli chat --help` on 2026-05-13 confirm support for `chat`, `--no-interactive`, `--trust-tools`, `--model`, and `--require-mcp-startup`.
+
+Guarded real model smoke check:
+
+```sh
+MCAS_RUN_REAL_KIRO=1 pnpm smoke:kiro:real
+```
+
+This invokes the configured Kiro CLI model in read-only mode with trusted read tools only, parses stdout for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_KIRO_MODEL=<model>` to override the default `claude-kiro-default` profile.
+
 ## Remaining CLI Work
 
-- Add `pnpm smoke:kiro:help` and gated `pnpm smoke:kiro:real`.
 - Harden Kiro trust-tool policy deny mapping.

@@ -52,12 +52,13 @@ Implemented and tested:
 - Phase F Claude real runner slice: `ClaudeCodeAdapter` can run real mode through an injected `NodeProcessRunner`, parse stream-json structured evidence, and preserve raw output as verification-insufficient evidence.
 - Phase F Claude smoke slice: `pnpm smoke:claude:help` checks local CLI assumptions, and gated `pnpm smoke:claude:real` defaults to no model call unless `MCAS_RUN_REAL_CLAUDE=1` is set.
 - Phase G Kiro real runner slice: `KiroCliAdapter` can run real mode through an injected `NodeProcessRunner`, parse stdout structured evidence, and preserve raw output as verification-insufficient evidence.
-- Test baseline: `pnpm test` currently covers 83 tests across 15 suites.
+- Phase G Kiro smoke slice: `pnpm smoke:kiro:help` checks local CLI assumptions, and gated `pnpm smoke:kiro:real` defaults to no model call unless `MCAS_RUN_REAL_KIRO=1` is set.
+- Test baseline: `pnpm test` currently covers 86 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- Kiro CLI lacks help/real smoke gates and trust-tool policy deny hardening.
+- Kiro CLI trust-tool policy deny hardening remains.
 - Verifier accepts any check with `status: "passed"`; it does not yet verify provenance, command output, CI status, or changed-file scope.
 - Eval plugin scores synthetic samples but is not wired into release gates, model profile decisions, or artifact sampling.
 - No tracker intake is implemented for GitHub or Linear.
@@ -329,7 +330,7 @@ Acceptance:
 
 ### Phase G: Kiro CLI Real Adapter
 
-Status: in progress. Real process-runner execution and stdout evidence parsing are complete; smoke scripts and trust-tool deny hardening remain.
+Status: in progress. Real process-runner execution, stdout evidence parsing, and smoke gates are complete; trust-tool deny hardening remains.
 
 Goal: connect Kiro CLI as the spec-heavy Claude-backed lane.
 
