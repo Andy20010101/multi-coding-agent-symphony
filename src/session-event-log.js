@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { redactSecrets } from './redaction.js';
+
 const EVENT_TYPES = new Set([
   'task.created',
   'command.queued',
@@ -72,7 +74,7 @@ function normalizeEvent(event, sessionId) {
     throw new TypeError('event.payload must be an object');
   }
 
-  return structuredClone({ ...event, sessionId });
+  return redactSecrets(structuredClone({ ...event, sessionId }));
 }
 
 function assertNonEmptyString(value, field) {

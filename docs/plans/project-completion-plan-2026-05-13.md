@@ -75,13 +75,15 @@ Implemented and tested:
 - Phase K GitHub PR summary slice: PR summaries combine the validated review task, CI status, failing checks, and artifact references into an artifact-ready object plus markdown.
 - Phase K GitHub naming policy slice: PR branch and workspace names are deterministic ASCII safe path segments derived from repository, PR number, and head ref.
 - Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`, `pnpm mcas run-next ...` executes the standard dry-run workflow with verifier exit-code mapping, `pnpm mcas run-task ...` runs TaskSpec JSON files without queue state, `pnpm mcas smoke <adapter>` dispatches existing package smoke scripts, `pnpm mcas eval replay -- ...` dispatches the eval replay package script, and `--config` loads runtime path defaults with flag override precedence.
-- Test baseline: `pnpm test` currently covers 125 tests across 19 suites.
+- Phase M redaction slice: ArtifactStore and SessionEventLog redact token-looking strings, authorization headers, `.env` paths, and auth file paths before persistence without mutating caller objects.
+- Test baseline: `pnpm test` currently covers 127 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Phase M security/redaction policy and Phase N release gate docs remain.
+- Phase M still needs shell command allow/deny matching, network policy, adapter permission mapping, and security checklist docs.
+- Phase N release gate docs remain.
 
 ## Target V1
 
@@ -564,6 +566,8 @@ Acceptance:
 
 ### Phase M: Security, Redaction, and Policy Enforcement
 
+Status: in progress. Artifact and session event redaction is complete for token-looking strings, authorization headers, `.env` paths, and auth file paths.
+
 Goal: prevent adapters and artifacts from leaking secrets or bypassing policy.
 
 Work:
@@ -741,15 +745,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Start Phase M with artifact and event redaction.
+Continue Phase M with denied path policy enforcement.
 
 First red test:
 
-- Add tests proving secret-like values in artifacts and session events are redacted before persistence.
+- Add tests proving denied file paths block adapter start before real CLI execution.
 
 First implementation:
 
-- Add a small redaction module and route ArtifactStore/SessionEventLog writes through it without changing public contracts.
+- Extend policy checks so sensitive path requests are represented as denial decisions and orchestrator policy gates stop adapter start.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

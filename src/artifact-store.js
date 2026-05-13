@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { redactSecrets } from './redaction.js';
+
 export class ArtifactStore {
   constructor(rootDirectory) {
     this.rootDirectory = rootDirectory;
@@ -11,10 +13,11 @@ export class ArtifactStore {
     assertSafePathSegment(artifactId, 'artifactId');
 
     const directory = join(this.rootDirectory, taskId);
+    const redactedArtifact = redactSecrets(artifact);
     await mkdir(directory, { recursive: true });
     await writeFile(
       this.#artifactPath(taskId, artifactId),
-      `${JSON.stringify(artifact, null, 2)}\n`,
+      `${JSON.stringify(redactedArtifact, null, 2)}\n`,
       'utf8'
     );
 
@@ -39,4 +42,3 @@ function assertSafePathSegment(value, field) {
     throw new TypeError(`${field} must be a safe path segment`);
   }
 }
-
