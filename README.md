@@ -19,6 +19,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [BDD and TDD Workflow](docs/bdd-tdd-workflow.md)
 - [Eval Replay Plugin](docs/eval-replay-plugin.md)
 - [Real CLI Integration](docs/real-cli-integration.md)
+- [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
 - [ADR 0001: Use BDD and TDD](docs/adr/0001-use-bdd-tdd.md)
 
 ## Design Center
