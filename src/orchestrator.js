@@ -18,6 +18,7 @@ export class Orchestrator {
     eventLog,
     workspaceManager,
     scheduler,
+    taskQueue,
     policyEngine,
     adapters
   }) {
@@ -26,6 +27,7 @@ export class Orchestrator {
     this.eventLog = requireMethod(eventLog, 'append', 'eventLog');
     this.workspaceManager = requireMethod(workspaceManager, 'allocate', 'workspaceManager');
     this.scheduler = requireMethod(scheduler, 'route', 'scheduler');
+    this.taskQueue = taskQueue;
     this.policyEngine = policyEngine;
     this.adapters = adapters;
     this.eventSequence = 0;
@@ -257,6 +259,49 @@ export class Orchestrator {
       commands,
       artifactRefs
     };
+  }
+
+  async runNextTask({
+    commandSpecs,
+    modelProfile,
+    policyRequests = [],
+    executionMode = 'dry-run',
+    timeoutMs,
+    leaseTimeoutMs,
+    now
+  }) {
+    if (!this.taskQueue) {
+      throw new Error('taskQueue is required to run the next task');
+    }
+
+    requireMethod(this.taskQueue, 'leaseNext', 'taskQueue');
+    requireMethod(this.taskQueue, 'complete', 'taskQueue');
+
+    const leased = this.taskQueue.leaseNext({
+      adapterId: 'orchestrator',
+      command: 'workflow',
+      leaseTimeoutMs,
+      now
+    });
+
+    if (!leased) {
+      return null;
+    }
+
+    const result = await this.runTaskWorkflow({
+      taskSpec: leased.task,
+      commandSpecs,
+      modelProfile,
+      policyRequests,
+      executionMode,
+      timeoutMs
+    });
+
+    if (result.status === 'passed') {
+      this.taskQueue.complete(leased.task.id, { now });
+    }
+
+    return result;
   }
 
   async #appendEvent({ type, actor, payload }) {

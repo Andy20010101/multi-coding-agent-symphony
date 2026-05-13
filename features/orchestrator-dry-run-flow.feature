@@ -49,3 +49,9 @@ Feature: Orchestrator dry-run execution flow
     Given implementation evidence was written by an earlier workflow command
     When the review command context is built
     Then the context includes the referenced implementation evidence content
+
+  Scenario: Run the next persisted queued task
+    Given a Task Queue backed by a state file
+    And a queued task exists before orchestrator startup
+    When the Orchestrator runs the next task workflow
+    Then the queued task is leased, executed, and completed

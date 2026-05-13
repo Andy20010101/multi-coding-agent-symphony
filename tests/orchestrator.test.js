@@ -11,6 +11,7 @@ import { RouterScheduler } from '../src/router-scheduler.js';
 import { Orchestrator, PolicyDeniedError } from '../src/orchestrator.js';
 import { PolicyEngine } from '../src/policy-engine.js';
 import { CodexAdapter } from '../src/adapters/codex-adapter.js';
+import { TaskQueue } from '../src/task-queue.js';
 
 const taskSpec = {
   id: 'task-123',
@@ -477,6 +478,46 @@ describe('Orchestrator dry-run execution flow', () => {
       assert.deepEqual(hydrated[0].content.checks, [
         { name: 'synthetic-check', status: 'passed', output: 'synthetic check passed' }
       ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the next persisted queued task through the configured workflow', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-queue-'));
+
+    try {
+      const stateFile = join(root, 'queue.json');
+      const queue = new TaskQueue({ maxConcurrency: 1, stateFile });
+      queue.enqueue(taskSpec, {
+        now: '2026-05-13T00:00:00.000Z'
+      });
+
+      const reloadedQueue = new TaskQueue({ maxConcurrency: 1, stateFile });
+      const adapter = new CapturingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        taskQueue: reloadedQueue,
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runNextTask({
+        commandSpecs: [commandSpec, reviewCommandSpec],
+        leaseTimeoutMs: 1000,
+        now: '2026-05-13T00:00:01.000Z'
+      });
+
+      assert.equal(result.taskId, 'task-123');
+      assert.equal(result.status, 'passed');
+      assert.deepEqual(result.commands.map((command) => command.command), ['implement', 'review']);
+      assert.equal(reloadedQueue.get('task-123').status, 'completed');
+      assert.equal(new TaskQueue({ maxConcurrency: 1, stateFile }).get('task-123').status, 'completed');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
