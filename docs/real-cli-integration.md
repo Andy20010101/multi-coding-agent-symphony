@@ -76,4 +76,16 @@ This invokes the configured Claude Code model in read-only mode, parses stream J
 
 ## Remaining CLI Work
 
-- Repeat the real process-runner pattern for Kiro CLI.
+## Kiro CLI
+
+Implemented:
+
+- `KiroCliAdapter.start({ executionMode: "real" })` spawns `kiro-cli chat --no-interactive` through an injected `NodeProcessRunner`.
+- The prompt is sent on stdin.
+- stdout is parsed for structured `EvidencePackage` content.
+- If no valid structured evidence is found, raw Kiro output is marked with `real-cli-output-unverified` and contains no passing checks.
+
+## Remaining CLI Work
+
+- Add `pnpm smoke:kiro:help` and gated `pnpm smoke:kiro:real`.
+- Harden Kiro trust-tool policy deny mapping.
