@@ -43,7 +43,8 @@ Implemented and tested:
 - Phase D process runner slice: `NodeProcessRunner` exposes startable handles that can be cancelled while preserving partial output, with `run()` compatibility retained.
 - Phase D Codex cancellation slice: active real Codex runs store process handles, forward idempotent adapter cancellation, resume public state, and return cancelled evidence with partial output.
 - Phase D timeout escalation slice: timed out process runs first send `SIGTERM`, then escalate to `SIGKILL` after the timeout grace period while preserving partial output.
-- Test baseline: `pnpm test` currently covers 66 tests across 12 suites.
+- Phase E model profile mapping slice: Codex project profile IDs can defer to CLI config, map to concrete Codex `--model` names, or pass through as direct smoke override model names.
+- Test baseline: `pnpm test` currently covers 67 tests across 12 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -242,6 +243,8 @@ Acceptance:
 - Timed out process termination escalates after the configured grace period.
 
 ### Phase E: Codex Production Readiness
+
+Status: in progress. Model profile mapping is complete; prompt templates, writer smoke, log artifacts, workspace policy checks, and structured error parsing remain.
 
 Goal: make Codex adapter reliable enough for V1 writer/reviewer/QA use.
 

@@ -41,3 +41,9 @@ Feature: Codex real CLI integration
     Then Codex runs in real execution mode
     And the workspace policy is read-only
     And the verifier accepts the structured smoke evidence
+
+  Scenario: Resolve Codex model profiles before CLI execution
+    Given a Codex adapter configured with project model profile mappings
+    When the adapter prepares a real CLI command
+    Then profile ids can map to concrete Codex CLI model names
+    And profile ids can defer model selection to the Codex CLI config

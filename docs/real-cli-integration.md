@@ -16,6 +16,9 @@ Implemented:
 - A final JSON `EvidencePackage` is normalized with harness-owned `command`, `taskId`, and `workspaceId` metadata before verification.
 - If no valid structured evidence is found, raw Codex output is marked with `real-cli-output-unverified` and contains no passing checks.
 - Timeout results are normalized to `cli-timeout`.
+- Active real runs can be cancelled through the adapter lifecycle and preserve partial output as cancelled evidence.
+- Timed out process runs send `SIGTERM`, then escalate to `SIGKILL` after the configured grace period.
+- Model profile IDs are resolved before CLI execution: `gpt-codex-default` and `codex-config-default` defer to local Codex config, `modelProfileMappings` can map project IDs to concrete Codex `--model` names, and unmapped IDs are treated as direct CLI model names.
 - `Orchestrator.runCommand({ executionMode: "real" })` passes real execution mode and timeout settings through to the adapter.
 
 Local binary smoke check:
@@ -36,6 +39,7 @@ This invokes the configured Codex model in read-only mode, captures the final me
 
 ## Remaining CLI Work
 
-- Wire real cancellation for an active child process.
+- Add Codex prompt templates per command.
+- Capture raw Codex logs as first-class artifacts.
 - Repeat the real process-runner pattern for Claude Code.
 - Repeat the real process-runner pattern for Kiro CLI.

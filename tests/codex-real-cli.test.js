@@ -123,6 +123,41 @@ describe('Codex real CLI integration', () => {
     assert.equal(prepared.args.includes('--output-schema'), true);
   });
 
+  it('maps project model profile ids to Codex CLI models or config default', async () => {
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      modelProfileMappings: {
+        'codex-writer-explicit': 'gpt-5.4'
+      }
+    });
+
+    const explicit = await adapter.prepare({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'codex-writer-explicit',
+      executionMode: 'real'
+    });
+    const explicitModelIndex = explicit.args.indexOf('--model');
+
+    assert.equal(explicit.resolvedModelProfile, 'codex-writer-explicit');
+    assert.equal(explicit.resolvedModel, 'gpt-5.4');
+    assert.equal(explicit.args[explicitModelIndex + 1], 'gpt-5.4');
+
+    const configDefault = await adapter.prepare({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    assert.equal(configDefault.resolvedModelProfile, 'gpt-codex-default');
+    assert.equal(configDefault.resolvedModel, CODEX_CONFIG_DEFAULT_MODEL_PROFILE);
+    assert.equal(configDefault.args.includes('--model'), false);
+    assert.equal((await adapter.probe()).modelProfiles.includes('codex-writer-explicit'), true);
+  });
+
   it('streams parsed Codex JSONL output as adapter events', async () => {
     const runner = new FakeProcessRunner({
       exitCode: 0,

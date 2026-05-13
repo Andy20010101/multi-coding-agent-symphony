@@ -58,9 +58,10 @@ Codex:
 
 - Native surfaces include CLI, non-interactive mode, config, hooks, MCP, skills, subagents, and app-server style automation.
 - Good fit for GPT coding models and structured local verification loops.
-- Phase 3 dry-run mapping uses `codex exec --json --cd <workspace> --sandbox <mode> --model <profile>` and optional `--output-schema <file>`; real runs set the default evidence schema and `--output-last-message`.
+- Phase 3 dry-run mapping uses `codex exec --json --cd <workspace> --sandbox <mode>`, adds `--model <resolved-model>` when the profile does not resolve to config default, and supports optional `--output-schema <file>`; real runs set the default evidence schema and `--output-last-message`.
 - Real execution is opt-in with `executionMode: "real"` and uses `NodeProcessRunner` to spawn `codex exec`; structured final output is parsed as `EvidencePackage`, while raw-only output remains verification-insufficient.
 - `codex-config-default` is a special model profile that defers model selection to the local Codex CLI config instead of passing `--model`.
+- Codex model profile IDs are resolved adapter-side before CLI execution: `gpt-codex-default` defaults to local Codex config, constructor-provided `modelProfileMappings` can map project profile IDs to concrete Codex `--model` names, and unmapped IDs remain direct CLI model names for smoke overrides.
 
 Claude Code:
 

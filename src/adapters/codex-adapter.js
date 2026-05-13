@@ -11,6 +11,10 @@ const DEFAULT_EVIDENCE_SCHEMA_PATH = fileURLToPath(
   new URL('../../schemas/evidence-package.schema.json', import.meta.url)
 );
 export const CODEX_CONFIG_DEFAULT_MODEL_PROFILE = 'codex-config-default';
+export const DEFAULT_CODEX_MODEL_PROFILE_MAPPINGS = Object.freeze({
+  'gpt-codex-default': CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+  [CODEX_CONFIG_DEFAULT_MODEL_PROFILE]: CODEX_CONFIG_DEFAULT_MODEL_PROFILE
+});
 
 export class CodexAdapter extends BaseAdapter {
   constructor({
@@ -18,26 +22,31 @@ export class CodexAdapter extends BaseAdapter {
     executable = 'codex',
     processRunner = new NodeProcessRunner(),
     timeoutMs = 300000,
-    evidenceSchemaPath = DEFAULT_EVIDENCE_SCHEMA_PATH
+    evidenceSchemaPath = DEFAULT_EVIDENCE_SCHEMA_PATH,
+    modelProfileMappings = {}
   } = {}) {
+    const resolvedModelProfileMappings = normalizeModelProfileMappings(modelProfileMappings);
+
     super({
       adapterId: 'codex',
       cliName: 'codex',
       cliVersion,
       executable,
-      modelProfiles: ['gpt-codex-default', CODEX_CONFIG_DEFAULT_MODEL_PROFILE],
+      modelProfiles: [...resolvedModelProfileMappings.keys()],
       workspaceIsolation: 'external-workspace',
       logStrategy: 'jsonl-stdout'
     });
     this.processRunner = processRunner;
     this.timeoutMs = timeoutMs;
     this.evidenceSchemaPath = evidenceSchemaPath;
+    this.modelProfileMappings = resolvedModelProfileMappings;
   }
 
   async prepare(input) {
     validatePrepareInput(input);
     const outputSchemaPath = input.outputSchemaPath
       ?? (input.executionMode === 'real' ? this.evidenceSchemaPath : null);
+    const resolvedModel = resolveModelProfile(input.modelProfile, this.modelProfileMappings);
 
     const args = [
       'exec',
@@ -48,8 +57,8 @@ export class CodexAdapter extends BaseAdapter {
       sandboxFor(input.commandSpec.workspacePolicy)
     ];
 
-    if (input.modelProfile !== CODEX_CONFIG_DEFAULT_MODEL_PROFILE) {
-      args.push('--model', input.modelProfile);
+    if (resolvedModel !== CODEX_CONFIG_DEFAULT_MODEL_PROFILE) {
+      args.push('--model', resolvedModel);
     }
 
     if (outputSchemaPath) {
@@ -68,6 +77,8 @@ export class CodexAdapter extends BaseAdapter {
       cwd: input.workspace,
       prompt: buildRunPrompt(input),
       environment: {},
+      resolvedModelProfile: input.modelProfile,
+      resolvedModel,
       outputSchemaPath,
       outputLastMessagePath: input.outputLastMessagePath
     };
@@ -339,6 +350,36 @@ function extractStructuredEvidence(stored) {
 
 function safeForPath(value) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
+}
+
+function normalizeModelProfileMappings(modelProfileMappings) {
+  if (
+    modelProfileMappings === null
+    || typeof modelProfileMappings !== 'object'
+    || Array.isArray(modelProfileMappings)
+  ) {
+    throw new TypeError('modelProfileMappings must be an object');
+  }
+
+  const mappings = new Map(Object.entries(DEFAULT_CODEX_MODEL_PROFILE_MAPPINGS));
+
+  for (const [profile, model] of Object.entries(modelProfileMappings)) {
+    if (typeof profile !== 'string' || profile.trim() === '') {
+      throw new TypeError('model profile id must be a non-empty string');
+    }
+
+    if (typeof model !== 'string' || model.trim() === '') {
+      throw new TypeError(`model mapping for ${profile} must be a non-empty string`);
+    }
+
+    mappings.set(profile, model);
+  }
+
+  return mappings;
+}
+
+function resolveModelProfile(modelProfile, modelProfileMappings) {
+  return modelProfileMappings.get(modelProfile) ?? modelProfile;
 }
 
 function parseJsonl(output) {
