@@ -41,6 +41,8 @@ Tracker
 
 ## Main Execution Flow
 
+Current dry-run integration entrypoint: `src/orchestrator.js`.
+
 1. Intake creates a `TaskSpec` from GitHub, Linear, a manual request, or another tracker.
 2. Orchestrator selects one `CommandSpec`, such as `implement` or `review`.
 3. Router picks a CLI adapter and model profile from capabilities, policy, cost, and history.
@@ -80,4 +82,3 @@ Deferred module:
 - Migration Layer
 
 Early versions should use explicit `version` fields and compatibility checks before building a full migration subsystem.
-
