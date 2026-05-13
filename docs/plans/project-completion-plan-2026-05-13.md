@@ -63,7 +63,8 @@ Implemented and tested:
 - Phase I eval release-gate slice: `pnpm eval:replay` builds a replay sample from stored artifacts, writes an eval report artifact, and returns the report reference without mutating router config.
 - Phase I eval fixture/task-class slice: bundled model-upgrade and adapter-regression fixtures drive task-class success summaries and failure deltas.
 - Phase I eval real-resource slice: real smoke evidence records `resourceProfile` with CPU, memory, timeout, concurrency, network, and version fields for eval replay.
-- Test baseline: `pnpm test` currently covers 103 tests across 16 suites.
+- Phase J registry slice: `ModelProfileRegistry` and `AdapterMappingRegistry` persist contract-validated JSON and reload/query profiles or CLI mappings by command and capability inputs.
+- Test baseline: `pnpm test` currently covers 105 tests across 17 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -450,6 +451,8 @@ Acceptance:
 
 ### Phase J: Model Profiles and Routing Policy
 
+Status: in progress. Persisted model profile and adapter mapping registries are complete; route selection inputs, explicit override policy, route decision artifacts, and eval-advisory approval boundaries remain.
+
 Goal: route based on adapter capability, model profile, prior failures, cost class, and eval recommendations.
 
 Work:
@@ -725,15 +728,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase J with persisted model profile and adapter mapping registries.
+Continue Phase J with deterministic route decision policy.
 
 First red test:
 
-- Add registry tests proving model profiles and adapter mappings can be saved, reloaded, and queried by command/capability inputs.
+- Add router tests proving retryable adapter failures are excluded, lower-cost review models are preferred when capability is equal, and explicit model overrides beat default profiles.
 
 First implementation:
 
-- Add `src/model-profile-registry.js` and `src/adapter-mapping-registry.js` using the existing contract validators and disk persistence pattern.
+- Extend `RouterScheduler.route` to accept model profiles, adapter mappings, failure history, and explicit model overrides, returning an explainable route decision.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
