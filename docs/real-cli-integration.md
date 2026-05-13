@@ -58,7 +58,22 @@ Implemented:
 - Stream JSON stdout is parsed for structured `EvidencePackage` content.
 - If no valid structured evidence is found, raw Claude Code output is marked with `real-cli-output-unverified` and contains no passing checks.
 
+Local binary smoke check:
+
+```sh
+pnpm smoke:claude:help
+```
+
+Local `claude --help` on 2026-05-13 confirms support for `-p/--print`, `--output-format stream-json`, `--add-dir`, `--model`, `--permission-mode`, `--disallowedTools`, and `--json-schema`.
+
+Guarded real model smoke check:
+
+```sh
+MCAS_RUN_REAL_CLAUDE=1 pnpm smoke:claude:real
+```
+
+This invokes the configured Claude Code model in read-only mode, parses stream JSON for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CLAUDE_MODEL=<model>` to override the default `deepseek-claude-code` profile.
+
 ## Remaining CLI Work
 
-- Add `pnpm smoke:claude:help` and gated `pnpm smoke:claude:real`.
 - Repeat the real process-runner pattern for Kiro CLI.

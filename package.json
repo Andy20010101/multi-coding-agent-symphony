@@ -10,7 +10,9 @@
     "check": "node --check src/*.js src/adapters/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js",
     "smoke:codex:help": "codex exec --help",
     "smoke:codex:real": "node scripts/smoke-codex-real.js",
-    "smoke:codex:writer": "node scripts/smoke-codex-writer.js"
+    "smoke:codex:writer": "node scripts/smoke-codex-writer.js",
+    "smoke:claude:help": "claude --help",
+    "smoke:claude:real": "node scripts/smoke-claude-real.js"
   },
   "engines": {
     "node": ">=20"

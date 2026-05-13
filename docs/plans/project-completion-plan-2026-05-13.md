@@ -50,12 +50,13 @@ Implemented and tested:
 - Phase E writer smoke slice: `pnpm smoke:codex:writer` is separately gated by `MCAS_RUN_REAL_CODEX_WRITER=1`, runs `implement` with `primary-writer` policy, and defaults to an isolated temporary git workspace.
 - Phase E workspace policy slice: Codex read-only smoke and review commands render `--sandbox read-only`, while writer smoke renders `--sandbox workspace-write`.
 - Phase F Claude real runner slice: `ClaudeCodeAdapter` can run real mode through an injected `NodeProcessRunner`, parse stream-json structured evidence, and preserve raw output as verification-insufficient evidence.
-- Test baseline: `pnpm test` currently covers 77 tests across 13 suites.
+- Phase F Claude smoke slice: `pnpm smoke:claude:help` checks local CLI assumptions, and gated `pnpm smoke:claude:real` defaults to no model call unless `MCAS_RUN_REAL_CLAUDE=1` is set.
+- Test baseline: `pnpm test` currently covers 80 tests across 14 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- Claude Code and Kiro CLI adapters are dry-run only.
+- Kiro CLI adapter is dry-run only.
 - Verifier accepts any check with `status: "passed"`; it does not yet verify provenance, command output, CI status, or changed-file scope.
 - Eval plugin scores synthetic samples but is not wired into release gates, model profile decisions, or artifact sampling.
 - No tracker intake is implemented for GitHub or Linear.
@@ -287,7 +288,7 @@ Acceptance:
 
 ### Phase F: Claude Code Real Adapter
 
-Status: in progress. Real process-runner execution and stream-json evidence parsing are complete; help/real smoke scripts and local Claude CLI assumptions remain.
+Status: completed for V1 Claude Code real adapter.
 
 Goal: connect Claude Code to the same real adapter lifecycle through the user's DeepSeek-compatible setup.
 

@@ -22,3 +22,16 @@ Feature: Claude Code real CLI integration
     Then stdout and stderr are preserved
     And the evidence contains no passing checks by default
     And the known risks include real CLI output requiring verification
+
+  Scenario: Guard real Claude Code smoke tests
+    Given the real Claude Code smoke flag is not set
+    When the smoke script runs
+    Then no model is invoked
+    And the script reports how to enable the real smoke
+
+  Scenario: Run a read-only real Claude Code smoke test
+    Given the real Claude Code smoke flag is set
+    When the smoke script runs
+    Then Claude Code runs in real execution mode
+    And the workspace policy is review-only
+    And the verifier accepts the structured smoke evidence
