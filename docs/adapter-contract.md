@@ -58,16 +58,28 @@ Codex:
 
 - Native surfaces include CLI, non-interactive mode, config, hooks, MCP, skills, subagents, and app-server style automation.
 - Good fit for GPT coding models and structured local verification loops.
+- Phase 3 dry-run mapping uses `codex exec --json --cd <workspace> --sandbox <mode> --model <profile>` and optional `--output-schema <file>`.
 
 Claude Code:
 
 - Native surfaces include settings, permission rules, hooks, MCP, memory files, slash commands, and resumable sessions.
 - In this project it may point at DeepSeek-compatible API wiring, so adapter tests must verify model/provider behavior instead of assuming Anthropic defaults.
+- Phase 3 dry-run mapping uses `claude -p --output-format stream-json --add-dir <workspace> --model <profile>` and permission flags.
 
 Kiro CLI:
 
 - Native surfaces include custom agents, MCP, hooks, steering files, spec-driven workflows, and headless automation.
 - Good fit for spec-heavy planning, requirements, and acceptance-criteria workflows.
+- Phase 3 dry-run mapping uses `kiro-cli chat --no-interactive --trust-tools=<categories>` and optional `--require-mcp-startup`.
+
+## Phase 3 Source Notes
+
+Command mappings are based on:
+
+- OpenAI Codex CLI command line options and non-interactive mode docs.
+- Local `codex exec --help` for installed `codex-cli 0.130.0`.
+- Claude Code CLI reference and local `claude --help` for installed Claude Code `2.1.123`.
+- Kiro CLI headless and CLI command reference plus local `kiro-cli 2.2.2`.
 
 ## Conformance Tests
 
@@ -82,4 +94,3 @@ Every adapter must pass these tests before production routing:
 7. Logs are collected and linked in Artifact Store.
 8. Failure codes map into Failure Taxonomy.
 9. Evidence validates against the requested schema.
-

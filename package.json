@@ -7,7 +7,7 @@
   "description": "A BDD and TDD built orchestrator for multiple coding CLIs.",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/*.js tests/*.test.js"
+    "check": "node --check src/*.js src/adapters/*.js tests/*.test.js"
   },
   "engines": {
     "node": ">=20"
