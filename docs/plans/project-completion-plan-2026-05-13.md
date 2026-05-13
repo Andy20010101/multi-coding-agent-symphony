@@ -26,13 +26,14 @@ Implemented and tested:
 - Real Codex path: `src/process-runner.js`, `src/evidence-parser.js`, `schemas/evidence-package.schema.json`, `src/codex-real-smoke.js`, `scripts/smoke-codex-real.js`.
 - External eval prototype: `plugins/eval-replay/index.js`.
 - Phase A contract reconciliation: `TaskSpec` optional metadata is validated, `EvidencePackage.checks` has explicit `name/status/output`, and the strict JSON schema matches the validator.
-- Test baseline: `pnpm test` currently covers 48 tests across 11 suites.
+- Phase B queue persistence slice: `TaskQueue` can persist state, reload after restart, and recover expired running leases.
+- Test baseline: `pnpm test` currently covers 50 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - `WorkspaceManager` allocates paths but does not materialize, clone, clean, or lock working directories.
-- `TaskQueue` is in-memory only and has no lease expiry or recovery.
+- `TaskQueue` persistence exists, but it is not yet integrated into orchestrator workflow recovery.
 - `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
 - Claude Code and Kiro CLI adapters are dry-run only.
 - Verifier accepts any check with `status: "passed"`; it does not yet verify provenance, command output, CI status, or changed-file scope.
@@ -101,6 +102,8 @@ Acceptance:
 - New contract tests fail before implementation and pass after implementation.
 
 ### Phase B: Durable State and Workspace Materialization
+
+Status: in progress. Queue persistence and expired lease recovery are complete; workspace materialization and manifests remain.
 
 Goal: turn in-memory primitives into recoverable harness state.
 
@@ -662,16 +665,16 @@ Additional gates:
 
 ## Immediate Next Task
 
-Start with Phase B.
+Continue Phase B with workspace materialization.
 
 First red test:
 
-- Add a queue persistence test proving queued, running, and completed task records can be reconstructed from disk after a new `TaskQueue` instance is created.
+- Add a workspace test proving allocation creates the workspace directory and writes a manifest with task id, role, adapter id, writable flag, and path.
 
 First implementation:
 
-- Add a state file path option to `TaskQueue`.
-- Persist records after enqueue, lease, complete, and cancel.
+- Add an opt-in materialization mode to `WorkspaceManager`.
+- Create the workspace directory and manifest during allocation when materialization is enabled.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 

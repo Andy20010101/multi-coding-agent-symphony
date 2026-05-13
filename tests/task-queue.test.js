@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { TaskQueue } from '../src/task-queue.js';
 
@@ -46,6 +49,72 @@ describe('TaskQueue', () => {
     assert.equal(queue.leaseNext().task.id, 'task-normal');
   });
 
+  it('persists queue state and reloads it after restart', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-task-queue-'));
+
+    try {
+      const stateFile = join(root, 'queue.json');
+      const queue = new TaskQueue({ maxConcurrency: 1, stateFile });
+
+      queue.enqueue(highTask);
+      queue.enqueue(normalTask);
+      queue.leaseNext({
+        adapterId: 'codex',
+        command: 'implement',
+        leaseTimeoutMs: 1000,
+        now: '2026-05-13T00:00:00.000Z'
+      });
+      queue.complete('task-high');
+
+      const reloaded = new TaskQueue({ maxConcurrency: 1, stateFile });
+
+      assert.equal(reloaded.get('task-high').status, 'completed');
+      assert.equal(reloaded.get('task-high').adapterId, 'codex');
+      assert.equal(reloaded.leaseNext().task.id, 'task-normal');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('recovers expired running leases from persisted state', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-task-queue-expired-'));
+
+    try {
+      const stateFile = join(root, 'queue.json');
+      const queue = new TaskQueue({ maxConcurrency: 1, stateFile });
+
+      queue.enqueue(highTask);
+      const firstLease = queue.leaseNext({
+        adapterId: 'codex',
+        command: 'implement',
+        leaseTimeoutMs: 1000,
+        now: '2026-05-13T00:00:00.000Z'
+      });
+
+      assert.equal(firstLease.attempt, 1);
+
+      const reloaded = new TaskQueue({ maxConcurrency: 1, stateFile });
+      const recovered = reloaded.recoverExpiredLeases({
+        now: '2026-05-13T00:00:02.000Z'
+      });
+
+      assert.deepEqual(recovered.map((record) => record.task.id), ['task-high']);
+      assert.equal(reloaded.get('task-high').status, 'queued');
+
+      const secondLease = reloaded.leaseNext({
+        adapterId: 'claude-code',
+        command: 'implement',
+        now: '2026-05-13T00:00:03.000Z'
+      });
+
+      assert.equal(secondLease.task.id, 'task-high');
+      assert.equal(secondLease.attempt, 2);
+      assert.equal(secondLease.adapterId, 'claude-code');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('cancels queued tasks and skips them during leasing', () => {
     const queue = new TaskQueue({ maxConcurrency: 1 });
 
@@ -58,4 +127,3 @@ describe('TaskQueue', () => {
     assert.equal(queue.leaseNext().task.id, 'task-normal');
   });
 });
-
