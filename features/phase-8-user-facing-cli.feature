@@ -29,3 +29,9 @@ Feature: Phase 8 user-facing CLI
     When the user runs the run-next command
     Then the CLI returns a verifier failure exit code
     And it leaves the task queued with retry metadata
+
+  Scenario: Run a TaskSpec file through the CLI
+    Given a TaskSpec JSON file and runtime directories
+    When the user runs the run-task command
+    Then the CLI runs the existing dry-run workflow without queue state
+    And it prints command artifact ids and verifier status

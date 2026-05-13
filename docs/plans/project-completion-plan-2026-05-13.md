@@ -74,14 +74,14 @@ Implemented and tested:
 - Phase K GitHub PR/CI `gh` wrapper slice: injected-runner PR intake calls `gh pr view --json ...`, and CI capture calls `gh api .../check-runs` through the pure normalizer.
 - Phase K GitHub PR summary slice: PR summaries combine the validated review task, CI status, failing checks, and artifact references into an artifact-ready object plus markdown.
 - Phase K GitHub naming policy slice: PR branch and workspace names are deterministic ASCII safe path segments derived from repository, PR number, and head ref.
-- Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`, and `pnpm mcas run-next ...` executes the standard dry-run workflow with verifier exit-code mapping.
-- Test baseline: `pnpm test` currently covers 119 tests across 19 suites.
+- Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`, `pnpm mcas run-next ...` executes the standard dry-run workflow with verifier exit-code mapping, and `pnpm mcas run-task ...` runs TaskSpec JSON files without queue state.
+- Test baseline: `pnpm test` currently covers 120 tests across 19 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- CLI currently covers doctor, GitHub issue intake, manual queue intake, and run-next; run-task, smoke, eval, and config commands remain.
+- CLI currently covers doctor, GitHub issue intake, manual queue intake, run-next, and run-task; smoke, eval, and config commands remain.
 
 ## Target V1
 
@@ -531,7 +531,7 @@ Acceptance:
 
 ### Phase L: User-Facing CLI
 
-Status: in progress. The first CLI slices are complete: `scripts/mcas.js` exposes `doctor`, read-only GitHub issue intake, persistent manual task queue intake, and verifier-gated `run-next` through `pnpm mcas`.
+Status: in progress. The first CLI slices are complete: `scripts/mcas.js` exposes `doctor`, read-only GitHub issue intake, persistent manual task queue intake, verifier-gated `run-next`, and queue-free `run-task` through `pnpm mcas`.
 
 Goal: expose project workflows without requiring ad hoc Node imports.
 
@@ -741,15 +741,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase L with `run-task`.
+Continue Phase L with CLI smoke wrappers.
 
 First red test:
 
-- Add CLI tests proving `run-task` reads a TaskSpec JSON file, runs the existing dry-run workflow, and prints artifact ids plus verifier status.
+- Add CLI tests proving `smoke codex`, `smoke claude`, and `smoke kiro` dispatch the existing package smoke scripts and propagate exit codes.
 
 First implementation:
 
-- Add `run-task` wiring that reuses the same runtime builder as `run-next` without touching queue state.
+- Add `smoke <adapter>` command wiring that invokes `pnpm smoke:<adapter>:help` by default and keeps real model smoke gated by the existing scripts.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

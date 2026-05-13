@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,7 +25,8 @@ const COMMANDS = [
   'doctor',
   'github issue',
   'queue manual',
-  'run-next'
+  'run-next',
+  'run-task'
 ];
 
 export async function runMcasCli({
@@ -67,6 +69,16 @@ export async function runMcasCli({
 
     if (command === 'run-next') {
       const result = await runNextWorkflow({
+        args: [subcommand, ...rest].filter((value) => value !== undefined),
+        adapterFactory
+      });
+
+      writeJson(stdout, result.output);
+      return result.exitCode;
+    }
+
+    if (command === 'run-task') {
+      const result = await runTaskFileWorkflow({
         args: [subcommand, ...rest].filter((value) => value !== undefined),
         adapterFactory
       });
@@ -147,18 +159,11 @@ function runManualTaskQueue({ args }) {
 
 async function runNextWorkflow({ args, adapterFactory }) {
   const paths = resolveRuntimePaths(args);
-  const adapter = await adapterFactory();
-  const capabilityReport = await adapter.probe();
   const taskQueue = new TaskQueue({ stateFile: paths.stateFile });
-  const orchestrator = new Orchestrator({
-    artifactStore: new ArtifactStore(paths.artifactDirectory),
-    eventLog: new SessionEventLog(paths.eventDirectory, paths.sessionId),
-    workspaceManager: new WorkspaceManager({ rootDirectory: paths.workspaceDirectory }),
-    scheduler: new RouterScheduler({ capabilityReports: [capabilityReport] }),
+  const orchestrator = await buildWorkflowRuntime({
+    paths,
     taskQueue,
-    adapters: {
-      [adapter.adapterId]: adapter
-    }
+    adapterFactory
   });
   const result = await orchestrator.runNextTask({
     commandSequence: readOptionalOption(args, '--sequence') ?? 'standard',
@@ -189,14 +194,67 @@ async function runNextWorkflow({ args, adapterFactory }) {
       status: result.status,
       exitCode,
       ...paths,
-      taskId: result.taskId,
-      workflowStatus: result.status,
-      commands: result.commands.map(summarizeCommandRun),
-      artifactRefs: result.artifactRefs,
-      ...(result.failedCommand ? { failedCommand: result.failedCommand } : {}),
-      ...(result.failure ? { failure: result.failure } : {}),
-      ...(result.retryPlan ? { retryPlan: result.retryPlan } : {})
+      ...summarizeWorkflowResult(result)
     }
+  };
+}
+
+async function runTaskFileWorkflow({ args, adapterFactory }) {
+  const taskFile = readOption(args, '--task-file');
+  const taskSpec = parseJsonFile(taskFile, 'taskFile');
+  const paths = resolveRuntimePaths(args);
+  const orchestrator = await buildWorkflowRuntime({
+    paths,
+    adapterFactory
+  });
+  const result = await orchestrator.runTaskWorkflow({
+    taskSpec,
+    commandSequence: readOptionalOption(args, '--sequence') ?? 'standard'
+  });
+  const exitCode = result.status === 'passed' ? EXIT_CODES.ok : EXIT_CODES.verifierFailure;
+
+  return {
+    exitCode,
+    output: {
+      version: '1',
+      command: 'run-task',
+      status: result.status,
+      exitCode,
+      artifactDirectory: paths.artifactDirectory,
+      eventDirectory: paths.eventDirectory,
+      workspaceDirectory: paths.workspaceDirectory,
+      sessionId: paths.sessionId,
+      taskFile,
+      ...summarizeWorkflowResult(result)
+    }
+  };
+}
+
+async function buildWorkflowRuntime({ paths, adapterFactory, taskQueue }) {
+  const adapter = await adapterFactory();
+  const capabilityReport = await adapter.probe();
+
+  return new Orchestrator({
+    artifactStore: new ArtifactStore(paths.artifactDirectory),
+    eventLog: new SessionEventLog(paths.eventDirectory, paths.sessionId),
+    workspaceManager: new WorkspaceManager({ rootDirectory: paths.workspaceDirectory }),
+    scheduler: new RouterScheduler({ capabilityReports: [capabilityReport] }),
+    taskQueue,
+    adapters: {
+      [adapter.adapterId]: adapter
+    }
+  });
+}
+
+function summarizeWorkflowResult(result) {
+  return {
+    taskId: result.taskId,
+    workflowStatus: result.status,
+    commands: result.commands.map(summarizeCommandRun),
+    artifactRefs: result.artifactRefs,
+    ...(result.failedCommand ? { failedCommand: result.failedCommand } : {}),
+    ...(result.failure ? { failure: result.failure } : {}),
+    ...(result.retryPlan ? { retryPlan: result.retryPlan } : {})
   };
 }
 
@@ -210,6 +268,14 @@ function resolveRuntimePaths(args) {
     workspaceDirectory: readOptionalOption(args, '--workspace-dir') ?? join(runtimeDirectory, 'workspaces'),
     sessionId: readOptionalOption(args, '--session-id') ?? 'mcas-cli'
   };
+}
+
+function parseJsonFile(path, field) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch (error) {
+    throw new UsageError(`${field} must be readable JSON: ${error.message}`);
+  }
 }
 
 function summarizeCommandRun(commandRun) {

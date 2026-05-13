@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -32,7 +32,8 @@ describe('Phase 8 user-facing CLI', () => {
       'doctor',
       'github issue',
       'queue manual',
-      'run-next'
+      'run-next',
+      'run-task'
     ]);
   });
 
@@ -254,6 +255,58 @@ describe('Phase 8 user-facing CLI', () => {
       assert.equal(record.status, 'queued');
       assert.equal(record.failedEventId, 'task-queue-1-failed-1');
       assert.equal(record.retryPlan.retry, true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs a TaskSpec file through the CLI dry-run workflow without queue state', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-cli-run-task-'));
+
+    try {
+      const taskFile = join(root, 'task.json');
+      await writeFile(taskFile, `${JSON.stringify(manualTask, null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'run-task',
+          '--task-file',
+          taskFile,
+          '--runtime-dir',
+          root,
+          '--session-id',
+          'session-cli'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const run = JSON.parse(output.stdoutText());
+
+      assert.equal(run.version, '1');
+      assert.equal(run.command, 'run-task');
+      assert.equal(run.status, 'passed');
+      assert.equal(run.exitCode, 0);
+      assert.equal(run.taskFile, taskFile);
+      assert.equal(run.taskId, 'manual-release-checklist');
+      assert.deepEqual(run.commands.map((command) => command.command), [
+        'implement',
+        'review',
+        'qa'
+      ]);
+      assert.deepEqual(run.commands.map((command) => command.verificationStatus), [
+        'passed',
+        'passed',
+        'passed'
+      ]);
+      await assert.rejects(
+        () => readFile(join(root, 'queue.json'), 'utf8'),
+        /ENOENT/
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
