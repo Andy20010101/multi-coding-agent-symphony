@@ -55,12 +55,13 @@ Implemented and tested:
 - Phase G Kiro smoke slice: `pnpm smoke:kiro:help` checks local CLI assumptions, and gated `pnpm smoke:kiro:real` defaults to no model call unless `MCAS_RUN_REAL_KIRO=1` is set.
 - Phase G Kiro trust-tool policy slice: denied shell or network policy decisions remove unsafe Kiro trusted tool categories while preserving read-only trust categories.
 - Phase H verifier provenance slice: production checks require command-plus-exit-code or artifact provenance, read-only changed-file scope violations fail verification, and failed check lists contain only failed checks.
-- Test baseline: `pnpm test` currently covers 90 tests across 16 suites.
+- Phase H command evidence slice: implementation evidence requires changed files or no-op rationale, review evidence requires findings or no-finding rationale, and production QA evidence requires at least one check artifact.
+- Test baseline: `pnpm test` currently covers 95 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- Verifier still lacks command-specific implementation no-op, review finding, QA artifact, CI status, and workspace-manifest path-boundary checks.
+- Verifier still lacks CI status and workspace-manifest path-boundary checks.
 - Eval plugin scores synthetic samples but is not wired into release gates, model profile decisions, or artifact sampling.
 - No tracker intake is implemented for GitHub or Linear.
 - No user-facing CLI entrypoint exists for orchestrator runs.
@@ -368,7 +369,7 @@ Acceptance:
 
 ### Phase H: Verifier Hardening
 
-Status: in progress. `CheckEvidence` provenance fields, production provenance rejection, read-only scope rejection, richer verifier reasons, and failed-check narrowing are complete; command-specific evidence requirements and workspace-manifest path-boundary checks remain.
+Status: in progress. `CheckEvidence` provenance fields, production provenance rejection, read-only scope rejection, richer verifier reasons, failed-check narrowing, and command-specific implement/review/QA evidence rules are complete; CI status and workspace-manifest path-boundary checks remain.
 
 Goal: move from accepting self-reported checks to validating evidence provenance.
 

@@ -53,6 +53,12 @@ export function verifyEvidence({ commandSpec, evidence }) {
     }
   }
 
+  const commandSpecificFailure = verifyCommandSpecificEvidence({ commandSpec, evidence, changedFiles });
+
+  if (commandSpecificFailure) {
+    return commandSpecificFailure;
+  }
+
   return {
     status: 'passed',
     reason: 'checks-passed',
@@ -68,6 +74,38 @@ function requiresProductionProvenance(commandSpec) {
   return !isSmokeEvidence(commandSpec);
 }
 
+function verifyCommandSpecificEvidence({ commandSpec, evidence, changedFiles }) {
+  if (isSmokeEvidence(commandSpec)) {
+    return null;
+  }
+
+  if (commandSpec.name === 'implement' && changedFiles.length === 0 && !isNonEmptyString(evidence.noOpRationale)) {
+    return {
+      status: 'failed',
+      reason: 'verification-insufficient',
+      requiredEvidence: ['changedFiles', 'noOpRationale']
+    };
+  }
+
+  if (commandSpec.name === 'review' && !hasFindings(evidence) && !isNonEmptyString(evidence.noFindingRationale)) {
+    return {
+      status: 'failed',
+      reason: 'verification-insufficient',
+      requiredEvidence: ['findings', 'noFindingRationale']
+    };
+  }
+
+  if (commandSpec.name === 'qa' && !evidence.checks.some((check) => isNonEmptyString(check.artifactId))) {
+    return {
+      status: 'failed',
+      reason: 'artifact-missing',
+      requiredEvidence: ['checks[].artifactId']
+    };
+  }
+
+  return null;
+}
+
 function isSmokeEvidence(commandSpec) {
   return commandSpec.evidenceSchema.includes('smoke') ||
     commandSpec.doneCriteria.includes('real-model-called');
@@ -80,4 +118,8 @@ function hasCheckProvenance(check) {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+function hasFindings(evidence) {
+  return Array.isArray(evidence.findings) && evidence.findings.some((finding) => isNonEmptyString(finding));
 }

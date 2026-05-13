@@ -30,6 +30,15 @@ const reviewCommand = {
   evidenceSchema: 'review-evidence.v1'
 };
 
+const qaCommand = {
+  name: 'qa',
+  version: '1',
+  allowedTools: ['read', 'shell', 'test'],
+  workspacePolicy: 'isolated',
+  doneCriteria: ['checks-run', 'evidence-written'],
+  evidenceSchema: 'qa-evidence.v1'
+};
+
 const capabilityReports = [
   {
     adapterId: 'codex',
@@ -434,6 +443,113 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
       status: 'failed',
       reason: 'check-failed',
       failedChecks: [failedCheck]
+    });
+  });
+
+  it('requires implementation evidence to include changed files or no-op rationale', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: implementCommand,
+      evidence: {
+        command: 'implement',
+        taskId: 'task-123',
+        workspaceId: 'task-123-primary-writer-1',
+        diffSummary: [],
+        changedFiles: [],
+        checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }],
+        knownRisks: [],
+        agentSummary: 'No implementation was needed.',
+        version: '1'
+      }
+    }), {
+      status: 'failed',
+      reason: 'verification-insufficient',
+      requiredEvidence: ['changedFiles', 'noOpRationale']
+    });
+  });
+
+  it('accepts explicit implementation no-op rationale', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: implementCommand,
+      evidence: {
+        command: 'implement',
+        taskId: 'task-123',
+        workspaceId: 'task-123-primary-writer-1',
+        diffSummary: [],
+        changedFiles: [],
+        checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }],
+        knownRisks: [],
+        agentSummary: 'No implementation was needed.',
+        noOpRationale: 'Task was already satisfied by existing behavior.',
+        version: '1'
+      }
+    }), {
+      status: 'passed',
+      reason: 'checks-passed',
+      checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }]
+    });
+  });
+
+  it('requires review evidence to include findings or no-finding rationale', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: reviewCommand,
+      evidence: {
+        command: 'review',
+        taskId: 'task-123',
+        workspaceId: 'task-123-review-1',
+        diffSummary: [],
+        changedFiles: [],
+        checks: [{ name: 'review', status: 'passed', artifactId: 'review-findings' }],
+        knownRisks: [],
+        agentSummary: 'Reviewed behavior.',
+        version: '1'
+      }
+    }), {
+      status: 'failed',
+      reason: 'verification-insufficient',
+      requiredEvidence: ['findings', 'noFindingRationale']
+    });
+  });
+
+  it('accepts review findings as structured evidence', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: reviewCommand,
+      evidence: {
+        command: 'review',
+        taskId: 'task-123',
+        workspaceId: 'task-123-review-1',
+        diffSummary: [],
+        changedFiles: [],
+        checks: [{ name: 'review', status: 'passed', artifactId: 'review-findings' }],
+        knownRisks: [],
+        findings: ['No blocking findings.'],
+        agentSummary: 'Reviewed behavior.',
+        version: '1'
+      }
+    }), {
+      status: 'passed',
+      reason: 'checks-passed',
+      checks: [{ name: 'review', status: 'passed', artifactId: 'review-findings' }]
+    });
+  });
+
+  it('requires QA evidence to include at least one check artifact', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: qaCommand,
+      evidence: {
+        command: 'qa',
+        taskId: 'task-123',
+        workspaceId: 'task-123-qa-1',
+        diffSummary: [],
+        changedFiles: [],
+        checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
+        knownRisks: [],
+        agentSummary: 'Ran QA checks.',
+        version: '1'
+      }
+    }), {
+      status: 'failed',
+      reason: 'artifact-missing',
+      requiredEvidence: ['checks[].artifactId']
     });
   });
 });

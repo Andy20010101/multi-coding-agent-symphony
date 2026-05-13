@@ -82,7 +82,7 @@ describe('Kiro CLI real integration', () => {
           workspaceId: 'model-workspace',
           diffSummary: [],
           changedFiles: [],
-          checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
+          checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, artifactId: 'test-log', output: 'tests passed' }],
           knownRisks: [],
           agentSummary: 'Parsed evidence from Kiro stdout.',
           version: '1'
@@ -110,7 +110,7 @@ describe('Kiro CLI real integration', () => {
     assert.deepEqual(verifyEvidence({ commandSpec, evidence }), {
       status: 'passed',
       reason: 'checks-passed',
-      checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }]
+      checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, artifactId: 'test-log', output: 'tests passed' }]
     });
   });
 

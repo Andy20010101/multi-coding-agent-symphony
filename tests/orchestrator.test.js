@@ -55,6 +55,7 @@ class PassingCodexAdapter extends CodexAdapter {
         status: 'passed',
         command: 'synthetic-check',
         exitCode: 0,
+        artifactId: 'synthetic-check-log',
         output: 'synthetic check passed'
       }],
       knownRisks: [],
@@ -140,6 +141,7 @@ describe('Orchestrator dry-run execution flow', () => {
           status: 'passed',
           command: 'synthetic-check',
           exitCode: 0,
+          artifactId: 'synthetic-check-log',
           output: 'synthetic check passed'
         }
       ]);
@@ -581,6 +583,7 @@ describe('Orchestrator dry-run execution flow', () => {
           status: 'passed',
           command: 'synthetic-check',
           exitCode: 0,
+          artifactId: 'synthetic-check-log',
           output: 'synthetic check passed'
         }
       ]);

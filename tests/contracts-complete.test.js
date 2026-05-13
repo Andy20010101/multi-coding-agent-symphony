@@ -69,6 +69,9 @@ describe('Complete core contract validation', () => {
       }],
       knownRisks: [],
       agentSummary: 'Implemented validators.',
+      noOpRationale: 'No code changes were needed.',
+      findings: ['No blocking findings.'],
+      noFindingRationale: 'Review found no issues.',
       version: '1'
     };
 
@@ -97,6 +100,10 @@ describe('Complete core contract validation', () => {
     );
     assert.throws(
       () => validateEvidencePackage({ ...evidence, diffSummary: undefined }),
+      ValidationError
+    );
+    assert.throws(
+      () => validateEvidencePackage({ ...evidence, noFindingRationale: '' }),
       ValidationError
     );
   });

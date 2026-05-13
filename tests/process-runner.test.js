@@ -13,7 +13,7 @@ describe('NodeProcessRunner', () => {
       timeoutMs: 5000
     });
 
-    await sleep(100);
+    await sleep(500);
 
     assert.deepEqual(handle.cancel(), {
       status: 'cancelled',

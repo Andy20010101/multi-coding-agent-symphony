@@ -76,3 +76,21 @@ Feature: Phase 4 routing, workspace, and verification modules
     When the Verifier evaluates the evidence
     Then verification fails
     And the failed check list contains only the failed check
+
+  Scenario: Require implementation diff or no-op rationale
+    Given implementation evidence with no changed files and no no-op rationale
+    When the Verifier evaluates the evidence
+    Then verification fails
+    And the required evidence names changed files or no-op rationale
+
+  Scenario: Require review findings or no-finding rationale
+    Given review evidence with no findings and no no-finding rationale
+    When the Verifier evaluates the evidence
+    Then verification fails
+    And the required evidence names findings or no-finding rationale
+
+  Scenario: Require QA check artifacts
+    Given production QA evidence with command output but no check artifact
+    When the Verifier evaluates the evidence
+    Then verification fails
+    And the failure reason is artifact-missing

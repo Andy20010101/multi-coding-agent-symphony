@@ -85,6 +85,9 @@ export function validateEvidencePackage(evidence) {
   assertChecks(evidence.checks, 'EvidencePackage.checks');
   assertStringArray(evidence.knownRisks, 'EvidencePackage.knownRisks');
   assertNonEmptyString(evidence.agentSummary, 'EvidencePackage.agentSummary');
+  assertOptionalNonEmptyString(evidence.noOpRationale, 'EvidencePackage.noOpRationale');
+  assertOptionalStringArray(evidence.findings, 'EvidencePackage.findings');
+  assertOptionalNonEmptyString(evidence.noFindingRationale, 'EvidencePackage.noFindingRationale');
   assertNonEmptyString(evidence.version, 'EvidencePackage.version');
 
   return evidence;

@@ -122,6 +122,9 @@ Minimum implementation evidence:
   ],
   "knownRisks": [],
   "agentSummary": "",
+  "noOpRationale": "Optional rationale when implement made no changes",
+  "findings": ["Optional review finding list"],
+  "noFindingRationale": "Optional rationale when review found no issues",
   "version": "1"
 }
 ```
@@ -144,6 +147,12 @@ Required fields are `name` and `status`. Every check must also include either `o
 ```
 
 `command`, `exitCode`, `artifactId`, `startedAt`, and `finishedAt` are optional contract fields. For non-smoke production evidence, the verifier requires either `artifactId` or the pair `command` plus `exitCode`; output-only checks are treated as weak self-report.
+
+Command-specific verifier rules:
+
+- `implement` evidence must include `changedFiles` or `noOpRationale`.
+- `review` evidence must include `findings` or `noFindingRationale`.
+- Production `qa` evidence must include at least one check with `artifactId`.
 
 `diffSummary` is required and may be empty. `checks` must contain at least one record for a verifier-valid evidence package. Raw or incomplete adapter output may still be stored as an artifact, but it is not a valid completion evidence package.
 
