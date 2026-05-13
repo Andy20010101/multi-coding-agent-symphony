@@ -522,4 +522,35 @@ describe('Orchestrator dry-run execution flow', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('runs the standard default command sequence when requested by name', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-default-sequence-'));
+
+    try {
+      const adapter = new CapturingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runTaskWorkflow({
+        taskSpec,
+        commandSequence: 'standard'
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.deepEqual(result.commands.map((command) => command.command), ['implement', 'review', 'qa']);
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.name), ['implement', 'review', 'qa']);
+      assert.equal(result.commands[1].workspace.writable, false);
+      assert.equal(result.commands[2].workspace.writable, false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

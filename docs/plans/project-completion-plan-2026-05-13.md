@@ -38,7 +38,8 @@ Implemented and tested:
 - Phase C command run record slice: every command writes a run record artifact linking evidence, workspace, verification status, and context artifact refs.
 - Phase C context hydration slice: later command context packs hydrate referenced artifact content from the Artifact Store.
 - Phase C queue-backed workflow slice: `Orchestrator.runNextTask` leases a persisted queued task, runs the workflow, and completes the queue record on success.
-- Test baseline: `pnpm test` currently covers 61 tests across 11 suites.
+- Phase C sequence policy slice: named `standard` workflow expands to `implement -> review -> qa`.
+- Test baseline: `pnpm test` currently covers 62 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -155,7 +156,7 @@ Acceptance:
 
 ### Phase C: Orchestrator Command Loop
 
-Status: in progress. The minimal `implement -> review` workflow path, verifier-gated failure stop, retry planning, command run records, context artifact hydration, and queue-backed `runNextTask` are complete; default command sequence policy and failed queue retry state remain.
+Status: in progress. The workflow path, verifier-gated failure stop, retry planning, command run records, context artifact hydration, queue-backed `runNextTask`, and default command sequence policy are complete; failed queue retry state remains.
 
 Goal: make `Orchestrator` run command sequences from queue state, not just one direct `runCommand` call.
 
@@ -188,6 +189,7 @@ BDD/TDD:
 - Add scenario: every command stores a run record artifact separate from evidence.
 - Add scenario: later command context hydrates referenced artifact content.
 - Add scenario: persisted queued task can be leased and completed by the orchestrator workflow.
+- Add scenario: named standard command sequence runs implement, review, and qa.
 - Add scenario: review receives implementation evidence through artifact refs.
 - Add scenario: verifier failure prevents task completion.
 
@@ -686,15 +688,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase C with default command sequence policy.
+Continue Phase C with failed queue retry state.
 
 First red test:
 
-- Add a workflow test proving `runTaskWorkflow` can use a named default sequence instead of requiring callers to pass every `CommandSpec`.
+- Add a queue-backed workflow test proving a failed workflow records retry metadata on the queue record.
 
 First implementation:
 
-- Add the smallest default sequence registry for `implement -> review -> qa` and keep explicit `commandSpecs` as the override path.
+- Add queue failure metadata persistence for failed `runNextTask` results without automatically retrying.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 

@@ -55,3 +55,9 @@ Feature: Orchestrator dry-run execution flow
     And a queued task exists before orchestrator startup
     When the Orchestrator runs the next task workflow
     Then the queued task is leased, executed, and completed
+
+  Scenario: Run a named default command sequence
+    Given a TaskSpec
+    And the standard command sequence is requested
+    When the Orchestrator runs the task workflow
+    Then it executes implement, review, and qa in order

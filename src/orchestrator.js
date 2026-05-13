@@ -3,6 +3,37 @@ import { buildContextPack } from './context-builder.js';
 import { classifyFailure } from './failure-taxonomy.js';
 import { verifyEvidence } from './verifier.js';
 
+const STANDARD_COMMAND_SEQUENCE = [
+  {
+    name: 'implement',
+    version: '1',
+    allowedTools: ['read', 'write', 'shell', 'test'],
+    workspacePolicy: 'primary-writer',
+    doneCriteria: ['diff-created', 'tests-run', 'evidence-written'],
+    evidenceSchema: 'implementation-evidence.v1'
+  },
+  {
+    name: 'review',
+    version: '1',
+    allowedTools: ['read', 'shell', 'test'],
+    workspacePolicy: 'review-only',
+    doneCriteria: ['review-completed', 'evidence-written'],
+    evidenceSchema: 'review-evidence.v1'
+  },
+  {
+    name: 'qa',
+    version: '1',
+    allowedTools: ['read', 'shell', 'test'],
+    workspacePolicy: 'isolated',
+    doneCriteria: ['checks-run', 'evidence-written'],
+    evidenceSchema: 'qa-evidence.v1'
+  }
+];
+
+const COMMAND_SEQUENCES = new Map([
+  ['standard', STANDARD_COMMAND_SEQUENCE]
+]);
+
 export class PolicyDeniedError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -187,6 +218,7 @@ export class Orchestrator {
   async runTaskWorkflow({
     taskSpec,
     commandSpecs,
+    commandSequence,
     modelProfile,
     policyRequests = [],
     executionMode = 'dry-run',
@@ -194,15 +226,13 @@ export class Orchestrator {
   }) {
     validateTaskSpec(taskSpec);
 
-    if (!Array.isArray(commandSpecs) || commandSpecs.length === 0) {
-      throw new TypeError('commandSpecs must be a non-empty array');
-    }
+    const resolvedCommandSpecs = resolveCommandSpecs({ commandSpecs, commandSequence });
 
     const commands = [];
     const artifactRefs = [];
     let sourceWorkspaceId;
 
-    for (const commandSpec of commandSpecs) {
+    for (const commandSpec of resolvedCommandSpecs) {
       const result = await this.runCommand({
         taskSpec,
         commandSpec,
@@ -263,6 +293,7 @@ export class Orchestrator {
 
   async runNextTask({
     commandSpecs,
+    commandSequence,
     modelProfile,
     policyRequests = [],
     executionMode = 'dry-run',
@@ -291,6 +322,7 @@ export class Orchestrator {
     const result = await this.runTaskWorkflow({
       taskSpec: leased.task,
       commandSpecs,
+      commandSequence,
       modelProfile,
       policyRequests,
       executionMode,
@@ -368,6 +400,25 @@ function workspaceRoleFor(workspacePolicy) {
   }
 
   return 'isolated';
+}
+
+function resolveCommandSpecs({ commandSpecs, commandSequence }) {
+  if (commandSpecs !== undefined) {
+    if (!Array.isArray(commandSpecs) || commandSpecs.length === 0) {
+      throw new TypeError('commandSpecs must be a non-empty array');
+    }
+
+    return structuredClone(commandSpecs);
+  }
+
+  const sequenceName = commandSequence ?? 'standard';
+  const sequence = COMMAND_SEQUENCES.get(sequenceName);
+
+  if (!sequence) {
+    throw new Error(`Unknown command sequence: ${sequenceName}`);
+  }
+
+  return structuredClone(sequence);
 }
 
 function requireMethod(value, method, field) {
