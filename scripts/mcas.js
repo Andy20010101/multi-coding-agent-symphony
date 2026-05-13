@@ -27,7 +27,8 @@ const COMMANDS = [
   'queue manual',
   'run-next',
   'run-task',
-  'smoke'
+  'smoke',
+  'eval replay'
 ];
 
 export async function runMcasCli({
@@ -91,6 +92,16 @@ export async function runMcasCli({
     if (command === 'smoke') {
       const result = await runSmokeCommand({
         adapter: subcommand,
+        args: rest,
+        runner: runner ?? new NodeProcessRunner()
+      });
+
+      writeJson(stdout, result.output);
+      return result.exitCode;
+    }
+
+    if (command === 'eval' && subcommand === 'replay') {
+      const result = await runEvalReplay({
         args: rest,
         runner: runner ?? new NodeProcessRunner()
       });
@@ -260,6 +271,28 @@ async function runSmokeCommand({ adapter, args, runner }) {
       script,
       status: exitCode === 0 ? 'passed' : 'failed',
       exitCode,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? ''
+    }
+  };
+}
+
+async function runEvalReplay({ args, runner }) {
+  const result = await runner.run({
+    executable: 'pnpm',
+    args: ['eval:replay', '--', ...args]
+  });
+  const exitCode = result.exitCode;
+
+  return {
+    exitCode,
+    output: {
+      version: '1',
+      command: 'eval replay',
+      script: 'eval:replay',
+      status: exitCode === 0 ? 'passed' : 'failed',
+      exitCode,
+      args: [...args],
       stdout: result.stdout ?? '',
       stderr: result.stderr ?? ''
     }

@@ -61,6 +61,7 @@ pnpm mcas queue manual --state-file .mcas/queue.json --id task-1 --repo OWNER/RE
 pnpm mcas run-next --state-file .mcas/queue.json --runtime-dir .mcas
 pnpm mcas run-task --task-file task.json --runtime-dir .mcas
 pnpm mcas smoke codex
+pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason model-upgrade
 ```
 
 `github issue` is read-only intake. It calls `gh issue view`, converts the response into a validated `TaskSpec`, and does not invoke a model.
@@ -68,3 +69,4 @@ pnpm mcas smoke codex
 `run-next` leases the next queued task and runs the existing standard dry-run workflow, returning verifier status and artifact ids.
 `run-task` runs a TaskSpec JSON file through the same dry-run workflow without reading or writing queue state.
 `smoke <codex|claude|kiro>` dispatches the existing package smoke scripts and propagates their exit codes; add `--real` only when the underlying real smoke gate is intended.
+`eval replay` dispatches the existing eval replay package script and passes through all remaining arguments.

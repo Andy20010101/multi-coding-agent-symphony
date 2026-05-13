@@ -41,3 +41,9 @@ Feature: Phase 8 user-facing CLI
     When the user runs smoke checks for Codex, Claude Code, and Kiro CLI
     Then the CLI calls the existing package smoke scripts
     And it propagates smoke command exit codes
+
+  Scenario: Dispatch eval replay through the CLI
+    Given an injected command runner for package scripts
+    When the user runs eval replay with pass-through arguments
+    Then the CLI calls the existing eval replay package script
+    And it propagates eval replay exit codes

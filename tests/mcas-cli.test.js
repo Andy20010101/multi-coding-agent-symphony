@@ -34,7 +34,8 @@ describe('Phase 8 user-facing CLI', () => {
       'queue manual',
       'run-next',
       'run-task',
-      'smoke'
+      'smoke',
+      'eval replay'
     ]);
   });
 
@@ -401,6 +402,84 @@ describe('Phase 8 user-facing CLI', () => {
       stdout: '',
       stderr: 'codex missing'
     });
+  });
+
+  it('dispatches eval replay with pass-through arguments', async () => {
+    const runner = new FakeRunner({
+      exitCode: 0,
+      stdout: '{"reportRef":{"taskId":"eval","artifactId":"report"}}',
+      stderr: ''
+    });
+    const output = createOutput();
+
+    const exitCode = await runMcasCli({
+      argv: [
+        'eval',
+        'replay',
+        '--artifacts',
+        'tmp/artifacts',
+        '--events',
+        'tmp/events',
+        '--reason',
+        'model-upgrade'
+      ],
+      stdout: output.stdout,
+      stderr: output.stderr,
+      runner
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(output.stderrText(), '');
+    assert.deepEqual(runner.calls, [{
+      executable: 'pnpm',
+      args: [
+        'eval:replay',
+        '--',
+        '--artifacts',
+        'tmp/artifacts',
+        '--events',
+        'tmp/events',
+        '--reason',
+        'model-upgrade'
+      ]
+    }]);
+    assert.deepEqual(JSON.parse(output.stdoutText()), {
+      version: '1',
+      command: 'eval replay',
+      script: 'eval:replay',
+      status: 'passed',
+      exitCode: 0,
+      args: [
+        '--artifacts',
+        'tmp/artifacts',
+        '--events',
+        'tmp/events',
+        '--reason',
+        'model-upgrade'
+      ],
+      stdout: '{"reportRef":{"taskId":"eval","artifactId":"report"}}',
+      stderr: ''
+    });
+  });
+
+  it('propagates eval replay exit codes', async () => {
+    const runner = new FakeRunner({
+      exitCode: 3,
+      stdout: '',
+      stderr: 'missing artifacts'
+    });
+    const output = createOutput();
+
+    const exitCode = await runMcasCli({
+      argv: ['eval', 'replay', '--artifacts', 'missing'],
+      stdout: output.stdout,
+      stderr: output.stderr,
+      runner
+    });
+
+    assert.equal(exitCode, 3);
+    assert.equal(output.stderrText(), '');
+    assert.equal(JSON.parse(output.stdoutText()).status, 'failed');
   });
 });
 
