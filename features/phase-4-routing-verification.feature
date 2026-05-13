@@ -100,3 +100,11 @@ Feature: Phase 4 routing, workspace, and verification modules
     When the Verifier evaluates the evidence
     Then verification fails
     And the failure reason is artifact-missing
+
+  Scenario: Require external CI status when configured
+    Given production QA evidence with passing local checks
+    And a required GitHub CI provider
+    When the Verifier evaluates missing or failed external CI status
+    Then verification fails with machine-readable CI details
+    When the Verifier evaluates passing external CI status with artifact provenance
+    Then verification passes

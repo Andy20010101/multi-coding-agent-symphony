@@ -147,5 +147,17 @@ describe('Phase 1 foundation modules', () => {
       owner: 'orchestrator',
       recommendedNextCommand: 'qa'
     });
+    assert.deepEqual(classifyFailure('external-ci-failed'), {
+      category: 'external-ci-failed',
+      retryable: true,
+      owner: 'implementer',
+      recommendedNextCommand: 'fix-ci'
+    });
+    assert.deepEqual(classifyFailure('external-ci-missing'), {
+      category: 'external-ci-missing',
+      retryable: true,
+      owner: 'verifier',
+      recommendedNextCommand: 'qa'
+    });
   });
 });

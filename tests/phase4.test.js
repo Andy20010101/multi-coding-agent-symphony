@@ -11,6 +11,7 @@ import {
 import { RouterScheduler } from '../src/router-scheduler.js';
 import { verifyEvidence } from '../src/verifier.js';
 import { classifyFailure } from '../src/failure-taxonomy.js';
+import { githubCheckRunsToCiStatusArtifact } from '../src/trackers/github-intake.js';
 
 const implementCommand = {
   name: 'implement',
@@ -576,6 +577,96 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
       status: 'failed',
       reason: 'artifact-missing',
       requiredEvidence: ['checks[].artifactId']
+    });
+  });
+
+  it('requires configured external CI status with artifact or command provenance', () => {
+    const evidence = {
+      command: 'qa',
+      taskId: 'task-123',
+      workspaceId: 'task-123-qa-1',
+      diffSummary: [],
+      changedFiles: [],
+      checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }],
+      knownRisks: [],
+      agentSummary: 'Ran QA checks.',
+      version: '1'
+    };
+    const passingCi = {
+      ...githubCheckRunsToCiStatusArtifact({
+        repository: 'Andy20010101/multi-coding-agent-symphony',
+        ref: 'refs/pull/17/head',
+        sha: 'abc123',
+        checkRuns: [
+          {
+            name: 'test',
+            status: 'completed',
+            conclusion: 'success',
+            detailsUrl: 'https://github.com/example/checks/1'
+          }
+        ]
+      }),
+      artifactId: 'pr-ci-status'
+    };
+    const failingCi = {
+      ...githubCheckRunsToCiStatusArtifact({
+        repository: 'Andy20010101/multi-coding-agent-symphony',
+        ref: 'refs/pull/17/head',
+        sha: 'abc123',
+        checkRuns: [
+          {
+            name: 'lint',
+            status: 'completed',
+            conclusion: 'failure',
+            detailsUrl: 'https://github.com/example/checks/2'
+          }
+        ]
+      }),
+      artifactId: 'pr-ci-status'
+    };
+
+    assert.deepEqual(verifyEvidence({
+      commandSpec: qaCommand,
+      evidence,
+      requiredExternalCiProviders: ['github']
+    }), {
+      status: 'failed',
+      reason: 'external-ci-missing',
+      requiredEvidence: ['externalCiStatusArtifacts[github]']
+    });
+    assert.deepEqual(verifyEvidence({
+      commandSpec: qaCommand,
+      evidence,
+      externalCiStatusArtifacts: [{ ...passingCi, artifactId: undefined }],
+      requiredExternalCiProviders: ['github']
+    }), {
+      status: 'failed',
+      reason: 'artifact-missing',
+      requiredEvidence: ['externalCiStatusArtifacts[].command+exitCode', 'externalCiStatusArtifacts[].artifactId'],
+      externalCiStatusArtifacts: [{ ...passingCi, artifactId: undefined }]
+    });
+    assert.deepEqual(verifyEvidence({
+      commandSpec: qaCommand,
+      evidence,
+      externalCiStatusArtifacts: [failingCi],
+      requiredExternalCiProviders: ['github']
+    }), {
+      status: 'failed',
+      reason: 'external-ci-failed',
+      provider: 'github',
+      statusArtifact: failingCi,
+      failedChecks: ['lint']
+    });
+    assert.deepEqual(verifyEvidence({
+      commandSpec: qaCommand,
+      evidence,
+      externalCiStatusArtifacts: [passingCi],
+      requiredExternalCiProviders: ['github']
+    }), {
+      status: 'passed',
+      reason: 'checks-passed',
+      checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }],
+      externalCiStatusArtifacts: [passingCi]
     });
   });
 });

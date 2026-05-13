@@ -183,6 +183,12 @@ Workspace scope verifier rules:
 - `review-only` commands must not report changed files.
 - When a workspace manifest path is available, every changed file must resolve inside that workspace path.
 
+External CI verifier rules:
+
+- Callers may pass `externalCiStatusArtifacts` and `requiredExternalCiProviders` to `verifyEvidence`.
+- Required external CI providers must have a matching status artifact with either `artifactId` or `command` plus `exitCode` provenance.
+- Any required external CI status other than `passed` fails verification with `external-ci-failed` and machine-readable `failedChecks`.
+
 `diffSummary` is required and may be empty. `checks` must contain at least one record for a verifier-valid evidence package. Raw or incomplete adapter output may still be stored as an artifact, but it is not a valid completion evidence package.
 
 `agentSummary` is informational only. Verifier decisions must use `checks`, `changedFiles`, logs, and other structured evidence.
@@ -236,6 +242,8 @@ Initial categories:
 - `checks-missing`
 - `artifact-missing`
 - `check-failed`
+- `external-ci-failed`
+- `external-ci-missing`
 - `scope-violation`
 - `workspace-conflict`
 - `infrastructure-failure`

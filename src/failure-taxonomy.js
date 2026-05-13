@@ -59,6 +59,16 @@ const FAILURE_CATEGORIES = new Map([
     owner: 'implementer',
     recommendedNextCommand: 'fix-ci'
   }],
+  ['external-ci-failed', {
+    retryable: true,
+    owner: 'implementer',
+    recommendedNextCommand: 'fix-ci'
+  }],
+  ['external-ci-missing', {
+    retryable: true,
+    owner: 'verifier',
+    recommendedNextCommand: 'qa'
+  }],
   ['scope-violation', {
     retryable: false,
     owner: 'policy',

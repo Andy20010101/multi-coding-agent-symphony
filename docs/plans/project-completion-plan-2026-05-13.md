@@ -57,6 +57,7 @@ Implemented and tested:
 - Phase H verifier provenance slice: production checks require command-plus-exit-code or artifact provenance, read-only changed-file scope violations fail verification, and failed check lists contain only failed checks.
 - Phase H command evidence slice: implementation evidence requires changed files or no-op rationale, review evidence requires findings or no-finding rationale, and production QA evidence requires at least one check artifact.
 - Phase H workspace boundary slice: verifier rejects changed files that resolve outside the provided workspace manifest path, and the orchestrator passes the allocated workspace into verification.
+- Phase H external CI slice: verifier can require external CI provider status artifacts, fails missing or failed GitHub CI with machine-readable details, and requires artifact or command provenance for CI status.
 - Phase I eval sample-builder slice: `buildReplaySampleFromSession` builds replay samples from `artifact.written` session events and evidence artifacts without adapter state.
 - Phase I eval report artifact slice: `writeEvalReportArtifact` stores eval reports in ArtifactStore and returns the task/artifact reference without mutating routing config.
 - Phase I eval resource/tradeoff slice: eval reports qualify baseline/candidate resource mismatches and recommendations can include higher-cost tradeoffs plus affected files/contracts.
@@ -82,12 +83,12 @@ Implemented and tested:
 - Phase M adapter permission mapping slice: Codex, Claude Code, and Kiro CLI derive adapter-local restrictions from denied path, shell, and network decisions without mutating `CommandSpec`.
 - Phase M security checklist docs slice: `docs/security-checklist.md` defines redaction, policy gate, adapter permission, and release verification checks and is linked from core contracts.
 - Phase N release docs slice: README now lists current status, actual gates, and release/troubleshooting/security docs; `docs/release-checklist.md` and `docs/troubleshooting.md` document safe release and operator recovery paths.
-- Test baseline: `pnpm test` currently covers 133 tests across 20 suites.
+- Test baseline: `pnpm test` currently covers 134 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- Verifier still needs external CI provider status checks.
+- No known V1 gaps remain; completion audit pending.
 
 ## Target V1
 
@@ -392,7 +393,7 @@ Acceptance:
 
 ### Phase H: Verifier Hardening
 
-Status: completed for V1 verifier hardening. Live external CI provider validation remains a later hardening gap.
+Status: completed for V1 verifier hardening, including external CI status artifact validation.
 
 Goal: move from accepting self-reported checks to validating evidence provenance.
 
@@ -752,15 +753,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Address verifier external CI provider status checks.
+Run completion audit against the V1 plan.
 
 First red test:
 
-- Add tests proving verifier accepts CI status artifacts from GitHub check-run normalization and fails when required external CI status is failing or missing.
+- Build a prompt-to-artifact checklist covering every explicit project requirement, named file, command, test, gate, and deliverable.
 
 First implementation:
 
-- Extend verifier input to accept external CI status artifacts with command/artifact provenance and machine-readable failed check names.
+- Inspect real files, git status, test output, docs, and pushed commits before deciding whether the goal is complete.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
