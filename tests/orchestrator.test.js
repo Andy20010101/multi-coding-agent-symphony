@@ -8,7 +8,8 @@ import { ArtifactStore } from '../src/artifact-store.js';
 import { SessionEventLog } from '../src/session-event-log.js';
 import { WorkspaceConflictError, WorkspaceManager } from '../src/workspace-manager.js';
 import { RouterScheduler } from '../src/router-scheduler.js';
-import { Orchestrator } from '../src/orchestrator.js';
+import { Orchestrator, PolicyDeniedError } from '../src/orchestrator.js';
+import { PolicyEngine } from '../src/policy-engine.js';
 import { CodexAdapter } from '../src/adapters/codex-adapter.js';
 
 const taskSpec = {
@@ -116,5 +117,48 @@ describe('Orchestrator dry-run execution flow', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
-});
 
+  it('blocks denied policy requests before adapter start', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-policy-'));
+
+    try {
+      const adapter = new PassingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const eventLog = new SessionEventLog(join(root, 'events'), 'session-123');
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog,
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        policyEngine: new PolicyEngine({
+          deniedPaths: ['.env'],
+          allowedCommands: ['pnpm test']
+        }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      await assert.rejects(
+        () => orchestrator.runCommand({
+          taskSpec,
+          commandSpec,
+          policyRequests: [
+            {
+              action: 'read',
+              target: '.env'
+            }
+          ]
+        }),
+        PolicyDeniedError
+      );
+
+      assert.deepEqual((await eventLog.readAll()).map((event) => event.type), [
+        'command.queued',
+        'policy.decision'
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

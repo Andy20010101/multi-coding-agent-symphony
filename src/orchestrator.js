@@ -2,23 +2,34 @@ import { validateCommandSpec, validateTaskSpec } from './contracts.js';
 import { buildContextPack } from './context-builder.js';
 import { verifyEvidence } from './verifier.js';
 
+export class PolicyDeniedError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = 'PolicyDeniedError';
+    this.category = 'permission-denied';
+    this.details = details;
+  }
+}
+
 export class Orchestrator {
   constructor({
     artifactStore,
     eventLog,
     workspaceManager,
     scheduler,
+    policyEngine,
     adapters
   }) {
     this.artifactStore = requireMethod(artifactStore, 'writeArtifact', 'artifactStore');
     this.eventLog = requireMethod(eventLog, 'append', 'eventLog');
     this.workspaceManager = requireMethod(workspaceManager, 'allocate', 'workspaceManager');
     this.scheduler = requireMethod(scheduler, 'route', 'scheduler');
+    this.policyEngine = policyEngine;
     this.adapters = adapters;
     this.eventSequence = 0;
   }
 
-  async runCommand({ taskSpec, commandSpec, modelProfile }) {
+  async runCommand({ taskSpec, commandSpec, modelProfile, policyRequests = [] }) {
     validateTaskSpec(taskSpec);
     validateCommandSpec(commandSpec);
 
@@ -30,6 +41,17 @@ export class Orchestrator {
         command: commandSpec.name
       }
     });
+
+    const policyDecisions = await this.#decidePolicy(policyRequests);
+    const deniedDecision = policyDecisions.find((decision) => decision.decision === 'deny');
+
+    if (deniedDecision) {
+      throw new PolicyDeniedError('Policy denied command execution', {
+        taskId: taskSpec.id,
+        command: commandSpec.name,
+        decision: deniedDecision
+      });
+    }
 
     const route = this.scheduler.route({ commandSpec });
     const adapter = this.adapters?.[route.adapterId];
@@ -64,7 +86,8 @@ export class Orchestrator {
       commandSpec,
       contextPack,
       workspace: workspace.path,
-      modelProfile: modelProfile ?? route.modelProfiles[0]
+      modelProfile: modelProfile ?? route.modelProfiles[0],
+      policyDecisions
     });
 
     for await (const adapterEvent of adapter.streamEvents(handle)) {
@@ -127,6 +150,33 @@ export class Orchestrator {
       version: '1'
     });
   }
+
+  async #decidePolicy(policyRequests) {
+    if (!Array.isArray(policyRequests)) {
+      throw new TypeError('policyRequests must be an array');
+    }
+
+    if (!this.policyEngine) {
+      return [];
+    }
+
+    const decisions = [];
+
+    for (const request of policyRequests) {
+      const decision = this.policyEngine.decide(request);
+      decisions.push(decision);
+      await this.#appendEvent({
+        type: 'policy.decision',
+        actor: 'policy',
+        payload: {
+          request,
+          decision
+        }
+      });
+    }
+
+    return decisions;
+  }
 }
 
 function workspaceRoleFor(workspacePolicy) {
@@ -148,4 +198,3 @@ function requireMethod(value, method, field) {
 
   return value;
 }
-
