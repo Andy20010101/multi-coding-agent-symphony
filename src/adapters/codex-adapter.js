@@ -1,12 +1,23 @@
+import { mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { BaseAdapter, buildRunPrompt, validatePrepareInput } from './base-adapter.js';
+import { extractEvidencePackageFromSources } from '../evidence-parser.js';
 import { NodeProcessRunner } from '../process-runner.js';
+
+const DEFAULT_EVIDENCE_SCHEMA_PATH = fileURLToPath(
+  new URL('../../schemas/evidence-package.schema.json', import.meta.url)
+);
 
 export class CodexAdapter extends BaseAdapter {
   constructor({
     cliVersion = 'unknown',
     executable = 'codex',
     processRunner = new NodeProcessRunner(),
-    timeoutMs = 300000
+    timeoutMs = 300000,
+    evidenceSchemaPath = DEFAULT_EVIDENCE_SCHEMA_PATH
   } = {}) {
     super({
       adapterId: 'codex',
@@ -19,10 +30,13 @@ export class CodexAdapter extends BaseAdapter {
     });
     this.processRunner = processRunner;
     this.timeoutMs = timeoutMs;
+    this.evidenceSchemaPath = evidenceSchemaPath;
   }
 
   async prepare(input) {
     validatePrepareInput(input);
+    const outputSchemaPath = input.outputSchemaPath
+      ?? (input.executionMode === 'real' ? this.evidenceSchemaPath : null);
 
     const args = [
       'exec',
@@ -35,8 +49,12 @@ export class CodexAdapter extends BaseAdapter {
       input.modelProfile
     ];
 
-    if (input.outputSchemaPath) {
-      args.push('--output-schema', input.outputSchemaPath);
+    if (outputSchemaPath) {
+      args.push('--output-schema', outputSchemaPath);
+    }
+
+    if (input.outputLastMessagePath) {
+      args.push('--output-last-message', input.outputLastMessagePath);
     }
 
     return {
@@ -46,7 +64,9 @@ export class CodexAdapter extends BaseAdapter {
       args,
       cwd: input.workspace,
       prompt: buildRunPrompt(input),
-      environment: {}
+      environment: {},
+      outputSchemaPath,
+      outputLastMessagePath: input.outputLastMessagePath
     };
   }
 
@@ -55,16 +75,27 @@ export class CodexAdapter extends BaseAdapter {
       return super.start(input);
     }
 
-    const preparedRun = await this.prepare(input);
+    const runId = `${this.adapterId}-${input.contextPack.task.id}-${this.runs.size + 1}`;
+    const outputLastMessagePath = input.outputLastMessagePath
+      ?? join(tmpdir(), 'mcas-codex', `${safeForPath(runId)}-last-message.json`);
+
+    await mkdir(dirname(outputLastMessagePath), { recursive: true });
+
+    const preparedRun = await this.prepare({
+      ...input,
+      outputLastMessagePath
+    });
     const result = await this.processRunner.run({
       executable: preparedRun.executable,
       args: preparedRun.args,
       cwd: preparedRun.cwd,
       stdin: preparedRun.prompt,
       env: preparedRun.environment,
-      timeoutMs: input.timeoutMs ?? this.timeoutMs
+      timeoutMs: input.timeoutMs ?? this.timeoutMs,
+      outputFiles: {
+        lastMessage: outputLastMessagePath
+      }
     });
-    const runId = `${this.adapterId}-${input.contextPack.task.id}-${this.runs.size + 1}`;
     const status = result.exitCode === 0 ? 'completed' : 'failed';
     const handle = {
       runId,
@@ -81,6 +112,7 @@ export class CodexAdapter extends BaseAdapter {
       stderr: result.stderr,
       durationMs: result.durationMs,
       timedOut: result.timedOut,
+      outputFiles: result.outputFiles ?? {},
       parsedEvents: parseJsonl(result.stdout),
       failure: status === 'failed'
         ? this.normalizeFailure(result.timedOut ? { code: 'ETIMEDOUT' } : { code: 'EEXIT' })
@@ -139,6 +171,12 @@ export class CodexAdapter extends BaseAdapter {
       return super.collectEvidence(handle);
     }
 
+    const structuredEvidence = extractStructuredEvidence(stored);
+
+    if (structuredEvidence) {
+      return structuredEvidence;
+    }
+
     return {
       command: stored.command,
       taskId: stored.taskId,
@@ -164,6 +202,23 @@ function sandboxFor(workspacePolicy) {
   }
 
   return 'read-only';
+}
+
+function extractStructuredEvidence(stored) {
+  return extractEvidencePackageFromSources({
+    sources: [
+      stored.outputFiles?.lastMessage?.content,
+      ...[...stored.parsedEvents].reverse(),
+      stored.stdout
+    ],
+    command: stored.command,
+    taskId: stored.taskId,
+    workspaceId: stored.workspaceId
+  });
+}
+
+function safeForPath(value) {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
 }
 
 function parseJsonl(output) {

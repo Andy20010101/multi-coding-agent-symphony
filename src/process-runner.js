@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 
 export class NodeProcessRunner {
   async run({
@@ -7,7 +8,8 @@ export class NodeProcessRunner {
     cwd,
     stdin = '',
     env = {},
-    timeoutMs = 300000
+    timeoutMs = 300000,
+    outputFiles = {}
   }) {
     assertNonEmptyString(executable, 'executable');
 
@@ -45,15 +47,25 @@ export class NodeProcessRunner {
         clearTimeout(timeout);
         reject(error);
       });
-      child.on('close', (exitCode, signal) => {
+      child.on('close', async (exitCode, signal) => {
         clearTimeout(timeout);
+        let capturedOutputFiles;
+
+        try {
+          capturedOutputFiles = await readOutputFiles(outputFiles);
+        } catch (error) {
+          reject(error);
+          return;
+        }
+
         resolve({
           exitCode,
           signal,
           stdout,
           stderr,
           durationMs: Date.now() - startedAt,
-          timedOut
+          timedOut,
+          outputFiles: capturedOutputFiles
         });
       });
 
@@ -62,9 +74,36 @@ export class NodeProcessRunner {
   }
 }
 
+async function readOutputFiles(outputFiles) {
+  if (outputFiles === null || typeof outputFiles !== 'object' || Array.isArray(outputFiles)) {
+    throw new TypeError('outputFiles must be an object');
+  }
+
+  const captured = {};
+
+  for (const [name, path] of Object.entries(outputFiles)) {
+    if (typeof path !== 'string' || path.trim() === '') {
+      continue;
+    }
+
+    try {
+      captured[name] = {
+        path,
+        content: await readFile(path, 'utf8')
+      };
+    } catch (error) {
+      captured[name] = {
+        path,
+        error: error.message
+      };
+    }
+  }
+
+  return captured;
+}
+
 function assertNonEmptyString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new TypeError(`${field} must be a non-empty string`);
   }
 }
-

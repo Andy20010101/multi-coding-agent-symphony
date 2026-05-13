@@ -182,7 +182,22 @@ describe('Orchestrator dry-run execution flow', () => {
         exitCode: 0,
         stdout: '{"type":"agent_message","message":"done"}\n',
         stderr: '',
-        durationMs: 10
+        durationMs: 10,
+        outputFiles: {
+          lastMessage: {
+            path: '/tmp/codex-last-message.json',
+            content: JSON.stringify({
+              command: 'implement',
+              taskId: 'task-real-codex',
+              workspaceId: 'model-supplied-workspace',
+              changedFiles: ['src/adapters/codex-adapter.js'],
+              checks: [{ name: 'pnpm test', status: 'passed' }],
+              knownRisks: [],
+              agentSummary: 'Structured evidence from real Codex execution.',
+              version: '1'
+            })
+          }
+        }
       });
       const adapter = new CodexAdapter({
         cliVersion: '0.130.0',
@@ -211,8 +226,8 @@ describe('Orchestrator dry-run execution flow', () => {
 
       assert.equal(runner.calls.length, 1);
       assert.equal(runner.calls[0].timeoutMs, 1000);
-      assert.equal(result.verification.status, 'failed');
-      assert.equal(result.verification.reason, 'verification-insufficient');
+      assert.equal(result.verification.status, 'passed');
+      assert.equal(result.verification.reason, 'checks-passed');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { CodexAdapter } from '../src/adapters/codex-adapter.js';
+import { validateEvidencePackage } from '../src/contracts.js';
+import { verifyEvidence } from '../src/verifier.js';
 
 const commandSpec = {
   name: 'implement',
@@ -62,6 +64,8 @@ describe('Codex real CLI integration', () => {
 
     assert.equal(runner.calls[0].executable, 'codex');
     assert.deepEqual(runner.calls[0].args.slice(0, 2), ['exec', '--json']);
+    assert.equal(runner.calls[0].args.includes('--output-schema'), true);
+    assert.equal(runner.calls[0].args.includes('--output-last-message'), true);
     assert.equal(runner.calls[0].cwd, '/work/repo');
     assert.match(runner.calls[0].stdin, /Run Codex through a real process runner/);
     assert.equal(handle.dryRun, false);
@@ -137,6 +141,90 @@ describe('Codex real CLI integration', () => {
       stderr: 'debug line',
       version: '1'
     });
+  });
+
+  it('collects structured final Codex output as verifier-readable evidence', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: 0,
+      stdout: '{"type":"agent_message","message":"done"}\n',
+      stderr: '',
+      durationMs: 12,
+      outputFiles: {
+        lastMessage: {
+          path: '/tmp/codex-last-message.json',
+          content: JSON.stringify({
+            command: 'implement',
+            taskId: 'model-supplied-task-id',
+            workspaceId: 'model-supplied-workspace',
+            diffSummary: ['Added real evidence parsing.'],
+            changedFiles: ['src/adapters/codex-adapter.js'],
+            checks: [{ name: 'pnpm test', status: 'passed' }],
+            knownRisks: [],
+            agentSummary: 'Parsed evidence from the final Codex message.',
+            version: '1'
+          })
+        }
+      }
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.equal(validateEvidencePackage(evidence), evidence);
+    assert.equal(evidence.taskId, 'task-123');
+    assert.equal(evidence.workspaceId, '/work/repo');
+    assert.deepEqual(verifyEvidence({ commandSpec, evidence }), {
+      status: 'passed',
+      reason: 'checks-passed',
+      checks: [{ name: 'pnpm test', status: 'passed' }]
+    });
+  });
+
+  it('falls back to structured evidence embedded in JSONL output', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        type: 'agent_message',
+        message: JSON.stringify({
+          command: 'implement',
+          taskId: 'task-123',
+          workspaceId: '/work/repo',
+          changedFiles: ['src/adapters/codex-adapter.js'],
+          checks: [{ name: 'node --test', status: 'passed' }],
+          knownRisks: [],
+          agentSummary: 'Evidence emitted in JSONL output.',
+          version: '1'
+        })
+      }),
+      stderr: '',
+      durationMs: 12
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.deepEqual(evidence.checks, [{ name: 'node --test', status: 'passed' }]);
+    assert.equal(evidence.knownRisks.length, 0);
   });
 
   it('marks timed out Codex processes as failed with retry metadata', async () => {

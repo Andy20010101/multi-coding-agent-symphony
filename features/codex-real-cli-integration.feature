@@ -22,3 +22,9 @@ Feature: Codex real CLI integration
     And the evidence contains no passing checks by default
     And the known risks include real CLI output requiring verification
 
+  Scenario: Verify structured Codex final output
+    Given a Codex real execution handle with a final JSON EvidencePackage
+    When evidence is collected
+    Then the harness-owned task and workspace metadata are applied
+    And the structured checks are preserved
+    And the verifier accepts the evidence when all checks passed
