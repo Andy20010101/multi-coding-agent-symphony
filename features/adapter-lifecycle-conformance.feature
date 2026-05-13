@@ -36,3 +36,9 @@ Feature: Runtime adapter lifecycle conformance
     When the adapter cancels the run handle
     Then cancellation is forwarded to the process handle
     And the adapter run status becomes cancelled
+
+  Scenario: Escalate timed out process termination
+    Given a process ignores graceful timeout termination
+    When the Node Process Runner timeout grace period expires
+    Then it escalates from SIGTERM to SIGKILL
+    And partial stdout is preserved

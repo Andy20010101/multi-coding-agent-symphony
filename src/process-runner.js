@@ -9,6 +9,7 @@ export class NodeProcessRunner {
     stdin = '',
     env = {},
     timeoutMs = 300000,
+    timeoutKillDelayMs = 5000,
     outputFiles = {}
   }) {
     assertNonEmptyString(executable, 'executable');
@@ -30,9 +31,15 @@ export class NodeProcessRunner {
     let stderr = '';
     let timedOut = false;
     let cancelled = false;
+    let killedAfterTimeout = false;
+    let killTimeout;
     const timeout = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
+      killTimeout = setTimeout(() => {
+        killedAfterTimeout = true;
+        child.kill('SIGKILL');
+      }, timeoutKillDelayMs);
     }, timeoutMs);
 
     child.stdout.setEncoding('utf8');
@@ -47,10 +54,12 @@ export class NodeProcessRunner {
     const result = new Promise((resolve, reject) => {
       child.on('error', (error) => {
         clearTimeout(timeout);
+        clearTimeout(killTimeout);
         reject(error);
       });
       child.on('close', async (exitCode, signal) => {
         clearTimeout(timeout);
+        clearTimeout(killTimeout);
         let capturedOutputFiles;
 
         try {
@@ -68,6 +77,7 @@ export class NodeProcessRunner {
           durationMs: Date.now() - startedAt,
           timedOut,
           cancelled,
+          killedAfterTimeout,
           outputFiles: capturedOutputFiles
         });
       });

@@ -42,12 +42,12 @@ Implemented and tested:
 - Phase C failed queue state slice: failed queued workflows persist failure and retry metadata, and retryable failures return to queued status.
 - Phase D process runner slice: `NodeProcessRunner` exposes startable handles that can be cancelled while preserving partial output, with `run()` compatibility retained.
 - Phase D Codex cancellation slice: active real Codex runs store process handles, forward idempotent adapter cancellation, resume public state, and return cancelled evidence with partial output.
-- Test baseline: `pnpm test` currently covers 65 tests across 12 suites.
+- Phase D timeout escalation slice: timed out process runs first send `SIGTERM`, then escalate to `SIGKILL` after the timeout grace period while preserving partial output.
+- Test baseline: `pnpm test` currently covers 66 tests across 12 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
 - Claude Code and Kiro CLI adapters are dry-run only.
 - Verifier accepts any check with `status: "passed"`; it does not yet verify provenance, command output, CI status, or changed-file scope.
 - Eval plugin scores synthetic samples but is not wired into release gates, model profile decisions, or artifact sampling.
@@ -204,7 +204,7 @@ Acceptance:
 
 ### Phase D: Process Lifecycle and Cancellation
 
-Status: in progress. Startable `NodeProcessRunner` handles, partial-output cancellation, active real Codex adapter cancellation, idempotency, and cancelled evidence are complete; timeout escalation remains.
+Status: completed for V1 process lifecycle and cancellation.
 
 Goal: support active process cancellation and terminal lifecycle states across adapters.
 
@@ -230,14 +230,16 @@ BDD/TDD:
 
 - Add scenario: process runner handle cancellation preserves partial stdout.
 - Add scenario: cancelling a real run terminates the child process and records cancelled status.
+- Add scenario: timed out process termination escalates from `SIGTERM` to `SIGKILL`.
 - Add test with a fake long-running process runner.
-- Add test that timeout emits `cli-timeout` and preserves captured output.
+- Add test that timeout escalation preserves captured output.
 
 Acceptance:
 
 - Real Codex active run can be cancelled by adapter lifecycle.
 - Cancellation is idempotent.
 - Partial evidence is stored with known risk, not marked passed.
+- Timed out process termination escalates after the configured grace period.
 
 ### Phase E: Codex Production Readiness
 
