@@ -131,10 +131,15 @@ describe('Orchestrator dry-run execution flow', () => {
       });
 
       const storedEvidence = await artifactStore.readArtifact('task-123', 'implement-evidence');
+      const routeDecision = await artifactStore.readArtifact('task-123', 'implement-route-decision');
       const events = await eventLog.readAll();
 
       assert.equal(result.adapterId, 'codex');
+      assert.equal(result.routeDecisionArtifactId, 'implement-route-decision');
       assert.equal(result.verification.status, 'passed');
+      assert.equal(routeDecision.command, 'implement');
+      assert.equal(routeDecision.adapterId, 'codex');
+      assert.equal(routeDecision.reason, 'first-capable-adapter');
       assert.deepEqual(storedEvidence.checks, [
         {
           name: 'synthetic-check',
@@ -147,6 +152,7 @@ describe('Orchestrator dry-run execution flow', () => {
       ]);
       assert.deepEqual(events.map((event) => event.type), [
         'command.queued',
+        'artifact.written',
         'route.selected',
         'adapter.started',
         'command.finished',
@@ -523,6 +529,7 @@ describe('Orchestrator dry-run execution flow', () => {
         adapterId: 'codex',
         workspaceId: 'task-123-primary-writer-1',
         evidenceArtifactId: 'implement-evidence',
+        routeDecisionArtifactId: 'implement-route-decision',
         verificationStatus: 'passed',
         artifactRefs: []
       });
@@ -533,6 +540,7 @@ describe('Orchestrator dry-run execution flow', () => {
         adapterId: 'codex',
         workspaceId: 'task-123-review-2',
         evidenceArtifactId: 'review-evidence',
+        routeDecisionArtifactId: 'review-route-decision',
         verificationStatus: 'passed',
         artifactRefs: [{
           taskId: 'task-123',

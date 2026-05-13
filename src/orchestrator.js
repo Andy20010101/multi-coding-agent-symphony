@@ -104,6 +104,22 @@ export class Orchestrator {
       throw new Error(`No adapter instance registered for ${route.adapterId}`);
     }
 
+    const routeDecisionArtifactId = `${commandSpec.name}-route-decision`;
+    const routeDecision = buildRouteDecisionArtifact({
+      taskId: taskSpec.id,
+      commandSpec,
+      route
+    });
+
+    await this.artifactStore.writeArtifact(taskSpec.id, routeDecisionArtifactId, routeDecision);
+    await this.#appendEvent({
+      type: 'artifact.written',
+      actor: 'orchestrator',
+      payload: {
+        taskId: taskSpec.id,
+        artifactId: routeDecisionArtifactId
+      }
+    });
     await this.#appendEvent({
       type: 'route.selected',
       actor: 'orchestrator',
@@ -112,7 +128,8 @@ export class Orchestrator {
         command: commandSpec.name,
         adapterId: route.adapterId,
         modelProfile: route.modelProfile ?? route.modelProfiles[0],
-        routeDecision: route.routeDecision
+        routeDecision,
+        routeDecisionArtifactId
       }
     });
 
@@ -193,6 +210,7 @@ export class Orchestrator {
       adapterId: route.adapterId,
       workspaceId: workspace.workspaceId,
       evidenceArtifactId: artifactId,
+      routeDecisionArtifactId,
       verificationStatus: verification.status,
       artifactRefs: structuredClone(artifactRefs),
       ...(adapterArtifactRefs.length > 0 ? { adapterArtifactRefs } : {})
@@ -224,6 +242,7 @@ export class Orchestrator {
       workspace,
       artifactId,
       runArtifactId,
+      routeDecisionArtifactId,
       verification
     };
   }
@@ -464,6 +483,20 @@ function workspaceRoleFor(workspacePolicy) {
   }
 
   return 'isolated';
+}
+
+function buildRouteDecisionArtifact({ taskId, commandSpec, route }) {
+  const modelProfile = route.modelProfile ?? route.modelProfiles[0];
+
+  return {
+    ...(route.routeDecision ? structuredClone(route.routeDecision) : {}),
+    taskId,
+    command: commandSpec.name,
+    adapterId: route.adapterId,
+    modelProfile,
+    reason: route.routeDecision?.reason ?? 'first-capable-adapter',
+    version: '1'
+  };
 }
 
 function resolveCommandSpecs({ commandSpecs, commandSequence }) {

@@ -65,6 +65,7 @@ Implemented and tested:
 - Phase I eval real-resource slice: real smoke evidence records `resourceProfile` with CPU, memory, timeout, concurrency, network, and version fields for eval replay.
 - Phase J registry slice: `ModelProfileRegistry` and `AdapterMappingRegistry` persist contract-validated JSON and reload/query profiles or CLI mappings by command and capability inputs.
 - Phase J routing policy slice: `RouterScheduler.route` can exclude retryable adapter failures, prefer lower-cost review models, honor explicit model overrides, and return an explainable route decision.
+- Phase J route decision artifact slice: orchestrator command runs write `<command>-route-decision` artifacts and link them from command run records.
 - Test baseline: `pnpm test` currently covers 106 tests across 17 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
@@ -452,7 +453,7 @@ Acceptance:
 
 ### Phase J: Model Profiles and Routing Policy
 
-Status: in progress. Persisted model profile and adapter mapping registries plus deterministic route selection policy are complete; route decision artifact persistence and eval-advisory approval boundaries remain.
+Status: in progress. Persisted model profile and adapter mapping registries, deterministic route selection policy, and route decision artifact persistence are complete; eval-advisory approval boundaries remain.
 
 Goal: route based on adapter capability, model profile, prior failures, cost class, and eval recommendations.
 
@@ -729,15 +730,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase J with route decision artifact persistence.
+Continue Phase J with eval recommendation approval boundaries.
 
 First red test:
 
-- Add an orchestrator test proving `route.selected` decisions are written as artifacts and command run records reference the route decision artifact.
+- Add a routing test proving eval recommendations are ignored unless an explicit release approval names the candidate model profile.
 
 First implementation:
 
-- Store `route.routeDecision` through the existing Artifact Store path and link it from the command run record.
+- Add an approved recommendation input to `RouterScheduler.route`; keep unapproved eval recommendations advisory and non-mutating.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

@@ -18,3 +18,9 @@ Feature: Phase 6 model profiles and routing policy
     Then it skips the failed adapter
     And it chooses the lower-cost review model when capability is equal
     And an explicit model override beats the default profile
+
+  Scenario: Persist route decision artifacts
+    Given the orchestrator selects an adapter and model profile
+    When it runs the command
+    Then it writes a route decision artifact
+    And the command run record references the route decision artifact
