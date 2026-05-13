@@ -24,3 +24,10 @@ Feature: Orchestrator dry-run execution flow
     Then both commands are executed in order
     And the review command receives the implementation evidence artifact reference
     And the review command runs in a non-writable workspace
+
+  Scenario: Stop workflow on verifier failure
+    Given implement and review CommandSpecs
+    And an implementation command returns insufficient evidence
+    When the Orchestrator runs the task workflow
+    Then the workflow stops after implementation
+    And the failure is recorded as command.failed

@@ -137,7 +137,7 @@ export class Orchestrator {
       payload: verification
     });
     await this.#appendEvent({
-      type: 'command.finished',
+      type: verification.status === 'passed' ? 'command.finished' : 'command.failed',
       actor: 'orchestrator',
       payload: {
         taskId: taskSpec.id,

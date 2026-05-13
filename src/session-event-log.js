@@ -13,6 +13,7 @@ const EVENT_TYPES = new Set([
   'check.finished',
   'failure.classified',
   'verifier.result',
+  'command.failed',
   'command.finished'
 ]);
 
@@ -79,4 +80,3 @@ function assertNonEmptyString(value, field) {
     throw new TypeError(`${field} must be a non-empty string`);
   }
 }
-

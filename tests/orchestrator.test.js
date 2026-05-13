@@ -67,6 +67,22 @@ class CapturingCodexAdapter extends PassingCodexAdapter {
   }
 }
 
+class FailingCodexAdapter extends CapturingCodexAdapter {
+  async collectEvidence(handle) {
+    return {
+      command: handle.command,
+      taskId: handle.taskId,
+      workspaceId: handle.workspaceId,
+      diffSummary: [],
+      changedFiles: ['src/orchestrator.js'],
+      checks: [],
+      knownRisks: ['missing-checks'],
+      agentSummary: 'Synthetic failing evidence.',
+      version: '1'
+    };
+  }
+}
+
 class FakeProcessRunner {
   constructor(result) {
     this.result = result;
@@ -289,6 +305,40 @@ describe('Orchestrator dry-run execution flow', () => {
       }]);
       assert.equal(result.commands[1].workspace.writable, false);
       assert.equal(result.commands[1].workspace.sourceWorkspaceId, result.commands[0].workspace.workspaceId);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('stops workflow after verifier failure and records command.failed', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-workflow-failure-'));
+
+    try {
+      const adapter = new FailingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const eventLog = new SessionEventLog(join(root, 'events'), 'session-123');
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog,
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runTaskWorkflow({
+        taskSpec,
+        commandSpecs: [commandSpec, reviewCommandSpec]
+      });
+      const events = await eventLog.readAll();
+
+      assert.equal(result.status, 'failed');
+      assert.equal(result.failedCommand, 'implement');
+      assert.deepEqual(result.commands.map((command) => command.command), ['implement']);
+      assert.equal(adapter.starts.length, 1);
+      assert.equal(events.at(-1).type, 'command.failed');
+      assert.equal(events.at(-1).payload.verificationStatus, 'failed');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
