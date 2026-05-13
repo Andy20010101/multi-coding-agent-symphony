@@ -22,3 +22,9 @@ Feature: Phase 7 GitHub intake and CI feedback
     When GitHub intake fetches the issue
     Then it calls gh with repository, issue number, and JSON fields
     And it returns a validated TaskSpec
+
+  Scenario: Fetch a GitHub pull request and CI status through gh
+    Given an injected command runner returns JSON from gh pr view and gh api check-runs
+    When GitHub intake fetches the pull request and CI status
+    Then it calls gh with repository, PR number, and check-run API path
+    And it returns a validated review TaskSpec and CI status artifact

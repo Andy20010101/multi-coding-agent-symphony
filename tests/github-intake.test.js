@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import { validateTaskSpec } from '../src/contracts.js';
 import {
+  fetchGitHubPullRequestCiStatusArtifact,
+  fetchGitHubPullRequestTaskSpec,
   fetchGitHubIssueTaskSpec,
   githubCheckRunsToCiStatusArtifact,
   githubIssueToTaskSpec,
@@ -205,6 +207,74 @@ describe('Phase 7 GitHub intake and CI feedback', () => {
     assert.equal(task.priority, 'high');
     assert.deepEqual(task.acceptance, ['release checklist exists']);
   });
+
+  it('fetches a GitHub pull request and CI status through an injected gh runner', async () => {
+    const runner = new QueueRunner([
+      {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          number: 17,
+          title: 'Document real CLI setup',
+          body: '- [ ] reviewer verifies read-only flow',
+          baseRefName: 'main',
+          headRefName: 'docs/real-cli-setup',
+          headRefOid: 'abc123',
+          labels: [{ name: 'priority:normal' }],
+          createdAt: '2026-05-13T13:00:00.000Z'
+        })
+      },
+      {
+        exitCode: 0,
+        stdout: JSON.stringify([
+          {
+            name: 'test',
+            status: 'completed',
+            conclusion: 'success',
+            detailsUrl: 'https://github.com/example/checks/1'
+          }
+        ])
+      }
+    ]);
+
+    const task = await fetchGitHubPullRequestTaskSpec({
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      pullRequestNumber: 17,
+      runner
+    });
+    const ciStatus = await fetchGitHubPullRequestCiStatusArtifact({
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      ref: 'refs/pull/17/head',
+      sha: 'abc123',
+      runner
+    });
+
+    assert.deepEqual(runner.calls, [
+      {
+        executable: 'gh',
+        args: [
+          'pr',
+          'view',
+          '17',
+          '--repo',
+          'Andy20010101/multi-coding-agent-symphony',
+          '--json',
+          'number,title,body,labels,createdAt,baseRefName,headRefName,headRefOid'
+        ]
+      },
+      {
+        executable: 'gh',
+        args: [
+          'api',
+          'repos/Andy20010101/multi-coding-agent-symphony/commits/abc123/check-runs',
+          '--jq',
+          '.check_runs'
+        ]
+      }
+    ]);
+    assert.equal(task.id, 'github-pr-17');
+    assert.equal(ciStatus.status, 'passed');
+    assert.equal(ciStatus.sha, 'abc123');
+  });
 });
 
 class FakeRunner {
@@ -216,5 +286,17 @@ class FakeRunner {
   async run(invocation) {
     this.calls.push(invocation);
     return this.result;
+  }
+}
+
+class QueueRunner {
+  constructor(results) {
+    this.results = [...results];
+    this.calls = [];
+  }
+
+  async run(invocation) {
+    this.calls.push(invocation);
+    return this.results.shift();
   }
 }

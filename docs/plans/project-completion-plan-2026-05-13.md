@@ -71,7 +71,8 @@ Implemented and tested:
 - Phase K GitHub PR intake slice: pure pull request metadata conversion produces read-only review `TaskSpec` objects with PR number, base/head refs, and acceptance criteria.
 - Phase K GitHub CI status slice: GitHub check runs normalize into artifact-ready CI summaries with aggregate status, conclusion, URLs, and failing check names.
 - Phase K GitHub issue `gh` wrapper slice: injected-runner issue intake calls `gh issue view --json ...`, parses JSON, and returns validated `TaskSpec` objects.
-- Test baseline: `pnpm test` currently covers 111 tests across 18 suites.
+- Phase K GitHub PR/CI `gh` wrapper slice: injected-runner PR intake calls `gh pr view --json ...`, and CI capture calls `gh api .../check-runs` through the pure normalizer.
+- Test baseline: `pnpm test` currently covers 112 tests across 18 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -493,7 +494,7 @@ Acceptance:
 
 ### Phase K: GitHub Intake and CI Feedback
 
-Status: in progress. Pure GitHub issue/PR metadata conversion, CI status artifact normalization, and live `gh issue view` intake are complete; live PR/CI `gh` intake, optional PR/comment summary, and branch/workspace naming policy remain.
+Status: in progress. Pure GitHub issue/PR metadata conversion, CI status artifact normalization, and live issue/PR/CI `gh` intake wrappers are complete; optional PR/comment summary and branch/workspace naming policy remain.
 
 Goal: support one real tracker first. Choose GitHub for V1 because the repository already uses GitHub and `gh` is available.
 
@@ -736,15 +737,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase K with live `gh` PR and CI wrappers.
+Continue Phase K with PR summary and branch/workspace naming policy.
 
 First red test:
 
-- Add injected-runner tests proving PR intake calls `gh pr view --json ...` and CI capture calls `gh run view` or `gh api` output through the pure normalizer.
+- Add GitHub intake tests proving PR summaries include task, CI status, and artifact references, and branch/workspace names are deterministic safe path segments.
 
 First implementation:
 
-- Add wrapper helpers that reuse `githubPullRequestToTaskSpec` and `githubCheckRunsToCiStatusArtifact`.
+- Add pure summary and naming helpers; keep posting comments optional and outside V1 hot path.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

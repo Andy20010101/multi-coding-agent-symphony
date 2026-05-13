@@ -2,6 +2,7 @@ import { validateTaskSpec } from '../contracts.js';
 import { NodeProcessRunner } from '../process-runner.js';
 
 const ISSUE_JSON_FIELDS = 'number,title,body,labels,createdAt';
+const PR_JSON_FIELDS = 'number,title,body,labels,createdAt,baseRefName,headRefName,headRefOid';
 
 export async function fetchGitHubIssueTaskSpec({
   repository,
@@ -35,6 +36,77 @@ export async function fetchGitHubIssueTaskSpec({
   return githubIssueToTaskSpec({
     repository,
     issue: parseJson(result.stdout, 'gh issue view stdout')
+  });
+}
+
+export async function fetchGitHubPullRequestTaskSpec({
+  repository,
+  pullRequestNumber,
+  runner = new NodeProcessRunner()
+}) {
+  assertNonEmptyString(repository, 'repository');
+  assertPositiveInteger(pullRequestNumber, 'pullRequestNumber');
+
+  if (!runner || typeof runner.run !== 'function') {
+    throw new TypeError('runner must provide run');
+  }
+
+  const result = await runner.run({
+    executable: 'gh',
+    args: [
+      'pr',
+      'view',
+      String(pullRequestNumber),
+      '--repo',
+      repository,
+      '--json',
+      PR_JSON_FIELDS
+    ]
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(`gh pr view failed with exit code ${result.exitCode}: ${result.stderr ?? ''}`);
+  }
+
+  return githubPullRequestToTaskSpec({
+    repository,
+    pullRequest: parseJson(result.stdout, 'gh pr view stdout')
+  });
+}
+
+export async function fetchGitHubPullRequestCiStatusArtifact({
+  repository,
+  ref,
+  sha,
+  runner = new NodeProcessRunner()
+}) {
+  assertNonEmptyString(repository, 'repository');
+  assertNonEmptyString(ref, 'ref');
+  assertNonEmptyString(sha, 'sha');
+
+  if (!runner || typeof runner.run !== 'function') {
+    throw new TypeError('runner must provide run');
+  }
+
+  const result = await runner.run({
+    executable: 'gh',
+    args: [
+      'api',
+      `repos/${repository}/commits/${sha}/check-runs`,
+      '--jq',
+      '.check_runs'
+    ]
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(`gh api check-runs failed with exit code ${result.exitCode}: ${result.stderr ?? ''}`);
+  }
+
+  return githubCheckRunsToCiStatusArtifact({
+    repository,
+    ref,
+    sha,
+    checkRuns: parseJson(result.stdout, 'gh api check-runs stdout')
   });
 }
 
