@@ -553,4 +553,45 @@ describe('Orchestrator dry-run execution flow', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('persists retry metadata when a queued workflow fails verification', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-queue-failure-'));
+
+    try {
+      const stateFile = join(root, 'queue.json');
+      const queue = new TaskQueue({ maxConcurrency: 1, stateFile });
+      queue.enqueue(taskSpec, {
+        now: '2026-05-13T00:00:00.000Z'
+      });
+
+      const adapter = new FailingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const reloadedQueue = new TaskQueue({ maxConcurrency: 1, stateFile });
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        taskQueue: reloadedQueue,
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runNextTask({
+        commandSpecs: [commandSpec, reviewCommandSpec],
+        now: '2026-05-13T00:00:01.000Z'
+      });
+      const record = new TaskQueue({ maxConcurrency: 1, stateFile }).get('task-123');
+
+      assert.equal(result.status, 'failed');
+      assert.equal(record.status, 'queued');
+      assert.equal(record.failedAt, '2026-05-13T00:00:01.000Z');
+      assert.equal(record.failedEventId, 'task-queue-1-failed-1');
+      assert.deepEqual(record.failure, result.failure);
+      assert.deepEqual(record.retryPlan, result.retryPlan);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

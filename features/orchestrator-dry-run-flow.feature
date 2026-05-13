@@ -61,3 +61,10 @@ Feature: Orchestrator dry-run execution flow
     And the standard command sequence is requested
     When the Orchestrator runs the task workflow
     Then it executes implement, review, and qa in order
+
+  Scenario: Persist retry state for failed queued workflow
+    Given a Task Queue backed by a state file
+    And a queued task fails verification during workflow execution
+    When the Orchestrator records the failed workflow result
+    Then the queue record stores failure and retry metadata
+    And retryable failures return to queued status

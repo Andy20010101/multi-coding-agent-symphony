@@ -307,6 +307,7 @@ export class Orchestrator {
 
     requireMethod(this.taskQueue, 'leaseNext', 'taskQueue');
     requireMethod(this.taskQueue, 'complete', 'taskQueue');
+    requireMethod(this.taskQueue, 'fail', 'taskQueue');
 
     const leased = this.taskQueue.leaseNext({
       adapterId: 'orchestrator',
@@ -331,6 +332,12 @@ export class Orchestrator {
 
     if (result.status === 'passed') {
       this.taskQueue.complete(leased.task.id, { now });
+    } else {
+      this.taskQueue.fail(leased.task.id, {
+        failure: result.failure,
+        retryPlan: result.retryPlan,
+        now
+      });
     }
 
     return result;

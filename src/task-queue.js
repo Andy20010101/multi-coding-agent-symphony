@@ -95,6 +95,17 @@ export class TaskQueue {
     return structuredClone(record);
   }
 
+  fail(taskId, { failure, retryPlan, now } = {}) {
+    const record = this.#getRecord(taskId);
+    record.status = retryPlan?.retry === true ? 'queued' : 'failed';
+    record.failedAt = toIsoTimestamp(now);
+    record.failedEventId = queueEventId(record, 'failed', record.attempt);
+    record.failure = structuredClone(failure);
+    record.retryPlan = structuredClone(retryPlan);
+    this.#persist();
+    return structuredClone(record);
+  }
+
   cancel(taskId, reason, { now } = {}) {
     const record = this.#getRecord(taskId);
 

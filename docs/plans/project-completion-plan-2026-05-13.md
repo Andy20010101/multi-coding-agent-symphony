@@ -39,12 +39,12 @@ Implemented and tested:
 - Phase C context hydration slice: later command context packs hydrate referenced artifact content from the Artifact Store.
 - Phase C queue-backed workflow slice: `Orchestrator.runNextTask` leases a persisted queued task, runs the workflow, and completes the queue record on success.
 - Phase C sequence policy slice: named `standard` workflow expands to `implement -> review -> qa`.
-- Test baseline: `pnpm test` currently covers 62 tests across 11 suites.
+- Phase C failed queue state slice: failed queued workflows persist failure and retry metadata, and retryable failures return to queued status.
+- Test baseline: `pnpm test` currently covers 63 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- `TaskQueue` persistence is integrated into `Orchestrator.runNextTask`, but failed workflow queue retry state is not yet persisted.
 - `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
 - Claude Code and Kiro CLI adapters are dry-run only.
 - Verifier accepts any check with `status: "passed"`; it does not yet verify provenance, command output, CI status, or changed-file scope.
@@ -156,7 +156,7 @@ Acceptance:
 
 ### Phase C: Orchestrator Command Loop
 
-Status: in progress. The workflow path, verifier-gated failure stop, retry planning, command run records, context artifact hydration, queue-backed `runNextTask`, and default command sequence policy are complete; failed queue retry state remains.
+Status: completed for V1 command loop. The workflow path, verifier-gated failure stop, retry planning, command run records, context artifact hydration, queue-backed `runNextTask`, default command sequence policy, and failed queue retry state are complete.
 
 Goal: make `Orchestrator` run command sequences from queue state, not just one direct `runCommand` call.
 
@@ -190,6 +190,7 @@ BDD/TDD:
 - Add scenario: later command context hydrates referenced artifact content.
 - Add scenario: persisted queued task can be leased and completed by the orchestrator workflow.
 - Add scenario: named standard command sequence runs implement, review, and qa.
+- Add scenario: failed queued workflow persists retry metadata.
 - Add scenario: review receives implementation evidence through artifact refs.
 - Add scenario: verifier failure prevents task completion.
 
@@ -688,15 +689,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase C with failed queue retry state.
+Continue Phase D with process lifecycle and cancellation.
 
 First red test:
 
-- Add a queue-backed workflow test proving a failed workflow records retry metadata on the queue record.
+- Add a process runner test proving a long-running process can be cancelled and returns cancelled status with partial output.
 
 First implementation:
 
-- Add queue failure metadata persistence for failed `runNextTask` results without automatically retrying.
+- Split `NodeProcessRunner` into a startable handle plus awaitable result, while retaining current `run()` compatibility.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 
