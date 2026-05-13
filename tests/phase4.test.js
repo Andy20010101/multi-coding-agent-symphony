@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import {
   WorkspaceConflictError,
@@ -96,6 +99,36 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
     assert.notEqual(firstReview.workspaceId, secondReview.workspaceId);
     assert.equal(firstReview.writable, false);
     assert.equal(secondReview.writable, false);
+  });
+
+  it('materializes workspace directories with a manifest when enabled', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-workspaces-'));
+
+    try {
+      const manager = new WorkspaceManager({
+        rootDirectory: root,
+        materialize: true
+      });
+      const allocation = manager.allocate({
+        taskId: 'task-123',
+        role: 'primary-writer',
+        adapterId: 'codex'
+      });
+
+      assert.equal((await stat(allocation.path)).isDirectory(), true);
+      assert.equal(allocation.manifestPath, join(allocation.path, 'workspace-manifest.json'));
+      assert.deepEqual(JSON.parse(await readFile(allocation.manifestPath, 'utf8')), {
+        version: '1',
+        workspaceId: allocation.workspaceId,
+        taskId: 'task-123',
+        role: 'primary-writer',
+        adapterId: 'codex',
+        path: allocation.path,
+        writable: true
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('routes commands to capable adapters while honoring exclusions', () => {

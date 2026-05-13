@@ -27,12 +27,13 @@ Implemented and tested:
 - External eval prototype: `plugins/eval-replay/index.js`.
 - Phase A contract reconciliation: `TaskSpec` optional metadata is validated, `EvidencePackage.checks` has explicit `name/status/output`, and the strict JSON schema matches the validator.
 - Phase B queue persistence slice: `TaskQueue` can persist state, reload after restart, and recover expired running leases.
-- Test baseline: `pnpm test` currently covers 50 tests across 11 suites.
+- Phase B workspace materialization slice: `WorkspaceManager` can create workspace directories and write workspace manifests when materialization is enabled.
+- Test baseline: `pnpm test` currently covers 51 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- `WorkspaceManager` allocates paths but does not materialize, clone, clean, or lock working directories.
+- `WorkspaceManager` materialization exists, but cleanup, clone, and lock behavior are still pending.
 - `TaskQueue` persistence exists, but it is not yet integrated into orchestrator workflow recovery.
 - `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
 - Claude Code and Kiro CLI adapters are dry-run only.
@@ -103,7 +104,7 @@ Acceptance:
 
 ### Phase B: Durable State and Workspace Materialization
 
-Status: in progress. Queue persistence and expired lease recovery are complete; workspace materialization and manifests remain.
+Status: in progress. Queue persistence, expired lease recovery, workspace materialization, and manifests are complete; cleanup and retained-artifact policy remain.
 
 Goal: turn in-memory primitives into recoverable harness state.
 
@@ -665,16 +666,16 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase B with workspace materialization.
+Continue Phase B with workspace cleanup and retained-artifact policy.
 
 First red test:
 
-- Add a workspace test proving allocation creates the workspace directory and writes a manifest with task id, role, adapter id, writable flag, and path.
+- Add a workspace cleanup test proving cleanup removes disposable workspace contents while retaining the manifest or a cleanup record.
 
 First implementation:
 
-- Add an opt-in materialization mode to `WorkspaceManager`.
-- Create the workspace directory and manifest during allocation when materialization is enabled.
+- Add a `cleanup` method to `WorkspaceManager`.
+- Preserve a manifest or cleanup record so later verification can still reconstruct the workspace allocation.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 

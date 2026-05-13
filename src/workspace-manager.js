@@ -1,4 +1,7 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+const WORKSPACE_MANIFEST_FILE = 'workspace-manifest.json';
 
 export class WorkspaceConflictError extends Error {
   constructor(message, details = {}) {
@@ -10,12 +13,17 @@ export class WorkspaceConflictError extends Error {
 }
 
 export class WorkspaceManager {
-  constructor({ rootDirectory }) {
+  constructor({ rootDirectory, materialize = false }) {
     if (typeof rootDirectory !== 'string' || rootDirectory.trim() === '') {
       throw new TypeError('rootDirectory must be a non-empty string');
     }
 
+    if (typeof materialize !== 'boolean') {
+      throw new TypeError('materialize must be a boolean');
+    }
+
     this.rootDirectory = rootDirectory;
+    this.materialize = materialize;
     this.allocations = [];
   }
 
@@ -40,10 +48,16 @@ export class WorkspaceManager {
       role,
       adapterId,
       path: join(this.rootDirectory, taskId, workspaceId),
+      manifestPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_MANIFEST_FILE),
       writable: role === 'primary-writer'
     };
 
     this.allocations.push(allocation);
+
+    if (this.materialize) {
+      materializeWorkspace(allocation);
+    }
+
     return structuredClone(allocation);
   }
 
@@ -61,9 +75,21 @@ export class WorkspaceManager {
   }
 }
 
+function materializeWorkspace(allocation) {
+  mkdirSync(allocation.path, { recursive: true });
+  writeFileSync(allocation.manifestPath, JSON.stringify({
+    version: '1',
+    workspaceId: allocation.workspaceId,
+    taskId: allocation.taskId,
+    role: allocation.role,
+    adapterId: allocation.adapterId,
+    path: allocation.path,
+    writable: allocation.writable
+  }, null, 2));
+}
+
 function assertNonEmptyString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new TypeError(`${field} must be a non-empty string`);
   }
 }
-

@@ -12,6 +12,12 @@ Feature: Phase 4 routing, workspace, and verification modules
     Then both review workspaces are allocated
     And neither review workspace is writable by default
 
+  Scenario: Materialize workspace directories
+    Given a Workspace Manager with materialization enabled
+    When a workspace is allocated
+    Then the workspace directory exists
+    And a workspace manifest records task id, role, adapter id, writable flag, and path
+
   Scenario: Route a command to a capable adapter
     Given capability reports for Codex and Kiro CLI
     When the Router Scheduler routes an implement command
@@ -29,4 +35,3 @@ Feature: Phase 4 routing, workspace, and verification modules
     When the Verifier evaluates the evidence
     Then verification fails
     And the failure reason is verification-insufficient
-
