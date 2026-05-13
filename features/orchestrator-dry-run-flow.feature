@@ -38,3 +38,9 @@ Feature: Orchestrator dry-run execution flow
     When the Orchestrator classifies the workflow failure
     Then it returns the retry plan recommended by the failure taxonomy
     And it records a failure.classified event
+
+  Scenario: Store command run records
+    Given implement and review CommandSpecs
+    When the Orchestrator runs the task workflow
+    Then each command writes a command run record artifact
+    And each run record links its evidence artifact and context artifact refs

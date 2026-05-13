@@ -137,6 +137,27 @@ export class Orchestrator {
       actor: 'verifier',
       payload: verification
     });
+    const runArtifactId = `${commandSpec.name}-run`;
+    const runRecord = {
+      version: '1',
+      taskId: taskSpec.id,
+      command: commandSpec.name,
+      adapterId: route.adapterId,
+      workspaceId: workspace.workspaceId,
+      evidenceArtifactId: artifactId,
+      verificationStatus: verification.status,
+      artifactRefs: structuredClone(artifactRefs)
+    };
+
+    await this.artifactStore.writeArtifact(taskSpec.id, runArtifactId, runRecord);
+    await this.#appendEvent({
+      type: 'artifact.written',
+      actor: 'orchestrator',
+      payload: {
+        taskId: taskSpec.id,
+        artifactId: runArtifactId
+      }
+    });
     await this.#appendEvent({
       type: verification.status === 'passed' ? 'command.finished' : 'command.failed',
       actor: 'orchestrator',
@@ -153,6 +174,7 @@ export class Orchestrator {
       adapterId: route.adapterId,
       workspace,
       artifactId,
+      runArtifactId,
       verification
     };
   }

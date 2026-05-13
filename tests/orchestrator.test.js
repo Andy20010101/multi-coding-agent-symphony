@@ -134,6 +134,7 @@ describe('Orchestrator dry-run execution flow', () => {
         'command.finished',
         'artifact.written',
         'verifier.result',
+        'artifact.written',
         'command.finished'
       ]);
     } finally {
@@ -378,19 +379,64 @@ describe('Orchestrator dry-run execution flow', () => {
         nextCommand: 'qa',
         owner: 'verifier'
       });
-      assert.deepEqual(events.at(-1), {
-        id: 'evt-8',
-        type: 'failure.classified',
-        timestamp: events.at(-1).timestamp,
-        actor: 'orchestrator',
-        payload: {
-          taskId: 'task-123',
-          command: 'implement',
-          failure: result.failure,
-          retryPlan: result.retryPlan
-        },
+      assert.equal(events.at(-1).type, 'failure.classified');
+      assert.deepEqual(events.at(-1).payload, {
+        taskId: 'task-123',
+        command: 'implement',
+        failure: result.failure,
+        retryPlan: result.retryPlan
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('stores command run records with evidence and context references', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-run-records-'));
+
+    try {
+      const adapter = new CapturingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const orchestrator = new Orchestrator({
+        artifactStore,
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      await orchestrator.runTaskWorkflow({
+        taskSpec,
+        commandSpecs: [commandSpec, reviewCommandSpec]
+      });
+
+      assert.deepEqual(await artifactStore.readArtifact('task-123', 'implement-run'), {
         version: '1',
-        sessionId: 'session-123'
+        taskId: 'task-123',
+        command: 'implement',
+        adapterId: 'codex',
+        workspaceId: 'task-123-primary-writer-1',
+        evidenceArtifactId: 'implement-evidence',
+        verificationStatus: 'passed',
+        artifactRefs: []
+      });
+      assert.deepEqual(await artifactStore.readArtifact('task-123', 'review-run'), {
+        version: '1',
+        taskId: 'task-123',
+        command: 'review',
+        adapterId: 'codex',
+        workspaceId: 'task-123-review-2',
+        evidenceArtifactId: 'review-evidence',
+        verificationStatus: 'passed',
+        artifactRefs: [{
+          taskId: 'task-123',
+          artifactId: 'implement-evidence',
+          command: 'implement',
+          verificationStatus: 'passed'
+        }]
       });
     } finally {
       await rm(root, { recursive: true, force: true });

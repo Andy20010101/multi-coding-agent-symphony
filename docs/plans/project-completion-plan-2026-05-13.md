@@ -35,7 +35,8 @@ Implemented and tested:
 - Phase C workflow slice: `Orchestrator.runTaskWorkflow` can execute `implement -> review`, pass implementation evidence refs into review context, and clone review workspace metadata.
 - Phase C verifier gate slice: workflow stops on verifier failure and records `command.failed`.
 - Phase C retry planning slice: failed workflows classify verifier failures and return the scheduler retry plan.
-- Test baseline: `pnpm test` currently covers 58 tests across 11 suites.
+- Phase C command run record slice: every command writes a run record artifact linking evidence, workspace, verification status, and context artifact refs.
+- Test baseline: `pnpm test` currently covers 59 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -152,7 +153,7 @@ Acceptance:
 
 ### Phase C: Orchestrator Command Loop
 
-Status: in progress. The minimal `implement -> review` workflow path, verifier-gated failure stop, and retry planning are complete; command run records, context artifact hydration, and queue recovery integration remain.
+Status: in progress. The minimal `implement -> review` workflow path, verifier-gated failure stop, retry planning, and command run records are complete; context artifact hydration and queue recovery integration remain.
 
 Goal: make `Orchestrator` run command sequences from queue state, not just one direct `runCommand` call.
 
@@ -182,6 +183,7 @@ BDD/TDD:
 - Add scenario: verifier failure stops workflow and records `command.failed`.
 - Add scenario: implement failure classified as retryable schedules QA or retry command.
 - Add scenario: failed workflow returns retry plan from failure taxonomy.
+- Add scenario: every command stores a run record artifact separate from evidence.
 - Add scenario: review receives implementation evidence through artifact refs.
 - Add scenario: verifier failure prevents task completion.
 
@@ -680,15 +682,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase C with command run records as artifacts.
+Continue Phase C with context artifact hydration.
 
 First red test:
 
-- Add a workflow test proving each command stores a command run record artifact separate from evidence.
+- Add a workflow test proving selected artifact refs are hydrated from the Artifact Store before building later command context.
 
 First implementation:
 
-- Add the smallest command run record artifact containing command, adapter, workspace id, evidence artifact id, verification status, and artifact refs used for context.
+- Read prior artifact refs from `ArtifactStore` and pass bounded artifact metadata/content into `ContextBuilder` for later commands.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 
