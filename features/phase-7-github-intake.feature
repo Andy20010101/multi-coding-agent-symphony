@@ -28,3 +28,13 @@ Feature: Phase 7 GitHub intake and CI feedback
     When GitHub intake fetches the pull request and CI status
     Then it calls gh with repository, PR number, and check-run API path
     And it returns a validated review TaskSpec and CI status artifact
+
+  Scenario: Build a pull request summary artifact
+    Given a pull request TaskSpec, CI status artifact, and command artifact refs
+    When GitHub intake builds the pull request summary
+    Then the summary includes task identity, CI status, failing checks, and artifact refs
+
+  Scenario: Build deterministic safe branch and workspace names
+    Given a GitHub pull request with repository and head ref metadata
+    When GitHub intake derives branch and workspace names
+    Then both names are deterministic safe path segments

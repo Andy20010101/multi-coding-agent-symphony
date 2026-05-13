@@ -72,13 +72,15 @@ Implemented and tested:
 - Phase K GitHub CI status slice: GitHub check runs normalize into artifact-ready CI summaries with aggregate status, conclusion, URLs, and failing check names.
 - Phase K GitHub issue `gh` wrapper slice: injected-runner issue intake calls `gh issue view --json ...`, parses JSON, and returns validated `TaskSpec` objects.
 - Phase K GitHub PR/CI `gh` wrapper slice: injected-runner PR intake calls `gh pr view --json ...`, and CI capture calls `gh api .../check-runs` through the pure normalizer.
-- Test baseline: `pnpm test` currently covers 112 tests across 18 suites.
+- Phase K GitHub PR summary slice: PR summaries combine the validated review task, CI status, failing checks, and artifact references into an artifact-ready object plus markdown.
+- Phase K GitHub naming policy slice: PR branch and workspace names are deterministic ASCII safe path segments derived from repository, PR number, and head ref.
+- Test baseline: `pnpm test` currently covers 114 tests across 18 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- No live GitHub CLI/API intake, PR conversion, or CI status capture is implemented yet.
+- GitHub intake is available as library helpers, but not yet through a user-facing CLI command.
 - No user-facing CLI entrypoint exists for orchestrator runs.
 
 ## Target V1
@@ -494,7 +496,7 @@ Acceptance:
 
 ### Phase K: GitHub Intake and CI Feedback
 
-Status: in progress. Pure GitHub issue/PR metadata conversion, CI status artifact normalization, and live issue/PR/CI `gh` intake wrappers are complete; optional PR/comment summary and branch/workspace naming policy remain.
+Status: completed for V1 intake primitives. Pure GitHub issue/PR metadata conversion, CI status artifact normalization, live issue/PR/CI `gh` wrappers, PR summary artifacts, and deterministic branch/workspace naming policy are complete; posting PR comments stays optional and outside the V1 hot path.
 
 Goal: support one real tracker first. Choose GitHub for V1 because the repository already uses GitHub and `gh` is available.
 
@@ -737,15 +739,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase K with PR summary and branch/workspace naming policy.
+Start Phase L with the user-facing CLI entrypoint.
 
 First red test:
 
-- Add GitHub intake tests proving PR summaries include task, CI status, and artifact references, and branch/workspace names are deterministic safe path segments.
+- Add CLI tests proving `scripts/mcas.js` exposes at least `doctor` and a read-only GitHub intake command without invoking a model.
 
 First implementation:
 
-- Add pure summary and naming helpers; keep posting comments optional and outside V1 hot path.
+- Add a small Node entrypoint that parses command arguments, calls existing modules instead of duplicating orchestration logic, and returns clear nonzero exit codes.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

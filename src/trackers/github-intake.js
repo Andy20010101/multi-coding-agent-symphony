@@ -3,6 +3,7 @@ import { NodeProcessRunner } from '../process-runner.js';
 
 const ISSUE_JSON_FIELDS = 'number,title,body,labels,createdAt';
 const PR_JSON_FIELDS = 'number,title,body,labels,createdAt,baseRefName,headRefName,headRefOid';
+const MAX_SAFE_SEGMENT_LENGTH = 80;
 
 export async function fetchGitHubIssueTaskSpec({
   repository,
@@ -211,6 +212,70 @@ export function githubCheckRunsToCiStatusArtifact({
   };
 }
 
+export function buildGitHubPullRequestSummary({
+  taskSpec,
+  ciStatusArtifact,
+  artifactRefs = []
+}) {
+  validateTaskSpec(taskSpec);
+  assertCiStatusArtifact(ciStatusArtifact);
+
+  const pullRequestNumber = extractPullRequestNumber(taskSpec);
+  const normalizedArtifactRefs = normalizeArtifactRefs(artifactRefs);
+  const failingChecks = [...ciStatusArtifact.failingChecks];
+  const summary = {
+    version: '1',
+    provider: 'github',
+    repository: taskSpec.repository,
+    pullRequestNumber,
+    task: {
+      id: taskSpec.id,
+      objective: taskSpec.objective,
+      acceptance: [...taskSpec.acceptance],
+      constraints: [...(taskSpec.constraints ?? [])]
+    },
+    ci: {
+      status: ciStatusArtifact.status,
+      conclusion: ciStatusArtifact.conclusion,
+      sha: ciStatusArtifact.sha,
+      summary: { ...ciStatusArtifact.summary },
+      failingChecks
+    },
+    artifactRefs: normalizedArtifactRefs
+  };
+
+  summary.markdown = buildPullRequestSummaryMarkdown(summary);
+
+  return summary;
+}
+
+export function githubPullRequestBranchWorkspacePolicy({
+  repository,
+  pullRequestNumber,
+  headRefName
+}) {
+  assertNonEmptyString(repository, 'repository');
+  assertPositiveInteger(pullRequestNumber, 'pullRequestNumber');
+  assertNonEmptyString(headRefName, 'headRefName');
+
+  const repositorySegment = toSafePathSegment(repository, 'repository');
+  const headRefSegment = toSafePathSegment(headRefName, 'headRefName');
+
+  return {
+    version: '1',
+    provider: 'github',
+    repository,
+    pullRequestNumber,
+    repositorySegment,
+    headRefSegment,
+    branchName: toSafePathSegment(`mcas-pr-${pullRequestNumber}-${headRefSegment}`, 'branchName'),
+    workspaceName: toSafePathSegment(
+      `${repositorySegment}-github-pr-${pullRequestNumber}-${headRefSegment}`,
+      'workspaceName'
+    )
+  };
+}
+
 function buildObjective(issue) {
   assertNonEmptyString(issue.title, 'issue.title');
 
@@ -302,6 +367,78 @@ function normalizeConclusion(checkRun) {
   return checkRun.status === 'completed' ? 'success' : 'pending';
 }
 
+function assertCiStatusArtifact(artifact) {
+  if (artifact === null || typeof artifact !== 'object' || Array.isArray(artifact)) {
+    throw new TypeError('ciStatusArtifact must be an object');
+  }
+
+  assertNonEmptyString(artifact.provider, 'ciStatusArtifact.provider');
+  assertNonEmptyString(artifact.repository, 'ciStatusArtifact.repository');
+  assertNonEmptyString(artifact.sha, 'ciStatusArtifact.sha');
+  assertNonEmptyString(artifact.status, 'ciStatusArtifact.status');
+  assertNonEmptyString(artifact.conclusion, 'ciStatusArtifact.conclusion');
+
+  if (artifact.summary === null || typeof artifact.summary !== 'object' || Array.isArray(artifact.summary)) {
+    throw new TypeError('ciStatusArtifact.summary must be an object');
+  }
+
+  if (!Array.isArray(artifact.failingChecks)) {
+    throw new TypeError('ciStatusArtifact.failingChecks must be an array');
+  }
+}
+
+function extractPullRequestNumber(taskSpec) {
+  const constraint = taskSpec.constraints?.find((item) => item.startsWith('pr:'));
+  if (constraint === undefined) {
+    throw new TypeError('TaskSpec.constraints must include pr:<number>');
+  }
+
+  const pullRequestNumber = Number.parseInt(constraint.slice('pr:'.length), 10);
+  assertPositiveInteger(pullRequestNumber, 'TaskSpec.constraints.pr');
+
+  return pullRequestNumber;
+}
+
+function normalizeArtifactRefs(artifactRefs) {
+  if (!Array.isArray(artifactRefs)) {
+    throw new TypeError('artifactRefs must be an array');
+  }
+
+  return artifactRefs.map((artifactRef, index) => {
+    if (artifactRef === null || typeof artifactRef !== 'object' || Array.isArray(artifactRef)) {
+      throw new TypeError(`artifactRefs[${index}] must be an object`);
+    }
+
+    assertSafePathSegment(artifactRef.taskId, `artifactRefs[${index}].taskId`);
+    assertSafePathSegment(artifactRef.artifactId, `artifactRefs[${index}].artifactId`);
+
+    const normalized = {
+      taskId: artifactRef.taskId,
+      artifactId: artifactRef.artifactId
+    };
+
+    if (artifactRef.label !== undefined) {
+      assertNonEmptyString(artifactRef.label, `artifactRefs[${index}].label`);
+      normalized.label = artifactRef.label;
+    }
+
+    return normalized;
+  });
+}
+
+function buildPullRequestSummaryMarkdown(summary) {
+  return [
+    `Task: ${summary.task.id}`,
+    `CI: ${summary.ci.status} (${summary.ci.conclusion})`,
+    `Failing checks: ${summary.ci.failingChecks.length > 0 ? summary.ci.failingChecks.join(', ') : 'none'}`,
+    `Artifacts: ${summary.artifactRefs.length > 0 ? summary.artifactRefs.map(formatArtifactRef).join(', ') : 'none'}`
+  ].join('\n');
+}
+
+function formatArtifactRef(artifactRef) {
+  return `${artifactRef.taskId}/${artifactRef.artifactId}`;
+}
+
 function parseJson(value, field) {
   try {
     return JSON.parse(value);
@@ -320,4 +457,31 @@ function assertPositiveInteger(value, field) {
   if (!Number.isInteger(value) || value < 1) {
     throw new TypeError(`${field} must be a positive integer`);
   }
+}
+
+function assertSafePathSegment(value, field) {
+  assertNonEmptyString(value, field);
+
+  if (value.includes('/') || value.includes('..')) {
+    throw new TypeError(`${field} must be a safe path segment`);
+  }
+}
+
+function toSafePathSegment(value, field) {
+  assertNonEmptyString(value, field);
+
+  const segment = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
+
+  if (segment === '') {
+    throw new TypeError(`${field} must contain at least one ASCII letter or digit`);
+  }
+
+  return segment.length <= MAX_SAFE_SEGMENT_LENGTH
+    ? segment
+    : segment.slice(0, MAX_SAFE_SEGMENT_LENGTH).replace(/-+$/g, '');
 }

@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 
 import { validateTaskSpec } from '../src/contracts.js';
 import {
+  buildGitHubPullRequestSummary,
   fetchGitHubPullRequestCiStatusArtifact,
   fetchGitHubPullRequestTaskSpec,
   fetchGitHubIssueTaskSpec,
   githubCheckRunsToCiStatusArtifact,
+  githubPullRequestBranchWorkspacePolicy,
   githubIssueToTaskSpec,
   githubPullRequestToTaskSpec
 } from '../src/trackers/github-intake.js';
@@ -274,6 +276,126 @@ describe('Phase 7 GitHub intake and CI feedback', () => {
     assert.equal(task.id, 'github-pr-17');
     assert.equal(ciStatus.status, 'passed');
     assert.equal(ciStatus.sha, 'abc123');
+  });
+
+  it('builds a PR summary artifact with task, CI status, and artifact refs', () => {
+    const task = githubPullRequestToTaskSpec({
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      pullRequest: {
+        number: 17,
+        title: 'Document real CLI setup',
+        body: '- [ ] reviewer verifies read-only flow',
+        baseRefName: 'main',
+        headRefName: 'docs/real-cli-setup',
+        labels: [{ name: 'priority:normal' }],
+        createdAt: '2026-05-13T13:00:00.000Z'
+      }
+    });
+    const ciStatus = githubCheckRunsToCiStatusArtifact({
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      ref: 'refs/pull/17/head',
+      sha: 'abc123',
+      checkRuns: [
+        {
+          name: 'test',
+          status: 'completed',
+          conclusion: 'success',
+          detailsUrl: 'https://github.com/example/checks/1'
+        },
+        {
+          name: 'lint',
+          status: 'completed',
+          conclusion: 'failure',
+          detailsUrl: 'https://github.com/example/checks/2'
+        }
+      ]
+    });
+
+    const summary = buildGitHubPullRequestSummary({
+      taskSpec: task,
+      ciStatusArtifact: ciStatus,
+      artifactRefs: [
+        {
+          taskId: 'github-pr-17',
+          artifactId: 'pr-ci-status',
+          label: 'CI status'
+        },
+        {
+          taskId: 'github-pr-17',
+          artifactId: 'review-evidence',
+          label: 'Review evidence'
+        }
+      ]
+    });
+
+    assert.deepEqual(summary, {
+      version: '1',
+      provider: 'github',
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      pullRequestNumber: 17,
+      task: {
+        id: 'github-pr-17',
+        objective: 'Review PR #17: Document real CLI setup\n\n- [ ] reviewer verifies read-only flow',
+        acceptance: ['reviewer verifies read-only flow'],
+        constraints: [
+          'mode:read-only-pr-review',
+          'pr:17',
+          'base:main',
+          'head:docs/real-cli-setup'
+        ]
+      },
+      ci: {
+        status: 'failed',
+        conclusion: 'failure',
+        sha: 'abc123',
+        summary: {
+          total: 2,
+          passed: 1,
+          failed: 1,
+          pending: 0
+        },
+        failingChecks: ['lint']
+      },
+      artifactRefs: [
+        {
+          taskId: 'github-pr-17',
+          artifactId: 'pr-ci-status',
+          label: 'CI status'
+        },
+        {
+          taskId: 'github-pr-17',
+          artifactId: 'review-evidence',
+          label: 'Review evidence'
+        }
+      ],
+      markdown: [
+        'Task: github-pr-17',
+        'CI: failed (failure)',
+        'Failing checks: lint',
+        'Artifacts: github-pr-17/pr-ci-status, github-pr-17/review-evidence'
+      ].join('\n')
+    });
+  });
+
+  it('builds deterministic safe PR branch and workspace names', () => {
+    const policy = githubPullRequestBranchWorkspacePolicy({
+      repository: 'Andy20010101/Multi-Coding-Agent-Symphony',
+      pullRequestNumber: 17,
+      headRefName: 'Feature/Fix CI Review..'
+    });
+
+    assert.deepEqual(policy, {
+      version: '1',
+      provider: 'github',
+      repository: 'Andy20010101/Multi-Coding-Agent-Symphony',
+      pullRequestNumber: 17,
+      repositorySegment: 'andy20010101-multi-coding-agent-symphony',
+      headRefSegment: 'feature-fix-ci-review',
+      branchName: 'mcas-pr-17-feature-fix-ci-review',
+      workspaceName: 'andy20010101-multi-coding-agent-symphony-github-pr-17-feature-fix-ci-review'
+    });
+    assert.doesNotMatch(policy.branchName, /[/.]/);
+    assert.doesNotMatch(policy.workspaceName, /[/.]/);
   });
 });
 
