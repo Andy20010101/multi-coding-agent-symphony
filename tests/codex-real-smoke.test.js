@@ -1,11 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  REAL_CODEX_WRITER_SMOKE_FLAG,
   REAL_CODEX_SMOKE_FLAG,
-  runCodexRealSmoke
+  runCodexRealSmoke,
+  runCodexWriterSmoke
 } from '../src/codex-real-smoke.js';
 
 class FakeSmokeAdapter {
@@ -111,5 +114,84 @@ describe('Codex real model smoke script', () => {
     });
 
     assert.equal(adapter.calls[0].modelProfile, 'gpt-5.5');
+  });
+
+  it('skips real writer smoke unless explicitly gated on', async () => {
+    const adapter = new FakeSmokeAdapter({});
+    const result = await runCodexWriterSmoke({
+      adapter,
+      env: {},
+      workspace: '/work/writer-smoke'
+    });
+
+    assert.equal(result.skipped, true);
+    assert.match(result.reason, /MCAS_RUN_REAL_CODEX_WRITER=1/);
+    assert.equal(adapter.calls.length, 0);
+  });
+
+  it('runs an isolated writer smoke path with primary-writer policy', async () => {
+    const adapter = new FakeSmokeAdapter({
+      command: 'implement',
+      taskId: 'writer-task',
+      workspaceId: 'writer-workspace',
+      diffSummary: ['Created writer smoke file.'],
+      changedFiles: ['codex-writer-smoke.txt'],
+      checks: [{ name: 'codex-writer-smoke', status: 'passed', output: 'writer smoke passed' }],
+      knownRisks: [],
+      agentSummary: 'Created and verified the smoke file.',
+      version: '1'
+    });
+    const result = await runCodexWriterSmoke({
+      adapter,
+      env: {
+        [REAL_CODEX_WRITER_SMOKE_FLAG]: '1'
+      },
+      workspace: '/work/writer-smoke',
+      timeoutMs: 1000
+    });
+
+    assert.equal(result.skipped, false);
+    assert.equal(result.verification.status, 'passed');
+    assert.equal(adapter.calls[0].executionMode, 'real');
+    assert.equal(adapter.calls[0].commandSpec.name, 'implement');
+    assert.equal(adapter.calls[0].commandSpec.workspacePolicy, 'primary-writer');
+    assert.equal(adapter.calls[0].modelProfile, 'codex-config-default');
+    assert.equal(adapter.calls[0].workspace, '/work/writer-smoke');
+    assert.equal(adapter.calls[0].timeoutMs, 1000);
+  });
+
+  it('creates an isolated temp git workspace for writer smoke by default', async () => {
+    const adapter = new FakeSmokeAdapter({
+      command: 'implement',
+      taskId: 'writer-task',
+      workspaceId: 'writer-workspace',
+      diffSummary: ['Created writer smoke file.'],
+      changedFiles: ['codex-writer-smoke.txt'],
+      checks: [{ name: 'codex-writer-smoke', status: 'passed', output: 'writer smoke passed' }],
+      knownRisks: [],
+      agentSummary: 'Created and verified the smoke file.',
+      version: '1'
+    });
+    let result;
+
+    try {
+      result = await runCodexWriterSmoke({
+        adapter,
+        env: {
+          [REAL_CODEX_WRITER_SMOKE_FLAG]: '1'
+        },
+        timeoutMs: 1000
+      });
+
+      assert.match(result.workspace, /mcas-codex-writer-smoke-/);
+      assert.equal(adapter.calls[0].workspace, result.workspace);
+      assert.equal(adapter.calls[0].contextPack.task.repository, 'isolated-temp-workspace');
+      assert.match(await readFile(join(result.workspace, 'README.md'), 'utf8'), /Codex Writer Smoke/);
+      assert.match(await readFile(join(result.workspace, '.git', 'HEAD'), 'utf8'), /refs\/heads/);
+    } finally {
+      if (result?.workspace) {
+        await rm(result.workspace, { recursive: true, force: true });
+      }
+    }
   });
 });

@@ -40,6 +40,14 @@ MCAS_RUN_REAL_CODEX=1 pnpm smoke:codex:real
 
 This invokes the configured Codex model in read-only mode, captures the final message through `--output-last-message`, parses `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CODEX_MODEL=<model>` to override the Codex CLI config model; when unset, the smoke uses the CLI config default and does not pass `--model`.
 
+Guarded real writer smoke check:
+
+```sh
+MCAS_RUN_REAL_CODEX_WRITER=1 pnpm smoke:codex:writer
+```
+
+This invokes Codex in `implement` mode with `workspacePolicy: "primary-writer"`. When no workspace is supplied programmatically, it creates an isolated temporary git workspace and asks Codex to create `codex-writer-smoke.txt`, then requires verifier status `passed`. Set `MCAS_CODEX_WRITER_MODEL=<model>` to override only the writer smoke model.
+
 ## Remaining CLI Work
 
 - Repeat the real process-runner pattern for Claude Code.

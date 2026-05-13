@@ -47,7 +47,8 @@ Implemented and tested:
 - Phase E prompt template slice: Codex renders command-specific role prompts for `plan`, `implement`, `review`, `fix-ci`, and `qa` while preserving EvidencePackage output instructions.
 - Phase E log artifact slice: Codex raw stdout JSONL, stderr, parsed events, and final message capture are stored as adapter artifacts and linked from command run records.
 - Phase E structured error slice: Codex JSONL error events map to `permission-denied`, `model-off-task`, or `adapter-crashed` through the shared failure taxonomy.
-- Test baseline: `pnpm test` currently covers 70 tests across 12 suites.
+- Phase E writer smoke slice: `pnpm smoke:codex:writer` is separately gated by `MCAS_RUN_REAL_CODEX_WRITER=1`, runs `implement` with `primary-writer` policy, and defaults to an isolated temporary git workspace.
+- Test baseline: `pnpm test` currently covers 73 tests across 12 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -247,7 +248,7 @@ Acceptance:
 
 ### Phase E: Codex Production Readiness
 
-Status: in progress. Model profile mapping, command prompt templates, raw log artifacts, and structured error parsing are complete; writer smoke and workspace policy checks remain.
+Status: in progress. Model profile mapping, command prompt templates, raw log artifacts, structured error parsing, and guarded writer smoke are complete; workspace policy checks remain.
 
 Goal: make Codex adapter reliable enough for V1 writer/reviewer/QA use.
 

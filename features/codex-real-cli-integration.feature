@@ -42,6 +42,19 @@ Feature: Codex real CLI integration
     And the workspace policy is read-only
     And the verifier accepts the structured smoke evidence
 
+  Scenario: Guard a real writer smoke test
+    Given the real Codex writer smoke flag is not set
+    When the writer smoke script runs
+    Then no model is invoked
+    And the script reports how to enable the writer smoke
+
+  Scenario: Run an isolated real writer smoke test
+    Given the real Codex writer smoke flag is set
+    When the writer smoke script runs
+    Then Codex runs an implement command in real execution mode
+    And the workspace policy is primary-writer
+    And the verifier accepts changed-file smoke evidence
+
   Scenario: Resolve Codex model profiles before CLI execution
     Given a Codex adapter configured with project model profile mappings
     When the adapter prepares a real CLI command
