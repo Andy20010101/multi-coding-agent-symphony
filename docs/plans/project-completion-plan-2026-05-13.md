@@ -67,13 +67,14 @@ Implemented and tested:
 - Phase J routing policy slice: `RouterScheduler.route` can exclude retryable adapter failures, prefer lower-cost review models, honor explicit model overrides, and return an explainable route decision.
 - Phase J route decision artifact slice: orchestrator command runs write `<command>-route-decision` artifacts and link them from command run records.
 - Phase J eval approval slice: eval recommendations stay advisory unless a release approval explicitly names the candidate model profile.
-- Test baseline: `pnpm test` currently covers 107 tests across 17 suites.
+- Phase K GitHub issue intake slice: pure GitHub issue metadata conversion produces validated `TaskSpec` objects with source, repository, objective, acceptance, priority, and created timestamp.
+- Test baseline: `pnpm test` currently covers 108 tests across 18 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- No tracker intake is implemented for GitHub or Linear.
+- No live GitHub CLI/API intake, PR conversion, or CI status capture is implemented yet.
 - No user-facing CLI entrypoint exists for orchestrator runs.
 
 ## Target V1
@@ -489,6 +490,8 @@ Acceptance:
 
 ### Phase K: GitHub Intake and CI Feedback
 
+Status: in progress. Pure GitHub issue metadata to `TaskSpec` conversion is complete; live `gh` intake, PR conversion, CI status artifact capture, optional PR/comment summary, and branch/workspace naming policy remain.
+
 Goal: support one real tracker first. Choose GitHub for V1 because the repository already uses GitHub and `gh` is available.
 
 Work:
@@ -730,15 +733,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase K with GitHub task intake.
+Continue Phase K with GitHub PR intake conversion.
 
 First red test:
 
-- Add a GitHub intake test proving issue metadata converts into a valid `TaskSpec` with source, repository, objective, acceptance, priority, and created timestamp.
+- Add a GitHub PR intake test proving PR metadata converts into a read-only review `TaskSpec` with PR number, branch refs, and acceptance criteria.
 
 First implementation:
 
-- Add `src/trackers/github-intake.js` with pure conversion helpers before adding any live `gh` command wrapper.
+- Extend `src/trackers/github-intake.js` with PR conversion helpers before adding any live `gh` command wrapper.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
