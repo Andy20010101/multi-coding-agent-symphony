@@ -298,6 +298,22 @@ export class CodexAdapter extends BaseAdapter {
       version: '1'
     };
   }
+
+  async collectArtifacts(handle) {
+    const stored = this.runs.get(handle.runId);
+
+    if (!stored) {
+      throw new Error(`Unknown run id: ${handle.runId}`);
+    }
+
+    if (stored.dryRun) {
+      return [];
+    }
+
+    await finalizeActiveRun(stored);
+
+    return buildCodexArtifacts(stored);
+  }
 }
 
 async function finalizeActiveRun(stored) {
@@ -390,6 +406,43 @@ function extractStructuredEvidence(stored) {
     taskId: stored.taskId,
     workspaceId: stored.workspaceId
   });
+}
+
+function buildCodexArtifacts(stored) {
+  const artifacts = [
+    {
+      id: 'codex-stdout-jsonl',
+      version: '1',
+      kind: 'codex-stdout-jsonl',
+      content: stored.stdout ?? ''
+    },
+    {
+      id: 'codex-stderr',
+      version: '1',
+      kind: 'codex-stderr',
+      content: stored.stderr ?? ''
+    },
+    {
+      id: 'codex-parsed-events',
+      version: '1',
+      kind: 'codex-parsed-events',
+      content: stored.parsedEvents ?? []
+    }
+  ];
+  const lastMessage = stored.outputFiles?.lastMessage;
+
+  if (lastMessage) {
+    artifacts.push({
+      id: 'codex-final-message',
+      version: '1',
+      kind: 'codex-final-message',
+      ...(lastMessage.path ? { path: lastMessage.path } : {}),
+      ...(Object.hasOwn(lastMessage, 'content') ? { content: lastMessage.content } : {}),
+      ...(lastMessage.error ? { error: lastMessage.error } : {})
+    });
+  }
+
+  return artifacts;
 }
 
 function safeForPath(value) {

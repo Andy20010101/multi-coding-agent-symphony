@@ -20,6 +20,8 @@ interface RuntimeAdapter {
 }
 ```
 
+Adapters may also expose `collectArtifacts(handle)` for non-evidence run material such as raw stdout, stderr, parsed events, and final-message files. The orchestrator writes those objects to `ArtifactStore` and links them from the command run record.
+
 ## Capability Report
 
 Each adapter must report:
@@ -63,6 +65,7 @@ Codex:
 - `codex-config-default` is a special model profile that defers model selection to the local Codex CLI config instead of passing `--model`.
 - Codex model profile IDs are resolved adapter-side before CLI execution: `gpt-codex-default` defaults to local Codex config, constructor-provided `modelProfileMappings` can map project profile IDs to concrete Codex `--model` names, and unmapped IDs remain direct CLI model names for smoke overrides.
 - Codex prompts are rendered per command role, so `implement`, `review`, `qa`, `plan`, and `fix-ci` receive different instructions while preserving the same verifier-readable EvidencePackage requirement.
+- Codex exposes raw execution artifacts for stdout JSONL, stderr, parsed JSONL events, and final message capture; the orchestrator stores them as artifacts and links them from the command run record.
 
 Claude Code:
 

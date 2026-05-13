@@ -167,6 +167,12 @@ export class Orchestrator {
     });
 
     const verification = verifyEvidence({ commandSpec, evidence });
+    const adapterArtifactRefs = await this.#writeAdapterArtifacts({
+      taskId: taskSpec.id,
+      command: commandSpec.name,
+      adapter,
+      handle
+    });
 
     await this.#appendEvent({
       type: 'verifier.result',
@@ -182,7 +188,8 @@ export class Orchestrator {
       workspaceId: workspace.workspaceId,
       evidenceArtifactId: artifactId,
       verificationStatus: verification.status,
-      artifactRefs: structuredClone(artifactRefs)
+      artifactRefs: structuredClone(artifactRefs),
+      ...(adapterArtifactRefs.length > 0 ? { adapterArtifactRefs } : {})
     };
 
     await this.artifactStore.writeArtifact(taskSpec.id, runArtifactId, runRecord);
@@ -394,6 +401,50 @@ export class Orchestrator {
     }
 
     return hydrated;
+  }
+
+  async #writeAdapterArtifacts({ taskId, command, adapter, handle }) {
+    if (typeof adapter.collectArtifacts !== 'function') {
+      return [];
+    }
+
+    const artifacts = await adapter.collectArtifacts(handle);
+
+    if (!Array.isArray(artifacts) || artifacts.length === 0) {
+      return [];
+    }
+
+    const refs = [];
+
+    for (const artifact of artifacts) {
+      if (artifact === null || typeof artifact !== 'object' || Array.isArray(artifact)) {
+        throw new TypeError('adapter artifacts must be objects');
+      }
+
+      if (typeof artifact.id !== 'string' || artifact.id.trim() === '') {
+        throw new TypeError('adapter artifact id must be a non-empty string');
+      }
+
+      const artifactId = `${command}-${artifact.id}`;
+      const { id, ...content } = artifact;
+
+      await this.artifactStore.writeArtifact(taskId, artifactId, content);
+      refs.push({
+        taskId,
+        artifactId,
+        kind: content.kind ?? 'adapter-artifact'
+      });
+      await this.#appendEvent({
+        type: 'artifact.written',
+        actor: 'orchestrator',
+        payload: {
+          taskId,
+          artifactId
+        }
+      });
+    }
+
+    return refs;
   }
 }
 

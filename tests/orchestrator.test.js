@@ -276,6 +276,91 @@ describe('Orchestrator dry-run execution flow', () => {
     }
   });
 
+  it('stores Codex raw log artifacts and links them from the run record', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-codex-logs-'));
+
+    try {
+      const finalMessage = {
+        command: 'implement',
+        taskId: 'task-codex-logs',
+        workspaceId: 'model-supplied-workspace',
+        diffSummary: [],
+        changedFiles: ['src/adapters/codex-adapter.js'],
+        checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }],
+        knownRisks: [],
+        agentSummary: 'Structured evidence from Codex logs.',
+        version: '1'
+      };
+      const runner = new FakeProcessRunner({
+        exitCode: 0,
+        stdout: '{"type":"agent_message","message":"started"}\n',
+        stderr: 'codex warning',
+        durationMs: 10,
+        outputFiles: {
+          lastMessage: {
+            path: '/tmp/codex-last-message.json',
+            content: JSON.stringify(finalMessage)
+          }
+        }
+      });
+      const adapter = new CodexAdapter({
+        cliVersion: '0.130.0',
+        processRunner: runner
+      });
+      const report = await adapter.probe();
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const orchestrator = new Orchestrator({
+        artifactStore,
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      await orchestrator.runCommand({
+        taskSpec: {
+          ...taskSpec,
+          id: 'task-codex-logs'
+        },
+        commandSpec,
+        executionMode: 'real',
+        timeoutMs: 1000
+      });
+
+      assert.deepEqual(await artifactStore.readArtifact('task-codex-logs', 'implement-codex-stdout-jsonl'), {
+        version: '1',
+        kind: 'codex-stdout-jsonl',
+        content: '{"type":"agent_message","message":"started"}\n'
+      });
+      assert.deepEqual(await artifactStore.readArtifact('task-codex-logs', 'implement-codex-stderr'), {
+        version: '1',
+        kind: 'codex-stderr',
+        content: 'codex warning'
+      });
+      assert.deepEqual(await artifactStore.readArtifact('task-codex-logs', 'implement-codex-parsed-events'), {
+        version: '1',
+        kind: 'codex-parsed-events',
+        content: [{ type: 'agent_message', message: 'started' }]
+      });
+      assert.deepEqual(await artifactStore.readArtifact('task-codex-logs', 'implement-codex-final-message'), {
+        version: '1',
+        kind: 'codex-final-message',
+        content: JSON.stringify(finalMessage),
+        path: '/tmp/codex-last-message.json'
+      });
+      assert.deepEqual((await artifactStore.readArtifact('task-codex-logs', 'implement-run')).adapterArtifactRefs, [
+        { taskId: 'task-codex-logs', artifactId: 'implement-codex-stdout-jsonl', kind: 'codex-stdout-jsonl' },
+        { taskId: 'task-codex-logs', artifactId: 'implement-codex-stderr', kind: 'codex-stderr' },
+        { taskId: 'task-codex-logs', artifactId: 'implement-codex-parsed-events', kind: 'codex-parsed-events' },
+        { taskId: 'task-codex-logs', artifactId: 'implement-codex-final-message', kind: 'codex-final-message' }
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('runs implement then review with implementation evidence in review context', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-workflow-'));
 

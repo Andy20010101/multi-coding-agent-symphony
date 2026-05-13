@@ -53,3 +53,9 @@ Feature: Codex real CLI integration
     When the prompts are rendered
     Then each prompt contains command-specific role guidance
     And each prompt still requests verifier-readable evidence
+
+  Scenario: Capture Codex raw execution artifacts
+    Given Codex real execution emits JSONL stdout, stderr, parsed events, and a final message
+    When the orchestrator stores command results
+    Then raw JSONL, stderr, parsed events, and final message are written as artifacts
+    And the command run record links those artifacts

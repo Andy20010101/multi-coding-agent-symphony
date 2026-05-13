@@ -20,6 +20,7 @@ Implemented:
 - Timed out process runs send `SIGTERM`, then escalate to `SIGKILL` after the configured grace period.
 - Model profile IDs are resolved before CLI execution: `gpt-codex-default` and `codex-config-default` defer to local Codex config, `modelProfileMappings` can map project IDs to concrete Codex `--model` names, and unmapped IDs are treated as direct CLI model names.
 - Prompts are rendered per command role for `plan`, `implement`, `review`, `fix-ci`, and `qa` while retaining the structured EvidencePackage requirement.
+- Raw stdout JSONL, stderr, parsed JSONL events, and final-message content are written as linked adapter artifacts when the orchestrator runs Codex.
 - `Orchestrator.runCommand({ executionMode: "real" })` passes real execution mode and timeout settings through to the adapter.
 
 Local binary smoke check:
@@ -40,6 +41,5 @@ This invokes the configured Codex model in read-only mode, captures the final me
 
 ## Remaining CLI Work
 
-- Capture raw Codex logs as first-class artifacts.
 - Repeat the real process-runner pattern for Claude Code.
 - Repeat the real process-runner pattern for Kiro CLI.

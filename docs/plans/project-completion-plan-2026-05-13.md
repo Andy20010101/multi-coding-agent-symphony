@@ -45,7 +45,8 @@ Implemented and tested:
 - Phase D timeout escalation slice: timed out process runs first send `SIGTERM`, then escalate to `SIGKILL` after the timeout grace period while preserving partial output.
 - Phase E model profile mapping slice: Codex project profile IDs can defer to CLI config, map to concrete Codex `--model` names, or pass through as direct smoke override model names.
 - Phase E prompt template slice: Codex renders command-specific role prompts for `plan`, `implement`, `review`, `fix-ci`, and `qa` while preserving EvidencePackage output instructions.
-- Test baseline: `pnpm test` currently covers 68 tests across 12 suites.
+- Phase E log artifact slice: Codex raw stdout JSONL, stderr, parsed events, and final message capture are stored as adapter artifacts and linked from command run records.
+- Test baseline: `pnpm test` currently covers 69 tests across 12 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -245,7 +246,7 @@ Acceptance:
 
 ### Phase E: Codex Production Readiness
 
-Status: in progress. Model profile mapping and command prompt templates are complete; writer smoke, log artifacts, workspace policy checks, and structured error parsing remain.
+Status: in progress. Model profile mapping, command prompt templates, and raw log artifacts are complete; writer smoke, workspace policy checks, and structured error parsing remain.
 
 Goal: make Codex adapter reliable enough for V1 writer/reviewer/QA use.
 
