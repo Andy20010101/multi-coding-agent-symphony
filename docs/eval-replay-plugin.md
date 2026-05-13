@@ -2,6 +2,8 @@
 
 Eval/Replay is an external plugin, not part of the hot execution path.
 
+Current implementation path: `plugins/eval-replay/index.js`.
+
 ## Purpose
 
 The plugin answers these questions:
@@ -58,15 +60,23 @@ The plugin writes an eval report:
   "candidate": "gpt-codex-default.v2",
   "taskSample": "sample-2026-05-13",
   "scores": {
-    "successRate": 0.0,
-    "verifiedSuccessRate": 0.0,
-    "meanCostUsd": 0.0,
-    "p50LatencySeconds": 0,
-    "p95LatencySeconds": 0
+    "baseline": {
+      "verifiedSuccessRate": 0.0,
+      "meanCostUsd": 0.0,
+      "p50LatencySeconds": 0,
+      "p95LatencySeconds": 0
+    },
+    "candidate": {
+      "verifiedSuccessRate": 0.0,
+      "meanCostUsd": 0.0,
+      "p50LatencySeconds": 0,
+      "p95LatencySeconds": 0
+    }
   },
   "failureDelta": {},
   "recommendations": [],
   "resourceProfile": {},
+  "mutatedCoreConfig": false,
   "version": "1"
 }
 ```
@@ -108,4 +118,3 @@ A model should not be compared against another model if resource conditions diff
 The plugin must not directly mutate production routing rules, model profiles, or command specs.
 
 It may produce recommendations. A separate release or review step decides whether to apply them.
-
