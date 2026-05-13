@@ -44,3 +44,8 @@ Feature: Orchestrator dry-run execution flow
     When the Orchestrator runs the task workflow
     Then each command writes a command run record artifact
     And each run record links its evidence artifact and context artifact refs
+
+  Scenario: Hydrate referenced artifacts for later command context
+    Given implementation evidence was written by an earlier workflow command
+    When the review command context is built
+    Then the context includes the referenced implementation evidence content

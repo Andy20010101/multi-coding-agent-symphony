@@ -442,4 +442,43 @@ describe('Orchestrator dry-run execution flow', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('hydrates referenced artifacts into later command context', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-hydrated-context-'));
+
+    try {
+      const adapter = new CapturingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      await orchestrator.runTaskWorkflow({
+        taskSpec,
+        commandSpecs: [commandSpec, reviewCommandSpec]
+      });
+
+      const hydrated = adapter.starts[1].contextPack.hydratedArtifacts;
+      assert.equal(hydrated.length, 1);
+      assert.deepEqual(hydrated[0].ref, {
+        taskId: 'task-123',
+        artifactId: 'implement-evidence',
+        command: 'implement',
+        verificationStatus: 'passed'
+      });
+      assert.equal(hydrated[0].content.command, 'implement');
+      assert.deepEqual(hydrated[0].content.changedFiles, ['src/orchestrator.js']);
+      assert.deepEqual(hydrated[0].content.checks, [
+        { name: 'synthetic-check', status: 'passed', output: 'synthetic check passed' }
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

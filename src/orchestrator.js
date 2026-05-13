@@ -22,6 +22,7 @@ export class Orchestrator {
     adapters
   }) {
     this.artifactStore = requireMethod(artifactStore, 'writeArtifact', 'artifactStore');
+    requireMethod(artifactStore, 'readArtifact', 'artifactStore');
     this.eventLog = requireMethod(eventLog, 'append', 'eventLog');
     this.workspaceManager = requireMethod(workspaceManager, 'allocate', 'workspaceManager');
     this.scheduler = requireMethod(scheduler, 'route', 'scheduler');
@@ -93,11 +94,13 @@ export class Orchestrator {
         adapterId: route.adapterId
       });
     const priorEvents = typeof this.eventLog.readAll === 'function' ? await this.eventLog.readAll() : [];
+    const hydratedArtifacts = await this.#hydrateArtifactRefs(artifactRefs);
     const contextPack = buildContextPack({
       taskSpec,
       commandName: commandSpec.name,
       events: priorEvents,
-      artifactRefs
+      artifactRefs,
+      hydratedArtifacts
     });
     const handle = await adapter.start({
       commandSpec,
@@ -294,6 +297,19 @@ export class Orchestrator {
     }
 
     return decisions;
+  }
+
+  async #hydrateArtifactRefs(artifactRefs) {
+    const hydrated = [];
+
+    for (const ref of artifactRefs) {
+      hydrated.push({
+        ref: structuredClone(ref),
+        content: await this.artifactStore.readArtifact(ref.taskId, ref.artifactId)
+      });
+    }
+
+    return hydrated;
   }
 }
 

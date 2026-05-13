@@ -13,6 +13,7 @@ export function buildContextPack(input) {
 
   const events = cloneArray(input.events ?? [], 'events');
   const artifactRefs = cloneArray(input.artifactRefs ?? [], 'artifactRefs').map(stripArtifactContent);
+  const hydratedArtifacts = cloneArray(input.hydratedArtifacts ?? [], 'hydratedArtifacts');
 
   return {
     version: '1',
@@ -26,7 +27,8 @@ export function buildContextPack(input) {
       version: input.taskSpec.version
     },
     events,
-    artifactRefs
+    artifactRefs,
+    hydratedArtifacts
   };
 }
 
@@ -46,4 +48,3 @@ function stripArtifactContent(ref) {
   const { content, ...withoutContent } = ref;
   return withoutContent;
 }
-
