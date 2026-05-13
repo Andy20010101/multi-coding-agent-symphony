@@ -16,3 +16,9 @@ Feature: Phase 7 GitHub intake and CI feedback
     Given GitHub check runs for a pull request head SHA
     When GitHub intake normalizes the check runs
     Then the artifact records status, conclusion, URLs, and failing check names
+
+  Scenario: Fetch a GitHub issue through gh
+    Given an injected command runner returns JSON from gh issue view
+    When GitHub intake fetches the issue
+    Then it calls gh with repository, issue number, and JSON fields
+    And it returns a validated TaskSpec

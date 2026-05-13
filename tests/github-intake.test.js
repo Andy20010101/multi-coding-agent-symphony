@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { validateTaskSpec } from '../src/contracts.js';
 import {
+  fetchGitHubIssueTaskSpec,
   githubCheckRunsToCiStatusArtifact,
   githubIssueToTaskSpec,
   githubPullRequestToTaskSpec
@@ -170,4 +171,50 @@ describe('Phase 7 GitHub intake and CI feedback', () => {
       ]
     });
   });
+
+  it('fetches a GitHub issue through an injected gh runner', async () => {
+    const runner = new FakeRunner({
+      exitCode: 0,
+      stdout: JSON.stringify({
+        number: 42,
+        title: 'Add release checklist',
+        body: '- [ ] release checklist exists',
+        labels: [{ name: 'priority:high' }],
+        createdAt: '2026-05-13T12:00:00.000Z'
+      })
+    });
+    const task = await fetchGitHubIssueTaskSpec({
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      issueNumber: 42,
+      runner
+    });
+
+    assert.deepEqual(runner.calls, [{
+      executable: 'gh',
+      args: [
+        'issue',
+        'view',
+        '42',
+        '--repo',
+        'Andy20010101/multi-coding-agent-symphony',
+        '--json',
+        'number,title,body,labels,createdAt'
+      ]
+    }]);
+    assert.equal(task.id, 'github-issue-42');
+    assert.equal(task.priority, 'high');
+    assert.deepEqual(task.acceptance, ['release checklist exists']);
+  });
 });
+
+class FakeRunner {
+  constructor(result) {
+    this.result = result;
+    this.calls = [];
+  }
+
+  async run(invocation) {
+    this.calls.push(invocation);
+    return this.result;
+  }
+}

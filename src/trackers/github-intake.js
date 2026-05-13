@@ -1,4 +1,42 @@
 import { validateTaskSpec } from '../contracts.js';
+import { NodeProcessRunner } from '../process-runner.js';
+
+const ISSUE_JSON_FIELDS = 'number,title,body,labels,createdAt';
+
+export async function fetchGitHubIssueTaskSpec({
+  repository,
+  issueNumber,
+  runner = new NodeProcessRunner()
+}) {
+  assertNonEmptyString(repository, 'repository');
+  assertPositiveInteger(issueNumber, 'issueNumber');
+
+  if (!runner || typeof runner.run !== 'function') {
+    throw new TypeError('runner must provide run');
+  }
+
+  const result = await runner.run({
+    executable: 'gh',
+    args: [
+      'issue',
+      'view',
+      String(issueNumber),
+      '--repo',
+      repository,
+      '--json',
+      ISSUE_JSON_FIELDS
+    ]
+  });
+
+  if (result.exitCode !== 0) {
+    throw new Error(`gh issue view failed with exit code ${result.exitCode}: ${result.stderr ?? ''}`);
+  }
+
+  return githubIssueToTaskSpec({
+    repository,
+    issue: parseJson(result.stdout, 'gh issue view stdout')
+  });
+}
 
 export function githubIssueToTaskSpec({ repository, issue }) {
   assertNonEmptyString(repository, 'repository');
@@ -190,6 +228,14 @@ function normalizeConclusion(checkRun) {
   }
 
   return checkRun.status === 'completed' ? 'success' : 'pending';
+}
+
+function parseJson(value, field) {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    throw new TypeError(`${field} must be valid JSON: ${error.message}`);
+  }
 }
 
 function assertNonEmptyString(value, field) {
