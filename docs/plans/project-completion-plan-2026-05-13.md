@@ -28,12 +28,13 @@ Implemented and tested:
 - Phase A contract reconciliation: `TaskSpec` optional metadata is validated, `EvidencePackage.checks` has explicit `name/status/output`, and the strict JSON schema matches the validator.
 - Phase B queue persistence slice: `TaskQueue` can persist state, reload after restart, and recover expired running leases.
 - Phase B workspace materialization slice: `WorkspaceManager` can create workspace directories and write workspace manifests when materialization is enabled.
-- Test baseline: `pnpm test` currently covers 51 tests across 11 suites.
+- Phase B workspace cleanup slice: `WorkspaceManager` can remove temporary workspace content while retaining the workspace manifest and a cleanup record.
+- Test baseline: `pnpm test` currently covers 52 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- `WorkspaceManager` materialization exists, but cleanup, clone, and lock behavior are still pending.
+- `WorkspaceManager` materialization and cleanup retention exist, but clone and lock behavior are still pending.
 - `TaskQueue` persistence exists, but it is not yet integrated into orchestrator workflow recovery.
 - `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
 - Claude Code and Kiro CLI adapters are dry-run only.
@@ -104,7 +105,7 @@ Acceptance:
 
 ### Phase B: Durable State and Workspace Materialization
 
-Status: in progress. Queue persistence, expired lease recovery, workspace materialization, and manifests are complete; cleanup and retained-artifact policy remain.
+Status: in progress. Queue persistence, expired lease recovery, workspace materialization, manifests, cleanup, and retained cleanup records are complete; clone and lock policy remain.
 
 Goal: turn in-memory primitives into recoverable harness state.
 

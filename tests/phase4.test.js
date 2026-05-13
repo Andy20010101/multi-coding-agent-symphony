@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -125,6 +125,60 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         adapterId: 'codex',
         path: allocation.path,
         writable: true
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('cleans temporary workspace content while retaining manifest and cleanup record', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-workspaces-'));
+
+    try {
+      const manager = new WorkspaceManager({
+        rootDirectory: root,
+        materialize: true
+      });
+      const allocation = manager.allocate({
+        taskId: 'task-123',
+        role: 'primary-writer',
+        adapterId: 'codex'
+      });
+      const temporaryFile = join(allocation.path, 'scratch.txt');
+
+      await writeFile(temporaryFile, 'temporary output');
+
+      const cleanup = manager.cleanup({
+        workspaceId: allocation.workspaceId,
+        cleanedAt: '2026-05-13T00:00:00.000Z'
+      });
+
+      assert.deepEqual(cleanup, {
+        workspaceId: allocation.workspaceId,
+        status: 'cleaned',
+        path: allocation.path,
+        manifestPath: allocation.manifestPath,
+        cleanupRecordPath: join(allocation.path, 'workspace-cleanup.json'),
+        retainedFiles: ['workspace-manifest.json', 'workspace-cleanup.json'],
+        cleanedAt: '2026-05-13T00:00:00.000Z'
+      });
+      await assert.rejects(() => stat(temporaryFile), /ENOENT/);
+      assert.deepEqual(JSON.parse(await readFile(allocation.manifestPath, 'utf8')), {
+        version: '1',
+        workspaceId: allocation.workspaceId,
+        taskId: 'task-123',
+        role: 'primary-writer',
+        adapterId: 'codex',
+        path: allocation.path,
+        writable: true
+      });
+      assert.deepEqual(JSON.parse(await readFile(cleanup.cleanupRecordPath, 'utf8')), {
+        version: '1',
+        workspaceId: allocation.workspaceId,
+        taskId: 'task-123',
+        path: allocation.path,
+        cleanedAt: '2026-05-13T00:00:00.000Z',
+        retainedFiles: ['workspace-manifest.json', 'workspace-cleanup.json']
       });
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -18,6 +18,12 @@ Feature: Phase 4 routing, workspace, and verification modules
     Then the workspace directory exists
     And a workspace manifest records task id, role, adapter id, writable flag, and path
 
+  Scenario: Cleanup retains workspace artifacts
+    Given a materialized workspace with temporary content
+    When the workspace is cleaned up
+    Then temporary content is removed
+    And the workspace manifest and cleanup record remain available
+
   Scenario: Route a command to a capable adapter
     Given capability reports for Codex and Kiro CLI
     When the Router Scheduler routes an implement command

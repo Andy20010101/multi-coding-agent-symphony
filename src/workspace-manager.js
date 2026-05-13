@@ -1,7 +1,9 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { readdirSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const WORKSPACE_MANIFEST_FILE = 'workspace-manifest.json';
+const WORKSPACE_CLEANUP_FILE = 'workspace-cleanup.json';
+const RETAINED_WORKSPACE_FILES = [WORKSPACE_MANIFEST_FILE, WORKSPACE_CLEANUP_FILE];
 
 export class WorkspaceConflictError extends Error {
   constructor(message, details = {}) {
@@ -68,6 +70,46 @@ export class WorkspaceManager {
       .map((allocation) => structuredClone(allocation));
   }
 
+  cleanup({ workspaceId, cleanedAt = new Date().toISOString() } = {}) {
+    assertNonEmptyString(workspaceId, 'workspaceId');
+    assertNonEmptyString(cleanedAt, 'cleanedAt');
+
+    const allocation = this.allocations.find((candidate) => candidate.workspaceId === workspaceId);
+    if (!allocation) {
+      throw new Error(`Workspace ${workspaceId} is not allocated`);
+    }
+
+    const cleanupRecordPath = join(allocation.path, WORKSPACE_CLEANUP_FILE);
+    const cleanupRecord = {
+      version: '1',
+      workspaceId: allocation.workspaceId,
+      taskId: allocation.taskId,
+      path: allocation.path,
+      cleanedAt,
+      retainedFiles: [...RETAINED_WORKSPACE_FILES]
+    };
+
+    if (this.materialize) {
+      mkdirSync(allocation.path, { recursive: true });
+      materializeWorkspace(allocation);
+      removeWorkspaceContentsExcept(allocation.path, new Set([WORKSPACE_MANIFEST_FILE]));
+      writeFileSync(cleanupRecordPath, JSON.stringify(cleanupRecord, null, 2));
+    }
+
+    allocation.cleanedAt = cleanedAt;
+    allocation.cleanupRecordPath = cleanupRecordPath;
+
+    return {
+      workspaceId: allocation.workspaceId,
+      status: 'cleaned',
+      path: allocation.path,
+      manifestPath: allocation.manifestPath,
+      cleanupRecordPath,
+      retainedFiles: [...RETAINED_WORKSPACE_FILES],
+      cleanedAt
+    };
+  }
+
   #hasPrimaryWriter(taskId) {
     return this.allocations.some((allocation) => (
       allocation.taskId === taskId && allocation.role === 'primary-writer'
@@ -86,6 +128,16 @@ function materializeWorkspace(allocation) {
     path: allocation.path,
     writable: allocation.writable
   }, null, 2));
+}
+
+function removeWorkspaceContentsExcept(workspacePath, retainedFileNames) {
+  for (const entry of readdirSync(workspacePath, { withFileTypes: true })) {
+    if (retainedFileNames.has(entry.name)) {
+      continue;
+    }
+
+    rmSync(join(workspacePath, entry.name), { recursive: true, force: true });
+  }
 }
 
 function assertNonEmptyString(value, field) {
