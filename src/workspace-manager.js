@@ -30,7 +30,7 @@ export class WorkspaceManager {
     this.allocations = [];
   }
 
-  allocate({ taskId, role, adapterId }) {
+  allocate({ taskId, role, adapterId, now }) {
     assertNonEmptyString(taskId, 'taskId');
     assertNonEmptyString(role, 'role');
     assertNonEmptyString(adapterId, 'adapterId');
@@ -45,6 +45,7 @@ export class WorkspaceManager {
 
     const sequence = this.allocations.filter((allocation) => allocation.taskId === taskId).length + 1;
     const workspaceId = `${taskId}-${role}-${sequence}`;
+    const allocatedAt = toIsoTimestamp(now);
     const allocation = {
       workspaceId,
       taskId,
@@ -53,7 +54,9 @@ export class WorkspaceManager {
       path: join(this.rootDirectory, taskId, workspaceId),
       manifestPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_MANIFEST_FILE),
       lockPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_LOCK_FILE),
-      writable: role === 'primary-writer'
+      writable: role === 'primary-writer',
+      allocatedAt,
+      allocatedEventId: workspaceEventId(workspaceId, 'allocated')
     };
 
     this.allocations.push(allocation);
@@ -82,12 +85,14 @@ export class WorkspaceManager {
     }
 
     const cleanupRecordPath = join(allocation.path, WORKSPACE_CLEANUP_FILE);
+    const cleanupEventId = workspaceEventId(allocation.workspaceId, 'cleaned');
     const cleanupRecord = {
       version: '1',
       workspaceId: allocation.workspaceId,
       taskId: allocation.taskId,
       path: allocation.path,
       cleanedAt,
+      cleanupEventId,
       retainedFiles: [...RETAINED_WORKSPACE_FILES]
     };
 
@@ -100,6 +105,7 @@ export class WorkspaceManager {
 
     allocation.cleanedAt = cleanedAt;
     allocation.cleanupRecordPath = cleanupRecordPath;
+    allocation.cleanupEventId = cleanupEventId;
 
     return {
       workspaceId: allocation.workspaceId,
@@ -108,7 +114,8 @@ export class WorkspaceManager {
       manifestPath: allocation.manifestPath,
       cleanupRecordPath,
       retainedFiles: [...RETAINED_WORKSPACE_FILES],
-      cleanedAt
+      cleanedAt,
+      cleanupEventId
     };
   }
 
@@ -157,7 +164,9 @@ function materializeWorkspace(allocation) {
     role: allocation.role,
     adapterId: allocation.adapterId,
     path: allocation.path,
-    writable: allocation.writable
+    writable: allocation.writable,
+    allocatedAt: allocation.allocatedAt,
+    allocatedEventId: allocation.allocatedEventId
   }, null, 2));
   writeFileSync(allocation.lockPath, JSON.stringify({
     version: '1',
@@ -167,7 +176,9 @@ function materializeWorkspace(allocation) {
     adapterId: allocation.adapterId,
     path: allocation.path,
     writable: allocation.writable,
-    accessMode: accessModeForRole(allocation.role)
+    accessMode: accessModeForRole(allocation.role),
+    allocatedAt: allocation.allocatedAt,
+    allocatedEventId: allocation.allocatedEventId
   }, null, 2));
 }
 
@@ -201,6 +212,42 @@ function accessModeForRole(role) {
   }
 
   return 'isolated';
+}
+
+function workspaceEventId(workspaceId, action) {
+  return `workspace-${workspaceId}-${action}`;
+}
+
+function toIsoTimestamp(value) {
+  return new Date(toTimestampMs(value)).toISOString();
+}
+
+function toTimestampMs(value) {
+  if (value === undefined) {
+    return Date.now();
+  }
+
+  if (value instanceof Date) {
+    const time = value.getTime();
+
+    if (!Number.isNaN(time)) {
+      return time;
+    }
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const time = Date.parse(value);
+
+    if (!Number.isNaN(time)) {
+      return time;
+    }
+  }
+
+  throw new TypeError('now must be a valid timestamp');
 }
 
 function assertNonEmptyString(value, field) {

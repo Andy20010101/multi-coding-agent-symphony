@@ -30,6 +30,11 @@ Feature: Phase 4 routing, workspace, and verification modules
     Then another primary writer for the same task is rejected
     And the workspace lock records the writer ownership
 
+  Scenario: Record workspace lifecycle metadata
+    Given a Workspace Manager with materialization enabled
+    When a workspace is allocated and cleaned up
+    Then the manifest, lock, and cleanup result include lifecycle event ids and timestamps
+
   Scenario: Route a command to a capable adapter
     Given capability reports for Codex and Kiro CLI
     When the Router Scheduler routes an implement command

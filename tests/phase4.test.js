@@ -112,11 +112,14 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
       const allocation = manager.allocate({
         taskId: 'task-123',
         role: 'primary-writer',
-        adapterId: 'codex'
+        adapterId: 'codex',
+        now: '2026-05-13T00:00:00.000Z'
       });
 
       assert.equal((await stat(allocation.path)).isDirectory(), true);
       assert.equal(allocation.manifestPath, join(allocation.path, 'workspace-manifest.json'));
+      assert.equal(allocation.allocatedAt, '2026-05-13T00:00:00.000Z');
+      assert.equal(allocation.allocatedEventId, 'workspace-task-123-primary-writer-1-allocated');
       assert.deepEqual(JSON.parse(await readFile(allocation.manifestPath, 'utf8')), {
         version: '1',
         workspaceId: allocation.workspaceId,
@@ -124,7 +127,9 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         role: 'primary-writer',
         adapterId: 'codex',
         path: allocation.path,
-        writable: true
+        writable: true,
+        allocatedAt: '2026-05-13T00:00:00.000Z',
+        allocatedEventId: 'workspace-task-123-primary-writer-1-allocated'
       });
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -142,7 +147,8 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
       const allocation = manager.allocate({
         taskId: 'task-123',
         role: 'primary-writer',
-        adapterId: 'codex'
+        adapterId: 'codex',
+        now: '2026-05-13T00:00:00.000Z'
       });
       const temporaryFile = join(allocation.path, 'scratch.txt');
 
@@ -160,7 +166,8 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         manifestPath: allocation.manifestPath,
         cleanupRecordPath: join(allocation.path, 'workspace-cleanup.json'),
         retainedFiles: ['workspace-manifest.json', 'workspace-cleanup.json'],
-        cleanedAt: '2026-05-13T00:00:00.000Z'
+        cleanedAt: '2026-05-13T00:00:00.000Z',
+        cleanupEventId: 'workspace-task-123-primary-writer-1-cleaned'
       });
       await assert.rejects(() => stat(temporaryFile), /ENOENT/);
       assert.deepEqual(JSON.parse(await readFile(allocation.manifestPath, 'utf8')), {
@@ -170,7 +177,9 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         role: 'primary-writer',
         adapterId: 'codex',
         path: allocation.path,
-        writable: true
+        writable: true,
+        allocatedAt: '2026-05-13T00:00:00.000Z',
+        allocatedEventId: 'workspace-task-123-primary-writer-1-allocated'
       });
       assert.deepEqual(JSON.parse(await readFile(cleanup.cleanupRecordPath, 'utf8')), {
         version: '1',
@@ -178,6 +187,7 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         taskId: 'task-123',
         path: allocation.path,
         cleanedAt: '2026-05-13T00:00:00.000Z',
+        cleanupEventId: 'workspace-task-123-primary-writer-1-cleaned',
         retainedFiles: ['workspace-manifest.json', 'workspace-cleanup.json']
       });
     } finally {
@@ -196,7 +206,8 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
       const allocation = manager.allocate({
         taskId: 'task-123',
         role: 'primary-writer',
-        adapterId: 'codex'
+        adapterId: 'codex',
+        now: '2026-05-13T00:00:00.000Z'
       });
       const restartedManager = new WorkspaceManager({
         rootDirectory: root,
@@ -212,7 +223,9 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         adapterId: 'codex',
         path: allocation.path,
         writable: true,
-        accessMode: 'read-write'
+        accessMode: 'read-write',
+        allocatedAt: '2026-05-13T00:00:00.000Z',
+        allocatedEventId: 'workspace-task-123-primary-writer-1-allocated'
       });
       assert.throws(
         () => restartedManager.allocate({

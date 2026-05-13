@@ -28,6 +28,11 @@ Feature: Task queue
     Then the task returns to queued status
     And the next lease increments its attempt count
 
+  Scenario: Record lifecycle metadata
+    Given a Task Queue with deterministic timestamps
+    When a task is queued, leased, and completed
+    Then each lifecycle change records an event id and timestamp
+
   Scenario: Cancel a queued task
     Given a queued task
     When the task is cancelled

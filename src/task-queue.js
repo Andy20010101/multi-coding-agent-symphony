@@ -26,7 +26,7 @@ export class TaskQueue {
     }
   }
 
-  enqueue(task) {
+  enqueue(task, { now } = {}) {
     validateTaskSpec(task);
 
     if (this.records.some((record) => record.task.id === task.id)) {
@@ -38,8 +38,10 @@ export class TaskQueue {
     const record = {
       task: structuredClone(task),
       status: 'queued',
-      sequence: this.sequence
+      sequence: this.sequence,
+      createdAt: toIsoTimestamp(now)
     };
+    record.createdEventId = queueEventId(record, 'created');
 
     this.records.push(record);
     this.#persist();
@@ -69,6 +71,7 @@ export class TaskQueue {
     next.status = 'running';
     next.leasedAt = toIsoTimestamp(now);
     next.attempt = (next.attempt ?? 0) + 1;
+    next.leasedEventId = queueEventId(next, 'leased', next.attempt);
     setOptionalStringOrDelete(next, 'adapterId', adapterId);
     setOptionalStringOrDelete(next, 'command', command);
 
@@ -83,14 +86,16 @@ export class TaskQueue {
     return structuredClone(next);
   }
 
-  complete(taskId) {
+  complete(taskId, { now } = {}) {
     const record = this.#getRecord(taskId);
     record.status = 'completed';
+    record.completedAt = toIsoTimestamp(now);
+    record.completedEventId = queueEventId(record, 'completed');
     this.#persist();
     return structuredClone(record);
   }
 
-  cancel(taskId, reason) {
+  cancel(taskId, reason, { now } = {}) {
     const record = this.#getRecord(taskId);
 
     if (record.status === 'completed') {
@@ -99,6 +104,8 @@ export class TaskQueue {
 
     record.status = 'cancelled';
     record.cancelReason = reason;
+    record.cancelledAt = toIsoTimestamp(now);
+    record.cancelledEventId = queueEventId(record, 'cancelled');
     this.#persist();
     return structuredClone(record);
   }
@@ -114,6 +121,7 @@ export class TaskQueue {
 
       record.status = 'queued';
       record.recoveredAt = new Date(nowMs).toISOString();
+      record.recoveredEventId = queueEventId(record, 'recovered', record.attempt);
       recovered.push(structuredClone(record));
     }
 
@@ -196,6 +204,15 @@ function compareQueueRecords(left, right) {
   }
 
   return left.sequence - right.sequence;
+}
+
+function queueEventId(record, action, suffix) {
+  return [
+    'task-queue',
+    record.sequence,
+    action,
+    suffix
+  ].filter((part) => part !== undefined).join('-');
 }
 
 function priorityWeight(priority = 'normal') {

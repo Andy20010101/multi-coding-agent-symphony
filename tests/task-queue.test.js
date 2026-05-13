@@ -115,6 +115,29 @@ describe('TaskQueue', () => {
     }
   });
 
+  it('records lifecycle event ids and timestamps for queue state changes', () => {
+    const queue = new TaskQueue({ maxConcurrency: 1 });
+
+    const created = queue.enqueue(highTask, {
+      now: '2026-05-13T00:00:00.000Z'
+    });
+    const leased = queue.leaseNext({
+      adapterId: 'codex',
+      command: 'implement',
+      now: '2026-05-13T00:00:01.000Z'
+    });
+    const completed = queue.complete('task-high', {
+      now: '2026-05-13T00:00:02.000Z'
+    });
+
+    assert.equal(created.createdAt, '2026-05-13T00:00:00.000Z');
+    assert.equal(created.createdEventId, 'task-queue-1-created');
+    assert.equal(leased.leasedAt, '2026-05-13T00:00:01.000Z');
+    assert.equal(leased.leasedEventId, 'task-queue-1-leased-1');
+    assert.equal(completed.completedAt, '2026-05-13T00:00:02.000Z');
+    assert.equal(completed.completedEventId, 'task-queue-1-completed');
+  });
+
   it('cancels queued tasks and skips them during leasing', () => {
     const queue = new TaskQueue({ maxConcurrency: 1 });
 

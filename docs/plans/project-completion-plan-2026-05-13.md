@@ -30,7 +30,8 @@ Implemented and tested:
 - Phase B workspace materialization slice: `WorkspaceManager` can create workspace directories and write workspace manifests when materialization is enabled.
 - Phase B workspace cleanup slice: `WorkspaceManager` can remove temporary workspace content while retaining the workspace manifest and a cleanup record.
 - Phase B workspace lock slice: materialized primary-writer locks survive `WorkspaceManager` restart and block duplicate writer allocation for the same task.
-- Test baseline: `pnpm test` currently covers 53 tests across 11 suites.
+- Phase B lifecycle metadata slice: queue and workspace lifecycle changes expose event IDs and deterministic timestamps when provided.
+- Test baseline: `pnpm test` currently covers 54 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -106,7 +107,7 @@ Acceptance:
 
 ### Phase B: Durable State and Workspace Materialization
 
-Status: in progress. Queue persistence, expired lease recovery, workspace materialization, manifests, cleanup, retained cleanup records, and primary-writer locks are complete; clone policy and lifecycle event IDs remain.
+Status: in progress. Queue persistence, expired lease recovery, workspace materialization, manifests, cleanup, retained cleanup records, primary-writer locks, and lifecycle event IDs are complete; clone policy remains.
 
 Goal: turn in-memory primitives into recoverable harness state.
 
@@ -137,6 +138,7 @@ BDD/TDD:
 - Add scenario: workspace allocation creates a directory and manifest.
 - Add scenario: cleanup removes temporary workspace content but preserves artifacts.
 - Add scenario: materialized primary-writer lock survives manager restart.
+- Add scenario: queue and workspace lifecycle metadata is recorded.
 
 Acceptance:
 
@@ -669,16 +671,16 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase B with lifecycle event IDs and timestamps for queue/workspace changes.
+Continue Phase B with workspace clone policy.
 
 First red test:
 
-- Add a lifecycle metadata test proving queue and workspace lifecycle changes expose stable event IDs and timestamps.
+- Add a workspace clone test proving a review workspace can be materialized from a primary writer workspace without becoming writable.
 
 First implementation:
 
-- Add lifecycle metadata generation to the smallest queue/workspace methods that mutate state.
-- Keep caller-provided timestamps injectable for deterministic tests.
+- Add the smallest `cloneFrom` behavior to `WorkspaceManager` or document why clone remains outside V1.
+- Preserve manifest, lock, and read-only ownership metadata in the cloned workspace.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 
