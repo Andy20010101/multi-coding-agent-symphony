@@ -2,6 +2,20 @@
 
 Real CLI execution is opt-in. Normal tests use injected fake runners and do not call model APIs.
 
+## MCAS CLI
+
+`pnpm mcas` exposes the current user-facing entrypoint. It supports:
+
+- `doctor`
+- `github issue --repo OWNER/REPO --number N`
+- `queue manual ...`
+- `run-next ...`
+- `run-task --task-file task.json ...`
+- `smoke <codex|claude|kiro> [--real]`
+- `eval replay -- ...`
+
+Workflow commands accept `--config <file>`, where `runtime.stateFile`, `runtime.artifactDirectory`, `runtime.eventDirectory`, `runtime.workspaceDirectory`, and `runtime.sessionId` provide defaults. Explicit CLI flags override config values.
+
 ## Codex
 
 Implemented:

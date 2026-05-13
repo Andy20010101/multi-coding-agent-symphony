@@ -481,6 +481,81 @@ describe('Phase 8 user-facing CLI', () => {
     assert.equal(output.stderrText(), '');
     assert.equal(JSON.parse(output.stdoutText()).status, 'failed');
   });
+
+  it('loads runtime defaults from config and lets flags override them', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-cli-config-'));
+
+    try {
+      const stateFile = join(root, 'configured-queue.json');
+      const artifactDirectory = join(root, 'configured-artifacts');
+      const eventDirectory = join(root, 'configured-events');
+      const workspaceDirectory = join(root, 'configured-workspaces');
+      const overrideArtifactDirectory = join(root, 'override-artifacts');
+      const configFile = join(root, 'mcas.config.json');
+      const queue = new TaskQueue({ stateFile });
+
+      queue.enqueue(manualTask, {
+        now: '2026-05-13T00:00:00.000Z'
+      });
+      await writeFile(configFile, `${JSON.stringify({
+        version: '1',
+        runtime: {
+          stateFile,
+          artifactDirectory,
+          eventDirectory,
+          workspaceDirectory,
+          sessionId: 'configured-session'
+        }
+      }, null, 2)}\n`, 'utf8');
+
+      const configuredOutput = createOutput();
+      const configuredExitCode = await runMcasCli({
+        argv: [
+          'run-next',
+          '--config',
+          configFile,
+          '--now',
+          '2026-05-13T00:00:01.000Z'
+        ],
+        stdout: configuredOutput.stdout,
+        stderr: configuredOutput.stderr
+      });
+
+      assert.equal(configuredExitCode, 0);
+
+      const configuredRun = JSON.parse(configuredOutput.stdoutText());
+
+      assert.equal(configuredRun.configFile, configFile);
+      assert.equal(configuredRun.stateFile, stateFile);
+      assert.equal(configuredRun.artifactDirectory, artifactDirectory);
+      assert.equal(configuredRun.eventDirectory, eventDirectory);
+      assert.equal(configuredRun.workspaceDirectory, workspaceDirectory);
+      assert.equal(configuredRun.sessionId, 'configured-session');
+
+      new TaskQueue({ stateFile }).enqueue({
+        ...manualTask,
+        id: 'manual-release-checklist-2'
+      });
+
+      const overrideOutput = createOutput();
+      const overrideExitCode = await runMcasCli({
+        argv: [
+          'run-next',
+          '--config',
+          configFile,
+          '--artifact-dir',
+          overrideArtifactDirectory
+        ],
+        stdout: overrideOutput.stdout,
+        stderr: overrideOutput.stderr
+      });
+
+      assert.equal(overrideExitCode, 0);
+      assert.equal(JSON.parse(overrideOutput.stdoutText()).artifactDirectory, overrideArtifactDirectory);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 const manualTask = {

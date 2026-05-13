@@ -47,3 +47,9 @@ Feature: Phase 8 user-facing CLI
     When the user runs eval replay with pass-through arguments
     Then the CLI calls the existing eval replay package script
     And it propagates eval replay exit codes
+
+  Scenario: Load runtime defaults from CLI config
+    Given a JSON config file with queue, artifact, event, and workspace paths
+    When the user runs a workflow command without path flags
+    Then the CLI uses config defaults
+    And explicit path flags override the config file

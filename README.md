@@ -70,3 +70,5 @@ pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason 
 `run-task` runs a TaskSpec JSON file through the same dry-run workflow without reading or writing queue state.
 `smoke <codex|claude|kiro>` dispatches the existing package smoke scripts and propagates their exit codes; add `--real` only when the underlying real smoke gate is intended.
 `eval replay` dispatches the existing eval replay package script and passes through all remaining arguments.
+
+Workflow commands also accept `--config mcas.config.json`. The config file can provide `runtime.stateFile`, `runtime.artifactDirectory`, `runtime.eventDirectory`, `runtime.workspaceDirectory`, and `runtime.sessionId`; explicit command flags take precedence.

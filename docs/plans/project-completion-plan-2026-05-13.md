@@ -74,14 +74,14 @@ Implemented and tested:
 - Phase K GitHub PR/CI `gh` wrapper slice: injected-runner PR intake calls `gh pr view --json ...`, and CI capture calls `gh api .../check-runs` through the pure normalizer.
 - Phase K GitHub PR summary slice: PR summaries combine the validated review task, CI status, failing checks, and artifact references into an artifact-ready object plus markdown.
 - Phase K GitHub naming policy slice: PR branch and workspace names are deterministic ASCII safe path segments derived from repository, PR number, and head ref.
-- Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`, `pnpm mcas run-next ...` executes the standard dry-run workflow with verifier exit-code mapping, `pnpm mcas run-task ...` runs TaskSpec JSON files without queue state, `pnpm mcas smoke <adapter>` dispatches existing package smoke scripts, and `pnpm mcas eval replay -- ...` dispatches the eval replay package script.
-- Test baseline: `pnpm test` currently covers 124 tests across 19 suites.
+- Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`, `pnpm mcas run-next ...` executes the standard dry-run workflow with verifier exit-code mapping, `pnpm mcas run-task ...` runs TaskSpec JSON files without queue state, `pnpm mcas smoke <adapter>` dispatches existing package smoke scripts, `pnpm mcas eval replay -- ...` dispatches the eval replay package script, and `--config` loads runtime path defaults with flag override precedence.
+- Test baseline: `pnpm test` currently covers 125 tests across 19 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- CLI currently covers doctor, GitHub issue intake, manual queue intake, run-next, run-task, smoke wrappers, and eval replay; config file support remains.
+- Phase M security/redaction policy and Phase N release gate docs remain.
 
 ## Target V1
 
@@ -531,7 +531,7 @@ Acceptance:
 
 ### Phase L: User-Facing CLI
 
-Status: in progress. The first CLI slices are complete: `scripts/mcas.js` exposes `doctor`, read-only GitHub issue intake, persistent manual task queue intake, verifier-gated `run-next`, queue-free `run-task`, smoke wrappers, and eval replay through `pnpm mcas`.
+Status: completed for V1 CLI entrypoint. `scripts/mcas.js` exposes `doctor`, read-only GitHub issue intake, persistent manual task queue intake, verifier-gated `run-next`, queue-free `run-task`, smoke wrappers, eval replay, and runtime config defaults through `pnpm mcas`.
 
 Goal: expose project workflows without requiring ad hoc Node imports.
 
@@ -741,15 +741,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase L with config file support.
+Start Phase M with artifact and event redaction.
 
 First red test:
 
-- Add CLI tests proving runtime directory defaults and queue/artifact/event/workspace paths can be loaded from a JSON config file when flags are absent.
+- Add tests proving secret-like values in artifacts and session events are redacted before persistence.
 
 First implementation:
 
-- Add `--config <file>` parsing for runtime path defaults while keeping explicit CLI flags higher precedence.
+- Add a small redaction module and route ArtifactStore/SessionEventLog writes through it without changing public contracts.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

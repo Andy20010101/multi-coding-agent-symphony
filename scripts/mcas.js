@@ -154,7 +154,8 @@ async function runGitHubIssueIntake({ args, runner }) {
 }
 
 function runManualTaskQueue({ args }) {
-  const stateFile = readOption(args, '--state-file');
+  const paths = resolveRuntimePaths(args);
+  const stateFile = paths.stateFile;
   const task = {
     id: readOption(args, '--id'),
     source: 'manual',
@@ -172,6 +173,7 @@ function runManualTaskQueue({ args }) {
     command: 'queue manual',
     status: 'queued',
     modelInvocation: false,
+    ...(paths.configFile ? { configFile: paths.configFile } : {}),
     stateFile,
     taskId: record.task.id,
     queueStatus: record.status,
@@ -247,6 +249,7 @@ async function runTaskFileWorkflow({ args, adapterFactory }) {
       eventDirectory: paths.eventDirectory,
       workspaceDirectory: paths.workspaceDirectory,
       sessionId: paths.sessionId,
+      ...(paths.configFile ? { configFile: paths.configFile } : {}),
       taskFile,
       ...summarizeWorkflowResult(result)
     }
@@ -350,15 +353,75 @@ function summarizeWorkflowResult(result) {
 }
 
 function resolveRuntimePaths(args) {
-  const runtimeDirectory = readOptionalOption(args, '--runtime-dir') ?? '.mcas';
+  const config = readCliConfig(args);
+  const runtimeDirectory = readOptionalOption(args, '--runtime-dir')
+    ?? configString(config.runtime, 'runtimeDirectory')
+    ?? '.mcas';
 
   return {
-    stateFile: readOptionalOption(args, '--state-file') ?? join(runtimeDirectory, 'queue.json'),
-    artifactDirectory: readOptionalOption(args, '--artifact-dir') ?? join(runtimeDirectory, 'artifacts'),
-    eventDirectory: readOptionalOption(args, '--event-dir') ?? join(runtimeDirectory, 'events'),
-    workspaceDirectory: readOptionalOption(args, '--workspace-dir') ?? join(runtimeDirectory, 'workspaces'),
-    sessionId: readOptionalOption(args, '--session-id') ?? 'mcas-cli'
+    ...(config.configFile ? { configFile: config.configFile } : {}),
+    stateFile: readOptionalOption(args, '--state-file')
+      ?? configString(config.runtime, 'stateFile')
+      ?? join(runtimeDirectory, 'queue.json'),
+    artifactDirectory: readOptionalOption(args, '--artifact-dir')
+      ?? configString(config.runtime, 'artifactDirectory')
+      ?? join(runtimeDirectory, 'artifacts'),
+    eventDirectory: readOptionalOption(args, '--event-dir')
+      ?? configString(config.runtime, 'eventDirectory')
+      ?? join(runtimeDirectory, 'events'),
+    workspaceDirectory: readOptionalOption(args, '--workspace-dir')
+      ?? configString(config.runtime, 'workspaceDirectory')
+      ?? join(runtimeDirectory, 'workspaces'),
+    sessionId: readOptionalOption(args, '--session-id')
+      ?? configString(config.runtime, 'sessionId')
+      ?? 'mcas-cli'
   };
+}
+
+function readCliConfig(args) {
+  const configFile = readOptionalOption(args, '--config');
+
+  if (configFile === undefined) {
+    return {
+      runtime: {}
+    };
+  }
+
+  const config = parseJsonFile(configFile, 'configFile');
+
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    throw new UsageError('configFile must contain a JSON object');
+  }
+
+  if (config.runtime === undefined) {
+    return {
+      configFile,
+      runtime: {}
+    };
+  }
+
+  if (config.runtime === null || typeof config.runtime !== 'object' || Array.isArray(config.runtime)) {
+    throw new UsageError('configFile.runtime must be an object');
+  }
+
+  return {
+    configFile,
+    runtime: config.runtime
+  };
+}
+
+function configString(config, field) {
+  const value = config[field];
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new UsageError(`configFile.runtime.${field} must be a non-empty string`);
+  }
+
+  return value;
 }
 
 function parseJsonFile(path, field) {
