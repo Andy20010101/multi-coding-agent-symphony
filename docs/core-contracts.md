@@ -154,6 +154,11 @@ Command-specific verifier rules:
 - `review` evidence must include `findings` or `noFindingRationale`.
 - Production `qa` evidence must include at least one check with `artifactId`.
 
+Workspace scope verifier rules:
+
+- `review-only` commands must not report changed files.
+- When a workspace manifest path is available, every changed file must resolve inside that workspace path.
+
 `diffSummary` is required and may be empty. `checks` must contain at least one record for a verifier-valid evidence package. Raw or incomplete adapter output may still be stored as an artifact, but it is not a valid completion evidence package.
 
 `agentSummary` is informational only. Verifier decisions must use `checks`, `changedFiles`, logs, and other structured evidence.

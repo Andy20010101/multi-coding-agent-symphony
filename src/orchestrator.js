@@ -166,7 +166,11 @@ export class Orchestrator {
       }
     });
 
-    const verification = verifyEvidence({ commandSpec, evidence });
+    const verification = verifyEvidence({
+      commandSpec,
+      evidence,
+      workspaceManifest: workspace
+    });
     const adapterArtifactRefs = await this.#writeAdapterArtifacts({
       taskId: taskSpec.id,
       command: commandSpec.name,

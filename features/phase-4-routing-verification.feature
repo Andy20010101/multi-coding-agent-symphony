@@ -71,6 +71,12 @@ Feature: Phase 4 routing, workspace, and verification modules
     Then verification fails
     And the failure reason is scope-violation
 
+  Scenario: Reject changed files outside workspace manifest path
+    Given a writable command evidence package with changed files outside the workspace root
+    When the Verifier evaluates the evidence with the workspace manifest
+    Then verification fails
+    And the failure reason is scope-violation
+
   Scenario: Report exact failed checks
     Given an evidence package with one passed check and one failed check
     When the Verifier evaluates the evidence

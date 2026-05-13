@@ -414,6 +414,32 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
     });
   });
 
+  it('rejects changed files outside the workspace manifest path', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: implementCommand,
+      workspaceManifest: {
+        path: '/tmp/workspace/task-123-primary-writer-1',
+        writable: true
+      },
+      evidence: {
+        command: 'implement',
+        taskId: 'task-123',
+        workspaceId: 'task-123-primary-writer-1',
+        diffSummary: [],
+        changedFiles: ['../outside.js', '/tmp/other/file.js'],
+        checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }],
+        knownRisks: [],
+        agentSummary: 'Implemented behavior.',
+        version: '1'
+      }
+    }), {
+      status: 'failed',
+      reason: 'scope-violation',
+      changedFiles: ['../outside.js', '/tmp/other/file.js'],
+      workspacePath: '/tmp/workspace/task-123-primary-writer-1'
+    });
+  });
+
   it('returns exact failed check list', () => {
     const failedCheck = {
       name: 'pnpm test',

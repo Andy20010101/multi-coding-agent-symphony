@@ -1,6 +1,8 @@
+import { isAbsolute, relative, resolve } from 'node:path';
+
 import { validateCommandSpec } from './contracts.js';
 
-export function verifyEvidence({ commandSpec, evidence }) {
+export function verifyEvidence({ commandSpec, evidence, workspaceManifest }) {
   validateCommandSpec(commandSpec);
 
   if (evidence === null || typeof evidence !== 'object' || Array.isArray(evidence)) {
@@ -27,6 +29,17 @@ export function verifyEvidence({ commandSpec, evidence }) {
       reason: 'scope-violation',
       changedFiles: structuredClone(changedFiles),
       workspacePolicy: commandSpec.workspacePolicy
+    };
+  }
+
+  const filesOutsideWorkspace = changedFilesOutsideWorkspace({ changedFiles, workspaceManifest });
+
+  if (filesOutsideWorkspace.length > 0) {
+    return {
+      status: 'failed',
+      reason: 'scope-violation',
+      changedFiles: structuredClone(filesOutsideWorkspace),
+      workspacePath: workspaceManifest.path
     };
   }
 
@@ -68,6 +81,31 @@ export function verifyEvidence({ commandSpec, evidence }) {
 
 function violatesReadOnlyScope({ commandSpec, changedFiles }) {
   return commandSpec.workspacePolicy === 'review-only' && changedFiles.length > 0;
+}
+
+function changedFilesOutsideWorkspace({ changedFiles, workspaceManifest }) {
+  if (!isNonEmptyString(workspaceManifest?.path)) {
+    return [];
+  }
+
+  const workspacePath = resolve(workspaceManifest.path);
+
+  return changedFiles.filter((changedFile) => {
+    if (!isNonEmptyString(changedFile)) {
+      return false;
+    }
+
+    const resolvedChangedFile = isAbsolute(changedFile)
+      ? resolve(changedFile)
+      : resolve(workspacePath, changedFile);
+    const relativePath = relative(workspacePath, resolvedChangedFile);
+
+    return relativePath === '..' || relativePath.startsWith(`..${pathSeparator()}`) || isAbsolute(relativePath);
+  });
+}
+
+function pathSeparator() {
+  return process.platform === 'win32' ? '\\' : '/';
 }
 
 function requiresProductionProvenance(commandSpec) {
