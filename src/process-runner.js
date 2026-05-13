@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 
 export class NodeProcessRunner {
-  async run({
+  start({
     executable,
     args = [],
     cwd,
@@ -17,32 +17,34 @@ export class NodeProcessRunner {
       throw new TypeError('args must be an array');
     }
 
-    return new Promise((resolve, reject) => {
-      const startedAt = Date.now();
-      const child = spawn(executable, args, {
-        cwd,
-        env: {
-          ...process.env,
-          ...env
-        },
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-      let stdout = '';
-      let stderr = '';
-      let timedOut = false;
-      const timeout = setTimeout(() => {
-        timedOut = true;
-        child.kill('SIGTERM');
-      }, timeoutMs);
+    const startedAt = Date.now();
+    const child = spawn(executable, args, {
+      cwd,
+      env: {
+        ...process.env,
+        ...env
+      },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
 
-      child.stdout.setEncoding('utf8');
-      child.stderr.setEncoding('utf8');
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk;
-      });
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk;
-      });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+
+    const result = new Promise((resolve, reject) => {
       child.on('error', (error) => {
         clearTimeout(timeout);
         reject(error);
@@ -65,12 +67,31 @@ export class NodeProcessRunner {
           stderr,
           durationMs: Date.now() - startedAt,
           timedOut,
+          cancelled,
           outputFiles: capturedOutputFiles
         });
       });
-
-      child.stdin.end(stdin);
     });
+
+    child.stdin.end(stdin);
+
+    return {
+      pid: child.pid,
+      result,
+      cancel(signal = 'SIGTERM') {
+        cancelled = true;
+        child.kill(signal);
+
+        return {
+          status: 'cancelled',
+          signal
+        };
+      }
+    };
+  }
+
+  async run(invocation) {
+    return this.start(invocation).result;
   }
 }
 

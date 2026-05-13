@@ -40,7 +40,8 @@ Implemented and tested:
 - Phase C queue-backed workflow slice: `Orchestrator.runNextTask` leases a persisted queued task, runs the workflow, and completes the queue record on success.
 - Phase C sequence policy slice: named `standard` workflow expands to `implement -> review -> qa`.
 - Phase C failed queue state slice: failed queued workflows persist failure and retry metadata, and retryable failures return to queued status.
-- Test baseline: `pnpm test` currently covers 63 tests across 11 suites.
+- Phase D process runner slice: `NodeProcessRunner` exposes startable handles that can be cancelled while preserving partial output, with `run()` compatibility retained.
+- Test baseline: `pnpm test` currently covers 64 tests across 12 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -202,6 +203,8 @@ Acceptance:
 
 ### Phase D: Process Lifecycle and Cancellation
 
+Status: in progress. Startable `NodeProcessRunner` handles and partial-output cancellation are complete; real Codex adapter cancellation, idempotency, timeout escalation, and cancelled evidence remain.
+
 Goal: support active process cancellation and terminal lifecycle states across adapters.
 
 Work:
@@ -224,6 +227,7 @@ Primary files:
 
 BDD/TDD:
 
+- Add scenario: process runner handle cancellation preserves partial stdout.
 - Add scenario: cancelling a real run terminates the child process and records cancelled status.
 - Add test with a fake long-running process runner.
 - Add test that timeout emits `cli-timeout` and preserves captured output.
@@ -689,15 +693,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase D with process lifecycle and cancellation.
+Continue Phase D with real Codex adapter cancellation.
 
 First red test:
 
-- Add a process runner test proving a long-running process can be cancelled and returns cancelled status with partial output.
+- Add a Codex adapter test proving `cancel(handle)` forwards to an active real process handle and marks the run cancelled.
 
 First implementation:
 
-- Split `NodeProcessRunner` into a startable handle plus awaitable result, while retaining current `run()` compatibility.
+- Store real process handles in `CodexAdapter` and make `cancel(handle)` idempotently terminate active real runs.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 

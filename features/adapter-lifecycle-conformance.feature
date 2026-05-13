@@ -25,3 +25,8 @@ Feature: Runtime adapter lifecycle conformance
     When the adapter resumes the run id
     Then a handle for the same run is returned
 
+  Scenario: Cancel active process runner handle
+    Given a long-running process started by the Node Process Runner
+    When the process handle is cancelled
+    Then the result records cancelled status
+    And partial stdout is preserved
