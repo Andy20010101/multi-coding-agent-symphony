@@ -1,6 +1,11 @@
 import { BaseAdapter, buildRunPrompt, validatePrepareInput } from './base-adapter.js';
 import { extractEvidencePackageFromSources } from '../evidence-parser.js';
 import { NodeProcessRunner } from '../process-runner.js';
+import {
+  deniedPathRules,
+  hasDeniedNetwork,
+  hasDeniedShell
+} from './policy-permissions.js';
 
 export class ClaudeCodeAdapter extends BaseAdapter {
   constructor({
@@ -181,9 +186,22 @@ function permissionModeFor(workspacePolicy) {
 }
 
 function disallowedToolsFrom(policyDecisions) {
-  return policyDecisions
-    .filter((decision) => decision.decision === 'deny' && decision.reason === 'sensitive-path')
-    .map((decision) => `Read(${decision.matchedRule})`);
+  const disallowedTools = new Set();
+
+  for (const pathRule of deniedPathRules(policyDecisions)) {
+    disallowedTools.add(`Read(${pathRule})`);
+  }
+
+  if (hasDeniedShell(policyDecisions)) {
+    disallowedTools.add('Bash');
+  }
+
+  if (hasDeniedNetwork(policyDecisions)) {
+    disallowedTools.add('WebFetch');
+    disallowedTools.add('WebSearch');
+  }
+
+  return Array.from(disallowedTools);
 }
 
 function parseJsonl(output) {

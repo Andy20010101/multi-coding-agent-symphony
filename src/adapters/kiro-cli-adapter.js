@@ -1,6 +1,11 @@
 import { BaseAdapter, buildRunPrompt, validatePrepareInput } from './base-adapter.js';
 import { extractEvidencePackageFromSources } from '../evidence-parser.js';
 import { NodeProcessRunner } from '../process-runner.js';
+import {
+  hasDeniedNetwork,
+  hasDeniedPath,
+  hasDeniedShell
+} from './policy-permissions.js';
 
 export class KiroCliAdapter extends BaseAdapter {
   constructor({
@@ -195,41 +200,16 @@ function trustToolsFor(allowedTools, policyDecisions = []) {
 function deniedTrustCategoriesFor(policyDecisions) {
   const deniedCategories = new Set();
 
-  for (const decision of policyDecisions) {
-    if (decision?.decision !== 'deny') {
-      continue;
-    }
+  if (hasDeniedPath(policyDecisions)) {
+    deniedCategories.add('read');
+    deniedCategories.add('grep');
+  }
 
-    if (deniesShell(decision) || deniesNetwork(decision)) {
-      deniedCategories.add('bash');
-    }
+  if (hasDeniedShell(policyDecisions) || hasDeniedNetwork(policyDecisions)) {
+    deniedCategories.add('bash');
   }
 
   return deniedCategories;
-}
-
-function deniesShell(decision) {
-  return decisionHasAnyValue(decision, ['shell', 'test']) ||
-    decision.reason === 'command-not-allowed' ||
-    decision.reason === 'invalid-command';
-}
-
-function deniesNetwork(decision) {
-  return decisionHasAnyValue(decision, ['network']) ||
-    decision.reason === 'network-denied';
-}
-
-function decisionHasAnyValue(decision, values) {
-  const normalizedValues = new Set(values);
-  const candidates = [
-    decision.action,
-    decision.tool,
-    decision.toolName,
-    decision.requestedTool,
-    decision.matchedRule
-  ];
-
-  return candidates.some((candidate) => typeof candidate === 'string' && normalizedValues.has(candidate));
 }
 
 function parseJsonl(output) {

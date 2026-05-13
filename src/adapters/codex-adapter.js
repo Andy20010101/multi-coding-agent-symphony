@@ -7,6 +7,11 @@ import { BaseAdapter, validatePrepareInput } from './base-adapter.js';
 import { extractEvidencePackageFromSources } from '../evidence-parser.js';
 import { classifyFailure } from '../failure-taxonomy.js';
 import { NodeProcessRunner } from '../process-runner.js';
+import {
+  hasDeniedNetwork,
+  hasDeniedShell,
+  policyRestrictionLines
+} from './policy-permissions.js';
 
 const DEFAULT_EVIDENCE_SCHEMA_PATH = fileURLToPath(
   new URL('../../schemas/evidence-package.schema.json', import.meta.url)
@@ -48,6 +53,7 @@ export class CodexAdapter extends BaseAdapter {
     const outputSchemaPath = input.outputSchemaPath
       ?? (input.executionMode === 'real' ? this.evidenceSchemaPath : null);
     const resolvedModel = resolveModelProfile(input.modelProfile, this.modelProfileMappings);
+    const policyDecisions = input.policyDecisions ?? [];
 
     const args = [
       'exec',
@@ -55,7 +61,7 @@ export class CodexAdapter extends BaseAdapter {
       '--cd',
       input.workspace,
       '--sandbox',
-      sandboxFor(input.commandSpec.workspacePolicy)
+      sandboxFor(input.commandSpec.workspacePolicy, policyDecisions)
     ];
 
     if (resolvedModel !== CODEX_CONFIG_DEFAULT_MODEL_PROFILE) {
@@ -351,7 +357,11 @@ function publicHandle(handle) {
   return structuredClone(publicFields);
 }
 
-function sandboxFor(workspacePolicy) {
+function sandboxFor(workspacePolicy, policyDecisions = []) {
+  if (hasDeniedShell(policyDecisions) || hasDeniedNetwork(policyDecisions)) {
+    return 'read-only';
+  }
+
   if (workspacePolicy === 'review-only') {
     return 'read-only';
   }
@@ -363,8 +373,9 @@ function sandboxFor(workspacePolicy) {
   return 'read-only';
 }
 
-function buildCodexRunPrompt({ commandSpec, contextPack }) {
+function buildCodexRunPrompt({ commandSpec, contextPack, policyDecisions = [] }) {
   const roleGuidance = CODEX_COMMAND_PROMPTS[commandSpec.name] ?? CODEX_COMMAND_PROMPTS.plan;
+  const restrictionLines = policyRestrictionLines(policyDecisions);
 
   return [
     `Command: ${commandSpec.name}`,
@@ -375,6 +386,7 @@ function buildCodexRunPrompt({ commandSpec, contextPack }) {
     `Acceptance: ${contextPack.task.acceptance.join('; ')}`,
     `Evidence schema: ${commandSpec.evidenceSchema}`,
     `Done criteria: ${commandSpec.doneCriteria.join('; ')}`,
+    ...(restrictionLines.length > 0 ? ['Policy restrictions:', ...restrictionLines] : []),
     'Return an EvidencePackage JSON object with command, taskId, workspaceId, changedFiles, checks, knownRisks, agentSummary, and version.',
     'Set checks to passed only for commands you actually ran or evidence you actually inspected.'
   ].join('\n');

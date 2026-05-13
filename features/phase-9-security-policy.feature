@@ -31,3 +31,9 @@ Feature: Phase 9 security, redaction, and policy enforcement
     Then the adapter is not started
     When a command requests allowed network access
     Then the session event log records the network policy decision
+
+  Scenario: Map policy denials to adapter-local permissions
+    Given denied path, shell, and network policy decisions
+    When Codex, Claude Code, and Kiro CLI prepare a command
+    Then each adapter renders the strongest supported local restriction
+    And the original CommandSpec is unchanged

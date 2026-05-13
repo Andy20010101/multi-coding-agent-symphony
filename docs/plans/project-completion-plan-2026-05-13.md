@@ -79,13 +79,14 @@ Implemented and tested:
 - Phase M denied path slice: PolicyEngine denies default sensitive paths such as `.env.*`, `.ssh`, `.npmrc`, `.netrc`, and `secrets`, and Orchestrator blocks adapter start on those denials.
 - Phase M shell command policy slice: PolicyEngine supports denied exact commands, denied command patterns, allowed exact commands, and allowed command patterns with deny precedence and default-deny fallback.
 - Phase M network policy slice: PolicyEngine supports `network` policy requests with disabled, enabled, and restricted host modes; Orchestrator blocks denied network access before adapter start and records allowed decisions.
-- Test baseline: `pnpm test` currently covers 132 tests across 20 suites.
+- Phase M adapter permission mapping slice: Codex, Claude Code, and Kiro CLI derive adapter-local restrictions from denied path, shell, and network decisions without mutating `CommandSpec`.
+- Test baseline: `pnpm test` currently covers 133 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Phase M still needs adapter permission mapping and security checklist docs.
+- Phase M still needs security checklist docs.
 - Phase N release gate docs remain.
 
 ## Target V1
@@ -569,7 +570,7 @@ Acceptance:
 
 ### Phase M: Security, Redaction, and Policy Enforcement
 
-Status: in progress. Artifact/session event redaction, default denied path policy, shell command allow/deny pattern policy, and network policy are complete.
+Status: in progress. Artifact/session event redaction, default denied path policy, shell command allow/deny pattern policy, network policy, and adapter permission mapping are complete.
 
 Goal: prevent adapters and artifacts from leaking secrets or bypassing policy.
 
@@ -748,15 +749,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase M with adapter permission mapping.
+Continue Phase M with security checklist docs.
 
 First red test:
 
-- Add tests proving Codex, Claude Code, and Kiro receive adapter-local permission restrictions derived from denied path, shell, and network decisions without changing `CommandSpec` semantics.
+- Add a security checklist covering secret redaction, policy gate inputs, adapter permission mapping, and release verification commands.
 
 First implementation:
 
-- Extend adapter prepare/config rendering so each CLI gets the strongest supported local permission mapping from existing `PolicyDecision` objects.
+- Link the checklist from core docs and the completion plan, then run docs-safe verification plus the normal static/test gates.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

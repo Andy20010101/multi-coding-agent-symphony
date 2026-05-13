@@ -159,6 +159,66 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
     assert.deepEqual(prepared.args.slice(0, 3), ['chat', '--no-interactive', '--trust-tools=read,grep']);
   });
 
+  it('maps policy denials to adapter-local permission restrictions without mutating CommandSpec', async () => {
+    const policyDecisions = [
+      {
+        decision: 'deny',
+        reason: 'sensitive-path',
+        matchedRule: '.env'
+      },
+      {
+        decision: 'deny',
+        reason: 'denied-command-pattern',
+        matchedRule: 'pnpm --filter * exec *'
+      },
+      {
+        decision: 'deny',
+        reason: 'network-denied',
+        matchedRule: 'restricted'
+      }
+    ];
+    const codexCommand = structuredClone(implementCommand);
+    const claudeCommand = structuredClone(reviewCommand);
+    const kiroCommand = structuredClone(qaCommand);
+
+    const codex = await new CodexAdapter({ cliVersion: '0.130.0' }).prepare({
+      commandSpec: codexCommand,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      policyDecisions
+    });
+    const claude = await new ClaudeCodeAdapter({ cliVersion: '2.1.123' }).prepare({
+      commandSpec: claudeCommand,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'deepseek-claude-code',
+      policyDecisions
+    });
+    const kiro = await new KiroCliAdapter({ cliVersion: '2.2.2' }).prepare({
+      commandSpec: kiroCommand,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-kiro-default',
+      policyDecisions
+    });
+
+    assert.equal(sandboxArg(codex), 'read-only');
+    assert.match(codex.prompt, /Policy restrictions:/);
+    assert.match(codex.prompt, /Do not read or write paths matching: \.env/);
+    assert.match(codex.prompt, /Do not run shell commands/);
+    assert.match(codex.prompt, /Do not access the network/);
+    assert.equal(claude.args.includes('--disallowedTools'), true);
+    assert.equal(claude.args.includes('Read(.env)'), true);
+    assert.equal(claude.args.includes('Bash'), true);
+    assert.equal(claude.args.includes('WebFetch'), true);
+    assert.equal(claude.args.includes('WebSearch'), true);
+    assert.deepEqual(kiro.args.slice(0, 3), ['chat', '--no-interactive', '--trust-tools=']);
+    assert.deepEqual(codexCommand, implementCommand);
+    assert.deepEqual(claudeCommand, reviewCommand);
+    assert.deepEqual(kiroCommand, qaCommand);
+  });
+
   it('normalizes timeout failures through the shared failure taxonomy', () => {
     const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
 
@@ -170,3 +230,7 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
     });
   });
 });
+
+function sandboxArg(prepared) {
+  return prepared.args[prepared.args.indexOf('--sandbox') + 1];
+}
