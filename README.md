@@ -51,3 +51,12 @@ pnpm test
 pnpm check
 pnpm smoke:codex:help
 ```
+
+Run the project CLI:
+
+```sh
+pnpm mcas doctor
+pnpm mcas github issue --repo OWNER/REPO --number 123
+```
+
+`github issue` is read-only intake. It calls `gh issue view`, converts the response into a validated `TaskSpec`, and does not invoke a model.

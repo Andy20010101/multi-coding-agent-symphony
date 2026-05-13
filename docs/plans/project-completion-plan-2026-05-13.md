@@ -74,14 +74,14 @@ Implemented and tested:
 - Phase K GitHub PR/CI `gh` wrapper slice: injected-runner PR intake calls `gh pr view --json ...`, and CI capture calls `gh api .../check-runs` through the pure normalizer.
 - Phase K GitHub PR summary slice: PR summaries combine the validated review task, CI status, failing checks, and artifact references into an artifact-ready object plus markdown.
 - Phase K GitHub naming policy slice: PR branch and workspace names are deterministic ASCII safe path segments derived from repository, PR number, and head ref.
-- Test baseline: `pnpm test` currently covers 114 tests across 18 suites.
+- Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, and `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model.
+- Test baseline: `pnpm test` currently covers 116 tests across 19 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- GitHub intake is available as library helpers, but not yet through a user-facing CLI command.
-- No user-facing CLI entrypoint exists for orchestrator runs.
+- CLI currently covers doctor and GitHub issue intake; queue, run-next, run-task, smoke, eval, and config commands remain.
 
 ## Target V1
 
@@ -531,6 +531,8 @@ Acceptance:
 
 ### Phase L: User-Facing CLI
 
+Status: in progress. The first CLI slice is complete: `scripts/mcas.js` exposes `doctor` plus read-only GitHub issue intake through `pnpm mcas`.
+
 Goal: expose project workflows without requiring ad hoc Node imports.
 
 Work:
@@ -739,15 +741,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Start Phase L with the user-facing CLI entrypoint.
+Continue Phase L with persistent queue intake.
 
 First red test:
 
-- Add CLI tests proving `scripts/mcas.js` exposes at least `doctor` and a read-only GitHub intake command without invoking a model.
+- Add CLI tests proving a manual task can be queued to a configured state file and prints the task id.
 
 First implementation:
 
-- Add a small Node entrypoint that parses command arguments, calls existing modules instead of duplicating orchestration logic, and returns clear nonzero exit codes.
+- Add a `queue manual` command that validates a `TaskSpec`, persists through `TaskQueue`, and reports queue state without invoking adapters.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

@@ -8,6 +8,7 @@
   "scripts": {
     "test": "node --test",
     "check": "node --check src/*.js src/adapters/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js",
+    "mcas": "node scripts/mcas.js",
     "smoke:codex:help": "codex exec --help",
     "smoke:codex:real": "node scripts/smoke-codex-real.js",
     "smoke:codex:writer": "node scripts/smoke-codex-writer.js",

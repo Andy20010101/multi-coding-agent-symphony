@@ -41,7 +41,7 @@ Tracker
 
 ## Main Execution Flow
 
-Current dry-run integration entrypoint: `src/orchestrator.js`.
+Current user-facing CLI entrypoint: `scripts/mcas.js`. Current dry-run orchestration entrypoint: `src/orchestrator.js`.
 
 1. Intake creates a `TaskSpec` from GitHub, Linear, a manual request, or another tracker.
 2. Orchestrator selects one `CommandSpec`, such as `implement` or `review`.
