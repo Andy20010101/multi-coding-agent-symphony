@@ -32,7 +32,8 @@ Implemented and tested:
 - Phase B workspace lock slice: materialized primary-writer locks survive `WorkspaceManager` restart and block duplicate writer allocation for the same task.
 - Phase B lifecycle metadata slice: queue and workspace lifecycle changes expose event IDs and deterministic timestamps when provided.
 - Phase B workspace clone slice: review workspaces can clone primary-writer content while retaining non-writable ownership metadata.
-- Test baseline: `pnpm test` currently covers 55 tests across 11 suites.
+- Phase C workflow slice: `Orchestrator.runTaskWorkflow` can execute `implement -> review`, pass implementation evidence refs into review context, and clone review workspace metadata.
+- Test baseline: `pnpm test` currently covers 56 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -149,6 +150,8 @@ Acceptance:
 
 ### Phase C: Orchestrator Command Loop
 
+Status: in progress. The minimal `implement -> review` workflow path is complete; failure handling, retry planning, context artifact hydration, and queue recovery integration remain.
+
 Goal: make `Orchestrator` run command sequences from queue state, not just one direct `runCommand` call.
 
 Work:
@@ -173,6 +176,7 @@ Primary files:
 
 BDD/TDD:
 
+- Add scenario: implement then review runs as one workflow and review receives implementation artifact refs.
 - Add scenario: implement failure classified as retryable schedules QA or retry command.
 - Add scenario: review receives implementation evidence through artifact refs.
 - Add scenario: verifier failure prevents task completion.
@@ -672,16 +676,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase C with the orchestrator command loop.
+Continue Phase C with verifier-gated workflow failure.
 
 First red test:
 
-- Add an orchestrator workflow test proving one task can run at least two commands in sequence.
+- Add a workflow test proving verifier failure stops later commands and returns failed status.
 
 First implementation:
 
-- Add the smallest `runTaskWorkflow` entrypoint that executes `implement -> review` using existing routing, artifacts, events, and verification.
-- Feed implementation evidence into the review command context through artifact refs.
+- Tighten `runTaskWorkflow` to stop on non-passing verification and expose the failed command.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 

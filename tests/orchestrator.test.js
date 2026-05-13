@@ -30,6 +30,15 @@ const commandSpec = {
   evidenceSchema: 'implementation-evidence.v1'
 };
 
+const reviewCommandSpec = {
+  name: 'review',
+  version: '1',
+  allowedTools: ['read', 'shell', 'test'],
+  workspacePolicy: 'review-only',
+  doneCriteria: ['review-completed', 'evidence-written'],
+  evidenceSchema: 'review-evidence.v1'
+};
+
 class PassingCodexAdapter extends CodexAdapter {
   async collectEvidence(handle) {
     return {
@@ -43,6 +52,18 @@ class PassingCodexAdapter extends CodexAdapter {
       agentSummary: 'Synthetic dry-run evidence.',
       version: '1'
     };
+  }
+}
+
+class CapturingCodexAdapter extends PassingCodexAdapter {
+  constructor(options) {
+    super(options);
+    this.starts = [];
+  }
+
+  async start(input) {
+    this.starts.push(structuredClone(input));
+    return super.start(input);
   }
 }
 
@@ -232,6 +253,42 @@ describe('Orchestrator dry-run execution flow', () => {
       assert.equal(runner.calls[0].timeoutMs, 1000);
       assert.equal(result.verification.status, 'passed');
       assert.equal(result.verification.reason, 'checks-passed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs implement then review with implementation evidence in review context', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-workflow-'));
+
+    try {
+      const adapter = new CapturingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runTaskWorkflow({
+        taskSpec,
+        commandSpecs: [commandSpec, reviewCommandSpec]
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.deepEqual(result.commands.map((command) => command.command), ['implement', 'review']);
+      assert.deepEqual(adapter.starts[1].contextPack.artifactRefs, [{
+        taskId: 'task-123',
+        artifactId: 'implement-evidence',
+        command: 'implement',
+        verificationStatus: 'passed'
+      }]);
+      assert.equal(result.commands[1].workspace.writable, false);
+      assert.equal(result.commands[1].workspace.sourceWorkspaceId, result.commands[0].workspace.workspaceId);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

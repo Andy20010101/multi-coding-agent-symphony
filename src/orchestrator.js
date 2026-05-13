@@ -35,7 +35,9 @@ export class Orchestrator {
     modelProfile,
     policyRequests = [],
     executionMode = 'dry-run',
-    timeoutMs
+    timeoutMs,
+    artifactRefs = [],
+    sourceWorkspaceId
   }) {
     validateTaskSpec(taskSpec);
     validateCommandSpec(commandSpec);
@@ -77,17 +79,24 @@ export class Orchestrator {
       }
     });
 
-    const workspace = this.workspaceManager.allocate({
-      taskId: taskSpec.id,
-      role: workspaceRoleFor(commandSpec.workspacePolicy),
-      adapterId: route.adapterId
-    });
+    const workspaceRole = workspaceRoleFor(commandSpec.workspacePolicy);
+    const workspace = sourceWorkspaceId && workspaceRole !== 'primary-writer' && typeof this.workspaceManager.cloneFrom === 'function'
+      ? this.workspaceManager.cloneFrom({
+        sourceWorkspaceId,
+        role: workspaceRole,
+        adapterId: route.adapterId
+      })
+      : this.workspaceManager.allocate({
+        taskId: taskSpec.id,
+        role: workspaceRole,
+        adapterId: route.adapterId
+      });
     const priorEvents = typeof this.eventLog.readAll === 'function' ? await this.eventLog.readAll() : [];
     const contextPack = buildContextPack({
       taskSpec,
       commandName: commandSpec.name,
       events: priorEvents,
-      artifactRefs: []
+      artifactRefs
     });
     const handle = await adapter.start({
       commandSpec,
@@ -144,6 +153,67 @@ export class Orchestrator {
       workspace,
       artifactId,
       verification
+    };
+  }
+
+  async runTaskWorkflow({
+    taskSpec,
+    commandSpecs,
+    modelProfile,
+    policyRequests = [],
+    executionMode = 'dry-run',
+    timeoutMs
+  }) {
+    validateTaskSpec(taskSpec);
+
+    if (!Array.isArray(commandSpecs) || commandSpecs.length === 0) {
+      throw new TypeError('commandSpecs must be a non-empty array');
+    }
+
+    const commands = [];
+    const artifactRefs = [];
+    let sourceWorkspaceId;
+
+    for (const commandSpec of commandSpecs) {
+      const result = await this.runCommand({
+        taskSpec,
+        commandSpec,
+        modelProfile,
+        policyRequests,
+        executionMode,
+        timeoutMs,
+        artifactRefs,
+        sourceWorkspaceId
+      });
+
+      commands.push(result);
+      artifactRefs.push({
+        taskId: taskSpec.id,
+        artifactId: result.artifactId,
+        command: result.command,
+        verificationStatus: result.verification.status
+      });
+
+      if (result.workspace.writable === true) {
+        sourceWorkspaceId = result.workspace.workspaceId;
+      }
+
+      if (result.verification.status !== 'passed') {
+        return {
+          taskId: taskSpec.id,
+          status: 'failed',
+          failedCommand: result.command,
+          commands,
+          artifactRefs
+        };
+      }
+    }
+
+    return {
+      taskId: taskSpec.id,
+      status: 'passed',
+      commands,
+      artifactRefs
     };
   }
 

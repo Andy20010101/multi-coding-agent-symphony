@@ -17,3 +17,10 @@ Feature: Orchestrator dry-run execution flow
     Then the run is rejected by the Workspace Manager
     And no second primary writer is created
 
+  Scenario: Run implement then review as a workflow
+    Given implement and review CommandSpecs
+    And a capable runtime adapter
+    When the Orchestrator runs the task workflow
+    Then both commands are executed in order
+    And the review command receives the implementation evidence artifact reference
+    And the review command runs in a non-writable workspace
