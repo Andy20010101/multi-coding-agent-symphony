@@ -5,6 +5,8 @@ const WORKSPACE_POLICIES = new Set(['primary-writer', 'review-only', 'isolated',
 const ADAPTER_NAMES = new Set(['codex', 'claude-code', 'kiro-cli']);
 const PROVIDER_NAMES = new Set(['openai', 'deepseek', 'anthropic']);
 const COST_CLASSES = new Set(['low', 'medium', 'high']);
+const TASK_PRIORITIES = new Set(['low', 'normal', 'high']);
+const CHECK_STATUSES = new Set(['passed', 'failed']);
 
 export class ValidationError extends Error {
   constructor(message, details = {}) {
@@ -20,7 +22,10 @@ export function validateTaskSpec(spec) {
   assertOneOf(spec.source, TASK_SOURCES, 'TaskSpec.source');
   assertNonEmptyString(spec.repository, 'TaskSpec.repository');
   assertNonEmptyString(spec.objective, 'TaskSpec.objective');
+  assertOptionalStringArray(spec.constraints, 'TaskSpec.constraints');
   assertNonEmptyStringArray(spec.acceptance, 'TaskSpec.acceptance');
+  assertOptionalOneOf(spec.priority, TASK_PRIORITIES, 'TaskSpec.priority');
+  assertOptionalIsoTimestamp(spec.createdAt, 'TaskSpec.createdAt');
   assertNonEmptyString(spec.version, 'TaskSpec.version');
 
   return spec;
@@ -74,9 +79,10 @@ export function validateEvidencePackage(evidence) {
   assertOneOf(evidence.command, COMMAND_NAMES, 'EvidencePackage.command');
   assertNonEmptyString(evidence.taskId, 'EvidencePackage.taskId');
   assertNonEmptyString(evidence.workspaceId, 'EvidencePackage.workspaceId');
-  assertStringArray(evidence.diffSummary ?? [], 'EvidencePackage.diffSummary');
+  assertStringArray(evidence.diffSummary, 'EvidencePackage.diffSummary');
   assertStringArray(evidence.changedFiles, 'EvidencePackage.changedFiles');
   assertNonEmptyArray(evidence.checks, 'EvidencePackage.checks');
+  assertChecks(evidence.checks, 'EvidencePackage.checks');
   assertStringArray(evidence.knownRisks, 'EvidencePackage.knownRisks');
   assertNonEmptyString(evidence.agentSummary, 'EvidencePackage.agentSummary');
   assertNonEmptyString(evidence.version, 'EvidencePackage.version');
@@ -120,6 +126,14 @@ function assertOneOf(value, allowed, field) {
   }
 }
 
+function assertOptionalOneOf(value, allowed, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  assertOneOf(value, allowed, field);
+}
+
 function assertSetSubset(value, allowed, field) {
   assertNonEmptyStringArray(value, field);
 
@@ -130,6 +144,35 @@ function assertSetSubset(value, allowed, field) {
         value: item
       });
     }
+  }
+}
+
+function assertOptionalStringArray(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  assertStringArray(value, field);
+
+  for (const [index, item] of value.entries()) {
+    if (item.trim() === '') {
+      throw new ValidationError(`${field}[${index}] must be a non-empty string`, {
+        field,
+        index
+      });
+    }
+  }
+}
+
+function assertOptionalIsoTimestamp(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  assertNonEmptyString(value, field);
+
+  if (Number.isNaN(Date.parse(value))) {
+    throw new ValidationError(`${field} must be a valid timestamp`, { field });
   }
 }
 
@@ -163,5 +206,14 @@ function assertStringArray(value, field) {
 function assertNonEmptyArray(value, field) {
   if (!Array.isArray(value) || value.length === 0) {
     throw new ValidationError(`${field} must be a non-empty array`, { field });
+  }
+}
+
+function assertChecks(checks, field) {
+  for (const [index, check] of checks.entries()) {
+    assertPlainObject(check, `${field}[${index}]`);
+    assertNonEmptyString(check.name, `${field}[${index}].name`);
+    assertOneOf(check.status, CHECK_STATUSES, `${field}[${index}].status`);
+    assertNonEmptyString(check.output, `${field}[${index}].output`);
   }
 }

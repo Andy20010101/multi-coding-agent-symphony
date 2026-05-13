@@ -57,7 +57,7 @@ describe('Complete core contract validation', () => {
       workspaceId: 'workspace-123',
       diffSummary: ['added contracts'],
       changedFiles: ['src/contracts.js'],
-      checks: [{ name: 'pnpm test', status: 'passed' }],
+      checks: [{ name: 'pnpm test', status: 'passed', output: '48 tests passed' }],
       knownRisks: [],
       agentSummary: 'Implemented validators.',
       version: '1'
@@ -68,6 +68,16 @@ describe('Complete core contract validation', () => {
       () => validateEvidencePackage({ ...evidence, checks: [] }),
       ValidationError
     );
+    assert.throws(
+      () => validateEvidencePackage({
+        ...evidence,
+        checks: [{ name: 'pnpm test', status: 'passed' }]
+      }),
+      ValidationError
+    );
+    assert.throws(
+      () => validateEvidencePackage({ ...evidence, diffSummary: undefined }),
+      ValidationError
+    );
   });
 });
-

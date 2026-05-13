@@ -64,8 +64,9 @@ describe('Codex real model smoke script', () => {
       command: 'qa',
       taskId: 'model-task',
       workspaceId: 'model-workspace',
+      diffSummary: [],
       changedFiles: [],
-      checks: [{ name: 'codex-real-smoke', status: 'passed' }],
+      checks: [{ name: 'codex-real-smoke', status: 'passed', output: 'smoke passed' }],
       knownRisks: [],
       agentSummary: 'Read package.json and README.md.',
       version: '1'
@@ -92,8 +93,9 @@ describe('Codex real model smoke script', () => {
       command: 'qa',
       taskId: 'task',
       workspaceId: '/work/repo',
+      diffSummary: [],
       changedFiles: [],
-      checks: [{ name: 'codex-real-smoke', status: 'passed' }],
+      checks: [{ name: 'codex-real-smoke', status: 'passed', output: 'smoke passed' }],
       knownRisks: [],
       agentSummary: 'Read package metadata.',
       version: '1'

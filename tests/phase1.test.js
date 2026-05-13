@@ -45,6 +45,34 @@ describe('Phase 1 foundation modules', () => {
     );
   });
 
+  it('validates optional TaskSpec metadata when present', () => {
+    const taskSpec = {
+      id: 'task-123',
+      source: 'manual',
+      repository: 'Andy20010101/multi-coding-agent-symphony',
+      objective: 'Validate optional task metadata',
+      constraints: ['Do not change public API'],
+      acceptance: ['optional fields are checked'],
+      priority: 'high',
+      createdAt: '2026-05-13T00:00:00.000Z',
+      version: '1'
+    };
+
+    assert.equal(validateTaskSpec(taskSpec), taskSpec);
+    assert.throws(
+      () => validateTaskSpec({ ...taskSpec, constraints: [''] }),
+      ValidationError
+    );
+    assert.throws(
+      () => validateTaskSpec({ ...taskSpec, priority: 'urgent' }),
+      ValidationError
+    );
+    assert.throws(
+      () => validateTaskSpec({ ...taskSpec, createdAt: 'not-a-date' }),
+      ValidationError
+    );
+  });
+
   it('stores and retrieves artifacts by task id and artifact id', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-artifacts-'));
 
@@ -121,4 +149,3 @@ describe('Phase 1 foundation modules', () => {
     });
   });
 });
-

@@ -25,12 +25,12 @@ Implemented and tested:
 - Adapter lifecycle foundation: `src/adapters/base-adapter.js`, `src/adapters/codex-adapter.js`, `src/adapters/claude-code-adapter.js`, `src/adapters/kiro-cli-adapter.js`.
 - Real Codex path: `src/process-runner.js`, `src/evidence-parser.js`, `schemas/evidence-package.schema.json`, `src/codex-real-smoke.js`, `scripts/smoke-codex-real.js`.
 - External eval prototype: `plugins/eval-replay/index.js`.
-- Test baseline: `pnpm test` currently covers 47 tests across 11 suites.
+- Phase A contract reconciliation: `TaskSpec` optional metadata is validated, `EvidencePackage.checks` has explicit `name/status/output`, and the strict JSON schema matches the validator.
+- Test baseline: `pnpm test` currently covers 48 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- `docs/core-contracts.md` describes richer `TaskSpec` fields than `src/contracts.js` currently validates.
 - `WorkspaceManager` allocates paths but does not materialize, clone, clean, or lock working directories.
 - `TaskQueue` is in-memory only and has no lease expiry or recovery.
 - `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
@@ -66,6 +66,8 @@ V1 proves this workflow end to end:
 ## Completion Phases
 
 ### Phase A: Contract Reconciliation
+
+Status: completed for V1 contract alignment.
 
 Goal: make docs, validators, JSON schemas, and tests describe the same objects.
 
@@ -660,15 +662,16 @@ Additional gates:
 
 ## Immediate Next Task
 
-Start with Phase A.
+Start with Phase B.
 
 First red test:
 
-- Add a contract test proving `TaskSpec` optional metadata (`constraints`, `priority`, `createdAt`) is either accepted and preserved or explicitly rejected with documented V1 reasoning.
+- Add a queue persistence test proving queued, running, and completed task records can be reconstructed from disk after a new `TaskQueue` instance is created.
 
 First implementation:
 
-- Reconcile `docs/core-contracts.md` and `src/contracts.js`.
+- Add a state file path option to `TaskQueue`.
+- Persist records after enqueue, lease, complete, and cancel.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 

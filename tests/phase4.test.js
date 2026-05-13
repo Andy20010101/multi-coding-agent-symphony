@@ -129,8 +129,10 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         command: 'implement',
         taskId: 'task-123',
         workspaceId: 'task-123-primary-writer-1',
+        diffSummary: [],
         changedFiles: ['src/example.js'],
         checks: [],
+        knownRisks: [],
         agentSummary: 'I ran the tests and everything passed.',
         version: '1'
       }
@@ -148,16 +150,17 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         command: 'implement',
         taskId: 'task-123',
         workspaceId: 'task-123-primary-writer-1',
+        diffSummary: [],
         changedFiles: ['src/example.js'],
-        checks: [{ name: 'pnpm test', status: 'passed' }],
+        checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }],
+        knownRisks: [],
         agentSummary: 'Implemented behavior.',
         version: '1'
       }
     }), {
       status: 'passed',
       reason: 'checks-passed',
-      checks: [{ name: 'pnpm test', status: 'passed' }]
+      checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }]
     });
   });
 });
-

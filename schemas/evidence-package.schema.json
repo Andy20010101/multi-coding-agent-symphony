@@ -56,7 +56,8 @@
             "enum": ["passed", "failed"]
           },
           "output": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           }
         }
       }

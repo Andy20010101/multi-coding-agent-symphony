@@ -36,8 +36,9 @@ class PassingCodexAdapter extends CodexAdapter {
       command: handle.command,
       taskId: handle.taskId,
       workspaceId: handle.workspaceId,
+      diffSummary: [],
       changedFiles: ['src/orchestrator.js'],
-      checks: [{ name: 'synthetic-check', status: 'passed' }],
+      checks: [{ name: 'synthetic-check', status: 'passed', output: 'synthetic check passed' }],
       knownRisks: [],
       agentSummary: 'Synthetic dry-run evidence.',
       version: '1'
@@ -86,7 +87,9 @@ describe('Orchestrator dry-run execution flow', () => {
 
       assert.equal(result.adapterId, 'codex');
       assert.equal(result.verification.status, 'passed');
-      assert.deepEqual(storedEvidence.checks, [{ name: 'synthetic-check', status: 'passed' }]);
+      assert.deepEqual(storedEvidence.checks, [
+        { name: 'synthetic-check', status: 'passed', output: 'synthetic check passed' }
+      ]);
       assert.deepEqual(events.map((event) => event.type), [
         'command.queued',
         'route.selected',
@@ -190,8 +193,9 @@ describe('Orchestrator dry-run execution flow', () => {
               command: 'implement',
               taskId: 'task-real-codex',
               workspaceId: 'model-supplied-workspace',
+              diffSummary: [],
               changedFiles: ['src/adapters/codex-adapter.js'],
-              checks: [{ name: 'pnpm test', status: 'passed' }],
+              checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }],
               knownRisks: [],
               agentSummary: 'Structured evidence from real Codex execution.',
               version: '1'

@@ -14,13 +14,22 @@ Required fields:
   "source": "github|linear|manual",
   "repository": "owner/repo",
   "objective": "Fix the failing login redirect test",
-  "constraints": ["Do not change public API"],
   "acceptance": ["Tests pass", "No unrelated files changed"],
-  "priority": "low|normal|high",
-  "createdAt": "2026-05-13T00:00:00Z",
   "version": "1"
 }
 ```
+
+V1 optional metadata:
+
+```json
+{
+  "constraints": ["Do not change public API"],
+  "priority": "low|normal|high",
+  "createdAt": "2026-05-13T00:00:00Z"
+}
+```
+
+If optional metadata is present, it is validated. `constraints` must be a string array with non-empty entries, `priority` must be `low`, `normal`, or `high`, and `createdAt` must be a parseable timestamp.
 
 ## CommandSpec
 
@@ -102,12 +111,32 @@ Minimum implementation evidence:
   "workspaceId": "ws-abc",
   "diffSummary": [],
   "changedFiles": [],
-  "checks": [],
+  "checks": [
+    {
+      "name": "pnpm test",
+      "status": "passed",
+      "output": "48 tests passed"
+    }
+  ],
   "knownRisks": [],
   "agentSummary": "",
   "version": "1"
 }
 ```
+
+`CheckEvidence` is the minimum verifier-readable check record inside `checks`.
+
+Required fields:
+
+```json
+{
+  "name": "pnpm test",
+  "status": "passed|failed",
+  "output": "Relevant command output, log summary, or artifact provenance"
+}
+```
+
+`diffSummary` is required and may be empty. `checks` must contain at least one record for a verifier-valid evidence package. Raw or incomplete adapter output may still be stored as an artifact, but it is not a valid completion evidence package.
 
 `agentSummary` is informational only. Verifier decisions must use `checks`, `changedFiles`, logs, and other structured evidence.
 
@@ -178,4 +207,3 @@ Fields:
   "version": "1"
 }
 ```
-

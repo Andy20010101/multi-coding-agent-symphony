@@ -17,4 +17,4 @@ Feature: Complete core contract validation
     When the contracts module validates the evidence
     Then the evidence is accepted
     And evidence without checks is rejected with typed validation errors
-
+    And checks without output are rejected with typed validation errors
