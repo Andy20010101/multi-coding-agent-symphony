@@ -94,6 +94,12 @@ class FakeActiveProcessRunner {
   }
 }
 
+function sandboxArg(prepared) {
+  const index = prepared.args.indexOf('--sandbox');
+
+  return prepared.args[index + 1];
+}
+
 describe('Codex real CLI integration', () => {
   it('starts Codex through an injected process runner', async () => {
     const runner = new FakeProcessRunner({
@@ -209,6 +215,38 @@ describe('Codex real CLI integration', () => {
       [implement, review, qa].every((prepared) => prepared.prompt.includes('Return an EvidencePackage JSON object')),
       true
     );
+  });
+
+  it('renders Codex sandbox flags for read-only smoke, writer smoke, and review policy', async () => {
+    const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
+    const readOnlySmoke = await adapter.prepare({
+      commandSpec: {
+        ...qaCommandSpec,
+        workspacePolicy: 'review-only'
+      },
+      contextPack: { ...contextPack, commandName: 'qa' },
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+    const writerSmoke = await adapter.prepare({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+    const review = await adapter.prepare({
+      commandSpec: reviewCommandSpec,
+      contextPack: { ...contextPack, commandName: 'review' },
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+
+    assert.equal(sandboxArg(readOnlySmoke), 'read-only');
+    assert.equal(sandboxArg(writerSmoke), 'workspace-write');
+    assert.equal(sandboxArg(review), 'read-only');
   });
 
   it('streams parsed Codex JSONL output as adapter events', async () => {

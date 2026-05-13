@@ -55,6 +55,12 @@ Feature: Codex real CLI integration
     And the workspace policy is primary-writer
     And the verifier accepts changed-file smoke evidence
 
+  Scenario: Preserve Codex workspace policies in sandbox flags
+    Given Codex prepares read-only smoke, writer smoke, and review commands
+    When CLI arguments are rendered
+    Then read-only smoke and review use the read-only sandbox
+    And writer smoke uses the workspace-write sandbox
+
   Scenario: Resolve Codex model profiles before CLI execution
     Given a Codex adapter configured with project model profile mappings
     When the adapter prepares a real CLI command

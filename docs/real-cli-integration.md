@@ -22,6 +22,7 @@ Implemented:
 - Prompts are rendered per command role for `plan`, `implement`, `review`, `fix-ci`, and `qa` while retaining the structured EvidencePackage requirement.
 - Raw stdout JSONL, stderr, parsed JSONL events, and final-message content are written as linked adapter artifacts when the orchestrator runs Codex.
 - Structured Codex error events are normalized to `permission-denied`, `model-off-task`, or `adapter-crashed` failure categories.
+- Codex sandbox flags preserve workspace policy: read-only smoke and review commands use `read-only`; writer smoke uses `workspace-write`.
 - `Orchestrator.runCommand({ executionMode: "real" })` passes real execution mode and timeout settings through to the adapter.
 
 Local binary smoke check:
