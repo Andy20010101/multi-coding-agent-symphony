@@ -76,13 +76,24 @@ export function runEvalReplay({
   candidate,
   sample,
   resourceProfile,
+  baselineResourceProfile,
+  candidateResourceProfile,
+  affectedFiles = [],
+  affectedContracts = [],
   coreRouterConfig
 }) {
   assertNonEmptyString(reason, 'reason');
   assertNonEmptyString(baseline, 'baseline');
   assertNonEmptyString(candidate, 'candidate');
   validateSample(sample);
-  validateResourceProfile(resourceProfile);
+  assertStringArray(affectedFiles, 'affectedFiles');
+  assertStringArray(affectedContracts, 'affectedContracts');
+
+  const resolvedResourceProfile = resolveResourceProfile({
+    resourceProfile,
+    baselineResourceProfile,
+    candidateResourceProfile
+  });
 
   const baselineResults = collectVariant(sample, 'baseline');
   const candidateResults = collectVariant(sample, 'candidate');
@@ -99,8 +110,16 @@ export function runEvalReplay({
     taskSample: sample.id,
     scores,
     failureDelta: compareFailures(baselineResults, candidateResults),
-    recommendations: buildRecommendations({ scores, candidate }),
-    resourceProfile: structuredClone(resourceProfile),
+    recommendations: buildRecommendations({
+      scores,
+      candidate,
+      affectedFiles,
+      affectedContracts
+    }),
+    resourceProfile: structuredClone(resolvedResourceProfile.resourceProfile),
+    ...(resolvedResourceProfile.resourceQualification
+      ? { resourceQualification: resolvedResourceProfile.resourceQualification }
+      : {}),
     mutatedCoreConfig: didMutateCoreConfig(coreRouterConfig),
     version: '1'
   };
@@ -216,18 +235,70 @@ function compareFailures(baselineResults, candidateResults) {
   return delta;
 }
 
-function buildRecommendations({ scores, candidate }) {
+function buildRecommendations({ scores, candidate, affectedFiles, affectedContracts }) {
   if (scores.candidate.verifiedSuccessRate > scores.baseline.verifiedSuccessRate) {
-    return [
-      {
-        type: 'review-routing',
-        reason: 'candidate-verified-success-rate-improved',
-        candidate
-      }
-    ];
+    const recommendation = {
+      type: 'review-routing',
+      reason: 'candidate-verified-success-rate-improved',
+      candidate
+    };
+    const tradeoffs = [];
+
+    if (scores.candidate.meanCostUsd > scores.baseline.meanCostUsd) {
+      tradeoffs.push('higher-cost');
+    }
+
+    if (tradeoffs.length > 0) {
+      recommendation.tradeoffs = tradeoffs;
+    }
+
+    if (affectedFiles.length > 0) {
+      recommendation.affectedFiles = structuredClone(affectedFiles);
+    }
+
+    if (affectedContracts.length > 0) {
+      recommendation.affectedContracts = structuredClone(affectedContracts);
+    }
+
+    return [recommendation];
   }
 
   return [];
+}
+
+function resolveResourceProfile({ resourceProfile, baselineResourceProfile, candidateResourceProfile }) {
+  if (resourceProfile !== undefined) {
+    validateResourceProfile(resourceProfile);
+
+    return {
+      resourceProfile
+    };
+  }
+
+  validateResourceProfile(baselineResourceProfile);
+  validateResourceProfile(candidateResourceProfile);
+
+  return {
+    resourceProfile: {
+      baseline: baselineResourceProfile,
+      candidate: candidateResourceProfile
+    },
+    resourceQualification: compareResourceProfiles({
+      baselineResourceProfile,
+      candidateResourceProfile
+    })
+  };
+}
+
+function compareResourceProfiles({ baselineResourceProfile, candidateResourceProfile }) {
+  const fields = ['cpu', 'memoryMb', 'timeoutSeconds', 'concurrency', 'network', 'version'];
+  const mismatchedFields = fields.filter((field) => baselineResourceProfile[field] !== candidateResourceProfile[field]);
+
+  return {
+    comparable: mismatchedFields.length === 0,
+    reasons: mismatchedFields.length > 0 ? ['resource-profile-mismatch'] : [],
+    mismatchedFields
+  };
 }
 
 function didMutateCoreConfig(coreRouterConfig) {
@@ -285,5 +356,17 @@ function assertNonEmptyString(value, field) {
 function assertNumber(value, field) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new TypeError(`${field} must be a finite number`);
+  }
+}
+
+function assertStringArray(value, field) {
+  if (!Array.isArray(value)) {
+    throw new TypeError(`${field} must be a string array`);
+  }
+
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== 'string' || item.trim() === '') {
+      throw new TypeError(`${field}[${index}] must be a non-empty string`);
+    }
   }
 }

@@ -57,6 +57,8 @@ Required inputs:
 
 `buildReplaySampleFromSession` ignores non-evidence run records and normalizes evidence fields into `variant`, `verified`, `failureCategory`, `command`, `taskClass`, `costUsd`, `latencySeconds`, and `evidenceArtifactId`.
 
+`runEvalReplay` accepts either one shared `resourceProfile` or separate `baselineResourceProfile` and `candidateResourceProfile` objects. Separate profiles are preserved in the report and compared field by field before the result is treated as directly comparable.
+
 ## Outputs
 
 The plugin writes an eval report:
@@ -83,8 +85,22 @@ The plugin writes an eval report:
     }
   },
   "failureDelta": {},
-  "recommendations": [],
+  "recommendations": [
+    {
+      "type": "review-routing",
+      "reason": "candidate-verified-success-rate-improved",
+      "candidate": "gpt-codex-default.v2",
+      "tradeoffs": ["higher-cost"],
+      "affectedFiles": ["src/router-scheduler.js"],
+      "affectedContracts": ["ModelProfile"]
+    }
+  ],
   "resourceProfile": {},
+  "resourceQualification": {
+    "comparable": false,
+    "reasons": ["resource-profile-mismatch"],
+    "mismatchedFields": ["timeoutSeconds", "network"]
+  },
   "mutatedCoreConfig": false,
   "version": "1"
 }
@@ -123,6 +139,8 @@ Resource configuration must be recorded as a first-class variable:
 - Dependency install policy.
 
 A model should not be compared against another model if resource conditions differ without being reported.
+
+When baseline and candidate profiles differ, the report includes `resourceQualification.comparable = false`, a machine-readable reason, and the exact mismatched fields. A candidate can still be recommended for review, but the recommendation is qualified by cost/resource tradeoffs rather than applied automatically.
 
 ## Non-Goals
 

@@ -18,6 +18,18 @@ Feature: Phase 5 external eval replay plugin
     Then it reports verified success rate for both variants
     And it reports cost and latency for both variants
 
+  Scenario: Report success and cost tradeoffs
+    Given the candidate has higher verified success and higher cost
+    When the Eval Replay plugin creates recommendations
+    Then the recommendation includes the higher-cost tradeoff
+    And the recommendation names affected files and contracts
+
+  Scenario: Qualify resource mismatches
+    Given baseline and candidate runs used different resource profiles
+    When the Eval Replay plugin scores the sample
+    Then the comparison is marked qualified
+    And the mismatched resource fields are reported
+
   Scenario: Preserve resource profile in the eval report
     Given a resource profile with CPU, memory, timeout, concurrency, and network
     When the Eval Replay plugin creates a report

@@ -59,13 +59,14 @@ Implemented and tested:
 - Phase H workspace boundary slice: verifier rejects changed files that resolve outside the provided workspace manifest path, and the orchestrator passes the allocated workspace into verification.
 - Phase I eval sample-builder slice: `buildReplaySampleFromSession` builds replay samples from `artifact.written` session events and evidence artifacts without adapter state.
 - Phase I eval report artifact slice: `writeEvalReportArtifact` stores eval reports in ArtifactStore and returns the task/artifact reference without mutating routing config.
-- Test baseline: `pnpm test` currently covers 98 tests across 16 suites.
+- Phase I eval resource/tradeoff slice: eval reports qualify baseline/candidate resource mismatches and recommendations can include higher-cost tradeoffs plus affected files/contracts.
+- Test baseline: `pnpm test` currently covers 100 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Eval plugin scores synthetic samples but is not wired into release gates, model profile decisions, or artifact sampling.
+- Eval plugin scores stored artifact samples but is not wired into release gates or model profile decisions.
 - No tracker intake is implemented for GitHub or Linear.
 - No user-facing CLI entrypoint exists for orchestrator runs.
 
@@ -409,7 +410,7 @@ Acceptance:
 
 ### Phase I: Eval/Replay Productionization
 
-Status: in progress. Session-log sample building from stored evidence artifacts and eval report artifact writing are complete; resource comparison qualification, release-gate script, richer recommendations, and fixtures remain.
+Status: in progress. Session-log sample building from stored evidence artifacts, eval report artifact writing, resource comparison qualification, and richer recommendation metadata are complete; release-gate script, resource profile capture from real runs, task-class comparison summaries, and fixtures remain.
 
 Goal: make external eval useful for model updates, adapter changes, and harness refactors.
 
@@ -721,17 +722,17 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase D with timeout escalation.
+Continue Phase I with the eval release-gate command.
 
 First red test:
 
-- Add a process runner test proving timeout first sends `SIGTERM`, then escalates to `SIGKILL` when the child ignores termination.
+- Add an eval replay CLI/script test proving the gate reads stored artifacts, writes an eval report artifact, and exits without mutating router config.
 
 First implementation:
 
-- Add configurable timeout escalation delay to `NodeProcessRunner` and preserve captured output after forced kill.
-- Keep the smallest compatible change.
-- Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
+- Add a small `scripts/eval-replay.js` entrypoint around the external plugin.
+- Keep config mutation outside the gate; emit report artifact references and recommendation summaries.
+- Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
 

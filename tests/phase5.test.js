@@ -224,6 +224,114 @@ describe('Phase 5 external eval replay plugin', () => {
     });
   });
 
+  it('reports success and cost tradeoffs with affected files and contracts', () => {
+    const report = runEvalReplay({
+      reason: 'model-upgrade',
+      baseline: 'gpt-codex-default.v1',
+      candidate: 'gpt-codex-default.v2',
+      sample: {
+        id: 'sample-task-1',
+        resultsByTask: {
+          'task-1': [
+            {
+              taskId: 'task-1',
+              variant: 'baseline',
+              verified: false,
+              costUsd: 1,
+              latencySeconds: 20,
+              failureCategory: 'test-failed'
+            },
+            {
+              taskId: 'task-1',
+              variant: 'candidate',
+              verified: true,
+              costUsd: 2,
+              latencySeconds: 20,
+              failureCategory: null
+            }
+          ]
+        }
+      },
+      resourceProfile: {
+        cpu: '4',
+        memoryMb: 8192,
+        timeoutSeconds: 3600,
+        concurrency: 1,
+        network: 'restricted',
+        version: '1'
+      },
+      affectedFiles: ['src/router-scheduler.js'],
+      affectedContracts: ['ModelProfile']
+    });
+
+    assert.deepEqual(report.recommendations, [
+      {
+        type: 'review-routing',
+        reason: 'candidate-verified-success-rate-improved',
+        candidate: 'gpt-codex-default.v2',
+        tradeoffs: ['higher-cost'],
+        affectedFiles: ['src/router-scheduler.js'],
+        affectedContracts: ['ModelProfile']
+      }
+    ]);
+  });
+
+  it('qualifies comparisons when resource profiles differ', () => {
+    const baselineResourceProfile = {
+      cpu: '4',
+      memoryMb: 8192,
+      timeoutSeconds: 3600,
+      concurrency: 1,
+      network: 'restricted',
+      version: '1'
+    };
+    const candidateResourceProfile = {
+      ...baselineResourceProfile,
+      timeoutSeconds: 1800,
+      network: 'enabled'
+    };
+    const report = runEvalReplay({
+      reason: 'model-upgrade',
+      baseline: 'gpt-codex-default.v1',
+      candidate: 'gpt-codex-default.v2',
+      sample: {
+        id: 'sample-task-1',
+        resultsByTask: {
+          'task-1': [
+            {
+              taskId: 'task-1',
+              variant: 'baseline',
+              verified: true,
+              costUsd: 1,
+              latencySeconds: 20,
+              failureCategory: null
+            },
+            {
+              taskId: 'task-1',
+              variant: 'candidate',
+              verified: true,
+              costUsd: 1,
+              latencySeconds: 20,
+              failureCategory: null
+            }
+          ]
+        }
+      },
+      baselineResourceProfile,
+      candidateResourceProfile
+    });
+
+    assert.deepEqual(report.resourceProfile, {
+      baseline: baselineResourceProfile,
+      candidate: candidateResourceProfile
+    });
+    assert.deepEqual(report.resourceQualification, {
+      comparable: false,
+      reasons: ['resource-profile-mismatch'],
+      mismatchedFields: ['timeoutSeconds', 'network']
+    });
+  });
+
   it('writes eval reports as artifacts without mutating the report', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-eval-report-'));
 
