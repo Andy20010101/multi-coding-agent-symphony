@@ -1,5 +1,6 @@
 import { validateCommandSpec, validateTaskSpec } from './contracts.js';
 import { buildContextPack } from './context-builder.js';
+import { classifyFailure } from './failure-taxonomy.js';
 import { verifyEvidence } from './verifier.js';
 
 export class PolicyDeniedError extends Error {
@@ -199,12 +200,28 @@ export class Orchestrator {
       }
 
       if (result.verification.status !== 'passed') {
+        const failure = classifyFailure(result.verification.reason);
+        const retryPlan = this.scheduler.planRetry({ failure });
+
+        await this.#appendEvent({
+          type: 'failure.classified',
+          actor: 'orchestrator',
+          payload: {
+            taskId: taskSpec.id,
+            command: result.command,
+            failure,
+            retryPlan
+          }
+        });
+
         return {
           taskId: taskSpec.id,
           status: 'failed',
           failedCommand: result.command,
           commands,
-          artifactRefs
+          artifactRefs,
+          failure,
+          retryPlan
         };
       }
     }

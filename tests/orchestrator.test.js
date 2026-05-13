@@ -337,8 +337,61 @@ describe('Orchestrator dry-run execution flow', () => {
       assert.equal(result.failedCommand, 'implement');
       assert.deepEqual(result.commands.map((command) => command.command), ['implement']);
       assert.equal(adapter.starts.length, 1);
-      assert.equal(events.at(-1).type, 'command.failed');
-      assert.equal(events.at(-1).payload.verificationStatus, 'failed');
+      const failedEvent = events.find((event) => event.type === 'command.failed');
+      assert.equal(failedEvent.payload.verificationStatus, 'failed');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('plans retry from verifier failure taxonomy metadata', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-workflow-retry-'));
+
+    try {
+      const adapter = new FailingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const eventLog = new SessionEventLog(join(root, 'events'), 'session-123');
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog,
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runTaskWorkflow({
+        taskSpec,
+        commandSpecs: [commandSpec, reviewCommandSpec]
+      });
+      const events = await eventLog.readAll();
+
+      assert.deepEqual(result.failure, {
+        category: 'verification-insufficient',
+        retryable: true,
+        owner: 'verifier',
+        recommendedNextCommand: 'qa'
+      });
+      assert.deepEqual(result.retryPlan, {
+        retry: true,
+        nextCommand: 'qa',
+        owner: 'verifier'
+      });
+      assert.deepEqual(events.at(-1), {
+        id: 'evt-8',
+        type: 'failure.classified',
+        timestamp: events.at(-1).timestamp,
+        actor: 'orchestrator',
+        payload: {
+          taskId: 'task-123',
+          command: 'implement',
+          failure: result.failure,
+          retryPlan: result.retryPlan
+        },
+        version: '1',
+        sessionId: 'session-123'
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

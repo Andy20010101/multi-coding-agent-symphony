@@ -31,3 +31,10 @@ Feature: Orchestrator dry-run execution flow
     When the Orchestrator runs the task workflow
     Then the workflow stops after implementation
     And the failure is recorded as command.failed
+
+  Scenario: Plan retry from workflow failure
+    Given implement and review CommandSpecs
+    And an implementation command returns insufficient evidence
+    When the Orchestrator classifies the workflow failure
+    Then it returns the retry plan recommended by the failure taxonomy
+    And it records a failure.classified event

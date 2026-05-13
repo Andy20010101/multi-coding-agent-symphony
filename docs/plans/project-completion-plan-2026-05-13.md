@@ -34,7 +34,8 @@ Implemented and tested:
 - Phase B workspace clone slice: review workspaces can clone primary-writer content while retaining non-writable ownership metadata.
 - Phase C workflow slice: `Orchestrator.runTaskWorkflow` can execute `implement -> review`, pass implementation evidence refs into review context, and clone review workspace metadata.
 - Phase C verifier gate slice: workflow stops on verifier failure and records `command.failed`.
-- Test baseline: `pnpm test` currently covers 57 tests across 11 suites.
+- Phase C retry planning slice: failed workflows classify verifier failures and return the scheduler retry plan.
+- Test baseline: `pnpm test` currently covers 58 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -151,7 +152,7 @@ Acceptance:
 
 ### Phase C: Orchestrator Command Loop
 
-Status: in progress. The minimal `implement -> review` workflow path and verifier-gated failure stop are complete; retry planning, context artifact hydration, and queue recovery integration remain.
+Status: in progress. The minimal `implement -> review` workflow path, verifier-gated failure stop, and retry planning are complete; command run records, context artifact hydration, and queue recovery integration remain.
 
 Goal: make `Orchestrator` run command sequences from queue state, not just one direct `runCommand` call.
 
@@ -180,6 +181,7 @@ BDD/TDD:
 - Add scenario: implement then review runs as one workflow and review receives implementation artifact refs.
 - Add scenario: verifier failure stops workflow and records `command.failed`.
 - Add scenario: implement failure classified as retryable schedules QA or retry command.
+- Add scenario: failed workflow returns retry plan from failure taxonomy.
 - Add scenario: review receives implementation evidence through artifact refs.
 - Add scenario: verifier failure prevents task completion.
 
@@ -678,15 +680,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase C with retry planning from failure taxonomy.
+Continue Phase C with command run records as artifacts.
 
 First red test:
 
-- Add a workflow test proving retryable adapter or verification failure returns the scheduler's recommended next command.
+- Add a workflow test proving each command stores a command run record artifact separate from evidence.
 
 First implementation:
 
-- Wire `FailureTaxonomy` and `RouterScheduler.planRetry` into failed workflow results without rerunning automatically yet.
+- Add the smallest command run record artifact containing command, adapter, workspace id, evidence artifact id, verification status, and artifact refs used for context.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 
