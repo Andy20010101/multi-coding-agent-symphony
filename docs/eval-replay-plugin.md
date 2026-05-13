@@ -10,6 +10,7 @@ Implemented entrypoints:
 - `buildReplaySampleFromSession({ artifactStore, eventLog, taskIds })` reads `artifact.written` session events and normalizes evidence artifacts into replay results without adapter state.
 - `runEvalReplay(...)` scores baseline and candidate variants and emits recommendations without mutating core config.
 - `writeEvalReportArtifact({ artifactStore, report, taskId, artifactId })` writes reports back to ArtifactStore and returns the artifact reference.
+- `pnpm eval:replay -- ...` runs the external gate command against stored artifacts and writes a report artifact.
 
 ## Purpose
 
@@ -107,6 +108,20 @@ The plugin writes an eval report:
 ```
 
 Reports may be stored under a synthetic task such as `eval-reports`, keeping replay output outside core routing configuration.
+
+Example gate command:
+
+```bash
+pnpm eval:replay -- \
+  --artifacts ./artifacts \
+  --events ./events \
+  --session session-1 \
+  --tasks task-1,task-2 \
+  --reason model-upgrade \
+  --baseline gpt-codex-default.v1 \
+  --candidate gpt-codex-default.v2 \
+  --resource-profile-json '{"cpu":"4","memoryMb":8192,"timeoutSeconds":3600,"concurrency":1,"network":"restricted","version":"1"}'
+```
 
 ## Scoring Rules
 

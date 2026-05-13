@@ -41,6 +41,12 @@ Feature: Phase 5 external eval replay plugin
     Then the Artifact Store contains the report
     And the written reference includes task id and artifact id
 
+  Scenario: Run eval replay release gate from stored artifacts
+    Given the Artifact Store and Session Event Log contain baseline and candidate evidence
+    When the eval replay gate command runs for the task sample
+    Then it writes an eval report artifact
+    And it returns the report artifact reference without changing router config
+
   Scenario: Recommend changes without mutating core configuration
     Given the candidate has a higher verified success rate
     When the Eval Replay plugin creates recommendations

@@ -14,7 +14,8 @@
     "smoke:claude:help": "claude --help",
     "smoke:claude:real": "node scripts/smoke-claude-real.js",
     "smoke:kiro:help": "kiro-cli --help",
-    "smoke:kiro:real": "node scripts/smoke-kiro-real.js"
+    "smoke:kiro:real": "node scripts/smoke-kiro-real.js",
+    "eval:replay": "node scripts/eval-replay.js"
   },
   "engines": {
     "node": ">=20"

@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -367,6 +368,99 @@ describe('Phase 5 external eval replay plugin', () => {
         artifactId: 'eval-model-upgrade-sample-task-1'
       });
       assert.deepEqual(await store.readArtifact('eval-reports', 'eval-model-upgrade-sample-task-1'), report);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the eval replay gate command from stored artifacts and writes a report ref', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-eval-gate-'));
+
+    try {
+      const artifactDirectory = join(root, 'artifacts');
+      const eventLogDirectory = join(root, 'events');
+      const store = new ArtifactStore(artifactDirectory);
+      const eventLog = new SessionEventLog(eventLogDirectory, 'session-1');
+
+      await store.writeArtifact('task-1', 'baseline-evidence', {
+        command: 'implement',
+        taskId: 'task-1',
+        workspaceId: 'workspace-baseline',
+        variant: 'baseline',
+        taskClass: 'model-upgrade',
+        diffSummary: [],
+        changedFiles: ['src/router-scheduler.js'],
+        checks: [{ name: 'pnpm test', status: 'failed', artifactId: 'baseline-test-log' }],
+        knownRisks: [],
+        verified: false,
+        costUsd: 1,
+        latencySeconds: 20,
+        agentSummary: 'Baseline failed.',
+        version: '1'
+      });
+      await store.writeArtifact('task-1', 'candidate-evidence', {
+        command: 'implement',
+        taskId: 'task-1',
+        workspaceId: 'workspace-candidate',
+        variant: 'candidate',
+        taskClass: 'model-upgrade',
+        diffSummary: [],
+        changedFiles: ['src/router-scheduler.js'],
+        checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'candidate-test-log' }],
+        knownRisks: [],
+        verified: true,
+        costUsd: 2,
+        latencySeconds: 18,
+        agentSummary: 'Candidate passed.',
+        version: '1'
+      });
+      await appendArtifactEvent(eventLog, 'event-1', 'task-1', 'baseline-evidence');
+      await appendArtifactEvent(eventLog, 'event-2', 'task-1', 'candidate-evidence');
+
+      const result = spawnSync(process.execPath, [
+        'scripts/eval-replay.js',
+        '--artifacts', artifactDirectory,
+        '--events', eventLogDirectory,
+        '--session', 'session-1',
+        '--tasks', 'task-1',
+        '--reason', 'model-upgrade',
+        '--baseline', 'gpt-codex-default.v1',
+        '--candidate', 'gpt-codex-default.v2',
+        '--resource-profile-json', JSON.stringify({
+          cpu: '4',
+          memoryMb: 8192,
+          timeoutSeconds: 3600,
+          concurrency: 1,
+          network: 'restricted',
+          version: '1'
+        }),
+        '--affected-files', 'src/router-scheduler.js',
+        '--affected-contracts', 'ModelProfile'
+      ], {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const output = JSON.parse(result.stdout);
+      assert.equal(output.status, 'passed');
+      assert.deepEqual(output.reportRef, {
+        taskId: 'eval-reports',
+        artifactId: 'eval-model-upgrade-sample-task-1'
+      });
+      assert.equal(output.report.mutatedCoreConfig, false);
+      assert.deepEqual(output.report.recommendations, [
+        {
+          type: 'review-routing',
+          reason: 'candidate-verified-success-rate-improved',
+          candidate: 'gpt-codex-default.v2',
+          tradeoffs: ['higher-cost'],
+          affectedFiles: ['src/router-scheduler.js'],
+          affectedContracts: ['ModelProfile']
+        }
+      ]);
+      assert.deepEqual(await store.readArtifact('eval-reports', 'eval-model-upgrade-sample-task-1'), output.report);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
