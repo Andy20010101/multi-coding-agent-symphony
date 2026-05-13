@@ -47,3 +47,9 @@ Feature: Codex real CLI integration
     When the adapter prepares a real CLI command
     Then profile ids can map to concrete Codex CLI model names
     And profile ids can defer model selection to the Codex CLI config
+
+  Scenario: Render command-specific Codex prompts
+    Given Codex prepares implement, review, and qa commands
+    When the prompts are rendered
+    Then each prompt contains command-specific role guidance
+    And each prompt still requests verifier-readable evidence

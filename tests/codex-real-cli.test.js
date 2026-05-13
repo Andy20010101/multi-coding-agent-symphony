@@ -17,6 +17,24 @@ const commandSpec = {
   evidenceSchema: 'implementation-evidence.v1'
 };
 
+const reviewCommandSpec = {
+  name: 'review',
+  version: '1',
+  allowedTools: ['read', 'shell'],
+  workspacePolicy: 'review-only',
+  doneCriteria: ['findings-written', 'evidence-written'],
+  evidenceSchema: 'review-evidence.v1'
+};
+
+const qaCommandSpec = {
+  name: 'qa',
+  version: '1',
+  allowedTools: ['read', 'shell', 'test'],
+  workspacePolicy: 'isolated',
+  doneCriteria: ['checks-run', 'evidence-written'],
+  evidenceSchema: 'qa-evidence.v1'
+};
+
 const contextPack = {
   version: '1',
   commandName: 'implement',
@@ -156,6 +174,41 @@ describe('Codex real CLI integration', () => {
     assert.equal(configDefault.resolvedModel, CODEX_CONFIG_DEFAULT_MODEL_PROFILE);
     assert.equal(configDefault.args.includes('--model'), false);
     assert.equal((await adapter.probe()).modelProfiles.includes('codex-writer-explicit'), true);
+  });
+
+  it('renders command-specific Codex prompts while preserving evidence instructions', async () => {
+    const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
+
+    const implement = await adapter.prepare({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+    const review = await adapter.prepare({
+      commandSpec: reviewCommandSpec,
+      contextPack: { ...contextPack, commandName: 'review' },
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+    const qa = await adapter.prepare({
+      commandSpec: qaCommandSpec,
+      contextPack: { ...contextPack, commandName: 'qa' },
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+
+    assert.match(implement.prompt, /Role: primary writer/);
+    assert.match(review.prompt, /Role: reviewer/);
+    assert.match(review.prompt, /Do not edit files/);
+    assert.match(qa.prompt, /Role: QA verifier/);
+    assert.equal(
+      [implement, review, qa].every((prepared) => prepared.prompt.includes('Return an EvidencePackage JSON object')),
+      true
+    );
   });
 
   it('streams parsed Codex JSONL output as adapter events', async () => {

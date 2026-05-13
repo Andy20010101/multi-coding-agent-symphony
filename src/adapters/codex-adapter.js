@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { BaseAdapter, buildRunPrompt, validatePrepareInput } from './base-adapter.js';
+import { BaseAdapter, validatePrepareInput } from './base-adapter.js';
 import { extractEvidencePackageFromSources } from '../evidence-parser.js';
 import { NodeProcessRunner } from '../process-runner.js';
 
@@ -75,7 +75,7 @@ export class CodexAdapter extends BaseAdapter {
       executable: this.executable,
       args,
       cwd: input.workspace,
-      prompt: buildRunPrompt(input),
+      prompt: buildCodexRunPrompt(input),
       environment: {},
       resolvedModelProfile: input.modelProfile,
       resolvedModel,
@@ -334,6 +334,50 @@ function sandboxFor(workspacePolicy) {
 
   return 'read-only';
 }
+
+function buildCodexRunPrompt({ commandSpec, contextPack }) {
+  const roleGuidance = CODEX_COMMAND_PROMPTS[commandSpec.name] ?? CODEX_COMMAND_PROMPTS.plan;
+
+  return [
+    `Command: ${commandSpec.name}`,
+    ...roleGuidance,
+    `Task: ${contextPack.task.id}`,
+    `Repository: ${contextPack.task.repository}`,
+    `Objective: ${contextPack.task.objective}`,
+    `Acceptance: ${contextPack.task.acceptance.join('; ')}`,
+    `Evidence schema: ${commandSpec.evidenceSchema}`,
+    `Done criteria: ${commandSpec.doneCriteria.join('; ')}`,
+    'Return an EvidencePackage JSON object with command, taskId, workspaceId, changedFiles, checks, knownRisks, agentSummary, and version.',
+    'Set checks to passed only for commands you actually ran or evidence you actually inspected.'
+  ].join('\n');
+}
+
+const CODEX_COMMAND_PROMPTS = Object.freeze({
+  plan: [
+    'Role: planner',
+    'Produce an implementation plan, risk list, and verification strategy without modifying files.'
+  ],
+  implement: [
+    'Role: primary writer',
+    'Modify only the assigned workspace files needed to satisfy acceptance.',
+    'Run focused checks before returning evidence.'
+  ],
+  review: [
+    'Role: reviewer',
+    'Do not edit files.',
+    'Inspect the implementation evidence and report findings or an explicit no-finding rationale.'
+  ],
+  'fix-ci': [
+    'Role: CI fixer',
+    'Make the smallest targeted change needed to address the failing check.',
+    'Include the failing and passing check evidence.'
+  ],
+  qa: [
+    'Role: QA verifier',
+    'Verify behavior through tests, static checks, or artifact inspection.',
+    'Do not mark completion passed without concrete check output.'
+  ]
+});
 
 function extractStructuredEvidence(stored) {
   return extractEvidencePackageFromSources({

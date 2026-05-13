@@ -62,6 +62,7 @@ Codex:
 - Real execution is opt-in with `executionMode: "real"` and uses `NodeProcessRunner` to spawn `codex exec`; structured final output is parsed as `EvidencePackage`, while raw-only output remains verification-insufficient.
 - `codex-config-default` is a special model profile that defers model selection to the local Codex CLI config instead of passing `--model`.
 - Codex model profile IDs are resolved adapter-side before CLI execution: `gpt-codex-default` defaults to local Codex config, constructor-provided `modelProfileMappings` can map project profile IDs to concrete Codex `--model` names, and unmapped IDs remain direct CLI model names for smoke overrides.
+- Codex prompts are rendered per command role, so `implement`, `review`, `qa`, `plan`, and `fix-ci` receive different instructions while preserving the same verifier-readable EvidencePackage requirement.
 
 Claude Code:
 
