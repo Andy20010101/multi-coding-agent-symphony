@@ -71,6 +71,8 @@ Supported request shapes:
 
 Network policy lives in execution policy config. `network: "disabled"` denies all network requests, `network: "enabled"` allows all non-denied hosts, and `network: "restricted"` allows only `allowedNetworkHosts`; `deniedNetworkHosts` takes precedence.
 
+Operational release checks are listed in [Security Checklist](security-checklist.md).
+
 ## AdapterMapping
 
 `AdapterMapping` translates a command into a concrete CLI run.

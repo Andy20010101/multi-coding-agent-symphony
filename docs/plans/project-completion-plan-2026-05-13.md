@@ -80,13 +80,13 @@ Implemented and tested:
 - Phase M shell command policy slice: PolicyEngine supports denied exact commands, denied command patterns, allowed exact commands, and allowed command patterns with deny precedence and default-deny fallback.
 - Phase M network policy slice: PolicyEngine supports `network` policy requests with disabled, enabled, and restricted host modes; Orchestrator blocks denied network access before adapter start and records allowed decisions.
 - Phase M adapter permission mapping slice: Codex, Claude Code, and Kiro CLI derive adapter-local restrictions from denied path, shell, and network decisions without mutating `CommandSpec`.
+- Phase M security checklist docs slice: `docs/security-checklist.md` defines redaction, policy gate, adapter permission, and release verification checks and is linked from core contracts.
 - Test baseline: `pnpm test` currently covers 133 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Phase M still needs security checklist docs.
 - Phase N release gate docs remain.
 
 ## Target V1
@@ -570,7 +570,7 @@ Acceptance:
 
 ### Phase M: Security, Redaction, and Policy Enforcement
 
-Status: in progress. Artifact/session event redaction, default denied path policy, shell command allow/deny pattern policy, network policy, and adapter permission mapping are complete.
+Status: complete. Artifact/session event redaction, default denied path policy, shell command allow/deny pattern policy, network policy, adapter permission mapping, and security checklist docs are complete.
 
 Goal: prevent adapters and artifacts from leaking secrets or bypassing policy.
 
@@ -591,6 +591,7 @@ Primary files:
 - `src/adapters/*.js`
 - `docs/adapter-contract.md`
 - `docs/bdd-tdd-workflow.md`
+- `docs/security-checklist.md`
 - New `tests/security-policy.test.js`
 
 BDD/TDD:
@@ -749,15 +750,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase M with security checklist docs.
+Continue Phase N with documentation and release readiness.
 
 First red test:
 
-- Add a security checklist covering secret redaction, policy gate inputs, adapter permission mapping, and release verification commands.
+- Add release checklist and troubleshooting docs that reference existing smoke/test gates without invoking real models by default.
 
 First implementation:
 
-- Link the checklist from core docs and the completion plan, then run docs-safe verification plus the normal static/test gates.
+- Link the release docs from README and the completion plan, then run docs-safe verification plus the normal static/test gates.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance
