@@ -83,12 +83,13 @@ Implemented and tested:
 - Phase M adapter permission mapping slice: Codex, Claude Code, and Kiro CLI derive adapter-local restrictions from denied path, shell, and network decisions without mutating `CommandSpec`.
 - Phase M security checklist docs slice: `docs/security-checklist.md` defines redaction, policy gate, adapter permission, and release verification checks and is linked from core contracts.
 - Phase N release docs slice: README now lists current status, actual gates, and release/troubleshooting/security docs; `docs/release-checklist.md` and `docs/troubleshooting.md` document safe release and operator recovery paths.
+- Completion audit slice: `docs/plans/completion-audit-2026-05-14.md` maps V1 requirements to concrete files, tests, docs, scripts, command output, and private-repo evidence.
 - Test baseline: `pnpm test` currently covers 134 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- No known V1 gaps remain; completion audit pending.
+- No known V1 gaps remain.
 
 ## Target V1
 
@@ -753,16 +754,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Run completion audit against the V1 plan.
+No immediate V1 implementation task remains.
 
 First red test:
 
-- Build a prompt-to-artifact checklist covering every explicit project requirement, named file, command, test, gate, and deliverable.
+- None. Completion audit is complete.
 
 First implementation:
 
-- Inspect real files, git status, test output, docs, and pushed commits before deciding whether the goal is complete.
-- Run `pnpm test`, `pnpm check`, and `git diff --check`.
+- Preserve the release checklist and run it before future tags or model/adapter upgrades.
 
 ## Handoff Guidance
 
