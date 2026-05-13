@@ -77,13 +77,14 @@ Implemented and tested:
 - Phase L CLI entrypoint slice: `pnpm mcas doctor` emits JSON health data, `pnpm mcas github issue ...` performs read-only GitHub issue intake without invoking a model, `pnpm mcas queue manual ...` persists manual tasks into `TaskQueue`, `pnpm mcas run-next ...` executes the standard dry-run workflow with verifier exit-code mapping, `pnpm mcas run-task ...` runs TaskSpec JSON files without queue state, `pnpm mcas smoke <adapter>` dispatches existing package smoke scripts, `pnpm mcas eval replay -- ...` dispatches the eval replay package script, and `--config` loads runtime path defaults with flag override precedence.
 - Phase M redaction slice: ArtifactStore and SessionEventLog redact token-looking strings, authorization headers, `.env` paths, and auth file paths before persistence without mutating caller objects.
 - Phase M denied path slice: PolicyEngine denies default sensitive paths such as `.env.*`, `.ssh`, `.npmrc`, `.netrc`, and `secrets`, and Orchestrator blocks adapter start on those denials.
-- Test baseline: `pnpm test` currently covers 129 tests across 20 suites.
+- Phase M shell command policy slice: PolicyEngine supports denied exact commands, denied command patterns, allowed exact commands, and allowed command patterns with deny precedence and default-deny fallback.
+- Test baseline: `pnpm test` currently covers 130 tests across 20 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
 - Verifier still lacks external CI provider status checks.
-- Phase M still needs shell command allow/deny pattern matching, network policy, adapter permission mapping, and security checklist docs.
+- Phase M still needs network policy, adapter permission mapping, and security checklist docs.
 - Phase N release gate docs remain.
 
 ## Target V1
@@ -567,7 +568,7 @@ Acceptance:
 
 ### Phase M: Security, Redaction, and Policy Enforcement
 
-Status: in progress. Artifact/session event redaction and default denied path policy are complete.
+Status: in progress. Artifact/session event redaction, default denied path policy, and shell command allow/deny pattern policy are complete.
 
 Goal: prevent adapters and artifacts from leaking secrets or bypassing policy.
 
@@ -746,15 +747,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase M with shell command policy patterns.
+Continue Phase M with network policy.
 
 First red test:
 
-- Add tests proving exact allowed shell commands still pass, denied shell commands fail, and configured shell patterns allow expected command families only.
+- Add tests proving commands with denied network access fail before adapter start and commands with allowed network access emit auditable policy decisions.
 
 First implementation:
 
-- Extend PolicyEngine shell matching with explicit allow patterns while retaining default-deny behavior.
+- Add a network policy request shape to PolicyEngine and Orchestrator policy gates without weakening existing path or shell denials.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

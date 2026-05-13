@@ -17,3 +17,10 @@ Feature: Phase 9 security, redaction, and policy enforcement
     When a command requests access to a sensitive file path
     Then the policy decision denies the path
     And the adapter is not started
+
+  Scenario: Allow only configured shell command patterns
+    Given a policy engine with shell allow and deny rules
+    When shell command policy decisions are evaluated
+    Then exact denied commands override allowed commands
+    And matching command patterns are allowed
+    And unmatched shell commands are denied

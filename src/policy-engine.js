@@ -6,11 +6,15 @@ const DEFAULT_DENIED_PATHS = [
   '.netrc',
   '**/secrets/**'
 ];
+const COMMAND_PATTERN_WILDCARD = '[^\\s;&|<>`$()\\n\\r]+';
 
 export class PolicyEngine {
   constructor(policy = {}) {
     this.deniedPaths = [...DEFAULT_DENIED_PATHS, ...(policy.deniedPaths ?? [])];
     this.allowedCommands = [...(policy.allowedCommands ?? [])];
+    this.deniedCommands = [...(policy.deniedCommands ?? [])];
+    this.allowedCommandPatterns = [...(policy.allowedCommandPatterns ?? [])];
+    this.deniedCommandPatterns = [...(policy.deniedCommandPatterns ?? [])];
   }
 
   decide(request) {
@@ -68,6 +72,28 @@ export class PolicyEngine {
       };
     }
 
+    const deniedCommand = this.deniedCommands.find((deniedCommand) => command === deniedCommand);
+
+    if (deniedCommand) {
+      return {
+        decision: 'deny',
+        reason: 'denied-command',
+        matchedRule: deniedCommand
+      };
+    }
+
+    const deniedCommandPattern = this.deniedCommandPatterns.find((pattern) => {
+      return matchesCommandPattern(pattern, command);
+    });
+
+    if (deniedCommandPattern) {
+      return {
+        decision: 'deny',
+        reason: 'denied-command-pattern',
+        matchedRule: deniedCommandPattern
+      };
+    }
+
     const matchedRule = this.allowedCommands.find((allowedCommand) => command === allowedCommand);
 
     if (matchedRule) {
@@ -75,6 +101,18 @@ export class PolicyEngine {
         decision: 'allow',
         reason: 'allowed-command',
         matchedRule
+      };
+    }
+
+    const allowedCommandPattern = this.allowedCommandPatterns.find((pattern) => {
+      return matchesCommandPattern(pattern, command);
+    });
+
+    if (allowedCommandPattern) {
+      return {
+        decision: 'allow',
+        reason: 'allowed-command-pattern',
+        matchedRule: allowedCommandPattern
       };
     }
 
@@ -101,4 +139,27 @@ function matchesPathPattern(pattern, target) {
   }
 
   return false;
+}
+
+function matchesCommandPattern(pattern, command) {
+  if (typeof pattern !== 'string' || pattern.trim() === '') {
+    return false;
+  }
+
+  const regex = new RegExp(`^${escapeCommandPattern(pattern)}$`);
+  return regex.test(command);
+}
+
+function escapeCommandPattern(pattern) {
+  return [...pattern].map((character) => {
+    if (character === '*') {
+      return COMMAND_PATTERN_WILDCARD;
+    }
+
+    return escapeRegExp(character);
+  }).join('');
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
 }

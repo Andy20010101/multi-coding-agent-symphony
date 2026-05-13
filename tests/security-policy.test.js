@@ -133,6 +133,56 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('allows shell commands through exact and pattern policy rules', () => {
+    const policy = new PolicyEngine({
+      allowedCommands: ['pnpm test', 'rm -rf tmp/generated'],
+      deniedCommands: ['rm -rf tmp/generated'],
+      allowedCommandPatterns: ['pnpm --filter * test', 'pnpm --filter * exec *'],
+      deniedCommandPatterns: ['pnpm --filter * exec *']
+    });
+
+    assert.deepEqual(policy.decide({
+      action: 'shell',
+      command: 'pnpm test'
+    }), {
+      decision: 'allow',
+      reason: 'allowed-command',
+      matchedRule: 'pnpm test'
+    });
+    assert.deepEqual(policy.decide({
+      action: 'shell',
+      command: 'rm -rf tmp/generated'
+    }), {
+      decision: 'deny',
+      reason: 'denied-command',
+      matchedRule: 'rm -rf tmp/generated'
+    });
+    assert.deepEqual(policy.decide({
+      action: 'shell',
+      command: 'pnpm --filter packages/orchestrator test'
+    }), {
+      decision: 'allow',
+      reason: 'allowed-command-pattern',
+      matchedRule: 'pnpm --filter * test'
+    });
+    assert.deepEqual(policy.decide({
+      action: 'shell',
+      command: 'pnpm --filter packages/orchestrator exec sh'
+    }), {
+      decision: 'deny',
+      reason: 'denied-command-pattern',
+      matchedRule: 'pnpm --filter * exec *'
+    });
+    assert.deepEqual(policy.decide({
+      action: 'shell',
+      command: 'pnpm --filter packages/orchestrator lint'
+    }), {
+      decision: 'deny',
+      reason: 'command-not-allowed',
+      matchedRule: null
+    });
+  });
 });
 
 const taskSpec = {
