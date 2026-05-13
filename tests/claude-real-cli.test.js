@@ -83,7 +83,7 @@ describe('Claude Code real CLI integration', () => {
           workspaceId: 'model-workspace',
           diffSummary: ['Added Claude real evidence parsing.'],
           changedFiles: ['src/adapters/claude-code-adapter.js'],
-          checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }],
+          checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
           knownRisks: [],
           agentSummary: 'Parsed evidence from Claude stream-json output.',
           version: '1'
@@ -111,7 +111,7 @@ describe('Claude Code real CLI integration', () => {
     assert.deepEqual(verifyEvidence({ commandSpec, evidence }), {
       status: 'passed',
       reason: 'checks-passed',
-      checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }]
+      checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }]
     });
   });
 

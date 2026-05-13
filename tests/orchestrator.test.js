@@ -42,15 +42,24 @@ const reviewCommandSpec = {
 
 class PassingCodexAdapter extends CodexAdapter {
   async collectEvidence(handle) {
+    const changedFiles = handle.command === 'implement' ? ['src/orchestrator.js'] : [];
+
     return {
       command: handle.command,
       taskId: handle.taskId,
       workspaceId: handle.workspaceId,
       diffSummary: [],
-      changedFiles: ['src/orchestrator.js'],
-      checks: [{ name: 'synthetic-check', status: 'passed', output: 'synthetic check passed' }],
+      changedFiles,
+      checks: [{
+        name: 'synthetic-check',
+        status: 'passed',
+        command: 'synthetic-check',
+        exitCode: 0,
+        output: 'synthetic check passed'
+      }],
       knownRisks: [],
       agentSummary: 'Synthetic dry-run evidence.',
+      ...(handle.command === 'review' ? { noFindingRationale: 'No findings in synthetic review.' } : {}),
       version: '1'
     };
   }
@@ -126,7 +135,13 @@ describe('Orchestrator dry-run execution flow', () => {
       assert.equal(result.adapterId, 'codex');
       assert.equal(result.verification.status, 'passed');
       assert.deepEqual(storedEvidence.checks, [
-        { name: 'synthetic-check', status: 'passed', output: 'synthetic check passed' }
+        {
+          name: 'synthetic-check',
+          status: 'passed',
+          command: 'synthetic-check',
+          exitCode: 0,
+          output: 'synthetic check passed'
+        }
       ]);
       assert.deepEqual(events.map((event) => event.type), [
         'command.queued',
@@ -234,7 +249,7 @@ describe('Orchestrator dry-run execution flow', () => {
               workspaceId: 'model-supplied-workspace',
               diffSummary: [],
               changedFiles: ['src/adapters/codex-adapter.js'],
-              checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }],
+              checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
               knownRisks: [],
               agentSummary: 'Structured evidence from real Codex execution.',
               version: '1'
@@ -286,7 +301,7 @@ describe('Orchestrator dry-run execution flow', () => {
         workspaceId: 'model-supplied-workspace',
         diffSummary: [],
         changedFiles: ['src/adapters/codex-adapter.js'],
-        checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }],
+        checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
         knownRisks: [],
         agentSummary: 'Structured evidence from Codex logs.',
         version: '1'
@@ -455,7 +470,7 @@ describe('Orchestrator dry-run execution flow', () => {
       const events = await eventLog.readAll();
 
       assert.deepEqual(result.failure, {
-        category: 'verification-insufficient',
+        category: 'checks-missing',
         retryable: true,
         owner: 'verifier',
         recommendedNextCommand: 'qa'
@@ -561,7 +576,13 @@ describe('Orchestrator dry-run execution flow', () => {
       assert.equal(hydrated[0].content.command, 'implement');
       assert.deepEqual(hydrated[0].content.changedFiles, ['src/orchestrator.js']);
       assert.deepEqual(hydrated[0].content.checks, [
-        { name: 'synthetic-check', status: 'passed', output: 'synthetic check passed' }
+        {
+          name: 'synthetic-check',
+          status: 'passed',
+          command: 'synthetic-check',
+          exitCode: 0,
+          output: 'synthetic check passed'
+        }
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });

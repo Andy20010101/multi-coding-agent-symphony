@@ -54,12 +54,13 @@ Implemented and tested:
 - Phase G Kiro real runner slice: `KiroCliAdapter` can run real mode through an injected `NodeProcessRunner`, parse stdout structured evidence, and preserve raw output as verification-insufficient evidence.
 - Phase G Kiro smoke slice: `pnpm smoke:kiro:help` checks local CLI assumptions, and gated `pnpm smoke:kiro:real` defaults to no model call unless `MCAS_RUN_REAL_KIRO=1` is set.
 - Phase G Kiro trust-tool policy slice: denied shell or network policy decisions remove unsafe Kiro trusted tool categories while preserving read-only trust categories.
-- Test baseline: `pnpm test` currently covers 87 tests across 16 suites.
+- Phase H verifier provenance slice: production checks require command-plus-exit-code or artifact provenance, read-only changed-file scope violations fail verification, and failed check lists contain only failed checks.
+- Test baseline: `pnpm test` currently covers 90 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- Verifier accepts any check with `status: "passed"`; it does not yet verify provenance, command output, CI status, or changed-file scope.
+- Verifier still lacks command-specific implementation no-op, review finding, QA artifact, CI status, and workspace-manifest path-boundary checks.
 - Eval plugin scores synthetic samples but is not wired into release gates, model profile decisions, or artifact sampling.
 - No tracker intake is implemented for GitHub or Linear.
 - No user-facing CLI entrypoint exists for orchestrator runs.
@@ -366,6 +367,8 @@ Acceptance:
 - Kiro adapter preserves `CommandSpec` semantics and keeps CLI flags adapter-local.
 
 ### Phase H: Verifier Hardening
+
+Status: in progress. `CheckEvidence` provenance fields, production provenance rejection, read-only scope rejection, richer verifier reasons, and failed-check narrowing are complete; command-specific evidence requirements and workspace-manifest path-boundary checks remain.
 
 Goal: move from accepting self-reported checks to validating evidence provenance.
 

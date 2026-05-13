@@ -214,6 +214,36 @@ function assertChecks(checks, field) {
     assertPlainObject(check, `${field}[${index}]`);
     assertNonEmptyString(check.name, `${field}[${index}].name`);
     assertOneOf(check.status, CHECK_STATUSES, `${field}[${index}].status`);
-    assertNonEmptyString(check.output, `${field}[${index}].output`);
+    assertOptionalNonEmptyString(check.command, `${field}[${index}].command`);
+    assertOptionalInteger(check.exitCode, `${field}[${index}].exitCode`);
+    assertOptionalNonEmptyString(check.output, `${field}[${index}].output`);
+    assertOptionalNonEmptyString(check.artifactId, `${field}[${index}].artifactId`);
+    assertOptionalIsoTimestamp(check.startedAt, `${field}[${index}].startedAt`);
+    assertOptionalIsoTimestamp(check.finishedAt, `${field}[${index}].finishedAt`);
+
+    if (check.output === undefined && check.artifactId === undefined) {
+      throw new ValidationError(`${field}[${index}] must include output or artifactId`, {
+        field,
+        index
+      });
+    }
+  }
+}
+
+function assertOptionalNonEmptyString(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  assertNonEmptyString(value, field);
+}
+
+function assertOptionalInteger(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  if (!Number.isInteger(value)) {
+    throw new ValidationError(`${field} must be an integer`, { field });
   }
 }

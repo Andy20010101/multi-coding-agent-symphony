@@ -57,4 +57,22 @@ Feature: Phase 4 routing, workspace, and verification modules
     Given an evidence package with only an agent summary
     When the Verifier evaluates the evidence
     Then verification fails
-    And the failure reason is verification-insufficient
+    And the failure reason is checks-missing
+
+  Scenario: Reject production checks without provenance
+    Given a production evidence package with a passing check but no command or artifact provenance
+    When the Verifier evaluates the evidence
+    Then verification fails
+    And the failure reason is artifact-missing
+
+  Scenario: Reject changed files outside workspace policy
+    Given a read-only command evidence package with changed files
+    When the Verifier evaluates the evidence
+    Then verification fails
+    And the failure reason is scope-violation
+
+  Scenario: Report exact failed checks
+    Given an evidence package with one passed check and one failed check
+    When the Verifier evaluates the evidence
+    Then verification fails
+    And the failed check list contains only the failed check

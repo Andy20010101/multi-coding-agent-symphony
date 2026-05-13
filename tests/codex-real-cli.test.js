@@ -334,7 +334,7 @@ describe('Codex real CLI integration', () => {
             workspaceId: 'model-supplied-workspace',
             diffSummary: ['Added real evidence parsing.'],
             changedFiles: ['src/adapters/codex-adapter.js'],
-            checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }],
+            checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
             knownRisks: [],
             agentSummary: 'Parsed evidence from the final Codex message.',
             version: '1'
@@ -362,7 +362,7 @@ describe('Codex real CLI integration', () => {
     assert.deepEqual(verifyEvidence({ commandSpec, evidence }), {
       status: 'passed',
       reason: 'checks-passed',
-      checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }]
+      checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }]
     });
   });
 
@@ -377,7 +377,7 @@ describe('Codex real CLI integration', () => {
           workspaceId: '/work/repo',
           diffSummary: [],
           changedFiles: ['src/adapters/codex-adapter.js'],
-          checks: [{ name: 'node --test', status: 'passed', output: 'node tests passed' }],
+          checks: [{ name: 'node --test', status: 'passed', command: 'node --test', exitCode: 0, output: 'node tests passed' }],
           knownRisks: [],
           agentSummary: 'Evidence emitted in JSONL output.',
           version: '1'
@@ -401,7 +401,7 @@ describe('Codex real CLI integration', () => {
     const evidence = await adapter.collectEvidence(handle);
 
     assert.deepEqual(evidence.checks, [
-      { name: 'node --test', status: 'passed', output: 'node tests passed' }
+      { name: 'node --test', status: 'passed', command: 'node --test', exitCode: 0, output: 'node tests passed' }
     ]);
     assert.equal(evidence.knownRisks.length, 0);
   });

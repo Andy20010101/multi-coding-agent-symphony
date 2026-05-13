@@ -46,7 +46,9 @@ describe('Codex real model smoke script', () => {
     assert.equal(schema.additionalProperties, false);
     assert.equal(schema.required.includes('diffSummary'), true);
     assert.equal(schema.properties.checks.items.additionalProperties, false);
-    assert.equal(schema.properties.checks.items.required.includes('output'), true);
+    assert.equal(schema.properties.checks.items.required.includes('name'), true);
+    assert.equal(schema.properties.checks.items.required.includes('status'), true);
+    assert.equal(Array.isArray(schema.properties.checks.items.anyOf), true);
   });
 
   it('skips real model invocation unless explicitly gated on', async () => {

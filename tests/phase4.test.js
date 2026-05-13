@@ -21,6 +21,15 @@ const implementCommand = {
   evidenceSchema: 'implementation-evidence.v1'
 };
 
+const reviewCommand = {
+  name: 'review',
+  version: '1',
+  allowedTools: ['read', 'shell', 'test'],
+  workspacePolicy: 'review-only',
+  doneCriteria: ['findings-written', 'evidence-written'],
+  evidenceSchema: 'review-evidence.v1'
+};
+
 const capabilityReports = [
   {
     adapterId: 'codex',
@@ -325,12 +334,33 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
       }
     }), {
       status: 'failed',
-      reason: 'verification-insufficient',
+      reason: 'checks-missing',
       requiredEvidence: ['checks']
     });
   });
 
   it('accepts evidence with passing structured checks', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: implementCommand,
+      evidence: {
+        command: 'implement',
+        taskId: 'task-123',
+        workspaceId: 'task-123-primary-writer-1',
+        diffSummary: [],
+        changedFiles: ['src/example.js'],
+        checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
+        knownRisks: [],
+        agentSummary: 'Implemented behavior.',
+        version: '1'
+      }
+    }), {
+      status: 'passed',
+      reason: 'checks-passed',
+      checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }]
+    });
+  });
+
+  it('rejects production checks without command or artifact provenance', () => {
     assert.deepEqual(verifyEvidence({
       commandSpec: implementCommand,
       evidence: {
@@ -345,9 +375,65 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
         version: '1'
       }
     }), {
-      status: 'passed',
-      reason: 'checks-passed',
+      status: 'failed',
+      reason: 'artifact-missing',
+      requiredEvidence: ['checks[].command+exitCode', 'checks[].artifactId'],
       checks: [{ name: 'pnpm test', status: 'passed', output: 'tests passed' }]
+    });
+  });
+
+  it('rejects changed files for read-only command policies', () => {
+    assert.deepEqual(verifyEvidence({
+      commandSpec: reviewCommand,
+      evidence: {
+        command: 'review',
+        taskId: 'task-123',
+        workspaceId: 'task-123-review-1',
+        diffSummary: [],
+        changedFiles: ['src/example.js'],
+        checks: [{ name: 'review', status: 'passed', artifactId: 'review-findings' }],
+        knownRisks: [],
+        agentSummary: 'Reviewed behavior.',
+        noFindingRationale: 'No regressions found.',
+        version: '1'
+      }
+    }), {
+      status: 'failed',
+      reason: 'scope-violation',
+      changedFiles: ['src/example.js'],
+      workspacePolicy: 'review-only'
+    });
+  });
+
+  it('returns exact failed check list', () => {
+    const failedCheck = {
+      name: 'pnpm test',
+      status: 'failed',
+      command: 'pnpm test',
+      exitCode: 1,
+      output: '1 failing test'
+    };
+
+    assert.deepEqual(verifyEvidence({
+      commandSpec: implementCommand,
+      evidence: {
+        command: 'implement',
+        taskId: 'task-123',
+        workspaceId: 'task-123-primary-writer-1',
+        diffSummary: [],
+        changedFiles: ['src/example.js'],
+        checks: [
+          { name: 'lint', status: 'passed', command: 'pnpm check', exitCode: 0, output: 'ok' },
+          failedCheck
+        ],
+        knownRisks: [],
+        agentSummary: 'One check failed.',
+        version: '1'
+      }
+    }), {
+      status: 'failed',
+      reason: 'check-failed',
+      failedChecks: [failedCheck]
     });
   });
 });

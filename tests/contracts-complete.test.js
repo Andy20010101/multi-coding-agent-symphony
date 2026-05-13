@@ -57,7 +57,16 @@ describe('Complete core contract validation', () => {
       workspaceId: 'workspace-123',
       diffSummary: ['added contracts'],
       changedFiles: ['src/contracts.js'],
-      checks: [{ name: 'pnpm test', status: 'passed', output: '48 tests passed' }],
+      checks: [{
+        name: 'pnpm test',
+        status: 'passed',
+        command: 'pnpm test',
+        exitCode: 0,
+        output: '48 tests passed',
+        artifactId: 'test-log',
+        startedAt: '2026-05-13T00:00:00.000Z',
+        finishedAt: '2026-05-13T00:00:01.000Z'
+      }],
       knownRisks: [],
       agentSummary: 'Implemented validators.',
       version: '1'
@@ -72,6 +81,17 @@ describe('Complete core contract validation', () => {
       () => validateEvidencePackage({
         ...evidence,
         checks: [{ name: 'pnpm test', status: 'passed' }]
+      }),
+      ValidationError
+    );
+    assert.equal(validateEvidencePackage({
+      ...evidence,
+      checks: [{ name: 'pnpm test', status: 'passed', artifactId: 'test-log' }]
+    }).checks[0].artifactId, 'test-log');
+    assert.throws(
+      () => validateEvidencePackage({
+        ...evidence,
+        checks: [{ name: 'pnpm test', status: 'passed', output: 'ok', startedAt: 'not-a-date' }]
       }),
       ValidationError
     );

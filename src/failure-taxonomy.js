@@ -44,6 +44,26 @@ const FAILURE_CATEGORIES = new Map([
     owner: 'verifier',
     recommendedNextCommand: 'qa'
   }],
+  ['checks-missing', {
+    retryable: true,
+    owner: 'verifier',
+    recommendedNextCommand: 'qa'
+  }],
+  ['artifact-missing', {
+    retryable: true,
+    owner: 'verifier',
+    recommendedNextCommand: 'qa'
+  }],
+  ['check-failed', {
+    retryable: true,
+    owner: 'implementer',
+    recommendedNextCommand: 'fix-ci'
+  }],
+  ['scope-violation', {
+    retryable: false,
+    owner: 'policy',
+    recommendedNextCommand: 'plan'
+  }],
   ['workspace-conflict', {
     retryable: false,
     owner: 'orchestrator',
@@ -68,4 +88,3 @@ export function classifyFailure(category) {
 export function listFailureCategories() {
   return Array.from(FAILURE_CATEGORIES.keys());
 }
-

@@ -115,6 +115,8 @@ Minimum implementation evidence:
     {
       "name": "pnpm test",
       "status": "passed",
+      "command": "pnpm test",
+      "exitCode": 0,
       "output": "48 tests passed"
     }
   ],
@@ -126,15 +128,22 @@ Minimum implementation evidence:
 
 `CheckEvidence` is the minimum verifier-readable check record inside `checks`.
 
-Required fields:
+Required fields are `name` and `status`. Every check must also include either `output` or `artifactId`.
 
 ```json
 {
   "name": "pnpm test",
   "status": "passed|failed",
-  "output": "Relevant command output, log summary, or artifact provenance"
+  "command": "pnpm test",
+  "exitCode": 0,
+  "output": "Relevant command output or log summary",
+  "artifactId": "test-log",
+  "startedAt": "2026-05-13T00:00:00.000Z",
+  "finishedAt": "2026-05-13T00:00:01.000Z"
 }
 ```
+
+`command`, `exitCode`, `artifactId`, `startedAt`, and `finishedAt` are optional contract fields. For non-smoke production evidence, the verifier requires either `artifactId` or the pair `command` plus `exitCode`; output-only checks are treated as weak self-report.
 
 `diffSummary` is required and may be empty. `checks` must contain at least one record for a verifier-valid evidence package. Raw or incomplete adapter output may still be stored as an artifact, but it is not a valid completion evidence package.
 
@@ -186,6 +195,10 @@ Initial categories:
 - `cli-timeout`
 - `model-off-task`
 - `verification-insufficient`
+- `checks-missing`
+- `artifact-missing`
+- `check-failed`
+- `scope-violation`
 - `workspace-conflict`
 - `infrastructure-failure`
 
