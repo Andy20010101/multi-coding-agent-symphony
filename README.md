@@ -45,6 +45,6 @@ This repository currently uses Node.js built-in tooling with no third-party runt
 Run checks:
 
 ```sh
-npm test
-npm run check
+pnpm test
+pnpm check
 ```
