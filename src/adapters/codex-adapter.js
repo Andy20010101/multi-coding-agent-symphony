@@ -251,6 +251,23 @@ export class CodexAdapter extends BaseAdapter {
       return super.collectEvidence(handle);
     }
 
+    await finalizeActiveRun(stored);
+
+    if (stored.status === 'cancelled') {
+      return {
+        command: stored.command,
+        taskId: stored.taskId,
+        workspaceId: stored.workspaceId,
+        changedFiles: [],
+        checks: [],
+        knownRisks: ['cancelled-run'],
+        agentSummary: 'Codex real CLI was cancelled before completion.',
+        stdout: stored.stdout,
+        stderr: stored.stderr,
+        version: '1'
+      };
+    }
+
     const structuredEvidence = extractStructuredEvidence(stored);
 
     if (structuredEvidence) {
@@ -270,6 +287,24 @@ export class CodexAdapter extends BaseAdapter {
       version: '1'
     };
   }
+}
+
+async function finalizeActiveRun(stored) {
+  if (!stored.processHandle?.result || stored.processFinalized === true) {
+    return;
+  }
+
+  const result = await stored.processHandle.result;
+  stored.exitCode = result.exitCode;
+  stored.signal = result.signal;
+  stored.stdout = result.stdout;
+  stored.stderr = result.stderr;
+  stored.durationMs = result.durationMs;
+  stored.timedOut = result.timedOut;
+  stored.cancelled = result.cancelled;
+  stored.outputFiles = result.outputFiles ?? {};
+  stored.parsedEvents = parseJsonl(result.stdout);
+  stored.processFinalized = true;
 }
 
 function publicHandle(handle) {

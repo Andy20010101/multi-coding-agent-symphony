@@ -332,7 +332,24 @@ describe('Codex real CLI integration', () => {
       status: 'cancelled',
       signal: 'SIGTERM'
     });
+    assert.deepEqual(await adapter.cancel(handle), {
+      runId: handle.runId,
+      status: 'cancelled',
+      signal: 'SIGTERM'
+    });
     assert.equal(runner.cancelCalls, 1);
     assert.equal((await adapter.resume({ runId: handle.runId })).status, 'cancelled');
+    assert.deepEqual(await adapter.collectEvidence(handle), {
+      command: 'implement',
+      taskId: 'task-123',
+      workspaceId: '/work/repo',
+      changedFiles: [],
+      checks: [],
+      knownRisks: ['cancelled-run'],
+      agentSummary: 'Codex real CLI was cancelled before completion.',
+      stdout: 'partial stdout',
+      stderr: '',
+      version: '1'
+    });
   });
 });

@@ -41,7 +41,7 @@ Implemented and tested:
 - Phase C sequence policy slice: named `standard` workflow expands to `implement -> review -> qa`.
 - Phase C failed queue state slice: failed queued workflows persist failure and retry metadata, and retryable failures return to queued status.
 - Phase D process runner slice: `NodeProcessRunner` exposes startable handles that can be cancelled while preserving partial output, with `run()` compatibility retained.
-- Phase D Codex cancellation slice: active real Codex runs store process handles, forward adapter cancellation, and resume without exposing internal handles.
+- Phase D Codex cancellation slice: active real Codex runs store process handles, forward idempotent adapter cancellation, resume public state, and return cancelled evidence with partial output.
 - Test baseline: `pnpm test` currently covers 65 tests across 12 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
@@ -204,7 +204,7 @@ Acceptance:
 
 ### Phase D: Process Lifecycle and Cancellation
 
-Status: in progress. Startable `NodeProcessRunner` handles, partial-output cancellation, and active real Codex adapter cancellation are complete; idempotency, timeout escalation, and cancelled evidence remain.
+Status: in progress. Startable `NodeProcessRunner` handles, partial-output cancellation, active real Codex adapter cancellation, idempotency, and cancelled evidence are complete; timeout escalation remains.
 
 Goal: support active process cancellation and terminal lifecycle states across adapters.
 
@@ -694,15 +694,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase D with cancellation idempotency and cancelled evidence.
+Continue Phase D with timeout escalation.
 
 First red test:
 
-- Add a Codex adapter test proving repeated cancellation does not call the process handle twice and cancelled evidence records partial output as a known risk.
+- Add a process runner test proving timeout first sends `SIGTERM`, then escalates to `SIGKILL` when the child ignores termination.
 
 First implementation:
 
-- Make real Codex cancellation idempotent and teach `collectEvidence` to return cancelled evidence after active process termination.
+- Add configurable timeout escalation delay to `NodeProcessRunner` and preserve captured output after forced kill.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 
