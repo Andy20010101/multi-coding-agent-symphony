@@ -110,7 +110,9 @@ export class Orchestrator {
       payload: {
         taskId: taskSpec.id,
         command: commandSpec.name,
-        adapterId: route.adapterId
+        adapterId: route.adapterId,
+        modelProfile: route.modelProfile ?? route.modelProfiles[0],
+        routeDecision: route.routeDecision
       }
     });
 
@@ -139,7 +141,7 @@ export class Orchestrator {
       commandSpec,
       contextPack,
       workspace: workspace.path,
-      modelProfile: modelProfile ?? route.modelProfiles[0],
+      modelProfile: modelProfile ?? route.modelProfile ?? route.modelProfiles[0],
       policyDecisions,
       executionMode,
       timeoutMs

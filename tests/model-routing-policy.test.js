@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 
 import { AdapterMappingRegistry } from '../src/adapter-mapping-registry.js';
 import { ModelProfileRegistry } from '../src/model-profile-registry.js';
+import { RouterScheduler } from '../src/router-scheduler.js';
 
 describe('Phase 6 model profiles and routing policy', () => {
   it('persists model profiles and queries by cost and structured output', async () => {
@@ -95,12 +96,106 @@ describe('Phase 6 model profiles and routing policy', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('routes around retryable adapter failures and explains model selection policy', () => {
+    const scheduler = new RouterScheduler({
+      capabilityReports: [
+        capabilityReport({ adapterId: 'codex', supportedCommands: ['implement', 'review'] }),
+        capabilityReport({ adapterId: 'kiro-cli', supportedCommands: ['implement', 'review'] })
+      ]
+    });
+    const modelProfiles = [
+      modelProfile({
+        id: 'gpt-implement-high',
+        model: 'gpt-5.5',
+        costClass: 'high'
+      }),
+      modelProfile({
+        id: 'claude-implement-medium',
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        costClass: 'medium'
+      }),
+      modelProfile({
+        id: 'gpt-review-high',
+        model: 'gpt-5.5',
+        costClass: 'high'
+      }),
+      modelProfile({
+        id: 'claude-review-low',
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        costClass: 'low'
+      })
+    ];
+    const adapterMappings = [
+      adapterMapping({
+        adapter: 'codex',
+        command: 'implement',
+        modelProfile: 'gpt-implement-high'
+      }),
+      adapterMapping({
+        adapter: 'kiro-cli',
+        command: 'implement',
+        modelProfile: 'claude-implement-medium'
+      }),
+      adapterMapping({
+        adapter: 'codex',
+        command: 'review',
+        modelProfile: 'gpt-review-high'
+      }),
+      adapterMapping({
+        adapter: 'kiro-cli',
+        command: 'review',
+        modelProfile: 'claude-review-low'
+      })
+    ];
+
+    const retryRoute = scheduler.route({
+      commandSpec: commandSpec('implement'),
+      adapterMappings,
+      modelProfiles,
+      failureHistory: [
+        {
+          adapterId: 'codex',
+          retryable: true,
+          category: 'adapter-crashed'
+        }
+      ]
+    });
+
+    assert.equal(retryRoute.adapterId, 'kiro-cli');
+    assert.equal(retryRoute.modelProfile, 'claude-implement-medium');
+    assert.deepEqual(retryRoute.routeDecision.excludedAdapters, ['codex']);
+    assert.equal(retryRoute.routeDecision.reason, 'retryable-failure-excluded');
+
+    const reviewRoute = scheduler.route({
+      commandSpec: commandSpec('review'),
+      adapterMappings,
+      modelProfiles
+    });
+
+    assert.equal(reviewRoute.adapterId, 'kiro-cli');
+    assert.equal(reviewRoute.modelProfile, 'claude-review-low');
+    assert.equal(reviewRoute.routeDecision.reason, 'lower-cost-review-profile');
+
+    const explicitRoute = scheduler.route({
+      commandSpec: commandSpec('review'),
+      adapterMappings,
+      modelProfiles,
+      explicitModelProfile: 'gpt-review-high'
+    });
+
+    assert.equal(explicitRoute.adapterId, 'codex');
+    assert.equal(explicitRoute.modelProfile, 'gpt-review-high');
+    assert.equal(explicitRoute.routeDecision.reason, 'explicit-model-override');
+  });
 });
 
-function modelProfile({ id, model, costClass }) {
+function modelProfile({ id, provider = 'openai', model, costClass }) {
   return {
     id,
-    provider: 'openai',
+    provider,
     model,
     contextTokens: 400000,
     maxOutputTokens: 128000,
@@ -123,5 +218,35 @@ function adapterMapping({ adapter, command, modelProfile }) {
     promptTemplate: `${command}-prompt`,
     outputParser: 'evidence-package-json',
     failureMapper: `${adapter}-failure-mapper`
+  };
+}
+
+function capabilityReport({ adapterId, supportedCommands }) {
+  return {
+    adapterId,
+    cliName: adapterId,
+    cliVersion: '1.0.0',
+    supportedCommands,
+    modelProfiles: [],
+    supportsNonInteractive: true,
+    supportsResume: true,
+    supportsCancel: true,
+    supportsHooks: true,
+    supportsMcp: true,
+    supportsStructuredOutput: true,
+    workspaceIsolation: 'worktree',
+    logStrategy: 'jsonl',
+    version: '1'
+  };
+}
+
+function commandSpec(name) {
+  return {
+    name,
+    version: '1',
+    allowedTools: ['read'],
+    workspacePolicy: name === 'implement' ? 'primary-writer' : 'review-only',
+    doneCriteria: ['evidence-written'],
+    evidenceSchema: `${name}-evidence.v1`
   };
 }
