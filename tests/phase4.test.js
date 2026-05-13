@@ -185,6 +185,48 @@ describe('Phase 4 routing, workspace, and verification modules', () => {
     }
   });
 
+  it('uses materialized locks to reject duplicate primary writers after restart', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-workspaces-'));
+
+    try {
+      const manager = new WorkspaceManager({
+        rootDirectory: root,
+        materialize: true
+      });
+      const allocation = manager.allocate({
+        taskId: 'task-123',
+        role: 'primary-writer',
+        adapterId: 'codex'
+      });
+      const restartedManager = new WorkspaceManager({
+        rootDirectory: root,
+        materialize: true
+      });
+
+      assert.equal(allocation.lockPath, join(allocation.path, 'workspace-lock.json'));
+      assert.deepEqual(JSON.parse(await readFile(allocation.lockPath, 'utf8')), {
+        version: '1',
+        workspaceId: allocation.workspaceId,
+        taskId: 'task-123',
+        role: 'primary-writer',
+        adapterId: 'codex',
+        path: allocation.path,
+        writable: true,
+        accessMode: 'read-write'
+      });
+      assert.throws(
+        () => restartedManager.allocate({
+          taskId: 'task-123',
+          role: 'primary-writer',
+          adapterId: 'claude-code'
+        }),
+        WorkspaceConflictError
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('routes commands to capable adapters while honoring exclusions', () => {
     const scheduler = new RouterScheduler({ capabilityReports });
 

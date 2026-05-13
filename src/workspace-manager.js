@@ -1,7 +1,8 @@
-import { readdirSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const WORKSPACE_MANIFEST_FILE = 'workspace-manifest.json';
+const WORKSPACE_LOCK_FILE = 'workspace-lock.json';
 const WORKSPACE_CLEANUP_FILE = 'workspace-cleanup.json';
 const RETAINED_WORKSPACE_FILES = [WORKSPACE_MANIFEST_FILE, WORKSPACE_CLEANUP_FILE];
 
@@ -51,6 +52,7 @@ export class WorkspaceManager {
       adapterId,
       path: join(this.rootDirectory, taskId, workspaceId),
       manifestPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_MANIFEST_FILE),
+      lockPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_LOCK_FILE),
       writable: role === 'primary-writer'
     };
 
@@ -113,7 +115,36 @@ export class WorkspaceManager {
   #hasPrimaryWriter(taskId) {
     return this.allocations.some((allocation) => (
       allocation.taskId === taskId && allocation.role === 'primary-writer'
-    ));
+    )) || this.#hasMaterializedPrimaryWriterLock(taskId);
+  }
+
+  #hasMaterializedPrimaryWriterLock(taskId) {
+    if (!this.materialize) {
+      return false;
+    }
+
+    const taskDirectory = join(this.rootDirectory, taskId);
+    if (!existsSync(taskDirectory)) {
+      return false;
+    }
+
+    for (const entry of readdirSync(taskDirectory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+
+      const lockPath = join(taskDirectory, entry.name, WORKSPACE_LOCK_FILE);
+      if (!existsSync(lockPath)) {
+        continue;
+      }
+
+      const lock = readWorkspaceLock(lockPath);
+      if (lock.role === 'primary-writer') {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 
@@ -128,6 +159,16 @@ function materializeWorkspace(allocation) {
     path: allocation.path,
     writable: allocation.writable
   }, null, 2));
+  writeFileSync(allocation.lockPath, JSON.stringify({
+    version: '1',
+    workspaceId: allocation.workspaceId,
+    taskId: allocation.taskId,
+    role: allocation.role,
+    adapterId: allocation.adapterId,
+    path: allocation.path,
+    writable: allocation.writable,
+    accessMode: accessModeForRole(allocation.role)
+  }, null, 2));
 }
 
 function removeWorkspaceContentsExcept(workspacePath, retainedFileNames) {
@@ -138,6 +179,28 @@ function removeWorkspaceContentsExcept(workspacePath, retainedFileNames) {
 
     rmSync(join(workspacePath, entry.name), { recursive: true, force: true });
   }
+}
+
+function readWorkspaceLock(lockPath) {
+  const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+
+  if (lock === null || typeof lock !== 'object' || Array.isArray(lock)) {
+    throw new TypeError(`Workspace lock must be an object: ${lockPath}`);
+  }
+
+  return lock;
+}
+
+function accessModeForRole(role) {
+  if (role === 'primary-writer') {
+    return 'read-write';
+  }
+
+  if (role === 'review') {
+    return 'read-only';
+  }
+
+  return 'isolated';
 }
 
 function assertNonEmptyString(value, field) {

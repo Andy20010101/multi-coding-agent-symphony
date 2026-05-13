@@ -24,6 +24,12 @@ Feature: Phase 4 routing, workspace, and verification modules
     Then temporary content is removed
     And the workspace manifest and cleanup record remain available
 
+  Scenario: Materialized primary writer lock survives manager restart
+    Given a materialized primary writer workspace exists
+    When a new Workspace Manager starts for the same root directory
+    Then another primary writer for the same task is rejected
+    And the workspace lock records the writer ownership
+
   Scenario: Route a command to a capable adapter
     Given capability reports for Codex and Kiro CLI
     When the Router Scheduler routes an implement command

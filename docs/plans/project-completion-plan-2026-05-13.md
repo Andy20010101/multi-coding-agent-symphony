@@ -29,12 +29,13 @@ Implemented and tested:
 - Phase B queue persistence slice: `TaskQueue` can persist state, reload after restart, and recover expired running leases.
 - Phase B workspace materialization slice: `WorkspaceManager` can create workspace directories and write workspace manifests when materialization is enabled.
 - Phase B workspace cleanup slice: `WorkspaceManager` can remove temporary workspace content while retaining the workspace manifest and a cleanup record.
-- Test baseline: `pnpm test` currently covers 52 tests across 11 suites.
+- Phase B workspace lock slice: materialized primary-writer locks survive `WorkspaceManager` restart and block duplicate writer allocation for the same task.
+- Test baseline: `pnpm test` currently covers 53 tests across 11 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
 
-- `WorkspaceManager` materialization and cleanup retention exist, but clone and lock behavior are still pending.
+- `WorkspaceManager` materialization, cleanup retention, and durable primary-writer locks exist, but clone behavior is still pending.
 - `TaskQueue` persistence exists, but it is not yet integrated into orchestrator workflow recovery.
 - `NodeProcessRunner` is one-shot and cannot cancel an active process from adapter lifecycle.
 - Claude Code and Kiro CLI adapters are dry-run only.
@@ -105,7 +106,7 @@ Acceptance:
 
 ### Phase B: Durable State and Workspace Materialization
 
-Status: in progress. Queue persistence, expired lease recovery, workspace materialization, manifests, cleanup, and retained cleanup records are complete; clone and lock policy remain.
+Status: in progress. Queue persistence, expired lease recovery, workspace materialization, manifests, cleanup, retained cleanup records, and primary-writer locks are complete; clone policy and lifecycle event IDs remain.
 
 Goal: turn in-memory primitives into recoverable harness state.
 
@@ -135,6 +136,7 @@ BDD/TDD:
 - Add scenario: expired running task is recoverable and can be leased again.
 - Add scenario: workspace allocation creates a directory and manifest.
 - Add scenario: cleanup removes temporary workspace content but preserves artifacts.
+- Add scenario: materialized primary-writer lock survives manager restart.
 
 Acceptance:
 
@@ -667,16 +669,16 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase B with workspace cleanup and retained-artifact policy.
+Continue Phase B with lifecycle event IDs and timestamps for queue/workspace changes.
 
 First red test:
 
-- Add a workspace cleanup test proving cleanup removes disposable workspace contents while retaining the manifest or a cleanup record.
+- Add a lifecycle metadata test proving queue and workspace lifecycle changes expose stable event IDs and timestamps.
 
 First implementation:
 
-- Add a `cleanup` method to `WorkspaceManager`.
-- Preserve a manifest or cleanup record so later verification can still reconstruct the workspace allocation.
+- Add lifecycle metadata generation to the smallest queue/workspace methods that mutate state.
+- Keep caller-provided timestamps injectable for deterministic tests.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 
