@@ -23,6 +23,12 @@ Feature: Phase 5 external eval replay plugin
     When the Eval Replay plugin creates a report
     Then the report includes the resource profile unchanged
 
+  Scenario: Write eval reports as artifacts
+    Given the Eval Replay plugin has generated a report
+    When the plugin writes the report artifact
+    Then the Artifact Store contains the report
+    And the written reference includes task id and artifact id
+
   Scenario: Recommend changes without mutating core configuration
     Given the candidate has a higher verified success rate
     When the Eval Replay plugin creates recommendations

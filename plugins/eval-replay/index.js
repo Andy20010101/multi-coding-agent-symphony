@@ -106,6 +106,32 @@ export function runEvalReplay({
   };
 }
 
+export async function writeEvalReportArtifact({
+  artifactStore,
+  report,
+  taskId = 'eval-reports',
+  artifactId = report?.id
+}) {
+  if (!artifactStore || typeof artifactStore.writeArtifact !== 'function') {
+    throw new TypeError('artifactStore must provide writeArtifact');
+  }
+
+  validateEvalReport(report);
+  assertNonEmptyString(taskId, 'taskId');
+  assertNonEmptyString(artifactId, 'artifactId');
+
+  return artifactStore.writeArtifact(taskId, artifactId, report);
+}
+
+function validateEvalReport(report) {
+  if (report === null || typeof report !== 'object' || Array.isArray(report)) {
+    throw new TypeError('report must be an object');
+  }
+
+  assertNonEmptyString(report.id, 'report.id');
+  assertNonEmptyString(report.version, 'report.version');
+}
+
 function isEvidenceArtifact(artifact) {
   return artifact !== null &&
     typeof artifact === 'object' &&

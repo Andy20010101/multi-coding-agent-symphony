@@ -58,7 +58,8 @@ Implemented and tested:
 - Phase H command evidence slice: implementation evidence requires changed files or no-op rationale, review evidence requires findings or no-finding rationale, and production QA evidence requires at least one check artifact.
 - Phase H workspace boundary slice: verifier rejects changed files that resolve outside the provided workspace manifest path, and the orchestrator passes the allocated workspace into verification.
 - Phase I eval sample-builder slice: `buildReplaySampleFromSession` builds replay samples from `artifact.written` session events and evidence artifacts without adapter state.
-- Test baseline: `pnpm test` currently covers 97 tests across 16 suites.
+- Phase I eval report artifact slice: `writeEvalReportArtifact` stores eval reports in ArtifactStore and returns the task/artifact reference without mutating routing config.
+- Test baseline: `pnpm test` currently covers 98 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -408,7 +409,7 @@ Acceptance:
 
 ### Phase I: Eval/Replay Productionization
 
-Status: in progress. Session-log sample building from stored evidence artifacts is complete; report artifact writing, resource comparison qualification, release-gate script, richer recommendations, and fixtures remain.
+Status: in progress. Session-log sample building from stored evidence artifacts and eval report artifact writing are complete; resource comparison qualification, release-gate script, richer recommendations, and fixtures remain.
 
 Goal: make external eval useful for model updates, adapter changes, and harness refactors.
 

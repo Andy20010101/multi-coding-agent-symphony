@@ -9,6 +9,7 @@ Implemented entrypoints:
 - `loadReplaySample({ artifactStore, tasks })` loads explicit artifact IDs.
 - `buildReplaySampleFromSession({ artifactStore, eventLog, taskIds })` reads `artifact.written` session events and normalizes evidence artifacts into replay results without adapter state.
 - `runEvalReplay(...)` scores baseline and candidate variants and emits recommendations without mutating core config.
+- `writeEvalReportArtifact({ artifactStore, report, taskId, artifactId })` writes reports back to ArtifactStore and returns the artifact reference.
 
 ## Purpose
 
@@ -88,6 +89,8 @@ The plugin writes an eval report:
   "version": "1"
 }
 ```
+
+Reports may be stored under a synthetic task such as `eval-reports`, keeping replay output outside core routing configuration.
 
 ## Scoring Rules
 

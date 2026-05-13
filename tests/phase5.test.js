@@ -9,7 +9,8 @@ import { SessionEventLog } from '../src/session-event-log.js';
 import {
   buildReplaySampleFromSession,
   loadReplaySample,
-  runEvalReplay
+  runEvalReplay,
+  writeEvalReportArtifact
 } from '../plugins/eval-replay/index.js';
 
 describe('Phase 5 external eval replay plugin', () => {
@@ -221,6 +222,46 @@ describe('Phase 5 external eval replay plugin', () => {
     assert.deepEqual(report.failureDelta, {
       'test-failed': -1
     });
+  });
+
+  it('writes eval reports as artifacts without mutating the report', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-eval-report-'));
+
+    try {
+      const store = new ArtifactStore(root);
+      const report = Object.freeze({
+        id: 'eval-model-upgrade-sample-task-1',
+        reason: 'model-upgrade',
+        baseline: 'gpt-codex-default.v1',
+        candidate: 'gpt-codex-default.v2',
+        taskSample: 'sample-task-1',
+        scores: Object.freeze({}),
+        failureDelta: Object.freeze({}),
+        recommendations: Object.freeze([]),
+        resourceProfile: Object.freeze({
+          cpu: '4',
+          memoryMb: 8192,
+          timeoutSeconds: 3600,
+          concurrency: 1,
+          network: 'restricted',
+          version: '1'
+        }),
+        mutatedCoreConfig: false,
+        version: '1'
+      });
+
+      assert.deepEqual(await writeEvalReportArtifact({
+        artifactStore: store,
+        report,
+        taskId: 'eval-reports'
+      }), {
+        taskId: 'eval-reports',
+        artifactId: 'eval-model-upgrade-sample-task-1'
+      });
+      assert.deepEqual(await store.readArtifact('eval-reports', 'eval-model-upgrade-sample-task-1'), report);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('emits recommendations without mutating core configuration', () => {
