@@ -186,7 +186,8 @@ function normalizeReplayResult({ taskId, artifactId, artifact }) {
     failureCategory: artifact.failureCategory ?? inferFailureCategory(artifact),
     command: artifact.command,
     taskClass: artifact.taskClass ?? artifact.command,
-    evidenceArtifactId: artifactId
+    evidenceArtifactId: artifactId,
+    ...(artifact.resourceProfile ? { resourceProfile: structuredClone(artifact.resourceProfile) } : {})
   };
 }
 

@@ -109,6 +109,37 @@
       "type": "string",
       "minLength": 1
     },
+    "resourceProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memoryMb", "timeoutSeconds", "concurrency", "network", "version"],
+      "properties": {
+        "cpu": {
+          "type": "string",
+          "minLength": 1
+        },
+        "memoryMb": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "network": {
+          "type": "string",
+          "enum": ["enabled", "disabled", "restricted"]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "version": {
       "type": "string",
       "minLength": 1

@@ -1,4 +1,5 @@
 import { ClaudeCodeAdapter } from './adapters/claude-code-adapter.js';
+import { attachResourceProfile, buildResourceProfile } from './resource-profile.js';
 import { verifyEvidence } from './verifier.js';
 
 export const REAL_CLAUDE_SMOKE_FLAG = 'MCAS_RUN_REAL_CLAUDE';
@@ -19,6 +20,7 @@ export async function runClaudeRealSmoke({
 
   const taskId = `claude-real-smoke-${Date.now()}`;
   const commandSpec = buildSmokeCommandSpec();
+  const resourceProfile = buildResourceProfile({ env, timeoutMs, network: 'enabled' });
   const handle = await adapter.start({
     commandSpec,
     contextPack: buildSmokeContextPack(taskId),
@@ -33,7 +35,7 @@ export async function runClaudeRealSmoke({
     events.push(event);
   }
 
-  const evidence = await adapter.collectEvidence(handle);
+  const evidence = attachResourceProfile(await adapter.collectEvidence(handle), resourceProfile);
   const verification = verifyEvidence({ commandSpec, evidence });
 
   return {
@@ -44,6 +46,7 @@ export async function runClaudeRealSmoke({
     adapterId: handle.adapterId,
     handleStatus: handle.status,
     exitCode: handle.exitCode,
+    resourceProfile,
     verification,
     evidence,
     eventTypes: events.map((event) => event.type)

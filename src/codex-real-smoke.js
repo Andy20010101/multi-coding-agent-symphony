@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { CODEX_CONFIG_DEFAULT_MODEL_PROFILE, CodexAdapter } from './adapters/codex-adapter.js';
+import { attachResourceProfile, buildResourceProfile } from './resource-profile.js';
 import { verifyEvidence } from './verifier.js';
 
 const execFileAsync = promisify(execFile);
@@ -28,6 +29,7 @@ export async function runCodexRealSmoke({
 
   const taskId = `codex-real-smoke-${Date.now()}`;
   const commandSpec = buildSmokeCommandSpec();
+  const resourceProfile = buildResourceProfile({ env, timeoutMs, network: 'enabled' });
   const handle = await adapter.start({
     commandSpec,
     contextPack: buildSmokeContextPack(taskId),
@@ -42,7 +44,7 @@ export async function runCodexRealSmoke({
     events.push(event);
   }
 
-  const evidence = await adapter.collectEvidence(handle);
+  const evidence = attachResourceProfile(await adapter.collectEvidence(handle), resourceProfile);
   const verification = verifyEvidence({ commandSpec, evidence });
 
   return {
@@ -53,6 +55,7 @@ export async function runCodexRealSmoke({
     adapterId: handle.adapterId,
     handleStatus: handle.status,
     exitCode: handle.exitCode,
+    resourceProfile,
     verification,
     evidence,
     eventTypes: events.map((event) => event.type)
@@ -76,6 +79,7 @@ export async function runCodexWriterSmoke({
   const smokeWorkspace = workspace ?? await createWriterSmokeWorkspace();
   const taskId = `codex-writer-smoke-${Date.now()}`;
   const commandSpec = buildWriterSmokeCommandSpec();
+  const resourceProfile = buildResourceProfile({ env, timeoutMs, network: 'enabled' });
   const handle = await adapter.start({
     commandSpec,
     contextPack: buildWriterSmokeContextPack(taskId),
@@ -90,7 +94,7 @@ export async function runCodexWriterSmoke({
     events.push(event);
   }
 
-  const evidence = await adapter.collectEvidence(handle);
+  const evidence = attachResourceProfile(await adapter.collectEvidence(handle), resourceProfile);
   const verification = verifyEvidence({ commandSpec, evidence });
 
   return {
@@ -101,6 +105,7 @@ export async function runCodexWriterSmoke({
     adapterId: handle.adapterId,
     handleStatus: handle.status,
     exitCode: handle.exitCode,
+    resourceProfile,
     verification,
     evidence,
     eventTypes: events.map((event) => event.type)

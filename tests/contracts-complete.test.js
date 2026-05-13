@@ -72,6 +72,14 @@ describe('Complete core contract validation', () => {
       noOpRationale: 'No code changes were needed.',
       findings: ['No blocking findings.'],
       noFindingRationale: 'Review found no issues.',
+      resourceProfile: {
+        cpu: '4',
+        memoryMb: 8192,
+        timeoutSeconds: 3600,
+        concurrency: 1,
+        network: 'restricted',
+        version: '1'
+      },
       version: '1'
     };
 
@@ -104,6 +112,16 @@ describe('Complete core contract validation', () => {
     );
     assert.throws(
       () => validateEvidencePackage({ ...evidence, noFindingRationale: '' }),
+      ValidationError
+    );
+    assert.throws(
+      () => validateEvidencePackage({
+        ...evidence,
+        resourceProfile: {
+          ...evidence.resourceProfile,
+          memoryMb: '8192'
+        }
+      }),
       ValidationError
     );
   });

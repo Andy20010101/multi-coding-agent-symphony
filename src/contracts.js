@@ -7,6 +7,7 @@ const PROVIDER_NAMES = new Set(['openai', 'deepseek', 'anthropic']);
 const COST_CLASSES = new Set(['low', 'medium', 'high']);
 const TASK_PRIORITIES = new Set(['low', 'normal', 'high']);
 const CHECK_STATUSES = new Set(['passed', 'failed']);
+const NETWORK_STATES = new Set(['enabled', 'disabled', 'restricted']);
 
 export class ValidationError extends Error {
   constructor(message, details = {}) {
@@ -88,6 +89,7 @@ export function validateEvidencePackage(evidence) {
   assertOptionalNonEmptyString(evidence.noOpRationale, 'EvidencePackage.noOpRationale');
   assertOptionalStringArray(evidence.findings, 'EvidencePackage.findings');
   assertOptionalNonEmptyString(evidence.noFindingRationale, 'EvidencePackage.noFindingRationale');
+  assertOptionalResourceProfile(evidence.resourceProfile, 'EvidencePackage.resourceProfile');
   assertNonEmptyString(evidence.version, 'EvidencePackage.version');
 
   return evidence;
@@ -97,6 +99,20 @@ function assertPlainObject(value, field) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new ValidationError(`${field} must be an object`, { field });
   }
+}
+
+function assertOptionalResourceProfile(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  assertPlainObject(value, field);
+  assertNonEmptyString(value.cpu, `${field}.cpu`);
+  assertPositiveInteger(value.memoryMb, `${field}.memoryMb`);
+  assertPositiveInteger(value.timeoutSeconds, `${field}.timeoutSeconds`);
+  assertPositiveInteger(value.concurrency, `${field}.concurrency`);
+  assertOneOf(value.network, NETWORK_STATES, `${field}.network`);
+  assertNonEmptyString(value.version, `${field}.version`);
 }
 
 function assertNonEmptyString(value, field) {

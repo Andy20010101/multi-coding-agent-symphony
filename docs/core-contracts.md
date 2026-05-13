@@ -125,6 +125,14 @@ Minimum implementation evidence:
   "noOpRationale": "Optional rationale when implement made no changes",
   "findings": ["Optional review finding list"],
   "noFindingRationale": "Optional rationale when review found no issues",
+  "resourceProfile": {
+    "cpu": "4",
+    "memoryMb": 8192,
+    "timeoutSeconds": 3600,
+    "concurrency": 1,
+    "network": "enabled|disabled|restricted",
+    "version": "1"
+  },
   "version": "1"
 }
 ```

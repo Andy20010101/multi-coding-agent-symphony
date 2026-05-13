@@ -93,6 +93,44 @@ describe('Codex real model smoke script', () => {
     assert.equal(adapter.calls[0].timeoutMs, 1000);
   });
 
+  it('records resource profile on real smoke evidence for eval replay', async () => {
+    const adapter = new FakeSmokeAdapter({
+      command: 'qa',
+      taskId: 'model-task',
+      workspaceId: 'model-workspace',
+      diffSummary: [],
+      changedFiles: [],
+      checks: [{ name: 'codex-real-smoke', status: 'passed', output: 'smoke passed' }],
+      knownRisks: [],
+      agentSummary: 'Read package.json and README.md.',
+      version: '1'
+    });
+    const result = await runCodexRealSmoke({
+      adapter,
+      env: {
+        [REAL_CODEX_SMOKE_FLAG]: '1',
+        MCAS_RESOURCE_CPU: '8',
+        MCAS_RESOURCE_MEMORY_MB: '16384',
+        MCAS_RESOURCE_CONCURRENCY: '2',
+        MCAS_RESOURCE_NETWORK: 'enabled'
+      },
+      workspace: '/work/repo',
+      timeoutMs: 90000
+    });
+
+    const expectedProfile = {
+      cpu: '8',
+      memoryMb: 16384,
+      timeoutSeconds: 90,
+      concurrency: 2,
+      network: 'enabled',
+      version: '1'
+    };
+
+    assert.deepEqual(result.resourceProfile, expectedProfile);
+    assert.deepEqual(result.evidence.resourceProfile, expectedProfile);
+  });
+
   it('passes MCAS_CODEX_MODEL through to the adapter when provided', async () => {
     const adapter = new FakeSmokeAdapter({
       command: 'qa',

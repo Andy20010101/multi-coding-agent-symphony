@@ -62,7 +62,8 @@ Implemented and tested:
 - Phase I eval resource/tradeoff slice: eval reports qualify baseline/candidate resource mismatches and recommendations can include higher-cost tradeoffs plus affected files/contracts.
 - Phase I eval release-gate slice: `pnpm eval:replay` builds a replay sample from stored artifacts, writes an eval report artifact, and returns the report reference without mutating router config.
 - Phase I eval fixture/task-class slice: bundled model-upgrade and adapter-regression fixtures drive task-class success summaries and failure deltas.
-- Test baseline: `pnpm test` currently covers 102 tests across 16 suites.
+- Phase I eval real-resource slice: real smoke evidence records `resourceProfile` with CPU, memory, timeout, concurrency, network, and version fields for eval replay.
+- Test baseline: `pnpm test` currently covers 103 tests across 16 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -412,7 +413,7 @@ Acceptance:
 
 ### Phase I: Eval/Replay Productionization
 
-Status: in progress. Session-log sample building from stored evidence artifacts, eval report artifact writing, resource comparison qualification, richer recommendation metadata, the external release-gate command, task-class summaries, and model-upgrade/adapter-regression fixtures are complete; resource profile capture from real runs remains.
+Status: completed for V1 eval/replay productionization. Session-log sample building from stored evidence artifacts, eval report artifact writing, resource comparison qualification, richer recommendation metadata, the external release-gate command, task-class summaries, model-upgrade/adapter-regression fixtures, and real-run resource profile capture are complete.
 
 Goal: make external eval useful for model updates, adapter changes, and harness refactors.
 
@@ -724,15 +725,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase I with resource profile capture from real runs.
+Continue Phase J with persisted model profile and adapter mapping registries.
 
 First red test:
 
-- Add a real-smoke resource profile test proving run evidence records CPU, memory, timeout, concurrency, network, and version fields.
+- Add registry tests proving model profiles and adapter mappings can be saved, reloaded, and queried by command/capability inputs.
 
 First implementation:
 
-- Add a shared resource profile helper and attach its output to real smoke evidence where eval can consume it.
+- Add `src/model-profile-registry.js` and `src/adapter-mapping-registry.js` using the existing contract validators and disk persistence pattern.
 - Run `pnpm test`, `pnpm check`, and `git diff --check`.
 
 ## Handoff Guidance

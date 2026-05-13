@@ -57,7 +57,7 @@ Required inputs:
 - Artifacts and evidence.
 - ResourceProfile.
 
-`buildReplaySampleFromSession` ignores non-evidence run records and normalizes evidence fields into `variant`, `verified`, `failureCategory`, `command`, `taskClass`, `costUsd`, `latencySeconds`, and `evidenceArtifactId`.
+`buildReplaySampleFromSession` ignores non-evidence run records and normalizes evidence fields into `variant`, `verified`, `failureCategory`, `command`, `taskClass`, `costUsd`, `latencySeconds`, `resourceProfile`, and `evidenceArtifactId`.
 
 `runEvalReplay` accepts either one shared `resourceProfile` or separate `baselineResourceProfile` and `candidateResourceProfile` objects. Separate profiles are preserved in the report and compared field by field before the result is treated as directly comparable.
 
@@ -179,6 +179,8 @@ Resource configuration must be recorded as a first-class variable:
 A model should not be compared against another model if resource conditions differ without being reported.
 
 When baseline and candidate profiles differ, the report includes `resourceQualification.comparable = false`, a machine-readable reason, and the exact mismatched fields. A candidate can still be recommended for review, but the recommendation is qualified by cost/resource tradeoffs rather than applied automatically.
+
+Real smoke evidence records `resourceProfile` so replay samples can preserve the resources observed during real CLI/model runs.
 
 ## Non-Goals
 
