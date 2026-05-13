@@ -30,3 +30,9 @@ Feature: Runtime adapter lifecycle conformance
     When the process handle is cancelled
     Then the result records cancelled status
     And partial stdout is preserved
+
+  Scenario: Cancel active real Codex run
+    Given Codex starts a real run in active lifecycle mode
+    When the adapter cancels the run handle
+    Then cancellation is forwarded to the process handle
+    And the adapter run status becomes cancelled

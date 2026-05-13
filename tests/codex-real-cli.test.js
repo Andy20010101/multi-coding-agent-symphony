@@ -44,6 +44,38 @@ class FakeProcessRunner {
   }
 }
 
+class FakeActiveProcessRunner {
+  constructor() {
+    this.calls = [];
+    this.cancelCalls = 0;
+  }
+
+  start(invocation) {
+    this.calls.push(invocation);
+
+    return {
+      pid: 12345,
+      result: Promise.resolve({
+        exitCode: null,
+        signal: 'SIGTERM',
+        stdout: 'partial stdout',
+        stderr: '',
+        durationMs: 5,
+        timedOut: false,
+        cancelled: true,
+        outputFiles: {}
+      }),
+      cancel: () => {
+        this.cancelCalls += 1;
+        return {
+          status: 'cancelled',
+          signal: 'SIGTERM'
+        };
+      }
+    };
+  }
+}
+
 describe('Codex real CLI integration', () => {
   it('starts Codex through an injected process runner', async () => {
     const runner = new FakeProcessRunner({
@@ -276,5 +308,31 @@ describe('Codex real CLI integration', () => {
       owner: 'adapter',
       recommendedNextCommand: 'qa'
     });
+  });
+
+  it('cancels active real Codex process handles through adapter lifecycle', async () => {
+    const runner = new FakeActiveProcessRunner();
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real',
+      lifecycleMode: 'active'
+    });
+
+    assert.equal(handle.status, 'running');
+    assert.equal(runner.calls.length, 1);
+    assert.deepEqual(await adapter.cancel(handle), {
+      runId: handle.runId,
+      status: 'cancelled',
+      signal: 'SIGTERM'
+    });
+    assert.equal(runner.cancelCalls, 1);
+    assert.equal((await adapter.resume({ runId: handle.runId })).status, 'cancelled');
   });
 });

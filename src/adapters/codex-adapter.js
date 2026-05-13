@@ -88,6 +88,38 @@ export class CodexAdapter extends BaseAdapter {
       ...input,
       outputLastMessagePath
     });
+    if (input.lifecycleMode === 'active') {
+      if (typeof this.processRunner.start !== 'function') {
+        throw new TypeError('processRunner must provide start for active lifecycle mode');
+      }
+
+      const processHandle = this.processRunner.start({
+        executable: preparedRun.executable,
+        args: preparedRun.args,
+        cwd: preparedRun.cwd,
+        stdin: preparedRun.prompt,
+        env: preparedRun.environment,
+        timeoutMs: input.timeoutMs ?? this.timeoutMs,
+        outputFiles: {
+          lastMessage: outputLastMessagePath
+        }
+      });
+      const handle = {
+        runId,
+        adapterId: this.adapterId,
+        status: 'running',
+        dryRun: false,
+        preparedRun,
+        command: input.commandSpec.name,
+        taskId: input.contextPack.task.id,
+        workspaceId: input.workspace,
+        processHandle
+      };
+
+      this.runs.set(runId, handle);
+      return publicHandle(handle);
+    }
+
     const result = await this.processRunner.run({
       executable: preparedRun.executable,
       args: preparedRun.args,
@@ -124,6 +156,51 @@ export class CodexAdapter extends BaseAdapter {
 
     this.runs.set(runId, handle);
     return structuredClone(handle);
+  }
+
+  async cancel(handle) {
+    const stored = this.runs.get(handle.runId);
+
+    if (!stored) {
+      throw new Error(`Unknown run id: ${handle.runId}`);
+    }
+
+    if (stored.dryRun) {
+      return super.cancel(handle);
+    }
+
+    if (stored.status === 'cancelled') {
+      return {
+        runId: stored.runId,
+        status: 'cancelled',
+        signal: stored.signal
+      };
+    }
+
+    const cancellation = stored.processHandle?.cancel();
+    stored.status = 'cancelled';
+    stored.signal = cancellation?.signal ?? stored.signal ?? 'SIGTERM';
+    this.runs.set(stored.runId, stored);
+
+    return {
+      runId: stored.runId,
+      status: 'cancelled',
+      signal: stored.signal
+    };
+  }
+
+  async resume({ runId }) {
+    const stored = this.runs.get(runId);
+
+    if (!stored) {
+      throw new Error(`Unknown run id: ${runId}`);
+    }
+
+    if (stored.dryRun) {
+      return super.resume({ runId });
+    }
+
+    return publicHandle(stored);
   }
 
   async *streamEvents(handle) {
@@ -193,6 +270,11 @@ export class CodexAdapter extends BaseAdapter {
       version: '1'
     };
   }
+}
+
+function publicHandle(handle) {
+  const { processHandle, ...publicFields } = handle;
+  return structuredClone(publicFields);
 }
 
 function sandboxFor(workspacePolicy) {

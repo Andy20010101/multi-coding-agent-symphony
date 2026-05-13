@@ -41,7 +41,8 @@ Implemented and tested:
 - Phase C sequence policy slice: named `standard` workflow expands to `implement -> review -> qa`.
 - Phase C failed queue state slice: failed queued workflows persist failure and retry metadata, and retryable failures return to queued status.
 - Phase D process runner slice: `NodeProcessRunner` exposes startable handles that can be cancelled while preserving partial output, with `run()` compatibility retained.
-- Test baseline: `pnpm test` currently covers 64 tests across 12 suites.
+- Phase D Codex cancellation slice: active real Codex runs store process handles, forward adapter cancellation, and resume without exposing internal handles.
+- Test baseline: `pnpm test` currently covers 65 tests across 12 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -203,7 +204,7 @@ Acceptance:
 
 ### Phase D: Process Lifecycle and Cancellation
 
-Status: in progress. Startable `NodeProcessRunner` handles and partial-output cancellation are complete; real Codex adapter cancellation, idempotency, timeout escalation, and cancelled evidence remain.
+Status: in progress. Startable `NodeProcessRunner` handles, partial-output cancellation, and active real Codex adapter cancellation are complete; idempotency, timeout escalation, and cancelled evidence remain.
 
 Goal: support active process cancellation and terminal lifecycle states across adapters.
 
@@ -693,15 +694,15 @@ Additional gates:
 
 ## Immediate Next Task
 
-Continue Phase D with real Codex adapter cancellation.
+Continue Phase D with cancellation idempotency and cancelled evidence.
 
 First red test:
 
-- Add a Codex adapter test proving `cancel(handle)` forwards to an active real process handle and marks the run cancelled.
+- Add a Codex adapter test proving repeated cancellation does not call the process handle twice and cancelled evidence records partial output as a known risk.
 
 First implementation:
 
-- Store real process handles in `CodexAdapter` and make `cancel(handle)` idempotently terminate active real runs.
+- Make real Codex cancellation idempotent and teach `collectEvidence` to return cancelled evidence after active process termination.
 - Keep the smallest compatible change.
 - Run `pnpm test`, `pnpm check`, and `pnpm smoke:codex:help`.
 
