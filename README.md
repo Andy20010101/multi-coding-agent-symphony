@@ -18,6 +18,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [Module Plan](docs/module-plan.md)
 - [BDD and TDD Workflow](docs/bdd-tdd-workflow.md)
 - [Eval Replay Plugin](docs/eval-replay-plugin.md)
+- [Real CLI Integration](docs/real-cli-integration.md)
 - [ADR 0001: Use BDD and TDD](docs/adr/0001-use-bdd-tdd.md)
 
 ## Design Center
@@ -47,4 +48,5 @@ Run checks:
 ```sh
 pnpm test
 pnpm check
+pnpm smoke:codex:help
 ```

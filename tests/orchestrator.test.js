@@ -45,6 +45,18 @@ class PassingCodexAdapter extends CodexAdapter {
   }
 }
 
+class FakeProcessRunner {
+  constructor(result) {
+    this.result = result;
+    this.calls = [];
+  }
+
+  async run(invocation) {
+    this.calls.push(invocation);
+    return this.result;
+  }
+}
+
 describe('Orchestrator dry-run execution flow', () => {
   it('routes, starts, stores evidence, and verifies a command', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-'));
@@ -157,6 +169,50 @@ describe('Orchestrator dry-run execution flow', () => {
         'command.queued',
         'policy.decision'
       ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('passes real execution mode through to Codex adapter', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-real-codex-'));
+
+    try {
+      const runner = new FakeProcessRunner({
+        exitCode: 0,
+        stdout: '{"type":"agent_message","message":"done"}\n',
+        stderr: '',
+        durationMs: 10
+      });
+      const adapter = new CodexAdapter({
+        cliVersion: '0.130.0',
+        processRunner: runner
+      });
+      const report = await adapter.probe();
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runCommand({
+        taskSpec: {
+          ...taskSpec,
+          id: 'task-real-codex'
+        },
+        commandSpec,
+        executionMode: 'real',
+        timeoutMs: 1000
+      });
+
+      assert.equal(runner.calls.length, 1);
+      assert.equal(runner.calls[0].timeoutMs, 1000);
+      assert.equal(result.verification.status, 'failed');
+      assert.equal(result.verification.reason, 'verification-insufficient');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

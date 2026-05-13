@@ -29,7 +29,14 @@ export class Orchestrator {
     this.eventSequence = 0;
   }
 
-  async runCommand({ taskSpec, commandSpec, modelProfile, policyRequests = [] }) {
+  async runCommand({
+    taskSpec,
+    commandSpec,
+    modelProfile,
+    policyRequests = [],
+    executionMode = 'dry-run',
+    timeoutMs
+  }) {
     validateTaskSpec(taskSpec);
     validateCommandSpec(commandSpec);
 
@@ -87,7 +94,9 @@ export class Orchestrator {
       contextPack,
       workspace: workspace.path,
       modelProfile: modelProfile ?? route.modelProfiles[0],
-      policyDecisions
+      policyDecisions,
+      executionMode,
+      timeoutMs
     });
 
     for await (const adapterEvent of adapter.streamEvents(handle)) {

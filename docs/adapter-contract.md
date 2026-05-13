@@ -59,6 +59,7 @@ Codex:
 - Native surfaces include CLI, non-interactive mode, config, hooks, MCP, skills, subagents, and app-server style automation.
 - Good fit for GPT coding models and structured local verification loops.
 - Phase 3 dry-run mapping uses `codex exec --json --cd <workspace> --sandbox <mode> --model <profile>` and optional `--output-schema <file>`.
+- Real execution is opt-in with `executionMode: "real"` and uses `NodeProcessRunner` to spawn `codex exec`; output remains unverified until structured checks are attached.
 
 Claude Code:
 

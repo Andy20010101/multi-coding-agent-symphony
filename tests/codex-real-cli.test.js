@@ -1,0 +1,171 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+
+import { CodexAdapter } from '../src/adapters/codex-adapter.js';
+
+const commandSpec = {
+  name: 'implement',
+  version: '1',
+  allowedTools: ['read', 'write', 'shell', 'test'],
+  workspacePolicy: 'primary-writer',
+  doneCriteria: ['diff-created', 'tests-run', 'evidence-written'],
+  evidenceSchema: 'implementation-evidence.v1'
+};
+
+const contextPack = {
+  version: '1',
+  commandName: 'implement',
+  task: {
+    id: 'task-123',
+    source: 'github',
+    repository: 'Andy20010101/multi-coding-agent-symphony',
+    objective: 'Run Codex through a real process runner',
+    acceptance: ['runner receives prompt on stdin'],
+    version: '1'
+  },
+  events: [],
+  artifactRefs: []
+};
+
+class FakeProcessRunner {
+  constructor(result) {
+    this.result = result;
+    this.calls = [];
+  }
+
+  async run(invocation) {
+    this.calls.push(invocation);
+    return this.result;
+  }
+}
+
+describe('Codex real CLI integration', () => {
+  it('starts Codex through an injected process runner', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: 0,
+      stdout: '{"type":"message","message":"done"}\n',
+      stderr: '',
+      durationMs: 12
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    assert.equal(runner.calls[0].executable, 'codex');
+    assert.deepEqual(runner.calls[0].args.slice(0, 2), ['exec', '--json']);
+    assert.equal(runner.calls[0].cwd, '/work/repo');
+    assert.match(runner.calls[0].stdin, /Run Codex through a real process runner/);
+    assert.equal(handle.dryRun, false);
+    assert.equal(handle.status, 'completed');
+    assert.equal(handle.exitCode, 0);
+  });
+
+  it('streams parsed Codex JSONL output as adapter events', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: 0,
+      stdout: [
+        '{"type":"agent_message","message":"started"}',
+        '{"type":"tool_call","tool":"shell","status":"completed"}'
+      ].join('\n'),
+      stderr: '',
+      durationMs: 12
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+    const events = [];
+
+    for await (const event of adapter.streamEvents(handle)) {
+      events.push(event);
+    }
+
+    assert.deepEqual(events.map((event) => event.type), [
+      'adapter.started',
+      'tool.observed',
+      'tool.observed',
+      'command.finished'
+    ]);
+    assert.equal(events[1].payload.type, 'agent_message');
+    assert.equal(events.at(-1).exitCode, 0);
+  });
+
+  it('collects real Codex output as unverified evidence', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: 0,
+      stdout: '{"type":"agent_message","message":"done"}\n',
+      stderr: 'debug line',
+      durationMs: 12
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    assert.deepEqual(await adapter.collectEvidence(handle), {
+      command: 'implement',
+      taskId: 'task-123',
+      workspaceId: '/work/repo',
+      changedFiles: [],
+      checks: [],
+      knownRisks: ['real-cli-output-unverified'],
+      agentSummary: 'Codex real CLI completed with exit code 0.',
+      stdout: '{"type":"agent_message","message":"done"}\n',
+      stderr: 'debug line',
+      version: '1'
+    });
+  });
+
+  it('marks timed out Codex processes as failed with retry metadata', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: null,
+      signal: 'SIGTERM',
+      stdout: '',
+      stderr: 'timeout',
+      durationMs: 1000,
+      timedOut: true
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    assert.equal(handle.status, 'failed');
+    assert.deepEqual(handle.failure, {
+      category: 'cli-timeout',
+      retryable: true,
+      owner: 'adapter',
+      recommendedNextCommand: 'qa'
+    });
+  });
+});
