@@ -49,7 +49,8 @@ Implemented and tested:
 - Phase E structured error slice: Codex JSONL error events map to `permission-denied`, `model-off-task`, or `adapter-crashed` through the shared failure taxonomy.
 - Phase E writer smoke slice: `pnpm smoke:codex:writer` is separately gated by `MCAS_RUN_REAL_CODEX_WRITER=1`, runs `implement` with `primary-writer` policy, and defaults to an isolated temporary git workspace.
 - Phase E workspace policy slice: Codex read-only smoke and review commands render `--sandbox read-only`, while writer smoke renders `--sandbox workspace-write`.
-- Test baseline: `pnpm test` currently covers 74 tests across 12 suites.
+- Phase F Claude real runner slice: `ClaudeCodeAdapter` can run real mode through an injected `NodeProcessRunner`, parse stream-json structured evidence, and preserve raw output as verification-insufficient evidence.
+- Test baseline: `pnpm test` currently covers 77 tests across 13 suites.
 - Real Codex smoke result: `MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=180000 pnpm smoke:codex:real` passed with `verification.status = passed`.
 
 Known gaps:
@@ -285,6 +286,8 @@ Acceptance:
 - Raw Codex outputs are linked as artifacts.
 
 ### Phase F: Claude Code Real Adapter
+
+Status: in progress. Real process-runner execution and stream-json evidence parsing are complete; help/real smoke scripts and local Claude CLI assumptions remain.
 
 Goal: connect Claude Code to the same real adapter lifecycle through the user's DeepSeek-compatible setup.
 

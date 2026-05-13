@@ -73,6 +73,7 @@ Claude Code:
 - Native surfaces include settings, permission rules, hooks, MCP, memory files, slash commands, and resumable sessions.
 - In this project it may point at DeepSeek-compatible API wiring, so adapter tests must verify model/provider behavior instead of assuming Anthropic defaults.
 - Phase 3 dry-run mapping uses `claude -p --output-format stream-json --add-dir <workspace> --model <profile>` and permission flags.
+- Real execution uses an injected `NodeProcessRunner` to spawn `claude -p --output-format stream-json`, parse stream JSON for structured EvidencePackage content, and preserve raw stdout/stderr as verification-insufficient evidence when structure is missing.
 
 Kiro CLI:
 

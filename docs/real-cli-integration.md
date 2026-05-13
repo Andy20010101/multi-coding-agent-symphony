@@ -49,7 +49,16 @@ MCAS_RUN_REAL_CODEX_WRITER=1 pnpm smoke:codex:writer
 
 This invokes Codex in `implement` mode with `workspacePolicy: "primary-writer"`. When no workspace is supplied programmatically, it creates an isolated temporary git workspace and asks Codex to create `codex-writer-smoke.txt`, then requires verifier status `passed`. Set `MCAS_CODEX_WRITER_MODEL=<model>` to override only the writer smoke model.
 
+## Claude Code
+
+Implemented:
+
+- `ClaudeCodeAdapter.start({ executionMode: "real" })` spawns `claude -p --output-format stream-json` through an injected `NodeProcessRunner`.
+- The prompt is sent on stdin.
+- Stream JSON stdout is parsed for structured `EvidencePackage` content.
+- If no valid structured evidence is found, raw Claude Code output is marked with `real-cli-output-unverified` and contains no passing checks.
+
 ## Remaining CLI Work
 
-- Repeat the real process-runner pattern for Claude Code.
+- Add `pnpm smoke:claude:help` and gated `pnpm smoke:claude:real`.
 - Repeat the real process-runner pattern for Kiro CLI.
