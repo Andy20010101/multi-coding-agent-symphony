@@ -2,6 +2,9 @@ const TASK_SOURCES = new Set(['github', 'linear', 'manual']);
 const COMMAND_NAMES = new Set(['plan', 'implement', 'review', 'fix-ci', 'qa']);
 const TOOL_NAMES = new Set(['read', 'write', 'shell', 'test', 'browser', 'network']);
 const WORKSPACE_POLICIES = new Set(['primary-writer', 'review-only', 'isolated', 'none']);
+const ADAPTER_NAMES = new Set(['codex', 'claude-code', 'kiro-cli']);
+const PROVIDER_NAMES = new Set(['openai', 'deepseek', 'anthropic']);
+const COST_CLASSES = new Set(['low', 'medium', 'high']);
 
 export class ValidationError extends Error {
   constructor(message, details = {}) {
@@ -33,6 +36,52 @@ export function validateCommandSpec(spec) {
   assertNonEmptyString(spec.evidenceSchema, 'CommandSpec.evidenceSchema');
 
   return spec;
+}
+
+export function validateAdapterMapping(mapping) {
+  assertPlainObject(mapping, 'AdapterMapping');
+  assertOneOf(mapping.adapter, ADAPTER_NAMES, 'AdapterMapping.adapter');
+  assertOneOf(mapping.command, COMMAND_NAMES, 'AdapterMapping.command');
+  assertNonEmptyString(mapping.commandVersion, 'AdapterMapping.commandVersion');
+  assertNonEmptyString(mapping.modelProfile, 'AdapterMapping.modelProfile');
+  assertNonEmptyString(mapping.configTemplate, 'AdapterMapping.configTemplate');
+  assertNonEmptyString(mapping.promptTemplate, 'AdapterMapping.promptTemplate');
+  assertNonEmptyString(mapping.outputParser, 'AdapterMapping.outputParser');
+  assertNonEmptyString(mapping.failureMapper, 'AdapterMapping.failureMapper');
+
+  return mapping;
+}
+
+export function validateModelProfile(profile) {
+  assertPlainObject(profile, 'ModelProfile');
+  assertNonEmptyString(profile.id, 'ModelProfile.id');
+  assertOneOf(profile.provider, PROVIDER_NAMES, 'ModelProfile.provider');
+  assertNonEmptyString(profile.model, 'ModelProfile.model');
+  assertPositiveInteger(profile.contextTokens, 'ModelProfile.contextTokens');
+  assertPositiveInteger(profile.maxOutputTokens, 'ModelProfile.maxOutputTokens');
+  assertBoolean(profile.supportsStructuredOutput, 'ModelProfile.supportsStructuredOutput');
+  assertBoolean(profile.supportsVisionInput, 'ModelProfile.supportsVisionInput');
+  assertNonEmptyStringArray(profile.reasoningControls, 'ModelProfile.reasoningControls');
+  assertOneOf(profile.costClass, COST_CLASSES, 'ModelProfile.costClass');
+  assertNonEmptyString(profile.retryPolicy, 'ModelProfile.retryPolicy');
+  assertNonEmptyString(profile.version, 'ModelProfile.version');
+
+  return profile;
+}
+
+export function validateEvidencePackage(evidence) {
+  assertPlainObject(evidence, 'EvidencePackage');
+  assertOneOf(evidence.command, COMMAND_NAMES, 'EvidencePackage.command');
+  assertNonEmptyString(evidence.taskId, 'EvidencePackage.taskId');
+  assertNonEmptyString(evidence.workspaceId, 'EvidencePackage.workspaceId');
+  assertStringArray(evidence.diffSummary ?? [], 'EvidencePackage.diffSummary');
+  assertStringArray(evidence.changedFiles, 'EvidencePackage.changedFiles');
+  assertNonEmptyArray(evidence.checks, 'EvidencePackage.checks');
+  assertStringArray(evidence.knownRisks, 'EvidencePackage.knownRisks');
+  assertNonEmptyString(evidence.agentSummary, 'EvidencePackage.agentSummary');
+  assertNonEmptyString(evidence.version, 'EvidencePackage.version');
+
+  return evidence;
 }
 
 function assertPlainObject(value, field) {
@@ -84,3 +133,35 @@ function assertSetSubset(value, allowed, field) {
   }
 }
 
+function assertPositiveInteger(value, field) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new ValidationError(`${field} must be a positive integer`, { field });
+  }
+}
+
+function assertBoolean(value, field) {
+  if (typeof value !== 'boolean') {
+    throw new ValidationError(`${field} must be a boolean`, { field });
+  }
+}
+
+function assertStringArray(value, field) {
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`${field} must be a string array`, { field });
+  }
+
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== 'string') {
+      throw new ValidationError(`${field}[${index}] must be a string`, {
+        field,
+        index
+      });
+    }
+  }
+}
+
+function assertNonEmptyArray(value, field) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new ValidationError(`${field} must be a non-empty array`, { field });
+  }
+}

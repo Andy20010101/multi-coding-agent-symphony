@@ -1,0 +1,73 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  ValidationError,
+  validateAdapterMapping,
+  validateEvidencePackage,
+  validateModelProfile
+} from '../src/contracts.js';
+
+describe('Complete core contract validation', () => {
+  it('validates AdapterMapping contracts with typed errors', () => {
+    const mapping = {
+      adapter: 'codex',
+      command: 'implement',
+      commandVersion: '1',
+      modelProfile: 'gpt-codex-default',
+      configTemplate: 'codex-config',
+      promptTemplate: 'implement-prompt',
+      outputParser: 'jsonl-parser',
+      failureMapper: 'codex-failure-mapper'
+    };
+
+    assert.equal(validateAdapterMapping(mapping), mapping);
+    assert.throws(
+      () => validateAdapterMapping({ ...mapping, modelProfile: '' }),
+      ValidationError
+    );
+  });
+
+  it('validates ModelProfile contracts with typed errors', () => {
+    const profile = {
+      id: 'gpt-codex-default',
+      provider: 'openai',
+      model: 'gpt-codex',
+      contextTokens: 400000,
+      maxOutputTokens: 128000,
+      supportsStructuredOutput: true,
+      supportsVisionInput: true,
+      reasoningControls: ['low', 'medium', 'high'],
+      costClass: 'high',
+      retryPolicy: 'standard-coding',
+      version: '1'
+    };
+
+    assert.equal(validateModelProfile(profile), profile);
+    assert.throws(
+      () => validateModelProfile({ ...profile, contextTokens: 0 }),
+      ValidationError
+    );
+  });
+
+  it('validates evidence packages with typed errors', () => {
+    const evidence = {
+      command: 'implement',
+      taskId: 'task-123',
+      workspaceId: 'workspace-123',
+      diffSummary: ['added contracts'],
+      changedFiles: ['src/contracts.js'],
+      checks: [{ name: 'pnpm test', status: 'passed' }],
+      knownRisks: [],
+      agentSummary: 'Implemented validators.',
+      version: '1'
+    };
+
+    assert.equal(validateEvidencePackage(evidence), evidence);
+    assert.throws(
+      () => validateEvidencePackage({ ...evidence, checks: [] }),
+      ValidationError
+    );
+  });
+});
+
