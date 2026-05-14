@@ -43,14 +43,58 @@ function normalizeEvidenceCandidate(candidate, metadata) {
       ? candidate.version
       : '1'
   };
+  const normalized = stripNullOptionalEvidenceFields(evidence);
 
   try {
-    validateEvidencePackage(evidence);
+    validateEvidencePackage(normalized);
   } catch {
     return null;
   }
 
-  return structuredClone(evidence);
+  return structuredClone(normalized);
+}
+
+function stripNullOptionalEvidenceFields(evidence) {
+  const normalized = structuredClone(evidence);
+  const optionalEvidenceFields = [
+    'noOpRationale',
+    'findings',
+    'noFindingRationale',
+    'resourceProfile'
+  ];
+
+  for (const field of optionalEvidenceFields) {
+    if (normalized[field] === null) {
+      delete normalized[field];
+    }
+  }
+
+  if (Array.isArray(normalized.checks)) {
+    normalized.checks = normalized.checks.map((check) => {
+      if (!isPlainObject(check)) {
+        return check;
+      }
+
+      const normalizedCheck = structuredClone(check);
+
+      for (const field of ['command', 'exitCode', 'output', 'artifactId', 'startedAt', 'finishedAt']) {
+        if (normalizedCheck[field] === null) {
+          delete normalizedCheck[field];
+        }
+      }
+
+      if (normalizedCheck.output === undefined &&
+        normalizedCheck.artifactId === undefined &&
+        typeof normalizedCheck.command === 'string' &&
+        Number.isInteger(normalizedCheck.exitCode)) {
+        normalizedCheck.output = `Command exited with code ${normalizedCheck.exitCode}.`;
+      }
+
+      return normalizedCheck;
+    });
+  }
+
+  return normalized;
 }
 
 function findEvidenceCandidate(value, depth = 0) {

@@ -671,6 +671,36 @@ describe('Orchestrator dry-run execution flow', () => {
     }
   });
 
+  it('runs an implementation-only command sequence when requested by name', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-implement-only-sequence-'));
+
+    try {
+      const adapter = new CapturingCodexAdapter({ cliVersion: '0.130.0' });
+      const report = await adapter.probe();
+      const orchestrator = new Orchestrator({
+        artifactStore: new ArtifactStore(join(root, 'artifacts')),
+        eventLog: new SessionEventLog(join(root, 'events'), 'session-123'),
+        workspaceManager: new WorkspaceManager({ rootDirectory: join(root, 'workspaces') }),
+        scheduler: new RouterScheduler({ capabilityReports: [report] }),
+        adapters: {
+          codex: adapter
+        }
+      });
+
+      const result = await orchestrator.runTaskWorkflow({
+        taskSpec,
+        commandSequence: 'implement-only'
+      });
+
+      assert.equal(result.status, 'passed');
+      assert.deepEqual(result.commands.map((command) => command.command), ['implement']);
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.name), ['implement']);
+      assert.equal(result.commands[0].workspace.writable, true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('persists retry metadata when a queued workflow fails verification', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-orchestrator-queue-failure-'));
 

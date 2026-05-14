@@ -23,6 +23,7 @@ export function buildContextPack(input) {
       source: input.taskSpec.source,
       repository: input.taskSpec.repository,
       objective: input.taskSpec.objective,
+      ...(input.taskSpec.constraints ? { constraints: [...input.taskSpec.constraints] } : {}),
       acceptance: [...input.taskSpec.acceptance],
       version: input.taskSpec.version
     },

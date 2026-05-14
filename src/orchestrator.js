@@ -3,34 +3,45 @@ import { buildContextPack } from './context-builder.js';
 import { classifyFailure } from './failure-taxonomy.js';
 import { verifyEvidence } from './verifier.js';
 
+const IMPLEMENT_COMMAND_SPEC = {
+  name: 'implement',
+  version: '1',
+  allowedTools: ['read', 'write', 'shell', 'test'],
+  workspacePolicy: 'primary-writer',
+  doneCriteria: ['diff-created', 'tests-run', 'evidence-written'],
+  evidenceSchema: 'implementation-evidence.v1'
+};
+
+const REVIEW_COMMAND_SPEC = {
+  name: 'review',
+  version: '1',
+  allowedTools: ['read', 'shell', 'test'],
+  workspacePolicy: 'review-only',
+  doneCriteria: ['review-completed', 'evidence-written'],
+  evidenceSchema: 'review-evidence.v1'
+};
+
+const QA_COMMAND_SPEC = {
+  name: 'qa',
+  version: '1',
+  allowedTools: ['read', 'shell', 'test'],
+  workspacePolicy: 'isolated',
+  doneCriteria: ['checks-run', 'evidence-written'],
+  evidenceSchema: 'qa-evidence.v1'
+};
+
 const STANDARD_COMMAND_SEQUENCE = [
-  {
-    name: 'implement',
-    version: '1',
-    allowedTools: ['read', 'write', 'shell', 'test'],
-    workspacePolicy: 'primary-writer',
-    doneCriteria: ['diff-created', 'tests-run', 'evidence-written'],
-    evidenceSchema: 'implementation-evidence.v1'
-  },
-  {
-    name: 'review',
-    version: '1',
-    allowedTools: ['read', 'shell', 'test'],
-    workspacePolicy: 'review-only',
-    doneCriteria: ['review-completed', 'evidence-written'],
-    evidenceSchema: 'review-evidence.v1'
-  },
-  {
-    name: 'qa',
-    version: '1',
-    allowedTools: ['read', 'shell', 'test'],
-    workspacePolicy: 'isolated',
-    doneCriteria: ['checks-run', 'evidence-written'],
-    evidenceSchema: 'qa-evidence.v1'
-  }
+  IMPLEMENT_COMMAND_SPEC,
+  REVIEW_COMMAND_SPEC,
+  QA_COMMAND_SPEC
+];
+
+const IMPLEMENT_ONLY_COMMAND_SEQUENCE = [
+  IMPLEMENT_COMMAND_SPEC
 ];
 
 const COMMAND_SEQUENCES = new Map([
+  ['implement-only', IMPLEMENT_ONLY_COMMAND_SEQUENCE],
   ['standard', STANDARD_COMMAND_SEQUENCE]
 ]);
 

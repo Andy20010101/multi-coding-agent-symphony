@@ -305,6 +305,7 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
     const taskPacket = await readTaskPacketJsonFile(taskPacketPath);
     const paths = resolveRuntimePaths(args);
     const workflowOptions = resolveWorkflowOptions(args);
+    const commandSequence = readOptionalOption(args, '--sequence') ?? 'standard';
     const harnessDirectory = readOptionalOption(args, '--harness-dir') ?? '.omx/harness';
     const expectedChecks = buildExpectedChecks(taskPacket);
     const harnessPolicy = buildHarnessPolicy(taskPacket);
@@ -330,6 +331,7 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
       runtime: paths,
       taskPacketPath,
       executionMode: workflowOptions.executionMode,
+      commandSequence,
       timeoutMs: workflowOptions.timeoutMs
     });
     const status = result.harnessVerification.status;
@@ -343,6 +345,7 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
         status,
         exitCode,
         runId,
+        commandSequence,
         executionMode: workflowOptions.executionMode,
         adapterId: workflowOptions.adapterId,
         taskId: result.taskSpec.id,

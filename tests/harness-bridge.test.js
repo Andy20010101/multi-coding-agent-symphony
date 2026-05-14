@@ -28,7 +28,9 @@ describe('Harness Bridge TaskPacket conversion', () => {
       constraints: [
         'harness.run_id:fixture-run',
         'write_set:synthetic-dry-run.txt',
-        'write_set:src/**'
+        'write_set:src/**',
+        'verification_command:pnpm test',
+        'verification_command:pnpm check'
       ],
       acceptance: [
         'CLI prints help',
@@ -129,10 +131,56 @@ describe('Harness Bridge TaskPacket conversion', () => {
     assert.equal(verification.status, 'failed');
     assert.equal(verification.reason, 'expected-check-missing');
     assert.deepEqual(verification.missingExpectedChecks, [{
-      command: 'implement',
-      artifactId: 'implement-evidence',
+      command: 'workflow',
+      artifactId: null,
       expectedCommands: ['pnpm check']
     }]);
+  });
+
+  it('accepts expected verification commands once across the workflow', async () => {
+    const verification = await verifyHarnessResult({
+      taskPacket: validTaskPacket(),
+      workflowResult: {
+        taskId: 'task.scaffold',
+        status: 'passed',
+        commands: [
+          {
+            command: 'implement',
+            artifactId: 'implement-evidence',
+            verification: { status: 'passed' }
+          },
+          {
+            command: 'review',
+            artifactId: 'review-evidence',
+            verification: { status: 'passed' }
+          }
+        ]
+      },
+      async readEvidence(command) {
+        if (command.command === 'implement') {
+          return {
+            command: 'implement',
+            changedFiles: ['synthetic-dry-run.txt'],
+            checks: [
+              { name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'ok' },
+              { name: 'pnpm check', status: 'passed', command: 'pnpm check', exitCode: 0, output: 'ok' }
+            ]
+          };
+        }
+
+        return {
+          command: 'review',
+          changedFiles: [],
+          checks: [
+            { name: 'review', status: 'passed', command: 'review', exitCode: 0, output: 'ok' }
+          ]
+        };
+      }
+    });
+
+    assert.equal(verification.status, 'passed');
+    assert.equal(verification.reason, 'checks-passed');
+    assert.deepEqual(verification.missingExpectedChecks, []);
   });
 });
 
@@ -358,6 +406,62 @@ describe('Harness Bridge CLI real lane', () => {
         'codex',
         'codex',
         'codex'
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('passes the selected command sequence through the Harness CLI', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-harness-real-sequence-'));
+    let adapter;
+
+    try {
+      const taskPacketFile = join(root, 'taskpacket.json');
+      const runtimeDirectory = join(root, 'runtime');
+      const harnessDirectory = join(root, 'harness');
+
+      await writeFile(taskPacketFile, `${JSON.stringify(validTaskPacket(), null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'harness',
+          'run-taskpacket',
+          '--run-id',
+          'fixture-run',
+          '--taskpacket',
+          taskPacketFile,
+          '--runtime-dir',
+          runtimeDirectory,
+          '--harness-dir',
+          harnessDirectory,
+          '--session-id',
+          'harness-session',
+          '--adapter',
+          'codex',
+          '--real',
+          '--sequence',
+          'implement-only'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        adapterFactory(options) {
+          adapter = new RecordingRealCliAdapter(options);
+          return adapter;
+        }
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.deepEqual(adapter.executionModes, ['real']);
+
+      const run = JSON.parse(output.stdoutText());
+      const evidenceMap = JSON.parse(await readFile(join(harnessDirectory, 'runs', 'fixture-run', 'evidence-map.json'), 'utf8'));
+
+      assert.deepEqual(run.commands.map((command) => command.command), ['implement']);
+      assert.deepEqual(evidenceMap.artifacts.map((artifact) => artifact.artifactId), [
+        'implement-evidence'
       ]);
     } finally {
       await rm(root, { recursive: true, force: true });

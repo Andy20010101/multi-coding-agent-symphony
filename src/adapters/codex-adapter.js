@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { BaseAdapter, validatePrepareInput } from './base-adapter.js';
@@ -14,7 +14,7 @@ import {
 } from './policy-permissions.js';
 
 const DEFAULT_EVIDENCE_SCHEMA_PATH = fileURLToPath(
-  new URL('../../schemas/evidence-package.schema.json', import.meta.url)
+  new URL('../../schemas/codex-evidence-package.schema.json', import.meta.url)
 );
 export const CODEX_CONFIG_DEFAULT_MODEL_PROFILE = 'codex-config-default';
 export const DEFAULT_CODEX_MODEL_PROFILE_MAPPINGS = Object.freeze({
@@ -54,12 +54,15 @@ export class CodexAdapter extends BaseAdapter {
       ?? (input.executionMode === 'real' ? this.evidenceSchemaPath : null);
     const resolvedModel = resolveModelProfile(input.modelProfile, this.modelProfileMappings);
     const policyDecisions = input.policyDecisions ?? [];
+    const workspacePath = input.executionMode === 'real'
+      ? resolve(input.workspace)
+      : input.workspace;
 
     const args = [
       'exec',
       '--json',
       '--cd',
-      input.workspace,
+      workspacePath,
       '--sandbox',
       sandboxFor(input.commandSpec.workspacePolicy, policyDecisions)
     ];
@@ -81,7 +84,7 @@ export class CodexAdapter extends BaseAdapter {
       dryRun: true,
       executable: this.executable,
       args,
-      cwd: input.workspace,
+      cwd: workspacePath,
       prompt: buildCodexRunPrompt(input),
       environment: {},
       resolvedModelProfile: input.modelProfile,
@@ -383,6 +386,7 @@ function buildCodexRunPrompt({ commandSpec, contextPack, policyDecisions = [] })
     `Task: ${contextPack.task.id}`,
     `Repository: ${contextPack.task.repository}`,
     `Objective: ${contextPack.task.objective}`,
+    ...constraintLines(contextPack.task.constraints),
     `Acceptance: ${contextPack.task.acceptance.join('; ')}`,
     `Evidence schema: ${commandSpec.evidenceSchema}`,
     `Done criteria: ${commandSpec.doneCriteria.join('; ')}`,
@@ -390,6 +394,31 @@ function buildCodexRunPrompt({ commandSpec, contextPack, policyDecisions = [] })
     'Return an EvidencePackage JSON object with command, taskId, workspaceId, changedFiles, checks, knownRisks, agentSummary, and version.',
     'Set checks to passed only for commands you actually ran or evidence you actually inspected.'
   ].join('\n');
+}
+
+function constraintLines(constraints = []) {
+  if (!Array.isArray(constraints) || constraints.length === 0) {
+    return [];
+  }
+
+  const verificationCommands = constraints
+    .filter((constraint) => typeof constraint === 'string' && constraint.startsWith('verification_command:'))
+    .map((constraint) => constraint.slice('verification_command:'.length))
+    .filter((command) => command.trim() !== '');
+  const otherConstraints = constraints.filter((constraint) => (
+    typeof constraint === 'string' && !constraint.startsWith('verification_command:')
+  ));
+  const lines = otherConstraints.length > 0
+    ? [`Constraints: ${otherConstraints.join('; ')}`]
+    : [];
+
+  if (verificationCommands.length > 0) {
+    lines.push('Required verification commands:');
+    lines.push(...verificationCommands.map((command) => `- ${command}`));
+    lines.push('For each required verification command, run it and include one checks[] entry whose checks[].command exactly equals that command.');
+  }
+
+  return lines;
 }
 
 const CODEX_COMMAND_PROMPTS = Object.freeze({

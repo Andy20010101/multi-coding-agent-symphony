@@ -9,6 +9,13 @@ Feature: Codex real CLI integration
     And the prompt is sent through stdin
     And the returned handle is marked as real execution
 
+  Scenario: Resolve relative real workspaces before invoking Codex
+    Given a Codex adapter configured for real execution
+    And Symphony allocates a relative workspace path
+    When the adapter prepares the real CLI command
+    Then the runner cwd is an absolute workspace path
+    And the Codex --cd argument uses the same absolute workspace path
+
   Scenario: Convert Codex JSONL output into adapter events
     Given a Codex real execution handle with JSONL stdout
     When lifecycle events are streamed

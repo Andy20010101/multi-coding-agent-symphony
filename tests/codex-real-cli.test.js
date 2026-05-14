@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 
 import {
   CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
@@ -132,6 +133,34 @@ describe('Codex real CLI integration', () => {
     assert.equal(handle.exitCode, 0);
   });
 
+  it('resolves relative real workspaces before invoking Codex', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: 0,
+      stdout: '{"type":"message","message":"done"}\n',
+      stderr: '',
+      durationMs: 12
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const relativeWorkspace = 'tmp/harness-bridge-real/workspaces/task.scaffold/task.scaffold-primary-writer-1';
+    const expectedWorkspace = resolve(relativeWorkspace);
+
+    await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: relativeWorkspace,
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    const cdIndex = runner.calls[0].args.indexOf('--cd');
+
+    assert.equal(runner.calls[0].cwd, expectedWorkspace);
+    assert.equal(runner.calls[0].args[cdIndex + 1], expectedWorkspace);
+  });
+
   it('can defer real model selection to Codex CLI config', async () => {
     const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
 
@@ -215,6 +244,30 @@ describe('Codex real CLI integration', () => {
       [implement, review, qa].every((prepared) => prepared.prompt.includes('Return an EvidencePackage JSON object')),
       true
     );
+  });
+
+  it('renders verification command constraints into the Codex prompt', async () => {
+    const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
+    const prepared = await adapter.prepare({
+      commandSpec,
+      contextPack: {
+        ...contextPack,
+        task: {
+          ...contextPack.task,
+          constraints: [
+            'write_set:synthetic-dry-run.txt',
+            'verification_command:test -f synthetic-dry-run.txt'
+          ]
+        }
+      },
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
+
+    assert.match(prepared.prompt, /Required verification commands:/);
+    assert.match(prepared.prompt, /test -f synthetic-dry-run\.txt/);
+    assert.match(prepared.prompt, /checks\[\]\.command exactly equals/);
   });
 
   it('renders Codex sandbox flags for read-only smoke, writer smoke, and review policy', async () => {
@@ -334,9 +387,22 @@ describe('Codex real CLI integration', () => {
             workspaceId: 'model-supplied-workspace',
             diffSummary: ['Added real evidence parsing.'],
             changedFiles: ['src/adapters/codex-adapter.js'],
-            checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
+            checks: [{
+              name: 'pnpm test',
+              status: 'passed',
+              command: 'pnpm test',
+              exitCode: 0,
+              output: 'tests passed',
+              artifactId: null,
+              startedAt: null,
+              finishedAt: null
+            }],
             knownRisks: [],
             agentSummary: 'Parsed evidence from the final Codex message.',
+            noOpRationale: null,
+            findings: null,
+            noFindingRationale: null,
+            resourceProfile: null,
             version: '1'
           })
         }
@@ -404,6 +470,65 @@ describe('Codex real CLI integration', () => {
       { name: 'node --test', status: 'passed', command: 'node --test', exitCode: 0, output: 'node tests passed' }
     ]);
     assert.equal(evidence.knownRisks.length, 0);
+  });
+
+  it('normalizes strict schema null check output from command provenance', async () => {
+    const runner = new FakeProcessRunner({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      durationMs: 12,
+      outputFiles: {
+        lastMessage: {
+          path: '/tmp/codex-last-message.json',
+          content: JSON.stringify({
+            command: 'implement',
+            taskId: 'task-123',
+            workspaceId: '/work/repo',
+            diffSummary: ['Created smoke file.'],
+            changedFiles: ['synthetic-dry-run.txt'],
+            checks: [{
+              name: 'required-file-exists',
+              status: 'passed',
+              command: 'test -f synthetic-dry-run.txt',
+              exitCode: 0,
+              output: null,
+              artifactId: null,
+              startedAt: null,
+              finishedAt: null
+            }],
+            knownRisks: [],
+            agentSummary: 'Verified through command provenance.',
+            noOpRationale: null,
+            findings: null,
+            noFindingRationale: null,
+            resourceProfile: null,
+            version: '1'
+          })
+        }
+      }
+    });
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'gpt-codex-default',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.deepEqual(evidence.checks, [{
+      name: 'required-file-exists',
+      status: 'passed',
+      command: 'test -f synthetic-dry-run.txt',
+      exitCode: 0,
+      output: 'Command exited with code 0.'
+    }]);
   });
 
   it('marks timed out Codex processes as failed with retry metadata', async () => {

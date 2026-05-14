@@ -17,7 +17,7 @@ Real CLI execution is opt-in. Normal tests use injected fake runners and do not 
 
 Workflow commands accept `--config <file>`, where `runtime.stateFile`, `runtime.artifactDirectory`, `runtime.eventDirectory`, `runtime.workspaceDirectory`, and `runtime.sessionId` provide defaults. Explicit CLI flags override config values.
 
-`run-next`, `run-task`, and `harness run-taskpacket` default to dry-run execution. Passing `--real --adapter <codex|claude|claude-code|kiro|kiro-cli>` selects a real CLI lane and requires the matching gate: `MCAS_RUN_REAL_CODEX=1`, `MCAS_RUN_REAL_CLAUDE=1`, or `MCAS_RUN_REAL_KIRO=1`. Real lanes materialize workspace directories before adapter start. `--timeout-ms <milliseconds>` overrides the real adapter timeout.
+`run-next`, `run-task`, and `harness run-taskpacket` default to dry-run execution. Passing `--real --adapter <codex|claude|claude-code|kiro|kiro-cli>` selects a real CLI lane and requires the matching gate: `MCAS_RUN_REAL_CODEX=1`, `MCAS_RUN_REAL_CLAUDE=1`, or `MCAS_RUN_REAL_KIRO=1`. Real lanes materialize workspace directories before adapter start. `--sequence <standard|implement-only>` selects the command sequence. `--timeout-ms <milliseconds>` overrides the real adapter timeout.
 
 ## Codex
 
@@ -25,9 +25,9 @@ Implemented:
 
 - `CodexAdapter.start({ executionMode: "real" })` spawns `codex exec`.
 - The prompt is sent on stdin.
-- Real runs pass `--output-schema schemas/evidence-package.schema.json`.
+- Real runs pass `--output-schema schemas/codex-evidence-package.schema.json`, a Codex structured-output variant of the canonical evidence schema.
 - Real runs pass `--output-last-message` and capture the final Codex message from a temp file.
-- The schema is strict structured-output compatible: object schemas use `additionalProperties: false`.
+- The schema is strict structured-output compatible: object schemas use `additionalProperties: false`, and nullable optional fields are stripped before canonical `EvidencePackage` validation.
 - `--json` output is parsed as JSONL and streamed as `tool.observed` adapter events.
 - stdout and stderr are preserved in evidence.
 - A final JSON `EvidencePackage` is normalized with harness-owned `command`, `taskId`, and `workspaceId` metadata before verification.

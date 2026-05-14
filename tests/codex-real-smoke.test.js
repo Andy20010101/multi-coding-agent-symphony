@@ -40,15 +40,19 @@ class FakeSmokeAdapter {
 
 describe('Codex real model smoke script', () => {
   it('uses a strict schema accepted by Codex structured output', async () => {
-    const schemaPath = fileURLToPath(new URL('../schemas/evidence-package.schema.json', import.meta.url));
+    const schemaPath = fileURLToPath(new URL('../schemas/codex-evidence-package.schema.json', import.meta.url));
     const schema = JSON.parse(await readFile(schemaPath, 'utf8'));
 
     assert.equal(schema.additionalProperties, false);
     assert.equal(schema.required.includes('diffSummary'), true);
+    assert.equal(schema.required.includes('noOpRationale'), true);
+    assert.equal(schema.required.includes('resourceProfile'), true);
     assert.equal(schema.properties.checks.items.additionalProperties, false);
     assert.equal(schema.properties.checks.items.required.includes('name'), true);
     assert.equal(schema.properties.checks.items.required.includes('status'), true);
-    assert.equal(Array.isArray(schema.properties.checks.items.anyOf), true);
+    assert.equal(schema.properties.checks.items.required.includes('output'), true);
+    assert.equal(schema.properties.checks.items.required.includes('artifactId'), true);
+    assert.equal(schema.properties.noOpRationale.type.includes('null'), true);
   });
 
   it('skips real model invocation unless explicitly gated on', async () => {

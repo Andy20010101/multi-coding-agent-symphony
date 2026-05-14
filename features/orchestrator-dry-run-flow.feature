@@ -62,6 +62,12 @@ Feature: Orchestrator dry-run execution flow
     When the Orchestrator runs the task workflow
     Then it executes implement, review, and qa in order
 
+  Scenario: Run an implementation-only command sequence
+    Given a TaskSpec
+    And the implement-only command sequence is requested
+    When the Orchestrator runs the task workflow
+    Then it executes only implement
+
   Scenario: Persist retry state for failed queued workflow
     Given a Task Queue backed by a state file
     And a queued task fails verification during workflow execution

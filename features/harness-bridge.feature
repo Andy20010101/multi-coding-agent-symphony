@@ -37,6 +37,13 @@ Feature: Harness Bridge execution
     And the CLI response records the Codex lane
     And Harness evidence records the Codex artifact ids
 
+  Scenario: Run a TaskPacket with a selected command sequence
+    Given a valid Harness TaskPacket
+    And the implement-only command sequence is selected
+    When the Harness Bridge runs the TaskPacket
+    Then Symphony executes the implement command only
+    And Harness evidence records the implementation artifact
+
   Scenario: Record policy denial in Symphony and Harness evidence
     Given a Harness TaskPacket whose policy denies a requested write
     When the Harness Bridge runs the TaskPacket

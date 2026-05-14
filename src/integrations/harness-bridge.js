@@ -64,7 +64,10 @@ export function taskPacketToTaskSpec(taskPacket, { runId = taskPacket?.run_id } 
       ? taskPacket.repository
       : 'harness-taskpacket',
     objective: intent,
-    constraints: buildWorkspaceConstraints({ runId, writeSet }),
+    constraints: [
+      ...buildWorkspaceConstraints({ runId, writeSet }),
+      ...buildExpectedChecks(taskPacket).map((command) => `verification_command:${command}`)
+    ],
     acceptance,
     priority,
     version: '1'
@@ -128,7 +131,7 @@ export async function verifyHarnessResult({
   const expectedChecks = buildExpectedChecks(taskPacket);
   const writeSet = requireWriteSet(taskPacket.write_set);
   const writeSetViolations = [];
-  const missingExpectedChecks = [];
+  const observedExpectedChecks = new Set();
   const commands = Array.isArray(workflowResult?.commands) ? workflowResult.commands : [];
   const policyDenied = policyDeniedFromError(error);
 
@@ -136,7 +139,6 @@ export async function verifyHarnessResult({
     const evidence = await readEvidence(command);
     const changedFiles = Array.isArray(evidence?.changedFiles) ? evidence.changedFiles : [];
     const violatingFiles = findWriteSetViolations({ changedFiles, writeSet });
-    const missingChecks = missingChecksForEvidence({ evidence, expectedChecks });
 
     if (violatingFiles.length > 0) {
       writeSetViolations.push({
@@ -146,15 +148,21 @@ export async function verifyHarnessResult({
       });
     }
 
-    if (missingChecks.length > 0) {
-      missingExpectedChecks.push({
-        command: command.command,
-        artifactId: command.artifactId,
-        expectedCommands: missingChecks
-      });
-    }
+    recordObservedExpectedChecks({
+      evidence,
+      expectedChecks,
+      observedExpectedChecks
+    });
   }
 
+  const missingExpectedCommands = expectedChecks.filter((expected) => !observedExpectedChecks.has(expected));
+  const missingExpectedChecks = missingExpectedCommands.length > 0
+    ? [{
+        command: 'workflow',
+        artifactId: null,
+        expectedCommands: missingExpectedCommands
+      }]
+    : [];
   const failedSymphony = workflowResult?.status !== 'passed';
   const reason = failureReason({
     policyDenied,
@@ -184,6 +192,7 @@ export async function runHarnessTaskPacket({
   runtime,
   taskPacketPath,
   executionMode = 'dry-run',
+  commandSequence = 'standard',
   timeoutMs
 }) {
   const taskSpec = taskPacketToTaskSpec(taskPacket, { runId });
@@ -203,6 +212,7 @@ export async function runHarnessTaskPacket({
     workflowResult = await orchestrator.runTaskWorkflow({
       taskSpec,
       policyRequests: policy.requests,
+      commandSequence,
       executionMode,
       timeoutMs
     });
@@ -242,12 +252,14 @@ export async function runHarnessTaskPacket({
   };
 }
 
-function missingChecksForEvidence({ evidence, expectedChecks }) {
+function recordObservedExpectedChecks({ evidence, expectedChecks, observedExpectedChecks }) {
   const checks = Array.isArray(evidence?.checks) ? evidence.checks : [];
 
-  return expectedChecks.filter((expected) => !checks.some((check) => (
-    check?.command === expected || check?.name === expected
-  )));
+  for (const expected of expectedChecks) {
+    if (checks.some((check) => check?.command === expected || check?.name === expected)) {
+      observedExpectedChecks.add(expected);
+    }
+  }
 }
 
 function failureReason({ policyDenied, failedSymphony, writeSetViolations, missingExpectedChecks }) {

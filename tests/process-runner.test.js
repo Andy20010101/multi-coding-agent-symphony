@@ -35,12 +35,12 @@ describe('NodeProcessRunner', () => {
       args: ['-e', [
         "process.on('SIGTERM', () => {",
         "  console.log('sigterm ignored briefly');",
-        '  setTimeout(() => process.exit(0), 500);',
+        '  setTimeout(() => process.exit(0), 1000);',
         '});',
         "console.log('started');",
         'setInterval(() => {}, 1000);'
       ].join('\n')],
-      timeoutMs: 100,
+      timeoutMs: 500,
       timeoutKillDelayMs: 50
     });
 
