@@ -5,14 +5,25 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ArtifactStore } from '../src/artifact-store.js';
+import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js';
 import { CodexAdapter } from '../src/adapters/codex-adapter.js';
+import { KiroCliAdapter } from '../src/adapters/kiro-cli-adapter.js';
 import { NodeProcessRunner } from '../src/process-runner.js';
 import { Orchestrator } from '../src/orchestrator.js';
+import { PolicyEngine } from '../src/policy-engine.js';
 import { RouterScheduler } from '../src/router-scheduler.js';
 import { SessionEventLog } from '../src/session-event-log.js';
 import { TaskQueue } from '../src/task-queue.js';
 import { fetchGitHubIssueTaskSpec } from '../src/trackers/github-intake.js';
 import { WorkspaceManager } from '../src/workspace-manager.js';
+import {
+  TaskPacketValidationError,
+  buildExpectedChecks,
+  buildHarnessPolicy,
+  readTaskPacketJsonFile,
+  runHarnessTaskPacket
+} from '../src/integrations/harness-bridge.js';
+import { HarnessEvidenceSink } from '../src/integrations/harness-evidence-sink.js';
 
 const EXIT_CODES = {
   ok: 0,
@@ -24,6 +35,7 @@ const EXIT_CODES = {
 const COMMANDS = [
   'doctor',
   'github issue',
+  'harness run-taskpacket',
   'queue manual',
   'run-next',
   'run-task',
@@ -31,12 +43,18 @@ const COMMANDS = [
   'eval replay'
 ];
 
+const REAL_CLI_GATES = {
+  codex: 'MCAS_RUN_REAL_CODEX',
+  'claude-code': 'MCAS_RUN_REAL_CLAUDE',
+  'kiro-cli': 'MCAS_RUN_REAL_KIRO'
+};
+
 export async function runMcasCli({
   argv = process.argv.slice(2),
   stdout = process.stdout,
   stderr = process.stderr,
   runner,
-  adapterFactory = () => new CliDryRunCodexAdapter()
+  adapterFactory = createCliAdapter
 } = {}) {
   try {
     if (!Array.isArray(argv)) {
@@ -58,6 +76,16 @@ export async function runMcasCli({
 
       writeJson(stdout, result);
       return EXIT_CODES.ok;
+    }
+
+    if (command === 'harness' && subcommand === 'run-taskpacket') {
+      const result = await runHarnessTaskPacketWorkflow({
+        args: rest,
+        adapterFactory
+      });
+
+      writeJson(stdout, result.output);
+      return result.exitCode;
     }
 
     if (command === 'queue' && subcommand === 'manual') {
@@ -184,14 +212,18 @@ function runManualTaskQueue({ args }) {
 
 async function runNextWorkflow({ args, adapterFactory }) {
   const paths = resolveRuntimePaths(args);
+  const workflowOptions = resolveWorkflowOptions(args);
   const taskQueue = new TaskQueue({ stateFile: paths.stateFile });
   const orchestrator = await buildWorkflowRuntime({
     paths,
     taskQueue,
-    adapterFactory
+    adapterFactory: () => adapterFactory(workflowOptions),
+    materializeWorkspaces: workflowOptions.executionMode === 'real'
   });
   const result = await orchestrator.runNextTask({
     commandSequence: readOptionalOption(args, '--sequence') ?? 'standard',
+    executionMode: workflowOptions.executionMode,
+    timeoutMs: workflowOptions.timeoutMs,
     leaseTimeoutMs: readOptionalPositiveInteger(args, '--lease-timeout-ms'),
     now: readOptionalOption(args, '--now')
   });
@@ -204,6 +236,8 @@ async function runNextWorkflow({ args, adapterFactory }) {
         command: 'run-next',
         status: 'idle',
         exitCode: EXIT_CODES.ok,
+        executionMode: workflowOptions.executionMode,
+        adapterId: workflowOptions.adapterId,
         ...paths
       }
     };
@@ -218,6 +252,8 @@ async function runNextWorkflow({ args, adapterFactory }) {
       command: 'run-next',
       status: result.status,
       exitCode,
+      executionMode: workflowOptions.executionMode,
+      adapterId: workflowOptions.adapterId,
       ...paths,
       ...summarizeWorkflowResult(result)
     }
@@ -228,13 +264,17 @@ async function runTaskFileWorkflow({ args, adapterFactory }) {
   const taskFile = readOption(args, '--task-file');
   const taskSpec = parseJsonFile(taskFile, 'taskFile');
   const paths = resolveRuntimePaths(args);
+  const workflowOptions = resolveWorkflowOptions(args);
   const orchestrator = await buildWorkflowRuntime({
     paths,
-    adapterFactory
+    adapterFactory: () => adapterFactory(workflowOptions),
+    materializeWorkspaces: workflowOptions.executionMode === 'real'
   });
   const result = await orchestrator.runTaskWorkflow({
     taskSpec,
-    commandSequence: readOptionalOption(args, '--sequence') ?? 'standard'
+    commandSequence: readOptionalOption(args, '--sequence') ?? 'standard',
+    executionMode: workflowOptions.executionMode,
+    timeoutMs: workflowOptions.timeoutMs
   });
   const exitCode = result.status === 'passed' ? EXIT_CODES.ok : EXIT_CODES.verifierFailure;
 
@@ -245,6 +285,8 @@ async function runTaskFileWorkflow({ args, adapterFactory }) {
       command: 'run-task',
       status: result.status,
       exitCode,
+      executionMode: workflowOptions.executionMode,
+      adapterId: workflowOptions.adapterId,
       artifactDirectory: paths.artifactDirectory,
       eventDirectory: paths.eventDirectory,
       workspaceDirectory: paths.workspaceDirectory,
@@ -254,6 +296,78 @@ async function runTaskFileWorkflow({ args, adapterFactory }) {
       ...summarizeWorkflowResult(result)
     }
   };
+}
+
+async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
+  try {
+    const runId = readOption(args, '--run-id');
+    const taskPacketPath = readOption(args, '--taskpacket');
+    const taskPacket = await readTaskPacketJsonFile(taskPacketPath);
+    const paths = resolveRuntimePaths(args);
+    const workflowOptions = resolveWorkflowOptions(args);
+    const harnessDirectory = readOptionalOption(args, '--harness-dir') ?? '.omx/harness';
+    const expectedChecks = buildExpectedChecks(taskPacket);
+    const harnessPolicy = buildHarnessPolicy(taskPacket);
+    const orchestrator = await buildWorkflowRuntime({
+      paths,
+      policyEngine: new PolicyEngine(harnessPolicy.config),
+      materializeWorkspaces: workflowOptions.executionMode === 'real',
+      adapterFactory: () => adapterFactory({
+        taskPacket,
+        checkCommands: expectedChecks,
+        ...workflowOptions
+      })
+    });
+    const result = await runHarnessTaskPacket({
+      taskPacket,
+      runId,
+      orchestrator,
+      artifactStore: orchestrator.artifactStore,
+      evidenceSink: new HarnessEvidenceSink({
+        rootDirectory: harnessDirectory,
+        runId
+      }),
+      runtime: paths,
+      taskPacketPath,
+      executionMode: workflowOptions.executionMode,
+      timeoutMs: workflowOptions.timeoutMs
+    });
+    const status = result.harnessVerification.status;
+    const exitCode = status === 'passed' ? EXIT_CODES.ok : EXIT_CODES.verifierFailure;
+
+    return {
+      exitCode,
+      output: {
+        version: '1',
+        command: 'harness run-taskpacket',
+        status,
+        exitCode,
+        runId,
+        executionMode: workflowOptions.executionMode,
+        adapterId: workflowOptions.adapterId,
+        taskId: result.taskSpec.id,
+        taskPacket: taskPacketPath,
+        symphonyStatus: result.workflowResult.status,
+        verifierStatus: result.harnessVerification.status,
+        reason: result.harnessVerification.reason,
+        artifactDirectory: paths.artifactDirectory,
+        eventDirectory: paths.eventDirectory,
+        workspaceDirectory: paths.workspaceDirectory,
+        sessionId: paths.sessionId,
+        commands: result.workflowResult.commands.map(summarizeCommandRun),
+        evidencePaths: result.evidencePaths,
+        ...(result.harnessVerification.policyDenied
+          ? { policyDenied: result.harnessVerification.policyDenied }
+          : {})
+      }
+    };
+  } catch (error) {
+    if (error instanceof TaskPacketValidationError) {
+      throw new UsageError(error.message);
+    }
+
+    throw error;
+  }
 }
 
 async function runSmokeCommand({ adapter, args, runner }) {
@@ -324,16 +438,93 @@ function smokeModeFor({ adapter, args }) {
   return args.includes('--real') ? 'real' : 'help';
 }
 
-async function buildWorkflowRuntime({ paths, adapterFactory, taskQueue }) {
+function resolveWorkflowOptions(args) {
+  const executionMode = args.includes('--real') ? 'real' : 'dry-run';
+  const rawAdapter = readOptionalOption(args, '--adapter') ?? readOptionalOption(args, '--lane');
+  const adapterId = normalizeCliAdapter(rawAdapter ?? 'codex');
+
+  if (executionMode !== 'real' && rawAdapter !== undefined) {
+    throw new UsageError('--adapter and --lane require --real');
+  }
+
+  return {
+    executionMode,
+    adapterId,
+    timeoutMs: readOptionalPositiveInteger(args, '--timeout-ms')
+  };
+}
+
+function createCliAdapter({ executionMode = 'dry-run', adapterId = 'codex', timeoutMs, checkCommands } = {}) {
+  if (executionMode !== 'real') {
+    return new CliDryRunCodexAdapter({ checkCommands });
+  }
+
+  assertRealCliGate(adapterId);
+  const options = timeoutMs === undefined ? {} : { timeoutMs };
+
+  if (adapterId === 'codex') {
+    return new CodexAdapter(options);
+  }
+
+  if (adapterId === 'claude-code') {
+    return new ClaudeCodeAdapter(options);
+  }
+
+  if (adapterId === 'kiro-cli') {
+    return new KiroCliAdapter(options);
+  }
+
+  throw new UsageError('adapter must be one of: codex, claude, claude-code, kiro, kiro-cli');
+}
+
+function normalizeCliAdapter(value) {
+  if (value === 'codex') {
+    return 'codex';
+  }
+
+  if (value === 'claude' || value === 'claude-code') {
+    return 'claude-code';
+  }
+
+  if (value === 'kiro' || value === 'kiro-cli') {
+    return 'kiro-cli';
+  }
+
+  throw new UsageError('adapter must be one of: codex, claude, claude-code, kiro, kiro-cli');
+}
+
+function assertRealCliGate(adapterId) {
+  const envName = REAL_CLI_GATES[adapterId];
+
+  if (!envName) {
+    throw new UsageError('adapter must be one of: codex, claude, claude-code, kiro, kiro-cli');
+  }
+
+  if (process.env[envName] !== '1') {
+    throw new UsageError(`Set ${envName}=1 to invoke the real ${adapterId} CLI lane.`);
+  }
+}
+
+async function buildWorkflowRuntime({
+  paths,
+  adapterFactory,
+  taskQueue,
+  policyEngine,
+  materializeWorkspaces = false
+}) {
   const adapter = await adapterFactory();
   const capabilityReport = await adapter.probe();
 
   return new Orchestrator({
     artifactStore: new ArtifactStore(paths.artifactDirectory),
     eventLog: new SessionEventLog(paths.eventDirectory, paths.sessionId),
-    workspaceManager: new WorkspaceManager({ rootDirectory: paths.workspaceDirectory }),
+    workspaceManager: new WorkspaceManager({
+      rootDirectory: paths.workspaceDirectory,
+      materialize: materializeWorkspaces
+    }),
     scheduler: new RouterScheduler({ capabilityReports: [capabilityReport] }),
     taskQueue,
+    policyEngine,
     adapters: {
       [adapter.adapterId]: adapter
     }
@@ -532,8 +723,9 @@ class UsageError extends Error {
 }
 
 class CliDryRunCodexAdapter extends CodexAdapter {
-  constructor() {
+  constructor({ checkCommands = ['mcas-cli-dry-run'] } = {}) {
     super({ cliVersion: 'synthetic-dry-run' });
+    this.checkCommands = [...checkCommands];
   }
 
   async collectEvidence(handle) {
@@ -545,20 +737,24 @@ class CliDryRunCodexAdapter extends CodexAdapter {
       workspaceId: handle.workspaceId,
       diffSummary: changedFiles.length > 0 ? ['Synthetic CLI dry-run change summary.'] : [],
       changedFiles,
-      checks: [{
-        name: 'mcas-cli-dry-run',
+      checks: this.checkCommands.map((command) => ({
+        name: command,
         status: 'passed',
-        command: 'mcas-cli-dry-run',
+        command,
         exitCode: 0,
-        artifactId: `${handle.command}-dry-run-check`,
-        output: 'Synthetic CLI dry-run check passed.'
-      }],
+        artifactId: `${handle.command}-${safeArtifactSuffix(command)}-check`,
+        output: `Synthetic CLI dry-run check passed: ${command}`
+      })),
       knownRisks: ['synthetic-dry-run-no-real-model'],
       agentSummary: 'MCAS CLI synthetic dry-run evidence.',
       ...(handle.command === 'review' ? { noFindingRationale: 'Synthetic dry-run review found no issues.' } : {}),
       version: '1'
     };
   }
+}
+
+function safeArtifactSuffix(value) {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'check';
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

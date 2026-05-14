@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -31,6 +32,7 @@ describe('Phase 8 user-facing CLI', () => {
     assert.deepEqual(doctor.commands, [
       'doctor',
       'github issue',
+      'harness run-taskpacket',
       'queue manual',
       'run-next',
       'run-task',
@@ -309,6 +311,54 @@ describe('Phase 8 user-facing CLI', () => {
         () => readFile(join(root, 'queue.json'), 'utf8'),
         /ENOENT/
       );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs a TaskSpec file through a selected real CLI lane', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-cli-run-task-real-'));
+    let adapter;
+
+    try {
+      const taskFile = join(root, 'task.json');
+      await writeFile(taskFile, `${JSON.stringify(manualTask, null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'run-task',
+          '--task-file',
+          taskFile,
+          '--runtime-dir',
+          root,
+          '--session-id',
+          'session-cli',
+          '--real',
+          '--adapter',
+          'codex'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        adapterFactory(options) {
+          adapter = new RecordingRealCliAdapter(options);
+          return adapter;
+        }
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.deepEqual(adapter.executionModes, ['real', 'real', 'real']);
+
+      const run = JSON.parse(output.stdoutText());
+
+      assert.equal(run.executionMode, 'real');
+      assert.equal(run.adapterId, 'codex');
+      assert.deepEqual(run.commands.map((command) => command.adapterId), [
+        'codex',
+        'codex',
+        'codex'
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -631,6 +681,91 @@ class FailingRunNextAdapter extends CodexAdapter {
       checks: [],
       knownRisks: ['synthetic-verifier-failure'],
       agentSummary: 'Synthetic failing evidence.',
+      version: '1'
+    };
+  }
+}
+
+class RecordingRealCliAdapter {
+  constructor({ adapterId = 'codex' } = {}) {
+    this.adapterId = adapterId;
+    this.cliName = adapterId;
+    this.cliVersion = 'synthetic-real';
+    this.modelProfiles = ['gpt-codex-default'];
+    this.runs = new Map();
+    this.executionModes = [];
+  }
+
+  async probe() {
+    return {
+      adapterId: this.adapterId,
+      cliName: this.cliName,
+      cliVersion: this.cliVersion,
+      supportedCommands: ['plan', 'implement', 'review', 'fix-ci', 'qa'],
+      modelProfiles: [...this.modelProfiles],
+      supportsNonInteractive: true,
+      supportsResume: true,
+      supportsCancel: true,
+      supportsHooks: true,
+      supportsMcp: true,
+      supportsStructuredOutput: true,
+      workspaceIsolation: 'external-workspace',
+      logStrategy: 'jsonl-stdout',
+      version: '1'
+    };
+  }
+
+  async start(input) {
+    this.executionModes.push(input.executionMode);
+    assert.equal(existsSync(input.workspace), true);
+    const runId = `${this.adapterId}-${input.commandSpec.name}-${this.runs.size + 1}`;
+    const handle = {
+      runId,
+      adapterId: this.adapterId,
+      status: 'completed',
+      dryRun: false,
+      command: input.commandSpec.name,
+      taskId: input.contextPack.task.id,
+      workspaceId: input.workspace
+    };
+
+    this.runs.set(runId, handle);
+    return structuredClone(handle);
+  }
+
+  async *streamEvents(handle) {
+    yield {
+      type: 'adapter.started',
+      runId: handle.runId,
+      adapterId: this.adapterId,
+      dryRun: false
+    };
+    yield {
+      type: 'command.finished',
+      runId: handle.runId,
+      adapterId: this.adapterId,
+      status: 'completed'
+    };
+  }
+
+  async collectEvidence(handle) {
+    return {
+      command: handle.command,
+      taskId: handle.taskId,
+      workspaceId: handle.workspaceId,
+      diffSummary: handle.command === 'implement' ? ['Synthetic real CLI change summary.'] : [],
+      changedFiles: handle.command === 'implement' ? ['synthetic-real.txt'] : [],
+      checks: [{
+        name: 'mcas-cli-real',
+        status: 'passed',
+        command: 'mcas-cli-real',
+        exitCode: 0,
+        artifactId: `${handle.command}-real-cli-check`,
+        output: 'Synthetic real CLI check passed.'
+      }],
+      knownRisks: [],
+      agentSummary: 'Synthetic real CLI evidence.',
+      ...(handle.command === 'review' ? { noFindingRationale: 'Synthetic real review found no issues.' } : {}),
       version: '1'
     };
   }

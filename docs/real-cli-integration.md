@@ -11,10 +11,13 @@ Real CLI execution is opt-in. Normal tests use injected fake runners and do not 
 - `queue manual ...`
 - `run-next ...`
 - `run-task --task-file task.json ...`
+- `harness run-taskpacket --run-id RUN --taskpacket taskpacket.json ...`
 - `smoke <codex|claude|kiro> [--real]`
 - `eval replay -- ...`
 
 Workflow commands accept `--config <file>`, where `runtime.stateFile`, `runtime.artifactDirectory`, `runtime.eventDirectory`, `runtime.workspaceDirectory`, and `runtime.sessionId` provide defaults. Explicit CLI flags override config values.
+
+`run-next`, `run-task`, and `harness run-taskpacket` default to dry-run execution. Passing `--real --adapter <codex|claude|claude-code|kiro|kiro-cli>` selects a real CLI lane and requires the matching gate: `MCAS_RUN_REAL_CODEX=1`, `MCAS_RUN_REAL_CLAUDE=1`, or `MCAS_RUN_REAL_KIRO=1`. Real lanes materialize workspace directories before adapter start. `--timeout-ms <milliseconds>` overrides the real adapter timeout.
 
 ## Codex
 

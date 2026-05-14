@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "id": "task.scaffold",
+  "run_id": "fixture-run",
+  "repository": "Andy20010101/multi-coding-agent-symphony",
+  "intent": "Create a Node CLI scaffold",
+  "acceptance": [
+    "CLI prints help",
+    "Harness verification records are written"
+  ],
+  "write_set": [
+    "synthetic-dry-run.txt",
+    "src/**"
+  ],
+  "verification": {
+    "commands": [
+      "pnpm test",
+      "pnpm check"
+    ]
+  }
+}

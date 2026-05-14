@@ -36,6 +36,12 @@ Feature: Phase 8 user-facing CLI
     Then the CLI runs the existing dry-run workflow without queue state
     And it prints command artifact ids and verifier status
 
+  Scenario: Run a TaskSpec file through a real CLI lane
+    Given a TaskSpec JSON file and runtime directories
+    When the user runs the run-task command with real execution enabled
+    Then the CLI starts the selected adapter in real execution mode
+    And it prints the selected adapter lane and verifier status
+
   Scenario: Dispatch smoke checks through the CLI
     Given an injected command runner for package scripts
     When the user runs smoke checks for Codex, Claude Code, and Kiro CLI
