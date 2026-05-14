@@ -19,11 +19,15 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [BDD and TDD Workflow](docs/bdd-tdd-workflow.md)
 - [Eval Replay Plugin](docs/eval-replay-plugin.md)
 - [Real CLI Integration](docs/real-cli-integration.md)
+- [Symphony Layer](docs/symphony-layer.md)
 - [Security Checklist](docs/security-checklist.md)
 - [Release Checklist](docs/release-checklist.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Harness Symphony Integration](docs/harness-symphony-integration.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
+- [V1 to V2 Evolution Plan](docs/plans/v1-to-v2-evolution-plan-2026-05-14.md)
 - [ADR 0001: Use BDD and TDD](docs/adr/0001-use-bdd-tdd.md)
+- [ADR 0002: Harness Protocol Bridge](docs/adr/0002-integrate-harness-through-protocol-bridge.md)
 
 ## Current Status
 
@@ -33,10 +37,12 @@ Implemented:
 - Durable artifacts, session events, queue state, workspace allocation, and workflow run records.
 - Real adapter paths for Codex, Claude Code, and Kiro CLI with opt-in model smokes.
 - User-facing `pnpm mcas` commands for doctor, GitHub issue intake, manual queueing, task execution, smoke dispatch, and eval replay dispatch.
+- V1.5 Harness Bridge dry-run execution and gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
+- V2 proposal-only and writer-reviewer ensemble flows with structured proposal, arbitration, synthesis, role separation, and ensemble-run artifacts.
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts.
 
-Current baseline: `pnpm test` covers 133 tests across 20 suites.
+Current baseline: `pnpm test` covers 153 tests across 28 suites.
 
 ## Design Center
 
@@ -80,6 +86,8 @@ pnpm mcas github issue --repo OWNER/REPO --number 123
 pnpm mcas queue manual --state-file .mcas/queue.json --id task-1 --repo OWNER/REPO --objective "Do the work" --acceptance "Verifier evidence is written"
 pnpm mcas run-next --state-file .mcas/queue.json --runtime-dir .mcas
 pnpm mcas run-task --task-file task.json --runtime-dir .mcas
+pnpm mcas harness run-taskpacket --run-id fixture-run --taskpacket fixtures/harness/scaffold-taskpacket.json --runtime-dir tmp/harness-bridge
+MCAS_RUN_REAL_CODEX=1 pnpm mcas harness run-taskpacket --run-id fixture-run --taskpacket fixtures/harness/scaffold-taskpacket.json --runtime-dir tmp/harness-bridge-real --real --adapter codex
 pnpm mcas smoke codex
 pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason model-upgrade
 ```
@@ -88,6 +96,7 @@ pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason 
 `queue manual` writes a validated manual `TaskSpec` into a persistent `TaskQueue` state file without invoking adapters.
 `run-next` leases the next queued task and runs the existing standard dry-run workflow, returning verifier status and artifact ids.
 `run-task` runs a TaskSpec JSON file through the same dry-run workflow without reading or writing queue state.
+`harness run-taskpacket` converts a Harness JSON TaskPacket into a Symphony TaskSpec, runs the workflow, and writes `.omx/harness/runs/<run-id>/` evidence records. Add `--real --adapter <codex|claude|claude-code|kiro|kiro-cli>` plus the matching `MCAS_RUN_REAL_*` gate to select a real CLI lane.
 `smoke <codex|claude|kiro>` dispatches the existing package smoke scripts and propagates their exit codes; add `--real` only when the underlying real smoke gate is intended.
 `eval replay` dispatches the existing eval replay package script and passes through all remaining arguments.
 
