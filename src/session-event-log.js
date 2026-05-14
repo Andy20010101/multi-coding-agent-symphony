@@ -16,7 +16,11 @@ const EVENT_TYPES = new Set([
   'failure.classified',
   'verifier.result',
   'command.failed',
-  'command.finished'
+  'command.finished',
+  'ensemble.proposal.written',
+  'ensemble.arbitration.decided',
+  'ensemble.synthesis.written',
+  'ensemble.run.completed'
 ]);
 
 export class SessionEventLog {

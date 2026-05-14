@@ -72,10 +72,12 @@ export class Orchestrator {
     executionMode = 'dry-run',
     timeoutMs,
     artifactRefs = [],
-    sourceWorkspaceId
+    sourceWorkspaceId,
+    artifactIdSuffix = ''
   }) {
     validateTaskSpec(taskSpec);
     validateCommandSpec(commandSpec);
+    const artifactKey = buildCommandArtifactKey(commandSpec.name, artifactIdSuffix);
 
     await this.#appendEvent({
       type: 'command.queued',
@@ -104,7 +106,7 @@ export class Orchestrator {
       throw new Error(`No adapter instance registered for ${route.adapterId}`);
     }
 
-    const routeDecisionArtifactId = `${commandSpec.name}-route-decision`;
+    const routeDecisionArtifactId = `${artifactKey}-route-decision`;
     const routeDecision = buildRouteDecisionArtifact({
       taskId: taskSpec.id,
       commandSpec,
@@ -173,7 +175,7 @@ export class Orchestrator {
     }
 
     const evidence = await adapter.collectEvidence(handle);
-    const artifactId = `${commandSpec.name}-evidence`;
+    const artifactId = `${artifactKey}-evidence`;
 
     await this.artifactStore.writeArtifact(taskSpec.id, artifactId, evidence);
     await this.#appendEvent({
@@ -192,7 +194,7 @@ export class Orchestrator {
     });
     const adapterArtifactRefs = await this.#writeAdapterArtifacts({
       taskId: taskSpec.id,
-      command: commandSpec.name,
+      command: artifactKey,
       adapter,
       handle
     });
@@ -202,7 +204,7 @@ export class Orchestrator {
       actor: 'verifier',
       payload: verification
     });
-    const runArtifactId = `${commandSpec.name}-run`;
+    const runArtifactId = `${artifactKey}-run`;
     const runRecord = {
       version: '1',
       taskId: taskSpec.id,
@@ -516,6 +518,21 @@ function resolveCommandSpecs({ commandSpecs, commandSequence }) {
   }
 
   return structuredClone(sequence);
+}
+
+function buildCommandArtifactKey(commandName, artifactIdSuffix) {
+  if (artifactIdSuffix === undefined || artifactIdSuffix === null || artifactIdSuffix === '') {
+    return commandName;
+  }
+
+  if (typeof artifactIdSuffix !== 'string' ||
+    artifactIdSuffix.trim() === '' ||
+    artifactIdSuffix.includes('/') ||
+    artifactIdSuffix.includes('..')) {
+    throw new TypeError('artifactIdSuffix must be a safe artifact id segment');
+  }
+
+  return `${commandName}-${artifactIdSuffix}`;
 }
 
 function requireMethod(value, method, field) {

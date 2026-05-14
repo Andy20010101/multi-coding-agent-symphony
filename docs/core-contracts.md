@@ -210,7 +210,12 @@ Event types:
 - `check.finished`
 - `failure.classified`
 - `verifier.result`
+- `command.failed`
 - `command.finished`
+- `ensemble.proposal.written`
+- `ensemble.arbitration.decided`
+- `ensemble.synthesis.written`
+- `ensemble.run.completed`
 
 Required fields:
 
