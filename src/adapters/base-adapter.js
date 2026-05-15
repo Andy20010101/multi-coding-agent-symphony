@@ -21,6 +21,7 @@ export class BaseAdapter {
     this.workspaceIsolation = workspaceIsolation;
     this.logStrategy = logStrategy;
     this.runs = new Map();
+    this.runSequence = 0;
   }
 
   async probe() {
@@ -68,7 +69,7 @@ export class BaseAdapter {
     }
 
     const preparedRun = await this.prepare(input);
-    const runId = `${this.adapterId}-${input.contextPack.task.id}-${this.runs.size + 1}`;
+    const runId = this.nextRunId(input.contextPack.task.id);
     const handle = {
       runId,
       adapterId: this.adapterId,
@@ -133,6 +134,11 @@ export class BaseAdapter {
 
   async cleanup(handle) {
     this.runs.delete(handle.runId);
+  }
+
+  nextRunId(taskId) {
+    this.runSequence += 1;
+    return `${this.adapterId}-${taskId}-${this.runSequence}`;
   }
 
   #getRun(runId) {

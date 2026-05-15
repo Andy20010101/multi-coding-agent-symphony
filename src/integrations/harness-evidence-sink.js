@@ -117,9 +117,11 @@ function summarizeStages(workflowResult) {
   return workflowResult.commands.map((command) => stripUndefined({
     stage: command.stage ?? command.command,
     role: command.role,
+    laneId: command.laneId,
     agentId: command.agentId,
     command: command.command,
     adapterId: command.adapterId,
+    writeSet: command.writeSet ? structuredClone(command.writeSet) : undefined,
     artifactId: command.artifactId,
     runArtifactId: command.runArtifactId,
     routeDecisionArtifactId: command.routeDecisionArtifactId,
@@ -133,7 +135,9 @@ function summarizeStages(workflowResult) {
 function buildVerificationMap(stages) {
   return stages.map((stage) => stripUndefined({
     stage: stage.stage,
+    laneId: stage.laneId,
     command: stage.command,
+    writeSet: stage.writeSet ? structuredClone(stage.writeSet) : undefined,
     artifactId: stage.artifactId,
     verificationStatus: stage.verificationStatus,
     verificationReason: stage.verificationReason,

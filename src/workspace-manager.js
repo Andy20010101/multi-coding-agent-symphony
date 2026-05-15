@@ -62,7 +62,7 @@ export class WorkspaceManager {
       path: join(this.rootDirectory, taskId, workspaceId),
       manifestPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_MANIFEST_FILE),
       lockPath: join(this.rootDirectory, taskId, workspaceId, WORKSPACE_LOCK_FILE),
-      writable: role === 'primary-writer',
+      writable: role === 'primary-writer' || role === 'parallel-writer',
       allocatedAt,
       allocatedEventId: workspaceEventId(workspaceId, 'allocated'),
       sourceWorkspaceId
@@ -255,7 +255,7 @@ function readWorkspaceLock(lockPath) {
 }
 
 function accessModeForRole(role) {
-  if (role === 'primary-writer') {
+  if (role === 'primary-writer' || role === 'parallel-writer') {
     return 'read-write';
   }
 

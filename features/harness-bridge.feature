@@ -51,6 +51,14 @@ Feature: Harness Bridge execution
     And Symphony executes one independent review-only stage
     And Harness evidence maps each stage to its artifact and verification result
 
+  Scenario: Run a TaskPacket through parallel-lanes ensemble mode
+    Given a valid Harness TaskPacket with workflow mode parallel-lanes
+    And each lane has a disjoint Harness write set
+    When the Harness Bridge runs the TaskPacket
+    Then Symphony executes each lane in its own writable workspace
+    And Harness evidence maps each lane to its artifact and verification result
+    And overlapping lane write sets are rejected before adapter execution
+
   Scenario: Diagnose real smoke failures by contract layer
     Given a real Harness Bridge smoke fails during model evidence verification
     When the Harness Bridge writes verification evidence

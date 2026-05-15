@@ -69,7 +69,7 @@ export class KiroCliAdapter extends BaseAdapter {
       onActivity: input.onActivity
     });
     const status = result.exitCode === 0 ? 'completed' : 'failed';
-    const runId = `${this.adapterId}-${input.contextPack.task.id}-${this.runs.size + 1}`;
+    const runId = this.nextRunId(input.contextPack.task.id);
     const handle = {
       runId,
       adapterId: this.adapterId,

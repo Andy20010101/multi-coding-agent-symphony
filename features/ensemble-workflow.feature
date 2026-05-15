@@ -47,3 +47,10 @@ Feature: V2 ensemble proposal arbitration synthesis and writer review
     When the ensemble runs in writer-reviewer mode
     Then the EnsembleRun decision is rejected
     And the reviewer verification failure is recorded
+
+  Scenario: Parallel lanes execute only with disjoint write sets
+    Given a bounded TaskSpec and two write-capable lanes with disjoint write sets
+    When the ensemble runs in parallel-lanes mode
+    Then each lane runs an implement command in its own writable workspace
+    And the EnsembleRun links every lane artifact, route decision, and verifier result
+    And overlapping lane write sets are rejected before adapter execution

@@ -636,9 +636,11 @@ function summarizeCommandRun(commandRun) {
   return {
     ...(commandRun.stage ? { stage: commandRun.stage } : {}),
     ...(commandRun.role ? { role: commandRun.role } : {}),
+    ...(commandRun.laneId ? { laneId: commandRun.laneId } : {}),
     ...(commandRun.agentId ? { agentId: commandRun.agentId } : {}),
     command: commandRun.command,
     adapterId: commandRun.adapterId,
+    ...(commandRun.writeSet ? { writeSet: commandRun.writeSet } : {}),
     workspaceId: commandRun.workspace.workspaceId,
     ...(commandRun.workspace.sourceWorkspaceId ? { sourceWorkspaceId: commandRun.workspace.sourceWorkspaceId } : {}),
     artifactId: commandRun.artifactId,
@@ -653,7 +655,9 @@ function summarizeCommandRun(commandRun) {
 function summarizeVerificationMap(commandRun) {
   return {
     stage: commandRun.stage ?? commandRun.command,
+    ...(commandRun.laneId ? { laneId: commandRun.laneId } : {}),
     command: commandRun.command,
+    ...(commandRun.writeSet ? { writeSet: commandRun.writeSet } : {}),
     artifactId: commandRun.artifactId,
     verificationStatus: commandRun.verification.status,
     ...(commandRun.verification.reason ? { verificationReason: commandRun.verification.reason } : {})
@@ -753,8 +757,21 @@ class CliDryRunCodexAdapter extends CodexAdapter {
     this.checkCommands = [...checkCommands];
   }
 
+  async start(input) {
+    const handle = await super.start(input);
+    const stored = this.runs.get(handle.runId);
+
+    stored.changedFiles = syntheticChangedFilesFor(input);
+    this.runs.set(handle.runId, stored);
+
+    return handle;
+  }
+
   async collectEvidence(handle) {
-    const changedFiles = handle.command === 'implement' ? ['synthetic-dry-run.txt'] : [];
+    const stored = this.runs.get(handle.runId);
+    const changedFiles = handle.command === 'implement'
+      ? stored?.changedFiles ?? ['synthetic-dry-run.txt']
+      : [];
 
     return {
       command: handle.command,
@@ -780,6 +797,25 @@ class CliDryRunCodexAdapter extends CodexAdapter {
 
 function safeArtifactSuffix(value) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'check';
+}
+
+function syntheticChangedFilesFor(input) {
+  if (input.commandSpec.name !== 'implement') {
+    return [];
+  }
+
+  const writeSet = Array.isArray(input.contextPack.task.constraints)
+    ? input.contextPack.task.constraints
+      .filter((constraint) => constraint.startsWith('write_set:'))
+      .map((constraint) => constraint.slice('write_set:'.length))
+    : [];
+  const firstPattern = writeSet[0] ?? 'synthetic-dry-run.txt';
+
+  return [
+    firstPattern
+      .replaceAll('**', 'synthetic-dry-run')
+      .replaceAll('*', 'synthetic-dry-run')
+  ];
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

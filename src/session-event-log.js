@@ -32,11 +32,20 @@ export class SessionEventLog {
 
     this.rootDirectory = rootDirectory;
     this.sessionId = sessionId;
+    this.writeChain = Promise.resolve();
   }
 
   async append(event) {
     const normalized = normalizeEvent(event, this.sessionId);
-    const events = await this.readAll();
+    const write = this.writeChain.then(() => this.#appendNormalized(normalized));
+
+    this.writeChain = write.catch(() => {});
+
+    return write;
+  }
+
+  async #appendNormalized(normalized) {
+    const events = await this.#readAllNow();
     events.push(normalized);
     await mkdir(this.rootDirectory, { recursive: true });
     await writeFile(this.#logPath(), `${JSON.stringify(events, null, 2)}\n`, 'utf8');
@@ -44,6 +53,11 @@ export class SessionEventLog {
   }
 
   async readAll() {
+    await this.writeChain;
+    return this.#readAllNow();
+  }
+
+  async #readAllNow() {
     try {
       const content = await readFile(this.#logPath(), 'utf8');
       return JSON.parse(content).map((event) => structuredClone(event));

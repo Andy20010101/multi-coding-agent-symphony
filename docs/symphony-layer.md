@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The V2 Symphony Layer coordinates multiple coding agents inside one bounded task. The implemented modes are `proposal-only` and `writer-reviewer`: agents either submit structured plan proposals for arbitration and synthesis, or one writer produces implementation evidence before independent reviewers inspect it.
+The V2 Symphony Layer coordinates multiple coding agents inside one bounded task. The implemented modes are `proposal-only`, `writer-reviewer`, and `parallel-lanes`: agents submit structured plan proposals, one writer can work before independent reviewers inspect it, or multiple write-capable lanes can execute after disjoint write-set validation.
 
 This layer does not replace Harness task ownership or Symphony adapter execution. Harness remains authoritative for TaskPackets, DAG state, and write-set locks. Symphony remains authoritative for adapter routing, artifacts, evidence, and verification.
 
@@ -60,6 +60,52 @@ Role rules:
       "adapterId": "codex",
       "evidenceArtifactId": "review-codex-reviewer-evidence",
       "runArtifactId": "review-codex-reviewer-run",
+      "verificationStatus": "passed"
+    }
+  ],
+  "decision": "accepted",
+  "finalVerificationStatus": "passed",
+  "rejectionReasons": []
+}
+```
+
+## Parallel-Lanes Mode
+
+`parallel-lanes` runs multiple write-capable implementation lanes only after their Harness-declared write sets are proven disjoint.
+
+Plan and acceptance criteria:
+
+- Validate every lane id, agent id, and lane write set before adapter execution.
+- Reject overlapping lane write sets before any adapter starts.
+- Run each lane as an `implement` command in a distinct writable `parallel-writer` workspace.
+- Preserve lane-level evidence artifact ids, run artifact ids, route decision artifact ids, workspace manifests, write sets, and verifier results in the `EnsembleRun`.
+- Accept the run only when every lane verifier result passes.
+
+Non-goals:
+
+- No overlapping write sets.
+- No automatic merge of conflicting outputs.
+- No replacement of Harness DAG scheduling or final task ownership.
+
+`EnsembleRun` for `parallel-lanes`:
+
+```json
+{
+  "version": "1",
+  "id": "ensemble-parallel",
+  "taskId": "task-v2",
+  "mode": "parallel-lanes",
+  "command": "parallel-implement",
+  "roles": ["parallel-writer", "verifier"],
+  "lanes": [
+    {
+      "laneId": "docs-lane",
+      "agentId": "codex-docs",
+      "adapterId": "codex",
+      "writeSet": ["docs/parallel-lanes.md"],
+      "evidenceArtifactId": "implement-docs-lane-evidence",
+      "runArtifactId": "implement-docs-lane-run",
+      "routeDecisionArtifactId": "implement-docs-lane-route-decision",
       "verificationStatus": "passed"
     }
   ],
@@ -156,6 +202,7 @@ The implemented V2 slices are covered by:
 - `tests/arbitrator.test.js`
 - `tests/synthesis.test.js`
 - `tests/ensemble-orchestrator.test.js`
+- `tests/harness-bridge.test.js`
 - `src/ensemble/role-policy.js`
 
 Release gates remain:

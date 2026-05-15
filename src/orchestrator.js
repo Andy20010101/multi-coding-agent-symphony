@@ -662,6 +662,10 @@ function workspaceRoleFor(workspacePolicy) {
     return 'primary-writer';
   }
 
+  if (workspacePolicy === 'parallel-writer') {
+    return 'parallel-writer';
+  }
+
   if (workspacePolicy === 'review-only') {
     return 'review';
   }

@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "id": "task.parallel-lanes",
+  "run_id": "fixture-parallel-lanes",
+  "repository": "Andy20010101/multi-coding-agent-symphony",
+  "intent": "Create disjoint dry-run artifacts through the parallel-lanes ensemble workflow.",
+  "acceptance": [
+    "docs lane evidence is recorded",
+    "source lane evidence is recorded",
+    "Harness maps each lane to its artifact and verification result"
+  ],
+  "write_set": [
+    "docs/parallel-lanes.md",
+    "src/parallel-lanes.js"
+  ],
+  "verification": {
+    "commands": [
+      "pnpm test"
+    ]
+  },
+  "workflow": {
+    "mode": "parallel-lanes",
+    "ensemble_id": "ensemble-parallel-lanes",
+    "lanes": [
+      {
+        "lane_id": "docs-lane",
+        "agent_id": "codex-docs",
+        "model_profile": "gpt-codex-default",
+        "write_set": [
+          "docs/parallel-lanes.md"
+        ]
+      },
+      {
+        "lane_id": "src-lane",
+        "agent_id": "codex-src",
+        "model_profile": "gpt-codex-default",
+        "write_set": [
+          "src/parallel-lanes.js"
+        ]
+      }
+    ]
+  }
+}

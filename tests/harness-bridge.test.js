@@ -414,6 +414,231 @@ describe('Harness Bridge CLI dry-run E2E', () => {
     }
   });
 
+  it('runs a TaskPacket through the parallel-lanes ensemble workflow', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-harness-parallel-lanes-'));
+
+    try {
+      const taskPacketFile = join(root, 'taskpacket.json');
+      const runtimeDirectory = join(root, 'runtime');
+      const harnessDirectory = join(root, 'harness');
+
+      await writeFile(taskPacketFile, `${JSON.stringify(parallelLanesTaskPacket(), null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'harness',
+          'run-taskpacket',
+          '--run-id',
+          'fixture-parallel-lanes',
+          '--taskpacket',
+          taskPacketFile,
+          '--runtime-dir',
+          runtimeDirectory,
+          '--harness-dir',
+          harnessDirectory,
+          '--session-id',
+          'harness-session'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const run = JSON.parse(output.stdoutText());
+      const evidenceMap = JSON.parse(await readFile(join(harnessDirectory, 'runs', 'fixture-parallel-lanes', 'evidence-map.json'), 'utf8'));
+      const summary = JSON.parse(await readFile(join(harnessDirectory, 'runs', 'fixture-parallel-lanes', 'summary.json'), 'utf8'));
+      const verification = await readFile(join(harnessDirectory, 'runs', 'fixture-parallel-lanes', 'verification.md'), 'utf8');
+
+      assert.equal(run.workflowMode, 'parallel-lanes');
+      assert.deepEqual(run.commands.map((command) => ({
+        stage: command.stage,
+        role: command.role,
+        laneId: command.laneId,
+        agentId: command.agentId,
+        command: command.command,
+        artifactId: command.artifactId,
+        verificationStatus: command.verificationStatus
+      })), [
+        {
+          stage: 'lane:docs-lane',
+          role: 'parallel-writer',
+          laneId: 'docs-lane',
+          agentId: 'codex-docs',
+          command: 'implement',
+          artifactId: 'implement-docs-lane-evidence',
+          verificationStatus: 'passed'
+        },
+        {
+          stage: 'lane:src-lane',
+          role: 'parallel-writer',
+          laneId: 'src-lane',
+          agentId: 'codex-src',
+          command: 'implement',
+          artifactId: 'implement-src-lane-evidence',
+          verificationStatus: 'passed'
+        }
+      ]);
+      assert.equal(evidenceMap.workflowMode, 'parallel-lanes');
+      assert.deepEqual(evidenceMap.artifacts.map((artifact) => artifact.artifactId), [
+        'implement-docs-lane-evidence',
+        'implement-src-lane-evidence'
+      ]);
+      assert.deepEqual(evidenceMap.stages.map((stage) => ({
+        stage: stage.stage,
+        role: stage.role,
+        laneId: stage.laneId,
+        agentId: stage.agentId,
+        command: stage.command,
+        verificationStatus: stage.verificationStatus,
+        writeSet: stage.writeSet
+      })), [
+        {
+          stage: 'lane:docs-lane',
+          role: 'parallel-writer',
+          laneId: 'docs-lane',
+          agentId: 'codex-docs',
+          command: 'implement',
+          verificationStatus: 'passed',
+          writeSet: ['docs/parallel-lanes.md']
+        },
+        {
+          stage: 'lane:src-lane',
+          role: 'parallel-writer',
+          laneId: 'src-lane',
+          agentId: 'codex-src',
+          command: 'implement',
+          verificationStatus: 'passed',
+          writeSet: ['src/parallel-lanes.js']
+        }
+      ]);
+      assert.deepEqual(summary.verificationMap, evidenceMap.verificationMap);
+      assert.match(verification, /Workflow mode: parallel-lanes/);
+      assert.match(verification, /Stage: lane:docs-lane/);
+      assert.match(verification, /Stage: lane:src-lane/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects overlapping parallel lane write sets before adapter execution', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-harness-parallel-overlap-'));
+    let adapter;
+
+    try {
+      const taskPacketFile = join(root, 'taskpacket.json');
+      const runtimeDirectory = join(root, 'runtime');
+      const harnessDirectory = join(root, 'harness');
+
+      await writeFile(taskPacketFile, `${JSON.stringify({
+        ...parallelLanesTaskPacket(),
+        workflow: {
+          ...parallelLanesTaskPacket().workflow,
+          lanes: [
+            {
+              lane_id: 'one',
+              agent_id: 'codex-one',
+              write_set: ['src/shared.js']
+            },
+            {
+              lane_id: 'two',
+              agent_id: 'codex-two',
+              write_set: ['src/shared.js']
+            }
+          ]
+        }
+      }, null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'harness',
+          'run-taskpacket',
+          '--run-id',
+          'fixture-parallel-overlap',
+          '--taskpacket',
+          taskPacketFile,
+          '--runtime-dir',
+          runtimeDirectory,
+          '--harness-dir',
+          harnessDirectory,
+          '--session-id',
+          'harness-session'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        adapterFactory(options) {
+          adapter = new RecordingRealCliAdapter(options);
+          return adapter;
+        }
+      });
+
+      assert.equal(exitCode, 64);
+      assert.equal(output.stdoutText(), '');
+      assert.match(output.stderrText(), /parallel lane write sets overlap/);
+      assert.deepEqual(adapter.executionModes, []);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects parallel lane write sets outside the TaskPacket write set before adapter execution', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-harness-parallel-escape-'));
+    let adapter;
+
+    try {
+      const taskPacketFile = join(root, 'taskpacket.json');
+      const runtimeDirectory = join(root, 'runtime');
+      const harnessDirectory = join(root, 'harness');
+
+      await writeFile(taskPacketFile, `${JSON.stringify({
+        ...parallelLanesTaskPacket(),
+        write_set: ['docs/parallel-lanes.md'],
+        workflow: {
+          ...parallelLanesTaskPacket().workflow,
+          lanes: [{
+            lane_id: 'escape',
+            agent_id: 'codex-escape',
+            write_set: ['src/outside-lock.js']
+          }]
+        }
+      }, null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'harness',
+          'run-taskpacket',
+          '--run-id',
+          'fixture-parallel-escape',
+          '--taskpacket',
+          taskPacketFile,
+          '--runtime-dir',
+          runtimeDirectory,
+          '--harness-dir',
+          harnessDirectory,
+          '--session-id',
+          'harness-session'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        adapterFactory(options) {
+          adapter = new RecordingRealCliAdapter(options);
+          return adapter;
+        }
+      });
+
+      assert.equal(exitCode, 64);
+      assert.equal(output.stdoutText(), '');
+      assert.match(output.stderrText(), /parallel lane write set escapes TaskPacket\.write_set/);
+      assert.deepEqual(adapter.executionModes, []);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('records policy denial in Symphony events and Harness evidence', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-harness-policy-'));
 
@@ -698,6 +923,47 @@ function writerReviewerTaskPacket() {
         agent_id: 'codex-reviewer',
         model_profile: 'gpt-codex-default'
       }]
+    }
+  };
+}
+
+function parallelLanesTaskPacket() {
+  return {
+    ...validTaskPacket(),
+    id: 'task.parallel-lanes',
+    run_id: 'fixture-parallel-lanes',
+    intent: 'Create two disjoint artifacts through parallel-lanes mode',
+    acceptance: [
+      'docs lane evidence is recorded',
+      'source lane evidence is recorded',
+      'Harness maps each lane to its artifact and verification result'
+    ],
+    write_set: [
+      'docs/parallel-lanes.md',
+      'src/parallel-lanes.js'
+    ],
+    verification: {
+      commands: [
+        'pnpm test'
+      ]
+    },
+    workflow: {
+      mode: 'parallel-lanes',
+      ensemble_id: 'ensemble-parallel-lanes',
+      lanes: [
+        {
+          lane_id: 'docs-lane',
+          agent_id: 'codex-docs',
+          model_profile: 'gpt-codex-default',
+          write_set: ['docs/parallel-lanes.md']
+        },
+        {
+          lane_id: 'src-lane',
+          agent_id: 'codex-src',
+          model_profile: 'gpt-codex-default',
+          write_set: ['src/parallel-lanes.js']
+        }
+      ]
     }
   };
 }

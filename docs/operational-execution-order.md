@@ -19,7 +19,7 @@ Remaining production gaps:
 - README test baseline needs refresh after the continuation-turn tests.
 - Local commits need push and CI confirmation before tagging.
 - Real CLI behavior still depends on local CLI installs, explicit env gates, and model output quality.
-- V2 modes `parallel-lanes`, `competitive-patch`, and `qa-swarm` are not implemented.
+- V2 modes `competitive-patch` and `qa-swarm` are not implemented.
 
 ## Execution Order
 

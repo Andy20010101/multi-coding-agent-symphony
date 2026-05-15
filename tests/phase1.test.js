@@ -133,6 +133,43 @@ describe('Phase 1 foundation modules', () => {
     }
   });
 
+  it('serializes concurrent session event appends without corrupting the log', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-events-concurrent-'));
+
+    try {
+      const log = new SessionEventLog(root, 'session-123');
+
+      await Promise.all(Array.from({ length: 10 }, (_, index) => log.append({
+        id: `evt-${index + 1}`,
+        type: 'artifact.written',
+        timestamp: `2026-05-13T00:00:${String(index).padStart(2, '0')}.000Z`,
+        actor: 'orchestrator',
+        payload: {
+          artifactId: `artifact-${index + 1}`
+        },
+        version: '1'
+      })));
+
+      const events = await log.readAll();
+
+      assert.equal(events.length, 10);
+      assert.deepEqual(new Set(events.map((event) => event.id)), new Set([
+        'evt-1',
+        'evt-2',
+        'evt-3',
+        'evt-4',
+        'evt-5',
+        'evt-6',
+        'evt-7',
+        'evt-8',
+        'evt-9',
+        'evt-10'
+      ]));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('classifies known failures with retry and next-command metadata', () => {
     assert.deepEqual(classifyFailure('build-failed'), {
       category: 'build-failed',

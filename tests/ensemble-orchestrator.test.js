@@ -233,6 +233,184 @@ describe('V2 writer-reviewer ensemble workflow', () => {
   });
 });
 
+describe('V2 parallel-lanes ensemble workflow', () => {
+  it('runs disjoint write-capable lanes with one workspace and evidence chain per lane', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-parallel-lanes-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter();
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      const result = await ensemble.runParallelLanes({
+        ensembleId: 'ensemble-parallel',
+        taskSpec: parallelTaskSpec,
+        lanes: [
+          {
+            laneId: 'docs-lane',
+            agentId: 'codex-docs',
+            modelProfile: 'gpt-codex-default',
+            writeSet: ['docs/parallel-lanes.md']
+          },
+          {
+            laneId: 'src-lane',
+            agentId: 'codex-src',
+            modelProfile: 'gpt-codex-default',
+            writeSet: ['src/parallel-lanes.js']
+          }
+        ]
+      });
+
+      const run = await artifactStore.readArtifact('task-v2', 'ensemble-run-ensemble-parallel');
+      const events = await eventLog.readAll();
+
+      assert.equal(result.decision, 'accepted');
+      assert.equal(result.finalVerificationStatus, 'passed');
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.name), ['implement', 'implement']);
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.workspacePolicy), [
+        'parallel-writer',
+        'parallel-writer'
+      ]);
+      assert.deepEqual(adapter.starts.map((start) => start.contextPack.task.constraints), [
+        ['write_set:docs/parallel-lanes.md'],
+        ['write_set:src/parallel-lanes.js']
+      ]);
+      assert.equal(run.mode, 'parallel-lanes');
+      assert.deepEqual(run.lanes.map((lane) => ({
+        laneId: lane.laneId,
+        agentId: lane.agentId,
+        evidenceArtifactId: lane.evidenceArtifactId,
+        runArtifactId: lane.runArtifactId,
+        routeDecisionArtifactId: lane.routeDecisionArtifactId,
+        writeSet: lane.writeSet,
+        workspaceRole: lane.workspace.role,
+        writable: lane.workspace.writable,
+        verificationStatus: lane.verificationStatus
+      })), [
+        {
+          laneId: 'docs-lane',
+          agentId: 'codex-docs',
+          evidenceArtifactId: 'implement-docs-lane-evidence',
+          runArtifactId: 'implement-docs-lane-run',
+          routeDecisionArtifactId: 'implement-docs-lane-route-decision',
+          writeSet: ['docs/parallel-lanes.md'],
+          workspaceRole: 'parallel-writer',
+          writable: true,
+          verificationStatus: 'passed'
+        },
+        {
+          laneId: 'src-lane',
+          agentId: 'codex-src',
+          evidenceArtifactId: 'implement-src-lane-evidence',
+          runArtifactId: 'implement-src-lane-run',
+          routeDecisionArtifactId: 'implement-src-lane-route-decision',
+          writeSet: ['src/parallel-lanes.js'],
+          workspaceRole: 'parallel-writer',
+          writable: true,
+          verificationStatus: 'passed'
+        }
+      ]);
+      assert.notEqual(run.lanes[0].workspace.workspaceId, run.lanes[1].workspace.workspaceId);
+      assert.equal(events.at(-1).type, 'ensemble.run.completed');
+      assert.equal(events.at(-1).payload.mode, 'parallel-lanes');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects overlapping lane write sets before adapter execution', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-parallel-lanes-overlap-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter();
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      await assert.rejects(
+        () => ensemble.runParallelLanes({
+          ensembleId: 'ensemble-overlap',
+          taskSpec: parallelTaskSpec,
+          lanes: [
+            {
+              laneId: 'one',
+              agentId: 'codex-one',
+              writeSet: ['src/shared.js']
+            },
+            {
+              laneId: 'two',
+              agentId: 'codex-two',
+              writeSet: ['src/shared.js']
+            }
+          ]
+        }),
+        /parallel lane write sets overlap/
+      );
+      assert.equal(adapter.starts.length, 0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects lane write sets outside the task write set before adapter execution', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-parallel-lanes-escape-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter();
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      await assert.rejects(
+        () => ensemble.runParallelLanes({
+          ensembleId: 'ensemble-escape',
+          taskSpec: parallelTaskSpec,
+          lanes: [{
+            laneId: 'escape',
+            agentId: 'codex-escape',
+            writeSet: ['src/outside-lock.js']
+          }]
+        }),
+        /parallel lane write set escapes task write set/
+      );
+      assert.equal(adapter.starts.length, 0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 const taskSpec = {
   id: 'task-v2',
   source: 'manual',
@@ -240,6 +418,14 @@ const taskSpec = {
   objective: 'Add V2 proposal arbitration synthesis',
   acceptance: ['proposal artifacts are stored', 'synthesis links source proposals'],
   version: '1'
+};
+
+const parallelTaskSpec = {
+  ...taskSpec,
+  constraints: [
+    'write_set:docs/parallel-lanes.md',
+    'write_set:src/parallel-lanes.js'
+  ]
 };
 
 function proposalInput({
@@ -320,7 +506,8 @@ class WriterReviewerAdapter {
       dryRun: true,
       command: input.commandSpec.name,
       taskId: input.contextPack.task.id,
-      workspaceId: input.workspace
+      workspaceId: input.workspace,
+      changedFiles: changedFilesForSyntheticImplement(input.contextPack.task.constraints)
     };
 
     this.runs.set(runId, handle);
@@ -352,7 +539,7 @@ class WriterReviewerAdapter {
       taskId: handle.taskId,
       workspaceId: handle.workspaceId,
       diffSummary: ['Synthetic writer change.'],
-      changedFiles: ['src/ensemble/ensemble-orchestrator.js'],
+      changedFiles: handle.changedFiles,
       checks: [{
         name: 'pnpm test',
         status: 'passed',
@@ -407,4 +594,12 @@ class WriterReviewerAdapter {
       version: '1'
     };
   }
+}
+
+function changedFilesForSyntheticImplement(constraints = []) {
+  const writeSet = constraints
+    .filter((constraint) => constraint.startsWith('write_set:'))
+    .map((constraint) => constraint.slice('write_set:'.length));
+
+  return [writeSet.find((pattern) => !pattern.includes('*')) ?? 'src/ensemble/ensemble-orchestrator.js'];
 }

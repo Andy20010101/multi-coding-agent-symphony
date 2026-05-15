@@ -2,7 +2,13 @@ import { readFile } from 'node:fs/promises';
 
 import { validateTaskSpec } from '../contracts.js';
 import { EnsembleOrchestrator } from '../ensemble/ensemble-orchestrator.js';
-import { findWriteSetViolations, buildWorkspaceConstraints, normalizeWriteSet } from './workspace-bridge.js';
+import {
+  buildWorkspaceConstraints,
+  findWriteSetSubsetViolations,
+  findWriteSetOverlaps,
+  findWriteSetViolations,
+  normalizeWriteSet
+} from './workspace-bridge.js';
 
 const TASK_PRIORITIES = new Set(['low', 'normal', 'high']);
 const POLICY_CONFIG_FIELDS = [
@@ -282,7 +288,7 @@ async function runTaskPacketWorkflow({
   executionMode,
   timeoutMs
 }) {
-  if (workflow.mode !== 'writer-reviewer') {
+  if (workflow.mode === 'linear') {
     return orchestrator.runTaskWorkflow({
       taskSpec,
       policyRequests,
@@ -297,6 +303,20 @@ async function runTaskPacketWorkflow({
     eventLog: orchestrator.eventLog,
     orchestrator
   });
+
+  if (workflow.mode === 'parallel-lanes') {
+    const result = await ensemble.runParallelLanes({
+      ensembleId: workflow.ensembleId,
+      taskSpec,
+      lanes: workflow.lanes,
+      executionMode,
+      timeoutMs,
+      policyRequests
+    });
+
+    return parallelLanesResultToWorkflowResult(result);
+  }
+
   const result = await ensemble.runWriterReviewer({
     ensembleId: workflow.ensembleId,
     taskSpec,
@@ -330,8 +350,24 @@ function buildTaskPacketWorkflow(taskPacket, { commandSequence }) {
     };
   }
 
+  if (mode === 'parallel-lanes') {
+    const ensembleId = workflow.ensemble_id ?? workflow.ensembleId ?? `${taskPacket.id}-parallel-lanes`;
+    const lanes = normalizeParallelWorkflowLanes(workflow.lanes);
+    const taskWriteSet = requireWriteSet(taskPacket.write_set);
+
+    assertSafeId(ensembleId, 'TaskPacket.workflow.ensemble_id');
+    assertDisjointParallelWorkflowLanes(lanes);
+    assertParallelWorkflowLanesWithinTaskWriteSet(lanes, taskWriteSet);
+
+    return {
+      mode,
+      ensembleId,
+      lanes
+    };
+  }
+
   if (mode !== 'writer-reviewer') {
-    throw new TaskPacketValidationError('TaskPacket.workflow.mode must be one of: linear, writer-reviewer');
+    throw new TaskPacketValidationError('TaskPacket.workflow.mode must be one of: linear, writer-reviewer, parallel-lanes');
   }
 
   const ensembleId = workflow.ensemble_id ?? workflow.ensembleId ?? `${taskPacket.id}-writer-reviewer`;
@@ -360,6 +396,71 @@ function normalizeWorkflowAgent(agent, field) {
   }
 
   return normalized;
+}
+
+function normalizeParallelWorkflowLanes(lanes) {
+  return requireNonEmptyArray(lanes, 'TaskPacket.workflow.lanes')
+    .map((lane, index) => normalizeParallelWorkflowLane(lane, `TaskPacket.workflow.lanes[${index}]`));
+}
+
+function normalizeParallelWorkflowLane(lane, field) {
+  assertPlainObject(lane, field);
+  const laneId = lane.lane_id ?? lane.laneId;
+  const agentId = lane.agent_id ?? lane.agentId;
+  const modelProfile = lane.model_profile ?? lane.modelProfile;
+  const writeSet = lane.write_set ?? lane.writeSet;
+  const normalized = {
+    laneId: requireNonEmptyString(laneId, `${field}.lane_id`),
+    agentId: requireNonEmptyString(agentId, `${field}.agent_id`),
+    writeSet: requireWriteSet(writeSet)
+  };
+
+  assertSafeId(normalized.laneId, `${field}.lane_id`);
+
+  if (modelProfile !== undefined) {
+    normalized.modelProfile = requireNonEmptyString(modelProfile, `${field}.model_profile`);
+  }
+
+  return normalized;
+}
+
+function assertDisjointParallelWorkflowLanes(lanes) {
+  const laneIds = new Set();
+
+  for (const lane of lanes) {
+    if (laneIds.has(lane.laneId)) {
+      throw new TaskPacketValidationError('TaskPacket.workflow.lanes[].lane_id must be unique');
+    }
+
+    laneIds.add(lane.laneId);
+  }
+
+  const overlaps = findWriteSetOverlaps(lanes.map((lane) => ({
+    owner: lane.laneId,
+    writeSet: lane.writeSet
+  })));
+
+  if (overlaps.length > 0) {
+    const overlap = overlaps[0];
+    throw new TaskPacketValidationError(
+      `parallel lane write sets overlap: ${overlap.firstOwner} and ${overlap.secondOwner} both claim ${overlap.firstPattern}`
+    );
+  }
+}
+
+function assertParallelWorkflowLanesWithinTaskWriteSet(lanes, taskWriteSet) {
+  for (const lane of lanes) {
+    const violations = findWriteSetSubsetViolations({
+      claimedWriteSet: lane.writeSet,
+      allowedWriteSet: taskWriteSet
+    });
+
+    if (violations.length > 0) {
+      throw new TaskPacketValidationError(
+        `parallel lane write set escapes TaskPacket.write_set: ${lane.laneId} claims ${violations[0]}`
+      );
+    }
+  }
 }
 
 function writerReviewerResultToWorkflowResult(result) {
@@ -398,13 +499,43 @@ function writerReviewerResultToWorkflowResult(result) {
   };
 }
 
+function parallelLanesResultToWorkflowResult(result) {
+  const commands = result.lanes.map((lane) => roleSummaryToCommand({
+    role: 'parallel-writer',
+    stage: `lane:${lane.laneId}`,
+    commandName: 'implement',
+    summary: lane
+  }));
+  const failedCommand = commands.find((command) => command.verification.status !== 'passed');
+
+  return {
+    taskId: result.taskId,
+    status: result.finalVerificationStatus === 'passed' ? 'passed' : 'failed',
+    mode: 'parallel-lanes',
+    ensembleRunArtifactId: result.runArtifactId,
+    decision: result.decision,
+    finalVerificationStatus: result.finalVerificationStatus,
+    rejectionReasons: structuredClone(result.rejectionReasons),
+    commands,
+    artifactRefs: commands.map((command) => ({
+      taskId: result.taskId,
+      artifactId: command.artifactId,
+      command: command.command,
+      verificationStatus: command.verification.status
+    })),
+    ...(failedCommand ? { failedCommand: failedCommand.command } : {})
+  };
+}
+
 function roleSummaryToCommand({ role, stage, commandName, summary }) {
   return {
     stage,
     role,
+    ...(summary.laneId ? { laneId: summary.laneId } : {}),
     agentId: summary.agentId,
     command: commandName,
     adapterId: summary.adapterId,
+    ...(summary.writeSet ? { writeSet: structuredClone(summary.writeSet) } : {}),
     workspace: structuredClone(summary.workspace),
     artifactId: summary.evidenceArtifactId,
     runArtifactId: summary.runArtifactId,

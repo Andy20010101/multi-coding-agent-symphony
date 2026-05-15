@@ -1,7 +1,7 @@
 const TASK_SOURCES = new Set(['github', 'linear', 'manual']);
 const COMMAND_NAMES = new Set(['plan', 'implement', 'review', 'fix-ci', 'qa']);
 const TOOL_NAMES = new Set(['read', 'write', 'shell', 'test', 'browser', 'network']);
-const WORKSPACE_POLICIES = new Set(['primary-writer', 'review-only', 'isolated', 'none']);
+const WORKSPACE_POLICIES = new Set(['primary-writer', 'parallel-writer', 'review-only', 'isolated', 'none']);
 const ADAPTER_NAMES = new Set(['codex', 'claude-code', 'kiro-cli']);
 const PROVIDER_NAMES = new Set(['openai', 'deepseek', 'anthropic']);
 const COST_CLASSES = new Set(['low', 'medium', 'high']);

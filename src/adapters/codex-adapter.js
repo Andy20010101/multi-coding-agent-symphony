@@ -99,7 +99,7 @@ export class CodexAdapter extends BaseAdapter {
       return super.start(input);
     }
 
-    const runId = `${this.adapterId}-${input.contextPack.task.id}-${this.runs.size + 1}`;
+    const runId = this.nextRunId(input.contextPack.task.id);
     const outputLastMessagePath = input.outputLastMessagePath
       ?? join(tmpdir(), 'mcas-codex', `${safeForPath(runId)}-last-message.json`);
 
@@ -378,7 +378,7 @@ function sandboxFor(workspacePolicy, policyDecisions = []) {
     return 'read-only';
   }
 
-  if (workspacePolicy === 'primary-writer' || workspacePolicy === 'isolated') {
+  if (workspacePolicy === 'primary-writer' || workspacePolicy === 'parallel-writer' || workspacePolicy === 'isolated') {
     return 'workspace-write';
   }
 

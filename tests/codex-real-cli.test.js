@@ -81,6 +81,23 @@ class FakeActiveProcessRunner {
   }
 }
 
+class SlowSuccessfulProcessRunner {
+  async run() {
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+
+    return {
+      exitCode: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+      durationMs: 10,
+      timedOut: false,
+      stalled: false,
+      outputFiles: {}
+    };
+  }
+}
+
 function sandboxArg(prepared) {
   const index = prepared.args.indexOf('--sandbox');
 
@@ -193,6 +210,36 @@ describe('Codex real CLI integration', () => {
     assert.equal((await adapter.probe()).modelProfiles.includes('codex-writer-explicit'), true);
   });
 
+  it('assigns unique run ids to concurrent real starts', async () => {
+    const adapter = new CodexAdapter({
+      cliVersion: '0.130.0',
+      processRunner: new SlowSuccessfulProcessRunner()
+    });
+
+    const [first, second] = await Promise.all([
+      adapter.start({
+        commandSpec,
+        contextPack,
+        workspace: '/work/repo-a',
+        modelProfile: 'gpt-codex-default',
+        executionMode: 'real'
+      }),
+      adapter.start({
+        commandSpec,
+        contextPack,
+        workspace: '/work/repo-b',
+        modelProfile: 'gpt-codex-default',
+        executionMode: 'real'
+      })
+    ]);
+
+    assert.notEqual(first.runId, second.runId);
+    assert.deepEqual([first.runId, second.runId].sort(), [
+      'codex-task-123-1',
+      'codex-task-123-2'
+    ]);
+  });
+
   it('renders command-specific Codex prompts while preserving evidence instructions', async () => {
     const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
 
@@ -256,7 +303,7 @@ describe('Codex real CLI integration', () => {
     assert.match(prepared.prompt, /checks\[\]\.command exactly equals/);
   });
 
-  it('renders Codex sandbox flags for read-only smoke, writer smoke, and review policy', async () => {
+  it('renders Codex sandbox flags for read-only smoke, writer smoke, parallel writer, and review policy', async () => {
     const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
     const readOnlySmoke = await adapter.prepare({
       commandSpec: {
@@ -275,6 +322,16 @@ describe('Codex real CLI integration', () => {
       modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
       executionMode: 'real'
     });
+    const parallelWriter = await adapter.prepare({
+      commandSpec: {
+        ...commandSpec,
+        workspacePolicy: 'parallel-writer'
+      },
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: CODEX_CONFIG_DEFAULT_MODEL_PROFILE,
+      executionMode: 'real'
+    });
     const review = await adapter.prepare({
       commandSpec: reviewCommandSpec,
       contextPack: { ...contextPack, commandName: 'review' },
@@ -285,6 +342,7 @@ describe('Codex real CLI integration', () => {
 
     assert.equal(sandboxArg(readOnlySmoke), 'read-only');
     assert.equal(sandboxArg(writerSmoke), 'workspace-write');
+    assert.equal(sandboxArg(parallelWriter), 'workspace-write');
     assert.equal(sandboxArg(review), 'read-only');
   });
 
