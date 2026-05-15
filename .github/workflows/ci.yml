@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_real_codex:
+        description: Run the gated real Codex Harness smoke
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm test:mutation:gate
+      - run: git diff --check
+      - run: pnpm mcas doctor
+
+      - name: Optional real Codex Harness smoke
+        if: ${{ vars.MCAS_RUN_REAL_CODEX == '1' || inputs.run_real_codex == 'true' }}
+        env:
+          MCAS_RUN_REAL_CODEX: "1"
+        run: pnpm smoke:harness:codex:real
