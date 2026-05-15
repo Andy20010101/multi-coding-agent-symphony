@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "permission-denied-error",
+  "processResult": {
+    "exitCode": 1,
+    "stdout": "{\"type\":\"error\",\"code\":\"permission_denied\",\"message\":\"permission_denied from Codex\"}",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

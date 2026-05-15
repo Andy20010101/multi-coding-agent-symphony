@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "timeout",
+  "processResult": {
+    "exitCode": null,
+    "signal": "SIGTERM",
+    "stdout": "",
+    "stderr": "timeout",
+    "durationMs": 1000,
+    "timedOut": true
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "kiro-cli",
+  "command": "qa",
+  "scenario": "unverified-output",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "done\n",
+    "stderr": "debug line",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

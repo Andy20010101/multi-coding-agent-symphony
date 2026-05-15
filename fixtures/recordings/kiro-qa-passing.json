@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "kiro-cli",
+  "command": "qa",
+  "scenario": "stdout-evidence",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "{\"evidence\":{\"command\":\"qa\",\"taskId\":\"model-task\",\"workspaceId\":\"model-workspace\",\"diffSummary\":[],\"changedFiles\":[],\"checks\":[{\"name\":\"pnpm test\",\"status\":\"passed\",\"command\":\"pnpm test\",\"exitCode\":0,\"artifactId\":\"test-log\",\"output\":\"tests passed\"}],\"knownRisks\":[],\"agentSummary\":\"Parsed evidence from Kiro stdout.\",\"version\":\"1\"}}\n",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

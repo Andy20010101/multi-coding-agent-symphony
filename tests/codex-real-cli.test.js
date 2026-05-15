@@ -8,6 +8,7 @@ import {
 } from '../src/adapters/codex-adapter.js';
 import { validateEvidencePackage } from '../src/contracts.js';
 import { verifyEvidence } from '../src/verifier.js';
+import { FixtureReplayProcessRunner } from './helpers/fixture-replay-runner.js';
 
 const commandSpec = {
   name: 'implement',
@@ -51,27 +52,12 @@ const contextPack = {
   artifactRefs: []
 };
 
-class FakeProcessRunner {
-  constructor(result) {
-    this.result = result;
-    this.calls = [];
-  }
-
-  async run(invocation) {
-    this.calls.push(invocation);
-    return this.result;
-  }
-}
-
 class FakeActiveProcessRunner {
   constructor() {
-    this.calls = [];
     this.cancelCalls = 0;
   }
 
-  start(invocation) {
-    this.calls.push(invocation);
-
+  start() {
     return {
       pid: 12345,
       result: Promise.resolve({
@@ -102,52 +88,48 @@ function sandboxArg(prepared) {
 }
 
 describe('Codex real CLI integration', () => {
-  it('starts Codex through an injected process runner', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '{"type":"message","message":"done"}\n',
-      stderr: '',
-      durationMs: 12
-    });
+  it('replays recorded Codex output as verifier-readable evidence', async () => {
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/codex-qa-passing.json');
     const adapter = new CodexAdapter({
       cliVersion: '0.130.0',
       processRunner: runner
     });
 
     const handle = await adapter.start({
-      commandSpec,
-      contextPack,
+      commandSpec: qaCommandSpec,
+      contextPack: {
+        ...contextPack,
+        commandName: 'qa',
+        task: {
+          ...contextPack.task,
+          id: 'task-codex-qa'
+        }
+      },
       workspace: '/work/repo',
       modelProfile: 'gpt-codex-default',
       executionMode: 'real'
     });
+    const evidence = await adapter.collectEvidence(handle);
+    const verification = verifyEvidence({ commandSpec: qaCommandSpec, evidence });
 
-    assert.equal(runner.calls[0].executable, 'codex');
-    assert.deepEqual(runner.calls[0].args.slice(0, 2), ['exec', '--json']);
-    assert.equal(runner.calls[0].args.includes('--output-schema'), true);
-    assert.equal(runner.calls[0].args.includes('--output-last-message'), true);
-    assert.equal(runner.calls[0].cwd, '/work/repo');
-    assert.match(runner.calls[0].stdin, /Run Codex through a real process runner/);
     assert.equal(handle.dryRun, false);
     assert.equal(handle.status, 'completed');
     assert.equal(handle.exitCode, 0);
+    assert.equal(validateEvidencePackage(evidence), evidence);
+    assert.equal(evidence.command, 'qa');
+    assert.equal(evidence.taskId, 'task-codex-qa');
+    assert.equal(evidence.workspaceId, '/work/repo');
+    assert.equal(verification.status, 'passed');
+    assert.equal(verification.checks[0].name, 'codex-real-smoke');
+    assert.equal(verification.checks[0].artifactId, 'qa-verification-log');
   });
 
-  it('resolves relative real workspaces before invoking Codex', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '{"type":"message","message":"done"}\n',
-      stderr: '',
-      durationMs: 12
-    });
-    const adapter = new CodexAdapter({
-      cliVersion: '0.130.0',
-      processRunner: runner
-    });
+  it('resolves relative real workspaces in the prepared Codex invocation', async () => {
+    const adapter = new CodexAdapter({ cliVersion: '0.130.0' });
     const relativeWorkspace = 'tmp/harness-bridge-real/workspaces/task.scaffold/task.scaffold-primary-writer-1';
     const expectedWorkspace = resolve(relativeWorkspace);
 
-    await adapter.start({
+    const prepared = await adapter.prepare({
       commandSpec,
       contextPack,
       workspace: relativeWorkspace,
@@ -155,10 +137,10 @@ describe('Codex real CLI integration', () => {
       executionMode: 'real'
     });
 
-    const cdIndex = runner.calls[0].args.indexOf('--cd');
+    const cdIndex = prepared.args.indexOf('--cd');
 
-    assert.equal(runner.calls[0].cwd, expectedWorkspace);
-    assert.equal(runner.calls[0].args[cdIndex + 1], expectedWorkspace);
+    assert.equal(prepared.cwd, expectedWorkspace);
+    assert.equal(prepared.args[cdIndex + 1], expectedWorkspace);
   });
 
   it('can defer real model selection to Codex CLI config', async () => {
@@ -239,7 +221,11 @@ describe('Codex real CLI integration', () => {
     assert.match(implement.prompt, /Role: primary writer/);
     assert.match(review.prompt, /Role: reviewer/);
     assert.match(review.prompt, /Do not edit files/);
+    assert.match(review.prompt, /changedFiles must describe only files modified by the review command/);
+    assert.match(review.prompt, /Do not copy implementation changedFiles from prior evidence/);
     assert.match(qa.prompt, /Role: QA verifier/);
+    assert.match(qa.prompt, /Do not copy implementation changedFiles from prior evidence/);
+    assert.match(qa.prompt, /At least one QA checks\[\] entry must include a non-null artifactId/);
     assert.equal(
       [implement, review, qa].every((prepared) => prepared.prompt.includes('Return an EvidencePackage JSON object')),
       true
@@ -303,15 +289,7 @@ describe('Codex real CLI integration', () => {
   });
 
   it('streams parsed Codex JSONL output as adapter events', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: [
-        '{"type":"agent_message","message":"started"}',
-        '{"type":"tool_call","tool":"shell","status":"completed"}'
-      ].join('\n'),
-      stderr: '',
-      durationMs: 12
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/codex-implement-unverified.json');
     const adapter = new CodexAdapter({
       cliVersion: '0.130.0',
       processRunner: runner
@@ -332,7 +310,6 @@ describe('Codex real CLI integration', () => {
     assert.deepEqual(events.map((event) => event.type), [
       'adapter.started',
       'tool.observed',
-      'tool.observed',
       'command.finished'
     ]);
     assert.equal(events[1].payload.type, 'agent_message');
@@ -340,12 +317,7 @@ describe('Codex real CLI integration', () => {
   });
 
   it('collects real Codex output as unverified evidence', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '{"type":"agent_message","message":"done"}\n',
-      stderr: 'debug line',
-      durationMs: 12
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/codex-implement-unverified.json');
     const adapter = new CodexAdapter({
       cliVersion: '0.130.0',
       processRunner: runner
@@ -373,41 +345,9 @@ describe('Codex real CLI integration', () => {
   });
 
   it('collects structured final Codex output as verifier-readable evidence', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '{"type":"agent_message","message":"done"}\n',
-      stderr: '',
-      durationMs: 12,
-      outputFiles: {
-        lastMessage: {
-          path: '/tmp/codex-last-message.json',
-          content: JSON.stringify({
-            command: 'implement',
-            taskId: 'model-supplied-task-id',
-            workspaceId: 'model-supplied-workspace',
-            diffSummary: ['Added real evidence parsing.'],
-            changedFiles: ['src/adapters/codex-adapter.js'],
-            checks: [{
-              name: 'pnpm test',
-              status: 'passed',
-              command: 'pnpm test',
-              exitCode: 0,
-              output: 'tests passed',
-              artifactId: null,
-              startedAt: null,
-              finishedAt: null
-            }],
-            knownRisks: [],
-            agentSummary: 'Parsed evidence from the final Codex message.',
-            noOpRationale: null,
-            findings: null,
-            noFindingRationale: null,
-            resourceProfile: null,
-            version: '1'
-          })
-        }
-      }
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture(
+      'fixtures/recordings/codex-implement-structured-final-message.json'
+    );
     const adapter = new CodexAdapter({
       cliVersion: '0.130.0',
       processRunner: runner
@@ -433,25 +373,9 @@ describe('Codex real CLI integration', () => {
   });
 
   it('falls back to structured evidence embedded in JSONL output', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: JSON.stringify({
-        type: 'agent_message',
-        message: JSON.stringify({
-          command: 'implement',
-          taskId: 'task-123',
-          workspaceId: '/work/repo',
-          diffSummary: [],
-          changedFiles: ['src/adapters/codex-adapter.js'],
-          checks: [{ name: 'node --test', status: 'passed', command: 'node --test', exitCode: 0, output: 'node tests passed' }],
-          knownRisks: [],
-          agentSummary: 'Evidence emitted in JSONL output.',
-          version: '1'
-        })
-      }),
-      stderr: '',
-      durationMs: 12
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture(
+      'fixtures/recordings/codex-implement-jsonl-evidence.json'
+    );
     const adapter = new CodexAdapter({
       cliVersion: '0.130.0',
       processRunner: runner
@@ -473,41 +397,9 @@ describe('Codex real CLI integration', () => {
   });
 
   it('normalizes strict schema null check output from command provenance', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '',
-      stderr: '',
-      durationMs: 12,
-      outputFiles: {
-        lastMessage: {
-          path: '/tmp/codex-last-message.json',
-          content: JSON.stringify({
-            command: 'implement',
-            taskId: 'task-123',
-            workspaceId: '/work/repo',
-            diffSummary: ['Created smoke file.'],
-            changedFiles: ['synthetic-dry-run.txt'],
-            checks: [{
-              name: 'required-file-exists',
-              status: 'passed',
-              command: 'test -f synthetic-dry-run.txt',
-              exitCode: 0,
-              output: null,
-              artifactId: null,
-              startedAt: null,
-              finishedAt: null
-            }],
-            knownRisks: [],
-            agentSummary: 'Verified through command provenance.',
-            noOpRationale: null,
-            findings: null,
-            noFindingRationale: null,
-            resourceProfile: null,
-            version: '1'
-          })
-        }
-      }
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture(
+      'fixtures/recordings/codex-implement-null-check-output.json'
+    );
     const adapter = new CodexAdapter({
       cliVersion: '0.130.0',
       processRunner: runner
@@ -532,14 +424,7 @@ describe('Codex real CLI integration', () => {
   });
 
   it('marks timed out Codex processes as failed with retry metadata', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: null,
-      signal: 'SIGTERM',
-      stdout: '',
-      stderr: 'timeout',
-      durationMs: 1000,
-      timedOut: true
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/codex-implement-timeout.json');
     const adapter = new CodexAdapter({
       cliVersion: '0.130.0',
       processRunner: runner
@@ -565,6 +450,7 @@ describe('Codex real CLI integration', () => {
     const cases = [
       {
         code: 'permission_denied',
+        fixture: 'fixtures/recordings/codex-implement-error-permission-denied.json',
         expected: {
           category: 'permission-denied',
           retryable: false,
@@ -574,6 +460,7 @@ describe('Codex real CLI integration', () => {
       },
       {
         code: 'model_off_task',
+        fixture: 'fixtures/recordings/codex-implement-error-model-off-task.json',
         expected: {
           category: 'model-off-task',
           retryable: true,
@@ -583,6 +470,7 @@ describe('Codex real CLI integration', () => {
       },
       {
         code: 'internal_error',
+        fixture: 'fixtures/recordings/codex-implement-error-internal.json',
         expected: {
           category: 'adapter-crashed',
           retryable: true,
@@ -595,16 +483,7 @@ describe('Codex real CLI integration', () => {
     for (const testCase of cases) {
       const adapter = new CodexAdapter({
         cliVersion: '0.130.0',
-        processRunner: new FakeProcessRunner({
-          exitCode: 1,
-          stdout: JSON.stringify({
-            type: 'error',
-            code: testCase.code,
-            message: `${testCase.code} from Codex`
-          }),
-          stderr: '',
-          durationMs: 12
-        })
+        processRunner: await FixtureReplayProcessRunner.fromFixture(testCase.fixture)
       });
       const handle = await adapter.start({
         commandSpec,
@@ -634,7 +513,6 @@ describe('Codex real CLI integration', () => {
     });
 
     assert.equal(handle.status, 'running');
-    assert.equal(runner.calls.length, 1);
     assert.deepEqual(await adapter.cancel(handle), {
       runId: handle.runId,
       status: 'cancelled',

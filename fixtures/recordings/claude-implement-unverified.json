@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "claude-code",
+  "command": "implement",
+  "scenario": "unverified-output",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "{\"type\":\"assistant\",\"message\":\"done\"}\n",
+    "stderr": "debug line",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

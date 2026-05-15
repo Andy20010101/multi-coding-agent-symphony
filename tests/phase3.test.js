@@ -110,7 +110,7 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
     });
 
     assert.equal(prepared.executable, 'claude');
-    assert.deepEqual(prepared.args.slice(0, 4), ['-p', '--output-format', 'stream-json', '--add-dir']);
+    assert.deepEqual(prepared.args.slice(0, 5), ['-p', '--output-format', 'stream-json', '--verbose', '--add-dir']);
     assert.equal(prepared.args.includes('--disallowedTools'), true);
     assert.equal(prepared.args.includes('Read(.env)'), true);
     assert.match(prepared.prompt, /Command: review/);
