@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "jsonl-embedded-evidence",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "{\"type\":\"agent_message\",\"message\":\"{\\\"command\\\":\\\"implement\\\",\\\"taskId\\\":\\\"task-123\\\",\\\"workspaceId\\\":\\\"/work/repo\\\",\\\"diffSummary\\\":[],\\\"changedFiles\\\":[\\\"src/adapters/codex-adapter.js\\\"],\\\"checks\\\":[{\\\"name\\\":\\\"node --test\\\",\\\"status\\\":\\\"passed\\\",\\\"command\\\":\\\"node --test\\\",\\\"exitCode\\\":0,\\\"output\\\":\\\"node tests passed\\\"}],\\\"knownRisks\\\":[],\\\"agentSummary\\\":\\\"Evidence emitted in JSONL output.\\\",\\\"version\\\":\\\"1\\\"}\"}\n",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

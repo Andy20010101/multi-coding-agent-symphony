@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { ClaudeCodeAdapter } from '../src/adapters/claude-code-adapter.js';
 import { verifyEvidence } from '../src/verifier.js';
+import { FixtureReplayProcessRunner } from './helpers/fixture-replay-runner.js';
 
 const commandSpec = {
   name: 'implement',
@@ -28,26 +29,9 @@ const contextPack = {
   artifactRefs: []
 };
 
-class FakeProcessRunner {
-  constructor(result) {
-    this.result = result;
-    this.calls = [];
-  }
-
-  async run(invocation) {
-    this.calls.push(invocation);
-    return this.result;
-  }
-}
-
 describe('Claude Code real CLI integration', () => {
-  it('starts Claude Code through an injected process runner', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '{"type":"assistant","message":"done"}\n',
-      stderr: '',
-      durationMs: 12
-    });
+  it('replays recorded Claude output through the real adapter lifecycle', async () => {
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/claude-implement-passing.json');
     const adapter = new ClaudeCodeAdapter({
       cliVersion: '2.1.123',
       processRunner: runner
@@ -61,37 +45,17 @@ describe('Claude Code real CLI integration', () => {
       executionMode: 'real',
       timeoutMs: 1000
     });
+    const evidence = await adapter.collectEvidence(handle);
 
-    assert.equal(runner.calls[0].executable, 'claude');
-    assert.deepEqual(runner.calls[0].args.slice(0, 3), ['-p', '--output-format', 'stream-json']);
-    assert.equal(runner.calls[0].cwd, '/work/repo');
-    assert.equal(runner.calls[0].timeoutMs, 1000);
-    assert.match(runner.calls[0].stdin, /Run Claude Code through a real process runner/);
     assert.equal(handle.dryRun, false);
     assert.equal(handle.status, 'completed');
     assert.equal(handle.exitCode, 0);
+    assert.deepEqual(evidence.changedFiles, ['src/adapters/claude-code-adapter.js']);
+    assert.equal(verifyEvidence({ commandSpec, evidence }).status, 'passed');
   });
 
   it('collects structured Claude stream output as verifier-readable evidence', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: JSON.stringify({
-        type: 'assistant',
-        message: JSON.stringify({
-          command: 'implement',
-          taskId: 'model-task',
-          workspaceId: 'model-workspace',
-          diffSummary: ['Added Claude real evidence parsing.'],
-          changedFiles: ['src/adapters/claude-code-adapter.js'],
-          checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }],
-          knownRisks: [],
-          agentSummary: 'Parsed evidence from Claude stream-json output.',
-          version: '1'
-        })
-      }),
-      stderr: '',
-      durationMs: 12
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/claude-implement-passing.json');
     const adapter = new ClaudeCodeAdapter({
       cliVersion: '2.1.123',
       processRunner: runner
@@ -116,12 +80,7 @@ describe('Claude Code real CLI integration', () => {
   });
 
   it('collects raw Claude output as unverified evidence when structure is missing', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '{"type":"assistant","message":"done"}\n',
-      stderr: 'debug line',
-      durationMs: 12
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/claude-implement-unverified.json');
     const adapter = new ClaudeCodeAdapter({
       cliVersion: '2.1.123',
       processRunner: runner

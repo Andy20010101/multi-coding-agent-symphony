@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "model-off-task-error",
+  "processResult": {
+    "exitCode": 1,
+    "stdout": "{\"type\":\"error\",\"code\":\"model_off_task\",\"message\":\"model_off_task from Codex\"}",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

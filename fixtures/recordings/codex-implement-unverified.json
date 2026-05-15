@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "unverified-output",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "{\"type\":\"agent_message\",\"message\":\"done\"}\n",
+    "stderr": "debug line",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

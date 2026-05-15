@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "claude-code",
+  "command": "implement",
+  "scenario": "stream-json-evidence",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "{\"type\":\"assistant\",\"message\":\"{\\\"command\\\":\\\"implement\\\",\\\"taskId\\\":\\\"model-task\\\",\\\"workspaceId\\\":\\\"model-workspace\\\",\\\"diffSummary\\\":[\\\"Added Claude real evidence parsing.\\\"],\\\"changedFiles\\\":[\\\"src/adapters/claude-code-adapter.js\\\"],\\\"checks\\\":[{\\\"name\\\":\\\"pnpm test\\\",\\\"status\\\":\\\"passed\\\",\\\"command\\\":\\\"pnpm test\\\",\\\"exitCode\\\":0,\\\"output\\\":\\\"tests passed\\\"}],\\\"knownRisks\\\":[],\\\"agentSummary\\\":\\\"Parsed evidence from Claude stream-json output.\\\",\\\"version\\\":\\\"1\\\"}\"}\n",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "internal-error",
+  "processResult": {
+    "exitCode": 1,
+    "stdout": "{\"type\":\"error\",\"code\":\"internal_error\",\"message\":\"internal_error from Codex\"}",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false
+  }
+}

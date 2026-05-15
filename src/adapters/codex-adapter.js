@@ -391,9 +391,32 @@ function buildCodexRunPrompt({ commandSpec, contextPack, policyDecisions = [] })
     `Evidence schema: ${commandSpec.evidenceSchema}`,
     `Done criteria: ${commandSpec.doneCriteria.join('; ')}`,
     ...(restrictionLines.length > 0 ? ['Policy restrictions:', ...restrictionLines] : []),
+    ...changedFileEvidenceLines(commandSpec),
     'Return an EvidencePackage JSON object with command, taskId, workspaceId, changedFiles, checks, knownRisks, agentSummary, and version.',
     'Set checks to passed only for commands you actually ran or evidence you actually inspected.'
   ].join('\n');
+}
+
+function changedFileEvidenceLines(commandSpec) {
+  if (commandSpec.name === 'review') {
+    return [
+      'Evidence ownership: changedFiles must describe only files modified by the review command.',
+      'Do not copy implementation changedFiles from prior evidence; report reviewed files in findings or agentSummary instead.',
+      'Because review runs read-only, changedFiles must be [] unless the command unexpectedly modified files.'
+    ];
+  }
+
+  if (commandSpec.name === 'qa') {
+    return [
+      'Evidence ownership: changedFiles must describe only files modified by the qa command.',
+      'Do not copy implementation changedFiles from prior evidence; report tested files in checks or agentSummary instead.',
+      'At least one QA checks[] entry must include a non-null artifactId such as qa-verification-log.'
+    ];
+  }
+
+  return [
+    `Evidence ownership: changedFiles must describe only files modified by the ${commandSpec.name} command.`
+  ];
 }
 
 function constraintLines(constraints = []) {

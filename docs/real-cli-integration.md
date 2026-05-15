@@ -66,6 +66,31 @@ MCAS_RUN_REAL_CODEX_WRITER=1 pnpm smoke:codex:writer
 
 This invokes Codex in `implement` mode with `workspacePolicy: "primary-writer"`. When no workspace is supplied programmatically, it creates an isolated temporary git workspace and asks Codex to create `codex-writer-smoke.txt`, then requires verifier status `passed`. Set `MCAS_CODEX_WRITER_MODEL=<model>` to override only the writer smoke model.
 
+Guarded Harness standard-chain smoke check:
+
+```sh
+MCAS_RUN_REAL_CODEX=1 pnpm smoke:harness:codex:real
+```
+
+This invokes the Harness bridge through `implement -> review -> qa` using `fixtures/harness/real-smoke-taskpacket.json`. The run writes Harness evidence under `tmp/harness-bridge-real-smoke-harness-standard/runs/<generated-run-id>/` and requires the Harness verifier status `passed`.
+The package script generates a unique run id and runtime directory for each invocation so failed materialized workspace locks do not block the next retry. Set `MCAS_HARNESS_CODEX_REAL_RUN_ID`, `MCAS_HARNESS_CODEX_REAL_RUNTIME_DIR`, `MCAS_HARNESS_CODEX_REAL_HARNESS_DIR`, `MCAS_HARNESS_CODEX_REAL_TASKPACKET`, or `MCAS_HARNESS_CODEX_REAL_TIMEOUT_MS` to override those defaults.
+
+Equivalent expanded command:
+
+```sh
+MCAS_RUN_REAL_CODEX=1 pnpm mcas harness run-taskpacket \
+  --run-id fixture-real-smoke-standard-2026-05-14T07-24-31-000Z \
+  --taskpacket fixtures/harness/real-smoke-taskpacket.json \
+  --runtime-dir tmp/harness-bridge-real-smoke-standard-fixture-real-smoke-standard-2026-05-14T07-24-31-000Z \
+  --harness-dir tmp/harness-bridge-real-smoke-harness-standard \
+  --real \
+  --adapter codex \
+  --sequence standard \
+  --timeout-ms 180000
+```
+
+The review and QA Codex prompts explicitly state that `changedFiles` belongs to the current command only. Review evidence must not copy implementation `changedFiles`; the review-only verifier still fails any non-empty review `changedFiles` as `scope-violation`.
+
 ## Claude Code
 
 Implemented:

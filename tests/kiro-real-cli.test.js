@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { KiroCliAdapter } from '../src/adapters/kiro-cli-adapter.js';
 import { verifyEvidence } from '../src/verifier.js';
+import { FixtureReplayProcessRunner } from './helpers/fixture-replay-runner.js';
 
 const commandSpec = {
   name: 'qa',
@@ -28,26 +29,9 @@ const contextPack = {
   artifactRefs: []
 };
 
-class FakeProcessRunner {
-  constructor(result) {
-    this.result = result;
-    this.calls = [];
-  }
-
-  async run(invocation) {
-    this.calls.push(invocation);
-    return this.result;
-  }
-}
-
 describe('Kiro CLI real integration', () => {
-  it('starts Kiro CLI through an injected process runner', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: '{"message":"done"}\n',
-      stderr: '',
-      durationMs: 12
-    });
+  it('replays recorded Kiro output through the real adapter lifecycle', async () => {
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/kiro-qa-passing.json');
     const adapter = new KiroCliAdapter({
       cliVersion: '2.2.2',
       processRunner: runner
@@ -61,36 +45,17 @@ describe('Kiro CLI real integration', () => {
       executionMode: 'real',
       timeoutMs: 1000
     });
+    const evidence = await adapter.collectEvidence(handle);
 
-    assert.equal(runner.calls[0].executable, 'kiro-cli');
-    assert.deepEqual(runner.calls[0].args.slice(0, 2), ['chat', '--no-interactive']);
-    assert.equal(runner.calls[0].cwd, '/work/repo');
-    assert.equal(runner.calls[0].timeoutMs, 1000);
-    assert.match(runner.calls[0].stdin, /Run Kiro CLI through a real process runner/);
     assert.equal(handle.dryRun, false);
     assert.equal(handle.status, 'completed');
     assert.equal(handle.exitCode, 0);
+    assert.equal(evidence.checks[0].artifactId, 'test-log');
+    assert.equal(verifyEvidence({ commandSpec, evidence }).status, 'passed');
   });
 
   it('collects structured Kiro output as verifier-readable evidence', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: JSON.stringify({
-        evidence: {
-          command: 'qa',
-          taskId: 'model-task',
-          workspaceId: 'model-workspace',
-          diffSummary: [],
-          changedFiles: [],
-          checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, artifactId: 'test-log', output: 'tests passed' }],
-          knownRisks: [],
-          agentSummary: 'Parsed evidence from Kiro stdout.',
-          version: '1'
-        }
-      }),
-      stderr: '',
-      durationMs: 12
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/kiro-qa-passing.json');
     const adapter = new KiroCliAdapter({
       cliVersion: '2.2.2',
       processRunner: runner
@@ -115,12 +80,7 @@ describe('Kiro CLI real integration', () => {
   });
 
   it('collects raw Kiro output as unverified evidence when structure is missing', async () => {
-    const runner = new FakeProcessRunner({
-      exitCode: 0,
-      stdout: 'done\n',
-      stderr: 'debug line',
-      durationMs: 12
-    });
+    const runner = await FixtureReplayProcessRunner.fromFixture('fixtures/recordings/kiro-qa-unverified.json');
     const adapter = new KiroCliAdapter({
       cliVersion: '2.2.2',
       processRunner: runner

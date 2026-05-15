@@ -34,6 +34,7 @@ export class ClaudeCodeAdapter extends BaseAdapter {
       '-p',
       '--output-format',
       'stream-json',
+      '--verbose',
       '--add-dir',
       input.workspace,
       '--model',

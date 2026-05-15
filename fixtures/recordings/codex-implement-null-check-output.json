@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "null-check-output",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false,
+    "outputFiles": {
+      "lastMessage": {
+        "path": "/tmp/codex-last-message.json",
+        "content": "{\"command\":\"implement\",\"taskId\":\"task-123\",\"workspaceId\":\"/work/repo\",\"diffSummary\":[\"Created smoke file.\"],\"changedFiles\":[\"synthetic-dry-run.txt\"],\"checks\":[{\"name\":\"required-file-exists\",\"status\":\"passed\",\"command\":\"test -f synthetic-dry-run.txt\",\"exitCode\":0,\"output\":null,\"artifactId\":null,\"startedAt\":null,\"finishedAt\":null}],\"knownRisks\":[],\"agentSummary\":\"Verified through command provenance.\",\"noOpRationale\":null,\"findings\":null,\"noFindingRationale\":null,\"resourceProfile\":null,\"version\":\"1\"}"
+      }
+    }
+  }
+}

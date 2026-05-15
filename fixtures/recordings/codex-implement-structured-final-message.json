@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "implement",
+  "scenario": "structured-final-message",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "{\"type\":\"agent_message\",\"message\":\"done\"}\n",
+    "stderr": "",
+    "durationMs": 12,
+    "timedOut": false,
+    "outputFiles": {
+      "lastMessage": {
+        "path": "/tmp/codex-last-message.json",
+        "content": "{\"command\":\"implement\",\"taskId\":\"model-supplied-task-id\",\"workspaceId\":\"model-supplied-workspace\",\"diffSummary\":[\"Added real evidence parsing.\"],\"changedFiles\":[\"src/adapters/codex-adapter.js\"],\"checks\":[{\"name\":\"pnpm test\",\"status\":\"passed\",\"command\":\"pnpm test\",\"exitCode\":0,\"output\":\"tests passed\",\"artifactId\":null,\"startedAt\":null,\"finishedAt\":null}],\"knownRisks\":[],\"agentSummary\":\"Parsed evidence from the final Codex message.\",\"noOpRationale\":null,\"findings\":null,\"noFindingRationale\":null,\"resourceProfile\":null,\"version\":\"1\"}"
+      }
+    }
+  }
+}

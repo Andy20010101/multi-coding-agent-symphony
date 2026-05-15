@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "adapter": "codex",
+  "command": "qa",
+  "scenario": "passing-smoke",
+  "recordedAt": "2026-05-15T01:08:59.752Z",
+  "recordedFrom": "MCAS_RUN_REAL_CODEX=1 MCAS_CODEX_TIMEOUT_MS=60000 pnpm smoke:codex:real",
+  "processResult": {
+    "exitCode": 0,
+    "stdout": "{\"type\":\"agent_message\",\"message\":\"read package.json and README.md\"}\n{\"type\":\"agent_message\",\"message\":\"returned smoke evidence\"}\n",
+    "stderr": "",
+    "durationMs": 44500,
+    "timedOut": false,
+    "outputFiles": {
+      "lastMessage": {
+        "path": "/tmp/mcas-codex/codex-codex-real-smoke-1778807339752-1-last-message.json",
+        "content": "{\"command\":\"qa\",\"taskId\":\"codex-real-smoke-1778807339752\",\"workspaceId\":\"/home/administrator/code/multi-coding-agent-symphony\",\"diffSummary\":[],\"changedFiles\":[],\"checks\":[{\"name\":\"codex-real-smoke\",\"status\":\"passed\",\"command\":\"for f in package.json README.md; do test -r \\\"$f\\\" || { printf '%s not readable\\\\n' \\\"$f\\\"; exit 1; }; bytes=$(wc -c < \\\"$f\\\") || exit 1; first_line=$(sed -n '1p' \\\"$f\\\") || exit 1; printf '%s readable bytes=%s first_line=%s\\\\n' \\\"$f\\\" \\\"$bytes\\\" \\\"$first_line\\\"; done\",\"exitCode\":0,\"output\":\"package.json readable bytes=1147 first_line={\\nREADME.md readable bytes=6195 first_line=# Multi Coding Agent Symphony\",\"artifactId\":\"qa-verification-log\",\"startedAt\":null,\"finishedAt\":null}],\"knownRisks\":[\"Smoke scope only verified readability of package.json and README.md; no build, lint, or test suite was run.\"],\"agentSummary\":\"Codex real QA verifier inspected package.json and README.md with a read-only shell check. Both required files were readable, and no files were modified.\",\"noOpRationale\":\"Read-only smoke test; no file edits requested or performed.\",\"findings\":null,\"noFindingRationale\":\"Required smoke files were readable.\",\"version\":\"smoke-evidence.v1\"}"
+      }
+    }
+  }
+}
