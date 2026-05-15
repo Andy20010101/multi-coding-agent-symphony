@@ -12,12 +12,32 @@ pnpm test
 pnpm test:mutation:gate
 git diff --check
 pnpm mcas doctor
+```
+
+Expected result: every command exits with code `0`. The mutation gate runs Stryker against the hardened core modules and must stay above its configured break threshold.
+
+## Required Harness Dry-Run Proof
+
+Run from the repository root:
+
+```sh
+pnpm mcas harness run-taskpacket --run-id fixture-run --taskpacket fixtures/harness/scaffold-taskpacket.json --runtime-dir tmp/harness-bridge
+pnpm mcas harness run-taskpacket --run-id fixture-writer-reviewer --taskpacket fixtures/harness/writer-reviewer-taskpacket.json --runtime-dir tmp/harness-writer-reviewer --harness-dir tmp/harness-writer-reviewer-output
+```
+
+Expected result: both commands return verifier status `passed`, Harness evidence files are written under the selected output paths, and the writer-reviewer evidence map links writer and reviewer command artifacts.
+
+## Optional Local CLI Help Smokes
+
+Run these only when validating installed CLI binaries:
+
+```sh
 pnpm smoke:codex:help
 pnpm smoke:claude:help
 pnpm smoke:kiro:help
 ```
 
-Expected result: every command exits with code `0`. Help smokes verify local binaries only and must not invoke model APIs. The mutation gate runs Stryker against the hardened core modules and must stay above its configured break threshold.
+Expected result: help smokes verify local binaries only and must not invoke model APIs.
 
 ## Security Gates
 

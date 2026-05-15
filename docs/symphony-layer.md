@@ -163,6 +163,7 @@ Release gates remain:
 ```sh
 pnpm test
 pnpm check
+pnpm test:mutation:gate
 git diff --check
 pnpm mcas doctor
 ```

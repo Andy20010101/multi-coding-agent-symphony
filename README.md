@@ -40,10 +40,11 @@ Implemented:
 - User-facing `pnpm mcas` commands for doctor, GitHub issue intake, manual queueing, task execution, smoke dispatch, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution, writer-reviewer TaskPacket mode, and gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
 - V2 proposal-only and writer-reviewer ensemble flows with structured proposal, arbitration, synthesis, role separation, and ensemble-run artifacts.
+- Continuation turns and stall detection in `orchestrator.runCommand`, including retryable verifier failures, activity tracking, and `stall-timeout` records.
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts.
 
-Current baseline: `pnpm test` covers 398 tests across 69 suites.
+Current baseline: `pnpm test` covers 407 tests across 70 suites.
 
 ## Design Center
 
@@ -72,6 +73,7 @@ Run checks:
 ```sh
 pnpm check
 pnpm test
+pnpm test:mutation:gate
 git diff --check
 pnpm mcas doctor
 pnpm smoke:codex:help
