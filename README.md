@@ -20,6 +20,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [Eval Replay Plugin](docs/eval-replay-plugin.md)
 - [Real CLI Integration](docs/real-cli-integration.md)
 - [Symphony Layer](docs/symphony-layer.md)
+- [Operational Execution Order](docs/operational-execution-order.md)
 - [Security Checklist](docs/security-checklist.md)
 - [Release Checklist](docs/release-checklist.md)
 - [Troubleshooting](docs/troubleshooting.md)
