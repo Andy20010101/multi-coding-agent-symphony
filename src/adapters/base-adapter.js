@@ -43,6 +43,10 @@ export class BaseAdapter {
   }
 
   normalizeFailure(error) {
+    if (error?.code === 'ESTALL' || error?.stalled === true) {
+      return classifyFailure('stall-timeout');
+    }
+
     if (error?.code === 'ETIMEDOUT' || error?.signal === 'SIGTERM') {
       return classifyFailure('cli-timeout');
     }

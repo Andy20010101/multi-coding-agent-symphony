@@ -10,6 +10,8 @@ export class NodeProcessRunner {
     env = {},
     timeoutMs = 300000,
     timeoutKillDelayMs = 5000,
+    stallTimeoutMs = 0,
+    onActivity,
     outputFiles = {}
   }) {
     assertNonEmptyString(executable, 'executable');
@@ -31,8 +33,11 @@ export class NodeProcessRunner {
     let stderr = '';
     let timedOut = false;
     let cancelled = false;
+    let stalled = false;
     let killedAfterTimeout = false;
     let killTimeout;
+    let stallCheck;
+    let lastActivityAt = startedAt;
     const timeout = setTimeout(() => {
       timedOut = true;
       child.kill('SIGTERM');
@@ -42,23 +47,47 @@ export class NodeProcessRunner {
       }, timeoutKillDelayMs);
     }, timeoutMs);
 
+    if (stallTimeoutMs > 0) {
+      const intervalMs = Math.min(Math.max(Math.floor(stallTimeoutMs / 3), 1), 60000);
+
+      stallCheck = setInterval(() => {
+        if (Date.now() - lastActivityAt <= stallTimeoutMs) {
+          return;
+        }
+
+        stalled = true;
+        child.kill('SIGTERM');
+        clearInterval(stallCheck);
+        killTimeout = setTimeout(() => {
+          killedAfterTimeout = true;
+          child.kill('SIGKILL');
+        }, timeoutKillDelayMs);
+      }, intervalMs);
+    }
+
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
+      lastActivityAt = Date.now();
+      emitActivity({ onActivity, type: 'stdout', chunk, timestamp: lastActivityAt });
     });
     child.stderr.on('data', (chunk) => {
       stderr += chunk;
+      lastActivityAt = Date.now();
+      emitActivity({ onActivity, type: 'stderr', chunk, timestamp: lastActivityAt });
     });
 
     const result = new Promise((resolve, reject) => {
       child.on('error', (error) => {
         clearTimeout(timeout);
+        clearInterval(stallCheck);
         clearTimeout(killTimeout);
         reject(error);
       });
       child.on('close', async (exitCode, signal) => {
         clearTimeout(timeout);
+        clearInterval(stallCheck);
         clearTimeout(killTimeout);
         let capturedOutputFiles;
 
@@ -77,6 +106,7 @@ export class NodeProcessRunner {
           durationMs: Date.now() - startedAt,
           timedOut,
           cancelled,
+          stalled,
           killedAfterTimeout,
           outputFiles: capturedOutputFiles
         });
@@ -90,6 +120,7 @@ export class NodeProcessRunner {
       result,
       cancel(signal = 'SIGTERM') {
         cancelled = true;
+        clearInterval(stallCheck);
         child.kill(signal);
 
         return {
@@ -103,6 +134,18 @@ export class NodeProcessRunner {
   async run(invocation) {
     return this.start(invocation).result;
   }
+}
+
+function emitActivity({ onActivity, type, chunk, timestamp }) {
+  if (typeof onActivity !== 'function') {
+    return;
+  }
+
+  onActivity({
+    type,
+    chunk,
+    timestamp: new Date(timestamp).toISOString()
+  });
 }
 
 async function readOutputFiles(outputFiles) {

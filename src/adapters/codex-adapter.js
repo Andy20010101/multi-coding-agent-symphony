@@ -121,6 +121,8 @@ export class CodexAdapter extends BaseAdapter {
         stdin: preparedRun.prompt,
         env: preparedRun.environment,
         timeoutMs: input.timeoutMs ?? this.timeoutMs,
+        stallTimeoutMs: input.stallTimeoutMs ?? 0,
+        onActivity: input.onActivity,
         outputFiles: {
           lastMessage: outputLastMessagePath
         }
@@ -148,6 +150,8 @@ export class CodexAdapter extends BaseAdapter {
       stdin: preparedRun.prompt,
       env: preparedRun.environment,
       timeoutMs: input.timeoutMs ?? this.timeoutMs,
+      stallTimeoutMs: input.stallTimeoutMs ?? 0,
+      onActivity: input.onActivity,
       outputFiles: {
         lastMessage: outputLastMessagePath
       }
@@ -169,6 +173,7 @@ export class CodexAdapter extends BaseAdapter {
       stderr: result.stderr,
       durationMs: result.durationMs,
       timedOut: result.timedOut,
+      stalled: result.stalled,
       outputFiles: result.outputFiles ?? {},
       parsedEvents,
       failure: status === 'failed'
@@ -350,8 +355,12 @@ async function finalizeActiveRun(stored) {
   stored.durationMs = result.durationMs;
   stored.timedOut = result.timedOut;
   stored.cancelled = result.cancelled;
+  stored.stalled = result.stalled;
   stored.outputFiles = result.outputFiles ?? {};
   stored.parsedEvents = parseJsonl(result.stdout);
+  if (stored.status !== 'cancelled') {
+    stored.status = result.exitCode === 0 ? 'completed' : 'failed';
+  }
   stored.processFinalized = true;
 }
 
@@ -522,6 +531,14 @@ function buildCodexArtifacts(stored) {
 }
 
 function buildCodexFailureInput({ result, parsedEvents }) {
+  if (result.stalled) {
+    return {
+      code: 'ESTALL',
+      signal: result.signal,
+      stalled: true
+    };
+  }
+
   if (result.timedOut) {
     return {
       code: 'ETIMEDOUT',
@@ -576,6 +593,10 @@ function mapCodexFailureCategory(error) {
     .join(' ')
     .toLowerCase()
     .replace(/[_\s]+/g, '-');
+
+  if (normalized.includes('estall') || normalized.includes('stall-timeout')) {
+    return 'stall-timeout';
+  }
 
   if (
     normalized.includes('permission-denied')

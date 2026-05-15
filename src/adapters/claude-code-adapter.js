@@ -72,7 +72,9 @@ export class ClaudeCodeAdapter extends BaseAdapter {
       cwd: preparedRun.cwd,
       stdin: preparedRun.prompt,
       env: preparedRun.environment,
-      timeoutMs: input.timeoutMs ?? this.timeoutMs
+      timeoutMs: input.timeoutMs ?? this.timeoutMs,
+      stallTimeoutMs: input.stallTimeoutMs ?? 0,
+      onActivity: input.onActivity
     });
     const status = result.exitCode === 0 ? 'completed' : 'failed';
     const runId = `${this.adapterId}-${input.contextPack.task.id}-${this.runs.size + 1}`;
@@ -91,9 +93,10 @@ export class ClaudeCodeAdapter extends BaseAdapter {
       stderr: result.stderr,
       durationMs: result.durationMs,
       timedOut: result.timedOut,
+      stalled: result.stalled,
       parsedEvents: parseJsonl(result.stdout),
       failure: status === 'failed'
-        ? this.normalizeFailure(result.timedOut ? { code: 'ETIMEDOUT' } : { code: 'EEXIT' })
+        ? this.normalizeFailure(result.stalled ? { code: 'ESTALL' } : result.timedOut ? { code: 'ETIMEDOUT' } : { code: 'EEXIT' })
         : null
     };
 
