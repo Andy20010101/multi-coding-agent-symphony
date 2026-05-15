@@ -269,7 +269,10 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       await allowedOrchestrator.runCommand({
         taskSpec: {
           ...taskSpec,
-          id: 'task-security-policy-network'
+          id: 'task-security-policy-network',
+          execution: {
+            maxTurns: 1
+          }
         },
         commandSpec: networkCommandSpec,
         policyRequests: [networkRequest]

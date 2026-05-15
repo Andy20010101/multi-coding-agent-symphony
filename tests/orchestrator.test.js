@@ -401,7 +401,12 @@ describe('Orchestrator dry-run execution flow', () => {
       });
 
       const result = await orchestrator.runTaskWorkflow({
-        taskSpec,
+        taskSpec: {
+          ...taskSpec,
+          execution: {
+            maxTurns: 1
+          }
+        },
         commandSpecs: [commandSpec, reviewCommandSpec]
       });
 
@@ -438,7 +443,12 @@ describe('Orchestrator dry-run execution flow', () => {
       });
 
       const result = await orchestrator.runTaskWorkflow({
-        taskSpec,
+        taskSpec: {
+          ...taskSpec,
+          execution: {
+            maxTurns: 1
+          }
+        },
         commandSpecs: [commandSpec, reviewCommandSpec]
       });
       const events = await eventLog.readAll();

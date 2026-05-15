@@ -14,6 +14,7 @@ export function buildContextPack(input) {
   const events = cloneArray(input.events ?? [], 'events');
   const artifactRefs = cloneArray(input.artifactRefs ?? [], 'artifactRefs').map(stripArtifactContent);
   const hydratedArtifacts = cloneArray(input.hydratedArtifacts ?? [], 'hydratedArtifacts');
+  const continuation = normalizeContinuation(input.continuation);
 
   return {
     version: '1',
@@ -29,7 +30,8 @@ export function buildContextPack(input) {
     },
     events,
     artifactRefs,
-    hydratedArtifacts
+    hydratedArtifacts,
+    ...(continuation ? { continuation } : {})
   };
 }
 
@@ -48,4 +50,16 @@ function stripArtifactContent(ref) {
 
   const { content, ...withoutContent } = ref;
   return withoutContent;
+}
+
+function normalizeContinuation(value) {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('continuation must be an object');
+  }
+
+  return structuredClone(value);
 }

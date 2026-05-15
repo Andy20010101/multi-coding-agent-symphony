@@ -45,6 +45,12 @@ const COMMAND_SEQUENCES = new Map([
   ['standard', STANDARD_COMMAND_SEQUENCE]
 ]);
 
+const DEFAULT_EXECUTION = Object.freeze({
+  maxTurns: 5,
+  turnTimeoutMs: 3600000,
+  stallTimeoutMs: 300000
+});
+
 export class PolicyDeniedError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -84,11 +90,15 @@ export class Orchestrator {
     timeoutMs,
     artifactRefs = [],
     sourceWorkspaceId,
-    artifactIdSuffix = ''
+    artifactIdSuffix = '',
+    checkTaskActive
   }) {
     validateTaskSpec(taskSpec);
     validateCommandSpec(commandSpec);
+    assertOptionalFunction(checkTaskActive, 'checkTaskActive');
     const artifactKey = buildCommandArtifactKey(commandSpec.name, artifactIdSuffix);
+    const artifactId = `${artifactKey}-evidence`;
+    const execution = resolveExecutionConfig({ taskSpec, commandSpec, timeoutMs });
 
     await this.#appendEvent({
       type: 'command.queued',
@@ -158,62 +168,163 @@ export class Orchestrator {
         role: workspaceRole,
         adapterId: route.adapterId
       });
-    const priorEvents = typeof this.eventLog.readAll === 'function' ? await this.eventLog.readAll() : [];
     const hydratedArtifacts = await this.#hydrateArtifactRefs(artifactRefs);
-    const contextPack = buildContextPack({
-      taskSpec,
-      commandName: commandSpec.name,
-      events: priorEvents,
-      artifactRefs,
-      hydratedArtifacts
-    });
-    const handle = await adapter.start({
-      commandSpec,
-      contextPack,
-      workspace: workspace.path,
-      modelProfile: modelProfile ?? route.modelProfile ?? route.modelProfiles[0],
-      policyDecisions,
-      executionMode,
-      timeoutMs
-    });
+    const turns = [];
+    let previousTurn;
+    let finalEvidence;
+    let finalVerification;
+    let finalHandle;
+    let finalTurnArtifactId;
 
-    for await (const adapterEvent of adapter.streamEvents(handle)) {
+    for (let attempt = 1; attempt <= execution.maxTurns; attempt += 1) {
+      const isContinuation = attempt > 1;
+      const continuation = isContinuation
+        ? buildContinuationContext({ attempt, previousTurn })
+        : undefined;
+      const priorEvents = typeof this.eventLog.readAll === 'function' ? await this.eventLog.readAll() : [];
+      const contextPack = buildContextPack({
+        taskSpec: continuation
+          ? buildContinuationTaskSpec({ taskSpec, continuation })
+          : taskSpec,
+        commandName: commandSpec.name,
+        events: priorEvents,
+        artifactRefs,
+        hydratedArtifacts,
+        continuation
+      });
+      const activityEvents = [];
+      const startInput = {
+        commandSpec,
+        contextPack,
+        workspace: workspace.path,
+        modelProfile: modelProfile ?? route.modelProfile ?? route.modelProfiles[0],
+        policyDecisions,
+        executionMode,
+        timeoutMs: execution.turnTimeoutMs,
+        stallTimeoutMs: execution.stallTimeoutMs,
+        isContinuation,
+        turn: attempt
+      };
+
+      if (executionMode === 'real') {
+        startInput.onActivity = (activity) => {
+          activityEvents.push(activity);
+        };
+      }
+
+      const handle = await adapter.start(startInput);
+      const streamResult = await this.#streamAdapterEvents({
+        adapter,
+        handle,
+        stallTimeoutMs: execution.stallTimeoutMs,
+        taskId: taskSpec.id,
+        command: commandSpec.name,
+        attempt
+      });
+      const evidence = await adapter.collectEvidence(handle);
+      let turnArtifactId = attempt === 1
+        ? artifactId
+        : `${artifactKey}-turn-${attempt}-evidence`;
+
+      await this.artifactStore.writeArtifact(taskSpec.id, turnArtifactId, evidence);
       await this.#appendEvent({
-        type: adapterEvent.type,
-        actor: 'adapter',
-        payload: adapterEvent
+        type: 'artifact.written',
+        actor: 'orchestrator',
+        payload: {
+          taskId: taskSpec.id,
+          artifactId: turnArtifactId
+        }
+      });
+
+      const verification = buildTurnVerification({
+        commandSpec,
+        evidence,
+        workspace,
+        handle,
+        stalled: streamResult.stalled
+      });
+      const turn = {
+        attempt,
+        isContinuation,
+        artifactId: turnArtifactId,
+        verification,
+        stalled: streamResult.stalled,
+        activityCount: activityEvents.length
+      };
+
+      turns.push(turn);
+      finalEvidence = evidence;
+      finalVerification = verification;
+      finalHandle = handle;
+      finalTurnArtifactId = turnArtifactId;
+      previousTurn = {
+        ...turn,
+        evidence
+      };
+
+      if (verification.status === 'passed' || isTerminalVerification(verification) || attempt === execution.maxTurns) {
+        break;
+      }
+
+      if (checkTaskActive) {
+        const active = await checkTaskActive({
+          taskSpec: structuredClone(taskSpec),
+          commandSpec: structuredClone(commandSpec),
+          attempt,
+          verification: structuredClone(verification),
+          turns: structuredClone(turns)
+        });
+
+        if (active === false) {
+          finalVerification = {
+            status: 'failed',
+            reason: 'task-cancelled',
+            previousFailureReason: verification.reason
+          };
+          break;
+        }
+      }
+
+      if (turnArtifactId === artifactId) {
+        turnArtifactId = `${artifactKey}-turn-${attempt}-evidence`;
+        await this.artifactStore.writeArtifact(taskSpec.id, turnArtifactId, evidence);
+        await this.#appendEvent({
+          type: 'artifact.written',
+          actor: 'orchestrator',
+          payload: {
+            taskId: taskSpec.id,
+            artifactId: turnArtifactId
+          }
+        });
+        turn.artifactId = turnArtifactId;
+        previousTurn.artifactId = turnArtifactId;
+        finalTurnArtifactId = turnArtifactId;
+      }
+    }
+
+    if (finalTurnArtifactId !== artifactId) {
+      await this.artifactStore.writeArtifact(taskSpec.id, artifactId, finalEvidence);
+      await this.#appendEvent({
+        type: 'artifact.written',
+        actor: 'orchestrator',
+        payload: {
+          taskId: taskSpec.id,
+          artifactId
+        }
       });
     }
 
-    const evidence = await adapter.collectEvidence(handle);
-    const artifactId = `${artifactKey}-evidence`;
-
-    await this.artifactStore.writeArtifact(taskSpec.id, artifactId, evidence);
-    await this.#appendEvent({
-      type: 'artifact.written',
-      actor: 'orchestrator',
-      payload: {
-        taskId: taskSpec.id,
-        artifactId
-      }
-    });
-
-    const verification = verifyEvidence({
-      commandSpec,
-      evidence,
-      workspaceManifest: workspace
-    });
     const adapterArtifactRefs = await this.#writeAdapterArtifacts({
       taskId: taskSpec.id,
       command: artifactKey,
       adapter,
-      handle
+      handle: finalHandle
     });
 
     await this.#appendEvent({
       type: 'verifier.result',
       actor: 'verifier',
-      payload: verification
+      payload: finalVerification
     });
     const runArtifactId = `${artifactKey}-run`;
     const runRecord = {
@@ -224,8 +335,11 @@ export class Orchestrator {
       workspaceId: workspace.workspaceId,
       evidenceArtifactId: artifactId,
       routeDecisionArtifactId,
-      verificationStatus: verification.status,
+      verificationStatus: finalVerification.status,
       artifactRefs: structuredClone(artifactRefs),
+      ...(turns.length > 1 || turns.some((turn) => turn.stalled)
+        ? { attempts: turns.length, turns: turns.map(summarizeTurn) }
+        : {}),
       ...(adapterArtifactRefs.length > 0 ? { adapterArtifactRefs } : {})
     };
 
@@ -239,12 +353,14 @@ export class Orchestrator {
       }
     });
     await this.#appendEvent({
-      type: verification.status === 'passed' ? 'command.finished' : 'command.failed',
+      type: finalVerification.status === 'passed' ? 'command.finished' : 'command.failed',
       actor: 'orchestrator',
       payload: {
         taskId: taskSpec.id,
         command: commandSpec.name,
-        verificationStatus: verification.status
+        verificationStatus: finalVerification.status,
+        verificationReason: finalVerification.reason,
+        attempts: turns.length
       }
     });
 
@@ -256,8 +372,10 @@ export class Orchestrator {
       artifactId,
       runArtifactId,
       routeDecisionArtifactId,
+      attempts: turns.length,
+      turns: turns.map(summarizeTurn),
       ...(adapterArtifactRefs.length > 0 ? { adapterArtifactRefs } : {}),
-      verification
+      verification: finalVerification
     };
   }
 
@@ -387,6 +505,58 @@ export class Orchestrator {
     }
 
     return result;
+  }
+
+  async #streamAdapterEvents({
+    adapter,
+    handle,
+    stallTimeoutMs,
+    taskId,
+    command,
+    attempt
+  }) {
+    const iterator = adapter.streamEvents(handle)[Symbol.asyncIterator]();
+
+    while (true) {
+      const next = await nextAdapterEvent({ iterator, stallTimeoutMs });
+
+      if (next.stalled) {
+        const cancellation = typeof adapter.cancel === 'function'
+          ? await adapter.cancel(handle)
+          : null;
+
+        await this.#appendEvent({
+          type: 'command.stalled',
+          actor: 'orchestrator',
+          payload: {
+            taskId,
+            command,
+            attempt,
+            runId: handle.runId,
+            reason: 'stall-timeout',
+            stallTimeoutMs,
+            ...(cancellation ? { cancellation } : {})
+          }
+        });
+
+        return {
+          stalled: true,
+          cancellation
+        };
+      }
+
+      if (next.result.done) {
+        return {
+          stalled: false
+        };
+      }
+
+      await this.#appendEvent({
+        type: next.result.value.type,
+        actor: 'adapter',
+        payload: next.result.value
+      });
+    }
   }
 
   async #appendEvent({ type, actor, payload }) {
@@ -545,6 +715,165 @@ function buildCommandArtifactKey(commandName, artifactIdSuffix) {
   }
 
   return `${commandName}-${artifactIdSuffix}`;
+}
+
+function resolveExecutionConfig({ taskSpec, commandSpec, timeoutMs }) {
+  const execution = {
+    ...DEFAULT_EXECUTION,
+    ...(taskSpec.execution ?? {}),
+    ...(commandSpec.execution ?? {})
+  };
+
+  if (timeoutMs !== undefined) {
+    execution.turnTimeoutMs = timeoutMs;
+  }
+
+  assertPositiveInteger(execution.maxTurns, 'execution.maxTurns');
+  assertPositiveInteger(execution.turnTimeoutMs, 'execution.turnTimeoutMs');
+  assertNonNegativeInteger(execution.stallTimeoutMs, 'execution.stallTimeoutMs');
+
+  return execution;
+}
+
+function buildTurnVerification({ commandSpec, evidence, workspace, handle, stalled }) {
+  if (stalled) {
+    return {
+      status: 'failed',
+      reason: 'stall-timeout',
+      failure: classifyFailure('stall-timeout')
+    };
+  }
+
+  if (handle.failure?.category) {
+    return {
+      status: 'failed',
+      reason: handle.failure.category,
+      failure: structuredClone(handle.failure)
+    };
+  }
+
+  return verifyEvidence({
+    commandSpec,
+    evidence,
+    workspaceManifest: workspace
+  });
+}
+
+function isTerminalVerification(verification) {
+  if (verification.status === 'passed') {
+    return true;
+  }
+
+  return classifyFailure(verification.reason).retryable === false;
+}
+
+function buildContinuationContext({ attempt, previousTurn }) {
+  return {
+    isContinuation: true,
+    attempt,
+    previousAttempt: previousTurn.attempt,
+    previousFailureReason: previousTurn.verification.reason,
+    previousEvidenceArtifactId: previousTurn.artifactId,
+    previousEvidenceSummary: summarizeEvidence(previousTurn.evidence)
+  };
+}
+
+function buildContinuationTaskSpec({ taskSpec, continuation }) {
+  return {
+    ...structuredClone(taskSpec),
+    objective: [
+      `Previous attempt failed: ${continuation.previousFailureReason}`,
+      `Evidence: ${continuation.previousEvidenceSummary}`,
+      'Continue from the current workspace state and resolve the failure.'
+    ].join('\n')
+  };
+}
+
+function summarizeEvidence(evidence) {
+  const checks = Array.isArray(evidence?.checks) ? evidence.checks : [];
+  const changedFiles = Array.isArray(evidence?.changedFiles) ? evidence.changedFiles : [];
+  const failedChecks = checks
+    .filter((check) => check?.status !== 'passed')
+    .map((check) => check.name)
+    .filter(Boolean);
+  const summaryParts = [];
+
+  if (typeof evidence?.agentSummary === 'string' && evidence.agentSummary.trim() !== '') {
+    summaryParts.push(evidence.agentSummary.trim());
+  }
+
+  summaryParts.push(`changedFiles=${changedFiles.length}`);
+  summaryParts.push(`checks=${checks.length}`);
+
+  if (failedChecks.length > 0) {
+    summaryParts.push(`failedChecks=${failedChecks.join(', ')}`);
+  }
+
+  return summaryParts.join('; ');
+}
+
+function summarizeTurn(turn) {
+  return {
+    attempt: turn.attempt,
+    isContinuation: turn.isContinuation,
+    artifactId: turn.artifactId,
+    verification: structuredClone(turn.verification),
+    ...(turn.stalled ? { stalled: true } : {}),
+    activityCount: turn.activityCount
+  };
+}
+
+function nextAdapterEvent({ iterator, stallTimeoutMs }) {
+  if (stallTimeoutMs === 0) {
+    return iterator.next().then((result) => ({ result }));
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      settled = true;
+      resolve({ stalled: true });
+    }, stallTimeoutMs);
+
+    iterator.next().then(
+      (result) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timer);
+        resolve({ result });
+      },
+      (error) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function assertPositiveInteger(value, field) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new TypeError(`${field} must be a positive integer`);
+  }
+}
+
+function assertNonNegativeInteger(value, field) {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new TypeError(`${field} must be a non-negative integer`);
+  }
+}
+
+function assertOptionalFunction(value, field) {
+  if (value !== undefined && typeof value !== 'function') {
+    throw new TypeError(`${field} must be a function`);
+  }
 }
 
 function requireMethod(value, method, field) {
