@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "id": "task.writer-reviewer",
+  "run_id": "fixture-writer-reviewer",
+  "repository": "Andy20010101/multi-coding-agent-symphony",
+  "intent": "Create synthetic-dry-run.txt through the writer-reviewer ensemble workflow.",
+  "acceptance": [
+    "writer evidence is recorded",
+    "reviewer evidence is recorded",
+    "Harness maps each stage to its artifact and verification result"
+  ],
+  "write_set": [
+    "synthetic-dry-run.txt"
+  ],
+  "verification": {
+    "commands": [
+      "pnpm test"
+    ]
+  },
+  "workflow": {
+    "mode": "writer-reviewer",
+    "ensemble_id": "ensemble-writer-reviewer",
+    "writer": {
+      "agent_id": "codex-writer",
+      "model_profile": "gpt-codex-default"
+    },
+    "reviewers": [
+      {
+        "agent_id": "codex-reviewer",
+        "model_profile": "gpt-codex-default"
+      }
+    ]
+  }
+}

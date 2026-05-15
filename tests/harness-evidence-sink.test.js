@@ -35,7 +35,8 @@ describe('HarnessEvidenceSink', () => {
             runArtifactId: 'implement-run',
             routeDecisionArtifactId: 'implement-route-decision',
             verification: {
-              status: 'passed'
+              status: 'passed',
+              reason: 'checks-passed'
             }
           }]
         },
@@ -76,10 +77,29 @@ describe('HarnessEvidenceSink', () => {
         routeDecisionArtifactId: 'implement-route-decision',
         verificationStatus: 'passed'
       }]);
+      assert.deepEqual(evidenceMap.stages, [{
+        stage: 'implement',
+        command: 'implement',
+        adapterId: 'codex',
+        artifactId: 'implement-evidence',
+        runArtifactId: 'implement-run',
+        routeDecisionArtifactId: 'implement-route-decision',
+        verificationStatus: 'passed',
+        verificationReason: 'checks-passed'
+      }]);
+      assert.deepEqual(evidenceMap.verificationMap, [{
+        stage: 'implement',
+        command: 'implement',
+        artifactId: 'implement-evidence',
+        verificationStatus: 'passed',
+        verificationReason: 'checks-passed'
+      }]);
       assert.equal(summary.status, 'passed');
+      assert.deepEqual(summary.verificationMap, evidenceMap.verificationMap);
       assert.equal(summary.taskPacketPath, '/tmp/taskpacket.json');
       assert.match(verification, /Task: task.scaffold/);
       assert.match(verification, /Status: passed/);
+      assert.match(verification, /Stage: implement/);
       assert.match(verification, /implement-evidence/);
     } finally {
       await rm(root, { recursive: true, force: true });

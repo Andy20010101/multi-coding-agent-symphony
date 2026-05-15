@@ -22,7 +22,10 @@ export class HarnessEvidenceSink {
     const evidenceMapPath = join(runDirectory, 'evidence-map.json');
     const verificationPath = join(runDirectory, 'verification.md');
     const summaryPath = join(runDirectory, 'summary.json');
+    const workflowMode = workflowResult.mode ?? 'linear';
     const artifacts = summarizeArtifacts(workflowResult);
+    const stages = summarizeStages(workflowResult);
+    const verificationMap = buildVerificationMap(stages);
 
     await mkdir(runDirectory, { recursive: true });
     await writeJson(evidenceMapPath, {
@@ -33,9 +36,13 @@ export class HarnessEvidenceSink {
       status: harnessVerification.status,
       verifierStatus: harnessVerification.status,
       symphonyStatus: workflowResult.status,
+      workflowMode,
       expectedChecks: [...harnessVerification.expectedChecks],
+      ...(harnessVerification.diagnosticLayer ? { diagnosticLayer: harnessVerification.diagnosticLayer } : {}),
       ...(executionMode ? { executionMode } : {}),
       artifacts,
+      stages,
+      verificationMap,
       artifactDirectory: runtime.artifactDirectory,
       eventDirectory: runtime.eventDirectory,
       workspaceDirectory: runtime.workspaceDirectory,
@@ -47,7 +54,9 @@ export class HarnessEvidenceSink {
       taskId: taskSpec.id,
       workflowResult,
       harnessVerification,
-      artifacts
+      artifacts,
+      stages,
+      workflowMode
     }), 'utf8');
     await writeJson(summaryPath, {
       version: '1',
@@ -58,17 +67,22 @@ export class HarnessEvidenceSink {
       status: harnessVerification.status,
       verifierStatus: harnessVerification.status,
       symphonyStatus: workflowResult.status,
+      workflowMode,
       reason: harnessVerification.reason,
+      ...(harnessVerification.diagnosticLayer ? { diagnosticLayer: harnessVerification.diagnosticLayer } : {}),
       expectedChecks: [...harnessVerification.expectedChecks],
       ...(executionMode ? { executionMode } : {}),
       writeSetViolations: structuredClone(harnessVerification.writeSetViolations),
       missingExpectedChecks: structuredClone(harnessVerification.missingExpectedChecks),
+      diagnostics: structuredClone(harnessVerification.diagnostics ?? []),
       ...(harnessVerification.policyDenied ? { policyDenied: structuredClone(harnessVerification.policyDenied) } : {}),
       artifactDirectory: runtime.artifactDirectory,
       eventDirectory: runtime.eventDirectory,
       workspaceDirectory: runtime.workspaceDirectory,
       sessionId: runtime.sessionId,
       artifacts,
+      stages,
+      verificationMap,
       writtenAt: new Date().toISOString()
     });
 
@@ -95,14 +109,48 @@ function summarizeArtifacts(workflowResult) {
   }));
 }
 
-function renderVerificationMarkdown({ runId, taskId, workflowResult, harnessVerification, artifacts }) {
+function summarizeStages(workflowResult) {
+  if (!Array.isArray(workflowResult?.commands)) {
+    return [];
+  }
+
+  return workflowResult.commands.map((command) => stripUndefined({
+    stage: command.stage ?? command.command,
+    role: command.role,
+    agentId: command.agentId,
+    command: command.command,
+    adapterId: command.adapterId,
+    artifactId: command.artifactId,
+    runArtifactId: command.runArtifactId,
+    routeDecisionArtifactId: command.routeDecisionArtifactId,
+    verificationStatus: command.verification?.status ?? command.verificationStatus ?? 'unknown',
+    verificationReason: command.verification?.reason ?? command.verificationReason,
+    diagnosticLayer: command.diagnosticLayer,
+    adapterArtifactRefs: command.adapterArtifactRefs
+  }));
+}
+
+function buildVerificationMap(stages) {
+  return stages.map((stage) => stripUndefined({
+    stage: stage.stage,
+    command: stage.command,
+    artifactId: stage.artifactId,
+    verificationStatus: stage.verificationStatus,
+    verificationReason: stage.verificationReason,
+    diagnosticLayer: stage.diagnosticLayer
+  }));
+}
+
+function renderVerificationMarkdown({ runId, taskId, workflowResult, harnessVerification, artifacts, stages, workflowMode }) {
   const lines = [
     `## Run ${runId}`,
     '',
     `- Task: ${taskId}`,
     `- Status: ${harnessVerification.status}`,
     `- Reason: ${harnessVerification.reason}`,
+    ...(harnessVerification.diagnosticLayer ? [`- Diagnostic layer: ${harnessVerification.diagnosticLayer}`] : []),
     `- Symphony status: ${workflowResult.status}`,
+    `- Workflow mode: ${workflowMode}`,
     `- Expected checks: ${harnessVerification.expectedChecks.join(', ')}`
   ];
 
@@ -115,6 +163,13 @@ function renderVerificationMarkdown({ runId, taskId, workflowResult, harnessVeri
     lines.push('- Artifacts:');
     for (const artifact of artifacts) {
       lines.push(`  - ${artifact.command}: ${artifact.artifactId} (${artifact.verificationStatus})`);
+    }
+  }
+
+  if (stages.length > 0) {
+    lines.push('- Stages:');
+    for (const stage of stages) {
+      lines.push(`  - Stage: ${stage.stage} -> ${stage.artifactId} (${stage.verificationStatus})`);
     }
   }
 
@@ -139,4 +194,16 @@ function assertSafePathSegment(value, field) {
   if (typeof value !== 'string' || value.trim() === '' || value.includes('/') || value.includes('..')) {
     throw new TypeError(`${field} must be a safe path segment`);
   }
+}
+
+function stripUndefined(value) {
+  const normalized = {};
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) {
+      normalized[key] = entry;
+    }
+  }
+
+  return normalized;
 }

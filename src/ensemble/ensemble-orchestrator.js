@@ -266,6 +266,7 @@ function summarizeRoleResult({ roleInput, result }) {
     evidenceArtifactId: result.artifactId,
     runArtifactId: result.runArtifactId,
     routeDecisionArtifactId: result.routeDecisionArtifactId,
+    ...(result.adapterArtifactRefs ? { adapterArtifactRefs: structuredClone(result.adapterArtifactRefs) } : {}),
     workspace: structuredClone(result.workspace),
     verificationStatus: result.verification.status,
     verification: structuredClone(result.verification)

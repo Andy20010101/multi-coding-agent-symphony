@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 import { validateTaskSpec } from '../contracts.js';
+import { EnsembleOrchestrator } from '../ensemble/ensemble-orchestrator.js';
 import { findWriteSetViolations, buildWorkspaceConstraints, normalizeWriteSet } from './workspace-bridge.js';
 
 const TASK_PRIORITIES = new Set(['low', 'normal', 'high']);
@@ -134,11 +135,17 @@ export async function verifyHarnessResult({
   const observedExpectedChecks = new Set();
   const commands = Array.isArray(workflowResult?.commands) ? workflowResult.commands : [];
   const policyDenied = policyDeniedFromError(error);
+  const diagnostics = [];
 
   for (const command of commands) {
     const evidence = await readEvidence(command);
     const changedFiles = Array.isArray(evidence?.changedFiles) ? evidence.changedFiles : [];
     const violatingFiles = findWriteSetViolations({ changedFiles, writeSet });
+    const diagnostic = commandDiagnostic({ command, evidence });
+
+    if (diagnostic) {
+      diagnostics.push(diagnostic);
+    }
 
     if (violatingFiles.length > 0) {
       writeSetViolations.push({
@@ -170,15 +177,25 @@ export async function verifyHarnessResult({
     writeSetViolations,
     missingExpectedChecks
   });
+  const diagnosticLayer = harnessDiagnosticLayer({
+    reason,
+    policyDenied,
+    failedSymphony,
+    writeSetViolations,
+    missingExpectedChecks,
+    diagnostics
+  });
 
   return {
     version: '1',
     status: reason === 'checks-passed' ? 'passed' : 'failed',
     reason,
+    ...(diagnosticLayer ? { diagnosticLayer } : {}),
     expectedChecks,
     writeSet,
     writeSetViolations,
     missingExpectedChecks,
+    diagnostics,
     ...(policyDenied ? { policyDenied } : {})
   };
 }
@@ -197,6 +214,7 @@ export async function runHarnessTaskPacket({
 }) {
   const taskSpec = taskPacketToTaskSpec(taskPacket, { runId });
   const policy = buildHarnessPolicy(taskPacket);
+  const workflow = buildTaskPacketWorkflow(taskPacket, { commandSequence });
 
   await artifactStore.writeArtifact(taskSpec.id, 'harness-taskpacket', {
     version: '1',
@@ -209,10 +227,12 @@ export async function runHarnessTaskPacket({
   let workflowError;
 
   try {
-    workflowResult = await orchestrator.runTaskWorkflow({
+    workflowResult = await runTaskPacketWorkflow({
+      workflow,
       taskSpec,
       policyRequests: policy.requests,
-      commandSequence,
+      orchestrator,
+      artifactStore,
       executionMode,
       timeoutMs
     });
@@ -221,6 +241,7 @@ export async function runHarnessTaskPacket({
     workflowResult = {
       taskId: taskSpec.id,
       status: 'failed',
+      mode: workflow.mode,
       commands: [],
       artifactRefs: []
     };
@@ -252,6 +273,147 @@ export async function runHarnessTaskPacket({
   };
 }
 
+async function runTaskPacketWorkflow({
+  workflow,
+  taskSpec,
+  policyRequests,
+  orchestrator,
+  artifactStore,
+  executionMode,
+  timeoutMs
+}) {
+  if (workflow.mode !== 'writer-reviewer') {
+    return orchestrator.runTaskWorkflow({
+      taskSpec,
+      policyRequests,
+      commandSequence: workflow.commandSequence,
+      executionMode,
+      timeoutMs
+    });
+  }
+
+  const ensemble = new EnsembleOrchestrator({
+    artifactStore,
+    eventLog: orchestrator.eventLog,
+    orchestrator
+  });
+  const result = await ensemble.runWriterReviewer({
+    ensembleId: workflow.ensembleId,
+    taskSpec,
+    writer: workflow.writer,
+    reviewers: workflow.reviewers,
+    executionMode,
+    timeoutMs,
+    policyRequests
+  });
+
+  return writerReviewerResultToWorkflowResult(result);
+}
+
+function buildTaskPacketWorkflow(taskPacket, { commandSequence }) {
+  const workflow = taskPacket.workflow;
+
+  if (workflow === undefined) {
+    return {
+      mode: 'linear',
+      commandSequence
+    };
+  }
+
+  assertPlainObject(workflow, 'TaskPacket.workflow');
+  const mode = requireNonEmptyString(workflow.mode, 'TaskPacket.workflow.mode');
+
+  if (mode === 'linear') {
+    return {
+      mode,
+      commandSequence: workflow.sequence ?? commandSequence
+    };
+  }
+
+  if (mode !== 'writer-reviewer') {
+    throw new TaskPacketValidationError('TaskPacket.workflow.mode must be one of: linear, writer-reviewer');
+  }
+
+  const ensembleId = workflow.ensemble_id ?? workflow.ensembleId ?? `${taskPacket.id}-writer-reviewer`;
+
+  assertSafeId(ensembleId, 'TaskPacket.workflow.ensemble_id');
+
+  return {
+    mode,
+    ensembleId,
+    writer: normalizeWorkflowAgent(workflow.writer, 'TaskPacket.workflow.writer'),
+    reviewers: requireNonEmptyArray(workflow.reviewers, 'TaskPacket.workflow.reviewers')
+      .map((reviewer, index) => normalizeWorkflowAgent(reviewer, `TaskPacket.workflow.reviewers[${index}]`))
+  };
+}
+
+function normalizeWorkflowAgent(agent, field) {
+  assertPlainObject(agent, field);
+  const agentId = agent.agent_id ?? agent.agentId;
+  const modelProfile = agent.model_profile ?? agent.modelProfile;
+  const normalized = {
+    agentId: requireNonEmptyString(agentId, `${field}.agent_id`)
+  };
+
+  if (modelProfile !== undefined) {
+    normalized.modelProfile = requireNonEmptyString(modelProfile, `${field}.model_profile`);
+  }
+
+  return normalized;
+}
+
+function writerReviewerResultToWorkflowResult(result) {
+  const commands = [
+    roleSummaryToCommand({
+      role: 'writer',
+      stage: 'writer',
+      commandName: 'implement',
+      summary: result.writer
+    }),
+    ...result.reviewers.map((reviewer) => roleSummaryToCommand({
+      role: 'reviewer',
+      stage: `reviewer:${reviewer.agentId}`,
+      commandName: 'review',
+      summary: reviewer
+    }))
+  ];
+  const failedCommand = commands.find((command) => command.verification.status !== 'passed');
+
+  return {
+    taskId: result.taskId,
+    status: result.finalVerificationStatus === 'passed' ? 'passed' : 'failed',
+    mode: 'writer-reviewer',
+    ensembleRunArtifactId: result.runArtifactId,
+    decision: result.decision,
+    finalVerificationStatus: result.finalVerificationStatus,
+    rejectionReasons: structuredClone(result.rejectionReasons),
+    commands,
+    artifactRefs: commands.map((command) => ({
+      taskId: result.taskId,
+      artifactId: command.artifactId,
+      command: command.command,
+      verificationStatus: command.verification.status
+    })),
+    ...(failedCommand ? { failedCommand: failedCommand.command } : {})
+  };
+}
+
+function roleSummaryToCommand({ role, stage, commandName, summary }) {
+  return {
+    stage,
+    role,
+    agentId: summary.agentId,
+    command: commandName,
+    adapterId: summary.adapterId,
+    workspace: structuredClone(summary.workspace),
+    artifactId: summary.evidenceArtifactId,
+    runArtifactId: summary.runArtifactId,
+    routeDecisionArtifactId: summary.routeDecisionArtifactId,
+    ...(summary.adapterArtifactRefs ? { adapterArtifactRefs: structuredClone(summary.adapterArtifactRefs) } : {}),
+    verification: structuredClone(summary.verification)
+  };
+}
+
 function recordObservedExpectedChecks({ evidence, expectedChecks, observedExpectedChecks }) {
   const checks = Array.isArray(evidence?.checks) ? evidence.checks : [];
 
@@ -280,6 +442,75 @@ function failureReason({ policyDenied, failedSymphony, writeSetViolations, missi
   }
 
   return 'checks-passed';
+}
+
+function commandDiagnostic({ command, evidence }) {
+  const verificationStatus = command.verification?.status ?? command.verificationStatus;
+  const verificationReason = command.verification?.reason ?? command.verificationReason;
+  const diagnosticLayer = commandDiagnosticLayer({ verificationStatus, verificationReason, evidence });
+
+  if (!diagnosticLayer) {
+    return null;
+  }
+
+  return {
+    command: command.command,
+    artifactId: command.artifactId,
+    verificationStatus: verificationStatus ?? 'unknown',
+    verificationReason: verificationReason ?? 'unknown',
+    diagnosticLayer
+  };
+}
+
+function commandDiagnosticLayer({ verificationStatus, verificationReason, evidence }) {
+  if (hasSchemaRisk(evidence)) {
+    return 'schema';
+  }
+
+  if (verificationReason === 'scope-violation') {
+    return 'workspace';
+  }
+
+  if (verificationStatus === 'failed') {
+    return 'prompt';
+  }
+
+  return null;
+}
+
+function harnessDiagnosticLayer({
+  reason,
+  policyDenied,
+  failedSymphony,
+  writeSetViolations,
+  missingExpectedChecks,
+  diagnostics
+}) {
+  if (reason === 'checks-passed') {
+    return null;
+  }
+
+  if (policyDenied || writeSetViolations.length > 0 || diagnostics.some((diagnostic) => diagnostic.diagnosticLayer === 'workspace')) {
+    return 'workspace';
+  }
+
+  if (diagnostics.some((diagnostic) => diagnostic.diagnosticLayer === 'schema')) {
+    return 'schema';
+  }
+
+  if (missingExpectedChecks.length > 0) {
+    return 'expected-check';
+  }
+
+  if (diagnostics.some((diagnostic) => diagnostic.diagnosticLayer === 'prompt') || failedSymphony) {
+    return 'prompt';
+  }
+
+  return null;
+}
+
+function hasSchemaRisk(evidence) {
+  return Array.isArray(evidence?.knownRisks) && evidence.knownRisks.includes('real-cli-output-unverified');
 }
 
 function policyDeniedFromError(error) {
@@ -353,4 +584,20 @@ function requireNonEmptyStringArray(value, field) {
 
     return item;
   });
+}
+
+function requireNonEmptyArray(value, field) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new TaskPacketValidationError(`${field} must be a non-empty array`);
+  }
+
+  return value;
+}
+
+function assertSafeId(value, field) {
+  const id = requireNonEmptyString(value, field);
+
+  if (id.includes('/') || id.includes('..')) {
+    throw new TaskPacketValidationError(`${field} must be a safe id`);
+  }
 }
