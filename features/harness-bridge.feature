@@ -44,6 +44,18 @@ Feature: Harness Bridge execution
     Then Symphony executes the implement command only
     And Harness evidence records the implementation artifact
 
+  Scenario: Run a TaskPacket through writer-reviewer ensemble mode
+    Given a valid Harness TaskPacket with workflow mode writer-reviewer
+    When the Harness Bridge runs the TaskPacket
+    Then Symphony executes one writer implementation stage
+    And Symphony executes one independent review-only stage
+    And Harness evidence maps each stage to its artifact and verification result
+
+  Scenario: Diagnose real smoke failures by contract layer
+    Given a real Harness Bridge smoke fails during model evidence verification
+    When the Harness Bridge writes verification evidence
+    Then the output identifies the failing layer as schema, prompt, workspace, or expected-check
+
   Scenario: Record policy denial in Symphony and Harness evidence
     Given a Harness TaskPacket whose policy denies a requested write
     When the Harness Bridge runs the TaskPacket

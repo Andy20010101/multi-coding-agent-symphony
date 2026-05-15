@@ -30,9 +30,12 @@ Symphony owns:
 | `repository` | `TaskSpec.repository`, defaulting to `harness-taskpacket` only when omitted |
 | `priority` | `TaskSpec.priority`, defaulting to `normal` |
 | `policy` | Harness policy config and explicit policy requests before adapter start |
+| `workflow.mode` | Optional workflow selector. Omitted or `linear` runs the command sequence; `writer-reviewer` runs the Symphony ensemble writer-reviewer path |
 | `run_id` or CLI `--run-id` | Harness evidence path under `.omx/harness/runs/<run-id>` |
 
 The original TaskPacket is stored as the `harness-taskpacket` Symphony artifact. TaskPacket metadata is not added as custom `TaskSpec` fields.
+
+`workflow.mode: "writer-reviewer"` requires `workflow.writer.agent_id` and at least one `workflow.reviewers[].agent_id`. `model_profile` is optional for each role. The writer runs `implement` in a primary-writer workspace, each reviewer runs `review` in a cloned read-only workspace, and the EnsembleRun is converted back into the Harness evidence map.
 
 ## CLI
 
@@ -59,6 +62,16 @@ MCAS_RUN_REAL_CODEX=1 pnpm mcas harness run-taskpacket \
 Supported real adapter values are `codex`, `claude` or `claude-code`, and `kiro` or `kiro-cli`. The corresponding gates are `MCAS_RUN_REAL_CODEX=1`, `MCAS_RUN_REAL_CLAUDE=1`, and `MCAS_RUN_REAL_KIRO=1`. `--timeout-ms <milliseconds>` overrides the adapter timeout for the workflow.
 Real lane workspaces are materialized before adapter start so native CLIs receive an existing `--cd` or working directory.
 
+Writer-reviewer TaskPacket smoke without model calls:
+
+```sh
+pnpm mcas harness run-taskpacket \
+  --run-id fixture-writer-reviewer \
+  --taskpacket fixtures/harness/writer-reviewer-taskpacket.json \
+  --runtime-dir tmp/harness-writer-reviewer \
+  --harness-dir tmp/harness-writer-reviewer-output
+```
+
 ## Evidence Written
 
 For each run, the bridge writes:
@@ -69,6 +82,7 @@ For each run, the bridge writes:
 
 The evidence map links Symphony evidence artifact ids, run artifact ids, route decision artifact ids, expected check commands, and runtime directories.
 Real lane runs also record `executionMode: "real"` in `evidence-map.json` and `summary.json`.
+Every run also writes `stages[]` and `verificationMap[]`. These arrays align each workflow stage to the command, role and agent when present, evidence artifact id, run artifact id, route decision artifact id, verifier status, and verifier reason.
 
 ## Gates
 
@@ -89,3 +103,10 @@ After Symphony finishes, the bridge verifies:
 - Every `verification.commands[]` entry appears in each command evidence package checks by `command` or `name`.
 
 Any write-set violation, missing expected check, policy denial, or Symphony verifier failure returns a failed Harness verifier status.
+
+Failed runs include `diagnosticLayer` in CLI JSON, `evidence-map.json`, and `summary.json` so operators can route the failure quickly:
+
+- `schema`: model output did not normalize into verifier-readable `EvidencePackage` evidence.
+- `prompt`: evidence was structured but omitted command-specific proof such as review findings/no-finding rationale.
+- `workspace`: policy, write-set, or read-only workspace scope was violated.
+- `expected-check`: the TaskPacket `verification.commands[]` requirement was absent from collected checks.

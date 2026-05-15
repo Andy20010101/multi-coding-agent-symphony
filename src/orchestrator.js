@@ -256,6 +256,7 @@ export class Orchestrator {
       artifactId,
       runArtifactId,
       routeDecisionArtifactId,
+      ...(adapterArtifactRefs.length > 0 ? { adapterArtifactRefs } : {}),
       verification
     };
   }

@@ -13,6 +13,7 @@ import {
   verifyHarnessResult
 } from '../src/integrations/harness-bridge.js';
 import { runMcasCli } from '../scripts/mcas.js';
+import { buildHarnessCodexRealSmokeArgv } from '../scripts/smoke-harness-codex-real.js';
 
 describe('Harness Bridge TaskPacket conversion', () => {
   it('converts TaskPacket intent, acceptance, write set, and verification commands', () => {
@@ -106,6 +107,7 @@ describe('Harness Bridge TaskPacket conversion', () => {
 
     assert.equal(verification.status, 'failed');
     assert.equal(verification.reason, 'write-set-violation');
+    assert.equal(verification.diagnosticLayer, 'workspace');
     assert.deepEqual(verification.writeSetViolations, [{
       command: 'implement',
       artifactId: 'implement-evidence',
@@ -130,11 +132,79 @@ describe('Harness Bridge TaskPacket conversion', () => {
 
     assert.equal(verification.status, 'failed');
     assert.equal(verification.reason, 'expected-check-missing');
+    assert.equal(verification.diagnosticLayer, 'expected-check');
     assert.deepEqual(verification.missingExpectedChecks, [{
       command: 'workflow',
       artifactId: null,
       expectedCommands: ['pnpm check']
     }]);
+  });
+
+  it('classifies invalid structured model evidence as a schema-layer failure', async () => {
+    const verification = await verifyHarnessResult({
+      taskPacket: validTaskPacket(),
+      workflowResult: {
+        taskId: 'task.scaffold',
+        status: 'failed',
+        commands: [{
+          command: 'implement',
+          artifactId: 'implement-evidence',
+          verification: {
+            status: 'failed',
+            reason: 'checks-missing'
+          }
+        }]
+      },
+      readEvidence: async () => ({
+        command: 'implement',
+        changedFiles: [],
+        checks: [],
+        knownRisks: ['real-cli-output-unverified'],
+        agentSummary: 'Raw model output did not match EvidencePackage schema.'
+      })
+    });
+
+    assert.equal(verification.status, 'failed');
+    assert.equal(verification.diagnosticLayer, 'schema');
+    assert.deepEqual(verification.diagnostics, [{
+      command: 'implement',
+      artifactId: 'implement-evidence',
+      verificationStatus: 'failed',
+      verificationReason: 'checks-missing',
+      diagnosticLayer: 'schema'
+    }]);
+  });
+
+  it('classifies verifier-readable but incomplete review evidence as a prompt-layer failure', async () => {
+    const verification = await verifyHarnessResult({
+      taskPacket: validTaskPacket(),
+      workflowResult: {
+        taskId: 'task.scaffold',
+        status: 'failed',
+        commands: [{
+          command: 'review',
+          artifactId: 'review-evidence',
+          verification: {
+            status: 'failed',
+            reason: 'verification-insufficient'
+          }
+        }]
+      },
+      readEvidence: async () => ({
+        command: 'review',
+        changedFiles: [],
+        checks: [
+          { name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'ok' },
+          { name: 'pnpm check', status: 'passed', command: 'pnpm check', exitCode: 0, output: 'ok' }
+        ],
+        knownRisks: [],
+        agentSummary: 'Review omitted findings and no-finding rationale.'
+      })
+    });
+
+    assert.equal(verification.status, 'failed');
+    assert.equal(verification.reason, 'symphony-verification-failed');
+    assert.equal(verification.diagnosticLayer, 'prompt');
   });
 
   it('accepts expected verification commands once across the workflow', async () => {
@@ -249,6 +319,101 @@ describe('Harness Bridge CLI dry-run E2E', () => {
     }
   });
 
+  it('runs a TaskPacket through the writer-reviewer ensemble workflow', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-harness-writer-reviewer-'));
+
+    try {
+      const taskPacketFile = join(root, 'taskpacket.json');
+      const runtimeDirectory = join(root, 'runtime');
+      const harnessDirectory = join(root, 'harness');
+
+      await writeFile(taskPacketFile, `${JSON.stringify(writerReviewerTaskPacket(), null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'harness',
+          'run-taskpacket',
+          '--run-id',
+          'fixture-writer-reviewer',
+          '--taskpacket',
+          taskPacketFile,
+          '--runtime-dir',
+          runtimeDirectory,
+          '--harness-dir',
+          harnessDirectory,
+          '--session-id',
+          'harness-session'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const run = JSON.parse(output.stdoutText());
+      const evidenceMap = JSON.parse(await readFile(join(harnessDirectory, 'runs', 'fixture-writer-reviewer', 'evidence-map.json'), 'utf8'));
+      const summary = JSON.parse(await readFile(join(harnessDirectory, 'runs', 'fixture-writer-reviewer', 'summary.json'), 'utf8'));
+      const verification = await readFile(join(harnessDirectory, 'runs', 'fixture-writer-reviewer', 'verification.md'), 'utf8');
+
+      assert.equal(run.workflowMode, 'writer-reviewer');
+      assert.deepEqual(run.commands.map((command) => ({
+        stage: command.stage,
+        role: command.role,
+        agentId: command.agentId,
+        command: command.command,
+        artifactId: command.artifactId,
+        verificationStatus: command.verificationStatus
+      })), [
+        {
+          stage: 'writer',
+          role: 'writer',
+          agentId: 'codex-writer',
+          command: 'implement',
+          artifactId: 'implement-evidence',
+          verificationStatus: 'passed'
+        },
+        {
+          stage: 'reviewer:codex-reviewer',
+          role: 'reviewer',
+          agentId: 'codex-reviewer',
+          command: 'review',
+          artifactId: 'review-codex-reviewer-evidence',
+          verificationStatus: 'passed'
+        }
+      ]);
+      assert.equal(evidenceMap.workflowMode, 'writer-reviewer');
+      assert.deepEqual(evidenceMap.stages.map((stage) => ({
+        stage: stage.stage,
+        role: stage.role,
+        agentId: stage.agentId,
+        command: stage.command,
+        verificationStatus: stage.verificationStatus
+      })), [
+        {
+          stage: 'writer',
+          role: 'writer',
+          agentId: 'codex-writer',
+          command: 'implement',
+          verificationStatus: 'passed'
+        },
+        {
+          stage: 'reviewer:codex-reviewer',
+          role: 'reviewer',
+          agentId: 'codex-reviewer',
+          command: 'review',
+          verificationStatus: 'passed'
+        }
+      ]);
+      assert.deepEqual(summary.verificationMap, evidenceMap.verificationMap);
+      assert.match(verification, /Workflow mode: writer-reviewer/);
+      assert.match(verification, /Stage: reviewer:codex-reviewer/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('records policy denial in Symphony events and Harness evidence', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-harness-policy-'));
 
@@ -305,6 +470,30 @@ describe('Harness Bridge CLI dry-run E2E', () => {
 });
 
 describe('Harness Bridge CLI real lane', () => {
+  it('builds a rerunnable real Codex Harness smoke command with unique runtime paths', () => {
+    assert.deepEqual(buildHarnessCodexRealSmokeArgv({
+      now: new Date('2026-05-14T07:24:31.000Z')
+    }), [
+      'harness',
+      'run-taskpacket',
+      '--run-id',
+      'fixture-real-smoke-standard-2026-05-14T07-24-31-000Z',
+      '--taskpacket',
+      'fixtures/harness/real-smoke-taskpacket.json',
+      '--runtime-dir',
+      'tmp/harness-bridge-real-smoke-standard-fixture-real-smoke-standard-2026-05-14T07-24-31-000Z',
+      '--harness-dir',
+      'tmp/harness-bridge-real-smoke-harness-standard',
+      '--real',
+      '--adapter',
+      'codex',
+      '--sequence',
+      'standard',
+      '--timeout-ms',
+      '180000'
+    ]);
+  });
+
   it('requires the adapter-specific real CLI gate before production real execution', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-harness-real-gate-'));
     const previousGate = process.env.MCAS_RUN_REAL_CODEX;
@@ -489,6 +678,26 @@ function validTaskPacket() {
         'pnpm test',
         'pnpm check'
       ]
+    }
+  };
+}
+
+function writerReviewerTaskPacket() {
+  return {
+    ...validTaskPacket(),
+    id: 'task.writer-reviewer',
+    intent: 'Create a Node CLI scaffold through writer-reviewer mode',
+    workflow: {
+      mode: 'writer-reviewer',
+      ensemble_id: 'ensemble-writer-reviewer',
+      writer: {
+        agent_id: 'codex-writer',
+        model_profile: 'gpt-codex-default'
+      },
+      reviewers: [{
+        agent_id: 'codex-reviewer',
+        model_profile: 'gpt-codex-default'
+      }]
     }
   };
 }

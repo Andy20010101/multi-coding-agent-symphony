@@ -346,6 +346,7 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
         exitCode,
         runId,
         commandSequence,
+        workflowMode: result.workflowResult.mode ?? 'linear',
         executionMode: workflowOptions.executionMode,
         adapterId: workflowOptions.adapterId,
         taskId: result.taskSpec.id,
@@ -353,11 +354,16 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
         symphonyStatus: result.workflowResult.status,
         verifierStatus: result.harnessVerification.status,
         reason: result.harnessVerification.reason,
+        ...(result.harnessVerification.diagnosticLayer
+          ? { diagnosticLayer: result.harnessVerification.diagnosticLayer }
+          : {}),
         artifactDirectory: paths.artifactDirectory,
         eventDirectory: paths.eventDirectory,
         workspaceDirectory: paths.workspaceDirectory,
         sessionId: paths.sessionId,
         commands: result.workflowResult.commands.map(summarizeCommandRun),
+        verificationMap: result.workflowResult.commands.map(summarizeVerificationMap),
+        diagnostics: result.harnessVerification.diagnostics,
         evidencePaths: result.evidencePaths,
         ...(result.harnessVerification.policyDenied
           ? { policyDenied: result.harnessVerification.policyDenied }
@@ -628,13 +634,29 @@ function parseJsonFile(path, field) {
 
 function summarizeCommandRun(commandRun) {
   return {
+    ...(commandRun.stage ? { stage: commandRun.stage } : {}),
+    ...(commandRun.role ? { role: commandRun.role } : {}),
+    ...(commandRun.agentId ? { agentId: commandRun.agentId } : {}),
     command: commandRun.command,
     adapterId: commandRun.adapterId,
     workspaceId: commandRun.workspace.workspaceId,
+    ...(commandRun.workspace.sourceWorkspaceId ? { sourceWorkspaceId: commandRun.workspace.sourceWorkspaceId } : {}),
     artifactId: commandRun.artifactId,
     runArtifactId: commandRun.runArtifactId,
     routeDecisionArtifactId: commandRun.routeDecisionArtifactId,
-    verificationStatus: commandRun.verification.status
+    ...(commandRun.adapterArtifactRefs ? { adapterArtifactRefs: commandRun.adapterArtifactRefs } : {}),
+    verificationStatus: commandRun.verification.status,
+    ...(commandRun.verification.reason ? { verificationReason: commandRun.verification.reason } : {})
+  };
+}
+
+function summarizeVerificationMap(commandRun) {
+  return {
+    stage: commandRun.stage ?? commandRun.command,
+    command: commandRun.command,
+    artifactId: commandRun.artifactId,
+    verificationStatus: commandRun.verification.status,
+    ...(commandRun.verification.reason ? { verificationReason: commandRun.verification.reason } : {})
   };
 }
 
