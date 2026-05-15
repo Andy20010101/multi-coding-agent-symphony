@@ -5,11 +5,13 @@ node_modules/
 dist/
 build/
 coverage/
+reports/
 .turbo/
 .cache/
 
 # Logs and temporary files
 *.log
+package-lock.json
 tmp/
 temp/
 
@@ -22,4 +24,3 @@ temp/
 .DS_Store
 .idea/
 .vscode/
-
