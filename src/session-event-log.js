@@ -15,6 +15,7 @@ const EVENT_TYPES = new Set([
   'check.finished',
   'failure.classified',
   'verifier.result',
+  'command.stalled',
   'command.failed',
   'command.finished',
   'ensemble.proposal.written',

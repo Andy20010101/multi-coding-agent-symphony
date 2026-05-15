@@ -25,11 +25,18 @@ V1 optional metadata:
 {
   "constraints": ["Do not change public API"],
   "priority": "low|normal|high",
-  "createdAt": "2026-05-13T00:00:00Z"
+  "createdAt": "2026-05-13T00:00:00Z",
+  "execution": {
+    "maxTurns": 5,
+    "turnTimeoutMs": 3600000,
+    "stallTimeoutMs": 300000
+  }
 }
 ```
 
 If optional metadata is present, it is validated. `constraints` must be a string array with non-empty entries, `priority` must be `low`, `normal`, or `high`, and `createdAt` must be a parseable timestamp.
+
+`execution` controls adapter turn behavior. `maxTurns` and `turnTimeoutMs` must be positive integers. `stallTimeoutMs` must be a non-negative integer; `0` disables stall detection.
 
 ## CommandSpec
 
@@ -56,6 +63,24 @@ Required fields:
   "evidenceSchema": "implementation-evidence.v1"
 }
 ```
+
+Optional execution metadata:
+
+```json
+{
+  "execution": {
+    "maxTurns": 5,
+    "turnTimeoutMs": 3600000,
+    "stallTimeoutMs": 300000
+  }
+}
+```
+
+`CommandSpec.execution` is optional and overrides `TaskSpec.execution` for that command. Runtime `timeoutMs` options map to `turnTimeoutMs` and override both contract-level values. Defaults are `maxTurns=5`, `turnTimeoutMs=3600000`, and `stallTimeoutMs=300000`.
+
+When a verifier failure is retryable and `maxTurns` remains, the next turn reuses the same workspace and receives a continuation prompt containing the prior failure reason and evidence summary. Terminal failures such as policy denial, adapter-not-found, workspace conflict, and scope violation do not continue. `checkTaskActive=false` stops continuation with `task-cancelled`.
+
+Stall detection tracks adapter activity events and process stdout/stderr activity. If no activity occurs for `stallTimeoutMs`, the adapter is cancelled, the turn is recorded as `stall-timeout`, and continuation can retry while turns remain.
 
 ## PolicyRequest and PolicyDecision
 
@@ -210,6 +235,7 @@ Event types:
 - `check.finished`
 - `failure.classified`
 - `verifier.result`
+- `command.stalled`
 - `command.failed`
 - `command.finished`
 - `ensemble.proposal.written`
@@ -240,8 +266,12 @@ Initial categories:
 - `lint-failed`
 - `context-missing`
 - `permission-denied`
+- `policy-denied`
+- `adapter-not-found`
 - `adapter-crashed`
 - `cli-timeout`
+- `stall-timeout`
+- `task-cancelled`
 - `model-off-task`
 - `verification-insufficient`
 - `checks-missing`

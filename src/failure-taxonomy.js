@@ -24,6 +24,16 @@ const FAILURE_CATEGORIES = new Map([
     owner: 'policy',
     recommendedNextCommand: 'plan'
   }],
+  ['policy-denied', {
+    retryable: false,
+    owner: 'policy',
+    recommendedNextCommand: 'plan'
+  }],
+  ['adapter-not-found', {
+    retryable: false,
+    owner: 'orchestrator',
+    recommendedNextCommand: 'plan'
+  }],
   ['adapter-crashed', {
     retryable: true,
     owner: 'adapter',
@@ -33,6 +43,16 @@ const FAILURE_CATEGORIES = new Map([
     retryable: true,
     owner: 'adapter',
     recommendedNextCommand: 'qa'
+  }],
+  ['stall-timeout', {
+    retryable: true,
+    owner: 'adapter',
+    recommendedNextCommand: 'qa'
+  }],
+  ['task-cancelled', {
+    retryable: false,
+    owner: 'orchestrator',
+    recommendedNextCommand: 'plan'
   }],
   ['model-off-task', {
     retryable: true,

@@ -27,6 +27,7 @@ export function validateTaskSpec(spec) {
   assertNonEmptyStringArray(spec.acceptance, 'TaskSpec.acceptance');
   assertOptionalOneOf(spec.priority, TASK_PRIORITIES, 'TaskSpec.priority');
   assertOptionalIsoTimestamp(spec.createdAt, 'TaskSpec.createdAt');
+  assertOptionalExecutionConfig(spec.execution, 'TaskSpec.execution');
   assertNonEmptyString(spec.version, 'TaskSpec.version');
 
   return spec;
@@ -40,6 +41,7 @@ export function validateCommandSpec(spec) {
   assertOneOf(spec.workspacePolicy, WORKSPACE_POLICIES, 'CommandSpec.workspacePolicy');
   assertNonEmptyStringArray(spec.doneCriteria, 'CommandSpec.doneCriteria');
   assertNonEmptyString(spec.evidenceSchema, 'CommandSpec.evidenceSchema');
+  assertOptionalExecutionConfig(spec.execution, 'CommandSpec.execution');
 
   return spec;
 }
@@ -113,6 +115,17 @@ function assertOptionalResourceProfile(value, field) {
   assertPositiveInteger(value.concurrency, `${field}.concurrency`);
   assertOneOf(value.network, NETWORK_STATES, `${field}.network`);
   assertNonEmptyString(value.version, `${field}.version`);
+}
+
+function assertOptionalExecutionConfig(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  assertPlainObject(value, field);
+  assertOptionalPositiveInteger(value.maxTurns, `${field}.maxTurns`);
+  assertOptionalPositiveInteger(value.turnTimeoutMs, `${field}.turnTimeoutMs`);
+  assertOptionalNonNegativeInteger(value.stallTimeoutMs, `${field}.stallTimeoutMs`);
 }
 
 function assertNonEmptyString(value, field) {
@@ -264,5 +277,23 @@ function assertOptionalInteger(value, field) {
 
   if (!Number.isInteger(value)) {
     throw new ValidationError(`${field} must be an integer`, { field });
+  }
+}
+
+function assertOptionalPositiveInteger(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  assertPositiveInteger(value, field);
+}
+
+function assertOptionalNonNegativeInteger(value, field) {
+  if (value === undefined) {
+    return;
+  }
+
+  if (!Number.isInteger(value) || value < 0) {
+    throw new ValidationError(`${field} must be a non-negative integer`, { field });
   }
 }
