@@ -14,6 +14,15 @@ const commandSpec = {
   evidenceSchema: 'qa-evidence.v1'
 };
 
+const smokeCommandSpec = {
+  name: 'qa',
+  version: '1',
+  allowedTools: ['read'],
+  workspacePolicy: 'review-only',
+  doneCriteria: ['real-model-called', 'structured-evidence-written'],
+  evidenceSchema: 'kiro-smoke-evidence.v1'
+};
+
 const contextPack = {
   version: '1',
   commandName: 'qa',
@@ -106,4 +115,64 @@ describe('Kiro CLI real integration', () => {
       version: '1'
     });
   });
+
+  it('normalizes Kiro smoke output that uses schema and check message fields', async () => {
+    const runner = new StaticProcessRunner({
+      stdout: [
+        'Here is the structured EvidencePackage:',
+        'json',
+        JSON.stringify({
+          schema: 'kiro-smoke-evidence.v1',
+          taskId: 'task-kiro',
+          checks: [
+            {
+              name: 'kiro-real-smoke',
+              status: 'passed',
+              message: 'package.json and README.md were both readable from the repository root'
+            }
+          ],
+          doneCriteria: {
+            'real-model-called': true,
+            'structured-evidence-written': true
+          }
+        }, null, 2)
+      ].join('\n')
+    });
+    const adapter = new KiroCliAdapter({
+      cliVersion: '2.2.2',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec: smokeCommandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-kiro-default',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.equal(evidence.version, 'kiro-smoke-evidence.v1');
+    assert.equal(evidence.checks[0].output, 'package.json and README.md were both readable from the repository root');
+    assert.equal(verifyEvidence({ commandSpec: smokeCommandSpec, evidence }).status, 'passed');
+  });
 });
+
+class StaticProcessRunner {
+  constructor({ stdout, stderr = '' }) {
+    this.stdout = stdout;
+    this.stderr = stderr;
+  }
+
+  async run() {
+    return {
+      exitCode: 0,
+      signal: null,
+      stdout: this.stdout,
+      stderr: this.stderr,
+      durationMs: 1,
+      timedOut: false,
+      stalled: false
+    };
+  }
+}

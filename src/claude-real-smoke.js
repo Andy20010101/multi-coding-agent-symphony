@@ -57,7 +57,7 @@ function buildSmokeCommandSpec() {
   return {
     name: 'qa',
     version: '1',
-    allowedTools: ['read', 'shell'],
+    allowedTools: ['read'],
     workspacePolicy: 'review-only',
     doneCriteria: ['real-model-called', 'structured-evidence-written'],
     evidenceSchema: 'claude-smoke-evidence.v1'

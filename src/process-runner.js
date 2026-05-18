@@ -23,10 +23,7 @@ export class NodeProcessRunner {
     const startedAt = Date.now();
     const child = spawn(executable, args, {
       cwd,
-      env: {
-        ...process.env,
-        ...env
-      },
+      env: childProcessEnvironment(env),
       stdio: ['pipe', 'pipe', 'pipe']
     });
     let stdout = '';
@@ -134,6 +131,22 @@ export class NodeProcessRunner {
   async run(invocation) {
     return this.start(invocation).result;
   }
+}
+
+function childProcessEnvironment(overrides) {
+  const childEnv = { ...process.env };
+
+  delete childEnv.NODE_TEST_CONTEXT;
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      delete childEnv[key];
+    } else {
+      childEnv[key] = value;
+    }
+  }
+
+  return childEnv;
 }
 
 function emitActivity({ onActivity, type, chunk, timestamp }) {

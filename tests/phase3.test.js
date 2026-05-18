@@ -111,6 +111,20 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
 
     assert.equal(prepared.executable, 'claude');
     assert.deepEqual(prepared.args.slice(0, 5), ['-p', '--output-format', 'stream-json', '--verbose', '--add-dir']);
+    assert.equal(argumentValue(prepared.args, '--permission-mode'), 'dontAsk');
+    assert.match(argumentValue(prepared.args, '--append-system-prompt'), /EvidencePackage JSON schema/);
+    assert.deepEqual(JSON.parse(argumentValue(prepared.args, '--json-schema')).required, [
+      'command',
+      'taskId',
+      'workspaceId',
+      'diffSummary',
+      'changedFiles',
+      'checks',
+      'knownRisks',
+      'agentSummary',
+      'version'
+    ]);
+    assert.deepEqual(valuesAfter(prepared.args, '--tools', '--disallowedTools'), ['Read', 'Bash']);
     assert.equal(prepared.args.includes('--disallowedTools'), true);
     assert.equal(prepared.args.includes('Read(.env)'), true);
     assert.match(prepared.prompt, /Command: review/);
@@ -233,4 +247,15 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
 
 function sandboxArg(prepared) {
   return prepared.args[prepared.args.indexOf('--sandbox') + 1];
+}
+
+function argumentValue(args, name) {
+  return args[args.indexOf(name) + 1];
+}
+
+function valuesAfter(args, name, nextName) {
+  const start = args.indexOf(name) + 1;
+  const end = args.indexOf(nextName, start);
+
+  return args.slice(start, end === -1 ? args.length : end);
 }

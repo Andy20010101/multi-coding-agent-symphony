@@ -87,6 +87,7 @@ MCAS_RUN_REAL_CODEX=1 pnpm smoke:harness:codex:real
 ```
 
 Expected result: each enabled smoke returns verifier status `passed` and writes no raw secrets to artifacts.
+Set `MCAS_CLAUDE_MODEL=<provider-model>` for Claude Code providers that do not map the default `deepseek-claude-code` profile.
 The Harness smoke must execute the standard `implement -> review -> qa` chain and write `diagnosticLayer` on failure so the failing layer is one of `schema`, `prompt`, `workspace`, or `expected-check`.
 
 ## Optional CI Gate

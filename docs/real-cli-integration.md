@@ -97,6 +97,7 @@ Implemented:
 
 - `ClaudeCodeAdapter.start({ executionMode: "real" })` spawns `claude -p --output-format stream-json` through an injected `NodeProcessRunner`.
 - The prompt is sent on stdin.
+- The adapter passes the shared `EvidencePackage` schema through `--json-schema` and appends a system prompt requiring final JSON evidence on stdout.
 - Stream JSON stdout is parsed for structured `EvidencePackage` content.
 - If no valid structured evidence is found, raw Claude Code output is marked with `real-cli-output-unverified` and contains no passing checks.
 
@@ -114,7 +115,7 @@ Guarded real model smoke check:
 MCAS_RUN_REAL_CLAUDE=1 pnpm smoke:claude:real
 ```
 
-This invokes the configured Claude Code model in read-only mode, parses stream JSON for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CLAUDE_MODEL=<model>` to override the default `deepseek-claude-code` profile.
+This invokes the configured Claude Code model in read-only mode, parses stream JSON for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CLAUDE_MODEL=<model>` when the local provider does not map the default `deepseek-claude-code` profile.
 
 ## Remaining CLI Work
 

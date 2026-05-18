@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { BaseAdapter, buildRunPrompt, validatePrepareInput } from './base-adapter.js';
 import { extractEvidencePackageFromSources } from '../evidence-parser.js';
 import { NodeProcessRunner } from '../process-runner.js';
@@ -6,6 +9,17 @@ import {
   hasDeniedNetwork,
   hasDeniedShell
 } from './policy-permissions.js';
+
+const EVIDENCE_SCHEMA_PATH = fileURLToPath(new URL('../../schemas/evidence-package.schema.json', import.meta.url));
+const CLAUDE_EVIDENCE_OUTPUT_SCHEMA = JSON.parse(readFileSync(EVIDENCE_SCHEMA_PATH, 'utf8'));
+const STRUCTURED_EVIDENCE_PROMPT = [
+  'Return only one JSON object matching the provided EvidencePackage JSON schema.',
+  'Populate command, taskId, and workspaceId from the user prompt.',
+  'Use empty arrays for diffSummary and changedFiles when no files changed.',
+  'checks must include verifier-readable evidence with output or artifactId.',
+  'For non-smoke checks, include command and exitCode or include artifactId.',
+  'Do not write evidence files; the final JSON response is the evidence artifact.'
+].join(' ');
 
 export class ClaudeCodeAdapter extends BaseAdapter {
   constructor({
@@ -40,8 +54,17 @@ export class ClaudeCodeAdapter extends BaseAdapter {
       '--model',
       input.modelProfile,
       '--permission-mode',
-      permissionModeFor(input.commandSpec.workspacePolicy)
+      permissionModeFor(input.commandSpec.workspacePolicy),
+      '--append-system-prompt',
+      STRUCTURED_EVIDENCE_PROMPT,
+      '--json-schema',
+      JSON.stringify(CLAUDE_EVIDENCE_OUTPUT_SCHEMA)
     ];
+    const allowedTools = allowedToolsFrom(input.commandSpec.allowedTools);
+
+    if (allowedTools.length > 0) {
+      args.push('--tools', ...allowedTools);
+    }
 
     const disallowedTools = disallowedToolsFrom(input.policyDecisions ?? []);
 
@@ -183,10 +206,36 @@ export class ClaudeCodeAdapter extends BaseAdapter {
 
 function permissionModeFor(workspacePolicy) {
   if (workspacePolicy === 'review-only') {
-    return 'plan';
+    return 'dontAsk';
   }
 
   return 'default';
+}
+
+function allowedToolsFrom(tools) {
+  const allowedTools = new Set();
+
+  for (const tool of tools) {
+    if (tool === 'read') {
+      allowedTools.add('Read');
+    }
+
+    if (tool === 'write') {
+      allowedTools.add('Edit');
+      allowedTools.add('Write');
+    }
+
+    if (tool === 'shell' || tool === 'test') {
+      allowedTools.add('Bash');
+    }
+
+    if (tool === 'network') {
+      allowedTools.add('WebFetch');
+      allowedTools.add('WebSearch');
+    }
+  }
+
+  return Array.from(allowedTools);
 }
 
 function disallowedToolsFrom(policyDecisions) {

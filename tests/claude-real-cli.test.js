@@ -106,4 +106,80 @@ describe('Claude Code real CLI integration', () => {
       version: '1'
     });
   });
+
+  it('normalizes fenced Claude JSON with verifier checks when summary fields are missing', async () => {
+    const runner = new StaticProcessRunner({
+      stdout: `${JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'text',
+              text: [
+                '```json',
+                JSON.stringify({
+                  command: 'implement',
+                  taskId: 'task-claude',
+                  workspaceId: '/work/repo',
+                  diffSummary: [],
+                  changedFiles: [],
+                  noOpRationale: 'No file changes required for replay normalization.',
+                  checks: [
+                    {
+                      name: 'pnpm test',
+                      status: 'passed',
+                      command: 'pnpm test',
+                      exitCode: 0,
+                      output: 'tests passed',
+                      artifactId: null
+                    }
+                  ]
+                }, null, 2),
+                '```'
+              ].join('\n')
+            }
+          ]
+        }
+      })}\n`
+    });
+    const adapter = new ClaudeCodeAdapter({
+      cliVersion: '2.1.123',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'deepseek-claude-code',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.equal(evidence.agentSummary, 'Structured evidence extracted from CLI output.');
+    assert.deepEqual(verifyEvidence({ commandSpec, evidence }), {
+      status: 'passed',
+      reason: 'checks-passed',
+      checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }]
+    });
+  });
 });
+
+class StaticProcessRunner {
+  constructor({ stdout, stderr = '' }) {
+    this.stdout = stdout;
+    this.stderr = stderr;
+  }
+
+  async run() {
+    return {
+      exitCode: 0,
+      signal: null,
+      stdout: this.stdout,
+      stderr: this.stderr,
+      durationMs: 1,
+      timedOut: false,
+      stalled: false
+    };
+  }
+}

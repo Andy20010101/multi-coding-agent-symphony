@@ -3,17 +3,18 @@
   "id": "task.real-smoke",
   "run_id": "fixture-real-smoke",
   "repository": "Andy20010101/multi-coding-agent-symphony",
-  "intent": "Create synthetic-dry-run.txt with the exact text real harness bridge smoke passed.",
+  "intent": "Create synthetic-dry-run.txt with the exact text real harness bridge smoke passed and no trailing newline.",
   "acceptance": [
     "synthetic-dry-run.txt exists",
-    "synthetic-dry-run.txt contains the exact smoke text"
+    "synthetic-dry-run.txt contains exactly real harness bridge smoke passed with no trailing newline"
   ],
   "write_set": [
     "synthetic-dry-run.txt"
   ],
   "verification": {
     "commands": [
-      "test -f synthetic-dry-run.txt"
+      "test -f synthetic-dry-run.txt",
+      "printf '%s' 'real harness bridge smoke passed' | cmp -s - synthetic-dry-run.txt"
     ]
   }
 }

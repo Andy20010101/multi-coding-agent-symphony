@@ -72,6 +72,7 @@ describe('Claude Code real model smoke script', () => {
     assert.equal(result.verification.status, 'passed');
     assert.equal(adapter.calls[0].executionMode, 'real');
     assert.equal(adapter.calls[0].commandSpec.workspacePolicy, 'review-only');
+    assert.deepEqual(adapter.calls[0].commandSpec.allowedTools, ['read']);
     assert.equal(adapter.calls[0].modelProfile, 'deepseek-claude-code');
     assert.equal(adapter.calls[0].timeoutMs, 1000);
   });

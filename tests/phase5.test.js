@@ -474,6 +474,7 @@ describe('Phase 5 external eval replay plugin', () => {
         '--affected-contracts', 'ModelProfile'
       ], {
         cwd: process.cwd(),
+        env: childProcessEnvironment(),
         encoding: 'utf8'
       });
 
@@ -747,6 +748,7 @@ describe('Phase 5 external eval replay plugin', () => {
         '--report-artifact-id', 'eval-workflow-comparison-cli'
       ], {
         cwd: process.cwd(),
+        env: childProcessEnvironment(),
         encoding: 'utf8'
       });
 
@@ -842,4 +844,12 @@ async function appendArtifactEvent(eventLog, id, taskId, artifactId) {
     },
     version: '1'
   });
+}
+
+function childProcessEnvironment() {
+  const env = { ...process.env };
+
+  delete env.NODE_TEST_CONTEXT;
+
+  return env;
 }

@@ -39,9 +39,14 @@ function normalizeEvidenceCandidate(candidate, metadata) {
     diffSummary: Array.isArray(candidate.diffSummary) ? candidate.diffSummary : [],
     changedFiles: Array.isArray(candidate.changedFiles) ? candidate.changedFiles : [],
     knownRisks: Array.isArray(candidate.knownRisks) ? candidate.knownRisks : [],
+    agentSummary: typeof candidate.agentSummary === 'string' && candidate.agentSummary.trim() !== ''
+      ? candidate.agentSummary
+      : 'Structured evidence extracted from CLI output.',
     version: typeof candidate.version === 'string' && candidate.version.trim() !== ''
       ? candidate.version
-      : '1'
+      : typeof candidate.schema === 'string' && candidate.schema.trim() !== ''
+        ? candidate.schema
+        : '1'
   };
   const normalized = stripNullOptionalEvidenceFields(evidence);
 
@@ -81,6 +86,12 @@ function stripNullOptionalEvidenceFields(evidence) {
         if (normalizedCheck[field] === null) {
           delete normalizedCheck[field];
         }
+      }
+
+      if (normalizedCheck.output === undefined &&
+        typeof normalizedCheck.message === 'string' &&
+        normalizedCheck.message.trim() !== '') {
+        normalizedCheck.output = normalizedCheck.message;
       }
 
       if (normalizedCheck.output === undefined &&
@@ -147,7 +158,17 @@ function findEvidenceCandidate(value, depth = 0) {
 function looksLikeEvidence(value) {
   return isPlainObject(value)
     && Array.isArray(value.checks)
-    && (Array.isArray(value.changedFiles) || typeof value.agentSummary === 'string');
+    && value.checks.some(looksLikeCheck)
+    && (Array.isArray(value.changedFiles) ||
+      typeof value.agentSummary === 'string' ||
+      typeof value.schema === 'string' ||
+      value.doneCriteria !== undefined);
+}
+
+function looksLikeCheck(value) {
+  return isPlainObject(value) &&
+    typeof value.name === 'string' &&
+    typeof value.status === 'string';
 }
 
 function parseJsonText(text) {
