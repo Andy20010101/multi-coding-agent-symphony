@@ -282,7 +282,9 @@ describe('V2 parallel-lanes ensemble workflow', () => {
         'parallel-writer',
         'parallel-writer'
       ]);
-      assert.deepEqual(adapter.starts.map((start) => start.contextPack.task.constraints), [
+      assert.deepEqual(adapter.starts
+        .map((start) => start.contextPack.task.constraints)
+        .sort((left, right) => left[0].localeCompare(right[0])), [
         ['write_set:docs/parallel-lanes.md'],
         ['write_set:src/parallel-lanes.js']
       ]);
@@ -411,6 +413,417 @@ describe('V2 parallel-lanes ensemble workflow', () => {
   });
 });
 
+describe('V2 qa-swarm ensemble workflow', () => {
+  it('runs read-only QA lanes and records verifier-readable lane artifacts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-qa-swarm-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter({
+        qaEvidenceSequence: [
+          {
+            findings: ['Acceptance criteria are not tied to a concrete verification command.'],
+            missingEvidence: [{
+              requirement: 'harness smoke output',
+              reason: 'No command output artifact proves the smoke command was run.'
+            }]
+          },
+          {
+            findings: [],
+            noFindingRationale: 'Inspected the implementation evidence and found no blocking issues.',
+            missingEvidence: []
+          }
+        ]
+      });
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      const result = await ensemble.runQaSwarm({
+        ensembleId: 'ensemble-qa',
+        taskSpec,
+        qaLanes: [
+          {
+            laneId: 'acceptance-audit',
+            agentId: 'codex-qa-a',
+            modelProfile: 'gpt-codex-default'
+          },
+          {
+            laneId: 'regression-audit',
+            agentId: 'codex-qa-b',
+            modelProfile: 'gpt-codex-default'
+          }
+        ]
+      });
+
+      const run = await artifactStore.readArtifact('task-v2', 'ensemble-run-ensemble-qa');
+      const findings = await artifactStore.readArtifact('task-v2', 'qa-swarm-findings-ensemble-qa');
+      const missingEvidence = await artifactStore.readArtifact('task-v2', 'qa-swarm-missing-evidence-ensemble-qa');
+      const events = await eventLog.readAll();
+
+      assert.equal(result.decision, 'accepted');
+      assert.equal(result.finalVerificationStatus, 'passed');
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.name), ['qa', 'qa']);
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.workspacePolicy), [
+        'review-only',
+        'review-only'
+      ]);
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.allowedTools), [
+        ['read', 'shell', 'test'],
+        ['read', 'shell', 'test']
+      ]);
+      assert.equal(adapter.starts.every((start) => start.commandSpec.allowedTools.includes('write') === false), true);
+      assert.equal(run.mode, 'qa-swarm');
+      assert.equal(run.completionGate, 'verifier');
+      assert.equal(run.vote, undefined);
+      assert.deepEqual(run.qaLanes.map((lane) => ({
+        laneId: lane.laneId,
+        agentId: lane.agentId,
+        adapterId: lane.adapterId,
+        commandArtifactId: lane.runArtifactId,
+        evidenceArtifactId: lane.evidenceArtifactId,
+        evidenceStatus: lane.verificationStatus,
+        findingsArtifactId: run.findingsArtifactId,
+        missingEvidenceArtifactId: run.missingEvidenceArtifactId,
+        writable: lane.workspace.writable
+      })), [
+        {
+          laneId: 'acceptance-audit',
+          agentId: 'codex-qa-a',
+          adapterId: 'codex',
+          commandArtifactId: 'qa-acceptance-audit-run',
+          evidenceArtifactId: 'qa-acceptance-audit-evidence',
+          evidenceStatus: 'passed',
+          findingsArtifactId: 'qa-swarm-findings-ensemble-qa',
+          missingEvidenceArtifactId: 'qa-swarm-missing-evidence-ensemble-qa',
+          writable: false
+        },
+        {
+          laneId: 'regression-audit',
+          agentId: 'codex-qa-b',
+          adapterId: 'codex',
+          commandArtifactId: 'qa-regression-audit-run',
+          evidenceArtifactId: 'qa-regression-audit-evidence',
+          evidenceStatus: 'passed',
+          findingsArtifactId: 'qa-swarm-findings-ensemble-qa',
+          missingEvidenceArtifactId: 'qa-swarm-missing-evidence-ensemble-qa',
+          writable: false
+        }
+      ]);
+      assert.equal(findings.lanes.some((lane) => lane.findings.includes(
+        'Acceptance criteria are not tied to a concrete verification command.'
+      )), true);
+      assert.equal(findings.lanes.some((lane) => lane.noFindingRationale ===
+        'Inspected the implementation evidence and found no blocking issues.'), true);
+      assert.equal(missingEvidence.lanes.some((lane) => lane.missingEvidence.some((entry) =>
+        entry.requirement === 'harness smoke output' &&
+        entry.reason === 'No command output artifact proves the smoke command was run.'
+      )), true);
+      assert.equal(events.at(-1).type, 'ensemble.run.completed');
+      assert.equal(events.at(-1).payload.mode, 'qa-swarm');
+      assert.equal(events.at(-1).payload.completionGate, 'verifier');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects QA lanes that report no findings without an explicit rationale', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-qa-swarm-no-rationale-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter({
+        qaEvidenceSequence: [
+          {
+            findings: [],
+            missingEvidence: []
+          }
+        ]
+      });
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      const result = await ensemble.runQaSwarm({
+        ensembleId: 'ensemble-qa-no-rationale',
+        taskSpec,
+        qaLanes: [{
+          laneId: 'empty-findings',
+          agentId: 'codex-qa-empty'
+        }]
+      });
+
+      const run = await artifactStore.readArtifact('task-v2', 'ensemble-run-ensemble-qa-no-rationale');
+
+      assert.equal(result.decision, 'rejected');
+      assert.equal(result.finalVerificationStatus, 'failed');
+      assert.deepEqual(result.rejectionReasons, [
+        'qa lane empty-findings (codex-qa-empty) verification failed: verification-insufficient'
+      ]);
+      assert.equal(run.qaLanes[0].verificationStatus, 'failed');
+      assert.equal(run.qaLanes[0].verification.reason, 'verification-insufficient');
+      assert.equal(run.qaLanes[0].missingEvidence.includes('findings-or-noFindingRationale'), true);
+      assert.equal(run.completionGate, 'verifier');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects qa-swarm completion when any lane fails verifier checks despite a passing majority', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-qa-swarm-verifier-gate-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter({
+        qaEvidenceSequence: [
+          {
+            findings: [],
+            noFindingRationale: 'No issues found in acceptance coverage.',
+            missingEvidence: []
+          },
+          {
+            findings: [],
+            noFindingRationale: 'No issues found in regression coverage.',
+            missingEvidence: []
+          },
+          {
+            findings: [],
+            missingEvidence: []
+          }
+        ]
+      });
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      const result = await ensemble.runQaSwarm({
+        ensembleId: 'ensemble-qa-verifier-gate',
+        taskSpec,
+        qaLanes: [
+          { laneId: 'pass-a', agentId: 'codex-qa-pass-a' },
+          { laneId: 'pass-b', agentId: 'codex-qa-pass-b' },
+          { laneId: 'fail-c', agentId: 'codex-qa-fail' }
+        ]
+      });
+
+      const run = await artifactStore.readArtifact('task-v2', 'ensemble-run-ensemble-qa-verifier-gate');
+
+      assert.equal(result.decision, 'rejected');
+      assert.equal(run.finalVerificationStatus, 'failed');
+      assert.equal(run.completionGate, 'verifier');
+      assert.equal(run.vote, undefined);
+      assert.equal(run.qaLanes.filter((lane) => lane.verificationStatus === 'passed').length, 2);
+      assert.equal(run.qaLanes.filter((lane) => lane.verificationStatus === 'failed').length, 1);
+      assert.match(run.rejectionReasons[0], /qa lane .* verification failed: verification-insufficient/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('V2 competitive-patch ensemble workflow', () => {
+  it('runs isolated candidates, preserves rejected artifacts, and selects exactly one verifier-passing patch', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-competitive-patch-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter({
+        implementEvidenceByAgent: {
+          'codex-candidate-a': {
+            checks: [{
+              name: 'pnpm test',
+              status: 'failed',
+              command: 'pnpm test',
+              exitCode: 1,
+              artifactId: 'candidate-a-test-log',
+              output: 'candidate a failed'
+            }]
+          },
+          'codex-candidate-b': {
+            checks: [{
+              name: 'pnpm test',
+              status: 'passed',
+              command: 'pnpm test',
+              exitCode: 0,
+              artifactId: 'candidate-b-test-log',
+              output: 'candidate b passed'
+            }]
+          },
+          'codex-candidate-c': {
+            changedFiles: [],
+            noOpRationale: undefined
+          }
+        }
+      });
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      const result = await ensemble.runCompetitivePatch({
+        ensembleId: 'ensemble-competitive',
+        taskSpec: competitivePatchTaskSpec,
+        candidates: [
+          { candidateId: 'candidate-a', agentId: 'codex-candidate-a', modelProfile: 'gpt-codex-default' },
+          { candidateId: 'candidate-b', agentId: 'codex-candidate-b', modelProfile: 'gpt-codex-default' },
+          { candidateId: 'candidate-c', agentId: 'codex-candidate-c', modelProfile: 'gpt-codex-default' }
+        ]
+      });
+
+      const run = await artifactStore.readArtifact('task-v2', 'ensemble-run-ensemble-competitive');
+      const events = await eventLog.readAll();
+
+      assert.equal(result.decision, 'accepted');
+      assert.equal(result.completionGate, 'verifier');
+      assert.equal(result.finalVerificationStatus, 'passed');
+      assert.equal(result.selectedCandidateId, 'candidate-b');
+      assert.equal(result.candidates.filter((candidate) => candidate.selected).length, 1);
+      assert.equal(result.candidates.filter((candidate) => candidate.verifierStatus === 'passed').length, 1);
+      assert.deepEqual(adapter.starts.map((start) => start.commandSpec.name), ['implement', 'implement', 'implement']);
+      assert.equal(new Set(adapter.starts.map((start) => start.workspace)).size, 3);
+      assert.deepEqual(result.candidates.map((candidate) => ({
+        candidateId: candidate.candidateId,
+        agentId: candidate.agentId,
+        adapterId: candidate.adapterId,
+        patchArtifactId: candidate.patchArtifactId,
+        commandArtifactId: candidate.commandArtifactId,
+        routeDecisionArtifactId: candidate.routeDecisionArtifactId,
+        verifierStatus: candidate.verifierStatus,
+        selected: candidate.selected,
+        rejectedReason: candidate.rejectedReason
+      })), [
+        {
+          candidateId: 'candidate-a',
+          agentId: 'codex-candidate-a',
+          adapterId: 'codex',
+          patchArtifactId: 'competitive-patch-candidate-a-patch',
+          commandArtifactId: 'implement-candidate-a-run',
+          routeDecisionArtifactId: 'implement-candidate-a-route-decision',
+          verifierStatus: 'failed',
+          selected: false,
+          rejectedReason: 'verifier failed: check-failed'
+        },
+        {
+          candidateId: 'candidate-b',
+          agentId: 'codex-candidate-b',
+          adapterId: 'codex',
+          patchArtifactId: 'competitive-patch-candidate-b-patch',
+          commandArtifactId: 'implement-candidate-b-run',
+          routeDecisionArtifactId: 'implement-candidate-b-route-decision',
+          verifierStatus: 'passed',
+          selected: true,
+          rejectedReason: undefined
+        },
+        {
+          candidateId: 'candidate-c',
+          agentId: 'codex-candidate-c',
+          adapterId: 'codex',
+          patchArtifactId: 'competitive-patch-candidate-c-patch',
+          commandArtifactId: 'implement-candidate-c-run',
+          routeDecisionArtifactId: 'implement-candidate-c-route-decision',
+          verifierStatus: 'failed',
+          selected: false,
+          rejectedReason: 'verifier failed: verification-insufficient'
+        }
+      ]);
+      assert.deepEqual(run.candidates, result.candidates);
+      assert.equal(events.at(-1).type, 'ensemble.run.completed');
+      assert.equal(events.at(-1).payload.mode, 'competitive-patch');
+      assert.equal(events.at(-1).payload.completionGate, 'verifier');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails when no competitive patch candidate passes verifier checks', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-competitive-patch-none-'));
+
+    try {
+      const artifactStore = new ArtifactStore(join(root, 'artifacts'));
+      const eventLog = new SessionEventLog(join(root, 'events'), 'ensemble-session');
+      const adapter = new WriterReviewerAdapter({
+        implementEvidenceByAgent: {
+          'codex-candidate-a': { checks: [] },
+          'codex-candidate-b': { checks: [] }
+        }
+      });
+      const orchestrator = await buildOrchestrator({
+        root,
+        artifactStore,
+        eventLog,
+        adapter
+      });
+      const ensemble = new EnsembleOrchestrator({
+        artifactStore,
+        eventLog,
+        orchestrator
+      });
+
+      const result = await ensemble.runCompetitivePatch({
+        ensembleId: 'ensemble-competitive-none',
+        taskSpec: competitivePatchTaskSpec,
+        candidates: [
+          { candidateId: 'candidate-a', agentId: 'codex-candidate-a' },
+          { candidateId: 'candidate-b', agentId: 'codex-candidate-b' }
+        ]
+      });
+
+      const run = await artifactStore.readArtifact('task-v2', 'ensemble-run-ensemble-competitive-none');
+
+      assert.equal(result.decision, 'rejected');
+      assert.equal(result.completionGate, 'verifier');
+      assert.equal(result.finalVerificationStatus, 'failed');
+      assert.equal(result.selectedCandidateId, undefined);
+      assert.equal(result.candidates.length, 2);
+      assert.equal(result.candidates.every((candidate) => candidate.selected === false), true);
+      assert.deepEqual(result.rejectionReasons, [
+        'no competitive patch candidate passed verifier checks'
+      ]);
+      assert.deepEqual(run.candidates.map((candidate) => candidate.patchArtifactId), [
+        'competitive-patch-candidate-a-patch',
+        'competitive-patch-candidate-b-patch'
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 const taskSpec = {
   id: 'task-v2',
   source: 'manual',
@@ -425,6 +838,13 @@ const parallelTaskSpec = {
   constraints: [
     'write_set:docs/parallel-lanes.md',
     'write_set:src/parallel-lanes.js'
+  ]
+};
+
+const competitivePatchTaskSpec = {
+  ...taskSpec,
+  constraints: [
+    'write_set:synthetic-dry-run.txt'
   ]
 };
 
@@ -467,12 +887,21 @@ async function buildOrchestrator({
 }
 
 class WriterReviewerAdapter {
-  constructor({ weakReview = false } = {}) {
+  constructor({
+    weakReview = false,
+    qaEvidenceByAgent = {},
+    qaEvidenceSequence = [],
+    implementEvidenceByAgent = {}
+  } = {}) {
     this.adapterId = 'codex';
     this.cliName = 'codex';
     this.cliVersion = 'synthetic';
     this.modelProfiles = ['gpt-codex-default'];
     this.weakReview = weakReview;
+    this.qaEvidenceByAgent = qaEvidenceByAgent;
+    this.qaEvidenceSequence = qaEvidenceSequence;
+    this.qaEvidenceIndex = 0;
+    this.implementEvidenceByAgent = implementEvidenceByAgent;
     this.starts = [];
     this.runs = new Map();
   }
@@ -505,6 +934,7 @@ class WriterReviewerAdapter {
       status: 'completed',
       dryRun: true,
       command: input.commandSpec.name,
+      agentId: input.contextPack.agentId,
       taskId: input.contextPack.task.id,
       workspaceId: input.workspace,
       changedFiles: changedFilesForSyntheticImplement(input.contextPack.task.constraints)
@@ -534,6 +964,10 @@ class WriterReviewerAdapter {
       return this.#reviewEvidence(handle);
     }
 
+    if (handle.command === 'qa') {
+      return this.#qaEvidence(handle);
+    }
+
     return {
       command: handle.command,
       taskId: handle.taskId,
@@ -550,7 +984,8 @@ class WriterReviewerAdapter {
       }],
       knownRisks: [],
       agentSummary: 'Writer evidence from synthetic adapter.',
-      version: '1'
+      version: '1',
+      ...structuredClone(this.implementEvidenceByAgent[handle.agentId] ?? {})
     };
   }
 
@@ -591,6 +1026,35 @@ class WriterReviewerAdapter {
       knownRisks: [],
       agentSummary: 'Reviewer evidence from synthetic adapter.',
       noFindingRationale: 'Synthetic reviewer found no issues.',
+      version: '1'
+    };
+  }
+
+  #qaEvidence(handle) {
+    const laneEvidence = this.qaEvidenceByAgent[handle.agentId] ??
+      this.qaEvidenceSequence[this.qaEvidenceIndex] ??
+      {};
+    this.qaEvidenceIndex += 1;
+
+    return {
+      command: handle.command,
+      taskId: handle.taskId,
+      workspaceId: handle.workspaceId,
+      diffSummary: [],
+      changedFiles: [],
+      checks: [{
+        name: 'qa-verification',
+        status: 'passed',
+        command: 'pnpm test',
+        exitCode: 0,
+        artifactId: `${handle.agentId}-qa-verification-log`,
+        output: 'qa verification passed'
+      }],
+      knownRisks: [],
+      agentSummary: 'QA evidence from synthetic adapter.',
+      findings: structuredClone(laneEvidence.findings ?? []),
+      missingEvidence: structuredClone(laneEvidence.missingEvidence ?? []),
+      ...(laneEvidence.noFindingRationale ? { noFindingRationale: laneEvidence.noFindingRationale } : {}),
       version: '1'
     };
   }

@@ -30,14 +30,19 @@ Symphony owns:
 | `repository` | `TaskSpec.repository`, defaulting to `harness-taskpacket` only when omitted |
 | `priority` | `TaskSpec.priority`, defaulting to `normal` |
 | `policy` | Harness policy config and explicit policy requests before adapter start |
-| `workflow.mode` | Optional workflow selector. Omitted or `linear` runs the command sequence; `writer-reviewer` runs the Symphony ensemble writer-reviewer path; `parallel-lanes` runs disjoint write-capable lanes |
+| `workflow.mode` | Optional workflow selector. Omitted means `linear`; supported modes are `linear`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, and `competitive-patch` |
 | `run_id` or CLI `--run-id` | Harness evidence path under `.omx/harness/runs/<run-id>` |
 
 The original TaskPacket is stored as the `harness-taskpacket` Symphony artifact. TaskPacket metadata is not added as custom `TaskSpec` fields.
 
-`workflow.mode: "writer-reviewer"` requires `workflow.writer.agent_id` and at least one `workflow.reviewers[].agent_id`. `model_profile` is optional for each role. The writer runs `implement` in a primary-writer workspace, each reviewer runs `review` in a cloned read-only workspace, and the EnsembleRun is converted back into the Harness evidence map.
+Mode requirements:
 
-`workflow.mode: "parallel-lanes"` requires `workflow.lanes[]` entries with `lane_id`, `agent_id`, and non-empty `write_set[]`. `model_profile` is optional. Lane write sets are validated for overlap before adapter execution. Each lane runs `implement` in a distinct writable `parallel-writer` workspace, and the Harness evidence map records lane id, agent id, lane write set, evidence artifact id, run artifact id, route decision artifact id, and verifier result.
+- `writer-reviewer`: `workflow.writer.agent_id` plus at least one `workflow.reviewers[].agent_id`.
+- `parallel-lanes`: `workflow.lanes[]` with unique lane ids, agent ids, and non-empty disjoint `write_set[]`.
+- `qa-swarm`: `workflow.qa_lanes[]` with unique lane ids and agent ids; lanes are read-only and cannot declare `write_set`.
+- `competitive-patch`: `workflow.candidates[]` with unique candidate ids and agent ids; each candidate runs in an isolated writable workspace and final completion is verifier-gated.
+
+`model_profile` is optional for every role, lane, and candidate.
 
 ## CLI
 
@@ -64,7 +69,7 @@ MCAS_RUN_REAL_CODEX=1 pnpm mcas harness run-taskpacket \
 Supported real adapter values are `codex`, `claude` or `claude-code`, and `kiro` or `kiro-cli`. The corresponding gates are `MCAS_RUN_REAL_CODEX=1`, `MCAS_RUN_REAL_CLAUDE=1`, and `MCAS_RUN_REAL_KIRO=1`. `--timeout-ms <milliseconds>` overrides the adapter timeout for the workflow.
 Real lane workspaces are materialized before adapter start so native CLIs receive an existing `--cd` or working directory.
 
-Writer-reviewer TaskPacket smoke without model calls:
+Dry-run TaskPacket smokes without model calls:
 
 ```sh
 pnpm mcas harness run-taskpacket \
@@ -72,16 +77,21 @@ pnpm mcas harness run-taskpacket \
   --taskpacket fixtures/harness/writer-reviewer-taskpacket.json \
   --runtime-dir tmp/harness-writer-reviewer \
   --harness-dir tmp/harness-writer-reviewer-output
-```
-
-Parallel-lanes TaskPacket smoke without model calls:
-
-```sh
 pnpm mcas harness run-taskpacket \
   --run-id fixture-parallel-lanes \
   --taskpacket fixtures/harness/parallel-lanes-taskpacket.json \
   --runtime-dir tmp/harness-parallel-lanes \
   --harness-dir tmp/harness-parallel-lanes-output
+pnpm mcas harness run-taskpacket \
+  --run-id fixture-qa-swarm \
+  --taskpacket fixtures/harness/qa-swarm-taskpacket.json \
+  --runtime-dir tmp/harness-qa-swarm \
+  --harness-dir tmp/harness-qa-swarm-output
+pnpm mcas harness run-taskpacket \
+  --run-id fixture-competitive-patch \
+  --taskpacket fixtures/harness/competitive-patch-taskpacket.json \
+  --runtime-dir tmp/harness-competitive-patch \
+  --harness-dir tmp/harness-competitive-patch-output
 ```
 
 ## Evidence Written
@@ -95,7 +105,7 @@ For each run, the bridge writes:
 The evidence map links Symphony evidence artifact ids, run artifact ids, route decision artifact ids, expected check commands, and runtime directories.
 Real lane runs also record `executionMode: "real"` in `evidence-map.json` and `summary.json`.
 Every run also writes `stages[]` and `verificationMap[]`. These arrays align each workflow stage to the command, role and agent when present, evidence artifact id, run artifact id, route decision artifact id, verifier status, and verifier reason.
-For `parallel-lanes`, stage records also include `laneId` and the lane `writeSet`.
+Mode-specific records also preserve lane ids and write sets, QA findings and missing evidence, candidate patch ids, selected/rejected candidate fields, and writer/reviewer verification. Eval replay workflow comparisons read these Harness evidence maps and EnsembleRun artifacts as replay-only inputs without invoking real CLIs.
 
 ## Gates
 
@@ -117,6 +127,8 @@ After Symphony finishes, the bridge verifies:
 
 Any write-set violation, missing expected check, policy denial, or Symphony verifier failure returns a failed Harness verifier status.
 For `parallel-lanes`, overlapping lane write sets are rejected before adapter execution.
+For `qa-swarm`, duplicate lane ids and any lane-level `write_set` are rejected before adapter execution.
+For `competitive-patch`, duplicate candidate ids are rejected before adapter execution. Candidate generation never writes the main workspace, and a patch is not selected without verifier-passing evidence.
 
 Failed runs include `diagnosticLayer` in CLI JSON, `evidence-map.json`, and `summary.json` so operators can route the failure quickly:
 

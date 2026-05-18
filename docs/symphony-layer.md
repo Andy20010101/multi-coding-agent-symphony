@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The V2 Symphony Layer coordinates multiple coding agents inside one bounded task. The implemented modes are `proposal-only`, `writer-reviewer`, and `parallel-lanes`: agents submit structured plan proposals, one writer can work before independent reviewers inspect it, or multiple write-capable lanes can execute after disjoint write-set validation.
+The V2 Symphony Layer coordinates multiple coding agents inside one bounded task. Implemented modes: `proposal-only`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, and `competitive-patch`.
 
 This layer does not replace Harness task ownership or Symphony adapter execution. Harness remains authoritative for TaskPackets, DAG state, and write-set locks. Symphony remains authoritative for adapter routing, artifacts, evidence, and verification.
 
@@ -115,6 +115,50 @@ Non-goals:
 }
 ```
 
+## QA-Swarm Mode
+
+`qa-swarm` runs multiple read-only QA lanes and aggregates their verifier-readable findings.
+
+Plan and acceptance criteria:
+
+- Run each QA lane as a `qa` command in a non-writable review workspace.
+- Forbid write-capable QA lane write sets before adapter execution.
+- Preserve lane id, agent id, adapter id, evidence artifact id, run artifact id, route decision artifact id, workspace manifest, findings, missing evidence, and verifier result.
+- Write aggregate `qa-swarm-findings` and `qa-swarm-missing-evidence` artifacts.
+- Require explicit `noFindingRationale` when a QA lane reports no findings.
+- Accept the run only when every QA lane verifier result passes.
+
+Non-goals:
+
+- No write-capable QA lanes.
+- No swarm vote or majority approval.
+- No replacement of Harness DAG scheduling or final task ownership.
+
+`EnsembleRun` records `completionGate: "verifier"`, aggregate findings and missing-evidence artifact ids, `qaLanes[]`, `decision`, `finalVerificationStatus`, and `rejectionReasons`. Each QA lane records lane id, agent id, adapter id, evidence/run/route artifact ids, findings, missing evidence, optional no-finding rationale, and verification status.
+
+## Competitive-Patch Mode
+
+`competitive-patch` runs multiple write-capable candidates against the same bounded fix, then selects exactly one verifier-passing candidate.
+
+Plan and acceptance criteria:
+
+- Validate every candidate id and agent id before adapter execution.
+- Run each candidate as an `implement` command in a distinct writable isolated workspace.
+- Preserve candidate id, agent id, adapter id, patch artifact id, evidence artifact id, command artifact id, route decision artifact id, workspace manifest, verifier result, selected flag, and rejected reason.
+- Select the first verifier-passing candidate in deterministic candidate order when multiple candidates pass.
+- Reject the workflow when no candidate has verifier-passing evidence.
+- Keep every failed or non-selected candidate artifact for eval replay.
+- Keep final completion verifier-gated through `completionGate: "verifier"`.
+
+Non-goals:
+
+- No candidate generation writes the main workspace.
+- No writer self-approval or candidate vote can complete the task.
+- No patch adoption without verifier-passing evidence.
+- No automatic selection from narrative confidence.
+
+`EnsembleRun` records `completionGate: "verifier"`, `selectedCandidateId`, `candidates[]`, `decision`, `finalVerificationStatus`, and `rejectionReasons`. Each candidate records candidate id, agent id, adapter id, patch/evidence/command/route artifact ids, verifier status, selected flag, and rejected reason.
+
 ## Artifacts
 
 `AgentProposal`:
@@ -189,6 +233,8 @@ Non-goals:
 
 - Passing verifier evidence outranks confident narrative text.
 - A proposal without passing evidence cannot be selected.
+- A competitive patch candidate without passing verifier evidence cannot be selected.
+- A competitive patch run selects exactly one candidate and records every rejected or failed candidate.
 - A `needs-followup` decision is emitted when no proposal has passing evidence.
 - Every selected and rejected proposal receives an explicit reason.
 - Synthesis preserves proposal artifact links and rejected tradeoffs.
@@ -203,6 +249,7 @@ The implemented V2 slices are covered by:
 - `tests/synthesis.test.js`
 - `tests/ensemble-orchestrator.test.js`
 - `tests/harness-bridge.test.js`
+- `tests/harness-evidence-sink.test.js`
 - `src/ensemble/role-policy.js`
 
 Release gates remain:

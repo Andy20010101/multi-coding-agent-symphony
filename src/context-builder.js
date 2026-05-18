@@ -19,6 +19,7 @@ export function buildContextPack(input) {
   return {
     version: '1',
     commandName: input.commandName,
+    ...(input.agentId ? { agentId: input.agentId } : {}),
     task: {
       id: input.taskSpec.id,
       source: input.taskSpec.source,

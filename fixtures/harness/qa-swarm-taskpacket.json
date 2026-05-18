@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "id": "task.qa-swarm",
+  "run_id": "fixture-qa-swarm",
+  "repository": "Andy20010101/multi-coding-agent-symphony",
+  "intent": "Audit implementation evidence through read-only QA swarm lanes.",
+  "acceptance": [
+    "QA lanes are read-only",
+    "Each QA lane records findings and missing-evidence artifacts",
+    "Harness completion follows verifier-gated qa-swarm results"
+  ],
+  "write_set": [
+    "synthetic-dry-run.txt"
+  ],
+  "verification": {
+    "commands": [
+      "pnpm test"
+    ]
+  },
+  "workflow": {
+    "mode": "qa-swarm",
+    "ensemble_id": "ensemble-qa-swarm",
+    "qa_lanes": [
+      {
+        "lane_id": "acceptance-audit",
+        "agent_id": "codex-qa-a",
+        "adapter_id": "codex",
+        "model_profile": "gpt-codex-default"
+      },
+      {
+        "lane_id": "regression-audit",
+        "agent_id": "codex-qa-b",
+        "adapter_id": "codex",
+        "model_profile": "gpt-codex-default"
+      }
+    ]
+  }
+}

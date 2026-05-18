@@ -10,8 +10,11 @@ Implemented entrypoints:
 - `loadReplayFixture({ name })` loads bundled model-upgrade or adapter-regression replay fixtures.
 - `buildReplaySampleFromSession({ artifactStore, eventLog, taskIds })` reads `artifact.written` session events and normalizes evidence artifacts into replay results without adapter state.
 - `runEvalReplay(...)` scores baseline and candidate variants and emits recommendations without mutating core config.
+- `loadWorkflowComparisonFixture({ name })` loads bundled workflow comparison fixtures.
+- `buildWorkflowComparisonInputFromArtifacts({ artifactStore, comparison })` reads referenced workflow, EnsembleRun, and Harness evidence artifacts.
+- `runWorkflowModeComparison(...)` compares workflow modes from structured artifacts.
 - `writeEvalReportArtifact({ artifactStore, report, taskId, artifactId })` writes reports back to ArtifactStore and returns the artifact reference.
-- `pnpm eval:replay -- ...` runs the external gate command against stored artifacts and writes a report artifact.
+- `pnpm eval:replay -- ...` runs the external gate command against stored artifacts or workflow comparison fixtures and writes a report artifact.
 
 ## Purpose
 
@@ -21,6 +24,7 @@ The plugin answers these questions:
 - Did an adapter change introduce regressions?
 - Did a harness refactor remove useful structure or dead weight?
 - Did cost, latency, retry rate, or failure type distribution change?
+- Which workflow mode passed or failed based on verifier-readable artifacts?
 
 ## Trigger Conditions
 
@@ -60,6 +64,8 @@ Required inputs:
 `buildReplaySampleFromSession` ignores non-evidence run records and normalizes evidence fields into `variant`, `verified`, `failureCategory`, `command`, `taskClass`, `costUsd`, `latencySeconds`, `resourceProfile`, and `evidenceArtifactId`.
 
 `runEvalReplay` accepts either one shared `resourceProfile` or separate `baselineResourceProfile` and `candidateResourceProfile` objects. Separate profiles are preserved in the report and compared field by field before the result is treated as directly comparable.
+
+Workflow comparison inputs can provide direct `workflowResult`, `ensembleRun`, or `evidenceMap` objects, or `artifacts[]` references with `taskId`, `artifactId`, and optional `kind`. Replay normalizes these shapes inside the plugin boundary and never calls real CLIs.
 
 ## Outputs
 
@@ -131,6 +137,12 @@ The plugin writes an eval report:
 
 Reports may be stored under a synthetic task such as `eval-reports`, keeping replay output outside core routing configuration.
 
+Workflow comparison reports are operator-readable artifacts with these stable top-level fields:
+
+- `samples[]`, `modes[]`, `resultsByMode`, `verifierSummary`, and `evidenceArtifacts`.
+- `workflowSpecificSummary` for competitive candidates, QA findings, lane write sets, and writer/reviewer verification.
+- `resourceProfile`, `costProfile`, and explicit unknown-profile reasons when data was not recorded.
+
 Example gate command:
 
 ```bash
@@ -143,6 +155,16 @@ pnpm eval:replay -- \
   --baseline gpt-codex-default.v1 \
   --candidate gpt-codex-default.v2 \
   --resource-profile-json '{"cpu":"4","memoryMb":8192,"timeoutSeconds":3600,"concurrency":1,"network":"restricted","version":"1"}'
+```
+
+Workflow comparison fixture command:
+
+```bash
+pnpm eval:replay -- \
+  --artifacts ./artifacts \
+  --workflow-comparison-fixture workflow-comparison \
+  --reason workflow-mode-comparison \
+  --compared-at 2026-05-16T00:00:00.000Z
 ```
 
 ## Scoring Rules

@@ -508,7 +508,71 @@ describe('Phase 8 user-facing CLI', () => {
         'model-upgrade'
       ],
       stdout: '{"reportRef":{"taskId":"eval","artifactId":"report"}}',
+      stderr: '',
+      reportRef: {
+        taskId: 'eval',
+        artifactId: 'report'
+      }
+    });
+  });
+
+  it('strips the CLI separator before dispatching eval replay arguments', async () => {
+    const runner = new FakeRunner({
+      exitCode: 0,
+      stdout: [
+        '> multi-coding-agent-symphony@0.1.0 eval:replay',
+        '{"reportArtifactPath":"tmp/eval-reports/report.json"}'
+      ].join('\n'),
       stderr: ''
+    });
+    const output = createOutput();
+
+    const exitCode = await runMcasCli({
+      argv: [
+        'eval',
+        'replay',
+        '--',
+        '--artifacts',
+        'tmp/eval-replay-comparison-artifacts',
+        '--workflow-comparison-fixture',
+        'workflow-comparison'
+      ],
+      stdout: output.stdout,
+      stderr: output.stderr,
+      runner
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(output.stderrText(), '');
+    assert.deepEqual(runner.calls, [{
+      executable: 'pnpm',
+      args: [
+        'eval:replay',
+        '--',
+        '--artifacts',
+        'tmp/eval-replay-comparison-artifacts',
+        '--workflow-comparison-fixture',
+        'workflow-comparison'
+      ]
+    }]);
+    assert.deepEqual(JSON.parse(output.stdoutText()), {
+      version: '1',
+      command: 'eval replay',
+      script: 'eval:replay',
+      status: 'passed',
+      exitCode: 0,
+      args: [
+        '--artifacts',
+        'tmp/eval-replay-comparison-artifacts',
+        '--workflow-comparison-fixture',
+        'workflow-comparison'
+      ],
+      stdout: [
+        '> multi-coding-agent-symphony@0.1.0 eval:replay',
+        '{"reportArtifactPath":"tmp/eval-reports/report.json"}'
+      ].join('\n'),
+      stderr: '',
+      reportArtifactPath: 'tmp/eval-reports/report.json'
     });
   });
 

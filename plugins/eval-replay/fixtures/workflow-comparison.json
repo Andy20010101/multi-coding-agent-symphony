@@ -1,0 +1,272 @@
+{
+  "id": "workflow-comparison",
+  "reason": "workflow-mode-comparison",
+  "comparedAt": "2026-05-16T00:00:00.000Z",
+  "operatorNotes": [
+    "Fixture uses structured replay artifacts only."
+  ],
+  "samples": [
+    {
+      "id": "single-agent-linear",
+      "mode": "single-agent",
+      "taskId": "task.linear",
+      "resourceProfile": {
+        "cpu": "4",
+        "memoryMb": 8192,
+        "timeoutSeconds": 3600,
+        "concurrency": 1,
+        "network": "restricted",
+        "version": "1"
+      },
+      "costProfile": {
+        "costUsd": 0.42,
+        "latencySeconds": 12
+      },
+      "workflowResult": {
+        "taskId": "task.linear",
+        "status": "passed",
+        "mode": "linear",
+        "commands": [
+          {
+            "stage": "implement",
+            "command": "implement",
+            "adapterId": "codex",
+            "artifactId": "linear-implement-evidence",
+            "runArtifactId": "linear-implement-run",
+            "routeDecisionArtifactId": "linear-implement-route-decision",
+            "verification": {
+              "status": "passed",
+              "reason": "checks-passed"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "proposal-only",
+      "taskId": "task.proposal",
+      "ensembleRun": {
+        "version": "1",
+        "id": "ensemble-proposal",
+        "taskId": "task.proposal",
+        "mode": "proposal-only",
+        "command": "plan",
+        "roles": [
+          "planner"
+        ],
+        "proposalArtifactIds": [
+          "proposal-codex-planner",
+          "proposal-kiro-planner"
+        ],
+        "arbitrationArtifactId": "arbitration-ensemble-proposal",
+        "synthesisArtifactId": "synthesis-ensemble-proposal",
+        "decision": "accepted"
+      }
+    },
+    {
+      "id": "writer-reviewer",
+      "taskId": "task.writer-reviewer",
+      "ensembleRun": {
+        "version": "1",
+        "id": "ensemble-writer-reviewer",
+        "taskId": "task.writer-reviewer",
+        "mode": "writer-reviewer",
+        "command": "implement-review",
+        "roles": [
+          "writer",
+          "reviewer",
+          "verifier"
+        ],
+        "writer": {
+          "agentId": "codex-writer",
+          "adapterId": "codex",
+          "evidenceArtifactId": "implement-evidence",
+          "runArtifactId": "implement-run",
+          "routeDecisionArtifactId": "implement-route-decision",
+          "verificationStatus": "passed",
+          "verification": {
+            "status": "passed",
+            "reason": "checks-passed"
+          }
+        },
+        "reviewers": [
+          {
+            "agentId": "codex-reviewer",
+            "adapterId": "codex",
+            "evidenceArtifactId": "review-codex-reviewer-evidence",
+            "runArtifactId": "review-codex-reviewer-run",
+            "routeDecisionArtifactId": "review-codex-reviewer-route-decision",
+            "verificationStatus": "passed",
+            "verification": {
+              "status": "passed",
+              "reason": "checks-passed"
+            }
+          }
+        ],
+        "decision": "accepted",
+        "finalVerificationStatus": "passed",
+        "rejectionReasons": []
+      }
+    },
+    {
+      "id": "parallel-lanes",
+      "taskId": "task.parallel-lanes",
+      "ensembleRun": {
+        "version": "1",
+        "id": "ensemble-parallel-lanes",
+        "taskId": "task.parallel-lanes",
+        "mode": "parallel-lanes",
+        "command": "parallel-implement",
+        "roles": [
+          "parallel-writer",
+          "verifier"
+        ],
+        "lanes": [
+          {
+            "laneId": "docs-lane",
+            "agentId": "codex-docs",
+            "adapterId": "codex",
+            "writeSet": [
+              "docs/parallel-lanes.md"
+            ],
+            "evidenceArtifactId": "implement-docs-lane-evidence",
+            "runArtifactId": "implement-docs-lane-run",
+            "routeDecisionArtifactId": "implement-docs-lane-route-decision",
+            "verificationStatus": "passed"
+          },
+          {
+            "laneId": "src-lane",
+            "agentId": "codex-src",
+            "adapterId": "codex",
+            "writeSet": [
+              "src/parallel-lanes.js"
+            ],
+            "evidenceArtifactId": "implement-src-lane-evidence",
+            "runArtifactId": "implement-src-lane-run",
+            "routeDecisionArtifactId": "implement-src-lane-route-decision",
+            "verificationStatus": "passed"
+          }
+        ],
+        "decision": "accepted",
+        "finalVerificationStatus": "passed",
+        "rejectionReasons": []
+      }
+    },
+    {
+      "id": "qa-swarm",
+      "taskId": "task.qa-swarm",
+      "ensembleRun": {
+        "version": "1",
+        "id": "ensemble-qa-swarm",
+        "taskId": "task.qa-swarm",
+        "mode": "qa-swarm",
+        "command": "qa-swarm",
+        "roles": [
+          "qa",
+          "verifier"
+        ],
+        "completionGate": "verifier",
+        "findingsArtifactId": "qa-swarm-findings-ensemble-qa-swarm",
+        "missingEvidenceArtifactId": "qa-swarm-missing-evidence-ensemble-qa-swarm",
+        "qaLanes": [
+          {
+            "laneId": "acceptance-audit",
+            "agentId": "codex-qa-a",
+            "adapterId": "codex",
+            "evidenceArtifactId": "qa-acceptance-audit-evidence",
+            "runArtifactId": "qa-acceptance-audit-run",
+            "routeDecisionArtifactId": "qa-acceptance-audit-route-decision",
+            "findings": [],
+            "missingEvidence": [],
+            "noFindingRationale": "No blocking issues found.",
+            "verificationStatus": "passed"
+          },
+          {
+            "laneId": "regression-audit",
+            "agentId": "codex-qa-b",
+            "adapterId": "codex",
+            "evidenceArtifactId": "qa-regression-audit-evidence",
+            "runArtifactId": "qa-regression-audit-run",
+            "routeDecisionArtifactId": "qa-regression-audit-route-decision",
+            "findings": [
+              "Regression proof is missing."
+            ],
+            "missingEvidence": [
+              "regression-test-log"
+            ],
+            "verificationStatus": "failed",
+            "verification": {
+              "status": "failed",
+              "reason": "verification-insufficient",
+              "requiredEvidence": [
+                "regression-test-log"
+              ]
+            }
+          }
+        ],
+        "decision": "rejected",
+        "finalVerificationStatus": "failed",
+        "rejectionReasons": [
+          "qa lane regression-audit (codex-qa-b) verification failed: verification-insufficient"
+        ]
+      }
+    },
+    {
+      "id": "competitive-patch",
+      "taskId": "task.competitive-patch",
+      "ensembleRun": {
+        "version": "1",
+        "id": "ensemble-competitive-patch",
+        "taskId": "task.competitive-patch",
+        "mode": "competitive-patch",
+        "command": "competitive-implement",
+        "roles": [
+          "competitive-candidate",
+          "verifier"
+        ],
+        "completionGate": "verifier",
+        "selectedCandidateId": "candidate-b",
+        "candidates": [
+          {
+            "candidateId": "candidate-a",
+            "agentId": "codex-candidate-a",
+            "adapterId": "codex",
+            "patchArtifactId": "competitive-patch-candidate-a-patch",
+            "evidenceArtifactId": "implement-candidate-a-evidence",
+            "commandArtifactId": "implement-candidate-a-run",
+            "routeDecisionArtifactId": "implement-candidate-a-route-decision",
+            "verifierStatus": "failed",
+            "selected": false,
+            "rejectedReason": "verifier failed: check-failed"
+          },
+          {
+            "candidateId": "candidate-b",
+            "agentId": "codex-candidate-b",
+            "adapterId": "codex",
+            "patchArtifactId": "competitive-patch-candidate-b-patch",
+            "evidenceArtifactId": "implement-candidate-b-evidence",
+            "commandArtifactId": "implement-candidate-b-run",
+            "routeDecisionArtifactId": "implement-candidate-b-route-decision",
+            "verifierStatus": "passed",
+            "selected": true
+          },
+          {
+            "candidateId": "candidate-c",
+            "agentId": "codex-candidate-c",
+            "adapterId": "codex",
+            "patchArtifactId": "competitive-patch-candidate-c-patch",
+            "evidenceArtifactId": "implement-candidate-c-evidence",
+            "commandArtifactId": "implement-candidate-c-run",
+            "routeDecisionArtifactId": "implement-candidate-c-route-decision",
+            "verifierStatus": "passed",
+            "selected": false,
+            "rejectedReason": "not selected"
+          }
+        ],
+        "decision": "accepted",
+        "finalVerificationStatus": "passed",
+        "rejectionReasons": []
+      }
+    }
+  ]
+}

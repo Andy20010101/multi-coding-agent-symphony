@@ -1,0 +1,46 @@
+{
+  "version": "1",
+  "id": "task.competitive-patch",
+  "run_id": "fixture-competitive-patch",
+  "repository": "Andy20010101/multi-coding-agent-symphony",
+  "intent": "Select one verifier-passing implementation from isolated competitive patch candidates.",
+  "acceptance": [
+    "Each candidate runs in an isolated writable workspace",
+    "Candidate patch, command, route decision, and verifier artifacts are recorded",
+    "Exactly one verifier-passing candidate is selected",
+    "Rejected candidates remain linked with rejection reasons",
+    "Harness completion follows verifier-gated competitive-patch results"
+  ],
+  "write_set": [
+    "synthetic-dry-run.txt"
+  ],
+  "verification": {
+    "commands": [
+      "pnpm test"
+    ]
+  },
+  "workflow": {
+    "mode": "competitive-patch",
+    "ensemble_id": "ensemble-competitive-patch",
+    "candidates": [
+      {
+        "candidate_id": "candidate-a",
+        "agent_id": "codex-candidate-a",
+        "adapter_id": "codex",
+        "model_profile": "gpt-codex-default"
+      },
+      {
+        "candidate_id": "candidate-b",
+        "agent_id": "codex-candidate-b",
+        "adapter_id": "codex",
+        "model_profile": "gpt-codex-default"
+      },
+      {
+        "candidate_id": "candidate-c",
+        "agent_id": "codex-candidate-c",
+        "adapter_id": "codex",
+        "model_profile": "gpt-codex-default"
+      }
+    ]
+  }
+}

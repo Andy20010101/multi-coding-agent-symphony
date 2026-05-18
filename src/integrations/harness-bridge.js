@@ -317,6 +317,32 @@ async function runTaskPacketWorkflow({
     return parallelLanesResultToWorkflowResult(result);
   }
 
+  if (workflow.mode === 'competitive-patch') {
+    const result = await ensemble.runCompetitivePatch({
+      ensembleId: workflow.ensembleId,
+      taskSpec,
+      candidates: workflow.candidates,
+      executionMode,
+      timeoutMs,
+      policyRequests
+    });
+
+    return competitivePatchResultToWorkflowResult(result);
+  }
+
+  if (workflow.mode === 'qa-swarm') {
+    const result = await ensemble.runQaSwarm({
+      ensembleId: workflow.ensembleId,
+      taskSpec,
+      qaLanes: workflow.qaLanes,
+      executionMode,
+      timeoutMs,
+      policyRequests
+    });
+
+    return qaSwarmResultToWorkflowResult(result);
+  }
+
   const result = await ensemble.runWriterReviewer({
     ensembleId: workflow.ensembleId,
     taskSpec,
@@ -366,8 +392,34 @@ function buildTaskPacketWorkflow(taskPacket, { commandSequence }) {
     };
   }
 
+  if (mode === 'competitive-patch') {
+    const ensembleId = workflow.ensemble_id ?? workflow.ensembleId ?? `${taskPacket.id}-competitive-patch`;
+    const candidates = normalizeCompetitiveWorkflowCandidates(workflow.candidates);
+
+    assertSafeId(ensembleId, 'TaskPacket.workflow.ensemble_id');
+
+    return {
+      mode,
+      ensembleId,
+      candidates
+    };
+  }
+
+  if (mode === 'qa-swarm') {
+    const ensembleId = workflow.ensemble_id ?? workflow.ensembleId ?? `${taskPacket.id}-qa-swarm`;
+    const qaLanes = normalizeQaWorkflowLanes(workflow.qa_lanes ?? workflow.qaLanes);
+
+    assertSafeId(ensembleId, 'TaskPacket.workflow.ensemble_id');
+
+    return {
+      mode,
+      ensembleId,
+      qaLanes
+    };
+  }
+
   if (mode !== 'writer-reviewer') {
-    throw new TaskPacketValidationError('TaskPacket.workflow.mode must be one of: linear, writer-reviewer, parallel-lanes');
+    throw new TaskPacketValidationError('TaskPacket.workflow.mode must be one of: linear, writer-reviewer, parallel-lanes, competitive-patch, qa-swarm');
   }
 
   const ensembleId = workflow.ensemble_id ?? workflow.ensembleId ?? `${taskPacket.id}-writer-reviewer`;
@@ -413,6 +465,80 @@ function normalizeParallelWorkflowLane(lane, field) {
     laneId: requireNonEmptyString(laneId, `${field}.lane_id`),
     agentId: requireNonEmptyString(agentId, `${field}.agent_id`),
     writeSet: requireWriteSet(writeSet)
+  };
+
+  assertSafeId(normalized.laneId, `${field}.lane_id`);
+
+  if (modelProfile !== undefined) {
+    normalized.modelProfile = requireNonEmptyString(modelProfile, `${field}.model_profile`);
+  }
+
+  return normalized;
+}
+
+function normalizeCompetitiveWorkflowCandidates(candidates) {
+  const candidateIds = new Set();
+
+  return requireNonEmptyArray(candidates, 'TaskPacket.workflow.candidates')
+    .map((candidate, index) => {
+      const normalized = normalizeCompetitiveWorkflowCandidate(candidate, `TaskPacket.workflow.candidates[${index}]`);
+
+      if (candidateIds.has(normalized.candidateId)) {
+        throw new TaskPacketValidationError('TaskPacket.workflow.candidates[].candidate_id must be unique');
+      }
+
+      candidateIds.add(normalized.candidateId);
+      return normalized;
+    });
+}
+
+function normalizeCompetitiveWorkflowCandidate(candidate, field) {
+  assertPlainObject(candidate, field);
+  const candidateId = candidate.candidate_id ?? candidate.candidateId;
+  const agentId = candidate.agent_id ?? candidate.agentId;
+  const modelProfile = candidate.model_profile ?? candidate.modelProfile;
+  const normalized = {
+    candidateId: requireNonEmptyString(candidateId, `${field}.candidate_id`),
+    agentId: requireNonEmptyString(agentId, `${field}.agent_id`)
+  };
+
+  assertSafeId(normalized.candidateId, `${field}.candidate_id`);
+
+  if (modelProfile !== undefined) {
+    normalized.modelProfile = requireNonEmptyString(modelProfile, `${field}.model_profile`);
+  }
+
+  return normalized;
+}
+
+function normalizeQaWorkflowLanes(qaLanes) {
+  const laneIds = new Set();
+
+  return requireNonEmptyArray(qaLanes, 'TaskPacket.workflow.qa_lanes')
+    .map((lane, index) => {
+      const normalized = normalizeQaWorkflowLane(lane, `TaskPacket.workflow.qa_lanes[${index}]`);
+
+      if (laneIds.has(normalized.laneId)) {
+        throw new TaskPacketValidationError('TaskPacket.workflow.qa_lanes[].lane_id must be unique');
+      }
+
+      laneIds.add(normalized.laneId);
+      return normalized;
+    });
+}
+
+function normalizeQaWorkflowLane(lane, field) {
+  assertPlainObject(lane, field);
+  if (lane.write_set !== undefined || lane.writeSet !== undefined) {
+    throw new TaskPacketValidationError('qa-swarm lanes must be read-only and cannot declare write sets');
+  }
+
+  const laneId = lane.lane_id ?? lane.laneId;
+  const agentId = lane.agent_id ?? lane.agentId;
+  const modelProfile = lane.model_profile ?? lane.modelProfile;
+  const normalized = {
+    laneId: requireNonEmptyString(laneId, `${field}.lane_id`),
+    agentId: requireNonEmptyString(agentId, `${field}.agent_id`)
   };
 
   assertSafeId(normalized.laneId, `${field}.lane_id`);
@@ -527,20 +653,93 @@ function parallelLanesResultToWorkflowResult(result) {
   };
 }
 
+function competitivePatchResultToWorkflowResult(result) {
+  const commands = result.candidates.map((candidate) => roleSummaryToCommand({
+    role: 'competitive-candidate',
+    stage: `candidate:${candidate.candidateId}`,
+    commandName: 'implement',
+    summary: candidate
+  }));
+  const failedCommand = result.finalVerificationStatus === 'passed'
+    ? undefined
+    : commands.find((command) => command.verification.status !== 'passed');
+
+  return {
+    taskId: result.taskId,
+    status: result.finalVerificationStatus === 'passed' ? 'passed' : 'failed',
+    mode: 'competitive-patch',
+    ensembleRunArtifactId: result.runArtifactId,
+    completionGate: result.completionGate,
+    selectedCandidateId: result.selectedCandidateId,
+    decision: result.decision,
+    finalVerificationStatus: result.finalVerificationStatus,
+    rejectionReasons: structuredClone(result.rejectionReasons),
+    commands,
+    artifactRefs: commands.map((command) => ({
+      taskId: result.taskId,
+      artifactId: command.artifactId,
+      command: command.command,
+      verificationStatus: command.verification.status
+    })),
+    ...(failedCommand ? { failedCommand: failedCommand.command } : {})
+  };
+}
+
+function qaSwarmResultToWorkflowResult(result) {
+  const commands = result.qaLanes.map((lane) => roleSummaryToCommand({
+    role: 'qa',
+    stage: `qa:${lane.laneId}`,
+    commandName: 'qa',
+    summary: lane
+  }));
+  const failedCommand = commands.find((command) => command.verification.status !== 'passed');
+
+  return {
+    taskId: result.taskId,
+    status: result.finalVerificationStatus === 'passed' ? 'passed' : 'failed',
+    mode: 'qa-swarm',
+    ensembleRunArtifactId: result.runArtifactId,
+    findingsArtifactId: result.findingsArtifactId,
+    missingEvidenceArtifactId: result.missingEvidenceArtifactId,
+    completionGate: result.completionGate,
+    decision: result.decision,
+    finalVerificationStatus: result.finalVerificationStatus,
+    rejectionReasons: structuredClone(result.rejectionReasons),
+    commands,
+    artifactRefs: commands.map((command) => ({
+      taskId: result.taskId,
+      artifactId: command.artifactId,
+      command: command.command,
+      verificationStatus: command.verification.status
+    })),
+    ...(failedCommand ? { failedCommand: failedCommand.command } : {})
+  };
+}
+
 function roleSummaryToCommand({ role, stage, commandName, summary }) {
   return {
     stage,
     role,
     ...(summary.laneId ? { laneId: summary.laneId } : {}),
+    ...(summary.candidateId ? { candidateId: summary.candidateId } : {}),
     agentId: summary.agentId,
     command: commandName,
     adapterId: summary.adapterId,
     ...(summary.writeSet ? { writeSet: structuredClone(summary.writeSet) } : {}),
     workspace: structuredClone(summary.workspace),
     artifactId: summary.evidenceArtifactId,
+    ...(summary.patchArtifactId ? { patchArtifactId: summary.patchArtifactId } : {}),
+    ...(summary.commandArtifactId ? { commandArtifactId: summary.commandArtifactId } : {}),
     runArtifactId: summary.runArtifactId,
     routeDecisionArtifactId: summary.routeDecisionArtifactId,
+    ...(summary.selected !== undefined ? { selected: summary.selected } : {}),
+    ...(summary.rejectedReason ? { rejectedReason: summary.rejectedReason } : {}),
     ...(summary.adapterArtifactRefs ? { adapterArtifactRefs: structuredClone(summary.adapterArtifactRefs) } : {}),
+    ...(summary.findings ? { findings: structuredClone(summary.findings) } : {}),
+    ...(summary.missingEvidence ? { missingEvidence: structuredClone(summary.missingEvidence) } : {}),
+    ...(summary.noFindingRationale ? { noFindingRationale: summary.noFindingRationale } : {}),
+    ...(summary.findingsArtifactId ? { findingsArtifactId: summary.findingsArtifactId } : {}),
+    ...(summary.missingEvidenceArtifactId ? { missingEvidenceArtifactId: summary.missingEvidenceArtifactId } : {}),
     verification: structuredClone(summary.verification)
   };
 }

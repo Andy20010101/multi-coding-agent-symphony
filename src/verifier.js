@@ -146,7 +146,9 @@ function verifyCommandSpecificEvidence({ commandSpec, evidence, changedFiles }) 
     };
   }
 
-  if (commandSpec.name === 'review' && !hasFindings(evidence) && !isNonEmptyString(evidence.noFindingRationale)) {
+  if ((commandSpec.name === 'review' || requiresQaFindingRationale(commandSpec)) &&
+    !hasFindings(evidence) &&
+    !isNonEmptyString(evidence.noFindingRationale)) {
     return {
       status: 'failed',
       reason: 'verification-insufficient',
@@ -163,6 +165,10 @@ function verifyCommandSpecificEvidence({ commandSpec, evidence, changedFiles }) 
   }
 
   return null;
+}
+
+function requiresQaFindingRationale(commandSpec) {
+  return commandSpec.name === 'qa' && commandSpec.doneCriteria.includes('findings-recorded');
 }
 
 function isSmokeEvidence(commandSpec) {

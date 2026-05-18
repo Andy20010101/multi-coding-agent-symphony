@@ -16,6 +16,8 @@ pnpm mcas doctor
 
 Expected result: every command exits with code `0`. The mutation gate runs Stryker against the hardened core modules and must stay above its configured break threshold.
 
+For a scoped closeout, an operator may explicitly approve an incremental Stryker gate. Record the exact mutation ranges, test files, score, and break threshold. Before tagging a release, prefer the full `pnpm test:mutation:gate` unless the release owner accepts the recorded incremental gate as sufficient evidence.
+
 ## Required Harness Dry-Run Proof
 
 Run from the repository root:
@@ -23,9 +25,32 @@ Run from the repository root:
 ```sh
 pnpm mcas harness run-taskpacket --run-id fixture-run --taskpacket fixtures/harness/scaffold-taskpacket.json --runtime-dir tmp/harness-bridge
 pnpm mcas harness run-taskpacket --run-id fixture-writer-reviewer --taskpacket fixtures/harness/writer-reviewer-taskpacket.json --runtime-dir tmp/harness-writer-reviewer --harness-dir tmp/harness-writer-reviewer-output
+pnpm mcas harness run-taskpacket --run-id fixture-parallel-lanes --taskpacket fixtures/harness/parallel-lanes-taskpacket.json --runtime-dir tmp/harness-parallel-lanes --harness-dir tmp/harness-parallel-lanes-output
+pnpm mcas harness run-taskpacket --run-id fixture-qa-swarm --taskpacket fixtures/harness/qa-swarm-taskpacket.json --runtime-dir tmp/harness-qa-swarm --harness-dir tmp/harness-qa-swarm-output
+pnpm mcas harness run-taskpacket --run-id fixture-competitive-patch --taskpacket fixtures/harness/competitive-patch-taskpacket.json --runtime-dir tmp/harness-competitive-patch --harness-dir tmp/harness-competitive-patch-output
 ```
 
-Expected result: both commands return verifier status `passed`, Harness evidence files are written under the selected output paths, and the writer-reviewer evidence map links writer and reviewer command artifacts.
+Expected result:
+
+- All five commands return verifier status `passed` and write Harness evidence.
+- Writer-reviewer links writer and reviewer artifacts.
+- Parallel-lanes preserves disjoint write-set ownership.
+- Qa-swarm preserves findings, missing-evidence artifacts, no-finding rationale, and verifier authority.
+- Competitive-patch preserves candidate patch artifacts and exactly one verifier-selected candidate.
+
+## Required Eval Replay Comparison Proof
+
+Run from the repository root:
+
+```sh
+pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --workflow-comparison-fixture workflow-comparison --reason workflow-mode-comparison --compared-at 2026-05-16T00:00:00.000Z
+```
+
+Expected result:
+
+- The command writes an eval report artifact.
+- The report compares linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch.
+- The report preserves verifier status, workflow-specific evidence fields, and explicit unknown cost/resource profiles.
 
 ## Optional Local CLI Help Smokes
 
@@ -76,6 +101,7 @@ Record:
 
 - Git commit SHA.
 - Commands run and exit codes.
+- Eval replay comparison report reference.
 - Real smoke environment variables used, or `not run`.
 - Known risks and skipped gates.
 - Links to changed docs, tests, and artifacts.

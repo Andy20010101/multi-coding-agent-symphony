@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -9,9 +9,12 @@ import { ArtifactStore } from '../src/artifact-store.js';
 import { SessionEventLog } from '../src/session-event-log.js';
 import {
   buildReplaySampleFromSession,
+  buildWorkflowComparisonInputFromArtifacts,
   loadReplayFixture,
   loadReplaySample,
+  loadWorkflowComparisonFixture,
   runEvalReplay,
+  runWorkflowModeComparison,
   writeEvalReportArtifact
 } from '../plugins/eval-replay/index.js';
 
@@ -494,6 +497,275 @@ describe('Phase 5 external eval replay plugin', () => {
         }
       ]);
       assert.deepEqual(await store.readArtifact('eval-reports', 'eval-model-upgrade-sample-task-1'), output.report);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('compares workflow modes from replayable structured artifacts', async () => {
+    const fixture = await loadWorkflowComparisonFixture({ name: 'workflow-comparison' });
+    const report = runWorkflowModeComparison(fixture);
+
+    assert.equal(report.id, 'eval-workflow-comparison-workflow-mode-comparison-workflow-comparison');
+    assert.equal(report.comparedAt, '2026-05-16T00:00:00.000Z');
+    assert.deepEqual(report.modes, [
+      'linear',
+      'proposal-only',
+      'writer-reviewer',
+      'parallel-lanes',
+      'qa-swarm',
+      'competitive-patch'
+    ]);
+    assert.deepEqual(Object.fromEntries(report.modes.map((mode) => [
+      mode,
+      report.resultsByMode[mode].status
+    ])), {
+      linear: 'passed',
+      'proposal-only': 'passed',
+      'writer-reviewer': 'passed',
+      'parallel-lanes': 'passed',
+      'qa-swarm': 'failed',
+      'competitive-patch': 'passed'
+    });
+    assert.deepEqual(report.verifierSummary.failedModes, ['qa-swarm']);
+    assert.equal(report.verifierSummary.byMode['qa-swarm'].finalVerificationStatus, 'failed');
+    assert.equal(report.verifierSummary.byMode['proposal-only'].finalVerificationStatus, 'unknown');
+    assert.deepEqual(report.resultsByMode.linear.evidenceArtifactIds, ['linear-implement-evidence']);
+    assert.equal(report.resultsByMode.linear.resourceProfile.status, 'known');
+    assert.equal(report.resultsByMode['writer-reviewer'].resourceProfile.status, 'unknown');
+    assert.equal(
+      report.resultsByMode['writer-reviewer'].resourceProfile.unknownResourceProfileReason,
+      'resource-profile-not-recorded'
+    );
+    assert.equal(report.resultsByMode['writer-reviewer'].costProfile.status, 'unknown');
+    assert.equal(
+      report.resultsByMode['writer-reviewer'].costProfile.unknownCostProfileReason,
+      'cost-profile-not-recorded'
+    );
+    assert.equal(
+      report.unknownResourceProfileReason,
+      'resource-profile-not-recorded: proposal-only, writer-reviewer, parallel-lanes, qa-swarm, competitive-patch'
+    );
+    assert.equal(
+      report.unknownCostProfileReason,
+      'cost-profile-not-recorded: proposal-only, writer-reviewer, parallel-lanes, qa-swarm, competitive-patch'
+    );
+    assert.deepEqual(report.operatorNotes, ['Fixture uses structured replay artifacts only.']);
+    assert.deepEqual(report.recommendations, []);
+  });
+
+  it('preserves workflow-specific verifier evidence in comparisons', async () => {
+    const report = runWorkflowModeComparison(await loadWorkflowComparisonFixture({ name: 'workflow-comparison' }));
+    const competitivePatch = report.workflowSpecificSummary['competitive-patch'];
+    const qaSwarm = report.workflowSpecificSummary['qa-swarm'];
+    const parallelLanes = report.workflowSpecificSummary['parallel-lanes'];
+    const writerReviewer = report.workflowSpecificSummary['writer-reviewer'];
+    const candidatesById = Object.fromEntries(competitivePatch.candidates.map((candidate) => [
+      candidate.candidateId,
+      candidate
+    ]));
+    const qaLanesById = Object.fromEntries(qaSwarm.qaLanes.map((lane) => [
+      lane.laneId,
+      lane
+    ]));
+
+    assert.equal(competitivePatch.selectedCandidateId, 'candidate-b');
+    assert.equal(candidatesById['candidate-b'].selected, true);
+    assert.equal(candidatesById['candidate-b'].verifierStatus, 'passed');
+    assert.equal(candidatesById['candidate-b'].patchArtifactId, 'competitive-patch-candidate-b-patch');
+    assert.equal(candidatesById['candidate-a'].rejectedReason, 'verifier failed: check-failed');
+    assert.equal(candidatesById['candidate-c'].rejectedReason, 'not selected');
+    assert.equal(candidatesById['candidate-a'].commandArtifactId, 'implement-candidate-a-run');
+    assert.equal(candidatesById['candidate-a'].routeDecisionArtifactId, 'implement-candidate-a-route-decision');
+
+    assert.equal(qaSwarm.findingsArtifactId, 'qa-swarm-findings-ensemble-qa-swarm');
+    assert.equal(qaSwarm.missingEvidenceArtifactId, 'qa-swarm-missing-evidence-ensemble-qa-swarm');
+    assert.deepEqual(qaLanesById['regression-audit'].findings, ['Regression proof is missing.']);
+    assert.deepEqual(qaLanesById['regression-audit'].missingEvidence, ['regression-test-log']);
+    assert.equal(qaLanesById['regression-audit'].verificationStatus, 'failed');
+    assert.equal(qaLanesById['acceptance-audit'].noFindingRationale, 'No blocking issues found.');
+
+    assert.deepEqual(parallelLanes.lanes.map((lane) => ({
+      laneId: lane.laneId,
+      agentId: lane.agentId,
+      writeSet: lane.writeSet,
+      verificationStatus: lane.verificationStatus
+    })), [
+      {
+        laneId: 'docs-lane',
+        agentId: 'codex-docs',
+        writeSet: ['docs/parallel-lanes.md'],
+        verificationStatus: 'passed'
+      },
+      {
+        laneId: 'src-lane',
+        agentId: 'codex-src',
+        writeSet: ['src/parallel-lanes.js'],
+        verificationStatus: 'passed'
+      }
+    ]);
+    assert.equal(writerReviewer.writer.agentId, 'codex-writer');
+    assert.equal(writerReviewer.writer.verificationStatus, 'passed');
+    assert.equal(writerReviewer.writer.evidenceArtifactId, 'implement-evidence');
+    assert.deepEqual(writerReviewer.reviewers.map((reviewer) => ({
+      agentId: reviewer.agentId,
+      evidenceArtifactId: reviewer.evidenceArtifactId,
+      verificationStatus: reviewer.verificationStatus
+    })), [{
+      agentId: 'codex-reviewer',
+      evidenceArtifactId: 'review-codex-reviewer-evidence',
+      verificationStatus: 'passed'
+    }]);
+    assert.equal(report.evidenceArtifacts.some((artifact) => artifact.confidence !== undefined), false);
+  });
+
+  it('builds workflow comparison input from stored artifact refs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-workflow-comparison-artifacts-'));
+
+    try {
+      const store = new ArtifactStore(root);
+
+      await store.writeArtifact('task.stored-parallel', 'stored-evidence-map', {
+        version: '1',
+        runId: 'fixture-stored-parallel',
+        taskId: 'task.stored-parallel',
+        status: 'passed',
+        verifierStatus: 'passed',
+        symphonyStatus: 'passed',
+        workflowMode: 'parallel-lanes',
+        stages: [
+          {
+            stage: 'lane:docs-lane',
+            role: 'parallel-writer',
+            laneId: 'docs-lane',
+            agentId: 'codex-docs',
+            command: 'implement',
+            adapterId: 'codex',
+            writeSet: ['docs/stored.md'],
+            artifactId: 'stored-docs-evidence',
+            runArtifactId: 'stored-docs-run',
+            routeDecisionArtifactId: 'stored-docs-route-decision',
+            verificationStatus: 'passed',
+            verificationReason: 'checks-passed'
+          }
+        ],
+        verificationMap: [
+          {
+            stage: 'lane:docs-lane',
+            laneId: 'docs-lane',
+            agentId: 'codex-docs',
+            command: 'implement',
+            adapterId: 'codex',
+            writeSet: ['docs/stored.md'],
+            artifactId: 'stored-docs-evidence',
+            runArtifactId: 'stored-docs-run',
+            routeDecisionArtifactId: 'stored-docs-route-decision',
+            verificationStatus: 'passed',
+            verificationReason: 'checks-passed'
+          }
+        ]
+      });
+
+      const input = await buildWorkflowComparisonInputFromArtifacts({
+        artifactStore: store,
+        comparison: {
+          reason: 'workflow-mode-comparison',
+          comparedAt: '2026-05-16T00:00:00.000Z',
+          samples: [
+            {
+              id: 'stored-parallel',
+              artifacts: [
+                {
+                  taskId: 'task.stored-parallel',
+                  artifactId: 'stored-evidence-map',
+                  kind: 'evidenceMap'
+                }
+              ]
+            }
+          ]
+        }
+      });
+      const report = runWorkflowModeComparison(input);
+
+      assert.deepEqual(report.modes, ['parallel-lanes']);
+      assert.equal(report.resultsByMode['parallel-lanes'].status, 'passed');
+      assert.deepEqual(report.samples[0].sourceArtifacts, [
+        {
+          taskId: 'task.stored-parallel',
+          artifactId: 'stored-evidence-map',
+          kind: 'evidenceMap'
+        }
+      ]);
+      assert.deepEqual(report.workflowSpecificSummary['parallel-lanes'].lanes[0].writeSet, ['docs/stored.md']);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs workflow comparison through the eval replay command and writes a report artifact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-workflow-comparison-gate-'));
+
+    try {
+      const artifactDirectory = join(root, 'artifacts');
+      const comparisonFile = join(root, 'workflow-comparison.json');
+      const store = new ArtifactStore(artifactDirectory);
+
+      await writeFile(comparisonFile, `${JSON.stringify({
+        comparedAt: '2026-05-16T00:00:00.000Z',
+        samples: [
+          {
+            id: 'cli-writer-reviewer',
+            taskId: 'task.cli-writer-reviewer',
+            ensembleRun: {
+              version: '1',
+              id: 'ensemble-cli-writer-reviewer',
+              taskId: 'task.cli-writer-reviewer',
+              mode: 'writer-reviewer',
+              writer: {
+                agentId: 'codex-writer',
+                adapterId: 'codex',
+                evidenceArtifactId: 'implement-evidence',
+                runArtifactId: 'implement-run',
+                routeDecisionArtifactId: 'implement-route-decision',
+                verificationStatus: 'passed'
+              },
+              reviewers: [],
+              decision: 'accepted',
+              finalVerificationStatus: 'passed',
+              rejectionReasons: []
+            }
+          }
+        ]
+      }, null, 2)}\n`, 'utf8');
+
+      const result = spawnSync(process.execPath, [
+        'scripts/eval-replay.js',
+        '--',
+        '--artifacts', artifactDirectory,
+        '--workflow-comparison-file', comparisonFile,
+        '--reason', 'workflow-mode-comparison',
+        '--report-artifact-id', 'eval-workflow-comparison-cli'
+      ], {
+        cwd: process.cwd(),
+        encoding: 'utf8'
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+
+      const output = JSON.parse(result.stdout);
+
+      assert.equal(output.status, 'passed');
+      assert.deepEqual(output.reportRef, {
+        taskId: 'eval-reports',
+        artifactId: 'eval-workflow-comparison-cli'
+      });
+      assert.equal(
+        output.reportArtifactPath,
+        join(artifactDirectory, 'eval-reports', 'eval-workflow-comparison-cli.json')
+      );
+      assert.deepEqual(output.report.modes, ['writer-reviewer']);
+      assert.equal(output.report.resultsByMode['writer-reviewer'].status, 'passed');
+      assert.deepEqual(await store.readArtifact('eval-reports', 'eval-workflow-comparison-cli'), output.report);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

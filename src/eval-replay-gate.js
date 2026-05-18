@@ -1,8 +1,13 @@
+import { join } from 'node:path';
+
 import { ArtifactStore } from './artifact-store.js';
 import { SessionEventLog } from './session-event-log.js';
 import {
+  buildWorkflowComparisonInputFromArtifacts,
   buildReplaySampleFromSession,
+  loadWorkflowComparisonFixture,
   runEvalReplay,
+  runWorkflowModeComparison,
   writeEvalReportArtifact
 } from '../plugins/eval-replay/index.js';
 
@@ -62,6 +67,54 @@ export async function runEvalReplayGate({
     recommendations: structuredClone(report.recommendations),
     report,
     mutatedCoreConfig: report.mutatedCoreConfig,
+    version: '1'
+  };
+}
+
+export async function runEvalWorkflowComparisonGate({
+  artifactDirectory,
+  comparison,
+  comparisonFixture,
+  reason,
+  comparedAt,
+  reportTaskId = 'eval-reports',
+  reportArtifactId
+}) {
+  assertNonEmptyString(artifactDirectory, 'artifactDirectory');
+
+  const artifactStore = new ArtifactStore(artifactDirectory);
+  const baseComparison = comparisonFixture !== undefined
+    ? await loadWorkflowComparisonFixture({ name: comparisonFixture })
+    : comparison;
+
+  if (baseComparison === undefined) {
+    throw new TypeError('comparison or comparisonFixture is required');
+  }
+
+  const comparisonInput = {
+    ...baseComparison,
+    ...(reason !== undefined ? { reason } : {}),
+    ...(comparedAt !== undefined ? { comparedAt } : {})
+  };
+  const normalizedComparison = await buildWorkflowComparisonInputFromArtifacts({
+    artifactStore,
+    comparison: comparisonInput
+  });
+  const report = runWorkflowModeComparison(normalizedComparison);
+  const reportRef = await writeEvalReportArtifact({
+    artifactStore,
+    report,
+    taskId: reportTaskId,
+    artifactId: reportArtifactId
+  });
+
+  return {
+    status: 'passed',
+    reportRef,
+    reportArtifactPath: join(artifactDirectory, reportRef.taskId, `${reportRef.artifactId}.json`),
+    recommendations: structuredClone(report.recommendations),
+    report,
+    mutatedCoreConfig: false,
     version: '1'
   };
 }

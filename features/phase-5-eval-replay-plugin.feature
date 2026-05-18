@@ -58,3 +58,39 @@ Feature: Phase 5 external eval replay plugin
     When the Eval Replay plugin creates recommendations
     Then the report recommends reviewing routing for the candidate
     And the core router configuration is not mutated
+
+  Scenario: Compare multiple workflow modes from stored artifacts
+    Given stored replay artifacts for single-agent, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch runs
+    When the Eval Replay plugin builds a workflow comparison report
+    Then the report lists each workflow mode as passed, failed, or unknown
+    And the report records the evidence artifacts used for each mode
+    And the report is written as an operator-readable artifact
+
+  Scenario: Preserve verifier-first workflow decision fields
+    Given replay artifacts include workflow status, verifier status, and final verification status
+    When the Eval Replay plugin compares workflow modes
+    Then the report preserves verifier status and final verification status
+    And the report does not rely on model narrative confidence
+
+  Scenario: Preserve competitive patch candidate evidence
+    Given a competitive-patch EnsembleRun selected one verifier-passing candidate
+    When the Eval Replay plugin compares workflow modes
+    Then the report includes the selected candidate id
+    And every candidate keeps patch, command, route-decision, verifier status, selected flag, and rejected reason fields
+
+  Scenario: Preserve qa-swarm findings and missing evidence
+    Given a qa-swarm EnsembleRun records QA lanes, findings, and missing evidence
+    When the Eval Replay plugin compares workflow modes
+    Then the report includes QA lane findings artifacts
+    And the report includes missing evidence and no-finding rationale fields
+
+  Scenario: Preserve parallel lane write-set ownership
+    Given a parallel-lanes EnsembleRun records lane write sets
+    When the Eval Replay plugin compares workflow modes
+    Then the report includes each lane id and write set
+
+  Scenario: Report unknown cost and resource profiles without fabrication
+    Given a workflow replay sample has no cost or resource profile
+    When the Eval Replay plugin compares workflow modes
+    Then the report marks the cost and resource profile as unknown
+    And it records the reason instead of inventing values

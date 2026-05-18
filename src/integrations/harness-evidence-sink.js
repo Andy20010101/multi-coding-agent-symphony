@@ -37,6 +37,8 @@ export class HarnessEvidenceSink {
       verifierStatus: harnessVerification.status,
       symphonyStatus: workflowResult.status,
       workflowMode,
+      ...(workflowResult.completionGate ? { completionGate: workflowResult.completionGate } : {}),
+      ...(workflowResult.selectedCandidateId ? { selectedCandidateId: workflowResult.selectedCandidateId } : {}),
       expectedChecks: [...harnessVerification.expectedChecks],
       ...(harnessVerification.diagnosticLayer ? { diagnosticLayer: harnessVerification.diagnosticLayer } : {}),
       ...(executionMode ? { executionMode } : {}),
@@ -68,6 +70,8 @@ export class HarnessEvidenceSink {
       verifierStatus: harnessVerification.status,
       symphonyStatus: workflowResult.status,
       workflowMode,
+      ...(workflowResult.completionGate ? { completionGate: workflowResult.completionGate } : {}),
+      ...(workflowResult.selectedCandidateId ? { selectedCandidateId: workflowResult.selectedCandidateId } : {}),
       reason: harnessVerification.reason,
       ...(harnessVerification.diagnosticLayer ? { diagnosticLayer: harnessVerification.diagnosticLayer } : {}),
       expectedChecks: [...harnessVerification.expectedChecks],
@@ -102,10 +106,16 @@ function summarizeArtifacts(workflowResult) {
   return workflowResult.commands.map((command) => ({
     command: command.command,
     adapterId: command.adapterId,
+    ...(command.candidateId ? { candidateId: command.candidateId } : {}),
+    ...(command.agentId ? { agentId: command.agentId } : {}),
     artifactId: command.artifactId,
+    ...(command.patchArtifactId ? { patchArtifactId: command.patchArtifactId } : {}),
+    ...(command.commandArtifactId ? { commandArtifactId: command.commandArtifactId } : {}),
     runArtifactId: command.runArtifactId,
     routeDecisionArtifactId: command.routeDecisionArtifactId,
-    verificationStatus: command.verification?.status ?? command.verificationStatus ?? 'unknown'
+    verificationStatus: command.verification?.status ?? command.verificationStatus ?? 'unknown',
+    ...(command.selected !== undefined ? { selected: command.selected } : {}),
+    ...(command.rejectedReason ? { rejectedReason: command.rejectedReason } : {})
   }));
 }
 
@@ -118,15 +128,25 @@ function summarizeStages(workflowResult) {
     stage: command.stage ?? command.command,
     role: command.role,
     laneId: command.laneId,
+    candidateId: command.candidateId,
     agentId: command.agentId,
     command: command.command,
     adapterId: command.adapterId,
     writeSet: command.writeSet ? structuredClone(command.writeSet) : undefined,
+    patchArtifactId: command.patchArtifactId,
+    commandArtifactId: command.commandArtifactId,
+    findings: command.findings ? structuredClone(command.findings) : undefined,
+    missingEvidence: command.missingEvidence ? structuredClone(command.missingEvidence) : undefined,
+    noFindingRationale: command.noFindingRationale,
+    findingsArtifactId: command.findingsArtifactId,
+    missingEvidenceArtifactId: command.missingEvidenceArtifactId,
     artifactId: command.artifactId,
     runArtifactId: command.runArtifactId,
     routeDecisionArtifactId: command.routeDecisionArtifactId,
     verificationStatus: command.verification?.status ?? command.verificationStatus ?? 'unknown',
     verificationReason: command.verification?.reason ?? command.verificationReason,
+    selected: command.selected,
+    rejectedReason: command.rejectedReason,
     diagnosticLayer: command.diagnosticLayer,
     adapterArtifactRefs: command.adapterArtifactRefs
   }));
@@ -136,11 +156,25 @@ function buildVerificationMap(stages) {
   return stages.map((stage) => stripUndefined({
     stage: stage.stage,
     laneId: stage.laneId,
+    candidateId: stage.candidateId,
+    agentId: stage.agentId,
     command: stage.command,
+    adapterId: stage.adapterId,
     writeSet: stage.writeSet ? structuredClone(stage.writeSet) : undefined,
+    patchArtifactId: stage.patchArtifactId,
+    commandArtifactId: stage.commandArtifactId,
+    findings: stage.findings ? structuredClone(stage.findings) : undefined,
+    missingEvidence: stage.missingEvidence ? structuredClone(stage.missingEvidence) : undefined,
+    noFindingRationale: stage.noFindingRationale,
+    findingsArtifactId: stage.findingsArtifactId,
+    missingEvidenceArtifactId: stage.missingEvidenceArtifactId,
     artifactId: stage.artifactId,
+    runArtifactId: stage.runArtifactId,
+    routeDecisionArtifactId: stage.routeDecisionArtifactId,
     verificationStatus: stage.verificationStatus,
     verificationReason: stage.verificationReason,
+    selected: stage.selected,
+    rejectedReason: stage.rejectedReason,
     diagnosticLayer: stage.diagnosticLayer
   }));
 }
@@ -155,6 +189,7 @@ function renderVerificationMarkdown({ runId, taskId, workflowResult, harnessVeri
     ...(harnessVerification.diagnosticLayer ? [`- Diagnostic layer: ${harnessVerification.diagnosticLayer}`] : []),
     `- Symphony status: ${workflowResult.status}`,
     `- Workflow mode: ${workflowMode}`,
+    ...(workflowResult.completionGate ? [`- Completion gate: ${workflowResult.completionGate}`] : []),
     `- Expected checks: ${harnessVerification.expectedChecks.join(', ')}`
   ];
 
@@ -173,7 +208,13 @@ function renderVerificationMarkdown({ runId, taskId, workflowResult, harnessVeri
   if (stages.length > 0) {
     lines.push('- Stages:');
     for (const stage of stages) {
-      lines.push(`  - Stage: ${stage.stage} -> ${stage.artifactId} (${stage.verificationStatus})`);
+      const details = [
+        stage.patchArtifactId ? `patch ${stage.patchArtifactId}` : null,
+        stage.rejectedReason ? stage.rejectedReason : null
+      ].filter(Boolean);
+      const suffix = details.length > 0 ? `; ${details.join('; ')}` : '';
+
+      lines.push(`  - Stage: ${stage.stage} -> ${stage.artifactId} (${stage.verificationStatus})${suffix}`);
     }
   }
 

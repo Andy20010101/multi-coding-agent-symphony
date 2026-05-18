@@ -91,6 +91,7 @@ export class Orchestrator {
     artifactRefs = [],
     sourceWorkspaceId,
     artifactIdSuffix = '',
+    agentId,
     checkTaskActive
   }) {
     validateTaskSpec(taskSpec);
@@ -187,6 +188,7 @@ export class Orchestrator {
           ? buildContinuationTaskSpec({ taskSpec, continuation })
           : taskSpec,
         commandName: commandSpec.name,
+        agentId,
         events: priorEvents,
         artifactRefs,
         hydratedArtifacts,
@@ -197,6 +199,7 @@ export class Orchestrator {
         commandSpec,
         contextPack,
         workspace: workspace.path,
+        ...(agentId ? { agentId } : {}),
         modelProfile: modelProfile ?? route.modelProfile ?? route.modelProfiles[0],
         policyDecisions,
         executionMode,

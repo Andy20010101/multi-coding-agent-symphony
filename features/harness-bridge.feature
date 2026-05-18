@@ -59,6 +59,46 @@ Feature: Harness Bridge execution
     And Harness evidence maps each lane to its artifact and verification result
     And overlapping lane write sets are rejected before adapter execution
 
+  Scenario: Run a TaskPacket through qa-swarm ensemble mode
+    Given a valid Harness TaskPacket with workflow mode qa-swarm
+    And each QA lane has no write set
+    When the Harness Bridge runs the TaskPacket
+    Then Symphony executes each lane as a read-only qa command
+    And Harness evidence maps each QA lane to its command artifact, evidence artifact, and verification result
+    And Harness evidence records each lane's lane id, agent id, adapter id, run artifact, route decision artifact, findings, and missing-evidence details
+    And QA lanes with empty findings include an explicit no-finding rationale
+    And Harness completion status follows verifier results rather than swarm vote
+
+  Scenario: Reject writable QA swarm lanes before adapter execution
+    Given a Harness TaskPacket with workflow mode qa-swarm
+    And a QA lane requests a write set
+    When the Harness Bridge prepares the task for Symphony
+    Then the TaskPacket is rejected
+    And no runtime adapter is started
+
+  Scenario: Reject duplicate QA swarm lane ids before adapter execution
+    Given a Harness TaskPacket with workflow mode qa-swarm
+    And two QA lanes use the same lane id
+    When the Harness Bridge prepares the task for Symphony
+    Then the TaskPacket is rejected
+    And no runtime adapter is started
+
+  Scenario: Run a TaskPacket through competitive-patch ensemble mode
+    Given a valid Harness TaskPacket with workflow mode competitive-patch
+    And each candidate has a unique candidate id and agent id
+    When the Harness Bridge runs the TaskPacket
+    Then Symphony executes each candidate in an isolated writable workspace
+    And Harness evidence maps each candidate to its patch artifact, command artifact, route decision artifact, and verification result
+    And Harness records the selected candidate and rejected candidate reasons
+    And Harness completion status follows the verifier-gated EnsembleRun result
+
+  Scenario: Reject duplicate competitive-patch candidate ids before adapter execution
+    Given a Harness TaskPacket with workflow mode competitive-patch
+    And two candidates use the same candidate id
+    When the Harness Bridge prepares the task for Symphony
+    Then the TaskPacket is rejected
+    And no runtime adapter is started
+
   Scenario: Diagnose real smoke failures by contract layer
     Given a real Harness Bridge smoke fails during model evidence verification
     When the Harness Bridge writes verification evidence

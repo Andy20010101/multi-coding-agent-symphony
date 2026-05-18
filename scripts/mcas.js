@@ -354,6 +354,8 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
         symphonyStatus: result.workflowResult.status,
         verifierStatus: result.harnessVerification.status,
         reason: result.harnessVerification.reason,
+        ...(result.workflowResult.completionGate ? { completionGate: result.workflowResult.completionGate } : {}),
+        ...(result.workflowResult.selectedCandidateId ? { selectedCandidateId: result.workflowResult.selectedCandidateId } : {}),
         ...(result.harnessVerification.diagnosticLayer
           ? { diagnosticLayer: result.harnessVerification.diagnosticLayer }
           : {}),
@@ -404,11 +406,13 @@ async function runSmokeCommand({ adapter, args, runner }) {
 }
 
 async function runEvalReplay({ args, runner }) {
+  const passThroughArgs = args[0] === '--' ? args.slice(1) : args;
   const result = await runner.run({
     executable: 'pnpm',
-    args: ['eval:replay', '--', ...args]
+    args: ['eval:replay', '--', ...passThroughArgs]
   });
   const exitCode = result.exitCode;
+  const replayOutput = parseOptionalJson(result.stdout);
 
   return {
     exitCode,
@@ -418,9 +422,11 @@ async function runEvalReplay({ args, runner }) {
       script: 'eval:replay',
       status: exitCode === 0 ? 'passed' : 'failed',
       exitCode,
-      args: [...args],
+      args: [...passThroughArgs],
       stdout: result.stdout ?? '',
-      stderr: result.stderr ?? ''
+      stderr: result.stderr ?? '',
+      ...(replayOutput?.reportRef ? { reportRef: replayOutput.reportRef } : {}),
+      ...(replayOutput?.reportArtifactPath ? { reportArtifactPath: replayOutput.reportArtifactPath } : {})
     }
   };
 }
@@ -632,11 +638,36 @@ function parseJsonFile(path, field) {
   }
 }
 
+function parseOptionalJson(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const objectStart = trimmed.indexOf('{');
+
+    if (objectStart === -1) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(trimmed.slice(objectStart));
+    } catch {
+      return null;
+    }
+  }
+}
+
 function summarizeCommandRun(commandRun) {
   return {
     ...(commandRun.stage ? { stage: commandRun.stage } : {}),
     ...(commandRun.role ? { role: commandRun.role } : {}),
     ...(commandRun.laneId ? { laneId: commandRun.laneId } : {}),
+    ...(commandRun.candidateId ? { candidateId: commandRun.candidateId } : {}),
     ...(commandRun.agentId ? { agentId: commandRun.agentId } : {}),
     command: commandRun.command,
     adapterId: commandRun.adapterId,
@@ -644,8 +675,17 @@ function summarizeCommandRun(commandRun) {
     workspaceId: commandRun.workspace.workspaceId,
     ...(commandRun.workspace.sourceWorkspaceId ? { sourceWorkspaceId: commandRun.workspace.sourceWorkspaceId } : {}),
     artifactId: commandRun.artifactId,
+    ...(commandRun.patchArtifactId ? { patchArtifactId: commandRun.patchArtifactId } : {}),
+    ...(commandRun.runArtifactId ? { commandArtifactId: commandRun.runArtifactId } : {}),
     runArtifactId: commandRun.runArtifactId,
     routeDecisionArtifactId: commandRun.routeDecisionArtifactId,
+    ...(commandRun.selected !== undefined ? { selected: commandRun.selected } : {}),
+    ...(commandRun.rejectedReason ? { rejectedReason: commandRun.rejectedReason } : {}),
+    ...(commandRun.findings ? { findings: commandRun.findings } : {}),
+    ...(commandRun.missingEvidence ? { missingEvidence: commandRun.missingEvidence } : {}),
+    ...(commandRun.noFindingRationale ? { noFindingRationale: commandRun.noFindingRationale } : {}),
+    ...(commandRun.findingsArtifactId ? { findingsArtifactId: commandRun.findingsArtifactId } : {}),
+    ...(commandRun.missingEvidenceArtifactId ? { missingEvidenceArtifactId: commandRun.missingEvidenceArtifactId } : {}),
     ...(commandRun.adapterArtifactRefs ? { adapterArtifactRefs: commandRun.adapterArtifactRefs } : {}),
     verificationStatus: commandRun.verification.status,
     ...(commandRun.verification.reason ? { verificationReason: commandRun.verification.reason } : {})
@@ -656,11 +696,25 @@ function summarizeVerificationMap(commandRun) {
   return {
     stage: commandRun.stage ?? commandRun.command,
     ...(commandRun.laneId ? { laneId: commandRun.laneId } : {}),
+    ...(commandRun.candidateId ? { candidateId: commandRun.candidateId } : {}),
+    ...(commandRun.agentId ? { agentId: commandRun.agentId } : {}),
     command: commandRun.command,
+    ...(commandRun.adapterId ? { adapterId: commandRun.adapterId } : {}),
     ...(commandRun.writeSet ? { writeSet: commandRun.writeSet } : {}),
+    ...(commandRun.patchArtifactId ? { patchArtifactId: commandRun.patchArtifactId } : {}),
+    ...(commandRun.runArtifactId ? { commandArtifactId: commandRun.runArtifactId } : {}),
+    ...(commandRun.findings ? { findings: commandRun.findings } : {}),
+    ...(commandRun.missingEvidence ? { missingEvidence: commandRun.missingEvidence } : {}),
+    ...(commandRun.noFindingRationale ? { noFindingRationale: commandRun.noFindingRationale } : {}),
+    ...(commandRun.findingsArtifactId ? { findingsArtifactId: commandRun.findingsArtifactId } : {}),
+    ...(commandRun.missingEvidenceArtifactId ? { missingEvidenceArtifactId: commandRun.missingEvidenceArtifactId } : {}),
     artifactId: commandRun.artifactId,
+    ...(commandRun.runArtifactId ? { runArtifactId: commandRun.runArtifactId } : {}),
+    ...(commandRun.routeDecisionArtifactId ? { routeDecisionArtifactId: commandRun.routeDecisionArtifactId } : {}),
     verificationStatus: commandRun.verification.status,
-    ...(commandRun.verification.reason ? { verificationReason: commandRun.verification.reason } : {})
+    ...(commandRun.verification.reason ? { verificationReason: commandRun.verification.reason } : {}),
+    ...(commandRun.selected !== undefined ? { selected: commandRun.selected } : {}),
+    ...(commandRun.rejectedReason ? { rejectedReason: commandRun.rejectedReason } : {})
   };
 }
 
@@ -789,7 +843,9 @@ class CliDryRunCodexAdapter extends CodexAdapter {
       })),
       knownRisks: ['synthetic-dry-run-no-real-model'],
       agentSummary: 'MCAS CLI synthetic dry-run evidence.',
-      ...(handle.command === 'review' ? { noFindingRationale: 'Synthetic dry-run review found no issues.' } : {}),
+      ...(handle.command === 'review' || handle.command === 'qa'
+        ? { noFindingRationale: `Synthetic dry-run ${handle.command} found no issues.` }
+        : {}),
       version: '1'
     };
   }
