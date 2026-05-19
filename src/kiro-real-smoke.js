@@ -1,4 +1,9 @@
 import { KiroCliAdapter } from './adapters/kiro-cli-adapter.js';
+import {
+  readRealCliReleaseConfig,
+  resolveRealCliModelProfile,
+  resolveRealCliProvider
+} from './real-cli-config.js';
 import { attachResourceProfile, buildResourceProfile } from './resource-profile.js';
 import { verifyEvidence } from './verifier.js';
 
@@ -9,7 +14,9 @@ export async function runKiroRealSmoke({
   env = process.env,
   workspace = process.cwd(),
   timeoutMs = parsePositiveInteger(env.MCAS_KIRO_TIMEOUT_MS, 180000),
-  modelProfile = env.MCAS_KIRO_MODEL || 'claude-kiro-default'
+  modelProfile,
+  realCliConfig,
+  realCliConfigFile
 } = {}) {
   if (env[REAL_KIRO_SMOKE_FLAG] !== '1') {
     return {
@@ -18,6 +25,20 @@ export async function runKiroRealSmoke({
     };
   }
 
+  const releaseConfig = realCliConfig ?? readRealCliReleaseConfig({
+    configFile: realCliConfigFile,
+    env
+  }).config;
+  const resolvedModelProfile = modelProfile ?? resolveRealCliModelProfile({
+    adapterId: 'kiro-cli',
+    env,
+    config: releaseConfig
+  }).profile;
+  const provider = resolveRealCliProvider({
+    adapterId: 'kiro-cli',
+    env,
+    config: releaseConfig
+  });
   const taskId = `kiro-real-smoke-${Date.now()}`;
   const commandSpec = buildSmokeCommandSpec();
   const resourceProfile = buildResourceProfile({ env, timeoutMs, network: 'enabled' });
@@ -25,7 +46,7 @@ export async function runKiroRealSmoke({
     commandSpec,
     contextPack: buildSmokeContextPack(taskId),
     workspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
     executionMode: 'real',
     timeoutMs
   });
@@ -41,8 +62,10 @@ export async function runKiroRealSmoke({
   return {
     skipped: false,
     taskId,
+    runId: handle.runId,
     workspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
+    provider,
     adapterId: handle.adapterId,
     handleStatus: handle.status,
     exitCode: handle.exitCode,

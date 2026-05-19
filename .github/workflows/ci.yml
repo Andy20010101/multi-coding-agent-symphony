@@ -32,8 +32,15 @@ jobs:
       - run: git diff --check
       - run: pnpm mcas doctor
 
+      - name: Optional real CLI preflight
+        if: ${{ vars.MCAS_RUN_REAL_CODEX == '1' || inputs.run_real_codex == 'true' }}
+        env:
+          MCAS_RUN_REAL_CODEX: "1"
+        run: pnpm mcas doctor --real-cli --adapter codex --require-gates --proof-dir tmp/real-cli-proofs
+
       - name: Optional real Codex Harness smoke
         if: ${{ vars.MCAS_RUN_REAL_CODEX == '1' || inputs.run_real_codex == 'true' }}
         env:
           MCAS_RUN_REAL_CODEX: "1"
+          MCAS_REAL_CLI_PROOF_DIR: tmp/real-cli-proofs
         run: pnpm smoke:harness:codex:real

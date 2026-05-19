@@ -1,6 +1,6 @@
 # Operational Execution Order
 
-This document is the handoff plan for taking the current `v2-beta` plus local `qa-swarm` and `competitive-patch` working state from local completion into controlled use.
+This document is the handoff plan for taking the current `v3` release plus local real CLI risk-closure changes from local completion into controlled use.
 
 ## Current Usability Position
 
@@ -15,9 +15,9 @@ Ready surfaces:
 
 Remaining production gaps:
 
-- Local commits need CI confirmation before any release tag.
-- Real CLI behavior still depends on local CLI installs, explicit env gates, and model output quality.
-- Eval replay comparisons across ensemble modes are implemented locally and still need release-candidate/CI proof before a tag.
+- Local commits need CI confirmation before the next release tag.
+- Real CLI behavior still depends on local CLI installs, explicit env gates, provider/auth alignment, and model output quality.
+- Claude real smoke proof must record requested and observed model profiles so local provider/model mapping remains auditable.
 
 ## Execution Order
 
@@ -32,8 +32,8 @@ git log --oneline --decorate -8
 
 Expected result:
 
-- Worktree is clean, or contains only the intentional closeout changes being verified.
-- `main` is based on `53fbb49` (`v2-beta`) before local closeout changes.
+- Worktree is clean, or contains only the intentional risk-closure changes being verified.
+- `main` is based on `89d07f2` (`v3`) before local risk-closure changes.
 - No push is performed unless explicitly requested.
 
 Stop if the worktree is dirty with changes that are not part of the current handoff.
@@ -106,20 +106,24 @@ Run only when the matching local CLI is installed and the operator intentionally
 Codex first:
 
 ```sh
-MCAS_RUN_REAL_CODEX=1 pnpm smoke:harness:codex:real
+MCAS_RUN_REAL_CODEX=1 pnpm mcas doctor --real-cli --adapter codex --require-gates --proof-dir tmp/real-cli-proofs
+MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:harness:codex:real
 ```
 
 Optional adapter-specific smokes:
 
 ```sh
-MCAS_RUN_REAL_CODEX=1 pnpm smoke:codex:real
-MCAS_RUN_REAL_CLAUDE=1 pnpm smoke:claude:real
-MCAS_RUN_REAL_KIRO=1 pnpm smoke:kiro:real
+MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:codex:real
+MCAS_RUN_REAL_CLAUDE=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:claude:real
+MCAS_RUN_REAL_KIRO=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:kiro:real
 ```
 
 Expected result:
 
+- `doctor --real-cli` records CLI version, gate status, model source, provider, and proof path without invoking a model.
 - Verifier status is `passed`.
+- Real smoke proof artifacts contain run id, model profile, provider, evidence path, verifier status, and resource profile when recorded.
+- Claude real smoke proof artifacts additionally contain requested/observed model profile diagnostics so local Claude settings that remap the requested model are explicit.
 - Failure output, if any, includes a diagnostic layer: `schema`, `prompt`, `workspace`, or `expected-check`.
 - No raw secrets appear in artifacts.
 
@@ -129,14 +133,14 @@ Stop after the first real-lane failure and record the failing layer before chang
 
 Only after Phases 1-3.5 pass, and Phase 4 is either passed or explicitly marked `not run`.
 
-Recommended release label should be chosen after local gates and CI confirmation. Do not reuse `v2-alpha`; `v2-beta` already tags commit `53fbb49`, and the next tag should describe the competitive-patch closeout or the next approved release scope.
+Recommended release label should be chosen after local gates and CI confirmation. Do not reuse `v3`; `v3` already tags commit `89d07f2`, and the next tag should describe the real CLI proof/risk-closure scope or the next approved release scope.
 
 Required evidence:
 
 - Commit SHA.
 - Local gate results.
 - Harness dry-run results.
-- Real CLI results or `not run`.
+- Real CLI doctor and smoke proof paths, or `not run`.
 - Known limitations.
 
 ### Phase 6: Next Feature Lane
@@ -145,8 +149,8 @@ Start this only after the current usable state is pushed or intentionally archiv
 
 Recommended next feature order:
 
-1. Package a release candidate with local gate output, Harness dry-run proof, eval replay comparison artifact, and CI confirmation.
-2. Run gated real CLI smoke only when the operator explicitly exports the matching `MCAS_RUN_REAL_*` variable.
+1. Commit and push the real CLI risk-closure changes when release approval exists.
+2. Confirm CI proof for that pushed risk-closure commit.
 
 Do not implement automatic routing changes from eval recommendations before release approval exists.
 
@@ -156,7 +160,7 @@ Use this prompt when handing the repo to a new Codex conversation:
 
 ```text
 Read docs/operational-execution-order.md and execute it from Phase 0.
-Confirm the docs reflect `v2-beta` plus implemented workflow comparisons, then verify Phases 1-3.5 before release-candidate packaging.
+Confirm the docs reflect `v3` plus real CLI proof diagnostics, then verify Phases 1-3.5 before any new release packaging.
 Do not run optional real CLI gates unless I explicitly provide the env gate.
 Do not push or tag unless I explicitly request it.
 Report phase status, changed files, commands run, and any blocked requirement.

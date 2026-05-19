@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "models": {
+    "claude-code": "deepseek-v4-pro"
+  },
+  "providers": {
+    "claude-code": "firstParty"
+  }
+}

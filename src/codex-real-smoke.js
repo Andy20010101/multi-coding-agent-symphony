@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { CODEX_CONFIG_DEFAULT_MODEL_PROFILE, CodexAdapter } from './adapters/codex-adapter.js';
+import {
+  readRealCliReleaseConfig,
+  resolveRealCliModelProfile,
+  resolveRealCliProvider
+} from './real-cli-config.js';
 import { attachResourceProfile, buildResourceProfile } from './resource-profile.js';
 import { verifyEvidence } from './verifier.js';
 
@@ -18,7 +23,9 @@ export async function runCodexRealSmoke({
   env = process.env,
   workspace = process.cwd(),
   timeoutMs = parsePositiveInteger(env.MCAS_CODEX_TIMEOUT_MS, 180000),
-  modelProfile = env.MCAS_CODEX_MODEL || CODEX_CONFIG_DEFAULT_MODEL_PROFILE
+  modelProfile,
+  realCliConfig,
+  realCliConfigFile
 } = {}) {
   if (env[REAL_CODEX_SMOKE_FLAG] !== '1') {
     return {
@@ -27,6 +34,21 @@ export async function runCodexRealSmoke({
     };
   }
 
+  const releaseConfig = realCliConfig ?? readRealCliReleaseConfig({
+    configFile: realCliConfigFile,
+    env
+  }).config;
+  const resolvedModelProfile = modelProfile ?? resolveRealCliModelProfile({
+    adapterId: 'codex',
+    env,
+    config: releaseConfig,
+    adapterDefault: CODEX_CONFIG_DEFAULT_MODEL_PROFILE
+  }).profile;
+  const provider = resolveRealCliProvider({
+    adapterId: 'codex',
+    env,
+    config: releaseConfig
+  });
   const taskId = `codex-real-smoke-${Date.now()}`;
   const commandSpec = buildSmokeCommandSpec();
   const resourceProfile = buildResourceProfile({ env, timeoutMs, network: 'enabled' });
@@ -34,7 +56,7 @@ export async function runCodexRealSmoke({
     commandSpec,
     contextPack: buildSmokeContextPack(taskId),
     workspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
     executionMode: 'real',
     timeoutMs
   });
@@ -50,8 +72,10 @@ export async function runCodexRealSmoke({
   return {
     skipped: false,
     taskId,
+    runId: handle.runId,
     workspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
+    provider,
     adapterId: handle.adapterId,
     handleStatus: handle.status,
     exitCode: handle.exitCode,
@@ -67,7 +91,9 @@ export async function runCodexWriterSmoke({
   env = process.env,
   workspace,
   timeoutMs = parsePositiveInteger(env.MCAS_CODEX_WRITER_TIMEOUT_MS, 180000),
-  modelProfile = env.MCAS_CODEX_WRITER_MODEL || env.MCAS_CODEX_MODEL || CODEX_CONFIG_DEFAULT_MODEL_PROFILE
+  modelProfile,
+  realCliConfig,
+  realCliConfigFile
 } = {}) {
   if (env[REAL_CODEX_WRITER_SMOKE_FLAG] !== '1') {
     return {
@@ -76,6 +102,23 @@ export async function runCodexWriterSmoke({
     };
   }
 
+  const releaseConfig = realCliConfig ?? readRealCliReleaseConfig({
+    configFile: realCliConfigFile,
+    env
+  }).config;
+  const resolvedModelProfile = modelProfile
+    ?? env.MCAS_CODEX_WRITER_MODEL
+    ?? resolveRealCliModelProfile({
+      adapterId: 'codex',
+      env,
+      config: releaseConfig,
+      adapterDefault: CODEX_CONFIG_DEFAULT_MODEL_PROFILE
+    }).profile;
+  const provider = resolveRealCliProvider({
+    adapterId: 'codex',
+    env,
+    config: releaseConfig
+  });
   const smokeWorkspace = workspace ?? await createWriterSmokeWorkspace();
   const taskId = `codex-writer-smoke-${Date.now()}`;
   const commandSpec = buildWriterSmokeCommandSpec();
@@ -84,7 +127,7 @@ export async function runCodexWriterSmoke({
     commandSpec,
     contextPack: buildWriterSmokeContextPack(taskId),
     workspace: smokeWorkspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
     executionMode: 'real',
     timeoutMs
   });
@@ -100,8 +143,10 @@ export async function runCodexWriterSmoke({
   return {
     skipped: false,
     taskId,
+    runId: handle.runId,
     workspace: smokeWorkspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
+    provider,
     adapterId: handle.adapterId,
     handleStatus: handle.status,
     exitCode: handle.exitCode,

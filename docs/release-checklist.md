@@ -80,21 +80,24 @@ Expected result: redaction, policy enforcement, and adapter permission mapping t
 Real model smokes are opt-in and must stay disabled unless the operator intentionally exports the gate variable:
 
 ```sh
-MCAS_RUN_REAL_CODEX=1 pnpm smoke:codex:real
-MCAS_RUN_REAL_CLAUDE=1 pnpm smoke:claude:real
-MCAS_RUN_REAL_KIRO=1 pnpm smoke:kiro:real
-MCAS_RUN_REAL_CODEX=1 pnpm smoke:harness:codex:real
+MCAS_RUN_REAL_CODEX=1 MCAS_RUN_REAL_CLAUDE=1 MCAS_RUN_REAL_KIRO=1 \
+  pnpm mcas doctor --real-cli --require-gates --proof-dir tmp/real-cli-proofs
+MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:codex:real
+MCAS_RUN_REAL_CLAUDE=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:claude:real
+MCAS_RUN_REAL_KIRO=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:kiro:real
+MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:harness:codex:real
 ```
 
-Expected result: each enabled smoke returns verifier status `passed` and writes no raw secrets to artifacts.
-Set `MCAS_CLAUDE_MODEL=<provider-model>` for Claude Code providers that do not map the default `deepseek-claude-code` profile.
+Expected result: `doctor --real-cli` returns status `ok`, each enabled smoke returns verifier status `passed`, and proof artifacts are written under `tmp/real-cli-proofs`.
+Model precedence is `MCAS_*_MODEL` env, then `config/real-cli-release.json`, then adapter default. The checked-in release config pins Claude Code to `deepseek-v4-pro` and pins the Claude auth-provider preflight value to `firstParty`; set `MCAS_CLAUDE_MODEL=<provider-model>` or `MCAS_CLAUDE_PROVIDER=<auth-provider>` to override them. Claude release preflight fails if it would fall back to the adapter default `deepseek-claude-code` or if `claude auth status` reports a provider different from the configured provider.
+For Claude real smoke, the proof artifact must show `requestedModelProfile`, `observedModelProfile`, and `modelProfileStatus`; `mismatched` means local Claude settings or provider aliases changed the model actually launched.
 The Harness smoke must execute the standard `implement -> review -> qa` chain and write `diagnosticLayer` on failure so the failing layer is one of `schema`, `prompt`, `workspace`, or `expected-check`.
 
 ## Optional CI Gate
 
 The default GitHub Actions workflow runs repository-local checks only: `pnpm check`, `pnpm test`, `pnpm test:mutation:gate`, `git diff --check`, and `pnpm mcas doctor`. It does not require local coding CLIs and does not call real model CLIs.
 
-To enable the Codex Harness smoke in CI, set the repository variable `MCAS_RUN_REAL_CODEX` to `1` or run the workflow manually with `run_real_codex=true`. The real step uses `pnpm smoke:harness:codex:real`.
+To enable the Codex Harness smoke in CI, set the repository variable `MCAS_RUN_REAL_CODEX` to `1` or run the workflow manually with `run_real_codex=true`. CI first runs `pnpm mcas doctor --real-cli --adapter codex --require-gates --proof-dir tmp/real-cli-proofs`, then `pnpm smoke:harness:codex:real`.
 
 ## Release Evidence
 
@@ -103,6 +106,7 @@ Record:
 - Git commit SHA.
 - Commands run and exit codes.
 - Eval replay comparison report reference.
-- Real smoke environment variables used, or `not run`.
+- Real CLI doctor proof path and real smoke proof paths, or `not run`.
+- Real smoke environment variables used.
 - Known risks and skipped gates.
 - Links to changed docs, tests, and artifacts.

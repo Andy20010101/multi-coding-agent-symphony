@@ -7,6 +7,7 @@ Real CLI execution is opt-in. Normal tests use injected fake runners and do not 
 `pnpm mcas` exposes the current user-facing entrypoint. It supports:
 
 - `doctor`
+- `doctor --real-cli [--adapter all|codex|claude|kiro] [--require-gates] [--proof-dir dir]`
 - `github issue --repo OWNER/REPO --number N`
 - `queue manual ...`
 - `run-next ...`
@@ -18,6 +19,27 @@ Real CLI execution is opt-in. Normal tests use injected fake runners and do not 
 Workflow commands accept `--config <file>`, where `runtime.stateFile`, `runtime.artifactDirectory`, `runtime.eventDirectory`, `runtime.workspaceDirectory`, and `runtime.sessionId` provide defaults. Explicit CLI flags override config values.
 
 `run-next`, `run-task`, and `harness run-taskpacket` default to dry-run execution. Passing `--real --adapter <codex|claude|claude-code|kiro|kiro-cli>` selects a real CLI lane and requires the matching gate: `MCAS_RUN_REAL_CODEX=1`, `MCAS_RUN_REAL_CLAUDE=1`, or `MCAS_RUN_REAL_KIRO=1`. Real lanes materialize workspace directories before adapter start. `--sequence <standard|implement-only>` selects the command sequence. `--timeout-ms <milliseconds>` overrides the real adapter timeout.
+
+## Real CLI Preflight And Proofs
+
+Run the preflight before real model gates:
+
+```sh
+MCAS_RUN_REAL_CODEX=1 MCAS_RUN_REAL_CLAUDE=1 MCAS_RUN_REAL_KIRO=1 \
+  pnpm mcas doctor --real-cli --require-gates --proof-dir tmp/real-cli-proofs
+```
+
+The preflight runs only CLI `--version`, help, and supported auth-status commands. It does not invoke a model. The report records executable availability, CLI version output, gate status, model profile source, provider source, auth provider when the CLI exposes it, and the proof artifact path. Model execution is verified by the gated real smoke commands.
+
+Real model profile precedence is:
+
+```text
+MCAS_*_MODEL env -> config/real-cli-release.json models[adapterId] -> adapter default
+```
+
+`config/real-cli-release.json` pins the release Claude Code profile to `deepseek-v4-pro` and the Claude auth-provider preflight value to `firstParty` for this repo. `MCAS_CLAUDE_MODEL=<provider-model>` and `MCAS_CLAUDE_PROVIDER=<auth-provider>` still take priority. If Claude Code would fall back to the adapter default `deepseek-claude-code`, or if `claude auth status` reports a provider different from the configured provider, `doctor --real-cli` fails fast.
+
+Set `MCAS_REAL_CLI_PROOF_DIR=<dir>` when running real smokes. Codex, Claude, Kiro, writer smoke, and Harness Codex real smoke write JSON proof artifacts containing run id, model profile, provider, verifier status, evidence path, resource profile when recorded, and structured evidence. Claude Code proof artifacts also retain `requestedModelProfile`, `observedModelProfile`, `modelProfileStatus`, and `modelProfileMismatch` when the CLI stream reports the model it actually started.
 
 ## Codex
 
@@ -56,7 +78,7 @@ Guarded real model smoke check:
 MCAS_RUN_REAL_CODEX=1 pnpm smoke:codex:real
 ```
 
-This invokes the configured Codex model in read-only mode, captures the final message through `--output-last-message`, parses `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CODEX_MODEL=<model>` to override the Codex CLI config model; when unset, the smoke uses the CLI config default and does not pass `--model`.
+This invokes the configured Codex model in read-only mode, captures the final message through `--output-last-message`, parses `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CODEX_MODEL=<model>` to override the Codex CLI config model; when unset, the smoke uses `config/real-cli-release.json` if present, then the CLI config default.
 
 Guarded real writer smoke check:
 
@@ -99,6 +121,7 @@ Implemented:
 - The prompt is sent on stdin.
 - The adapter passes the shared `EvidencePackage` schema through `--json-schema` and appends a system prompt requiring final JSON evidence on stdout.
 - Stream JSON stdout is parsed for structured `EvidencePackage` content.
+- The `system/init` stream event is parsed for the observed model profile. If it differs from the requested profile, evidence `knownRisks` includes `real-cli-model-profile-mismatch`, and the smoke/proof artifact records the requested and observed profiles.
 - If no valid structured evidence is found, raw Claude Code output is marked with `real-cli-output-unverified` and contains no passing checks.
 
 Local binary smoke check:
@@ -115,7 +138,7 @@ Guarded real model smoke check:
 MCAS_RUN_REAL_CLAUDE=1 pnpm smoke:claude:real
 ```
 
-This invokes the configured Claude Code model in read-only mode, parses stream JSON for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_CLAUDE_MODEL=<model>` when the local provider does not map the default `deepseek-claude-code` profile.
+This invokes the configured Claude Code model in read-only mode, parses stream JSON for `EvidencePackage`, and requires verifier status `passed`. The checked-in release config uses `deepseek-v4-pro`; set `MCAS_CLAUDE_MODEL=<model>` to override it for a different model. Claude Code user settings can still map provider aliases such as `sonnet` to a configured `ANTHROPIC_MODEL`; the proof artifact records both requested and observed model profiles so operators can diagnose that mapping without relying on log prose.
 
 ## Remaining CLI Work
 
@@ -143,7 +166,7 @@ Guarded real model smoke check:
 MCAS_RUN_REAL_KIRO=1 pnpm smoke:kiro:real
 ```
 
-This invokes the configured Kiro CLI model in read-only mode with trusted read tools only, parses stdout for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_KIRO_MODEL=<model>` to override the default `claude-kiro-default` profile.
+This invokes the configured Kiro CLI model in read-only mode with trusted read tools only, parses stdout for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_KIRO_MODEL=<model>` to override `config/real-cli-release.json` or the default `claude-kiro-default` profile.
 
 ## Remaining CLI Work
 

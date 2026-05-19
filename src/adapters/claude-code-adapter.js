@@ -12,6 +12,7 @@ import {
 
 const EVIDENCE_SCHEMA_PATH = fileURLToPath(new URL('../../schemas/evidence-package.schema.json', import.meta.url));
 const CLAUDE_EVIDENCE_OUTPUT_SCHEMA = JSON.parse(readFileSync(EVIDENCE_SCHEMA_PATH, 'utf8'));
+const MODEL_PROFILE_MISMATCH_RISK = 'real-cli-model-profile-mismatch';
 const STRUCTURED_EVIDENCE_PROMPT = [
   'Return only one JSON object matching the provided EvidencePackage JSON schema.',
   'Populate command, taskId, and workspaceId from the user prompt.',
@@ -26,14 +27,15 @@ export class ClaudeCodeAdapter extends BaseAdapter {
     cliVersion = 'unknown',
     executable = 'claude',
     processRunner = new NodeProcessRunner(),
-    timeoutMs = 300000
+    timeoutMs = 300000,
+    modelProfiles = ['deepseek-claude-code']
   } = {}) {
     super({
       adapterId: 'claude-code',
       cliName: 'claude',
       cliVersion,
       executable,
-      modelProfiles: ['deepseek-claude-code'],
+      modelProfiles,
       workspaceIsolation: 'external-workspace',
       logStrategy: 'stream-json-stdout'
     });
@@ -101,6 +103,11 @@ export class ClaudeCodeAdapter extends BaseAdapter {
     });
     const status = result.exitCode === 0 ? 'completed' : 'failed';
     const runId = this.nextRunId(input.contextPack.task.id);
+    const parsedEvents = parseJsonl(result.stdout);
+    const modelProfileDiagnostics = buildModelProfileDiagnostics({
+      requestedModelProfile: input.modelProfile,
+      parsedEvents
+    });
     const handle = {
       runId,
       adapterId: this.adapterId,
@@ -117,7 +124,8 @@ export class ClaudeCodeAdapter extends BaseAdapter {
       durationMs: result.durationMs,
       timedOut: result.timedOut,
       stalled: result.stalled,
-      parsedEvents: parseJsonl(result.stdout),
+      parsedEvents,
+      ...modelProfileDiagnostics,
       failure: status === 'failed'
         ? this.normalizeFailure(result.stalled ? { code: 'ESTALL' } : result.timedOut ? { code: 'ETIMEDOUT' } : { code: 'EEXIT' })
         : null
@@ -186,7 +194,7 @@ export class ClaudeCodeAdapter extends BaseAdapter {
     });
 
     if (structuredEvidence) {
-      return structuredEvidence;
+      return withModelProfileKnownRisks(structuredEvidence, stored);
     }
 
     return {
@@ -195,7 +203,7 @@ export class ClaudeCodeAdapter extends BaseAdapter {
       workspaceId: stored.workspaceId,
       changedFiles: [],
       checks: [],
-      knownRisks: ['real-cli-output-unverified'],
+      knownRisks: withUniqueRisks(['real-cli-output-unverified'], modelProfileKnownRisks(stored)),
       agentSummary: `Claude Code real CLI completed with exit code ${stored.exitCode}.`,
       stdout: stored.stdout,
       stderr: stored.stderr,
@@ -273,4 +281,106 @@ function parseJsonl(output) {
         };
       }
     });
+}
+
+function buildModelProfileDiagnostics({ requestedModelProfile, parsedEvents }) {
+  const observedModelProfile = observedModelProfileFromEvents(parsedEvents);
+  const normalizedRequested = nonEmptyStringOrNull(requestedModelProfile);
+
+  if (!normalizedRequested || !observedModelProfile) {
+    return {
+      requestedModelProfile: normalizedRequested,
+      observedModelProfile,
+      modelProfileStatus: 'unknown',
+      modelProfileMismatch: null
+    };
+  }
+
+  if (normalizedRequested === observedModelProfile) {
+    return {
+      requestedModelProfile: normalizedRequested,
+      observedModelProfile,
+      modelProfileStatus: 'matched',
+      modelProfileMismatch: null
+    };
+  }
+
+  return {
+    requestedModelProfile: normalizedRequested,
+    observedModelProfile,
+    modelProfileStatus: 'mismatched',
+    modelProfileMismatch: {
+      requestedModelProfile: normalizedRequested,
+      observedModelProfile
+    }
+  };
+}
+
+function observedModelProfileFromEvents(events) {
+  if (!Array.isArray(events)) {
+    return null;
+  }
+
+  const initEvent = events.find((event) => {
+    return isPlainObject(event) &&
+      event.type === 'system' &&
+      event.subtype === 'init' &&
+      nonEmptyStringOrNull(event.model);
+  });
+
+  if (initEvent) {
+    return nonEmptyStringOrNull(initEvent.model);
+  }
+
+  const directModelEvent = events.find((event) => {
+    return isPlainObject(event) && nonEmptyStringOrNull(event.model);
+  });
+
+  return directModelEvent ? nonEmptyStringOrNull(directModelEvent.model) : null;
+}
+
+function withModelProfileKnownRisks(evidence, stored) {
+  const modelRisks = modelProfileKnownRisks(stored);
+
+  if (modelRisks.length === 0) {
+    return evidence;
+  }
+
+  return {
+    ...evidence,
+    knownRisks: withUniqueRisks(evidence.knownRisks, modelRisks)
+  };
+}
+
+function modelProfileKnownRisks(stored) {
+  return stored.modelProfileStatus === 'mismatched' ? [MODEL_PROFILE_MISMATCH_RISK] : [];
+}
+
+function withUniqueRisks(existingRisks, additionalRisks) {
+  const seen = new Set();
+  const risks = [];
+
+  for (const risk of [
+    ...(Array.isArray(existingRisks) ? existingRisks : []),
+    ...(Array.isArray(additionalRisks) ? additionalRisks : [])
+  ]) {
+    const normalized = nonEmptyStringOrNull(risk);
+
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    risks.push(normalized);
+  }
+
+  return risks;
+}
+
+function nonEmptyStringOrNull(value) {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

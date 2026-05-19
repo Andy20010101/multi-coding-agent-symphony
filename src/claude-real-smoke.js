@@ -1,4 +1,9 @@
 import { ClaudeCodeAdapter } from './adapters/claude-code-adapter.js';
+import {
+  readRealCliReleaseConfig,
+  resolveRealCliModelProfile,
+  resolveRealCliProvider
+} from './real-cli-config.js';
 import { attachResourceProfile, buildResourceProfile } from './resource-profile.js';
 import { verifyEvidence } from './verifier.js';
 
@@ -9,7 +14,9 @@ export async function runClaudeRealSmoke({
   env = process.env,
   workspace = process.cwd(),
   timeoutMs = parsePositiveInteger(env.MCAS_CLAUDE_TIMEOUT_MS, 180000),
-  modelProfile = env.MCAS_CLAUDE_MODEL || 'deepseek-claude-code'
+  modelProfile,
+  realCliConfig,
+  realCliConfigFile
 } = {}) {
   if (env[REAL_CLAUDE_SMOKE_FLAG] !== '1') {
     return {
@@ -18,6 +25,20 @@ export async function runClaudeRealSmoke({
     };
   }
 
+  const releaseConfig = realCliConfig ?? readRealCliReleaseConfig({
+    configFile: realCliConfigFile,
+    env
+  }).config;
+  const resolvedModelProfile = modelProfile ?? resolveRealCliModelProfile({
+    adapterId: 'claude-code',
+    env,
+    config: releaseConfig
+  }).profile;
+  const provider = resolveRealCliProvider({
+    adapterId: 'claude-code',
+    env,
+    config: releaseConfig
+  });
   const taskId = `claude-real-smoke-${Date.now()}`;
   const commandSpec = buildSmokeCommandSpec();
   const resourceProfile = buildResourceProfile({ env, timeoutMs, network: 'enabled' });
@@ -25,7 +46,7 @@ export async function runClaudeRealSmoke({
     commandSpec,
     contextPack: buildSmokeContextPack(taskId),
     workspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
     executionMode: 'real',
     timeoutMs
   });
@@ -41,11 +62,17 @@ export async function runClaudeRealSmoke({
   return {
     skipped: false,
     taskId,
+    runId: handle.runId,
     workspace,
-    modelProfile,
+    modelProfile: resolvedModelProfile,
+    provider,
     adapterId: handle.adapterId,
     handleStatus: handle.status,
     exitCode: handle.exitCode,
+    requestedModelProfile: handle.requestedModelProfile ?? resolvedModelProfile,
+    observedModelProfile: handle.observedModelProfile ?? null,
+    modelProfileStatus: handle.modelProfileStatus ?? 'unknown',
+    modelProfileMismatch: handle.modelProfileMismatch ?? null,
     resourceProfile,
     verification,
     evidence,

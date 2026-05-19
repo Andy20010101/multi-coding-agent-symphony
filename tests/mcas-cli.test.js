@@ -41,6 +41,207 @@ describe('Phase 8 user-facing CLI', () => {
     ]);
   });
 
+  it('preflights real CLI adapters and writes a doctor proof artifact', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-real-cli-doctor-'));
+
+    try {
+      const configFile = join(root, 'real-cli-release.json');
+      const proofDirectory = join(root, 'proofs');
+
+      await writeFile(configFile, JSON.stringify({
+        version: '1',
+        models: {
+          'claude-code': 'deepseek-v4-pro'
+        },
+        providers: {
+          'claude-code': 'deepseek'
+        }
+      }));
+
+      const runner = new QueueRunner([
+        { exitCode: 0, stdout: 'codex 1.2.3\n', stderr: '' },
+        { exitCode: 0, stdout: 'codex help\n', stderr: '' },
+        { exitCode: 0, stdout: 'claude 2.1.123\n', stderr: '' },
+        { exitCode: 0, stdout: 'claude help\n', stderr: '' },
+        { exitCode: 0, stdout: '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"deepseek"}', stderr: '' },
+        { exitCode: 0, stdout: 'kiro-cli 0.9.0\n', stderr: '' },
+        { exitCode: 0, stdout: 'kiro help\n', stderr: '' }
+      ]);
+      const output = createOutput();
+
+      const exitCode = await runMcasCli({
+        argv: [
+          'doctor',
+          '--real-cli',
+          '--real-cli-config',
+          configFile,
+          '--proof-dir',
+          proofDirectory
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner,
+        env: {
+          MCAS_RUN_REAL_CODEX: '1',
+          MCAS_RUN_REAL_CLAUDE: '1',
+          MCAS_RUN_REAL_KIRO: '1'
+        }
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.deepEqual(runner.calls.map((call) => [call.executable, call.args]), [
+        ['codex', ['--version']],
+        ['codex', ['exec', '--help']],
+        ['claude', ['--version']],
+        ['claude', ['--help']],
+        ['claude', ['auth', 'status']],
+        ['kiro-cli', ['--version']],
+        ['kiro-cli', ['--help']]
+      ]);
+
+      const doctor = JSON.parse(output.stdoutText());
+
+      assert.equal(doctor.status, 'ok');
+      assert.equal(doctor.realCli.status, 'ok');
+      assert.equal(doctor.realCli.modelInvocation, false);
+      assert.equal(doctor.realCli.releaseConfig.path, configFile);
+      assert.equal(doctor.realCli.proofArtifactPath, join(proofDirectory, 'real-cli-doctor-proof.json'));
+
+      const claude = doctor.realCli.adapters.find((adapter) => adapter.adapterId === 'claude-code');
+
+      assert.equal(claude.cli.status, 'available');
+      assert.equal(claude.cli.version, 'claude 2.1.123');
+      assert.equal(claude.gate.status, 'enabled');
+      assert.equal(claude.model.profile, 'deepseek-v4-pro');
+      assert.equal(claude.model.source, 'release-config');
+      assert.equal(claude.provider.name, 'deepseek');
+      assert.equal(claude.auth.status, 'checked');
+      assert.equal(claude.auth.apiProvider, 'deepseek');
+
+      const proof = JSON.parse(await readFile(doctor.realCli.proofArtifactPath, 'utf8'));
+
+      assert.equal(proof.version, '1');
+      assert.equal(proof.kind, 'real-cli-doctor');
+      assert.equal(proof.realCli.status, 'ok');
+      assert.deepEqual(
+        proof.realCli.adapters.map((adapter) => adapter.adapterId),
+        ['codex', 'claude-code', 'kiro-cli']
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails fast when Claude release preflight would use the adapter default model', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-real-cli-doctor-default-'));
+
+    try {
+      const configFile = join(root, 'real-cli-release.json');
+
+      await writeFile(configFile, JSON.stringify({
+        version: '1',
+        models: {},
+        providers: {}
+      }));
+
+      const runner = new QueueRunner([
+        { exitCode: 0, stdout: 'claude 2.1.123\n', stderr: '' },
+        { exitCode: 0, stdout: 'claude help\n', stderr: '' },
+        { exitCode: 0, stdout: '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}', stderr: '' }
+      ]);
+      const output = createOutput();
+
+      const exitCode = await runMcasCli({
+        argv: [
+          'doctor',
+          '--real-cli',
+          '--adapter',
+          'claude',
+          '--real-cli-config',
+          configFile
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner,
+        env: {
+          MCAS_RUN_REAL_CLAUDE: '1'
+        }
+      });
+
+      assert.equal(exitCode, 1);
+      assert.equal(output.stderrText(), '');
+
+      const doctor = JSON.parse(output.stdoutText());
+      const [claude] = doctor.realCli.adapters;
+
+      assert.equal(doctor.status, 'failed');
+      assert.equal(doctor.realCli.status, 'failed');
+      assert.equal(claude.model.profile, 'deepseek-claude-code');
+      assert.equal(claude.model.source, 'adapter-default');
+      assert.equal(claude.model.status, 'failed');
+      assert.match(claude.model.recommendation, /MCAS_CLAUDE_MODEL/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails fast when Claude auth provider does not match the release config provider', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-real-cli-doctor-auth-'));
+
+    try {
+      const configFile = join(root, 'real-cli-release.json');
+
+      await writeFile(configFile, JSON.stringify({
+        version: '1',
+        models: {
+          'claude-code': 'deepseek-v4-pro'
+        },
+        providers: {
+          'claude-code': 'deepseek'
+        }
+      }));
+
+      const runner = new QueueRunner([
+        { exitCode: 0, stdout: 'claude 2.1.123\n', stderr: '' },
+        { exitCode: 0, stdout: 'claude help\n', stderr: '' },
+        { exitCode: 0, stdout: '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}', stderr: '' }
+      ]);
+      const output = createOutput();
+
+      const exitCode = await runMcasCli({
+        argv: [
+          'doctor',
+          '--real-cli',
+          '--adapter',
+          'claude',
+          '--real-cli-config',
+          configFile
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner,
+        env: {
+          MCAS_RUN_REAL_CLAUDE: '1'
+        }
+      });
+
+      assert.equal(exitCode, 1);
+      assert.equal(output.stderrText(), '');
+
+      const doctor = JSON.parse(output.stdoutText());
+      const [claude] = doctor.realCli.adapters;
+
+      assert.equal(doctor.realCli.status, 'failed');
+      assert.equal(claude.model.status, 'configured');
+      assert.equal(claude.auth.status, 'failed');
+      assert.equal(claude.auth.apiProvider, 'firstParty');
+      assert.match(claude.auth.recommendation, /provider is deepseek/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('reads a GitHub issue through the CLI without invoking a model', async () => {
     const runner = new FakeRunner({
       exitCode: 0,

@@ -23,10 +23,21 @@ Cause: real model calls are gated by environment variables.
 Enable only the intended gate:
 
 ```sh
-MCAS_RUN_REAL_CODEX=1 pnpm smoke:codex:real
-MCAS_RUN_REAL_CLAUDE=1 pnpm smoke:claude:real
-MCAS_RUN_REAL_KIRO=1 pnpm smoke:kiro:real
+MCAS_RUN_REAL_CODEX=1 pnpm mcas doctor --real-cli --adapter codex --require-gates --proof-dir tmp/real-cli-proofs
+MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:codex:real
+MCAS_RUN_REAL_CLAUDE=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:claude:real
+MCAS_RUN_REAL_KIRO=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:kiro:real
 ```
+
+For Claude provider/model mismatches, set `MCAS_CLAUDE_MODEL=<provider-model>` or update `config/real-cli-release.json`. If `claude auth status` reports a different provider than the release config, align `MCAS_CLAUDE_PROVIDER`, the release config provider, or the Claude CLI auth provider before running real smoke. `doctor --real-cli` fails fast when Claude would fall back to the adapter default profile or the auth provider is inconsistent.
+
+## Claude Real Smoke Model Mismatch
+
+Symptom: Claude smoke proof shows `modelProfileStatus: "mismatched"` or evidence `knownRisks` contains `real-cli-model-profile-mismatch`.
+
+Cause: the requested `--model` was accepted by the wrapper, but Claude Code reported a different model in its stream `system/init` event. Check `requestedModelProfile`, `observedModelProfile`, `modelProfileMismatch`, and the local Claude settings that define `ANTHROPIC_MODEL`, provider base URL, or provider aliases.
+
+Fix the release config, `MCAS_CLAUDE_MODEL`, `MCAS_CLAUDE_PROVIDER`, or the local Claude provider settings so `doctor --real-cli --adapter claude --require-gates` passes and the next proof artifact reports `modelProfileStatus: "matched"`.
 
 ## Structured Output Schema Failure
 

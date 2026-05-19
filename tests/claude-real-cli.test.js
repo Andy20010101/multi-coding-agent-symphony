@@ -163,6 +163,67 @@ describe('Claude Code real CLI integration', () => {
       checks: [{ name: 'pnpm test', status: 'passed', command: 'pnpm test', exitCode: 0, output: 'tests passed' }]
     });
   });
+
+  it('records the observed Claude model profile from stream init events', async () => {
+    const runner = new StaticProcessRunner({
+      stdout: [
+        JSON.stringify({
+          type: 'system',
+          subtype: 'init',
+          model: 'deepseek-v4-pro'
+        }),
+        JSON.stringify({
+          type: 'assistant',
+          message: {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                command: 'implement',
+                taskId: 'task-claude',
+                workspaceId: '/work/repo',
+                diffSummary: [],
+                changedFiles: [],
+                noOpRationale: 'No file changes were needed.',
+                checks: [{
+                  name: 'pnpm test',
+                  status: 'passed',
+                  command: 'pnpm test',
+                  exitCode: 0,
+                  output: 'tests passed'
+                }],
+                knownRisks: [],
+                agentSummary: 'Structured evidence returned.',
+                version: '1'
+              })
+            }]
+          }
+        })
+      ].join('\n')
+    });
+    const adapter = new ClaudeCodeAdapter({
+      cliVersion: '2.1.123',
+      processRunner: runner
+    });
+
+    const handle = await adapter.start({
+      commandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'sonnet',
+      executionMode: 'real'
+    });
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.equal(handle.requestedModelProfile, 'sonnet');
+    assert.equal(handle.observedModelProfile, 'deepseek-v4-pro');
+    assert.equal(handle.modelProfileStatus, 'mismatched');
+    assert.deepEqual(handle.modelProfileMismatch, {
+      requestedModelProfile: 'sonnet',
+      observedModelProfile: 'deepseek-v4-pro'
+    });
+    assert.equal(evidence.knownRisks.includes('real-cli-model-profile-mismatch'), true);
+    assert.equal(verifyEvidence({ commandSpec, evidence }).status, 'passed');
+  });
 });
 
 class StaticProcessRunner {

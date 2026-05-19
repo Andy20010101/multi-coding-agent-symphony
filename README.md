@@ -25,7 +25,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [Release Checklist](docs/release-checklist.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Harness Symphony Integration](docs/harness-symphony-integration.md)
-- [Post v2-beta Next Steps](docs/post-v2-alpha-next-steps.md)
+- [Post v3 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
 - [V1 to V2 Evolution Plan](docs/plans/v1-to-v2-evolution-plan-2026-05-14.md)
 - [ADR 0001: Use BDD and TDD](docs/adr/0001-use-bdd-tdd.md)
@@ -86,6 +86,7 @@ Run the project CLI:
 
 ```sh
 pnpm mcas doctor
+pnpm mcas doctor --real-cli --proof-dir tmp/real-cli-proofs
 pnpm mcas github issue --repo OWNER/REPO --number 123
 pnpm mcas queue manual --state-file .mcas/queue.json --id task-1 --repo OWNER/REPO --objective "Do the work" --acceptance "Verifier evidence is written"
 pnpm mcas run-next --state-file .mcas/queue.json --runtime-dir .mcas
@@ -97,12 +98,13 @@ pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason 
 pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --workflow-comparison-fixture workflow-comparison --reason workflow-mode-comparison --compared-at 2026-05-16T00:00:00.000Z
 ```
 
+`doctor --real-cli` preflights installed real CLI binaries, gate variables, configured model profiles, provider/auth alignment, and optional proof artifact writing without invoking a model.
 `github issue` is read-only intake. It calls `gh issue view`, converts the response into a validated `TaskSpec`, and does not invoke a model.
 `queue manual` writes a validated manual `TaskSpec` into a persistent `TaskQueue` state file without invoking adapters.
 `run-next` leases the next queued task and runs the existing standard dry-run workflow, returning verifier status and artifact ids.
 `run-task` runs a TaskSpec JSON file through the same dry-run workflow without reading or writing queue state.
 `harness run-taskpacket` converts a Harness JSON TaskPacket into Symphony artifacts and Harness verification records. Supported `workflow.mode` values are `linear`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, and `competitive-patch`; add `--real --adapter <codex|claude|claude-code|kiro|kiro-cli>` plus the matching `MCAS_RUN_REAL_*` gate to select a real CLI lane.
-`smoke <codex|claude|kiro>` dispatches the existing package smoke scripts and propagates their exit codes; add `--real` only when the underlying real smoke gate is intended.
+`smoke <codex|claude|kiro>` dispatches the existing package smoke scripts and propagates their exit codes; add `--real` only when the underlying real smoke gate is intended. Set `MCAS_REAL_CLI_PROOF_DIR=<dir>` during real smokes to persist release proof artifacts; Claude proof artifacts include requested and observed model profiles when the CLI reports an init model.
 `eval replay` dispatches the existing eval replay package script and passes through all remaining arguments. Add `--workflow-comparison-file <json>` or `--workflow-comparison-fixture workflow-comparison` to write a verifier-first comparison report artifact without invoking real CLIs.
 
 Workflow commands also accept `--config mcas.config.json`. The config file can provide `runtime.stateFile`, `runtime.artifactDirectory`, `runtime.eventDirectory`, `runtime.workspaceDirectory`, and `runtime.sessionId`; explicit command flags take precedence.

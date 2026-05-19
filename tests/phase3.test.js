@@ -130,6 +130,16 @@ describe('Phase 3 runtime adapter dry-run foundations', () => {
     assert.match(prepared.prompt, /Command: review/);
   });
 
+  it('lets the CLI layer inject the release Claude model profile into capability probes', async () => {
+    const adapter = new ClaudeCodeAdapter({
+      cliVersion: '2.1.123',
+      modelProfiles: ['deepseek-v4-pro']
+    });
+    const probe = await adapter.probe();
+
+    assert.deepEqual(probe.modelProfiles, ['deepseek-v4-pro']);
+  });
+
   it('renders Kiro CLI headless arguments with trusted tool categories', async () => {
     const adapter = new KiroCliAdapter({ cliVersion: '2.2.2' });
 

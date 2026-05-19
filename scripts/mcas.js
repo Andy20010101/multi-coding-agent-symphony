@@ -17,6 +17,14 @@ import { TaskQueue } from '../src/task-queue.js';
 import { fetchGitHubIssueTaskSpec } from '../src/trackers/github-intake.js';
 import { WorkspaceManager } from '../src/workspace-manager.js';
 import {
+  normalizeRealCliDoctorAdapter,
+  runRealCliDoctor
+} from '../src/real-cli-doctor.js';
+import {
+  readRealCliReleaseConfig,
+  resolveRealCliModelProfile
+} from '../src/real-cli-config.js';
+import {
   TaskPacketValidationError,
   buildExpectedChecks,
   buildHarnessPolicy,
@@ -54,6 +62,7 @@ export async function runMcasCli({
   stdout = process.stdout,
   stderr = process.stderr,
   runner,
+  env = process.env,
   adapterFactory = createCliAdapter
 } = {}) {
   try {
@@ -64,6 +73,19 @@ export async function runMcasCli({
     const [command, subcommand, ...rest] = argv;
 
     if (command === 'doctor') {
+      const doctorArgs = [subcommand, ...rest].filter((value) => value !== undefined);
+
+      if (doctorArgs.includes('--real-cli')) {
+        const result = await runRealCliDoctorCommand({
+          args: doctorArgs,
+          runner: runner ?? new NodeProcessRunner(),
+          env
+        });
+
+        writeJson(stdout, result.output);
+        return result.exitCode;
+      }
+
       writeJson(stdout, buildDoctorSummary());
       return EXIT_CODES.ok;
     }
@@ -160,6 +182,29 @@ function buildDoctorSummary() {
     nodeVersion: process.versions.node,
     packageManager: 'pnpm',
     commands: COMMANDS
+  };
+}
+
+async function runRealCliDoctorCommand({ args, runner, env }) {
+  const adapterIds = normalizeRealCliDoctorAdapter(readOptionalOption(args, '--adapter'));
+  const output = await runRealCliDoctor({
+    runner,
+    env,
+    configFile: readOptionalOption(args, '--real-cli-config'),
+    adapterIds,
+    requireGates: args.includes('--require-gates'),
+    proofDirectory: readOptionalOption(args, '--proof-dir'),
+    timeoutMs: readOptionalPositiveInteger(args, '--timeout-ms') ?? 15000
+  });
+  const exitCode = output.status === 'ok' ? EXIT_CODES.ok : EXIT_CODES.failure;
+
+  return {
+    exitCode,
+    output: {
+      ...buildDoctorSummary(),
+      ...output,
+      exitCode
+    }
   };
 }
 
@@ -482,7 +527,16 @@ function createCliAdapter({ executionMode = 'dry-run', adapterId = 'codex', time
   }
 
   if (adapterId === 'claude-code') {
-    return new ClaudeCodeAdapter(options);
+    const releaseConfig = readRealCliReleaseConfig().config;
+    const modelProfile = resolveRealCliModelProfile({
+      adapterId: 'claude-code',
+      config: releaseConfig
+    }).profile;
+
+    return new ClaudeCodeAdapter({
+      ...options,
+      modelProfiles: [modelProfile]
+    });
   }
 
   if (adapterId === 'kiro-cli') {

@@ -109,13 +109,15 @@ Required fields:
   "adapter": "codex|claude-code|kiro-cli",
   "command": "implement",
   "commandVersion": "1",
-  "modelProfile": "gpt-codex-default|deepseek-claude-code|claude-kiro-default",
+  "modelProfile": "gpt-codex-default|deepseek-v4-pro|claude-kiro-default",
   "configTemplate": "path-or-inline-template",
   "promptTemplate": "path-or-inline-template",
   "outputParser": "parser-id",
   "failureMapper": "mapper-id"
 }
 ```
+
+Real CLI proof artifacts preserve the requested model profile separately from any observed model profile reported by a CLI stream. For Claude Code this allows operators to detect local provider settings that remap `modelProfile` at runtime.
 
 ## ModelProfile
 

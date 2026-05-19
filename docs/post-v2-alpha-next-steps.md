@@ -1,13 +1,13 @@
-# Post v2-beta Next Steps
+# Post v3 Next Steps
 
-Date: 2026-05-16
-Status: active handoff plan after `v2-beta` plus local workflow closeout and eval replay comparison work
+Date: 2026-05-19
+Status: active handoff plan after `v3` plus real CLI risk-closure work
 
-Note: this document keeps its historical filename so existing handoff prompts still resolve, but the content reflects the post-`v2-beta` state.
+Note: this document keeps its historical filename so existing handoff prompts still resolve, but the content reflects the post-`v3` state.
 
 ## Current Released State
 
-`v2-beta` is tagged at commit `53fbb49` on `main`.
+`v3` is tagged at commit `89d07f2` on `main`.
 
 Implemented workflow modes:
 
@@ -29,27 +29,27 @@ Implemented supporting surfaces:
 Current local state at handoff start:
 
 - Branch: `main`.
-- HEAD: `53fbb49` (`v2-beta`, `origin/main`).
-- Local working tree contains the intentional workflow closeout and eval replay comparison changes.
+- HEAD: `89d07f2` (`v3`, `origin/main`).
+- Local working tree contains the intentional real CLI risk-closure changes.
 
 ## Remaining Work Order
 
-### 1. Package Release Candidate Evidence
+### 1. Close Real CLI Release Risk
 
-Goal: package the post-`v2-beta` closeout with local gates, Harness dry-run proof, eval replay comparison artifacts, and CI confirmation before any tag.
+Goal: make real CLI proof artifacts sufficient to diagnose provider, auth, model-profile, verifier, and resource status without relying on prose logs.
 
 Scope:
 
 - Run required local gates and record command output.
-- Run five Harness dry-run proofs and the workflow comparison fixture proof.
-- Keep optional real CLI smoke disabled unless the operator provides `MCAS_RUN_REAL_*`.
+- Run real CLI preflight before any real smoke and write proof artifacts.
+- Preserve requested and observed model profile diagnostics for Claude real smoke.
 - Keep recommendations advisory until a release approval explicitly adopts them.
 
 Acceptance:
 
 - Release evidence names commit SHA, changed docs/tests/artifacts, and skipped gates.
 - CI passes the repository-local workflow.
-- Real CLI proof is either passed with explicit gates or recorded as `not run`.
+- Real CLI proof is either passed with explicit gates and proof paths, or recorded as a structured failing proof with verifier/model/provider diagnostics.
 
 ## Required Local Gates
 
@@ -98,9 +98,9 @@ Read:
 - docs/harness-symphony-integration.md
 
 Current state:
-- `v2-beta` is tagged at commit 53fbb49 on main.
+- `v3` is tagged at commit 89d07f2 on main.
 - `proposal-only`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, `competitive-patch`, and eval replay workflow comparisons are implemented.
-- Next intended task is release candidate packaging plus CI proof.
+- Next intended task is commit/push approval for the risk-closure changes, then CI proof for that pushed commit.
 
 Constraints:
 - Keep Harness authoritative for DAG and write-set locks.
