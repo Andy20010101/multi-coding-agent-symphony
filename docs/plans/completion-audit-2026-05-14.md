@@ -23,7 +23,7 @@ Audit commit: `e03999d`.
 
 | Requirement | Evidence |
 | --- | --- |
-| Private repo | `gh repo view Andy20010101/multi-coding-agent-symphony --json nameWithOwner,isPrivate,url` returned `"isPrivate": true`. |
+| Initial repo visibility | The 2026-05-14 audit baseline recorded private visibility; v6 distribution later changed the repository to public. |
 | pnpm instead of npm | `package.json` has `"packageManager": "pnpm@10.30.3"` and scripts are documented as `pnpm ...` in `README.md`. |
 | BDD plus TDD | `features/` contains phase scenarios from foundation through security; tests live in `tests/*.test.js`; `docs/adr/0001-use-bdd-tdd.md`, `CONTRIBUTING.md`, and `docs/bdd-tdd-workflow.md` define the workflow. |
 | Modular model/adapter/harness/eval design | `docs/architecture.md`, `docs/module-plan.md`, `docs/core-contracts.md`, `docs/adapter-contract.md`, `docs/eval-replay-plugin.md`, `src/router-scheduler.js`, and `plugins/eval-replay/index.js`. |
@@ -47,7 +47,7 @@ Commands run during final audit:
 
 - `git status --short`: no output before audit file creation.
 - `git rev-parse --short HEAD`: `e03999d`.
-- `gh repo view Andy20010101/multi-coding-agent-symphony --json nameWithOwner,isPrivate,url`: private repo confirmed.
+- `gh repo view Andy20010101/multi-coding-agent-symphony --json nameWithOwner,isPrivate,url`: audit baseline visibility recorded before the v6 public release.
 - `pnpm mcas doctor`: status `ok`; commands include doctor, GitHub issue, queue manual, run-next, run-task, smoke, eval replay.
 - `pnpm smoke:codex:help`: exit `0`.
 - `pnpm smoke:claude:help`: exit `0`.

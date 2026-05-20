@@ -150,7 +150,7 @@ main() {
   require_command git
 
   if ! command_exists gh; then
-    warn "gh was not found on PATH; private repository installs require git credentials, and GitHub-backed commands will need GitHub CLI later"
+    warn "gh was not found on PATH; public installs continue with git, but private repository overrides and GitHub-backed commands may require GitHub CLI later"
   fi
 
   prepare_install_dir

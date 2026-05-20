@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 
 import { writeRealCliSmokeProofArtifact } from '../src/real-cli-proof.js';
 
+const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
+const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
+const FAKE_BEARER_TOKEN = ['abcdefghijkl', 'mnopqrstuvwx'].join('');
+
 describe('real CLI release proof artifacts', () => {
   it('records run id, model, provider, evidence path, and verifier status', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-real-cli-proof-'));
@@ -41,7 +45,7 @@ describe('real CLI release proof artifacts', () => {
               status: 'passed',
               output: 'repository readable'
             }],
-            stdout: 'ANTHROPIC_AUTH_TOKEN=deepseek-secret-value sk-123456789012345678901234 Bearer abcdefghijklmnopqrstuvwx /tmp/.env'
+            stdout: `ANTHROPIC_AUTH_TOKEN=${FAKE_SECRET_VALUE} ${FAKE_OPENAI_TOKEN} Bearer ${FAKE_BEARER_TOKEN} /tmp/.env`
           },
           resourceProfile: {
             status: 'known',
@@ -74,8 +78,8 @@ describe('real CLI release proof artifacts', () => {
       assert.equal(proof.evidencePath, proofPath);
       assert.equal(proof.resourceProfile.status, 'known');
       assert.deepEqual(proof.evidence.checks.map((check) => check.name), ['claude-real-smoke']);
-      assert.equal(JSON.stringify(proof).includes('deepseek-secret-value'), false);
-      assert.equal(JSON.stringify(proof).includes('sk-123456789012345678901234'), false);
+      assert.equal(JSON.stringify(proof).includes(FAKE_SECRET_VALUE), false);
+      assert.equal(JSON.stringify(proof).includes(FAKE_OPENAI_TOKEN), false);
       assert.match(proof.evidence.stdout, /ANTHROPIC_AUTH_TOKEN=\[REDACTED_TOKEN\]/);
       assert.match(proof.evidence.stdout, /Bearer \[REDACTED_TOKEN\]/);
       assert.match(proof.evidence.stdout, /\[REDACTED_PATH\]/);

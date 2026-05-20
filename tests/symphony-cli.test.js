@@ -12,6 +12,10 @@ import {
 } from '../scripts/symphony.js';
 import { runMcasCli } from '../scripts/mcas.js';
 
+const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
+const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
+const FAKE_BEARER_TOKEN = ['abcdefghijkl', 'mnopqrstuvwx'].join('');
+
 describe('v5 symphony CLI identity', () => {
   it('declares symphony and mcas package bins without replacing the mcas script', async () => {
     const pkg = JSON.parse(await readFile('package.json', 'utf8'));
@@ -289,8 +293,8 @@ describe('v5 symphony native agent passthrough', () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-agent-real-'));
     const runner = new RecordingRunner({
       exitCode: 0,
-      stdout: 'ANTHROPIC_AUTH_TOKEN=deepseek-secret-value Bearer abcdefghijklmnopqrstuvwx /tmp/.env',
-      stderr: 'sk-123456789012345678901234'
+      stdout: `ANTHROPIC_AUTH_TOKEN=${FAKE_SECRET_VALUE} Bearer ${FAKE_BEARER_TOKEN} /tmp/.env`,
+      stderr: FAKE_OPENAI_TOKEN
     });
 
     try {

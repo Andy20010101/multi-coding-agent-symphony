@@ -2,7 +2,7 @@
 
 Date: 2026-05-20
 Base tag: `v5`
-Scope: authenticated curl installer for a private GitHub repository, global `symphony`/`mcas` shims, package-root dispatch from any caller repository.
+Scope: public raw curl installer, global `symphony`/`mcas` shims, package-root dispatch from any caller repository.
 
 ## Local Gates
 
@@ -31,7 +31,7 @@ Result: passed. Final mutation score `74.18`; break threshold `60`; killed `1762
 Isolated install proof:
 
 ```sh
-env MCAS_REPO_URL=/home/administrator/code/multi-coding-agent-symphony \
+env MCAS_REPO_URL=/path/to/multi-coding-agent-symphony \
   MCAS_INSTALL_REF=main \
   MCAS_INSTALL_DIR=/tmp/mcas-v6-install-proof-3/share/mcas \
   MCAS_BIN_DIR=/tmp/mcas-v6-install-proof-3/bin \
@@ -52,7 +52,7 @@ Result: both returned `status: ok` from `/tmp`.
 Package-root dispatch proof from another directory:
 
 ```sh
-node /home/administrator/code/multi-coding-agent-symphony/scripts/mcas.js smoke codex
+node /path/to/multi-coding-agent-symphony/scripts/mcas.js smoke codex
 ```
 
 Result: passed from `/tmp`; the internal `pnpm smoke:codex:help` ran from the package root instead of the caller directory.
@@ -60,12 +60,14 @@ Result: passed from `/tmp`; the internal `pnpm smoke:codex:help` ran from the pa
 ## Fixes Found During Release Closure
 
 - `install.sh` defaults `MCAS_INSTALL_REF` to `v6`, so the release installer is reproducible after the tag exists.
-- `install.sh` uses `gh repo clone` for the default private repository when available, then falls back to `git clone`.
+- `install.sh` supports `gh repo clone` when GitHub CLI credentials are available, then falls back to `git clone` for the public repository.
 - `mcas smoke` and `mcas eval replay` now run package scripts with `cwd` fixed to the installed package root.
 - Installer tests disable inherited Git commit signing in the fixture repository.
-- Anonymous `raw.githubusercontent.com/.../v6/install.sh` returned `404` because the repository is private; docs now use GitHub API raw content with `Authorization: Bearer $(gh auth token)`.
+- Public release docs use `raw.githubusercontent.com/.../v6/install.sh` so the install path works without GitHub authentication.
+- Static fake secret-shaped test literals were converted to runtime-built fixtures so current-tree secret scans stay clean before public exposure.
 
 ## Known Release Notes
 
-- The isolated install proof used `MCAS_INSTALL_REF=main` before the `v6` tag existed; run the authenticated pinned GitHub curl command after pushing `v6`.
+- The isolated install proof used `MCAS_INSTALL_REF=main` before the `v6` tag existed; run the pinned public raw curl command after pushing `v6`.
 - Mutation testing covers the existing core source set in `stryker.config.mjs`; installer behavior is covered by `tests/installer.test.js`, targeted CLI tests, and the isolated install proof.
+- Git history contains old fake test-token literals from pre-public commits; current-tree scans do not contain those static fixtures.

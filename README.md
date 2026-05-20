@@ -89,14 +89,11 @@ pnpm smoke:kiro:help
 Install the user CLI:
 
 ```sh
-curl -fsSL \
-  -H "Authorization: Bearer $(gh auth token)" \
-  -H "Accept: application/vnd.github.raw" \
-  "https://api.github.com/repos/Andy20010101/multi-coding-agent-symphony/contents/install.sh?ref=v6" | sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v6/install.sh | sh
 symphony doctor
 ```
 
-The installer clones or updates the `v6` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The authenticated curl command works for this private repository when `gh auth token` is available. Set `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_INSTALL_REF`, `MCAS_REPO_SLUG`, or `MCAS_REPO_URL` to override the defaults.
+The installer clones or updates the `v6` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. Set `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_INSTALL_REF`, `MCAS_REPO_SLUG`, or `MCAS_REPO_URL` to override the defaults.
 
 Development fallback from a checkout:
 

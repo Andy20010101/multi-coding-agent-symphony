@@ -110,7 +110,7 @@ node scripts/symphony.js agent claude /review --dry-run
 ## Prompt For A New Conversation
 
 ```text
-You are continuing work in /home/administrator/code/multi-coding-agent-symphony.
+You are continuing work in the multi-coding-agent-symphony checkout.
 
 Read:
 - docs/post-v2-alpha-next-steps.md
@@ -121,7 +121,7 @@ Read:
 Current state:
 - `v5` is tagged at commit 69907f0 on main.
 - `proposal-only`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, `competitive-patch`, and eval replay workflow comparisons are implemented.
-- v6 curl installer implementation is local: `install.sh` creates global `symphony` and `mcas` shims, pins the default install ref to `v6`, uses `gh repo clone` for the private repository, and lets package-script passthroughs run from the installed package root.
+- v6 curl installer implementation is released: `install.sh` creates global `symphony` and `mcas` shims, pins the default install ref to `v6`, supports the public raw install path, and lets package-script passthroughs run from the installed package root.
 
 Constraints:
 - Keep Harness authoritative for DAG and write-set locks.

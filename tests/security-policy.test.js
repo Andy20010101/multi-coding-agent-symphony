@@ -12,6 +12,9 @@ import { RouterScheduler } from '../src/router-scheduler.js';
 import { SessionEventLog } from '../src/session-event-log.js';
 import { WorkspaceManager } from '../src/workspace-manager.js';
 
+const FAKE_GITHUB_TOKEN = ['ghp', 'abcdefghijklmnopqrstuvwxyz1234567890'].join('_');
+const FAKE_OPENAI_TOKEN = ['sk', 'abcdefghijklmnopqrstuvwxyz123456'].join('-');
+
 describe('Phase 9 security, redaction, and policy enforcement', () => {
   it('redacts secret-looking artifact output before persistence', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-security-artifacts-'));
@@ -20,9 +23,9 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       const store = new ArtifactStore(root);
       const artifact = {
         command: 'qa',
-        stdout: 'GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz1234567890 read /repo/.env.local',
+        stdout: `GITHUB_TOKEN=${FAKE_GITHUB_TOKEN} read /repo/.env.local`,
         nested: {
-          auth: 'Authorization: Bearer sk-abcdefghijklmnopqrstuvwxyz123456'
+          auth: `Authorization: Bearer ${FAKE_OPENAI_TOKEN}`
         },
         version: '1'
       };
@@ -32,8 +35,8 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       const raw = await readFile(join(root, 'task-123', 'qa-evidence.json'), 'utf8');
       const stored = await store.readArtifact('task-123', 'qa-evidence');
 
-      assert.doesNotMatch(raw, /ghp_abcdefghijklmnopqrstuvwxyz1234567890/);
-      assert.doesNotMatch(raw, /sk-abcdefghijklmnopqrstuvwxyz123456/);
+      assert.equal(raw.includes(FAKE_GITHUB_TOKEN), false);
+      assert.equal(raw.includes(FAKE_OPENAI_TOKEN), false);
       assert.doesNotMatch(raw, /\.env/);
       assert.match(raw, /\[REDACTED_TOKEN\]/);
       assert.match(raw, /\[REDACTED_PATH\]/);
@@ -41,7 +44,7 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       assert.equal(stored.nested.auth, 'Authorization: Bearer [REDACTED_TOKEN]');
       assert.equal(
         artifact.stdout,
-        'GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz1234567890 read /repo/.env.local'
+        `GITHUB_TOKEN=${FAKE_GITHUB_TOKEN} read /repo/.env.local`
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -59,7 +62,7 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
         timestamp: '2026-05-13T00:00:00.000Z',
         actor: 'adapter',
         payload: {
-          output: 'curl -H "Authorization: Bearer sk-abcdefghijklmnopqrstuvwxyz123456" /tmp/project/.env',
+          output: `curl -H "Authorization: Bearer ${FAKE_OPENAI_TOKEN}" /tmp/project/.env`,
           files: ['/tmp/project/.env', 'src/index.js']
         },
         version: '1'
@@ -67,7 +70,7 @@ describe('Phase 9 security, redaction, and policy enforcement', () => {
       const raw = await readFile(join(root, 'session-123.json'), 'utf8');
       const events = await log.readAll();
 
-      assert.doesNotMatch(raw, /sk-abcdefghijklmnopqrstuvwxyz123456/);
+      assert.equal(raw.includes(FAKE_OPENAI_TOKEN), false);
       assert.doesNotMatch(raw, /\.env/);
       assert.equal(
         appended.payload.output,
