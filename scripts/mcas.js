@@ -39,6 +39,7 @@ const EXIT_CODES = {
   usage: 64,
   verifierFailure: 70
 };
+const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 const COMMANDS = [
   'doctor',
@@ -430,7 +431,8 @@ async function runSmokeCommand({ adapter, args, runner }) {
   const script = smokeScriptFor({ adapter, args });
   const result = await runner.run({
     executable: 'pnpm',
-    args: [script]
+    args: [script],
+    cwd: PACKAGE_ROOT
   });
   const exitCode = result.exitCode;
 
@@ -454,7 +456,8 @@ async function runEvalReplay({ args, runner }) {
   const passThroughArgs = args[0] === '--' ? args.slice(1) : args;
   const result = await runner.run({
     executable: 'pnpm',
-    args: ['eval:replay', '--', ...passThroughArgs]
+    args: ['eval:replay', '--', ...passThroughArgs],
+    cwd: PACKAGE_ROOT
   });
   const exitCode = result.exitCode;
   const replayOutput = parseOptionalJson(result.stdout);

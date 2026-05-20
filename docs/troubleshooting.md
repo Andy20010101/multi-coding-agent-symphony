@@ -21,13 +21,20 @@ Symptom: `symphony doctor` is not found after checkout.
 Check:
 
 ```sh
-pnpm install
-pnpm symphony doctor
-pnpm link --global
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v6/install.sh | sh
 symphony doctor
 ```
 
-Fix the package install or global link path. `pnpm symphony doctor` is the development fallback; direct `symphony doctor` requires the package bin shim from install/link.
+The installer writes shims to `~/.local/bin` by default. If `symphony` still is not found, add that directory to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`.
+
+Development fallback:
+
+```sh
+pnpm install
+pnpm symphony doctor
+```
+
+Fix the package install or global shim path. `pnpm symphony doctor` is the development fallback; direct `symphony doctor` requires the installer-created shim or another package bin shim.
 
 ## Native CLI Unavailable
 

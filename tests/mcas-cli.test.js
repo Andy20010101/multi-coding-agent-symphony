@@ -10,6 +10,8 @@ import { CodexAdapter } from '../src/adapters/codex-adapter.js';
 import { TaskQueue } from '../src/task-queue.js';
 import { runMcasCli } from '../scripts/mcas.js';
 
+const PACKAGE_ROOT = process.cwd();
+
 describe('Phase 8 user-facing CLI', () => {
   it('prints a doctor health summary', async () => {
     const output = createOutput();
@@ -602,15 +604,18 @@ describe('Phase 8 user-facing CLI', () => {
     assert.deepEqual(runner.calls, [
       {
         executable: 'pnpm',
-        args: ['smoke:codex:help']
+        args: ['smoke:codex:help'],
+        cwd: PACKAGE_ROOT
       },
       {
         executable: 'pnpm',
-        args: ['smoke:claude:help']
+        args: ['smoke:claude:help'],
+        cwd: PACKAGE_ROOT
       },
       {
         executable: 'pnpm',
-        args: ['smoke:kiro:help']
+        args: ['smoke:kiro:help'],
+        cwd: PACKAGE_ROOT
       }
     ]);
     assert.deepEqual(outputs.map((output) => output.script), [
@@ -692,7 +697,8 @@ describe('Phase 8 user-facing CLI', () => {
         'tmp/events',
         '--reason',
         'model-upgrade'
-      ]
+      ],
+      cwd: PACKAGE_ROOT
     }]);
     assert.deepEqual(JSON.parse(output.stdoutText()), {
       version: '1',
@@ -754,7 +760,8 @@ describe('Phase 8 user-facing CLI', () => {
         'tmp/eval-replay-comparison-artifacts',
         '--workflow-comparison-fixture',
         'workflow-comparison'
-      ]
+      ],
+      cwd: PACKAGE_ROOT
     }]);
     assert.deepEqual(JSON.parse(output.stdoutText()), {
       version: '1',
@@ -795,6 +802,41 @@ describe('Phase 8 user-facing CLI', () => {
     assert.equal(exitCode, 3);
     assert.equal(output.stderrText(), '');
     assert.equal(JSON.parse(output.stdoutText()).status, 'failed');
+  });
+
+  it('runs package script dispatch from the package root when invoked elsewhere', async () => {
+    const callerProject = await mkdtemp(join(tmpdir(), 'mcas-cli-caller-project-'));
+    const originalCwd = process.cwd();
+
+    try {
+      process.chdir(callerProject);
+
+      const runner = new QueueRunner([
+        { exitCode: 0, stdout: 'codex help ok', stderr: '' },
+        { exitCode: 0, stdout: '{"reportArtifactPath":"tmp/eval-reports/report.json"}', stderr: '' }
+      ]);
+      const smokeOutput = createOutput();
+      const smokeExitCode = await runMcasCli({
+        argv: ['smoke', 'codex'],
+        stdout: smokeOutput.stdout,
+        stderr: smokeOutput.stderr,
+        runner
+      });
+      const replayOutput = createOutput();
+      const replayExitCode = await runMcasCli({
+        argv: ['eval', 'replay', '--workflow-comparison-fixture', 'workflow-comparison'],
+        stdout: replayOutput.stdout,
+        stderr: replayOutput.stderr,
+        runner
+      });
+
+      assert.equal(smokeExitCode, 0);
+      assert.equal(replayExitCode, 0);
+      assert.deepEqual(runner.calls.map((call) => call.cwd), [PACKAGE_ROOT, PACKAGE_ROOT]);
+    } finally {
+      process.chdir(originalCwd);
+      await rm(callerProject, { recursive: true, force: true });
+    }
   });
 
   it('loads runtime defaults from config and lets flags override them', async () => {

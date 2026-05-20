@@ -1,13 +1,13 @@
-# Post v5 Next Steps
+# Post v6 Next Steps
 
-Date: 2026-05-19
-Status: v5 usability implementation verified locally
+Date: 2026-05-20
+Status: v6 curl installer implementation in progress
 
-Note: this document keeps its historical filename so existing handoff prompts still resolve, but the content reflects the local v5 usability work after `v4`.
+Note: this document keeps its historical filename so existing handoff prompts still resolve, but the content now tracks the v6 installer work after the published `v5` release.
 
 ## Current Released State
 
-`v4` is tagged at commit `3ca2d93` on `main`.
+`v5` is tagged at commit `69907f0` on `main`.
 
 Implemented workflow modes:
 
@@ -21,6 +21,7 @@ Implemented workflow modes:
 Implemented supporting surfaces:
 
 - User-facing `symphony` CLI identity with package bins for `symphony` and `mcas`.
+- Curl-installable `install.sh` path for global `symphony` and `mcas` shims.
 - `symphony doctor`, `symphony harness ...`, and `symphony replay ...` passthroughs to the existing kernel paths.
 - `symphony work` dry-run TaskPacket generation into `tmp/symphony-work/<run-id>/` through the existing Harness Bridge.
 - `symphony review` and `symphony qa` shortcuts into the qa-swarm Harness Bridge workflow.
@@ -31,29 +32,29 @@ Implemented supporting surfaces:
 - Continuation turns and stall detection in `orchestrator.runCommand`.
 - External eval replay dispatch for stored artifacts and workflow-mode comparison reports.
 
-Current local state after v5 verification:
+Current local state after v6 installer work:
 
 - Branch: `main`.
-- HEAD: `3ca2d93` (`v4`, `origin/main`).
-- Local working tree contains the verified v5 usability implementation and docs until it is committed.
+- HEAD starts from `69907f0` (`v5`, `origin/main`).
+- Local working tree contains the v6 curl installer implementation until it is committed.
 
 ## Remaining Work Order
 
-### 1. Complete v5 Usability Release Verification
+### 1. Complete v6 Curl Installer Verification
 
-Goal: verify the project now exposes a usable agent-work CLI while keeping `mcas` as the kernel/debug path.
+Goal: verify a user can install global `symphony` and `mcas` shims with a single shell command while keeping `mcas` as the kernel/debug path.
 
 Scope:
 
-- Keep [v5 Usability Release Plan](plans/v5-usability-release-plan.md) aligned with implementation.
-- Verify `symphony` package bin and `pnpm symphony` development fallback.
+- Keep [v6 Curl Installer Plan](plans/v6-curl-installer-plan.md) aligned with implementation.
+- Verify `install.sh` and `pnpm symphony` development fallback.
 - Verify `symphony work` creates a TaskPacket automatically and calls the Harness Bridge.
 - Verify `symphony agent claude /review --dry-run` captures structured proof without invoking Claude.
 - Keep direct `pnpm mcas ...` commands documented as advanced/debug paths.
 
 Acceptance:
 
-- `symphony doctor` works after link/install.
+- `symphony doctor` works after curl install.
 - `symphony work --dry-run "inspect README"` runs without a hand-written TaskPacket.
 - `symphony agent claude /review --dry-run` captures a proof artifact.
 - CI passes the repository-local workflow.
@@ -118,9 +119,9 @@ Read:
 - docs/harness-symphony-integration.md
 
 Current state:
-- `v4` is tagged at commit 3ca2d93 on main.
+- `v5` is tagged at commit 69907f0 on main.
 - `proposal-only`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, `competitive-patch`, and eval replay workflow comparisons are implemented.
-- v5 usability release implementation is local: `symphony` is the user CLI, `symphony work` generates TaskPackets, and `symphony agent claude /review --dry-run` writes passthrough proof.
+- v6 curl installer implementation is local: `install.sh` creates global `symphony` and `mcas` shims, pins the default install ref to `v6`, and lets package-script passthroughs run from the installed package root.
 
 Constraints:
 - Keep Harness authoritative for DAG and write-set locks.

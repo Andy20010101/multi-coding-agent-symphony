@@ -39,6 +39,7 @@ Implemented:
 - Durable artifacts, session events, queue state, workspace allocation, and workflow run records.
 - Real adapter paths for Codex, Claude Code, and Kiro CLI with opt-in model smokes.
 - User-facing `symphony` commands for doctor, dry-run work, native agent passthrough proof capture, Harness passthrough, and eval replay dispatch.
+- Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
 - V2 ensemble flows for proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch, with verifier-readable role, lane, QA, and candidate evidence.
@@ -85,12 +86,20 @@ pnpm smoke:claude:help
 pnpm smoke:kiro:help
 ```
 
-Install or link the user CLI:
+Install the user CLI:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v6/install.sh | sh
+symphony doctor
+```
+
+The installer clones or updates the `v6` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. Set `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_INSTALL_REF`, or `MCAS_REPO_URL` to override the defaults.
+
+Development fallback from a checkout:
 
 ```sh
 pnpm install
-pnpm link --global
-symphony doctor
+pnpm symphony doctor
 ```
 
 Run the user CLI:
