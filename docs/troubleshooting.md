@@ -21,11 +21,14 @@ Symptom: `symphony doctor` is not found after checkout.
 Check:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v6/install.sh | sh
+curl -fsSL \
+  -H "Authorization: Bearer $(gh auth token)" \
+  -H "Accept: application/vnd.github.raw" \
+  "https://api.github.com/repos/Andy20010101/multi-coding-agent-symphony/contents/install.sh?ref=v6" | sh
 symphony doctor
 ```
 
-The installer writes shims to `~/.local/bin` by default. If `symphony` still is not found, add that directory to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`.
+The installer writes shims to `~/.local/bin` by default. If the curl command returns `404`, confirm `gh auth token` can access the private repository. If `symphony` still is not found, add `~/.local/bin` to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`.
 
 Development fallback:
 

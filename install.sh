@@ -1,7 +1,8 @@
 #!/bin/sh
 set -eu
 
-REPO_URL="${MCAS_REPO_URL:-https://github.com/Andy20010101/multi-coding-agent-symphony.git}"
+REPO_SLUG="${MCAS_REPO_SLUG:-Andy20010101/multi-coding-agent-symphony}"
+REPO_URL="${MCAS_REPO_URL:-https://github.com/$REPO_SLUG.git}"
 INSTALL_REF="${MCAS_INSTALL_REF:-v6}"
 INSTALL_DIR="${MCAS_INSTALL_DIR:-$HOME/.local/share/mcas}"
 BIN_DIR="${MCAS_BIN_DIR:-$HOME/.local/bin}"
@@ -55,8 +56,7 @@ prepare_install_dir() {
   elif [ -e "$INSTALL_DIR" ]; then
     fail "$INSTALL_DIR exists but is not a git checkout"
   else
-    log "cloning $REPO_URL into $INSTALL_DIR"
-    git clone "$REPO_URL" "$INSTALL_DIR"
+    clone_repo
   fi
 
   if git -C "$INSTALL_DIR" show-ref --verify --quiet "refs/remotes/origin/$INSTALL_REF"; then
@@ -66,6 +66,21 @@ prepare_install_dir() {
   fi
 
   INSTALL_DIR=$(cd "$INSTALL_DIR" && pwd -P)
+}
+
+clone_repo() {
+  if [ -z "${MCAS_REPO_URL+x}" ] && command_exists gh; then
+    log "cloning $REPO_SLUG into $INSTALL_DIR with gh"
+
+    if gh repo clone "$REPO_SLUG" "$INSTALL_DIR"; then
+      return
+    fi
+
+    warn "gh repo clone failed; falling back to git clone $REPO_URL"
+  fi
+
+  log "cloning $REPO_URL into $INSTALL_DIR"
+  git clone "$REPO_URL" "$INSTALL_DIR"
 }
 
 install_dependencies() {
@@ -135,7 +150,7 @@ main() {
   require_command git
 
   if ! command_exists gh; then
-    warn "gh was not found on PATH; GitHub-backed commands will need GitHub CLI later"
+    warn "gh was not found on PATH; private repository installs require git credentials, and GitHub-backed commands will need GitHub CLI later"
   fi
 
   prepare_install_dir

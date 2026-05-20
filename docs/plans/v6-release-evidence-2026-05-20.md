@@ -2,7 +2,7 @@
 
 Date: 2026-05-20
 Base tag: `v5`
-Scope: curl installer, global `symphony`/`mcas` shims, package-root dispatch from any caller repository.
+Scope: authenticated curl installer for a private GitHub repository, global `symphony`/`mcas` shims, package-root dispatch from any caller repository.
 
 ## Local Gates
 
@@ -60,10 +60,12 @@ Result: passed from `/tmp`; the internal `pnpm smoke:codex:help` ran from the pa
 ## Fixes Found During Release Closure
 
 - `install.sh` defaults `MCAS_INSTALL_REF` to `v6`, so the release installer is reproducible after the tag exists.
+- `install.sh` uses `gh repo clone` for the default private repository when available, then falls back to `git clone`.
 - `mcas smoke` and `mcas eval replay` now run package scripts with `cwd` fixed to the installed package root.
 - Installer tests disable inherited Git commit signing in the fixture repository.
+- Anonymous `raw.githubusercontent.com/.../v6/install.sh` returned `404` because the repository is private; docs now use GitHub API raw content with `Authorization: Bearer $(gh auth token)`.
 
 ## Known Release Notes
 
-- The isolated install proof used `MCAS_INSTALL_REF=main` before the `v6` tag existed; run the pinned GitHub curl command after pushing `v6`.
+- The isolated install proof used `MCAS_INSTALL_REF=main` before the `v6` tag existed; run the authenticated pinned GitHub curl command after pushing `v6`.
 - Mutation testing covers the existing core source set in `stryker.config.mjs`; installer behavior is covered by `tests/installer.test.js`, targeted CLI tests, and the isolated install proof.

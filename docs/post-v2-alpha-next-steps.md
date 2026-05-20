@@ -21,7 +21,7 @@ Implemented workflow modes:
 Implemented supporting surfaces:
 
 - User-facing `symphony` CLI identity with package bins for `symphony` and `mcas`.
-- Curl-installable `install.sh` path for global `symphony` and `mcas` shims.
+- Authenticated curl-installable `install.sh` path for global `symphony` and `mcas` shims.
 - `symphony doctor`, `symphony harness ...`, and `symphony replay ...` passthroughs to the existing kernel paths.
 - `symphony work` dry-run TaskPacket generation into `tmp/symphony-work/<run-id>/` through the existing Harness Bridge.
 - `symphony review` and `symphony qa` shortcuts into the qa-swarm Harness Bridge workflow.
@@ -121,7 +121,7 @@ Read:
 Current state:
 - `v5` is tagged at commit 69907f0 on main.
 - `proposal-only`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, `competitive-patch`, and eval replay workflow comparisons are implemented.
-- v6 curl installer implementation is local: `install.sh` creates global `symphony` and `mcas` shims, pins the default install ref to `v6`, and lets package-script passthroughs run from the installed package root.
+- v6 curl installer implementation is local: `install.sh` creates global `symphony` and `mcas` shims, pins the default install ref to `v6`, uses `gh repo clone` for the private repository, and lets package-script passthroughs run from the installed package root.
 
 Constraints:
 - Keep Harness authoritative for DAG and write-set locks.

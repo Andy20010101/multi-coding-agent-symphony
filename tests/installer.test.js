@@ -14,8 +14,10 @@ describe('v6 curl installer', () => {
 
     assert.match(installer, /^#!\/bin\/sh/);
     assert.match(installer, /MCAS_INSTALL_REF:-v6/);
+    assert.match(installer, /MCAS_REPO_SLUG/);
     assert.match(installer, /MCAS_INSTALL_DIR/);
     assert.match(installer, /MCAS_BIN_DIR/);
+    assert.match(installer, /gh repo clone/);
     assert.match(installer, /symphony scripts\/symphony\.js/);
     assert.match(installer, /mcas scripts\/mcas\.js/);
     assert.doesNotMatch(installer, /pnpm link --global/);
