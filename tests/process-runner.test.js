@@ -1,19 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { setTimeout as sleep } from 'node:timers/promises';
 
 import { NodeProcessRunner } from '../src/process-runner.js';
 
 describe('NodeProcessRunner', () => {
   it('cancels active process handles and preserves partial output', async () => {
     const runner = new NodeProcessRunner();
+    const ready = waitForOutput(/ready/);
     const handle = runner.start({
-      executable: process.execPath,
-      args: ['-e', "console.log('ready'); setInterval(() => {}, 1000);"],
-      timeoutMs: 5000
+      executable: 'bash',
+      args: ['-lc', 'echo ready; while true; do sleep 1; done'],
+      timeoutMs: 5000,
+      onActivity: ready.onActivity
     });
 
-    await sleep(500);
+    await ready.promise;
 
     assert.deepEqual(handle.cancel(), {
       status: 'cancelled',
@@ -31,15 +32,12 @@ describe('NodeProcessRunner', () => {
   it('escalates timed out processes from SIGTERM to SIGKILL after a grace period', async () => {
     const runner = new NodeProcessRunner();
     const result = await runner.run({
-      executable: process.execPath,
-      args: ['-e', [
-        "process.on('SIGTERM', () => {",
-        "  console.log('sigterm ignored briefly');",
-        '  setTimeout(() => process.exit(0), 1000);',
-        '});',
-        "console.log('started');",
-        'setInterval(() => {}, 1000);'
-      ].join('\n')],
+      executable: 'bash',
+      args: ['-lc', [
+        "trap 'echo sigterm ignored briefly; sleep 1; exit 0' TERM",
+        'echo started',
+        'while true; do sleep 1; done'
+      ].join('; ')],
       timeoutMs: 500,
       timeoutKillDelayMs: 50
     });
@@ -50,3 +48,23 @@ describe('NodeProcessRunner', () => {
     assert.match(result.stdout, /started/);
   });
 });
+
+function waitForOutput(pattern) {
+  let settle;
+  const timeout = setTimeout(() => {
+    settle.reject(new Error(`Timed out waiting for child output matching ${pattern}`));
+  }, 3000);
+  const promise = new Promise((resolve, reject) => {
+    settle = { resolve, reject };
+  });
+
+  return {
+    promise,
+    onActivity(event) {
+      if (pattern.test(event.chunk)) {
+        clearTimeout(timeout);
+        settle.resolve();
+      }
+    }
+  };
+}

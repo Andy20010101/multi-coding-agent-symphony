@@ -95,6 +95,12 @@ function stripNullOptionalEvidenceFields(evidence) {
       }
 
       if (normalizedCheck.output === undefined &&
+        typeof normalizedCheck.detail === 'string' &&
+        normalizedCheck.detail.trim() !== '') {
+        normalizedCheck.output = normalizedCheck.detail;
+      }
+
+      if (normalizedCheck.output === undefined &&
         normalizedCheck.artifactId === undefined &&
         typeof normalizedCheck.command === 'string' &&
         Number.isInteger(normalizedCheck.exitCode)) {
@@ -172,7 +178,7 @@ function looksLikeCheck(value) {
 }
 
 function parseJsonText(text) {
-  const trimmed = text.trim();
+  const trimmed = stripAnsi(text).trim();
 
   if (trimmed === '') {
     return null;
@@ -209,4 +215,8 @@ function jsonTextCandidates(text) {
 
 function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stripAnsi(text) {
+  return text.replace(/\u001B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
 }

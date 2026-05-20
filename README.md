@@ -25,7 +25,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [Release Checklist](docs/release-checklist.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Harness Symphony Integration](docs/harness-symphony-integration.md)
-- [Post v3 Next Steps](docs/post-v2-alpha-next-steps.md)
+- [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
 - [V1 to V2 Evolution Plan](docs/plans/v1-to-v2-evolution-plan-2026-05-14.md)
 - [ADR 0001: Use BDD and TDD](docs/adr/0001-use-bdd-tdd.md)
@@ -38,14 +38,15 @@ Implemented:
 - Contract validation for task, command, adapter, model, evidence, policy, and routing objects.
 - Durable artifacts, session events, queue state, workspace allocation, and workflow run records.
 - Real adapter paths for Codex, Claude Code, and Kiro CLI with opt-in model smokes.
-- User-facing `pnpm mcas` commands for doctor, GitHub issue intake, manual queueing, task execution, smoke dispatch, and eval replay dispatch.
+- User-facing `symphony` commands for doctor, dry-run work, native agent passthrough proof capture, Harness passthrough, and eval replay dispatch.
+- Kernel/debug `pnpm mcas` commands for doctor, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
 - V2 ensemble flows for proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch, with verifier-readable role, lane, QA, and candidate evidence.
 - Continuation turns and stall detection in `orchestrator.runCommand`, including retryable verifier failures, activity tracking, and `stall-timeout` records.
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current baseline: `pnpm test` covers 431 tests across 74 suites.
+Current baseline: `pnpm test` passes 40 test files; direct Node suite expansion covers 454 tests across 78 suites.
 
 ## Design Center
 
@@ -77,12 +78,34 @@ pnpm test
 pnpm test:mutation:gate
 git diff --check
 pnpm mcas doctor
+node scripts/symphony.js doctor
+pnpm symphony doctor
 pnpm smoke:codex:help
 pnpm smoke:claude:help
 pnpm smoke:kiro:help
 ```
 
-Run the project CLI:
+Install or link the user CLI:
+
+```sh
+pnpm install
+pnpm link --global
+symphony doctor
+```
+
+Run the user CLI:
+
+```sh
+symphony doctor
+symphony work --dry-run "inspect README"
+symphony work --mode writer-reviewer --dry-run "update README"
+symphony review --dry-run "inspect README"
+symphony qa --dry-run "inspect README"
+symphony agent claude /review --dry-run
+symphony replay --artifacts tmp/artifacts --events tmp/events --reason model-upgrade
+```
+
+Advanced kernel/debug commands remain under `pnpm mcas`:
 
 ```sh
 pnpm mcas doctor
@@ -96,6 +119,24 @@ MCAS_RUN_REAL_CODEX=1 pnpm smoke:harness:codex:real
 pnpm mcas smoke codex
 pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason model-upgrade
 pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --workflow-comparison-fixture workflow-comparison --reason workflow-mode-comparison --compared-at 2026-05-16T00:00:00.000Z
+```
+
+`symphony work` is the default user workflow entry. It creates a minimal Harness TaskPacket under `tmp/symphony-work/<run-id>/`, runs the existing Harness Bridge, and prints status, run id, workflow mode, adapter, execution mode, verifier status, changed files, evidence path, Harness output path, and next action.
+`symphony review` and `symphony qa` are shortcuts for dry-run qa-swarm workflow execution through the same Harness Bridge path.
+`symphony agent claude /review --dry-run` captures native command metadata and a proof artifact without invoking Claude. Add `--real` only with `MCAS_RUN_REAL_CLAUDE=1`.
+`symphony harness ...` and `symphony replay ...` are compatibility passthroughs to the existing `mcas harness ...` and `mcas eval replay ...` paths.
+`mcas` remains the advanced kernel/debug CLI for queueing, TaskSpec files, direct Harness TaskPackets, smokes, and low-level diagnostics.
+
+Command hierarchy:
+
+```text
+symphony work     user workflow entry
+symphony agent    native CLI passthrough
+symphony review   shortcut for review workflow
+symphony qa       shortcut for QA workflow
+symphony replay   eval replay reports
+symphony doctor   environment and gate checks
+mcas              advanced kernel/debug commands
 ```
 
 `doctor --real-cli` preflights installed real CLI binaries, gate variables, configured model profiles, provider/auth alignment, and optional proof artifact writing without invoking a model.

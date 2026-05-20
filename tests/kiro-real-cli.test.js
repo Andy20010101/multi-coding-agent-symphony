@@ -156,6 +156,48 @@ describe('Kiro CLI real integration', () => {
     assert.equal(evidence.checks[0].output, 'package.json and README.md were both readable from the repository root');
     assert.equal(verifyEvidence({ commandSpec: smokeCommandSpec, evidence }).status, 'passed');
   });
+
+  it('normalizes ANSI-styled Kiro smoke JSON output', async () => {
+    const runner = new StaticProcessRunner({
+      stdout: [
+        '\u001b[m> \u001b[0mBoth files are readable. Here is the structured EvidencePackage:',
+        '\u001b[1mjson',
+        '\u001b[0m{',
+        '  \u001b[36m"schema"\u001b[0m: "kiro-smoke-evidence.v1",',
+        '  \u001b[36m"taskId"\u001b[0m: "task-kiro",',
+        '  \u001b[36m"checks"\u001b[0m: [',
+        '    {',
+        '      \u001b[36m"name"\u001b[0m: "kiro-real-smoke",',
+        '      \u001b[36m"status"\u001b[0m: "passed",',
+        '      \u001b[36m"detail"\u001b[0m: "package.json and README.md were readable"',
+        '    }',
+        '  ],',
+        '  \u001b[36m"doneCriteria"\u001b[0m: {',
+        '    "real-model-called": true,',
+        '    "structured-evidence-written": true',
+        '  }',
+        '}\u001b[0m',
+        'Summary: no files were edited.'
+      ].join('\n')
+    });
+    const adapter = new KiroCliAdapter({
+      cliVersion: '2.2.2',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec: smokeCommandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-kiro-default',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.equal(evidence.version, 'kiro-smoke-evidence.v1');
+    assert.equal(evidence.checks[0].output, 'package.json and README.md were readable');
+    assert.equal(verifyEvidence({ commandSpec: smokeCommandSpec, evidence }).status, 'passed');
+  });
 });
 
 class StaticProcessRunner {

@@ -1,13 +1,13 @@
-# Post v3 Next Steps
+# Post v5 Next Steps
 
 Date: 2026-05-19
-Status: active handoff plan after `v3` plus real CLI risk-closure work
+Status: v5 usability implementation verified locally
 
-Note: this document keeps its historical filename so existing handoff prompts still resolve, but the content reflects the post-`v3` state.
+Note: this document keeps its historical filename so existing handoff prompts still resolve, but the content reflects the local v5 usability work after `v4`.
 
 ## Current Released State
 
-`v3` is tagged at commit `89d07f2` on `main`.
+`v4` is tagged at commit `3ca2d93` on `main`.
 
 Implemented workflow modes:
 
@@ -20,36 +20,43 @@ Implemented workflow modes:
 
 Implemented supporting surfaces:
 
+- User-facing `symphony` CLI identity with package bins for `symphony` and `mcas`.
+- `symphony doctor`, `symphony harness ...`, and `symphony replay ...` passthroughs to the existing kernel paths.
+- `symphony work` dry-run TaskPacket generation into `tmp/symphony-work/<run-id>/` through the existing Harness Bridge.
+- `symphony review` and `symphony qa` shortcuts into the qa-swarm Harness Bridge workflow.
+- `symphony agent claude /review --dry-run` proof capture without invoking the native Claude CLI, plus gated real passthrough under `MCAS_RUN_REAL_CLAUDE=1`.
 - V1.5 Harness Bridge dry-run execution from JSON TaskPackets.
 - Harness writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch TaskPacket modes.
 - Gated real CLI lanes for Codex, Claude Code, and Kiro CLI.
 - Continuation turns and stall detection in `orchestrator.runCommand`.
 - External eval replay dispatch for stored artifacts and workflow-mode comparison reports.
 
-Current local state at handoff start:
+Current local state after v5 verification:
 
 - Branch: `main`.
-- HEAD: `89d07f2` (`v3`, `origin/main`).
-- Local working tree contains the intentional real CLI risk-closure changes.
+- HEAD: `3ca2d93` (`v4`, `origin/main`).
+- Local working tree contains the verified v5 usability implementation and docs until it is committed.
 
 ## Remaining Work Order
 
-### 1. Close Real CLI Release Risk
+### 1. Complete v5 Usability Release Verification
 
-Goal: make real CLI proof artifacts sufficient to diagnose provider, auth, model-profile, verifier, and resource status without relying on prose logs.
+Goal: verify the project now exposes a usable agent-work CLI while keeping `mcas` as the kernel/debug path.
 
 Scope:
 
-- Run required local gates and record command output.
-- Run real CLI preflight before any real smoke and write proof artifacts.
-- Preserve requested and observed model profile diagnostics for Claude real smoke.
-- Keep recommendations advisory until a release approval explicitly adopts them.
+- Keep [v5 Usability Release Plan](plans/v5-usability-release-plan.md) aligned with implementation.
+- Verify `symphony` package bin and `pnpm symphony` development fallback.
+- Verify `symphony work` creates a TaskPacket automatically and calls the Harness Bridge.
+- Verify `symphony agent claude /review --dry-run` captures structured proof without invoking Claude.
+- Keep direct `pnpm mcas ...` commands documented as advanced/debug paths.
 
 Acceptance:
 
-- Release evidence names commit SHA, changed docs/tests/artifacts, and skipped gates.
+- `symphony doctor` works after link/install.
+- `symphony work --dry-run "inspect README"` runs without a hand-written TaskPacket.
+- `symphony agent claude /review --dry-run` captures a proof artifact.
 - CI passes the repository-local workflow.
-- Real CLI proof is either passed with explicit gates and proof paths, or recorded as a structured failing proof with verifier/model/provider diagnostics.
 
 ## Required Local Gates
 
@@ -61,6 +68,8 @@ pnpm test
 pnpm test:mutation:gate
 git diff --check
 pnpm mcas doctor
+node scripts/symphony.js doctor
+pnpm symphony doctor
 ```
 
 For a scoped closeout, an operator-approved incremental Stryker gate may replace the full mutation gate temporarily. Record the exact mutation ranges, test files, mutation score, and break threshold. Full mutation remains the preferred release gate before tagging.
@@ -74,6 +83,17 @@ pnpm mcas harness run-taskpacket --run-id fixture-parallel-lanes --taskpacket fi
 pnpm mcas harness run-taskpacket --run-id fixture-qa-swarm --taskpacket fixtures/harness/qa-swarm-taskpacket.json --runtime-dir tmp/harness-qa-swarm --harness-dir tmp/harness-qa-swarm-output
 pnpm mcas harness run-taskpacket --run-id fixture-competitive-patch --taskpacket fixtures/harness/competitive-patch-taskpacket.json --runtime-dir tmp/harness-competitive-patch --harness-dir tmp/harness-competitive-patch-output
 pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --workflow-comparison-fixture workflow-comparison --reason workflow-mode-comparison --compared-at 2026-05-16T00:00:00.000Z
+```
+
+v5 usability proofs:
+
+```sh
+node scripts/symphony.js doctor
+pnpm symphony doctor
+node scripts/symphony.js work --dry-run "inspect README"
+node scripts/symphony.js review --dry-run "inspect README"
+node scripts/symphony.js qa --dry-run "inspect README"
+node scripts/symphony.js agent claude /review --dry-run
 ```
 
 ## Standing Constraints
@@ -98,9 +118,9 @@ Read:
 - docs/harness-symphony-integration.md
 
 Current state:
-- `v3` is tagged at commit 89d07f2 on main.
+- `v4` is tagged at commit 3ca2d93 on main.
 - `proposal-only`, `writer-reviewer`, `parallel-lanes`, `qa-swarm`, `competitive-patch`, and eval replay workflow comparisons are implemented.
-- Next intended task is commit/push approval for the risk-closure changes, then CI proof for that pushed commit.
+- v5 usability release implementation is local: `symphony` is the user CLI, `symphony work` generates TaskPackets, and `symphony agent claude /review --dry-run` writes passthrough proof.
 
 Constraints:
 - Keep Harness authoritative for DAG and write-set locks.

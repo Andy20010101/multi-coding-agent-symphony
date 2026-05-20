@@ -14,6 +14,34 @@ kiro-cli --help
 
 Fix the local CLI installation or PATH, then rerun the matching help smoke.
 
+## Symphony Command Missing
+
+Symptom: `symphony doctor` is not found after checkout.
+
+Check:
+
+```sh
+pnpm install
+pnpm symphony doctor
+pnpm link --global
+symphony doctor
+```
+
+Fix the package install or global link path. `pnpm symphony doctor` is the development fallback; direct `symphony doctor` requires the package bin shim from install/link.
+
+## Native CLI Unavailable
+
+Symptom: `symphony agent claude /review --real` cannot start the native CLI.
+
+Check:
+
+```sh
+claude --help
+MCAS_RUN_REAL_CLAUDE=1 symphony agent claude /review --real
+```
+
+Fix the native CLI installation or PATH. Dry-run agent passthrough writes proof metadata without invoking Claude; real passthrough still requires the native CLI binary.
+
 ## Real Smoke Skipped
 
 Symptom: real smoke output says the run was skipped.
@@ -27,6 +55,8 @@ MCAS_RUN_REAL_CODEX=1 pnpm mcas doctor --real-cli --adapter codex --require-gate
 MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:codex:real
 MCAS_RUN_REAL_CLAUDE=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:claude:real
 MCAS_RUN_REAL_KIRO=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:kiro:real
+MCAS_RUN_REAL_CODEX=1 symphony work --real codex "inspect README"
+MCAS_RUN_REAL_CLAUDE=1 symphony agent claude /review --real
 ```
 
 For Claude provider/model mismatches, set `MCAS_CLAUDE_MODEL=<provider-model>` or update `config/real-cli-release.json`. If `claude auth status` reports a different provider than the release config, align `MCAS_CLAUDE_PROVIDER`, the release config provider, or the Claude CLI auth provider before running real smoke. `doctor --real-cli` fails fast when Claude would fall back to the adapter default profile or the auth provider is inconsistent.
@@ -49,6 +79,12 @@ Check:
 - `schemas/evidence-package.schema.json` for strict object fields.
 - The final message artifact for Codex real runs.
 - The relevant adapter test: `node --test tests/codex-real-cli.test.js`, `node --test tests/claude-real-cli.test.js`, or `node --test tests/kiro-real-cli.test.js`.
+
+## Proof Artifact Unverified
+
+Symptom: `symphony agent ...` summary reports `verifierStatus: "unverified"`.
+
+Check the proof artifact path from the summary, plus any stdout/stderr artifact paths. Level 1 native passthrough captures command metadata and redacted process output; it does not prove Harness verifier completion. Use `symphony work` when a verifier-passed Harness workflow is required.
 
 ## Policy Denied Before Adapter Start
 

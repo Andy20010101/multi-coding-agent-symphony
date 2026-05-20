@@ -1,11 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { ArtifactStore } from '../src/artifact-store.js';
+import {
+  runEvalReplayGate,
+  runEvalWorkflowComparisonGate
+} from '../src/eval-replay-gate.js';
 import { SessionEventLog } from '../src/session-event-log.js';
 import {
   buildReplaySampleFromSession,
@@ -453,34 +456,26 @@ describe('Phase 5 external eval replay plugin', () => {
       await appendArtifactEvent(eventLog, 'event-1', 'task-1', 'baseline-evidence');
       await appendArtifactEvent(eventLog, 'event-2', 'task-1', 'candidate-evidence');
 
-      const result = spawnSync(process.execPath, [
-        'scripts/eval-replay.js',
-        '--artifacts', artifactDirectory,
-        '--events', eventLogDirectory,
-        '--session', 'session-1',
-        '--tasks', 'task-1',
-        '--reason', 'model-upgrade',
-        '--baseline', 'gpt-codex-default.v1',
-        '--candidate', 'gpt-codex-default.v2',
-        '--resource-profile-json', JSON.stringify({
+      const output = await runEvalReplayGate({
+        artifactDirectory,
+        eventLogDirectory,
+        sessionId: 'session-1',
+        taskIds: ['task-1'],
+        reason: 'model-upgrade',
+        baseline: 'gpt-codex-default.v1',
+        candidate: 'gpt-codex-default.v2',
+        resourceProfile: {
           cpu: '4',
           memoryMb: 8192,
           timeoutSeconds: 3600,
           concurrency: 1,
           network: 'restricted',
           version: '1'
-        }),
-        '--affected-files', 'src/router-scheduler.js',
-        '--affected-contracts', 'ModelProfile'
-      ], {
-        cwd: process.cwd(),
-        env: childProcessEnvironment(),
-        encoding: 'utf8'
+        },
+        affectedFiles: ['src/router-scheduler.js'],
+        affectedContracts: ['ModelProfile']
       });
 
-      assert.equal(result.status, 0, result.stderr);
-
-      const output = JSON.parse(result.stdout);
       assert.equal(output.status, 'passed');
       assert.deepEqual(output.reportRef, {
         taskId: 'eval-reports',
@@ -739,22 +734,12 @@ describe('Phase 5 external eval replay plugin', () => {
         ]
       }, null, 2)}\n`, 'utf8');
 
-      const result = spawnSync(process.execPath, [
-        'scripts/eval-replay.js',
-        '--',
-        '--artifacts', artifactDirectory,
-        '--workflow-comparison-file', comparisonFile,
-        '--reason', 'workflow-mode-comparison',
-        '--report-artifact-id', 'eval-workflow-comparison-cli'
-      ], {
-        cwd: process.cwd(),
-        env: childProcessEnvironment(),
-        encoding: 'utf8'
+      const output = await runEvalWorkflowComparisonGate({
+        artifactDirectory,
+        comparison: JSON.parse(await readFile(comparisonFile, 'utf8')),
+        reason: 'workflow-mode-comparison',
+        reportArtifactId: 'eval-workflow-comparison-cli'
       });
-
-      assert.equal(result.status, 0, result.stderr);
-
-      const output = JSON.parse(result.stdout);
 
       assert.equal(output.status, 'passed');
       assert.deepEqual(output.reportRef, {
@@ -844,12 +829,4 @@ async function appendArtifactEvent(eventLog, id, taskId, artifactId) {
     },
     version: '1'
   });
-}
-
-function childProcessEnvironment() {
-  const env = { ...process.env };
-
-  delete env.NODE_TEST_CONTEXT;
-
-  return env;
 }
