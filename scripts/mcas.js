@@ -121,7 +121,8 @@ export async function runMcasCli({
     if (command === 'harness' && subcommand === 'run-taskpacket') {
       const result = await runHarnessTaskPacketWorkflow({
         args: rest,
-        adapterFactory
+        adapterFactory,
+        env
       });
 
       writeJson(stdout, result.output);
@@ -140,7 +141,8 @@ export async function runMcasCli({
     if (command === 'run-next') {
       const result = await runNextWorkflow({
         args: [subcommand, ...rest].filter((value) => value !== undefined),
-        adapterFactory
+        adapterFactory,
+        env
       });
 
       writeJson(stdout, result.output);
@@ -150,7 +152,8 @@ export async function runMcasCli({
     if (command === 'run-task') {
       const result = await runTaskFileWorkflow({
         args: [subcommand, ...rest].filter((value) => value !== undefined),
-        adapterFactory
+        adapterFactory,
+        env
       });
 
       writeJson(stdout, result.output);
@@ -389,14 +392,17 @@ function runManualTaskQueue({ args }) {
   };
 }
 
-async function runNextWorkflow({ args, adapterFactory }) {
+async function runNextWorkflow({ args, adapterFactory, env }) {
   const paths = resolveRuntimePaths(args);
   const workflowOptions = resolveWorkflowOptions(args);
   const taskQueue = new TaskQueue({ stateFile: paths.stateFile });
   const orchestrator = await buildWorkflowRuntime({
     paths,
     taskQueue,
-    adapterFactory: () => adapterFactory(workflowOptions),
+    adapterFactory: () => adapterFactory({
+      ...workflowOptions,
+      env
+    }),
     materializeWorkspaces: workflowOptions.executionMode === 'real'
   });
   const result = await orchestrator.runNextTask({
@@ -439,14 +445,17 @@ async function runNextWorkflow({ args, adapterFactory }) {
   };
 }
 
-async function runTaskFileWorkflow({ args, adapterFactory }) {
+async function runTaskFileWorkflow({ args, adapterFactory, env }) {
   const taskFile = readOption(args, '--task-file');
   const taskSpec = parseJsonFile(taskFile, 'taskFile');
   const paths = resolveRuntimePaths(args);
   const workflowOptions = resolveWorkflowOptions(args);
   const orchestrator = await buildWorkflowRuntime({
     paths,
-    adapterFactory: () => adapterFactory(workflowOptions),
+    adapterFactory: () => adapterFactory({
+      ...workflowOptions,
+      env
+    }),
     materializeWorkspaces: workflowOptions.executionMode === 'real'
   });
   const result = await orchestrator.runTaskWorkflow({
@@ -477,7 +486,7 @@ async function runTaskFileWorkflow({ args, adapterFactory }) {
   };
 }
 
-async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
+async function runHarnessTaskPacketWorkflow({ args, adapterFactory, env }) {
   try {
     const runId = readOption(args, '--run-id');
     const taskPacketPath = readOption(args, '--taskpacket');
@@ -495,7 +504,8 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory }) {
       adapterFactory: () => adapterFactory({
         taskPacket,
         checkCommands: expectedChecks,
-        ...workflowOptions
+        ...workflowOptions,
+        env
       })
     });
     const result = await runHarnessTaskPacket({
@@ -650,12 +660,18 @@ function resolveWorkflowOptions(args) {
   };
 }
 
-function createCliAdapter({ executionMode = 'dry-run', adapterId = 'codex', timeoutMs, checkCommands } = {}) {
+function createCliAdapter({
+  executionMode = 'dry-run',
+  adapterId = 'codex',
+  timeoutMs,
+  checkCommands,
+  env = process.env
+} = {}) {
   if (executionMode !== 'real') {
     return new CliDryRunCodexAdapter({ checkCommands });
   }
 
-  assertRealCliGate(adapterId);
+  assertRealCliGate(adapterId, env);
   const options = timeoutMs === undefined ? {} : { timeoutMs };
 
   if (adapterId === 'codex') {
@@ -663,9 +679,10 @@ function createCliAdapter({ executionMode = 'dry-run', adapterId = 'codex', time
   }
 
   if (adapterId === 'claude-code') {
-    const releaseConfig = readRealCliReleaseConfig().config;
+    const releaseConfig = readRealCliReleaseConfig({ env }).config;
     const modelProfile = resolveRealCliModelProfile({
       adapterId: 'claude-code',
+      env,
       config: releaseConfig
     }).profile;
 
@@ -698,14 +715,14 @@ function normalizeCliAdapter(value) {
   throw new UsageError('adapter must be one of: codex, claude, claude-code, kiro, kiro-cli');
 }
 
-function assertRealCliGate(adapterId) {
+function assertRealCliGate(adapterId, env = process.env) {
   const envName = REAL_CLI_GATES[adapterId];
 
   if (!envName) {
     throw new UsageError('adapter must be one of: codex, claude, claude-code, kiro, kiro-cli');
   }
 
-  if (process.env[envName] !== '1') {
+  if (env?.[envName] !== '1') {
     throw new UsageError(`Set ${envName}=1 to invoke the real ${adapterId} CLI lane.`);
   }
 }

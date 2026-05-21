@@ -707,6 +707,47 @@ describe('Phase 8 user-facing CLI', () => {
     }
   });
 
+  it('threads injected env to real workflow adapter selection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-cli-run-task-real-env-'));
+    let observedEnv;
+
+    try {
+      const taskFile = join(root, 'task.json');
+      await writeFile(taskFile, `${JSON.stringify(manualTask, null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'run-task',
+          '--task-file',
+          taskFile,
+          '--runtime-dir',
+          root,
+          '--session-id',
+          'session-cli',
+          '--real',
+          '--adapter',
+          'codex'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        env: {
+          MCAS_RUN_REAL_CODEX: '1'
+        },
+        adapterFactory(options) {
+          observedEnv = options.env;
+          return new RecordingRealCliAdapter(options);
+        }
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.equal(observedEnv.MCAS_RUN_REAL_CODEX, '1');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('dispatches smoke checks through existing package scripts', async () => {
     const runner = new QueueRunner([
       {

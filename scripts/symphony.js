@@ -5,9 +5,25 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ArtifactStore } from '../src/artifact-store.js';
 import { NodeProcessRunner } from '../src/process-runner.js';
 import { redactSecrets } from '../src/redaction.js';
 import { validateProjectContextArtifact } from '../src/intake/intake-contracts.js';
+import {
+  ScaffoldError,
+  normalizeTemplate,
+  scaffoldProject
+} from '../src/symphony/new-project.js';
+import { classifyPrompt } from '../src/symphony/prompt-router.js';
+import {
+  buildProjectFingerprint,
+  readLatestContext,
+  readLatestRun,
+  readRunState,
+  symphonyStatePaths,
+  writeLatestContext,
+  writeRunState
+} from '../src/symphony/state.js';
 import { runMcasCli } from './mcas.js';
 
 const EXIT_CODES = {
@@ -27,6 +43,29 @@ const WORK_MODES = new Set([
 const REAL_AGENT_GATES = {
   claude: 'MCAS_RUN_REAL_CLAUDE'
 };
+const REAL_WORK_GATES = {
+  codex: 'MCAS_RUN_REAL_CODEX',
+  claude: 'MCAS_RUN_REAL_CLAUDE',
+  kiro: 'MCAS_RUN_REAL_KIRO'
+};
+const KNOWN_COMMANDS = new Set([
+  'doctor',
+  'harness',
+  'replay',
+  'eval',
+  'work',
+  'intake',
+  'agent',
+  'review',
+  'qa',
+  'scan',
+  'do',
+  'verify',
+  'status',
+  'artifacts',
+  'continue',
+  'new'
+]);
 
 export async function runSymphonyCli({
   argv = process.argv.slice(2),
@@ -39,6 +78,19 @@ export async function runSymphonyCli({
   try {
     if (!Array.isArray(argv)) {
       throw new UsageError('argv must be an array');
+    }
+
+    const promptInvocation = parsePromptInvocation(argv);
+
+    if (promptInvocation !== null) {
+      return await runSymphonyPrompt({
+        invocation: promptInvocation,
+        stdout,
+        stderr,
+        runner,
+        env,
+        mcasRunner
+      });
     }
 
     const [command, ...rest] = argv;
@@ -90,6 +142,73 @@ export async function runSymphonyCli({
         stdout,
         stderr,
         runner,
+        env,
+        mcasRunner
+      });
+    }
+
+    if (command === 'scan') {
+      return await runSymphonyScanProduct({
+        args: rest,
+        stdout,
+        stderr,
+        runner,
+        env,
+        mcasRunner
+      });
+    }
+
+    if (command === 'do') {
+      return await runSymphonyWorkProduct({
+        args: rest,
+        semanticCommand: 'do',
+        stdout,
+        stderr,
+        runner,
+        env,
+        mcasRunner
+      });
+    }
+
+    if (command === 'verify') {
+      return await runSymphonyWorkProduct({
+        args: rest,
+        semanticCommand: 'verify',
+        stdout,
+        stderr,
+        runner,
+        env,
+        mcasRunner
+      });
+    }
+
+    if (command === 'status') {
+      return await runSymphonyStatus({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'artifacts') {
+      return await runSymphonyArtifacts({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'continue') {
+      return await runSymphonyContinue({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'new') {
+      return await runSymphonyNew({
+        args: rest,
+        stdout,
+        stderr,
+        runner: runner ?? new NodeProcessRunner(),
         env,
         mcasRunner
       });
@@ -307,7 +426,37 @@ async function runSymphonyIntake({
   mcasRunner
 }) {
   const options = parseSymphonyIntakeArgs(args);
-  const runId = buildIntakeRunId(options);
+  const intake = await executeSymphonyIntake({
+    options,
+    runner,
+    env,
+    mcasRunner
+  });
+
+  if (intake.summary === null) {
+    if (intake.stderrText !== '') {
+      stderr.write(intake.stderrText);
+    }
+
+    return intake.exitCode;
+  }
+
+  writeJson(stdout, intake.summary);
+
+  if (intake.stderrText !== '') {
+    stderr.write(intake.stderrText);
+  }
+
+  return intake.exitCode;
+}
+
+async function executeSymphonyIntake({
+  options,
+  runner,
+  env,
+  mcasRunner,
+  runId = buildIntakeRunId(options)
+}) {
   const runtimeDirectory = join(options.outputDir, runId, 'runtime');
   const kernelStdout = createBufferedStream();
   const kernelStderr = createBufferedStream();
@@ -346,11 +495,13 @@ async function runSymphonyIntake({
   });
 
   if (kernelStdout.text().trim() === '') {
-    if (kernelStderr.text() !== '') {
-      stderr.write(kernelStderr.text());
-    }
-
-    return exitCode;
+    return {
+      exitCode,
+      summary: null,
+      kernelOutput: null,
+      runId,
+      stderrText: kernelStderr.text()
+    };
   }
 
   const kernelOutput = parseJsonOutput(kernelStdout.text(), 'mcas intake output');
@@ -360,13 +511,735 @@ async function runSymphonyIntake({
     format: options.format
   });
 
-  writeJson(stdout, summary);
+  return {
+    exitCode,
+    summary,
+    kernelOutput,
+    runId,
+    stderrText: kernelStderr.text()
+  };
+}
 
-  if (kernelStderr.text() !== '') {
-    stderr.write(kernelStderr.text());
+async function runSymphonyScanProduct({
+  args,
+  stdout,
+  stderr,
+  runner,
+  env,
+  mcasRunner,
+  routeDecision
+}) {
+  const options = parseScanProductArgs(args);
+  const scan = await executeProductScan({
+    options,
+    runner,
+    env,
+    mcasRunner,
+    routeDecision
+  });
+
+  if (scan.summary === null) {
+    if (scan.stderrText !== '') {
+      stderr.write(scan.stderrText);
+    }
+
+    return scan.exitCode;
   }
 
-  return exitCode;
+  writeProductOutput(stdout, scan.summary, options.json);
+
+  if (scan.stderrText !== '') {
+    stderr.write(scan.stderrText);
+  }
+
+  return scan.exitCode;
+}
+
+async function executeProductScan({
+  options,
+  runner,
+  env,
+  mcasRunner,
+  routeDecision
+}) {
+  const runId = buildScanRunId(options);
+  const intakeOptions = {
+    projectDir: options.projectDir,
+    outputDir: options.outputDir,
+    provider: providerForScanMode(options.providerMode),
+    providerCommand: options.providerCommand,
+    requireProvider: options.requireProvider,
+    failOn: options.failOn,
+    format: 'json'
+  };
+  let intake = await executeSymphonyIntake({
+    options: intakeOptions,
+    runner,
+    env,
+    mcasRunner,
+    runId
+  });
+
+  if (
+    options.providerMode === 'grill'
+    && intake.kernelOutput?.providerStatus === 'unavailable'
+    && intake.exitCode === EXIT_CODES.ok
+  ) {
+    intake = await executeSymphonyIntake({
+      options: {
+        ...intakeOptions,
+        provider: 'builtin',
+        requireProvider: false
+      },
+      runner,
+      env,
+      mcasRunner,
+      runId: `${runId}-builtin`
+    });
+  }
+
+  if (intake.summary === null) {
+    return {
+      exitCode: intake.exitCode,
+      summary: null,
+      stderrText: intake.stderrText
+    };
+  }
+
+  const projectFingerprint = await buildProjectFingerprint({
+    projectDir: intake.summary.projectDir
+  });
+  const now = new Date().toISOString();
+  const contextPointer = {
+    version: '1',
+    kind: 'symphony-latest-context',
+    projectRoot: intake.summary.projectDir,
+    projectFingerprint,
+    runId: intake.runId,
+    contextArtifactPath: intake.summary.contextArtifactPath,
+    summaryArtifactPath: intake.summary.summaryArtifactPath,
+    recommendedWorkflow: intake.summary.recommendedWorkflow,
+    verificationCommands: intake.summary.verificationCommands,
+    createdAt: now
+  };
+
+  await writeLatestContext({
+    stateDir: options.stateDir,
+    pointer: contextPointer
+  });
+
+  const summary = {
+    version: '1',
+    command: 'symphony scan',
+    intent: 'scan-project',
+    semanticCommand: 'scan',
+    pipeline: ['scan'],
+    safetyMode: 'read-only',
+    projectWrites: false,
+    runtimeWrites: true,
+    externalCalls: false,
+    destructiveWrites: false,
+    status: intake.summary.status,
+    exitCode: intake.summary.exitCode,
+    verifierStatus: intake.summary.status,
+    runId: intake.runId,
+    projectRoot: intake.summary.projectDir,
+    projectFingerprint,
+    provider: intake.summary.provider,
+    providerStatus: intake.summary.providerStatus,
+    modelInvocation: false,
+    contextArtifactPath: intake.summary.contextArtifactPath,
+    summaryArtifactPath: intake.summary.summaryArtifactPath,
+    riskCounts: intake.summary.riskCounts,
+    openQuestionCount: intake.summary.openQuestionCount,
+    recommendedWorkflow: intake.summary.recommendedWorkflow,
+    verificationCommands: intake.summary.verificationCommands,
+    statePath: symphonyStatePaths({ stateDir: options.stateDir }).latestContextPath,
+    ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
+    nextAction: 'symphony do --dry-run "inspect README"'
+  };
+
+  await writeProductRunState({
+    stateDir: options.stateDir,
+    summary,
+    updatedAt: now
+  });
+
+  return {
+    exitCode: intake.exitCode,
+    summary,
+    stderrText: intake.stderrText
+  };
+}
+
+async function runSymphonyWorkProduct({
+  args,
+  semanticCommand,
+  stdout,
+  stderr,
+  runner,
+  env,
+  mcasRunner,
+  prompt,
+  routeDecision
+}) {
+  const options = parseWorkProductArgs(args, {
+    semanticCommand,
+    prompt
+  });
+
+  if (routeDecision?.safetyMode === 'external' && !args.includes('--real')) {
+    options.safetyMode = 'external';
+    options.adapter = routeDecision.adapter;
+  }
+
+  const work = await executeProductWork({
+    options,
+    semanticCommand,
+    runner,
+    env,
+    mcasRunner,
+    routeDecision
+  });
+
+  if (work.summary === null) {
+    if (work.stderrText !== '') {
+      stderr.write(work.stderrText);
+    }
+
+    return work.exitCode;
+  }
+
+  writeProductOutput(stdout, work.summary, options.json);
+
+  if (work.stderrText !== '') {
+    stderr.write(work.stderrText);
+  }
+
+  return work.exitCode;
+}
+
+async function executeProductWork({
+  options,
+  semanticCommand,
+  runner,
+  env,
+  mcasRunner,
+  routeDecision
+}) {
+  if (options.safetyMode === 'write') {
+    throw new UsageError('symphony do --write is not implemented for project work; use --real <adapter> with the matching gate for external execution');
+  }
+
+  if (options.safetyMode === 'external') {
+    assertProductRealGate(options.adapter, env);
+  }
+
+  const context = await ensureFreshContext({
+    projectDir: options.projectDir,
+    stateDir: options.stateDir,
+    runner,
+    env,
+    mcasRunner
+  });
+  const legacyArgs = [
+    '--intake-artifact',
+    context.pointer.contextArtifactPath,
+    '--work-dir',
+    options.workDir
+  ];
+
+  if (options.mode !== undefined) {
+    legacyArgs.push('--mode', options.mode);
+  }
+
+  if (options.safetyMode === 'external') {
+    legacyArgs.push('--real', options.adapter);
+  } else {
+    legacyArgs.push('--dry-run');
+  }
+
+  if (options.timeoutMs !== undefined) {
+    legacyArgs.push('--timeout-ms', String(options.timeoutMs));
+  }
+
+  legacyArgs.push(options.prompt);
+
+  const legacy = await executeLegacyWork({
+    args: legacyArgs,
+    summaryCommand: `symphony ${semanticCommand}`,
+    stdout: createBufferedStream(),
+    stderr: createBufferedStream(),
+    runner,
+    env,
+    mcasRunner
+  });
+
+  if (legacy.summary === null) {
+    return legacy;
+  }
+
+  const now = new Date().toISOString();
+  const intent = semanticCommand === 'do' ? 'work' : semanticCommand;
+  const pipelineTail = semanticCommand;
+  const pipeline = ['scan-if-needed', pipelineTail];
+  const summary = {
+    version: '1',
+    command: `symphony ${semanticCommand}`,
+    intent,
+    semanticCommand,
+    pipeline,
+    safetyMode: options.safetyMode,
+    projectWrites: options.safetyMode === 'external' && semanticCommand === 'do',
+    runtimeWrites: true,
+    externalCalls: options.safetyMode === 'external',
+    destructiveWrites: false,
+    status: legacy.summary.status,
+    exitCode: legacy.summary.exitCode,
+    verifierStatus: legacy.summary.verifierStatus,
+    runId: legacy.summary.runId,
+    workflowMode: legacy.summary.workflowMode,
+    adapter: legacy.summary.adapter,
+    executionMode: legacy.summary.executionMode,
+    projectRoot: context.pointer.projectRoot,
+    projectFingerprint: context.pointer.projectFingerprint,
+    contextReused: !context.scanned,
+    contextArtifactPath: context.pointer.contextArtifactPath,
+    summaryArtifactPath: context.pointer.summaryArtifactPath,
+    evidenceArtifactPath: legacy.summary.evidenceArtifactPath,
+    harnessOutputPath: legacy.summary.harnessOutputPath,
+    taskPacketPath: legacy.summary.taskPacketPath,
+    changedFiles: legacy.summary.changedFiles,
+    ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
+    nextAction: 'symphony status'
+  };
+
+  if (legacy.summary.proofArtifactPath) {
+    summary.proofArtifactPath = legacy.summary.proofArtifactPath;
+  }
+
+  await writeProductRunState({
+    stateDir: options.stateDir,
+    summary,
+    updatedAt: now
+  });
+
+  return {
+    exitCode: legacy.exitCode,
+    summary,
+    stderrText: legacy.stderrText
+  };
+}
+
+async function executeLegacyWork({
+  args,
+  summaryCommand,
+  runner,
+  env,
+  mcasRunner
+}) {
+  const bufferedStdout = createBufferedStream();
+  const bufferedStderr = createBufferedStream();
+  const exitCode = await runSymphonyWork({
+    args,
+    summaryCommand,
+    stdout: bufferedStdout.stream,
+    stderr: bufferedStderr.stream,
+    runner,
+    env,
+    mcasRunner
+  });
+
+  if (bufferedStdout.text().trim() === '') {
+    return {
+      exitCode,
+      summary: null,
+      stderrText: bufferedStderr.text()
+    };
+  }
+
+  return {
+    exitCode,
+    summary: parseJsonOutput(bufferedStdout.text(), `${summaryCommand} output`),
+    stderrText: bufferedStderr.text()
+  };
+}
+
+async function ensureFreshContext({
+  projectDir,
+  stateDir,
+  runner,
+  env,
+  mcasRunner
+}) {
+  const projectFingerprint = await buildProjectFingerprint({ projectDir });
+  const latest = await readLatestContext({ stateDir });
+
+  if (
+    latest?.contextArtifactPath
+    && latest.projectFingerprint === projectFingerprint
+    && resolve(latest.projectRoot) === resolve(projectDir)
+  ) {
+    return {
+      scanned: false,
+      pointer: latest
+    };
+  }
+
+  const scan = await executeProductScan({
+    options: {
+      ...defaultScanProductOptions(),
+      projectDir,
+      stateDir
+    },
+    runner,
+    env,
+    mcasRunner
+  });
+
+  if (scan.summary === null || scan.exitCode !== EXIT_CODES.ok) {
+    throw new UsageError('scan-if-needed failed before work could start');
+  }
+
+  return {
+    scanned: true,
+    pointer: await readLatestContext({ stateDir })
+  };
+}
+
+async function runSymphonyPrompt({
+  invocation,
+  stdout,
+  stderr,
+  runner,
+  env,
+  mcasRunner
+}) {
+  const routeDecision = classifyPrompt({
+    prompt: invocation.prompt,
+    args: invocation.args
+  });
+
+  if (routeDecision.requiresConfirmation) {
+    throw new UsageError('destructive prompts require --confirm-destructive');
+  }
+
+  if (routeDecision.intent === 'scan-project') {
+    return await runSymphonyScanProduct({
+      args: invocation.args,
+      stdout,
+      stderr,
+      runner,
+      env,
+      mcasRunner,
+      routeDecision
+    });
+  }
+
+  if (routeDecision.intent === 'work') {
+    return await runSymphonyWorkProduct({
+      args: invocation.args,
+      semanticCommand: 'do',
+      stdout,
+      stderr,
+      runner,
+      env,
+      mcasRunner,
+      prompt: invocation.prompt,
+      routeDecision
+    });
+  }
+
+  if (routeDecision.intent === 'review' || routeDecision.intent === 'verify') {
+    return await runSymphonyWorkProduct({
+      args: invocation.args,
+      semanticCommand: routeDecision.intent,
+      stdout,
+      stderr,
+      runner,
+      env,
+      mcasRunner,
+      prompt: invocation.prompt,
+      routeDecision
+    });
+  }
+
+  if (routeDecision.intent === 'status') {
+    return await runSymphonyStatus({
+      args: invocation.args,
+      stdout,
+      routeDecision
+    });
+  }
+
+  if (routeDecision.intent === 'artifacts') {
+    return await runSymphonyArtifacts({
+      args: invocation.args,
+      stdout,
+      routeDecision
+    });
+  }
+
+  if (routeDecision.intent === 'continue') {
+    return await runSymphonyContinue({
+      args: invocation.args,
+      stdout,
+      routeDecision
+    });
+  }
+
+  return await runSymphonyNew({
+    args: invocation.args,
+    stdout,
+    stderr,
+    runner: runner ?? new NodeProcessRunner(),
+    env,
+    mcasRunner,
+    promptTarget: `tmp/symphony-new-${routeDecision.template}`,
+    promptTemplate: routeDecision.template,
+    routeDecision
+  });
+}
+
+async function runSymphonyStatus({ args, stdout, routeDecision }) {
+  const options = parseStateReaderArgs(args);
+  const latestRun = await readLatestRun({ stateDir: options.stateDir });
+  const summary = latestRun === null
+    ? {
+        version: '1',
+        command: 'symphony status',
+        intent: 'status',
+        semanticCommand: 'status',
+        pipeline: ['status'],
+        safetyMode: 'read-only',
+        projectWrites: false,
+        runtimeWrites: false,
+        externalCalls: false,
+        status: 'no-runs',
+        nextAction: 'symphony scan',
+        ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
+      }
+    : {
+        version: '1',
+        command: 'symphony status',
+        intent: 'status',
+        semanticCommand: 'status',
+        pipeline: ['status'],
+        safetyMode: 'read-only',
+        projectWrites: false,
+        runtimeWrites: false,
+        externalCalls: false,
+        status: latestRun.status,
+        latestRunId: latestRun.runId,
+        latestIntent: latestRun.intent,
+        verifierStatus: latestRun.verifierStatus,
+        contextArtifactPath: latestRun.contextArtifactPath,
+        evidenceArtifactPath: latestRun.evidenceArtifactPath,
+        harnessOutputPath: latestRun.harnessOutputPath,
+        taskPacketPath: latestRun.taskPacketPath,
+        nextAction: latestRun.nextAction ?? 'symphony artifacts',
+        ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
+      };
+
+  writeProductOutput(stdout, summary, options.json);
+  return EXIT_CODES.ok;
+}
+
+async function runSymphonyArtifacts({ args, stdout, routeDecision }) {
+  const options = parseArtifactsArgs(args);
+  const runState = await readRunState({
+    stateDir: options.stateDir,
+    runId: options.runId
+  });
+  const summary = runState === null
+    ? {
+        version: '1',
+        command: 'symphony artifacts',
+        intent: 'artifacts',
+        semanticCommand: 'artifacts',
+        pipeline: ['artifacts'],
+        safetyMode: 'read-only',
+        projectWrites: false,
+        runtimeWrites: false,
+        externalCalls: false,
+        status: 'missing',
+        runId: options.runId ?? 'latest',
+        nextAction: 'symphony status',
+        ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
+      }
+    : {
+        version: '1',
+        command: 'symphony artifacts',
+        intent: 'artifacts',
+        semanticCommand: 'artifacts',
+        pipeline: ['artifacts'],
+        safetyMode: 'read-only',
+        projectWrites: false,
+        runtimeWrites: false,
+        externalCalls: false,
+        status: runState.status,
+        runId: runState.runId,
+        contextArtifactPath: runState.contextArtifactPath,
+        summaryArtifactPath: runState.summaryArtifactPath,
+        evidenceArtifactPath: runState.evidenceArtifactPath,
+        harnessOutputPath: runState.harnessOutputPath,
+        taskPacketPath: runState.taskPacketPath,
+        proofArtifactPath: runState.proofArtifactPath,
+        scaffoldManifestArtifactPath: runState.scaffoldManifestArtifactPath,
+        nextAction: 'symphony status',
+        ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
+      };
+
+  writeProductOutput(stdout, summary, options.json);
+  return EXIT_CODES.ok;
+}
+
+async function runSymphonyContinue({ args, stdout, routeDecision }) {
+  const options = parseStateReaderArgs(args);
+  const latestRun = await readLatestRun({ stateDir: options.stateDir });
+  const summary = latestRun === null
+    ? {
+        version: '1',
+        command: 'symphony continue',
+        intent: 'continue',
+        semanticCommand: 'continue',
+        pipeline: ['continue latest'],
+        safetyMode: 'read-only',
+        projectWrites: false,
+        runtimeWrites: false,
+        externalCalls: false,
+        status: 'no-runs',
+        continuationStatus: 'nothing-to-continue',
+        nextAction: 'symphony scan',
+        ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
+      }
+    : {
+        version: '1',
+        command: 'symphony continue',
+        intent: 'continue',
+        semanticCommand: 'continue',
+        pipeline: ['continue latest'],
+        safetyMode: 'read-only',
+        projectWrites: false,
+        runtimeWrites: false,
+        externalCalls: false,
+        status: latestRun.status,
+        runId: latestRun.runId,
+        continuationStatus: latestRun.status === 'passed' ? 'nothing-to-continue' : 'safe-action-needed',
+        contextArtifactPath: latestRun.contextArtifactPath,
+        evidenceArtifactPath: latestRun.evidenceArtifactPath,
+        harnessOutputPath: latestRun.harnessOutputPath,
+        taskPacketPath: latestRun.taskPacketPath,
+        nextAction: latestRun.status === 'passed'
+          ? 'symphony artifacts'
+          : latestRun.nextAction ?? 'symphony do --dry-run "<task>"',
+        ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
+      };
+
+  writeProductOutput(stdout, summary, options.json);
+  return EXIT_CODES.ok;
+}
+
+async function runSymphonyNew({
+  args,
+  stdout,
+  stderr,
+  runner,
+  env,
+  mcasRunner,
+  promptTarget,
+  promptTemplate,
+  routeDecision
+}) {
+  const options = parseNewProjectArgs(args, {
+    promptTarget,
+    promptTemplate
+  });
+  const runId = buildNewRunId(options);
+  const artifactDirectory = join(options.runtimeDir, runId, 'runtime', 'artifacts');
+  let scaffold;
+
+  try {
+    scaffold = await scaffoldProject({
+      targetDir: options.targetDir,
+      template: options.template,
+      write: options.write,
+      runner
+    });
+  } catch (error) {
+    if (error instanceof ScaffoldError) {
+      throw new UsageError(error.message);
+    }
+
+    throw error;
+  }
+
+  const store = new ArtifactStore(artifactDirectory);
+  await store.writeArtifact('symphony-new', 'scaffold-manifest', scaffold.manifest);
+
+  const manifestArtifactPath = join(artifactDirectory, 'symphony-new', 'scaffold-manifest.json');
+  let scanSummary;
+
+  if (options.write) {
+    const scan = await executeProductScan({
+      options: {
+        ...defaultScanProductOptions(),
+        projectDir: scaffold.manifest.resolvedTargetDir,
+        outputDir: join(options.runtimeDir, runId, 'scan'),
+        stateDir: options.stateDir
+      },
+      runner,
+      env,
+      mcasRunner
+    });
+
+    if (scan.summary === null) {
+      if (scan.stderrText !== '') {
+        stderr.write(scan.stderrText);
+      }
+
+      return scan.exitCode;
+    }
+
+    scanSummary = scan.summary;
+  }
+
+  const now = new Date().toISOString();
+  const summary = {
+    version: '1',
+    command: 'symphony new',
+    intent: 'new-project',
+    semanticCommand: 'new',
+    pipeline: ['new', 'scan'],
+    safetyMode: options.write ? 'write' : 'dry-run',
+    projectWrites: options.write,
+    runtimeWrites: true,
+    externalCalls: false,
+    destructiveWrites: false,
+    status: scaffold.status,
+    exitCode: EXIT_CODES.ok,
+    verifierStatus: options.write ? scanSummary?.verifierStatus ?? scanSummary?.status : 'not-run',
+    runId,
+    template: options.template,
+    targetDir: options.targetDir,
+    createdFiles: scaffold.manifest.createdFiles,
+    scaffoldManifestArtifactPath: manifestArtifactPath,
+    contextArtifactPath: scanSummary?.contextArtifactPath,
+    summaryArtifactPath: scanSummary?.summaryArtifactPath,
+    ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
+    nextAction: options.write
+      ? 'symphony status'
+      : `symphony new ${options.targetDir} --template ${options.template} --write`
+  };
+
+  await writeProductRunState({
+    stateDir: options.stateDir,
+    summary,
+    updatedAt: now
+  });
+
+  writeProductOutput(stdout, summary, options.json);
+  return EXIT_CODES.ok;
 }
 
 function parseWorkArgs(args) {
@@ -535,6 +1408,497 @@ function parseSymphonyIntakeArgs(args) {
   return options;
 }
 
+function defaultScanProductOptions() {
+  return {
+    projectDir: '.',
+    outputDir: 'tmp/symphony-scan',
+    stateDir: '.symphony',
+    providerMode: 'auto',
+    providerCommand: 'grill-me-docs',
+    requireProvider: false,
+    json: false
+  };
+}
+
+function parseScanProductArgs(args) {
+  const options = defaultScanProductOptions();
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--builtin') {
+      options.providerMode = 'builtin';
+      continue;
+    }
+
+    if (value === '--grill') {
+      options.providerMode = 'grill';
+      continue;
+    }
+
+    if (value === '--require-grill') {
+      options.providerMode = 'grill';
+      options.requireProvider = true;
+      continue;
+    }
+
+    if (value === '--project-dir') {
+      options.projectDir = readRequiredValue(args, index, '--project-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--output-dir') {
+      options.outputDir = readRequiredValue(args, index, '--output-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--provider') {
+      const provider = readRequiredValue(args, index, '--provider');
+      options.providerMode = provider === 'grill-me-docs' ? 'grill' : provider;
+      index += 1;
+      continue;
+    }
+
+    if (value === '--provider-command') {
+      options.providerCommand = readRequiredValue(args, index, '--provider-command');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--fail-on') {
+      options.failOn = readRequiredValue(args, index, '--fail-on');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown scan option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected scan argument: ${value}`);
+  }
+
+  if (!['auto', 'builtin', 'grill'].includes(options.providerMode)) {
+    throw new UsageError('scan provider must be one of: auto, builtin, grill-me-docs');
+  }
+
+  return options;
+}
+
+function parseWorkProductArgs(args, { semanticCommand, prompt }) {
+  const options = {
+    prompt,
+    projectDir: '.',
+    stateDir: '.symphony',
+    workDir: 'tmp/symphony-work',
+    safetyMode: semanticCommand === 'review' ? 'read-only' : 'dry-run',
+    adapter: 'codex',
+    mode: semanticCommand === 'do' ? 'writer-reviewer' : 'qa-swarm',
+    json: false
+  };
+  const promptParts = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--dry-run') {
+      options.safetyMode = 'dry-run';
+      continue;
+    }
+
+    if (value === '--write') {
+      options.safetyMode = 'write';
+      continue;
+    }
+
+    if (value === '--real') {
+      options.adapter = normalizeWorkAdapter(readRequiredValue(args, index, '--real'));
+      options.safetyMode = 'external';
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--project-dir') {
+      options.projectDir = readRequiredValue(args, index, '--project-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--work-dir') {
+      options.workDir = readRequiredValue(args, index, '--work-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--mode') {
+      options.mode = readRequiredValue(args, index, '--mode');
+      assertWorkMode(options.mode);
+      index += 1;
+      continue;
+    }
+
+    if (value === '--timeout-ms') {
+      options.timeoutMs = toPositiveInteger(readRequiredValue(args, index, '--timeout-ms'), '--timeout-ms');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--confirm-destructive') {
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown ${semanticCommand} option: ${value}`);
+    }
+
+    promptParts.push(value);
+  }
+
+  options.prompt = options.prompt ?? promptParts.join(' ').trim();
+  assertNonEmptyString(options.prompt, `${semanticCommand} prompt`);
+
+  return options;
+}
+
+function parseStateReaderArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    json: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown state option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected state argument: ${value}`);
+  }
+
+  return options;
+}
+
+function parseArtifactsArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    json: false
+  };
+  const positional = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown artifacts option: ${value}`);
+    }
+
+    positional.push(value);
+  }
+
+  if (positional.length > 1) {
+    throw new UsageError('artifacts accepts at most one run id');
+  }
+
+  return {
+    ...options,
+    runId: positional[0]
+  };
+}
+
+function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
+  const options = {
+    targetDir: promptTarget,
+    template: promptTemplate ?? 'empty',
+    runtimeDir: 'tmp/symphony-new',
+    stateDir: '.symphony',
+    write: false,
+    json: false
+  };
+  const positional = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--dry-run') {
+      options.write = false;
+      continue;
+    }
+
+    if (value === '--write') {
+      options.write = true;
+      continue;
+    }
+
+    if (value === '--template') {
+      options.template = normalizeTemplate(readRequiredValue(args, index, '--template'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--runtime-dir') {
+      options.runtimeDir = readRequiredValue(args, index, '--runtime-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--target') {
+      options.targetDir = readRequiredValue(args, index, '--target');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown new option: ${value}`);
+    }
+
+    positional.push(value);
+  }
+
+  if (positional.length > 1) {
+    throw new UsageError('new accepts one target directory');
+  }
+
+  options.targetDir = positional[0] ?? options.targetDir;
+  options.template = normalizeTemplate(options.template);
+  assertNonEmptyString(options.targetDir, 'new target');
+
+  return options;
+}
+
+function providerForScanMode(providerMode) {
+  return providerMode === 'grill' ? 'grill-me-docs' : 'builtin';
+}
+
+function parsePromptInvocation(argv) {
+  if (argv.length === 0 || KNOWN_COMMANDS.has(argv[0])) {
+    return null;
+  }
+
+  const args = [];
+  const promptParts = [];
+  const valueOptions = new Set([
+    '--real',
+    '--state-dir',
+    '--template',
+    '--runtime-dir',
+    '--target',
+    '--work-dir',
+    '--project-dir',
+    '--output-dir',
+    '--provider',
+    '--provider-command',
+    '--fail-on',
+    '--timeout-ms'
+  ]);
+  const flagOptions = new Set(['--json', '--dry-run', '--write', '--confirm-destructive']);
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+
+    if (flagOptions.has(value)) {
+      args.push(value);
+      continue;
+    }
+
+    if (valueOptions.has(value)) {
+      args.push(value, readRequiredValue(argv, index, value));
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      args.push(value);
+      continue;
+    }
+
+    promptParts.push(value);
+  }
+
+  const prompt = promptParts.join(' ').trim();
+
+  if (prompt === '') {
+    return null;
+  }
+
+  return {
+    prompt,
+    args
+  };
+}
+
+async function writeProductRunState({ stateDir, summary, updatedAt }) {
+  const createdAt = summary.createdAt ?? updatedAt;
+  const runState = {
+    version: '1',
+    kind: 'symphony-run-state',
+    runId: summary.runId,
+    command: summary.command,
+    intent: summary.intent,
+    semanticCommand: summary.semanticCommand,
+    pipeline: summary.pipeline,
+    safetyMode: summary.safetyMode,
+    projectWrites: summary.projectWrites,
+    runtimeWrites: summary.runtimeWrites,
+    externalCalls: summary.externalCalls,
+    destructiveWrites: summary.destructiveWrites,
+    projectRoot: summary.projectRoot,
+    projectFingerprint: summary.projectFingerprint,
+    contextArtifactPath: summary.contextArtifactPath,
+    summaryArtifactPath: summary.summaryArtifactPath,
+    evidenceArtifactPath: summary.evidenceArtifactPath,
+    harnessOutputPath: summary.harnessOutputPath,
+    taskPacketPath: summary.taskPacketPath,
+    proofArtifactPath: summary.proofArtifactPath,
+    scaffoldManifestArtifactPath: summary.scaffoldManifestArtifactPath,
+    verifierStatus: summary.verifierStatus,
+    status: summary.status,
+    createdAt,
+    updatedAt,
+    nextAction: summary.nextAction
+  };
+
+  return await writeRunState({
+    stateDir,
+    runState
+  });
+}
+
+function writeProductOutput(stdout, summary, json) {
+  if (json) {
+    writeJson(stdout, summary);
+    return;
+  }
+
+  stdout.write(`${humanProductSummary(summary)}\n`);
+}
+
+function humanProductSummary(summary) {
+  if (summary.command === 'symphony status' && summary.status === 'no-runs') {
+    return [
+      'Status: no runs yet',
+      `Next: ${summary.nextAction}`
+    ].join('\n');
+  }
+
+  const lines = [
+    `Intent: ${summary.intent}`,
+    `Pipeline: ${summary.pipeline.join(' -> ')}`,
+    `Safety: ${summary.safetyMode}`,
+    `Project writes: ${summary.projectWrites ? 'yes' : 'no'}`,
+    `Runtime writes: ${summary.runtimeWrites ? 'yes' : 'no'}`,
+    `External calls: ${summary.externalCalls ? 'yes' : 'no'}`,
+    `Status: ${summary.status}`
+  ];
+
+  if (summary.verifierStatus !== undefined) {
+    lines.push(`Verifier: ${summary.verifierStatus}`);
+  }
+
+  if (summary.runId !== undefined || summary.latestRunId !== undefined) {
+    lines.push(`Run: ${summary.runId ?? summary.latestRunId}`);
+  }
+
+  for (const [label, field] of [
+    ['Context', 'contextArtifactPath'],
+    ['Summary', 'summaryArtifactPath'],
+    ['Evidence', 'evidenceArtifactPath'],
+    ['Harness', 'harnessOutputPath'],
+    ['TaskPacket', 'taskPacketPath'],
+    ['Manifest', 'scaffoldManifestArtifactPath'],
+    ['Proof', 'proofArtifactPath']
+  ]) {
+    if (summary[field] !== undefined) {
+      lines.push(`${label}: ${summary[field]}`);
+    }
+  }
+
+  if (summary.nextAction !== undefined) {
+    lines.push(`Next: ${summary.nextAction}`);
+  }
+
+  return lines.join('\n');
+}
+
+function buildScanRunId({ projectDir, providerMode }) {
+  const resolvedProjectDir = resolve(projectDir);
+
+  return `symphony-scan-${safeIdPart(basenameFromPath(resolvedProjectDir))}-${shortHash([resolvedProjectDir, providerMode].join('\0'))}`;
+}
+
+function buildNewRunId({ targetDir, template }) {
+  return `symphony-new-${safeIdPart(template)}-${shortHash([resolve(targetDir), template].join('\0'))}`;
+}
+
+function assertProductRealGate(adapter, env) {
+  const gate = REAL_WORK_GATES[adapter];
+
+  if (gate === undefined) {
+    throw new UsageError('adapter must be one of: codex, claude, claude-code, kiro, kiro-cli');
+  }
+
+  if (env?.[gate] !== '1') {
+    throw new UsageError(`Set ${gate}=1 to invoke the real ${adapter} CLI lane.`);
+  }
+}
+
 async function prepareWorkIntake({
   options,
   runId,
@@ -688,6 +2052,7 @@ async function buildWorkSummary({
   const summary = {
     version: '1',
     command: summaryCommand,
+    ...productMetadataForSummaryCommand(summaryCommand),
     status: kernelOutput.status,
     exitCode: kernelOutput.exitCode,
     runId,
@@ -720,6 +2085,34 @@ async function buildWorkSummary({
   }
 
   return summary;
+}
+
+function productMetadataForSummaryCommand(summaryCommand) {
+  if (summaryCommand === 'symphony review') {
+    return {
+      intent: 'review',
+      semanticCommand: 'review',
+      pipeline: ['scan-if-needed', 'review'],
+      safetyMode: 'read-only',
+      projectWrites: false,
+      runtimeWrites: true,
+      externalCalls: false
+    };
+  }
+
+  if (summaryCommand === 'symphony qa') {
+    return {
+      intent: 'verify',
+      semanticCommand: 'qa',
+      pipeline: ['scan-if-needed', 'qa'],
+      safetyMode: 'dry-run',
+      projectWrites: false,
+      runtimeWrites: true,
+      externalCalls: false
+    };
+  }
+
+  return {};
 }
 
 async function collectEvidence({ artifactDirectory, taskId, commands }) {

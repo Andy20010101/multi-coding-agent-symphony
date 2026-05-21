@@ -381,6 +381,369 @@ describe('v5 symphony work', () => {
   });
 });
 
+describe('v8 prompt-driven symphony CLI', () => {
+  it('runs scan as the product intake alias and writes latest state pointers', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-scan-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const scan = JSON.parse(output.stdoutText());
+
+      assert.equal(scan.command, 'symphony scan');
+      assert.equal(scan.intent, 'scan-project');
+      assert.equal(scan.safetyMode, 'read-only');
+      assert.equal(scan.projectWrites, false);
+      assert.equal(scan.runtimeWrites, true);
+      assert.equal(scan.externalCalls, false);
+      assert.equal(scan.modelInvocation, false);
+      assert.equal(existsSync(scan.contextArtifactPath), true);
+      assert.equal(existsSync(join(stateDir, 'context', 'latest.json')), true);
+      assert.equal(existsSync(join(stateDir, 'runs', 'latest.json')), true);
+      assert.equal(existsSync(join(stateDir, 'runs', `${scan.runId}.json`)), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs do and verify aliases through cached context with product summaries', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-work-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const doOutput = createOutput();
+      const doExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--work-dir',
+          join(root, 'work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: doOutput.stdout,
+        stderr: doOutput.stderr
+      });
+
+      assert.equal(doExitCode, 0);
+      assert.equal(doOutput.stderrText(), '');
+
+      const work = JSON.parse(doOutput.stdoutText());
+
+      assert.equal(work.command, 'symphony do');
+      assert.equal(work.intent, 'work');
+      assert.equal(work.semanticCommand, 'do');
+      assert.deepEqual(work.pipeline, ['scan-if-needed', 'do']);
+      assert.equal(work.contextReused, true);
+      assert.equal(work.safetyMode, 'dry-run');
+      assert.equal(work.verifierStatus, 'passed');
+      assert.equal(existsSync(work.taskPacketPath), true);
+
+      const verifyOutput = createOutput();
+      const verifyExitCode = await runSymphonyCli({
+        argv: [
+          'verify',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--work-dir',
+          join(root, 'verify-work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: verifyOutput.stdout,
+        stderr: verifyOutput.stderr
+      });
+
+      assert.equal(verifyExitCode, 0);
+      assert.equal(verifyOutput.stderrText(), '');
+
+      const verify = JSON.parse(verifyOutput.stdoutText());
+
+      assert.equal(verify.command, 'symphony verify');
+      assert.equal(verify.intent, 'verify');
+      assert.equal(verify.semanticCommand, 'verify');
+      assert.equal(verify.workflowMode, 'qa-swarm');
+      assert.equal(verify.projectWrites, false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('routes natural-language prompts without model classification', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-router-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+      const scanExitCode = await runSymphonyCli({
+        argv: [
+          '--json',
+          '扫描这个仓库',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(scanExitCode, 0);
+
+      const scan = JSON.parse(scanOutput.stdoutText());
+
+      assert.equal(scan.intent, 'scan-project');
+      assert.equal(scan.routeDecision.intent, 'scan-project');
+      assert.equal(scan.matchedSignals.includes('扫描'), true);
+
+      const reviewOutput = createOutput();
+      const reviewExitCode = await runSymphonyCli({
+        argv: [
+          '--json',
+          '审查当前改动',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--work-dir',
+          join(root, 'review-work')
+        ],
+        stdout: reviewOutput.stdout,
+        stderr: reviewOutput.stderr
+      });
+
+      assert.equal(reviewExitCode, 0);
+
+      const review = JSON.parse(reviewOutput.stdoutText());
+
+      assert.equal(review.intent, 'review');
+      assert.equal(review.semanticCommand, 'review');
+      assert.equal(review.safetyMode, 'read-only');
+      assert.equal(review.workflowMode, 'qa-swarm');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('prints status and artifacts from state only', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-state-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const statusOutput = createOutput();
+      const statusExitCode = await runSymphonyCli({
+        argv: ['status', '--state-dir', stateDir, '--json'],
+        stdout: statusOutput.stdout,
+        stderr: statusOutput.stderr
+      });
+
+      assert.equal(statusExitCode, 0);
+      assert.equal(JSON.parse(statusOutput.stdoutText()).latestIntent, 'scan-project');
+
+      const artifactsOutput = createOutput();
+      const artifactsExitCode = await runSymphonyCli({
+        argv: ['artifacts', '--state-dir', stateDir, '--json'],
+        stdout: artifactsOutput.stdout,
+        stderr: artifactsOutput.stderr
+      });
+
+      assert.equal(artifactsExitCode, 0);
+      assert.equal(existsSync(JSON.parse(artifactsOutput.stdoutText()).contextArtifactPath), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('previews new projects without creating the target directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-new-'));
+
+    try {
+      const targetDir = join(root, 'demo');
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'new',
+          targetDir,
+          '--template',
+          'empty',
+          '--dry-run',
+          '--runtime-dir',
+          join(root, 'runtime'),
+          '--state-dir',
+          join(root, '.symphony'),
+          '--json'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.equal(existsSync(targetDir), false);
+
+      const summary = JSON.parse(output.stdoutText());
+
+      assert.equal(summary.intent, 'new-project');
+      assert.equal(summary.template, 'empty');
+      assert.equal(summary.projectWrites, false);
+      assert.equal(existsSync(summary.scaffoldManifestArtifactPath), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('writes a limited node-cli template only when write mode is explicit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-new-write-'));
+
+    try {
+      const targetDir = join(root, 'demo-cli');
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'new',
+          targetDir,
+          '--template',
+          'node-cli',
+          '--write',
+          '--runtime-dir',
+          join(root, 'runtime'),
+          '--state-dir',
+          join(root, '.symphony'),
+          '--json'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.equal(existsSync(join(targetDir, 'README.md')), true);
+      assert.equal(existsSync(join(targetDir, 'AGENTS.md')), true);
+      assert.equal(existsSync(join(targetDir, 'package.json')), true);
+      assert.equal(existsSync(join(targetDir, 'scripts', 'cli.js')), true);
+
+      const summary = JSON.parse(output.stdoutText());
+
+      assert.equal(summary.intent, 'new-project');
+      assert.equal(summary.template, 'node-cli');
+      assert.equal(summary.projectWrites, true);
+      assert.equal(existsSync(summary.contextArtifactPath), true);
+      assert.equal(existsSync(summary.scaffoldManifestArtifactPath), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('routes new project prompts to the limited node-cli template preview', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-new-prompt-'));
+
+    try {
+      const targetDir = join(root, 'node-demo');
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          '--json',
+          '创建一个新的 node cli 项目',
+          '--dry-run',
+          '--target',
+          targetDir,
+          '--runtime-dir',
+          join(root, 'runtime'),
+          '--state-dir',
+          join(root, '.symphony')
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(existsSync(targetDir), false);
+
+      const summary = JSON.parse(output.stdoutText());
+
+      assert.equal(summary.intent, 'new-project');
+      assert.equal(summary.template, 'node-cli');
+      assert.equal(summary.routeDecision.intent, 'new-project');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('v5 symphony native agent passthrough', () => {
   it('dry-runs claude /review without invoking the native CLI and writes proof metadata', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-agent-dry-'));
@@ -565,4 +928,19 @@ class MissingToolRunner {
       stderr: 'missing'
     };
   }
+}
+
+async function writeFixtureProject(root) {
+  await writeFile(join(root, 'README.md'), '# Fixture\n', 'utf8');
+  await writeFile(join(root, 'AGENTS.md'), 'You must run tests.\n', 'utf8');
+  await mkdir(join(root, 'tests'));
+  await writeFile(join(root, 'tests', 'fixture.test.js'), 'export const ok = true;\n', 'utf8');
+  await writeFile(join(root, 'package.json'), `${JSON.stringify({
+    name: 'fixture',
+    packageManager: 'pnpm@10.30.3',
+    scripts: {
+      check: 'node --check index.js',
+      test: 'node --test'
+    }
+  }, null, 2)}\n`, 'utf8');
 }
