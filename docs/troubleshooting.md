@@ -124,16 +124,49 @@ The MCAS CLI uses `gh issue view` for read-only intake and does not invoke a mod
 
 ## Project Intake Provider Unavailable
 
-Symptom: `symphony intake --provider grill-me-docs` reports `providerStatus: "unavailable"`.
+Symptom: `symphony scan --grill` or `symphony intake --provider grill-me-docs` reports `providerStatus: "unavailable"`.
 
 Check:
 
 ```sh
 command -v grill-me-docs
+pnpm symphony scan --grill --json
 pnpm mcas intake --project-dir . --provider grill-me-docs --provider-command grill-me-docs
 ```
 
-The built-in intake provider still writes `project-context` and `intake-summary` without `grill-me-docs`. Add `--require-provider` only when the external provider must be present; that mode returns usage exit code `64` if discovery fails.
+The built-in intake provider still writes `project-context` and `intake-summary` without `grill-me-docs`. `symphony scan --grill` falls back to builtin when the optional provider is unavailable. Add `--require-grill` or `--require-provider` only when the external provider must be present; that mode returns usage exit code `64` if discovery fails.
+
+## Symphony Latest State Missing
+
+Symptom: `symphony status` prints `Status: no runs yet`, or `symphony artifacts` has no paths.
+
+Run:
+
+```sh
+pnpm symphony scan
+pnpm symphony status
+pnpm symphony artifacts
+```
+
+The `.symphony/context/latest.json` and `.symphony/runs/latest.json` files are product-layer pointers only. Full context, summary, evidence, TaskPacket, and Harness files remain in runtime artifact directories. Remove stale `.symphony/` pointers only after preserving any artifact paths you still need.
+
+## Prompt Route Is Unexpected
+
+Symptom: `symphony "<prompt>" --json` selects a safer route than expected.
+
+Check the JSON `routeDecision.matchedSignals`, `intent`, `pipeline`, and `safetyMode`. The router is deterministic and model-free. Mixed prompts such as `跑测试并修复失败` verify first unless `--write`, `--real <adapter>`, or explicit write wording changes the safety mode.
+
+## New Project Preview Did Not Create Files
+
+Symptom: `symphony new my-app --template node-cli` or `symphony "创建一个新的 node cli 项目"` reports success but no target directory exists.
+
+Default new-project mode is dry-run preview. Use explicit write mode:
+
+```sh
+pnpm symphony new my-app --template node-cli --write
+```
+
+v8 only supports `empty`, `node-cli`, and `web-app` placeholders. It does not run framework generators, install dependencies, or call the network.
 
 ## Project Intake Fail-On Gate
 

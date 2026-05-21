@@ -1,6 +1,16 @@
 # Multi Coding Agent Symphony
 
-Multi Coding Agent Symphony is an orchestration layer for running multiple coding CLIs through stable task contracts.
+Multi Coding Agent Symphony is a prompt-driven orchestration CLI for scanning projects, routing work, recording evidence, and running multiple coding CLIs through stable task contracts.
+
+Start with the product CLI:
+
+```sh
+symphony doctor
+symphony scan
+symphony do "inspect README"
+symphony "修复失败的测试"
+symphony status
+```
 
 The target CLIs are:
 
@@ -40,6 +50,8 @@ Implemented:
 - Real adapter paths for Codex, Claude Code, and Kiro CLI with opt-in model smokes.
 - User-facing `symphony` commands for doctor, dry-run work, native agent passthrough proof capture, Harness passthrough, and eval replay dispatch.
 - User-facing `symphony intake` for read-only project scans that write reusable `project-context` and `intake-summary` artifacts without invoking real models.
+- v8 product commands: `symphony scan`, `symphony do`, `symphony verify`, `symphony status`, `symphony artifacts`, `symphony continue`, `symphony new`, and deterministic prompt routing through `symphony "<prompt>"`.
+- Product state pointers under `.symphony/context/latest.json`, `.symphony/runs/latest.json`, and `.symphony/runs/<run-id>.json`; canonical evidence and artifacts remain in `ArtifactStore` runtime directories.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
@@ -83,8 +95,12 @@ pnpm mcas doctor
 pnpm mcas intake --project-dir . --runtime-dir tmp/v7-intake-runtime
 node scripts/symphony.js doctor
 pnpm symphony doctor
-pnpm symphony intake --project-dir . --output-dir tmp/v7-symphony-intake
-pnpm symphony work --preflight-intake --dry-run --work-dir tmp/v7-work "inspect README"
+pnpm symphony scan
+pnpm symphony do --dry-run "inspect README"
+pnpm symphony verify --dry-run "inspect README"
+pnpm symphony "扫描这个仓库"
+pnpm symphony "审查当前改动"
+pnpm symphony status
 pnpm smoke:codex:help
 pnpm smoke:claude:help
 pnpm smoke:kiro:help
@@ -110,6 +126,25 @@ Run the user CLI:
 
 ```sh
 symphony doctor
+symphony scan
+symphony do --dry-run "inspect README"
+symphony verify --dry-run "inspect README"
+symphony "扫描这个仓库"
+symphony "审查当前改动"
+symphony "修复失败的测试"
+symphony status
+symphony artifacts
+symphony new tmp/v8-demo --template empty --dry-run
+symphony "创建一个新的 node cli 项目" --dry-run
+```
+
+`symphony scan` is the product name for the v7 intake/grill-me-docs capability. `symphony do` uses the latest scan context when its project fingerprint is fresh, and reruns scan when the context is missing or stale. `symphony review` and `symphony verify` keep distinct product intent metadata even while they reuse the qa-swarm Harness path. Prompt routing is deterministic and model-free; it matches rules for scan, work, review, verify, status, artifacts, continue, and new-project intents.
+
+`.symphony/` stores local user-facing pointers and summaries. Add it to your local ignore rules if you do not want run pointers in source control. Full evidence, TaskPackets, Harness output, scaffold manifests, and intake artifacts stay in the runtime artifact directories written through `ArtifactStore`.
+
+Advanced compatibility commands:
+
+```sh
 symphony intake
 symphony intake --project-dir . --output-dir tmp/symphony-intake
 symphony work --dry-run "inspect README"
@@ -140,8 +175,9 @@ pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason 
 pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --workflow-comparison-fixture workflow-comparison --reason workflow-mode-comparison --compared-at 2026-05-16T00:00:00.000Z
 ```
 
-`symphony intake` scans a checkout in read-only mode, writes `project-context` and `intake-summary` JSON artifacts through `ArtifactStore` under task id `project-intake`, and prints the context path, risks, open questions, recommended workflow, and verification commands. The built-in provider is deterministic and does not invoke models. `--provider grill-me-docs` is optional; when the binary is absent, the provider is marked unavailable unless `--require-provider` is also passed.
-`symphony work` is the default user workflow entry. It creates a minimal Harness TaskPacket under `tmp/symphony-work/<run-id>/`, runs the existing Harness Bridge, and prints status, run id, workflow mode, adapter, execution mode, verifier status, changed files, evidence path, Harness output path, and next action. Default behavior is unchanged unless `--preflight-intake` or `--intake-artifact <path>` is passed. `--preflight-intake` writes intake artifacts before work and adds project context, recommended workflow, and verification command constraints to the TaskPacket. `--intake-artifact <path>` reuses an existing `project-context` artifact without rescanning.
+`symphony scan` scans a checkout in read-only mode, writes `project-context` and `intake-summary` JSON artifacts through `ArtifactStore` under task id `project-intake`, and writes latest context/run pointers under `.symphony/`. The built-in provider is deterministic and does not invoke models. `--grill` uses the optional `grill-me-docs` adapter with builtin fallback; `--require-grill` fails when the provider is unavailable.
+`symphony do` is the default product workflow entry. It creates a minimal Harness TaskPacket under `tmp/symphony-work/<run-id>/`, runs the existing Harness Bridge in dry-run mode by default, and prints intent, pipeline, safety mode, verifier status, artifact paths, and next action. Add `--real <codex|claude|kiro>` only with the matching `MCAS_RUN_REAL_*` gate.
+`symphony intake` and `symphony work` remain advanced compatibility commands. Their default JSON behavior is preserved unless routed through the v8 aliases.
 `symphony review` and `symphony qa` are shortcuts for dry-run qa-swarm workflow execution through the same Harness Bridge path.
 `symphony agent claude /review --dry-run` captures native command metadata and a proof artifact without invoking Claude. Add `--real` only with `MCAS_RUN_REAL_CLAUDE=1`.
 `symphony harness ...` and `symphony replay ...` are compatibility passthroughs to the existing `mcas harness ...` and `mcas eval replay ...` paths.
@@ -152,6 +188,12 @@ Command hierarchy:
 ```text
 symphony intake   read-only project context scan
 symphony work     user workflow entry
+symphony scan     product project scan alias
+symphony do       product work alias
+symphony verify   product verification alias
+symphony status   latest run state
+symphony artifacts artifact and evidence pointers
+symphony new      limited dry-run/write project bootstrap
 symphony agent    native CLI passthrough
 symphony review   shortcut for review workflow
 symphony qa       shortcut for QA workflow
