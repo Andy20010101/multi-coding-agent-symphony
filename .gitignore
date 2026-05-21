@@ -23,5 +23,6 @@ temp/
 
 # OS/editor noise
 .DS_Store
+*:Zone.Identifier
 .idea/
 .vscode/
