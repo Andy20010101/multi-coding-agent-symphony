@@ -64,6 +64,15 @@ export class NodeProcessRunner {
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
+    let stdinError;
+
+    child.stdin.on('error', (error) => {
+      if (isIgnorableStdinError(error)) {
+        return;
+      }
+
+      stdinError = error;
+    });
     child.stdout.on('data', (chunk) => {
       stdout += chunk;
       lastActivityAt = Date.now();
@@ -88,6 +97,11 @@ export class NodeProcessRunner {
         clearTimeout(killTimeout);
         let capturedOutputFiles;
 
+        if (stdinError) {
+          reject(stdinError);
+          return;
+        }
+
         try {
           capturedOutputFiles = await readOutputFiles(outputFiles);
         } catch (error) {
@@ -110,7 +124,13 @@ export class NodeProcessRunner {
       });
     });
 
-    child.stdin.end(stdin);
+    try {
+      child.stdin.end(stdin);
+    } catch (error) {
+      if (!isIgnorableStdinError(error)) {
+        stdinError = error;
+      }
+    }
 
     return {
       pid: child.pid,
@@ -131,6 +151,10 @@ export class NodeProcessRunner {
   async run(invocation) {
     return this.start(invocation).result;
   }
+}
+
+function isIgnorableStdinError(error) {
+  return error?.code === 'EPIPE' || error?.code === 'ERR_STREAM_DESTROYED';
 }
 
 function childProcessEnvironment(overrides) {

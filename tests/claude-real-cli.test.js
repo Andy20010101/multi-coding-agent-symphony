@@ -224,6 +224,35 @@ describe('Claude Code real CLI integration', () => {
     assert.equal(evidence.knownRisks.includes('real-cli-model-profile-mismatch'), true);
     assert.equal(verifyEvidence({ commandSpec, evidence }).status, 'passed');
   });
+
+  it('renders intake constraints into the shared Claude prompt', async () => {
+    const adapter = new ClaudeCodeAdapter({
+      cliVersion: '2.1.123'
+    });
+    const prepared = await adapter.prepare({
+      commandSpec,
+      contextPack: {
+        ...contextPack,
+        task: {
+          ...contextPack.task,
+          constraints: [
+            'project_context_artifact:tmp/intake/project-context.json',
+            'recommended_workflow:writer-reviewer',
+            'verification_command:pnpm check'
+          ]
+        }
+      },
+      workspace: '/work/repo',
+      modelProfile: 'deepseek-claude-code',
+      executionMode: 'real'
+    });
+
+    assert.match(prepared.prompt, /project_context_artifact:tmp\/intake\/project-context\.json/);
+    assert.match(prepared.prompt, /recommended_workflow:writer-reviewer/);
+    assert.match(prepared.prompt, /Required verification commands:/);
+    assert.match(prepared.prompt, /pnpm check/);
+    assert.match(prepared.prompt, /checks\[\]\.command exactly equals/);
+  });
 });
 
 class StaticProcessRunner {

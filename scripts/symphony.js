@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { NodeProcessRunner } from '../src/process-runner.js';
 import { redactSecrets } from '../src/redaction.js';
+import { validateProjectContextArtifact } from '../src/intake/intake-contracts.js';
 import { runMcasCli } from './mcas.js';
 
 const EXIT_CODES = {
@@ -94,6 +95,17 @@ export async function runSymphonyCli({
       });
     }
 
+    if (command === 'intake') {
+      return await runSymphonyIntake({
+        args: rest,
+        stdout,
+        stderr,
+        runner,
+        env,
+        mcasRunner
+      });
+    }
+
     if (command === 'agent') {
       return await runSymphonyAgent({
         args: rest,
@@ -135,7 +147,8 @@ export function buildSymphonyWorkTaskPacket({
   prompt,
   mode = defaultWorkMode(prompt),
   runId = buildWorkRunId({ prompt, mode }),
-  adapter = 'codex'
+  adapter = 'codex',
+  constraints = []
 }) {
   assertNonEmptyString(prompt, 'prompt');
   assertWorkMode(mode);
@@ -160,6 +173,10 @@ export function buildSymphonyWorkTaskPacket({
       commands: ['symphony-work-dry-run']
     }
   };
+
+  if (constraints.length > 0) {
+    taskPacket.constraints = [...constraints];
+  }
 
   if (mode !== 'linear') {
     taskPacket.workflow = buildWorkWorkflow({
@@ -192,11 +209,27 @@ async function runSymphonyWork({
   const runtimeDirectory = join(runRoot, 'runtime');
   const harnessDirectory = join(runRoot, 'harness');
   const taskPacketPath = join(runRoot, 'taskpacket.json');
+  const intake = await prepareWorkIntake({
+    options,
+    runId,
+    runRoot,
+    stdout,
+    stderr,
+    runner,
+    env,
+    mcasRunner
+  });
+
+  if (intake.exitCode !== EXIT_CODES.ok) {
+    return intake.exitCode;
+  }
+
   const taskPacket = buildSymphonyWorkTaskPacket({
     prompt: options.prompt,
     mode: options.mode,
     runId,
-    adapter: options.adapter
+    adapter: options.adapter,
+    constraints: intake.constraints
   });
 
   await mkdir(runRoot, { recursive: true });
@@ -252,7 +285,79 @@ async function runSymphonyWork({
     summaryCommand,
     executionMode: options.executionMode,
     adapter: options.adapter,
-    proofDir: options.proofDir
+    proofDir: options.proofDir,
+    intake
+  });
+
+  writeJson(stdout, summary);
+
+  if (kernelStderr.text() !== '') {
+    stderr.write(kernelStderr.text());
+  }
+
+  return exitCode;
+}
+
+async function runSymphonyIntake({
+  args,
+  stdout,
+  stderr,
+  runner,
+  env,
+  mcasRunner
+}) {
+  const options = parseSymphonyIntakeArgs(args);
+  const runId = buildIntakeRunId(options);
+  const runtimeDirectory = join(options.outputDir, runId, 'runtime');
+  const kernelStdout = createBufferedStream();
+  const kernelStderr = createBufferedStream();
+  const kernelArgv = [
+    'intake',
+    '--project-dir',
+    options.projectDir,
+    '--runtime-dir',
+    runtimeDirectory,
+    '--session-id',
+    runId,
+    '--provider',
+    options.provider,
+    '--format',
+    'json'
+  ];
+
+  if (options.providerCommand !== undefined) {
+    kernelArgv.push('--provider-command', options.providerCommand);
+  }
+
+  if (options.requireProvider) {
+    kernelArgv.push('--require-provider');
+  }
+
+  if (options.failOn !== undefined) {
+    kernelArgv.push('--fail-on', options.failOn);
+  }
+
+  const exitCode = await mcasRunner({
+    argv: kernelArgv,
+    stdout: kernelStdout.stream,
+    stderr: kernelStderr.stream,
+    runner,
+    env
+  });
+
+  if (kernelStdout.text().trim() === '') {
+    if (kernelStderr.text() !== '') {
+      stderr.write(kernelStderr.text());
+    }
+
+    return exitCode;
+  }
+
+  const kernelOutput = parseJsonOutput(kernelStdout.text(), 'mcas intake output');
+  const summary = buildSymphonyIntakeSummary({
+    kernelOutput,
+    provider: options.provider,
+    format: options.format
   });
 
   writeJson(stdout, summary);
@@ -270,6 +375,8 @@ function parseWorkArgs(args) {
   let proofDir = 'tmp/real-cli-proofs';
   let realAdapter;
   let dryRun = false;
+  let preflightIntake = false;
+  let intakeArtifact;
   let timeoutMs;
   const promptParts = [];
 
@@ -278,6 +385,17 @@ function parseWorkArgs(args) {
 
     if (value === '--dry-run') {
       dryRun = true;
+      continue;
+    }
+
+    if (value === '--preflight-intake') {
+      preflightIntake = true;
+      continue;
+    }
+
+    if (value === '--intake-artifact') {
+      intakeArtifact = readRequiredValue(args, index, '--intake-artifact');
+      index += 1;
       continue;
     }
 
@@ -330,6 +448,10 @@ function parseWorkArgs(args) {
   mode = mode ?? defaultWorkMode(prompt);
   assertWorkMode(mode);
 
+  if (preflightIntake && intakeArtifact !== undefined) {
+    throw new UsageError('--preflight-intake and --intake-artifact cannot be combined');
+  }
+
   return {
     prompt,
     mode,
@@ -337,8 +459,214 @@ function parseWorkArgs(args) {
     proofDir,
     adapter: realAdapter ?? 'codex',
     executionMode: dryRun || realAdapter === undefined ? 'dry-run' : 'real',
+    preflightIntake,
+    intakeArtifact,
     timeoutMs
   };
+}
+
+function parseSymphonyIntakeArgs(args) {
+  const options = {
+    projectDir: '.',
+    outputDir: 'tmp/symphony-intake',
+    provider: 'builtin',
+    format: 'json',
+    requireProvider: false
+  };
+  const valueOptions = new Set([
+    '--project-dir',
+    '--output-dir',
+    '--format',
+    '--provider',
+    '--provider-command',
+    '--fail-on'
+  ]);
+  const knownOptions = new Set([...valueOptions, '--require-provider']);
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (!value.startsWith('--')) {
+      throw new UsageError(`unexpected intake argument: ${value}`);
+    }
+
+    if (!knownOptions.has(value)) {
+      throw new UsageError(`unknown intake option: ${value}`);
+    }
+
+    if (value === '--require-provider') {
+      options.requireProvider = true;
+      continue;
+    }
+
+    const optionValue = readRequiredValue(args, index, value);
+
+    if (value === '--project-dir') {
+      options.projectDir = optionValue;
+    } else if (value === '--output-dir') {
+      options.outputDir = optionValue;
+    } else if (value === '--format') {
+      options.format = optionValue;
+    } else if (value === '--provider') {
+      options.provider = optionValue;
+    } else if (value === '--provider-command') {
+      options.providerCommand = optionValue;
+    } else if (value === '--fail-on') {
+      options.failOn = optionValue;
+    }
+
+    if (valueOptions.has(value)) {
+      index += 1;
+    }
+  }
+
+  if (!['builtin', 'grill-me-docs'].includes(options.provider)) {
+    throw new UsageError('provider must be one of: builtin, grill-me-docs');
+  }
+
+  if (!['json', 'summary'].includes(options.format)) {
+    throw new UsageError('format must be one of: json, summary');
+  }
+
+  if (options.failOn !== undefined && !['low', 'medium', 'high', 'critical'].includes(options.failOn)) {
+    throw new UsageError('fail-on must be one of: low, medium, high, critical');
+  }
+
+  return options;
+}
+
+async function prepareWorkIntake({
+  options,
+  runId,
+  runRoot,
+  stdout,
+  stderr,
+  runner,
+  env,
+  mcasRunner
+}) {
+  if (options.preflightIntake) {
+    return await runWorkPreflightIntake({
+      runId,
+      runRoot,
+      stdout,
+      stderr,
+      runner,
+      env,
+      mcasRunner
+    });
+  }
+
+  if (options.intakeArtifact !== undefined) {
+    return await loadWorkIntakeArtifact(options.intakeArtifact);
+  }
+
+  return {
+    exitCode: EXIT_CODES.ok,
+    constraints: []
+  };
+}
+
+async function runWorkPreflightIntake({
+  runId,
+  runRoot,
+  stdout,
+  stderr,
+  runner,
+  env,
+  mcasRunner
+}) {
+  const kernelStdout = createBufferedStream();
+  const kernelStderr = createBufferedStream();
+  const exitCode = await mcasRunner({
+    argv: [
+      'intake',
+      '--project-dir',
+      '.',
+      '--runtime-dir',
+      join(runRoot, 'intake-runtime'),
+      '--session-id',
+      `${runId}-intake`
+    ],
+    stdout: kernelStdout.stream,
+    stderr: kernelStderr.stream,
+    runner,
+    env
+  });
+
+  if (exitCode !== EXIT_CODES.ok) {
+    if (kernelStdout.text() !== '') {
+      stdout.write(kernelStdout.text());
+    }
+
+    if (kernelStderr.text() !== '') {
+      stderr.write(kernelStderr.text());
+    }
+
+    return {
+      exitCode,
+      constraints: []
+    };
+  }
+
+  const output = parseJsonOutput(kernelStdout.text(), 'mcas intake output');
+
+  if (kernelStderr.text() !== '') {
+    stderr.write(kernelStderr.text());
+  }
+
+  return {
+    exitCode,
+    intakeContextArtifactPath: output.contextArtifactPath,
+    intakeSummaryArtifactPath: output.summaryArtifactPath,
+    recommendedWorkflow: output.recommendedWorkflow,
+    verificationCommands: output.verificationCommands,
+    constraints: buildIntakeConstraints({
+      contextArtifactPath: output.contextArtifactPath,
+      recommendedWorkflow: output.recommendedWorkflow,
+      verificationCommands: output.verificationCommands
+    })
+  };
+}
+
+async function loadWorkIntakeArtifact(path) {
+  let context;
+
+  try {
+    context = JSON.parse(await readFile(path, 'utf8'));
+    validateProjectContextArtifact(context);
+  } catch (error) {
+    throw new UsageError(`--intake-artifact must be readable project-context JSON: ${error.message}`);
+  }
+
+  return {
+    exitCode: EXIT_CODES.ok,
+    intakeContextArtifactPath: path,
+    recommendedWorkflow: context.workflowHints.recommendedMode,
+    verificationCommands: context.workflowHints.verificationCommands,
+    constraints: buildIntakeConstraints({
+      contextArtifactPath: path,
+      recommendedWorkflow: context.workflowHints.recommendedMode,
+      verificationCommands: context.workflowHints.verificationCommands
+    })
+  };
+}
+
+function buildIntakeConstraints({
+  contextArtifactPath,
+  recommendedWorkflow,
+  verificationCommands = []
+}) {
+  const constraints = [
+    `project_context_artifact:${contextArtifactPath}`,
+    `recommended_workflow:${recommendedWorkflow}`
+  ];
+
+  for (const command of verificationCommands) {
+    constraints.push(`verification_command:${command}`);
+  }
+
+  return constraints;
 }
 
 async function buildWorkSummary({
@@ -349,7 +677,8 @@ async function buildWorkSummary({
   summaryCommand = 'symphony work',
   executionMode,
   adapter,
-  proofDir
+  proofDir,
+  intake = {}
 }) {
   const evidence = await collectEvidence({
     artifactDirectory: kernelOutput.artifactDirectory,
@@ -370,6 +699,12 @@ async function buildWorkSummary({
     evidenceArtifactPath: evidence.firstArtifactPath,
     harnessOutputPath: harnessDirectory,
     taskPacketPath,
+    ...(intake.intakeContextArtifactPath
+      ? { intakeContextArtifactPath: intake.intakeContextArtifactPath }
+      : {}),
+    ...(intake.intakeSummaryArtifactPath
+      ? { intakeSummaryArtifactPath: intake.intakeSummaryArtifactPath }
+      : {}),
     nextAction: executionMode === 'real'
       ? 'Inspect proofArtifactPath, evidenceArtifactPath, and harnessOutputPath.'
       : 'Inspect evidenceArtifactPath and harnessOutputPath; use --real <adapter> only with the matching MCAS_RUN_REAL_* gate.'
@@ -704,12 +1039,53 @@ function buildWorkRunId({ prompt, mode, adapter = 'codex' }) {
   return `symphony-work-${safeIdPart(mode)}-${shortHash([adapter, mode, prompt].join('\0'))}`;
 }
 
+function buildIntakeRunId({ projectDir, provider }) {
+  const resolvedProjectDir = resolve(projectDir);
+
+  return `symphony-intake-${safeIdPart(basenameFromPath(resolvedProjectDir))}-${shortHash([resolvedProjectDir, provider].join('\0'))}`;
+}
+
 function buildAgentRunId({ adapter, nativeCommand, promptArgs }) {
   return `symphony-agent-${safeIdPart(adapter)}-${safeIdPart(nativeCommand)}-${shortHash(promptArgs.join('\0'))}`;
 }
 
+function buildSymphonyIntakeSummary({ kernelOutput, provider, format }) {
+  const summary = {
+    version: '1',
+    command: 'symphony intake',
+    status: kernelOutput.status,
+    exitCode: kernelOutput.exitCode,
+    projectDir: kernelOutput.projectDir,
+    provider,
+    modelInvocation: false,
+    contextArtifactPath: kernelOutput.contextArtifactPath,
+    summaryArtifactPath: kernelOutput.summaryArtifactPath,
+    riskCounts: kernelOutput.riskCounts,
+    openQuestionCount: kernelOutput.openQuestionCount,
+    recommendedWorkflow: kernelOutput.recommendedWorkflow,
+    verificationCommands: kernelOutput.verificationCommands,
+    nextAction: 'Review contextArtifactPath before running symphony work --intake-artifact <path>.'
+  };
+
+  if (format === 'json') {
+    summary.artifactDirectory = kernelOutput.artifactDirectory;
+    summary.eventDirectory = kernelOutput.eventDirectory;
+    summary.sessionId = kernelOutput.sessionId;
+    summary.taskId = kernelOutput.taskId;
+    summary.providerStatus = kernelOutput.providerStatus;
+  }
+
+  return summary;
+}
+
 function shortHash(value) {
   return createHash('sha256').update(value).digest('hex').slice(0, 12);
+}
+
+function basenameFromPath(path) {
+  const parts = path.split(/[\\/]+/u).filter(Boolean);
+
+  return parts.at(-1) ?? 'project';
 }
 
 function safeIdPart(value) {

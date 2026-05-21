@@ -176,8 +176,35 @@ export function buildRunPrompt({ commandSpec, contextPack }) {
     `Task: ${contextPack.task.id}`,
     `Repository: ${contextPack.task.repository}`,
     `Objective: ${contextPack.task.objective}`,
+    ...constraintLines(contextPack.task.constraints),
     `Acceptance: ${contextPack.task.acceptance.join('; ')}`,
     `Evidence schema: ${commandSpec.evidenceSchema}`,
-    `Done criteria: ${commandSpec.doneCriteria.join('; ')}`
+    `Done criteria: ${commandSpec.doneCriteria.join('; ')}`,
+    'Return an EvidencePackage JSON object with command, taskId, workspaceId, changedFiles, checks, knownRisks, agentSummary, and version.'
   ].join('\n');
+}
+
+function constraintLines(constraints = []) {
+  if (!Array.isArray(constraints) || constraints.length === 0) {
+    return [];
+  }
+
+  const verificationCommands = constraints
+    .filter((constraint) => typeof constraint === 'string' && constraint.startsWith('verification_command:'))
+    .map((constraint) => constraint.slice('verification_command:'.length))
+    .filter((command) => command.trim() !== '');
+  const otherConstraints = constraints.filter((constraint) => (
+    typeof constraint === 'string' && !constraint.startsWith('verification_command:')
+  ));
+  const lines = otherConstraints.length > 0
+    ? [`Constraints: ${otherConstraints.join('; ')}`]
+    : [];
+
+  if (verificationCommands.length > 0) {
+    lines.push('Required verification commands:');
+    lines.push(...verificationCommands.map((command) => `- ${command}`));
+    lines.push('For each required verification command, run it and include one checks[] entry whose checks[].command exactly equals that command.');
+  }
+
+  return lines;
 }

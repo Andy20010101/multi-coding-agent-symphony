@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -33,6 +33,7 @@ describe('Phase 8 user-facing CLI', () => {
     assert.equal(typeof doctor.nodeVersion, 'string');
     assert.deepEqual(doctor.commands, [
       'doctor',
+      'intake',
       'github issue',
       'harness run-taskpacket',
       'queue manual',
@@ -41,6 +42,145 @@ describe('Phase 8 user-facing CLI', () => {
       'smoke',
       'eval replay'
     ]);
+  });
+
+  it('runs project intake and writes project context artifacts without invoking a model', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-intake-cli-'));
+
+    try {
+      await writeFile(join(root, 'README.md'), '# Fixture\n', 'utf8');
+      await writeFile(join(root, 'AGENTS.md'), 'You must run tests.\n', 'utf8');
+      await mkdir(join(root, 'tests'));
+      await writeFile(join(root, 'tests', 'fixture.test.js'), 'export const ok = true;\n', 'utf8');
+      await writeFile(join(root, 'package.json'), `${JSON.stringify({
+        name: 'fixture',
+        packageManager: 'pnpm@10.30.3',
+        scripts: {
+          check: 'node --check index.js',
+          test: 'node --test'
+        }
+      }, null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'intake',
+          '--project-dir',
+          root,
+          '--runtime-dir',
+          join(root, 'runtime')
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const intake = JSON.parse(output.stdoutText());
+
+      assert.equal(intake.version, '1');
+      assert.equal(intake.command, 'intake');
+      assert.equal(intake.taskId, 'project-intake');
+      assert.equal(intake.contextArtifactId, 'project-context');
+      assert.equal(intake.summaryArtifactId, 'intake-summary');
+      assert.equal(intake.modelInvocation, false);
+      assert.equal(intake.providerStatus, 'builtin');
+      assert.equal(intake.contextArtifactPath, join(root, 'runtime', 'artifacts', 'project-intake', 'project-context.json'));
+      assert.equal(intake.summaryArtifactPath, join(root, 'runtime', 'artifacts', 'project-intake', 'intake-summary.json'));
+      assert.equal(existsSync(intake.contextArtifactPath), true);
+      assert.equal(existsSync(intake.summaryArtifactPath), true);
+
+      const context = JSON.parse(await readFile(intake.contextArtifactPath, 'utf8'));
+
+      assert.equal(context.kind, 'project-context');
+      assert.equal(context.provider.modelInvocation, false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns verifier failure when fail-on threshold is met', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-intake-fail-on-'));
+
+    try {
+      const output = createOutput();
+      const exitCode = await runMcasCli({
+        argv: [
+          'intake',
+          '--project-dir',
+          root,
+          '--runtime-dir',
+          join(root, 'runtime'),
+          '--fail-on',
+          'high'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 70);
+      assert.equal(output.stderrText(), '');
+
+      const intake = JSON.parse(output.stdoutText());
+
+      assert.equal(intake.status, 'failed');
+      assert.equal(intake.exitCode, 70);
+      assert.equal(intake.riskCounts.high >= 1, true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps grill-me-docs optional unless the provider is required', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-intake-provider-'));
+
+    try {
+      const optionalOutput = createOutput();
+      const optionalExitCode = await runMcasCli({
+        argv: [
+          'intake',
+          '--project-dir',
+          root,
+          '--runtime-dir',
+          join(root, 'runtime-optional'),
+          '--provider',
+          'grill-me-docs'
+        ],
+        stdout: optionalOutput.stdout,
+        stderr: optionalOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(optionalExitCode, 0);
+      assert.equal(optionalOutput.stderrText(), '');
+      assert.equal(JSON.parse(optionalOutput.stdoutText()).providerStatus, 'unavailable');
+
+      const requiredOutput = createOutput();
+      const requiredExitCode = await runMcasCli({
+        argv: [
+          'intake',
+          '--project-dir',
+          root,
+          '--runtime-dir',
+          join(root, 'runtime-required'),
+          '--provider',
+          'grill-me-docs',
+          '--require-provider'
+        ],
+        stdout: requiredOutput.stdout,
+        stderr: requiredOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(requiredExitCode, 64);
+      assert.equal(requiredOutput.stdoutText(), '');
+      assert.match(JSON.parse(requiredOutput.stderrText()).message, /provider is unavailable/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('preflights real CLI adapters and writes a doctor proof artifact', async () => {
@@ -958,6 +1098,21 @@ class FakeRunner {
   async run(invocation) {
     this.calls.push(invocation);
     return this.result;
+  }
+}
+
+class MissingToolRunner {
+  constructor() {
+    this.calls = [];
+  }
+
+  async run(invocation) {
+    this.calls.push(invocation);
+    return {
+      exitCode: 1,
+      stdout: '',
+      stderr: 'missing'
+    };
   }
 }
 

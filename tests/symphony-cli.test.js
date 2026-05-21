@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -145,6 +145,176 @@ describe('v5 symphony work', () => {
       assert.equal(existsSync(summary.evidenceArtifactPath), true);
       assert.equal(existsSync(join(summary.harnessOutputPath, 'runs', summary.runId, 'summary.json')), true);
       assert.match(summary.nextAction, /harnessOutputPath/);
+
+      const taskPacket = JSON.parse(await readFile(summary.taskPacketPath, 'utf8'));
+
+      assert.equal(taskPacket.constraints, undefined);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs a standalone symphony intake workflow through the mcas kernel', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-intake-cli-'));
+
+    try {
+      await writeFile(join(root, 'README.md'), '# Fixture\n', 'utf8');
+      await writeFile(join(root, 'AGENTS.md'), 'You must run tests.\n', 'utf8');
+      await mkdir(join(root, 'tests'));
+      await writeFile(join(root, 'tests', 'fixture.test.js'), 'export const ok = true;\n', 'utf8');
+      await writeFile(join(root, 'package.json'), `${JSON.stringify({
+        name: 'fixture',
+        packageManager: 'pnpm@10.30.3',
+        scripts: {
+          check: 'node --check index.js',
+          test: 'node --test'
+        }
+      }, null, 2)}\n`, 'utf8');
+
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'intake',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'out')
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const intake = JSON.parse(output.stdoutText());
+
+      assert.equal(intake.command, 'symphony intake');
+      assert.equal(intake.provider, 'builtin');
+      assert.equal(intake.modelInvocation, false);
+      assert.equal(intake.taskId, 'project-intake');
+      assert.equal(existsSync(intake.contextArtifactPath), true);
+      assert.equal(existsSync(intake.summaryArtifactPath), true);
+      assert.match(intake.nextAction, /--intake-artifact/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('runs preflight intake before dry-run work and carries context into the TaskPacket', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-preflight-work-'));
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'work',
+          '--preflight-intake',
+          '--dry-run',
+          '--work-dir',
+          root,
+          'inspect README'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const summary = JSON.parse(output.stdoutText());
+
+      assert.equal(summary.command, 'symphony work');
+      assert.equal(summary.status, 'passed');
+      assert.equal(existsSync(summary.intakeContextArtifactPath), true);
+      assert.equal(existsSync(summary.intakeSummaryArtifactPath), true);
+
+      const taskPacket = JSON.parse(await readFile(summary.taskPacketPath, 'utf8'));
+
+      assert.equal(taskPacket.constraints.includes(`project_context_artifact:${summary.intakeContextArtifactPath}`), true);
+      assert.equal(taskPacket.constraints.some((constraint) => constraint.startsWith('recommended_workflow:')), true);
+      assert.equal(taskPacket.constraints.some((constraint) => constraint === 'verification_command:pnpm check'), true);
+      assert.equal(taskPacket.constraints.some((constraint) => constraint === 'verification_command:pnpm test'), true);
+      assert.equal(taskPacketToTaskSpec(taskPacket).constraints.includes(`project_context_artifact:${summary.intakeContextArtifactPath}`), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reuses an existing intake artifact for work without running preflight', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-intake-artifact-work-'));
+
+    try {
+      const intakeOutput = createOutput();
+      const intakeExitCode = await runSymphonyCli({
+        argv: [
+          'intake',
+          '--project-dir',
+          '.',
+          '--output-dir',
+          join(root, 'intake')
+        ],
+        stdout: intakeOutput.stdout,
+        stderr: intakeOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+      const intake = JSON.parse(intakeOutput.stdoutText());
+
+      assert.equal(intakeExitCode, 0);
+
+      const workOutput = createOutput();
+      const workExitCode = await runSymphonyCli({
+        argv: [
+          'work',
+          '--intake-artifact',
+          intake.contextArtifactPath,
+          '--dry-run',
+          '--work-dir',
+          join(root, 'work'),
+          'inspect README'
+        ],
+        stdout: workOutput.stdout,
+        stderr: workOutput.stderr
+      });
+
+      assert.equal(workExitCode, 0);
+      assert.equal(workOutput.stderrText(), '');
+
+      const summary = JSON.parse(workOutput.stdoutText());
+      const taskPacket = JSON.parse(await readFile(summary.taskPacketPath, 'utf8'));
+
+      assert.equal(summary.intakeContextArtifactPath, intake.contextArtifactPath);
+      assert.equal(summary.intakeSummaryArtifactPath, undefined);
+      assert.equal(taskPacket.constraints.includes(`project_context_artifact:${intake.contextArtifactPath}`), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns usage failure when an intake artifact is missing or invalid', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-missing-intake-artifact-'));
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'work',
+          '--intake-artifact',
+          join(root, 'missing.json'),
+          '--dry-run',
+          '--work-dir',
+          root,
+          'inspect README'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 64);
+      assert.equal(output.stdoutText(), '');
+      assert.match(JSON.parse(output.stderrText()).message, /--intake-artifact/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -379,5 +549,20 @@ class RecordingRunner {
     });
 
     return this.result;
+  }
+}
+
+class MissingToolRunner {
+  constructor() {
+    this.calls = [];
+  }
+
+  async run(invocation) {
+    this.calls.push(invocation);
+    return {
+      exitCode: 1,
+      stdout: '',
+      stderr: 'missing'
+    };
   }
 }

@@ -47,6 +47,19 @@ describe('NodeProcessRunner', () => {
     assert.equal(result.signal, 'SIGKILL');
     assert.match(result.stdout, /started/);
   });
+
+  it('ignores stdin pipe closure when a process exits before reading input', async () => {
+    const runner = new NodeProcessRunner();
+    const result = await runner.run({
+      executable: 'bash',
+      args: ['-lc', 'exit 0'],
+      stdin: 'x'.repeat(1024 * 1024),
+      timeoutMs: 5000
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.stderr, '');
+  });
 });
 
 function waitForOutput(pattern) {

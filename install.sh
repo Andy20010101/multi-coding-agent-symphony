@@ -3,7 +3,7 @@ set -eu
 
 REPO_SLUG="${MCAS_REPO_SLUG:-Andy20010101/multi-coding-agent-symphony}"
 REPO_URL="${MCAS_REPO_URL:-https://github.com/$REPO_SLUG.git}"
-INSTALL_REF="${MCAS_INSTALL_REF:-v6}"
+INSTALL_REF="${MCAS_INSTALL_REF:-v7}"
 INSTALL_DIR="${MCAS_INSTALL_DIR:-$HOME/.local/share/mcas}"
 BIN_DIR="${MCAS_BIN_DIR:-$HOME/.local/bin}"
 SKIP_INSTALL="${MCAS_SKIP_INSTALL:-0}"

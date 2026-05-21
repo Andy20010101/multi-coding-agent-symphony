@@ -198,6 +198,35 @@ describe('Kiro CLI real integration', () => {
     assert.equal(evidence.checks[0].output, 'package.json and README.md were readable');
     assert.equal(verifyEvidence({ commandSpec: smokeCommandSpec, evidence }).status, 'passed');
   });
+
+  it('renders intake constraints into the shared Kiro prompt', async () => {
+    const adapter = new KiroCliAdapter({
+      cliVersion: '2.2.2'
+    });
+    const prepared = await adapter.prepare({
+      commandSpec,
+      contextPack: {
+        ...contextPack,
+        task: {
+          ...contextPack.task,
+          constraints: [
+            'project_context_artifact:tmp/intake/project-context.json',
+            'recommended_workflow:writer-reviewer',
+            'verification_command:pnpm test'
+          ]
+        }
+      },
+      workspace: '/work/repo',
+      modelProfile: 'claude-kiro-default',
+      executionMode: 'real'
+    });
+
+    assert.match(prepared.prompt, /project_context_artifact:tmp\/intake\/project-context\.json/);
+    assert.match(prepared.prompt, /recommended_workflow:writer-reviewer/);
+    assert.match(prepared.prompt, /Required verification commands:/);
+    assert.match(prepared.prompt, /pnpm test/);
+    assert.match(prepared.prompt, /checks\[\]\.command exactly equals/);
+  });
 });
 
 class StaticProcessRunner {

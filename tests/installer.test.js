@@ -6,14 +6,14 @@ import { join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-describe('v6 curl installer', () => {
+describe('v7 curl installer', () => {
   it('documents a curl-installable POSIX shell entrypoint', async () => {
     const installerPath = resolve('install.sh');
     const installer = await readFile(installerPath, 'utf8');
     const installerStat = await stat(installerPath);
 
     assert.match(installer, /^#!\/bin\/sh/);
-    assert.match(installer, /MCAS_INSTALL_REF:-v6/);
+    assert.match(installer, /MCAS_INSTALL_REF:-v7/);
     assert.match(installer, /MCAS_REPO_SLUG/);
     assert.match(installer, /MCAS_INSTALL_DIR/);
     assert.match(installer, /MCAS_BIN_DIR/);

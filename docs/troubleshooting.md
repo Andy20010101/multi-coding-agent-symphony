@@ -21,11 +21,11 @@ Symptom: `symphony doctor` is not found after checkout.
 Check:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v6/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v7/install.sh | sh
 symphony doctor
 ```
 
-The installer writes shims to `~/.local/bin` by default. If the curl command returns `404`, confirm the repository is public and the `v6` tag exists. If `symphony` still is not found, add `~/.local/bin` to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`.
+The installer writes shims to `~/.local/bin` by default. If the curl command returns `404`, confirm the repository is public and the `v7` tag exists. If `symphony` still is not found, add `~/.local/bin` to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`.
 
 Development fallback:
 
@@ -121,6 +121,44 @@ gh issue view 123 --repo OWNER/REPO --json number,title,body,url,state,labels,as
 ```
 
 The MCAS CLI uses `gh issue view` for read-only intake and does not invoke a model.
+
+## Project Intake Provider Unavailable
+
+Symptom: `symphony intake --provider grill-me-docs` reports `providerStatus: "unavailable"`.
+
+Check:
+
+```sh
+command -v grill-me-docs
+pnpm mcas intake --project-dir . --provider grill-me-docs --provider-command grill-me-docs
+```
+
+The built-in intake provider still writes `project-context` and `intake-summary` without `grill-me-docs`. Add `--require-provider` only when the external provider must be present; that mode returns usage exit code `64` if discovery fails.
+
+## Project Intake Fail-On Gate
+
+Symptom: `pnpm mcas intake --project-dir . --fail-on high` exits `70`.
+
+Check the printed `contextArtifactPath` and inspect `risks`:
+
+```sh
+pnpm mcas intake --project-dir . --runtime-dir tmp/intake-debug
+node -e "const fs=require('fs'); const p='tmp/intake-debug/artifacts/project-intake/project-context.json'; console.log(JSON.parse(fs.readFileSync(p,'utf8')).risks)"
+```
+
+Lower the gate only for exploratory scans, or fix the high/critical risk before using the artifact as work preflight evidence.
+
+## Project Intake Scan Limits
+
+Symptom: the `project-context` artifact has `inventory.truncated: true` or misses files from large/generated directories.
+
+Current v7 limits are deterministic: 5000 files, 256 KiB per text file, depth 8, with `.git`, `node_modules`, `.pnpm-store`, `tmp`, `.mcas`, `.omx/logs`, `coverage`, and `.stryker-tmp` ignored. Move generated outputs outside the source tree or add the missing project facts to `README.md`, `AGENTS.md`, or docs before rerunning intake.
+
+## Project Intake Missing Verification Scripts
+
+Symptom: `verificationCommands` contains `manual verification required`.
+
+Add a package script such as `check`, `test`, `lint`, or `test:mutation:gate`, or document the manual verification command in the project README. `symphony work --preflight-intake` copies detected verification commands into TaskPacket constraints so later workflow evidence can see them.
 
 ## Workspace Conflict
 

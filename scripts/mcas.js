@@ -32,6 +32,12 @@ import {
   runHarnessTaskPacket
 } from '../src/integrations/harness-bridge.js';
 import { HarnessEvidenceSink } from '../src/integrations/harness-evidence-sink.js';
+import {
+  runProjectIntake
+} from '../src/intake/project-intake.js';
+import {
+  riskSeverityRank
+} from '../src/intake/intake-contracts.js';
 
 const EXIT_CODES = {
   ok: 0,
@@ -43,6 +49,7 @@ const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 const COMMANDS = [
   'doctor',
+  'intake',
   'github issue',
   'harness run-taskpacket',
   'queue manual',
@@ -99,6 +106,16 @@ export async function runMcasCli({
 
       writeJson(stdout, result);
       return EXIT_CODES.ok;
+    }
+
+    if (command === 'intake') {
+      const result = await runMcasIntake({
+        args: [subcommand, ...rest].filter((value) => value !== undefined),
+        runner: runner ?? new NodeProcessRunner()
+      });
+
+      writeJson(stdout, result.output);
+      return result.exitCode;
     }
 
     if (command === 'harness' && subcommand === 'run-taskpacket') {
@@ -224,6 +241,122 @@ async function runGitHubIssueIntake({ args, runner }) {
     mode: 'read-only-intake',
     modelInvocation: false,
     taskSpec
+  };
+}
+
+async function runMcasIntake({ args, runner }) {
+  const options = parseMcasIntakeArgs(args);
+  const paths = resolveRuntimePaths(args);
+  const result = await runProjectIntake({
+    projectDir: options.projectDir,
+    artifactDirectory: paths.artifactDirectory,
+    eventDirectory: paths.eventDirectory,
+    sessionId: paths.sessionId,
+    provider: options.provider,
+    providerCommand: options.providerCommand,
+    requireProvider: options.requireProvider,
+    failOn: options.failOn,
+    runner
+  });
+
+  if (result.requiredProviderUnavailable) {
+    throw new UsageError(`provider is unavailable: ${options.providerCommand}`);
+  }
+
+  return {
+    exitCode: result.exitCode,
+    output: options.format === 'summary'
+      ? summarizeIntakeOutput(result.output)
+      : result.output
+  };
+}
+
+function parseMcasIntakeArgs(args) {
+  const options = {
+    projectDir: readOptionalOption(args, '--project-dir') ?? '.',
+    provider: readOptionalOption(args, '--provider') ?? 'builtin',
+    providerCommand: readOptionalOption(args, '--provider-command') ?? 'grill-me-docs',
+    requireProvider: args.includes('--require-provider'),
+    failOn: readOptionalOption(args, '--fail-on'),
+    format: readOptionalOption(args, '--format') ?? 'json'
+  };
+  const knownOptions = new Set([
+    '--project-dir',
+    '--runtime-dir',
+    '--artifact-dir',
+    '--event-dir',
+    '--workspace-dir',
+    '--state-file',
+    '--session-id',
+    '--config',
+    '--provider',
+    '--provider-command',
+    '--require-provider',
+    '--fail-on',
+    '--format'
+  ]);
+  const valueOptions = new Set([
+    '--project-dir',
+    '--runtime-dir',
+    '--artifact-dir',
+    '--event-dir',
+    '--workspace-dir',
+    '--state-file',
+    '--session-id',
+    '--config',
+    '--provider',
+    '--provider-command',
+    '--fail-on',
+    '--format'
+  ]);
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (!value.startsWith('--')) {
+      throw new UsageError(`unexpected intake argument: ${value}`);
+    }
+
+    if (!knownOptions.has(value)) {
+      throw new UsageError(`unknown intake option: ${value}`);
+    }
+
+    if (valueOptions.has(value)) {
+      readRequiredValue(args, index, value);
+      index += 1;
+    }
+  }
+
+  if (!['builtin', 'grill-me-docs'].includes(options.provider)) {
+    throw new UsageError('provider must be one of: builtin, grill-me-docs');
+  }
+
+  if (!['json', 'summary'].includes(options.format)) {
+    throw new UsageError('format must be one of: json, summary');
+  }
+
+  if (options.failOn !== undefined && riskSeverityRank(options.failOn) === 0) {
+    throw new UsageError('fail-on must be one of: low, medium, high, critical');
+  }
+
+  return options;
+}
+
+function summarizeIntakeOutput(output) {
+  return {
+    version: output.version,
+    command: output.command,
+    status: output.status,
+    exitCode: output.exitCode,
+    projectDir: output.projectDir,
+    contextArtifactPath: output.contextArtifactPath,
+    summaryArtifactPath: output.summaryArtifactPath,
+    riskCounts: output.riskCounts,
+    openQuestionCount: output.openQuestionCount,
+    recommendedWorkflow: output.recommendedWorkflow,
+    verificationCommands: output.verificationCommands,
+    modelInvocation: output.modelInvocation,
+    providerStatus: output.providerStatus
   };
 }
 
@@ -773,6 +906,16 @@ function summarizeVerificationMap(commandRun) {
     ...(commandRun.selected !== undefined ? { selected: commandRun.selected } : {}),
     ...(commandRun.rejectedReason ? { rejectedReason: commandRun.rejectedReason } : {})
   };
+}
+
+function readRequiredValue(args, index, optionName) {
+  const value = args[index + 1];
+
+  if (typeof value !== 'string' || value.trim() === '' || value.startsWith('--')) {
+    throw new UsageError(`${optionName} requires a value`);
+  }
+
+  return value;
 }
 
 function readOption(args, optionName) {

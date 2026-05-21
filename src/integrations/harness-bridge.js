@@ -56,6 +56,7 @@ export function taskPacketToTaskSpec(taskPacket, { runId = taskPacket?.run_id } 
   const intent = requireNonEmptyString(taskPacket.intent, 'TaskPacket.intent');
   const acceptance = requireNonEmptyStringArray(taskPacket.acceptance, 'TaskPacket.acceptance');
   const writeSet = requireWriteSet(taskPacket.write_set);
+  const taskPacketConstraints = optionalStringArray(taskPacket.constraints, 'TaskPacket.constraints');
   const priority = taskPacket.priority ?? 'normal';
 
   buildExpectedChecks(taskPacket);
@@ -73,6 +74,7 @@ export function taskPacketToTaskSpec(taskPacket, { runId = taskPacket?.run_id } 
     objective: intent,
     constraints: [
       ...buildWorkspaceConstraints({ runId, writeSet }),
+      ...taskPacketConstraints,
       ...buildExpectedChecks(taskPacket).map((command) => `verification_command:${command}`)
     ],
     acceptance,
@@ -83,6 +85,14 @@ export function taskPacketToTaskSpec(taskPacket, { runId = taskPacket?.run_id } 
   validateTaskSpec(taskSpec);
 
   return taskSpec;
+}
+
+function optionalStringArray(value, field) {
+  if (value === undefined) {
+    return [];
+  }
+
+  return requireNonEmptyStringArray(value, field);
 }
 
 export function buildExpectedChecks(taskPacket) {

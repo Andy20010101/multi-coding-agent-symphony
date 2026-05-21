@@ -39,15 +39,16 @@ Implemented:
 - Durable artifacts, session events, queue state, workspace allocation, and workflow run records.
 - Real adapter paths for Codex, Claude Code, and Kiro CLI with opt-in model smokes.
 - User-facing `symphony` commands for doctor, dry-run work, native agent passthrough proof capture, Harness passthrough, and eval replay dispatch.
+- User-facing `symphony intake` for read-only project scans that write reusable `project-context` and `intake-summary` artifacts without invoking real models.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
-- Kernel/debug `pnpm mcas` commands for doctor, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
+- Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
 - V2 ensemble flows for proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch, with verifier-readable role, lane, QA, and candidate evidence.
 - Continuation turns and stall detection in `orchestrator.runCommand`, including retryable verifier failures, activity tracking, and `stall-timeout` records.
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current baseline: `pnpm test` passes 40 test files; direct Node suite expansion covers 454 tests across 78 suites.
+Current baseline: `pnpm test` passes 42 test files; the targeted v7 intake and CLI Node suite covers 46 tests across 8 suites.
 
 ## Design Center
 
@@ -79,8 +80,11 @@ pnpm test
 pnpm test:mutation:gate
 git diff --check
 pnpm mcas doctor
+pnpm mcas intake --project-dir . --runtime-dir tmp/v7-intake-runtime
 node scripts/symphony.js doctor
 pnpm symphony doctor
+pnpm symphony intake --project-dir . --output-dir tmp/v7-symphony-intake
+pnpm symphony work --preflight-intake --dry-run --work-dir tmp/v7-work "inspect README"
 pnpm smoke:codex:help
 pnpm smoke:claude:help
 pnpm smoke:kiro:help
@@ -89,11 +93,11 @@ pnpm smoke:kiro:help
 Install the user CLI:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v6/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v7/install.sh | sh
 symphony doctor
 ```
 
-The installer clones or updates the `v6` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. Set `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_INSTALL_REF`, `MCAS_REPO_SLUG`, or `MCAS_REPO_URL` to override the defaults.
+The installer clones or updates the `v7` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. Set `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_INSTALL_REF`, `MCAS_REPO_SLUG`, or `MCAS_REPO_URL` to override the defaults.
 
 Development fallback from a checkout:
 
@@ -106,7 +110,11 @@ Run the user CLI:
 
 ```sh
 symphony doctor
+symphony intake
+symphony intake --project-dir . --output-dir tmp/symphony-intake
 symphony work --dry-run "inspect README"
+symphony work --preflight-intake --dry-run "inspect README"
+symphony work --intake-artifact tmp/symphony-intake/<run-id>/runtime/artifacts/project-intake/project-context.json --dry-run "inspect README"
 symphony work --mode writer-reviewer --dry-run "update README"
 symphony review --dry-run "inspect README"
 symphony qa --dry-run "inspect README"
@@ -119,6 +127,8 @@ Advanced kernel/debug commands remain under `pnpm mcas`:
 ```sh
 pnpm mcas doctor
 pnpm mcas doctor --real-cli --proof-dir tmp/real-cli-proofs
+pnpm mcas intake --project-dir . --runtime-dir .mcas
+pnpm mcas intake --project-dir . --provider grill-me-docs --provider-command grill-me-docs
 pnpm mcas github issue --repo OWNER/REPO --number 123
 pnpm mcas queue manual --state-file .mcas/queue.json --id task-1 --repo OWNER/REPO --objective "Do the work" --acceptance "Verifier evidence is written"
 pnpm mcas run-next --state-file .mcas/queue.json --runtime-dir .mcas
@@ -130,7 +140,8 @@ pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason 
 pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --workflow-comparison-fixture workflow-comparison --reason workflow-mode-comparison --compared-at 2026-05-16T00:00:00.000Z
 ```
 
-`symphony work` is the default user workflow entry. It creates a minimal Harness TaskPacket under `tmp/symphony-work/<run-id>/`, runs the existing Harness Bridge, and prints status, run id, workflow mode, adapter, execution mode, verifier status, changed files, evidence path, Harness output path, and next action.
+`symphony intake` scans a checkout in read-only mode, writes `project-context` and `intake-summary` JSON artifacts through `ArtifactStore` under task id `project-intake`, and prints the context path, risks, open questions, recommended workflow, and verification commands. The built-in provider is deterministic and does not invoke models. `--provider grill-me-docs` is optional; when the binary is absent, the provider is marked unavailable unless `--require-provider` is also passed.
+`symphony work` is the default user workflow entry. It creates a minimal Harness TaskPacket under `tmp/symphony-work/<run-id>/`, runs the existing Harness Bridge, and prints status, run id, workflow mode, adapter, execution mode, verifier status, changed files, evidence path, Harness output path, and next action. Default behavior is unchanged unless `--preflight-intake` or `--intake-artifact <path>` is passed. `--preflight-intake` writes intake artifacts before work and adds project context, recommended workflow, and verification command constraints to the TaskPacket. `--intake-artifact <path>` reuses an existing `project-context` artifact without rescanning.
 `symphony review` and `symphony qa` are shortcuts for dry-run qa-swarm workflow execution through the same Harness Bridge path.
 `symphony agent claude /review --dry-run` captures native command metadata and a proof artifact without invoking Claude. Add `--real` only with `MCAS_RUN_REAL_CLAUDE=1`.
 `symphony harness ...` and `symphony replay ...` are compatibility passthroughs to the existing `mcas harness ...` and `mcas eval replay ...` paths.
@@ -139,6 +150,7 @@ pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --work
 Command hierarchy:
 
 ```text
+symphony intake   read-only project context scan
 symphony work     user workflow entry
 symphony agent    native CLI passthrough
 symphony review   shortcut for review workflow
@@ -149,7 +161,8 @@ mcas              advanced kernel/debug commands
 ```
 
 `doctor --real-cli` preflights installed real CLI binaries, gate variables, configured model profiles, provider/auth alignment, and optional proof artifact writing without invoking a model.
-`github issue` is read-only intake. It calls `gh issue view`, converts the response into a validated `TaskSpec`, and does not invoke a model.
+`mcas intake` is the machine-facing project intake surface. It accepts `--project-dir`, `--runtime-dir`, `--artifact-dir`, `--event-dir`, `--session-id`, `--provider`, `--provider-command`, `--require-provider`, `--fail-on`, and `--format`. It writes `.mcas/artifacts/project-intake/project-context.json` and `.mcas/artifacts/project-intake/intake-summary.json` by default.
+`github issue` is read-only issue intake. It calls `gh issue view`, converts the response into a validated `TaskSpec`, and does not invoke a model.
 `queue manual` writes a validated manual `TaskSpec` into a persistent `TaskQueue` state file without invoking adapters.
 `run-next` leases the next queued task and runs the existing standard dry-run workflow, returning verifier status and artifact ids.
 `run-task` runs a TaskSpec JSON file through the same dry-run workflow without reading or writing queue state.
