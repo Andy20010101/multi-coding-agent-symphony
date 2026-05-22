@@ -10,6 +10,13 @@ import { NodeProcessRunner } from '../src/process-runner.js';
 import { redactSecrets } from '../src/redaction.js';
 import { validateProjectContextArtifact } from '../src/intake/intake-contracts.js';
 import {
+  withProductJsonContract
+} from '../src/symphony/contract.js';
+import {
+  buildConsoleSnapshot,
+  startSymphonyConsoleServer
+} from '../src/symphony/console.js';
+import {
   ScaffoldError,
   buildScaffoldPlan,
   normalizeTemplate,
@@ -65,6 +72,7 @@ const KNOWN_COMMANDS = new Set([
   'status',
   'artifacts',
   'continue',
+  'console',
   'new'
 ]);
 let productRunSequence = 0;
@@ -213,6 +221,13 @@ export async function runSymphonyCli({
 
     if (command === 'continue') {
       return await runSymphonyContinue({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'console') {
+      return await runSymphonyConsole({
         args: rest,
         stdout
       });
@@ -1027,6 +1042,13 @@ async function runSymphonyPrompt({
     });
   }
 
+  if (routeDecision.intent === 'console') {
+    return await runSymphonyConsole({
+      args: invocation.args,
+      stdout
+    });
+  }
+
   return await runSymphonyNew({
     args: invocation.args,
     stdout,
@@ -1179,6 +1201,51 @@ async function runSymphonyContinue({ args, stdout, routeDecision }) {
           : latestRun.nextAction ?? 'symphony do --dry-run "<task>"',
         ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
       };
+
+  writeProductOutput(stdout, summary, options.json);
+  return EXIT_CODES.ok;
+}
+
+async function runSymphonyConsole({ args, stdout }) {
+  const options = parseConsoleArgs(args);
+
+  if (options.snapshot) {
+    const snapshot = await buildConsoleSnapshot({
+      stateDir: options.stateDir
+    });
+
+    if (options.json) {
+      writeJson(stdout, snapshot);
+    } else {
+      stdout.write(humanConsoleSnapshot(snapshot));
+    }
+
+    return EXIT_CODES.ok;
+  }
+
+  const server = await startSymphonyConsoleServer({
+    stateDir: options.stateDir,
+    host: options.host,
+    port: options.port
+  });
+  const summary = {
+    version: '1',
+    command: 'symphony console',
+    intent: 'console',
+    semanticCommand: 'console',
+    pipeline: ['console'],
+    safetyMode: 'read-only',
+    projectWrites: false,
+    runtimeWrites: false,
+    externalCalls: false,
+    destructiveWrites: false,
+    status: 'listening',
+    url: server.url,
+    host: server.host,
+    port: server.port,
+    stateDir: options.stateDir,
+    nextAction: server.url
+  };
 
   writeProductOutput(stdout, summary, options.json);
   return EXIT_CODES.ok;
@@ -1719,6 +1786,56 @@ function parseArtifactsArgs(args) {
   };
 }
 
+function parseConsoleArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    host: '127.0.0.1',
+    port: 8765,
+    snapshot: false,
+    json: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--snapshot') {
+      options.snapshot = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--host') {
+      options.host = readRequiredValue(args, index, '--host');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--port') {
+      options.port = toPortInteger(readRequiredValue(args, index, '--port'), '--port');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown console option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected console argument: ${value}`);
+  }
+
+  return options;
+}
+
 function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
   const options = {
     targetDir: promptTarget,
@@ -1824,9 +1941,11 @@ function parsePromptInvocation(argv) {
     '--provider',
     '--provider-command',
     '--fail-on',
-    '--timeout-ms'
+    '--timeout-ms',
+    '--host',
+    '--port'
   ]);
-  const flagOptions = new Set(['--json', '--dry-run', '--write', '--confirm-destructive']);
+  const flagOptions = new Set(['--json', '--dry-run', '--write', '--confirm-destructive', '--snapshot']);
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
@@ -1872,13 +1991,23 @@ async function writeProductRunState({ stateDir, summary, updatedAt }) {
     intent: summary.intent,
     semanticCommand: summary.semanticCommand,
     pipeline: summary.pipeline,
+    routeDecision: summary.routeDecision,
+    matchedSignals: summary.matchedSignals,
     safetyMode: summary.safetyMode,
     projectWrites: summary.projectWrites,
     runtimeWrites: summary.runtimeWrites,
     externalCalls: summary.externalCalls,
     destructiveWrites: summary.destructiveWrites,
+    workflowMode: summary.workflowMode,
+    adapter: summary.adapter,
+    executionMode: summary.executionMode,
     projectRoot: summary.projectRoot,
     projectFingerprint: summary.projectFingerprint,
+    contextReused: summary.contextReused,
+    recommendedWorkflow: summary.recommendedWorkflow,
+    verificationCommands: summary.verificationCommands,
+    riskCounts: summary.riskCounts,
+    openQuestionCount: summary.openQuestionCount,
     contextArtifactPath: summary.contextArtifactPath,
     summaryArtifactPath: summary.summaryArtifactPath,
     evidenceArtifactPath: summary.evidenceArtifactPath,
@@ -1892,9 +2021,16 @@ async function writeProductRunState({ stateDir, summary, updatedAt }) {
     detectedStack: summary.detectedStack,
     networkInstall: summary.networkInstall,
     unsupportedRequests: summary.unsupportedRequests,
+    template: summary.template,
+    targetDir: summary.targetDir,
+    changedFiles: summary.changedFiles,
+    createdFiles: summary.createdFiles,
     providerMode: summary.providerMode,
+    provider: summary.provider,
+    providerStatus: summary.providerStatus,
     providerAttempts: summary.providerAttempts,
     providerFallback: summary.providerFallback,
+    modelInvocation: summary.modelInvocation,
     verifierStatus: summary.verifierStatus,
     status: summary.status,
     createdAt,
@@ -1902,19 +2038,33 @@ async function writeProductRunState({ stateDir, summary, updatedAt }) {
     nextAction: summary.nextAction
   };
 
+  const contractedRunState = withProductJsonContract(runState, {
+    contractName: 'symphony.run-state',
+    generatedAt: updatedAt
+  });
+
   return await writeRunState({
     stateDir,
-    runState
+    runState: contractedRunState
   });
 }
 
 function writeProductOutput(stdout, summary, json) {
   if (json) {
-    writeJson(stdout, summary);
+    writeJson(stdout, withProductJsonContract(summary));
     return;
   }
 
   stdout.write(`${humanProductSummary(summary)}\n`);
+}
+
+function humanConsoleSnapshot(snapshot) {
+  return [
+    `Console snapshot: ${snapshot.status}`,
+    `Runs: ${snapshot.runs.length}`,
+    `Latest: ${snapshot.latestRun?.runId ?? 'none'}`,
+    `Next: ${snapshot.action.next}`
+  ].join('\n') + '\n';
 }
 
 function humanProductSummary(summary) {
@@ -2649,6 +2799,16 @@ function toPositiveInteger(value, field) {
 
   if (!Number.isInteger(number) || number < 1 || String(number) !== value) {
     throw new UsageError(`${field} must be a positive integer`);
+  }
+
+  return number;
+}
+
+function toPortInteger(value, field) {
+  const number = Number.parseInt(value, 10);
+
+  if (!Number.isInteger(number) || number < 0 || number > 65535 || String(number) !== value) {
+    throw new UsageError(`${field} must be an integer from 0 to 65535`);
   }
 
   return number;

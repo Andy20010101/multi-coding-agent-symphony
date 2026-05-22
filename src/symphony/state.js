@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
 import { redactSecrets } from '../redaction.js';
@@ -57,9 +57,50 @@ export async function readRunState({ stateDir = '.symphony', runId } = {}) {
   return await readJsonIfExists(symphonyStatePaths({ stateDir, runId }).runPath);
 }
 
+export async function listRunStates({ stateDir = '.symphony' } = {}) {
+  const runsDir = join(stateDir, 'runs');
+  let entries;
+
+  try {
+    entries = await readdir(runsDir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const runStates = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json') || entry.name === 'latest.json') {
+      continue;
+    }
+
+    const runState = await readJsonIfExists(join(runsDir, entry.name));
+
+    if (runState !== null) {
+      runStates.push(runState);
+    }
+  }
+
+  return runStates.sort(compareRunStatesNewestFirst);
+}
+
 export async function writeLatestContext({ stateDir = '.symphony', pointer }) {
   await atomicWriteJson(symphonyStatePaths({ stateDir }).latestContextPath, pointer);
   return symphonyStatePaths({ stateDir }).latestContextPath;
+}
+
+function compareRunStatesNewestFirst(left, right) {
+  return timestampValue(right.updatedAt ?? right.createdAt) - timestampValue(left.updatedAt ?? left.createdAt);
+}
+
+function timestampValue(value) {
+  const timestamp = Date.parse(value);
+
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 export async function writeRunState({ stateDir = '.symphony', runState }) {

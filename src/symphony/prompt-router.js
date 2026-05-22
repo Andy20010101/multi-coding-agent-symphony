@@ -12,7 +12,8 @@ const INTENT_PIPELINES = {
   verify: ['scan-if-needed', 'verify'],
   continue: ['continue latest'],
   status: ['status'],
-  artifacts: ['artifacts']
+  artifacts: ['artifacts'],
+  console: ['console']
 };
 
 export function classifyPrompt({ prompt, args = [], projectState = {} } = {}) {
@@ -112,6 +113,12 @@ function classifyIntent({ prompt, projectState }) {
   const normalized = normalize(prompt);
   const checks = [
     {
+      intent: 'console',
+      confidence: 'high',
+      signals: ['console', 'dashboard', '控制台'],
+      matches: /\b(console|dashboard)\b/u.test(normalized) || /控制台/u.test(prompt)
+    },
+    {
       intent: 'status',
       confidence: 'high',
       signals: ['status', '状态'],
@@ -202,7 +209,7 @@ function matchingSignals({ prompt, normalized, signals }) {
 }
 
 function defaultSafetyMode(intent) {
-  if (intent === 'scan-project' || intent === 'review' || intent === 'status' || intent === 'artifacts' || intent === 'continue') {
+  if (intent === 'scan-project' || intent === 'review' || intent === 'status' || intent === 'artifacts' || intent === 'continue' || intent === 'console') {
     return 'read-only';
   }
 

@@ -11,6 +11,7 @@ import {
   runSymphonyCli
 } from '../scripts/symphony.js';
 import { runMcasCli } from '../scripts/mcas.js';
+import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
@@ -529,6 +530,13 @@ describe('v8 prompt-driven symphony CLI', () => {
       const scan = JSON.parse(output.stdoutText());
 
       assert.equal(scan.command, 'symphony scan');
+      assert.equal(scan.contractVersion, '1');
+      assert.equal(scan.contractName, 'symphony.product-summary');
+      assert.equal(scan.contract.stability, 'stable');
+      assert.equal(scan.identity.runId, scan.runId);
+      assert.equal(scan.safety.mode, 'read-only');
+      assert.deepEqual(scan.artifactRefs.map((artifact) => artifact.kind), ['context', 'summary']);
+      assert.equal(scan.action.next, scan.nextAction);
       assert.equal(scan.intent, 'scan-project');
       assert.equal(scan.safetyMode, 'read-only');
       assert.equal(scan.projectWrites, false);
@@ -561,6 +569,11 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(existsSync(join(stateDir, 'context', 'latest.json')), true);
       assert.equal(existsSync(join(stateDir, 'runs', 'latest.json')), true);
       assert.equal(existsSync(join(stateDir, 'runs', `${scan.runId}.json`)), true);
+
+      const persistedRun = JSON.parse(await readFile(join(stateDir, 'runs', `${scan.runId}.json`), 'utf8'));
+
+      assert.equal(persistedRun.contractName, 'symphony.run-state');
+      assert.equal(persistedRun.identity.runId, scan.runId);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -900,6 +913,198 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(artifactsExitCode, 0);
       assert.equal(existsSync(JSON.parse(artifactsOutput.stdoutText()).contextArtifactPath), true);
     } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('serves a read-only local console snapshot and API from state', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-console-'));
+    let server;
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const snapshotOutput = createOutput();
+      const snapshotExitCode = await runSymphonyCli({
+        argv: ['console', '--snapshot', '--state-dir', stateDir, '--json'],
+        stdout: snapshotOutput.stdout,
+        stderr: snapshotOutput.stderr
+      });
+
+      assert.equal(snapshotExitCode, 0);
+      assert.equal(snapshotOutput.stderrText(), '');
+
+      const snapshot = JSON.parse(snapshotOutput.stdoutText());
+
+      assert.equal(snapshot.contractName, 'symphony.console-snapshot');
+      assert.equal(snapshot.status, 'ready');
+      assert.equal(snapshot.runs.length, 1);
+      assert.equal(snapshot.latestRun.runId, JSON.parse(scanOutput.stdoutText()).runId);
+      assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'context'), true);
+
+      server = createSymphonyConsoleServer({ stateDir });
+      const baseUrl = await listenOnRandomPort(server);
+
+      const htmlResponse = await fetch(baseUrl);
+      const summaryResponse = await fetch(`${baseUrl}/api/summary`);
+      const latestRunResponse = await fetch(`${baseUrl}/api/runs/latest`);
+      const contextPreviewResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/context`);
+      const writeResponse = await fetch(`${baseUrl}/api/summary`, { method: 'POST' });
+
+      assert.equal(htmlResponse.status, 200);
+      assert.match(await htmlResponse.text(), /Symphony Evidence Console/u);
+      assert.equal(summaryResponse.status, 200);
+      assert.equal((await summaryResponse.json()).contractName, 'symphony.console-snapshot');
+      assert.equal(latestRunResponse.status, 200);
+      assert.equal((await latestRunResponse.json()).run.runId, snapshot.latestRun.runId);
+      assert.equal(contextPreviewResponse.status, 200);
+
+      const contextPreview = await contextPreviewResponse.json();
+
+      assert.equal(contextPreview.contractName, 'symphony.console-artifact');
+      assert.equal(contextPreview.artifact.kind, 'context');
+      assert.equal(contextPreview.artifact.type, 'file');
+      assert.equal(contextPreview.artifact.format, 'json');
+      assert.equal(contextPreview.artifact.truncated, false);
+      assert.equal(contextPreview.artifact.json.kind, 'project-context');
+      assert.equal(writeResponse.status, 405);
+      assert.match((await writeResponse.json()).message, /read-only/u);
+    } finally {
+      if (server !== undefined) {
+        await closeServer(server);
+      }
+
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps console artifact previews bounded to registered refs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-console-artifacts-'));
+    let server;
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const runsDir = join(stateDir, 'runs');
+      const artifactDir = join(root, 'artifacts');
+      const runId = 'console-edge-run';
+      const missingArtifactPath = join(artifactDir, 'missing.json');
+      const malformedArtifactPath = join(artifactDir, 'malformed.json');
+      const directoryArtifactPath = join(artifactDir, 'directory-artifact');
+      const largeArtifactPath = join(artifactDir, 'large.txt');
+      const now = '2026-05-22T00:00:00.000Z';
+      const runState = {
+        version: '1',
+        kind: 'symphony-run-state',
+        contractVersion: '1',
+        contractName: 'symphony.run-state',
+        runId,
+        command: 'symphony new',
+        intent: 'new-project',
+        semanticCommand: 'new',
+        pipeline: ['new', 'scan'],
+        routeDecision: {
+          intent: 'new-project',
+          safetyMode: 'dry-run'
+        },
+        safetyMode: 'dry-run',
+        projectWrites: false,
+        runtimeWrites: true,
+        externalCalls: false,
+        destructiveWrites: false,
+        providerMode: 'auto',
+        providerFallback: {
+          from: 'grill-me-docs',
+          to: 'builtin',
+          reason: 'unavailable'
+        },
+        unsupportedRequests: [{
+          type: 'framework-generator',
+          value: 'react'
+        }],
+        scaffoldPlan: {
+          template: 'empty',
+          networkInstall: false
+        },
+        changedFiles: ['README.md'],
+        verifierStatus: 'not-run',
+        status: 'preview',
+        contextArtifactPath: missingArtifactPath,
+        summaryArtifactPath: malformedArtifactPath,
+        evidenceArtifactPath: directoryArtifactPath,
+        harnessOutputPath: largeArtifactPath,
+        createdAt: now,
+        updatedAt: now,
+        nextAction: 'symphony status'
+      };
+
+      await mkdir(runsDir, { recursive: true });
+      await mkdir(directoryArtifactPath, { recursive: true });
+      await writeFile(malformedArtifactPath, '{', 'utf8');
+      await writeFile(join(directoryArtifactPath, 'one.txt'), 'one\n', 'utf8');
+      await writeFile(join(directoryArtifactPath, 'two.json'), '{}\n', 'utf8');
+      await writeFile(largeArtifactPath, Buffer.alloc((200 * 1024) + 8, 'a'));
+      await writeFile(join(runsDir, `${runId}.json`), JSON.stringify(runState, null, 2), 'utf8');
+      await writeFile(join(runsDir, 'latest.json'), JSON.stringify(runState, null, 2), 'utf8');
+
+      server = createSymphonyConsoleServer({ stateDir });
+      const baseUrl = await listenOnRandomPort(server);
+      const summary = await (await fetch(`${baseUrl}/api/summary`)).json();
+
+      assert.equal(summary.latestRun.routeDecision.intent, 'new-project');
+      assert.equal(summary.latestRun.providerMode, 'auto');
+      assert.equal(summary.latestRun.providerFallback.reason, 'unavailable');
+      assert.deepEqual(summary.latestRun.unsupportedRequests, runState.unsupportedRequests);
+      assert.deepEqual(summary.latestRun.scaffoldPlan, runState.scaffoldPlan);
+      assert.deepEqual(summary.latestRun.changedFiles, ['README.md']);
+
+      const missingResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/context`);
+      const malformedResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/summary`);
+      const directoryResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/evidence`);
+      const largeResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/harness`);
+      const unregisteredResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/proof?path=${encodeURIComponent(malformedArtifactPath)}`);
+
+      assert.equal(missingResponse.status, 404);
+      assert.equal((await missingResponse.json()).status, 'missing-artifact');
+      assert.equal(malformedResponse.status, 200);
+      assert.equal((await malformedResponse.json()).artifact.format, 'malformed-json');
+      assert.equal(directoryResponse.status, 200);
+
+      const directoryPreview = await directoryResponse.json();
+
+      assert.equal(directoryPreview.artifact.type, 'directory');
+      assert.deepEqual(directoryPreview.artifact.entries.map((entry) => entry.name).sort(), ['one.txt', 'two.json']);
+      assert.equal(largeResponse.status, 200);
+
+      const largePreview = await largeResponse.json();
+
+      assert.equal(largePreview.artifact.truncated, true);
+      assert.equal(largePreview.artifact.content.length, 200 * 1024);
+      assert.equal(unregisteredResponse.status, 404);
+      assert.equal((await unregisteredResponse.json()).status, 'missing');
+    } finally {
+      if (server !== undefined) {
+        await closeServer(server);
+      }
+
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -1302,6 +1507,31 @@ function optionValue(argv, option) {
 
   assert.notEqual(index, -1);
   return argv[index + 1];
+}
+
+async function listenOnRandomPort(server) {
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+async function closeServer(server) {
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
 
 async function writeFixtureProject(root) {

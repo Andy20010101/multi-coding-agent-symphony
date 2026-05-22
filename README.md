@@ -30,6 +30,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [Eval Replay Plugin](docs/eval-replay-plugin.md)
 - [Real CLI Integration](docs/real-cli-integration.md)
 - [Symphony Layer](docs/symphony-layer.md)
+- [Symphony Product JSON Contracts](docs/symphony-product-contracts.md)
 - [Operational Execution Order](docs/operational-execution-order.md)
 - [Security Checklist](docs/security-checklist.md)
 - [Release Checklist](docs/release-checklist.md)
@@ -52,6 +53,8 @@ Implemented:
 - User-facing `symphony intake` for read-only project scans that write reusable `project-context` and `intake-summary` artifacts without invoking real models.
 - v8 product commands: `symphony scan`, `symphony do`, `symphony verify`, `symphony status`, `symphony artifacts`, `symphony continue`, `symphony new`, and deterministic prompt routing through `symphony "<prompt>"`.
 - Product state pointers under `.symphony/context/latest.json`, `.symphony/runs/latest.json`, and `.symphony/runs/<run-id>.json`; canonical evidence and artifacts remain in `ArtifactStore` runtime directories.
+- Stable product JSON contract fields for automation: `contractVersion`, `contractName`, `contract`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`.
+- Read-only local `symphony console` for browsing latest runs, verifier status, next actions, and artifact pointers from `.symphony` state.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
@@ -60,7 +63,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current install baseline: the `v8` tag is the stable user CLI install target. The `v7` tag remains available for historical installs, and `main` carries v8.1 development hardening until the next tag.
+Current install baseline: the `v8` tag is the stable user CLI line. The `v8.2` release adds stable product JSON contracts and the local read-only console; the `v7` tag remains available for historical installs.
 
 ## Design Center
 
@@ -101,6 +104,7 @@ pnpm symphony verify --dry-run "inspect README"
 pnpm symphony "扫描这个仓库"
 pnpm symphony "审查当前改动"
 pnpm symphony status
+pnpm symphony console --snapshot --json
 pnpm smoke:codex:help
 pnpm smoke:claude:help
 pnpm smoke:kiro:help
@@ -134,6 +138,8 @@ symphony "审查当前改动"
 symphony "修复失败的测试"
 symphony status
 symphony artifacts
+symphony console
+symphony console --snapshot --json
 symphony "创建一个新的 React 看板项目" --dry-run --json
 symphony "创建一个新的 node cli 项目" --dry-run
 ```
@@ -141,6 +147,8 @@ symphony "创建一个新的 node cli 项目" --dry-run
 `symphony scan` is the product name for the v7 intake/grill-me-docs capability. In default `auto` mode it tries optional `grill-me-docs` first, records provider attempts in JSON output, and falls back to the built-in provider when grill-me-docs is unavailable. Use `--builtin` for built-in-only scans and `--require-grill` for a hard failure when grill-me-docs is unavailable.
 `symphony do` uses the latest scan context when its project fingerprint is fresh, and reruns scan when the context is missing or stale. `symphony review`, `symphony qa`, and `symphony verify` use the v8 product work path with qa-swarm workflow mode; `qa` is a product command alias for the `verify` semantic command. Prompt routing is deterministic and model-free; it matches rules for scan, work, review, verify, status, artifacts, continue, and new-project intents.
 New-project prompts produce a `scaffoldPlan` and a separate `scaffold-manifest` artifact. Framework-shaped requests such as React or Vite are reported as unsupported generator requests; Symphony does not run npm installs, framework generators, or dependency installation, and `--write` is still required before any files are created.
+Every product `--json` response keeps its legacy top-level fields and adds a stable machine-readable envelope: `contractVersion`, `contractName`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`. `symphony console --snapshot --json` returns the same read-only run model without starting a server; see [Symphony Product JSON Contracts](docs/symphony-product-contracts.md) for v8.2 contract examples.
+`symphony console` starts a local read-only web console on `127.0.0.1:8765` by default. It serves `/`, `/api/summary`, `/api/runs`, `/api/runs/latest`, `/api/runs/<run-id>`, and `/api/runs/<run-id>/artifacts/<kind>`; all non-GET requests return `405`. Artifact preview only reads paths already referenced by a run state and truncates file previews after 200 KiB.
 
 `.symphony/` stores local user-facing pointers and summaries. Add it to your local ignore rules if you do not want run pointers in source control. Full evidence, TaskPackets, Harness output, scaffold manifests, and intake artifacts stay in the runtime artifact directories written through `ArtifactStore`.
 
@@ -194,6 +202,7 @@ symphony do       product work alias
 symphony verify   product verification alias
 symphony status   latest run state
 symphony artifacts artifact and evidence pointers
+symphony console  read-only local evidence console
 symphony new      limited dry-run/write project bootstrap
 symphony agent    native CLI passthrough
 symphony review   shortcut for review workflow
