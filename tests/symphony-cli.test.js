@@ -320,22 +320,67 @@ describe('v5 symphony work', () => {
     }
   });
 
-  it('runs review and qa shortcuts through qa-swarm work mode', async () => {
+  it('preserves work --mode qa-swarm as the advanced legacy path', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-work-qa-swarm-'));
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'work',
+          '--mode',
+          'qa-swarm',
+          '--dry-run',
+          '--work-dir',
+          root,
+          'inspect README'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const summary = JSON.parse(output.stdoutText());
+
+      assert.equal(summary.command, 'symphony work');
+      assert.equal(summary.intent, undefined);
+      assert.equal(summary.status, 'passed');
+      assert.equal(summary.workflowMode, 'qa-swarm');
+      assert.equal(summary.executionMode, 'dry-run');
+      assert.equal(summary.verifierStatus, 'passed');
+      assert.deepEqual(summary.changedFiles, []);
+      assert.equal(existsSync(summary.taskPacketPath), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('routes direct review and qa shortcuts through v8 product work summaries', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-shortcut-cli-'));
 
     try {
+      await writeFixtureProject(root);
+
       for (const shortcut of ['review', 'qa']) {
         const output = createOutput();
         const exitCode = await runSymphonyCli({
           argv: [
             shortcut,
-            '--dry-run',
-            '--work-dir',
+            '--project-dir',
             root,
+            '--state-dir',
+            join(root, '.symphony'),
+            '--work-dir',
+            join(root, `${shortcut}-work`),
+            '--dry-run',
+            '--json',
             'inspect README'
           ],
           stdout: output.stdout,
-          stderr: output.stderr
+          stderr: output.stderr,
+          runner: new MissingToolRunner()
         });
 
         assert.equal(exitCode, 0);
@@ -344,13 +389,85 @@ describe('v5 symphony work', () => {
         const summary = JSON.parse(output.stdoutText());
 
         assert.equal(summary.command, `symphony ${shortcut}`);
-        assert.equal(summary.status, 'passed');
+        assert.equal(summary.intent, shortcut === 'review' ? 'review' : 'verify');
+        assert.equal(summary.semanticCommand, shortcut === 'review' ? 'review' : 'verify');
         assert.equal(summary.workflowMode, 'qa-swarm');
+        assert.equal(summary.projectWrites, false);
         assert.equal(summary.executionMode, 'dry-run');
         assert.equal(summary.verifierStatus, 'passed');
         assert.deepEqual(summary.changedFiles, []);
+        assert.equal(existsSync(summary.contextArtifactPath), true);
         assert.equal(existsSync(summary.taskPacketPath), true);
       }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('persists qa shortcut proof metadata as verify semantic command', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-qa-proof-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'qa',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--work-dir',
+          join(root, 'work'),
+          '--proof-dir',
+          join(root, 'proofs'),
+          '--real',
+          'codex',
+          '--json',
+          'inspect README'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        env: {
+          MCAS_RUN_REAL_CODEX: '1'
+        },
+        mcasRunner: fakePassingHarnessRunner
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const summary = JSON.parse(output.stdoutText());
+      const proof = JSON.parse(await readFile(summary.proofArtifactPath, 'utf8'));
+
+      assert.equal(summary.command, 'symphony qa');
+      assert.equal(summary.intent, 'verify');
+      assert.equal(summary.semanticCommand, 'verify');
+      assert.equal(summary.executionMode, 'real');
+      assert.equal(proof.summary.command, 'symphony qa');
+      assert.equal(proof.summary.intent, 'verify');
+      assert.equal(proof.summary.semanticCommand, 'verify');
+      assert.deepEqual(proof.summary.pipeline, ['scan-if-needed', 'verify']);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -418,10 +535,108 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(scan.runtimeWrites, true);
       assert.equal(scan.externalCalls, false);
       assert.equal(scan.modelInvocation, false);
+      assert.equal(scan.providerMode, 'auto');
+      assert.deepEqual(scan.providerAttempts, [
+        {
+          provider: 'grill-me-docs',
+          runId: scan.runId.replace(/-builtin$/u, ''),
+          status: 'unavailable',
+          exitCode: 0
+        },
+        {
+          provider: 'builtin',
+          runId: scan.runId,
+          status: 'builtin',
+          exitCode: 0
+        }
+      ]);
+      assert.deepEqual(scan.providerFallback, {
+        from: 'grill-me-docs',
+        to: 'builtin',
+        reason: 'unavailable'
+      });
+      assert.equal(scan.provider, 'builtin');
+      assert.equal(scan.providerStatus, 'builtin');
       assert.equal(existsSync(scan.contextArtifactPath), true);
       assert.equal(existsSync(join(stateDir, 'context', 'latest.json')), true);
       assert.equal(existsSync(join(stateDir, 'runs', 'latest.json')), true);
       assert.equal(existsSync(join(stateDir, 'runs', `${scan.runId}.json`)), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps builtin scan mode builtin-only with provider metadata', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-scan-builtin-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'scan',
+          '--builtin',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          join(root, '.symphony'),
+          '--json'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const scan = JSON.parse(output.stdoutText());
+
+      assert.equal(scan.providerMode, 'builtin');
+      assert.deepEqual(scan.providerAttempts, [{
+        provider: 'builtin',
+        runId: scan.runId,
+        status: 'builtin',
+        exitCode: 0
+      }]);
+      assert.equal(scan.providerFallback, null);
+      assert.equal(scan.provider, 'builtin');
+      assert.equal(scan.providerStatus, 'builtin');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails require-grill scan mode when grill-me-docs is missing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-scan-require-grill-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'scan',
+          '--require-grill',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          join(root, '.symphony'),
+          '--json'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      assert.equal(exitCode, 64);
+      assert.equal(output.stdoutText(), '');
+      assert.match(JSON.parse(output.stderrText()).message, /provider is unavailable: grill-me-docs/u);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -512,6 +727,68 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(verify.semanticCommand, 'verify');
       assert.equal(verify.workflowMode, 'qa-swarm');
       assert.equal(verify.projectWrites, false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps repeated product do dry-runs from colliding in state or runtime paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-work-runid-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const summaries = [];
+
+      for (let index = 0; index < 2; index += 1) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv: [
+            'do',
+            '--project-dir',
+            root,
+            '--state-dir',
+            stateDir,
+            '--work-dir',
+            join(root, 'work'),
+            '--dry-run',
+            '--json',
+            'inspect README'
+          ],
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 0);
+        assert.equal(output.stderrText(), '');
+        summaries.push(JSON.parse(output.stdoutText()));
+      }
+
+      assert.notEqual(summaries[0].runId, summaries[1].runId);
+      assert.notEqual(summaries[0].taskPacketPath, summaries[1].taskPacketPath);
+      assert.notEqual(summaries[0].harnessOutputPath, summaries[1].harnessOutputPath);
+      assert.equal(existsSync(join(stateDir, 'runs', `${summaries[0].runId}.json`)), true);
+      assert.equal(existsSync(join(stateDir, 'runs', `${summaries[1].runId}.json`)), true);
+      assert.equal(JSON.parse(await readFile(join(stateDir, 'runs', 'latest.json'), 'utf8')).runId, summaries[1].runId);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -737,7 +1014,57 @@ describe('v8 prompt-driven symphony CLI', () => {
 
       assert.equal(summary.intent, 'new-project');
       assert.equal(summary.template, 'node-cli');
+      assert.equal(summary.projectKind, 'node-cli');
+      assert.equal(summary.networkInstall, false);
+      assert.equal(existsSync(summary.scaffoldPlanArtifactPath), true);
       assert.equal(summary.routeDecision.intent, 'new-project');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('plans framework-flavored new project prompts without installing dependencies', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v8-new-react-prompt-'));
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          '--json',
+          '创建一个新的 React 看板项目',
+          '--dry-run',
+          '--runtime-dir',
+          join(root, 'runtime'),
+          '--state-dir',
+          join(root, '.symphony')
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const summary = JSON.parse(output.stdoutText());
+      const planArtifact = JSON.parse(await readFile(summary.scaffoldPlanArtifactPath, 'utf8'));
+      const manifestArtifact = JSON.parse(await readFile(summary.scaffoldManifestArtifactPath, 'utf8'));
+
+      assert.equal(summary.intent, 'new-project');
+      assert.equal(summary.projectKind, 'web-app');
+      assert.deepEqual(summary.detectedStack.frameworks, ['react']);
+      assert.deepEqual(summary.detectedStack.features, ['board']);
+      assert.equal(summary.projectWrites, false);
+      assert.equal(summary.networkInstall, false);
+      assert.equal(summary.scaffoldPlan.networkInstall, false);
+      assert.deepEqual(summary.unsupportedRequests, [{
+        request: 'react',
+        reason: 'framework generators and dependency installation are disabled'
+      }]);
+      assert.equal(existsSync(summary.targetDir), false);
+      assert.equal(existsSync(summary.scaffoldPlanArtifactPath), true);
+      assert.equal(existsSync(summary.scaffoldManifestArtifactPath), true);
+      assert.deepEqual(planArtifact, summary.scaffoldPlan);
+      assert.deepEqual(manifestArtifact.scaffoldPlan, summary.scaffoldPlan);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -928,6 +1255,53 @@ class MissingToolRunner {
       stderr: 'missing'
     };
   }
+}
+
+async function fakePassingHarnessRunner({ argv, stdout }) {
+  assert.equal(argv[0], 'harness');
+  assert.equal(argv[1], 'run-taskpacket');
+
+  const runId = optionValue(argv, '--run-id');
+  const runtimeDir = optionValue(argv, '--runtime-dir');
+  const artifactDirectory = join(runtimeDir, 'artifacts');
+  const taskId = `symphony.work.${runId}`;
+  const artifactId = 'implement-evidence';
+
+  await mkdir(join(artifactDirectory, taskId), { recursive: true });
+  await writeFile(join(artifactDirectory, taskId, `${artifactId}.json`), `${JSON.stringify({
+    version: '1',
+    changedFiles: [],
+    checks: [{
+      command: 'fake real harness',
+      exitCode: 0
+    }]
+  }, null, 2)}\n`, 'utf8');
+
+  stdout.write(`${JSON.stringify({
+    version: '1',
+    command: 'harness run-taskpacket',
+    status: 'passed',
+    exitCode: 0,
+    runId,
+    workflowMode: 'qa-swarm',
+    executionMode: 'real',
+    adapterId: 'codex',
+    taskId,
+    artifactDirectory,
+    verifierStatus: 'passed',
+    commands: [{
+      artifactId
+    }]
+  }, null, 2)}\n`);
+
+  return 0;
+}
+
+function optionValue(argv, option) {
+  const index = argv.indexOf(option);
+
+  assert.notEqual(index, -1);
+  return argv[index + 1];
 }
 
 async function writeFixtureProject(root) {

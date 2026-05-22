@@ -60,7 +60,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current baseline: `pnpm test` passes 42 test files; the targeted v7 intake and CLI Node suite covers 46 tests across 8 suites.
+Current install baseline: the `v8` tag is the stable user CLI install target. The `v7` tag remains available for historical installs, and `main` carries v8.1 development hardening until the next tag.
 
 ## Design Center
 
@@ -109,11 +109,11 @@ pnpm smoke:kiro:help
 Install the user CLI:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v7/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh | sh
 symphony doctor
 ```
 
-The installer clones or updates the `v7` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. Set `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_INSTALL_REF`, `MCAS_REPO_SLUG`, or `MCAS_REPO_URL` to override the defaults.
+The installer clones or updates the `v8` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI; `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults.
 
 Development fallback from a checkout:
 
@@ -134,11 +134,13 @@ symphony "审查当前改动"
 symphony "修复失败的测试"
 symphony status
 symphony artifacts
-symphony new tmp/v8-demo --template empty --dry-run
+symphony "创建一个新的 React 看板项目" --dry-run --json
 symphony "创建一个新的 node cli 项目" --dry-run
 ```
 
-`symphony scan` is the product name for the v7 intake/grill-me-docs capability. `symphony do` uses the latest scan context when its project fingerprint is fresh, and reruns scan when the context is missing or stale. `symphony review` and `symphony verify` keep distinct product intent metadata even while they reuse the qa-swarm Harness path. Prompt routing is deterministic and model-free; it matches rules for scan, work, review, verify, status, artifacts, continue, and new-project intents.
+`symphony scan` is the product name for the v7 intake/grill-me-docs capability. In default `auto` mode it tries optional `grill-me-docs` first, records provider attempts in JSON output, and falls back to the built-in provider when grill-me-docs is unavailable. Use `--builtin` for built-in-only scans and `--require-grill` for a hard failure when grill-me-docs is unavailable.
+`symphony do` uses the latest scan context when its project fingerprint is fresh, and reruns scan when the context is missing or stale. `symphony review`, `symphony qa`, and `symphony verify` use the v8 product work path with qa-swarm workflow mode; `qa` is a product command alias for the `verify` semantic command. Prompt routing is deterministic and model-free; it matches rules for scan, work, review, verify, status, artifacts, continue, and new-project intents.
+New-project prompts produce a `scaffoldPlan` and a separate `scaffold-manifest` artifact. Framework-shaped requests such as React or Vite are reported as unsupported generator requests; Symphony does not run npm installs, framework generators, or dependency installation, and `--write` is still required before any files are created.
 
 `.symphony/` stores local user-facing pointers and summaries. Add it to your local ignore rules if you do not want run pointers in source control. Full evidence, TaskPackets, Harness output, scaffold manifests, and intake artifacts stay in the runtime artifact directories written through `ArtifactStore`.
 
@@ -151,8 +153,7 @@ symphony work --dry-run "inspect README"
 symphony work --preflight-intake --dry-run "inspect README"
 symphony work --intake-artifact tmp/symphony-intake/<run-id>/runtime/artifacts/project-intake/project-context.json --dry-run "inspect README"
 symphony work --mode writer-reviewer --dry-run "update README"
-symphony review --dry-run "inspect README"
-symphony qa --dry-run "inspect README"
+symphony work --mode qa-swarm --dry-run "inspect README"
 symphony agent claude /review --dry-run
 symphony replay --artifacts tmp/artifacts --events tmp/events --reason model-upgrade
 ```
@@ -175,10 +176,10 @@ pnpm mcas eval replay -- --artifacts tmp/artifacts --events tmp/events --reason 
 pnpm mcas eval replay -- --artifacts tmp/eval-replay-comparison-artifacts --workflow-comparison-fixture workflow-comparison --reason workflow-mode-comparison --compared-at 2026-05-16T00:00:00.000Z
 ```
 
-`symphony scan` scans a checkout in read-only mode, writes `project-context` and `intake-summary` JSON artifacts through `ArtifactStore` under task id `project-intake`, and writes latest context/run pointers under `.symphony/`. The built-in provider is deterministic and does not invoke models. `--grill` uses the optional `grill-me-docs` adapter with builtin fallback; `--require-grill` fails when the provider is unavailable.
+`symphony scan` scans a checkout in read-only mode, writes `project-context` and `intake-summary` JSON artifacts through `ArtifactStore` under task id `project-intake`, and writes latest context/run pointers under `.symphony/`. The built-in provider is deterministic and does not invoke models. Default `auto` and explicit `--grill` try the optional `grill-me-docs` adapter with builtin fallback; `--builtin` stays builtin-only; `--require-grill` fails when the provider is unavailable.
 `symphony do` is the default product workflow entry. It creates a minimal Harness TaskPacket under `tmp/symphony-work/<run-id>/`, runs the existing Harness Bridge in dry-run mode by default, and prints intent, pipeline, safety mode, verifier status, artifact paths, and next action. Add `--real <codex|claude|kiro>` only with the matching `MCAS_RUN_REAL_*` gate.
 `symphony intake` and `symphony work` remain advanced compatibility commands. Their default JSON behavior is preserved unless routed through the v8 aliases.
-`symphony review` and `symphony qa` are shortcuts for dry-run qa-swarm workflow execution through the same Harness Bridge path.
+`symphony review` and `symphony qa` route through the v8 product work path; use `symphony work --mode qa-swarm` for the advanced legacy qa-swarm path.
 `symphony agent claude /review --dry-run` captures native command metadata and a proof artifact without invoking Claude. Add `--real` only with `MCAS_RUN_REAL_CLAUDE=1`.
 `symphony harness ...` and `symphony replay ...` are compatibility passthroughs to the existing `mcas harness ...` and `mcas eval replay ...` paths.
 `mcas` remains the advanced kernel/debug CLI for queueing, TaskSpec files, direct Harness TaskPackets, smokes, and low-level diagnostics.

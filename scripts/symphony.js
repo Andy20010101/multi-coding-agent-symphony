@@ -11,6 +11,7 @@ import { redactSecrets } from '../src/redaction.js';
 import { validateProjectContextArtifact } from '../src/intake/intake-contracts.js';
 import {
   ScaffoldError,
+  buildScaffoldPlan,
   normalizeTemplate,
   scaffoldProject
 } from '../src/symphony/new-project.js';
@@ -66,6 +67,7 @@ const KNOWN_COMMANDS = new Set([
   'continue',
   'new'
 ]);
+let productRunSequence = 0;
 
 export async function runSymphonyCli({
   argv = process.argv.slice(2),
@@ -182,6 +184,19 @@ export async function runSymphonyCli({
       });
     }
 
+    if (command === 'review' || command === 'qa') {
+      return await runSymphonyWorkProduct({
+        args: rest,
+        semanticCommand: command === 'review' ? 'review' : 'verify',
+        productCommand: command,
+        stdout,
+        stderr,
+        runner,
+        env,
+        mcasRunner
+      });
+    }
+
     if (command === 'status') {
       return await runSymphonyStatus({
         args: rest,
@@ -232,18 +247,6 @@ export async function runSymphonyCli({
         stderr,
         runner: runner ?? new NodeProcessRunner(),
         env
-      });
-    }
-
-    if (command === 'review' || command === 'qa') {
-      return await runSymphonyWork({
-        args: ['--mode', 'qa-swarm', ...rest],
-        summaryCommand: `symphony ${command}`,
-        stdout,
-        stderr,
-        runner,
-        env,
-        mcasRunner
       });
     }
 
@@ -312,6 +315,7 @@ export function buildSymphonyWorkTaskPacket({
 async function runSymphonyWork({
   args,
   summaryCommand,
+  forcedRunId,
   stdout,
   stderr,
   runner,
@@ -319,7 +323,7 @@ async function runSymphonyWork({
   mcasRunner
 }) {
   const options = parseWorkArgs(args);
-  const runId = buildWorkRunId({
+  const runId = forcedRunId ?? buildWorkRunId({
     prompt: options.prompt,
     mode: options.mode,
     adapter: options.adapter
@@ -563,10 +567,12 @@ async function executeProductScan({
   routeDecision
 }) {
   const runId = buildScanRunId(options);
+  const providerAttempts = [];
+  let providerFallback = null;
   const intakeOptions = {
     projectDir: options.projectDir,
     outputDir: options.outputDir,
-    provider: providerForScanMode(options.providerMode),
+    provider: initialProviderForScanMode(options.providerMode),
     providerCommand: options.providerCommand,
     requireProvider: options.requireProvider,
     failOn: options.failOn,
@@ -579,12 +585,22 @@ async function executeProductScan({
     mcasRunner,
     runId
   });
+  providerAttempts.push(buildProviderAttempt({
+    provider: intakeOptions.provider,
+    intake
+  }));
 
   if (
-    options.providerMode === 'grill'
+    options.providerMode !== 'builtin'
+    && !options.requireProvider
     && intake.kernelOutput?.providerStatus === 'unavailable'
     && intake.exitCode === EXIT_CODES.ok
   ) {
+    providerFallback = {
+      from: 'grill-me-docs',
+      to: 'builtin',
+      reason: 'unavailable'
+    };
     intake = await executeSymphonyIntake({
       options: {
         ...intakeOptions,
@@ -596,6 +612,10 @@ async function executeProductScan({
       mcasRunner,
       runId: `${runId}-builtin`
     });
+    providerAttempts.push(buildProviderAttempt({
+      provider: 'builtin',
+      intake
+    }));
   }
 
   if (intake.summary === null) {
@@ -645,6 +665,9 @@ async function executeProductScan({
     runId: intake.runId,
     projectRoot: intake.summary.projectDir,
     projectFingerprint,
+    providerMode: options.providerMode,
+    providerAttempts,
+    providerFallback,
     provider: intake.summary.provider,
     providerStatus: intake.summary.providerStatus,
     modelInvocation: false,
@@ -675,6 +698,7 @@ async function executeProductScan({
 async function runSymphonyWorkProduct({
   args,
   semanticCommand,
+  productCommand,
   stdout,
   stderr,
   runner,
@@ -696,6 +720,7 @@ async function runSymphonyWorkProduct({
   const work = await executeProductWork({
     options,
     semanticCommand,
+    productCommand,
     runner,
     env,
     mcasRunner,
@@ -722,6 +747,7 @@ async function runSymphonyWorkProduct({
 async function executeProductWork({
   options,
   semanticCommand,
+  productCommand,
   runner,
   env,
   mcasRunner,
@@ -741,6 +767,12 @@ async function executeProductWork({
     runner,
     env,
     mcasRunner
+  });
+  const productRunId = buildProductWorkRunId({
+    prompt: options.prompt,
+    mode: options.mode,
+    adapter: options.adapter,
+    semanticCommand
   });
   const legacyArgs = [
     '--intake-artifact',
@@ -763,11 +795,16 @@ async function executeProductWork({
     legacyArgs.push('--timeout-ms', String(options.timeoutMs));
   }
 
+  if (options.proofDir !== undefined) {
+    legacyArgs.push('--proof-dir', options.proofDir);
+  }
+
   legacyArgs.push(options.prompt);
 
   const legacy = await executeLegacyWork({
     args: legacyArgs,
-    summaryCommand: `symphony ${semanticCommand}`,
+    summaryCommand: `symphony ${productCommand ?? semanticCommand}`,
+    forcedRunId: productRunId,
     stdout: createBufferedStream(),
     stderr: createBufferedStream(),
     runner,
@@ -785,7 +822,7 @@ async function executeProductWork({
   const pipeline = ['scan-if-needed', pipelineTail];
   const summary = {
     version: '1',
-    command: `symphony ${semanticCommand}`,
+    command: `symphony ${productCommand ?? semanticCommand}`,
     intent,
     semanticCommand,
     pipeline,
@@ -834,6 +871,7 @@ async function executeProductWork({
 async function executeLegacyWork({
   args,
   summaryCommand,
+  forcedRunId,
   runner,
   env,
   mcasRunner
@@ -843,6 +881,7 @@ async function executeLegacyWork({
   const exitCode = await runSymphonyWork({
     args,
     summaryCommand,
+    forcedRunId,
     stdout: bufferedStdout.stream,
     stderr: bufferedStderr.stream,
     runner,
@@ -995,7 +1034,11 @@ async function runSymphonyPrompt({
     runner: runner ?? new NodeProcessRunner(),
     env,
     mcasRunner,
-    promptTarget: `tmp/symphony-new-${routeDecision.template}`,
+    prompt: invocation.prompt,
+    promptTarget: buildPromptNewTarget({
+      prompt: invocation.prompt,
+      template: routeDecision.template
+    }),
     promptTemplate: routeDecision.template,
     routeDecision
   });
@@ -1085,6 +1128,7 @@ async function runSymphonyArtifacts({ args, stdout, routeDecision }) {
         harnessOutputPath: runState.harnessOutputPath,
         taskPacketPath: runState.taskPacketPath,
         proofArtifactPath: runState.proofArtifactPath,
+        scaffoldPlanArtifactPath: runState.scaffoldPlanArtifactPath,
         scaffoldManifestArtifactPath: runState.scaffoldManifestArtifactPath,
         nextAction: 'symphony status',
         ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
@@ -1147,6 +1191,7 @@ async function runSymphonyNew({
   runner,
   env,
   mcasRunner,
+  prompt,
   promptTarget,
   promptTemplate,
   routeDecision
@@ -1157,12 +1202,20 @@ async function runSymphonyNew({
   });
   const runId = buildNewRunId(options);
   const artifactDirectory = join(options.runtimeDir, runId, 'runtime', 'artifacts');
+  const scaffoldPlan = buildScaffoldPlan({
+    prompt,
+    targetDir: options.targetDir,
+    template: options.template,
+    templateOverride: options.templateOverride,
+    write: options.write
+  });
   let scaffold;
 
   try {
     scaffold = await scaffoldProject({
       targetDir: options.targetDir,
-      template: options.template,
+      template: scaffoldPlan.template,
+      scaffoldPlan,
       write: options.write,
       runner
     });
@@ -1175,8 +1228,10 @@ async function runSymphonyNew({
   }
 
   const store = new ArtifactStore(artifactDirectory);
+  await store.writeArtifact('symphony-new', 'scaffold-plan', scaffoldPlan);
   await store.writeArtifact('symphony-new', 'scaffold-manifest', scaffold.manifest);
 
+  const planArtifactPath = join(artifactDirectory, 'symphony-new', 'scaffold-plan.json');
   const manifestArtifactPath = join(artifactDirectory, 'symphony-new', 'scaffold-manifest.json');
   let scanSummary;
 
@@ -1220,16 +1275,22 @@ async function runSymphonyNew({
     exitCode: EXIT_CODES.ok,
     verifierStatus: options.write ? scanSummary?.verifierStatus ?? scanSummary?.status : 'not-run',
     runId,
-    template: options.template,
+    projectKind: scaffoldPlan.projectKind,
+    detectedStack: scaffoldPlan.detectedStack,
+    scaffoldPlan,
+    networkInstall: scaffoldPlan.networkInstall,
+    unsupportedRequests: scaffoldPlan.unsupportedRequests,
+    template: scaffoldPlan.template,
     targetDir: options.targetDir,
     createdFiles: scaffold.manifest.createdFiles,
+    scaffoldPlanArtifactPath: planArtifactPath,
     scaffoldManifestArtifactPath: manifestArtifactPath,
     contextArtifactPath: scanSummary?.contextArtifactPath,
     summaryArtifactPath: scanSummary?.summaryArtifactPath,
     ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
     nextAction: options.write
       ? 'symphony status'
-      : `symphony new ${options.targetDir} --template ${options.template} --write`
+      : `symphony new ${options.targetDir} --template ${scaffoldPlan.template} --write`
   };
 
   await writeProductRunState({
@@ -1554,6 +1615,12 @@ function parseWorkProductArgs(args, { semanticCommand, prompt }) {
       continue;
     }
 
+    if (value === '--proof-dir') {
+      options.proofDir = readRequiredValue(args, index, '--proof-dir');
+      index += 1;
+      continue;
+    }
+
     if (value === '--mode') {
       options.mode = readRequiredValue(args, index, '--mode');
       assertWorkMode(options.mode);
@@ -1656,6 +1723,7 @@ function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
   const options = {
     targetDir: promptTarget,
     template: promptTemplate ?? 'empty',
+    templateOverride: false,
     runtimeDir: 'tmp/symphony-new',
     stateDir: '.symphony',
     write: false,
@@ -1683,6 +1751,7 @@ function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
 
     if (value === '--template') {
       options.template = normalizeTemplate(readRequiredValue(args, index, '--template'));
+      options.templateOverride = true;
       index += 1;
       continue;
     }
@@ -1723,8 +1792,17 @@ function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
   return options;
 }
 
-function providerForScanMode(providerMode) {
-  return providerMode === 'grill' ? 'grill-me-docs' : 'builtin';
+function initialProviderForScanMode(providerMode) {
+  return providerMode === 'builtin' ? 'builtin' : 'grill-me-docs';
+}
+
+function buildProviderAttempt({ provider, intake }) {
+  return {
+    provider,
+    runId: intake.runId,
+    status: intake.summary?.providerStatus ?? intake.kernelOutput?.providerStatus ?? 'failed',
+    exitCode: intake.exitCode
+  };
 }
 
 function parsePromptInvocation(argv) {
@@ -1807,7 +1885,16 @@ async function writeProductRunState({ stateDir, summary, updatedAt }) {
     harnessOutputPath: summary.harnessOutputPath,
     taskPacketPath: summary.taskPacketPath,
     proofArtifactPath: summary.proofArtifactPath,
+    scaffoldPlanArtifactPath: summary.scaffoldPlanArtifactPath,
     scaffoldManifestArtifactPath: summary.scaffoldManifestArtifactPath,
+    scaffoldPlan: summary.scaffoldPlan,
+    projectKind: summary.projectKind,
+    detectedStack: summary.detectedStack,
+    networkInstall: summary.networkInstall,
+    unsupportedRequests: summary.unsupportedRequests,
+    providerMode: summary.providerMode,
+    providerAttempts: summary.providerAttempts,
+    providerFallback: summary.providerFallback,
     verifierStatus: summary.verifierStatus,
     status: summary.status,
     createdAt,
@@ -1862,6 +1949,7 @@ function humanProductSummary(summary) {
     ['Evidence', 'evidenceArtifactPath'],
     ['Harness', 'harnessOutputPath'],
     ['TaskPacket', 'taskPacketPath'],
+    ['Plan', 'scaffoldPlanArtifactPath'],
     ['Manifest', 'scaffoldManifestArtifactPath'],
     ['Proof', 'proofArtifactPath']
   ]) {
@@ -1880,11 +1968,24 @@ function humanProductSummary(summary) {
 function buildScanRunId({ projectDir, providerMode }) {
   const resolvedProjectDir = resolve(projectDir);
 
-  return `symphony-scan-${safeIdPart(basenameFromPath(resolvedProjectDir))}-${shortHash([resolvedProjectDir, providerMode].join('\0'))}`;
+  return `symphony-scan-${safeIdPart(basenameFromPath(resolvedProjectDir))}-${shortHash([resolvedProjectDir, providerMode].join('\0'))}-${uniqueProductRunSuffix()}`;
 }
 
 function buildNewRunId({ targetDir, template }) {
-  return `symphony-new-${safeIdPart(template)}-${shortHash([resolve(targetDir), template].join('\0'))}`;
+  return `symphony-new-${safeIdPart(template)}-${shortHash([resolve(targetDir), template].join('\0'))}-${uniqueProductRunSuffix()}`;
+}
+
+function buildPromptNewTarget({ prompt, template }) {
+  return join('tmp', 'symphony-new', `${safeIdPart(template)}-${shortHash(prompt)}`);
+}
+
+function buildProductWorkRunId({ prompt, mode, adapter, semanticCommand }) {
+  return `${buildWorkRunId({ prompt, mode, adapter })}-${safeIdPart(semanticCommand)}-${uniqueProductRunSuffix()}`;
+}
+
+function uniqueProductRunSuffix() {
+  productRunSequence += 1;
+  return `${Date.now().toString(36)}-${process.pid.toString(36)}-${productRunSequence.toString(36)}`;
 }
 
 function assertProductRealGate(adapter, env) {
@@ -2103,8 +2204,8 @@ function productMetadataForSummaryCommand(summaryCommand) {
   if (summaryCommand === 'symphony qa') {
     return {
       intent: 'verify',
-      semanticCommand: 'qa',
-      pipeline: ['scan-if-needed', 'qa'],
+      semanticCommand: 'verify',
+      pipeline: ['scan-if-needed', 'verify'],
       safetyMode: 'dry-run',
       projectWrites: false,
       runtimeWrites: true,

@@ -66,3 +66,69 @@ Results:
 - `pnpm check`: passed.
 - `pnpm test`: passed, 488 tests across 83 suites.
 - `git diff --check`: passed.
+
+## v8.1 P0 Release Gates
+
+Recorded during v8.1 release hardening on 2026-05-21 before product behavior changes.
+
+```sh
+pnpm test:mutation:gate
+```
+
+Result: passed. Stryker completed in 26 minutes 52 seconds with final mutation score 74.31, above the configured break threshold 60.
+
+```sh
+pnpm audit --audit-level high
+```
+
+Result: passed. pnpm reported no known vulnerabilities.
+
+## v8.1 Release Hardening Evidence
+
+Implemented and verified on 2026-05-21.
+
+Scope completed:
+
+- `symphony scan` default `auto` mode now tries `grill-me-docs` first, falls back to builtin when unavailable, preserves `--builtin` as builtin-only, and preserves `--require-grill` as hard failure.
+- Scan JSON now includes `providerMode`, `providerAttempts`, and `providerFallback`.
+- Direct `symphony review` and `symphony qa` now route through the v8 product work path; `symphony work --mode qa-swarm` remains the advanced legacy path.
+- `symphony qa` preserves the product command while recording `verify` as the semantic command in summaries and proof metadata.
+- New-project prompts now produce a deterministic `scaffoldPlan`, `detectedStack`, `projectKind`, `networkInstall: false`, `unsupportedRequests`, and a separate `scaffold-plan` artifact before the scaffold manifest.
+- Product-layer scan, new-project, and work run ids include a unique suffix; legacy `symphony work` deterministic run id behavior is unchanged.
+- README and `install.sh` now target the existing `v8` tag by default and note `v7` as the historical install target.
+
+Targeted verification:
+
+```sh
+node --test tests/symphony-cli.test.js
+node --test tests/installer.test.js tests/symphony-cli.test.js
+sh -n install.sh
+```
+
+Results:
+
+- `node --test tests/symphony-cli.test.js`: passed, 27 tests across 4 suites.
+- `node --test tests/installer.test.js tests/symphony-cli.test.js`: passed, 28 tests across 5 suites after the installer default was moved to `v8`.
+- `sh -n install.sh`: passed.
+
+Architecture review:
+
+- Independent re-review approved the direct `symphony qa` product path and persisted proof metadata after the semantic command was corrected to `verify`.
+
+Final verification:
+
+```sh
+pnpm check
+pnpm test
+pnpm test:mutation:gate
+pnpm audit --audit-level high
+git diff --check
+```
+
+Results:
+
+- `pnpm check`: passed.
+- `pnpm test`: passed, 494 tests across 83 suites.
+- `pnpm test:mutation:gate`: passed. Stryker completed in 33 minutes 30 seconds with final mutation score 74.22, above the configured break threshold 60; 5 mutants timed out and there were 0 mutation errors.
+- `pnpm audit --audit-level high`: passed. pnpm reported no known vulnerabilities.
+- `git diff --check`: passed.

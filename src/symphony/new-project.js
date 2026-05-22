@@ -4,6 +4,12 @@ import { dirname, join, resolve } from 'node:path';
 import { NodeProcessRunner } from '../process-runner.js';
 
 export const SCAFFOLD_TEMPLATES = new Set(['empty', 'node-cli', 'web-app']);
+const FRAMEWORK_REQUESTS = [
+  ['react', /\breact\b/iu],
+  ['vue', /\bvue\b/iu],
+  ['next', /\bnext(?:\.js)?\b/iu],
+  ['vite', /\bvite\b/iu]
+];
 
 export class ScaffoldError extends Error {
   constructor(message) {
@@ -15,6 +21,7 @@ export class ScaffoldError extends Error {
 export async function scaffoldProject({
   targetDir,
   template = 'empty',
+  scaffoldPlan,
   write = false,
   runner = new NodeProcessRunner()
 } = {}) {
@@ -36,6 +43,7 @@ export async function scaffoldProject({
     targetDir,
     resolvedTargetDir,
     projectWrites: write,
+    ...(scaffoldPlan ? { scaffoldPlan } : {}),
     createdFiles: files.map((file) => file.path),
     skippedFiles: [],
     gitInit: {
@@ -67,6 +75,37 @@ export async function scaffoldProject({
   };
 }
 
+export function buildScaffoldPlan({
+  prompt,
+  targetDir,
+  template = 'empty',
+  templateOverride = false,
+  write = false
+} = {}) {
+  assertNonEmptyString(targetDir, 'targetDir');
+  const normalizedTemplate = normalizeTemplate(template);
+  const detectedStack = detectStack(prompt);
+  const projectKind = templateOverride
+    ? projectKindForTemplate(normalizedTemplate)
+    : projectKindForDetectedStack(detectedStack, normalizedTemplate);
+  const plannedTemplate = templateOverride
+    ? normalizedTemplate
+    : templateForProjectKind(projectKind);
+
+  return {
+    version: '1',
+    kind: 'symphony-scaffold-plan',
+    projectKind,
+    detectedStack,
+    template: plannedTemplate,
+    templateOverride,
+    targetDir,
+    projectWrites: write,
+    networkInstall: false,
+    unsupportedRequests: unsupportedRequestsFor(detectedStack)
+  };
+}
+
 export function normalizeTemplate(value) {
   if (value === undefined) {
     return 'empty';
@@ -77,6 +116,75 @@ export function normalizeTemplate(value) {
   }
 
   return value;
+}
+
+function detectStack(prompt) {
+  const text = String(prompt ?? '');
+  const normalized = text.toLowerCase();
+  const frameworks = FRAMEWORK_REQUESTS
+    .filter(([, pattern]) => pattern.test(normalized))
+    .map(([name]) => name);
+  const features = [];
+
+  if (/\b(kanban|board|dashboard)\b/iu.test(normalized) || /看板/u.test(text)) {
+    features.push('board');
+  }
+
+  return {
+    language: /\btypescript\b/iu.test(normalized) ? 'typescript' : 'javascript',
+    frameworks,
+    features,
+    fullFrameworkRequest: /\bfull\s+(framework|app|application)\b/iu.test(normalized)
+      || /完整.*框架/u.test(text)
+  };
+}
+
+function projectKindForDetectedStack(detectedStack, fallbackTemplate) {
+  if (detectedStack.frameworks.length > 0 || detectedStack.features.includes('board')) {
+    return 'web-app';
+  }
+
+  return projectKindForTemplate(fallbackTemplate);
+}
+
+function projectKindForTemplate(template) {
+  if (template === 'node-cli') {
+    return 'node-cli';
+  }
+
+  if (template === 'web-app') {
+    return 'web-app';
+  }
+
+  return 'empty';
+}
+
+function templateForProjectKind(projectKind) {
+  if (projectKind === 'node-cli') {
+    return 'node-cli';
+  }
+
+  if (projectKind === 'web-app') {
+    return 'web-app';
+  }
+
+  return 'empty';
+}
+
+function unsupportedRequestsFor(detectedStack) {
+  const requests = detectedStack.frameworks.map((framework) => ({
+    request: framework,
+    reason: 'framework generators and dependency installation are disabled'
+  }));
+
+  if (detectedStack.fullFrameworkRequest) {
+    requests.push({
+      request: 'full-framework',
+      reason: 'framework generators and dependency installation are disabled'
+    });
+  }
+
+  return requests;
 }
 
 function filesForTemplate({ template, targetDir }) {
