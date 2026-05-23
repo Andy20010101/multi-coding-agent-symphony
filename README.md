@@ -57,6 +57,7 @@ Implemented:
 - Stable product JSON contract fields for automation: `contractVersion`, `contractName`, `contract`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`.
 - Read-only local `symphony console` workbench for browsing latest runs, verifier status, readiness checks, copy-only next commands, timelines, risk summaries, run filters, recent-run diagnostics, and artifact pointers from `.symphony` state.
 - Controlled diagnostics CLI `symphony diagnose` for terminal summaries, stable JSON reports, and redirectable static HTML reports without starting a browser server.
+- v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
@@ -65,7 +66,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current released repository tag: `v9`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, and the `v7` tag remains available for historical installs.
+Current released repository tag: `v9`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, and this checkout adds v11 controlled kernel execution plans. The `v7` tag remains available for historical installs.
 
 ## Design Center
 
@@ -102,6 +103,8 @@ node scripts/symphony.js doctor
 pnpm symphony doctor
 pnpm symphony scan
 pnpm symphony do --dry-run "inspect README"
+pnpm --silent symphony do --write --json "inspect README"
+pnpm --silent symphony do --confirm-plan <plan-id> --json
 pnpm symphony verify --dry-run "inspect README"
 pnpm symphony "扫描这个仓库"
 pnpm symphony "审查当前改动"
@@ -136,6 +139,8 @@ Run the user CLI:
 symphony doctor
 symphony scan
 symphony do --dry-run "inspect README"
+symphony do --write "inspect README"
+symphony do --confirm-plan <plan-id>
 symphony verify --dry-run "inspect README"
 symphony "扫描这个仓库"
 symphony "审查当前改动"
@@ -153,6 +158,7 @@ symphony "创建一个新的 node cli 项目" --dry-run
 
 `symphony scan` is the product name for the v7 intake/grill-me-docs capability. In default `auto` mode it tries optional `grill-me-docs` first, records provider attempts in JSON output, and falls back to the built-in provider when grill-me-docs is unavailable. Use `--builtin` for built-in-only scans and `--require-grill` for a hard failure when grill-me-docs is unavailable.
 `symphony do` uses the latest scan context when its project fingerprint is fresh, and reruns scan when the context is missing or stale. `symphony review`, `symphony qa`, and `symphony verify` use the v8 product work path with qa-swarm workflow mode; `qa` is a product command alias for the `verify` semantic command. Prompt routing is deterministic and model-free; it matches rules for scan, work, review, verify, status, artifacts, continue, and new-project intents.
+`symphony do --write` is controlled in v11: without `--confirm-plan` it only writes a `symphony.execution-plan` artifact under `.symphony/plans/` and records a planned run. The confirm command reloads that frozen plan, rejects prompt drift, verifies the project fingerprint, checks any required real-agent gate, and then runs the existing kernel workflow in a materialized isolated workspace. It does not apply patches to the main worktree; `mainWorktreeWrites` remains `false`.
 New-project prompts produce a `scaffoldPlan` and a separate `scaffold-manifest` artifact. Framework-shaped requests such as React or Vite are reported as unsupported generator requests; Symphony does not run npm installs, framework generators, or dependency installation, and `--write` is still required before any files are created.
 Every product `--json` response keeps its legacy top-level fields and adds a stable machine-readable envelope: `contractVersion`, `contractName`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`. `symphony console --snapshot --json` returns the same read-only run model without starting a server; see [Symphony Product JSON Contracts](docs/symphony-product-contracts.md) for v8.2 and v9 contract examples.
 `symphony console` starts a local read-only workbench on `127.0.0.1:8765` by default. It serves `/`, `/api/summary`, `/api/readiness`, `/api/runs`, `/api/runs/latest`, `/api/runs/<run-id>`, `/api/runs/<run-id>/timeline`, and `/api/runs/<run-id>/artifacts/<kind>`; all non-GET requests return `405`. The workbench shows readiness, latest run health, recent run diagnostics, run filters for `all`, `passed`, `failed`, `dry-run`, `real`, `scan`, and `verify`, a risk panel, run detail sections, registered artifacts, and grouped copy-only commands. It does not add browser write, execute, retry, delete, or arbitrary path-read controls. Artifact preview only reads paths already referenced by a run state and truncates file previews after 200 KiB.

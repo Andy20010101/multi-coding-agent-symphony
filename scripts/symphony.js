@@ -28,10 +28,12 @@ import {
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
+  readExecutionPlan,
   readLatestContext,
   readLatestRun,
   readRunState,
   symphonyStatePaths,
+  writeExecutionPlan,
   writeLatestContext,
   writeRunState
 } from '../src/symphony/state.js';
@@ -407,6 +409,10 @@ async function runSymphonyWork({
     kernelArgv.push('--real', '--adapter', options.adapter);
   }
 
+  if (options.materializeWorkspaces) {
+    kernelArgv.push('--materialize-workspaces');
+  }
+
   if (options.timeoutMs !== undefined) {
     kernelArgv.push('--timeout-ms', String(options.timeoutMs));
   }
@@ -735,14 +741,40 @@ async function runSymphonyWorkProduct({
   prompt,
   routeDecision
 }) {
+  if (args.includes('--confirm-plan')) {
+    if (semanticCommand !== 'do') {
+      throw new UsageError('--confirm-plan is only supported for symphony do');
+    }
+
+    const options = parseConfirmPlanArgs(args);
+    const confirmed = await executeConfirmedProductPlan({
+      options,
+      runner,
+      env,
+      mcasRunner
+    });
+
+    writeProductOutput(stdout, confirmed.summary, options.json);
+
+    if (confirmed.stderrText !== '') {
+      stderr.write(confirmed.stderrText);
+    }
+
+    return confirmed.exitCode;
+  }
+
   const options = parseWorkProductArgs(args, {
     semanticCommand,
     prompt
   });
 
-  if (routeDecision?.safetyMode === 'external' && !args.includes('--real')) {
-    options.safetyMode = 'external';
+  if (routeDecision?.safetyMode === 'external' && !options.realRequested) {
+    options.realRequested = true;
     options.adapter = routeDecision.adapter;
+  }
+
+  if (options.realRequested && !options.writeRequested) {
+    options.safetyMode = 'external';
   }
 
   const work = await executeProductWork({
@@ -782,7 +814,19 @@ async function executeProductWork({
   routeDecision
 }) {
   if (options.safetyMode === 'write') {
-    throw new UsageError('symphony do --write is not implemented for project work; use --real <adapter> with the matching gate for external execution');
+    if (semanticCommand !== 'do') {
+      throw new UsageError('write-mode execution plans are only supported for symphony do');
+    }
+
+    return await createProductExecutionPlan({
+      options,
+      semanticCommand,
+      productCommand,
+      runner,
+      env,
+      mcasRunner,
+      routeDecision
+    });
   }
 
   if (options.safetyMode === 'external') {
@@ -876,6 +920,263 @@ async function executeProductWork({
     taskPacketPath: legacy.summary.taskPacketPath,
     changedFiles: legacy.summary.changedFiles,
     ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
+    nextAction: 'symphony status'
+  };
+
+  if (legacy.summary.proofArtifactPath) {
+    summary.proofArtifactPath = legacy.summary.proofArtifactPath;
+  }
+
+  await writeProductRunState({
+    stateDir: options.stateDir,
+    summary,
+    updatedAt: now
+  });
+
+  return {
+    exitCode: legacy.exitCode,
+    summary,
+    stderrText: legacy.stderrText
+  };
+}
+
+async function createProductExecutionPlan({
+  options,
+  semanticCommand,
+  productCommand,
+  runner,
+  env,
+  mcasRunner,
+  routeDecision
+}) {
+  const context = await ensureFreshContext({
+    projectDir: options.projectDir,
+    stateDir: options.stateDir,
+    runner,
+    env,
+    mcasRunner
+  });
+  const now = new Date().toISOString();
+  const planId = buildExecutionPlanId({
+    prompt: options.prompt,
+    mode: options.mode,
+    adapter: options.adapter
+  });
+  const command = `symphony ${productCommand ?? semanticCommand}`;
+  const pipeline = ['scan-if-needed', semanticCommand];
+  const executionMode = options.realRequested ? 'real' : 'dry-run';
+  const requiresGate = options.realRequested ? REAL_WORK_GATES[options.adapter] : null;
+  const confirmationCommand = `symphony do --confirm-plan ${planId}`;
+  const normalizedRouteDecision = routeDecision ?? {
+    version: '1',
+    intent: 'work',
+    confidence: 'explicit',
+    matchedSignals: ['--write'],
+    safetyMode: 'write',
+    adapter: options.adapter,
+    pipeline,
+    requiresGate,
+    requiresConfirmation: true,
+    reason: 'Explicit --write requested; generated a controlled execution plan.'
+  };
+  const plan = {
+    version: '1',
+    kind: 'symphony.execution-plan',
+    contractVersion: '1',
+    contractName: 'symphony.execution-plan',
+    planId,
+    command,
+    intent: 'work',
+    semanticCommand,
+    prompt: options.prompt,
+    pipeline,
+    routeDecision: normalizedRouteDecision,
+    matchedSignals: normalizedRouteDecision.matchedSignals,
+    safetyMode: 'write',
+    projectWrites: true,
+    mainWorktreeWrites: false,
+    workspaceWrites: true,
+    runtimeWrites: true,
+    externalCalls: options.realRequested,
+    destructiveWrites: false,
+    writeBoundary: 'isolated-workspace',
+    projectRoot: context.pointer.projectRoot,
+    projectFingerprint: context.pointer.projectFingerprint,
+    contextReused: !context.scanned,
+    contextArtifactPath: context.pointer.contextArtifactPath,
+    summaryArtifactPath: context.pointer.summaryArtifactPath,
+    workflowMode: options.mode,
+    adapter: options.adapter,
+    executionMode,
+    workDir: options.workDir,
+    ...(options.proofDir ? { proofDir: options.proofDir } : {}),
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
+    requiresGate,
+    confirmationCommand,
+    createdAt: now
+  };
+  const executionPlanArtifactPath = await writeExecutionPlan({
+    stateDir: options.stateDir,
+    plan
+  });
+  const summary = {
+    version: '1',
+    command,
+    intent: 'work',
+    semanticCommand,
+    pipeline,
+    safetyMode: 'write',
+    projectWrites: true,
+    mainWorktreeWrites: false,
+    workspaceWrites: true,
+    runtimeWrites: true,
+    externalCalls: options.realRequested,
+    destructiveWrites: false,
+    status: 'planned',
+    exitCode: EXIT_CODES.ok,
+    verifierStatus: 'not-run',
+    runId: planId,
+    executionPlanId: planId,
+    executionPlanArtifactPath,
+    writeBoundary: 'isolated-workspace',
+    workflowMode: options.mode,
+    adapter: options.adapter,
+    executionMode,
+    requiresGate,
+    projectRoot: context.pointer.projectRoot,
+    projectFingerprint: context.pointer.projectFingerprint,
+    contextReused: !context.scanned,
+    contextArtifactPath: context.pointer.contextArtifactPath,
+    summaryArtifactPath: context.pointer.summaryArtifactPath,
+    matchedSignals: normalizedRouteDecision.matchedSignals,
+    routeDecision: normalizedRouteDecision,
+    confirmationCommand,
+    nextAction: confirmationCommand
+  };
+
+  await writeProductRunState({
+    stateDir: options.stateDir,
+    summary,
+    updatedAt: now
+  });
+
+  return {
+    exitCode: EXIT_CODES.ok,
+    summary,
+    stderrText: ''
+  };
+}
+
+async function executeConfirmedProductPlan({
+  options,
+  runner,
+  env,
+  mcasRunner
+}) {
+  const plan = await readExecutionPlan({
+    stateDir: options.stateDir,
+    planId: options.planId
+  });
+
+  if (plan === null) {
+    throw new UsageError(`execution plan not found: ${options.planId}`);
+  }
+
+  assertExecutionPlan(plan, options.planId);
+
+  const currentFingerprint = await buildProjectFingerprint({
+    projectDir: plan.projectRoot
+  });
+
+  if (currentFingerprint !== plan.projectFingerprint) {
+    throw new UsageError('execution plan is stale: project fingerprint changed');
+  }
+
+  if (plan.executionMode === 'real') {
+    assertProductRealGate(plan.adapter, env);
+  }
+
+  const productRunId = buildConfirmedPlanRunId(plan);
+  const legacyArgs = [
+    '--intake-artifact',
+    plan.contextArtifactPath,
+    '--work-dir',
+    plan.workDir,
+    '--mode',
+    plan.workflowMode,
+    '--materialize-workspaces'
+  ];
+
+  if (plan.executionMode === 'real') {
+    legacyArgs.push('--real', plan.adapter);
+  } else {
+    legacyArgs.push('--dry-run');
+  }
+
+  if (plan.timeoutMs !== undefined) {
+    legacyArgs.push('--timeout-ms', String(plan.timeoutMs));
+  }
+
+  if (plan.proofDir !== undefined) {
+    legacyArgs.push('--proof-dir', plan.proofDir);
+  }
+
+  legacyArgs.push(plan.prompt);
+
+  const legacy = await executeLegacyWork({
+    args: legacyArgs,
+    summaryCommand: plan.command,
+    forcedRunId: productRunId,
+    runner,
+    env,
+    mcasRunner
+  });
+
+  if (legacy.summary === null) {
+    return legacy;
+  }
+
+  const now = new Date().toISOString();
+  const summary = {
+    version: '1',
+    command: plan.command,
+    intent: plan.intent,
+    semanticCommand: plan.semanticCommand,
+    pipeline: plan.pipeline,
+    safetyMode: 'write',
+    projectWrites: true,
+    mainWorktreeWrites: false,
+    workspaceWrites: true,
+    runtimeWrites: true,
+    externalCalls: plan.externalCalls,
+    destructiveWrites: false,
+    status: legacy.summary.status,
+    exitCode: legacy.summary.exitCode,
+    verifierStatus: legacy.summary.verifierStatus,
+    runId: legacy.summary.runId,
+    plannedRunId: plan.planId,
+    executionPlanId: plan.planId,
+    executionPlanArtifactPath: symphonyStatePaths({
+      stateDir: options.stateDir,
+      planId: plan.planId
+    }).executionPlanPath,
+    writeBoundary: plan.writeBoundary,
+    workflowMode: legacy.summary.workflowMode,
+    adapter: legacy.summary.adapter,
+    executionMode: legacy.summary.executionMode,
+    requiresGate: plan.requiresGate,
+    projectRoot: plan.projectRoot,
+    projectFingerprint: plan.projectFingerprint,
+    contextReused: true,
+    contextArtifactPath: plan.contextArtifactPath,
+    summaryArtifactPath: plan.summaryArtifactPath,
+    evidenceArtifactPath: legacy.summary.evidenceArtifactPath,
+    harnessOutputPath: legacy.summary.harnessOutputPath,
+    taskPacketPath: legacy.summary.taskPacketPath,
+    changedFiles: legacy.summary.changedFiles,
+    matchedSignals: plan.matchedSignals,
+    routeDecision: plan.routeDecision,
+    confirmationCommand: plan.confirmationCommand,
     nextAction: 'symphony status'
   };
 
@@ -1113,6 +1414,8 @@ async function runSymphonyStatus({ args, stdout, routeDecision }) {
         verifierStatus: latestRun.verifierStatus,
         contextArtifactPath: latestRun.contextArtifactPath,
         evidenceArtifactPath: latestRun.evidenceArtifactPath,
+        executionPlanArtifactPath: latestRun.executionPlanArtifactPath,
+        executionPlanId: latestRun.executionPlanId,
         harnessOutputPath: latestRun.harnessOutputPath,
         taskPacketPath: latestRun.taskPacketPath,
         nextAction: latestRun.nextAction ?? 'symphony artifacts',
@@ -1165,6 +1468,8 @@ async function runSymphonyArtifacts({ args, stdout, routeDecision }) {
         proofArtifactPath: runState.proofArtifactPath,
         scaffoldPlanArtifactPath: runState.scaffoldPlanArtifactPath,
         scaffoldManifestArtifactPath: runState.scaffoldManifestArtifactPath,
+        executionPlanArtifactPath: runState.executionPlanArtifactPath,
+        executionPlanId: runState.executionPlanId,
         nextAction: 'symphony status',
         ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
       };
@@ -1207,6 +1512,8 @@ async function runSymphonyContinue({ args, stdout, routeDecision }) {
         continuationStatus: latestRun.status === 'passed' ? 'nothing-to-continue' : 'safe-action-needed',
         contextArtifactPath: latestRun.contextArtifactPath,
         evidenceArtifactPath: latestRun.evidenceArtifactPath,
+        executionPlanArtifactPath: latestRun.executionPlanArtifactPath,
+        executionPlanId: latestRun.executionPlanId,
         harnessOutputPath: latestRun.harnessOutputPath,
         taskPacketPath: latestRun.taskPacketPath,
         nextAction: latestRun.status === 'passed'
@@ -1413,6 +1720,7 @@ function parseWorkArgs(args) {
   let realAdapter;
   let dryRun = false;
   let preflightIntake = false;
+  let materializeWorkspaces = false;
   let intakeArtifact;
   let timeoutMs;
   const promptParts = [];
@@ -1427,6 +1735,11 @@ function parseWorkArgs(args) {
 
     if (value === '--preflight-intake') {
       preflightIntake = true;
+      continue;
+    }
+
+    if (value === '--materialize-workspaces') {
+      materializeWorkspaces = true;
       continue;
     }
 
@@ -1497,6 +1810,7 @@ function parseWorkArgs(args) {
     adapter: realAdapter ?? 'codex',
     executionMode: dryRun || realAdapter === undefined ? 'dry-run' : 'real',
     preflightIntake,
+    materializeWorkspaces,
     intakeArtifact,
     timeoutMs
   };
@@ -1670,6 +1984,8 @@ function parseWorkProductArgs(args, { semanticCommand, prompt }) {
     workDir: 'tmp/symphony-work',
     safetyMode: semanticCommand === 'review' ? 'read-only' : 'dry-run',
     adapter: 'codex',
+    realRequested: false,
+    writeRequested: false,
     mode: semanticCommand === 'do' ? 'writer-reviewer' : 'qa-swarm',
     json: false
   };
@@ -1689,13 +2005,17 @@ function parseWorkProductArgs(args, { semanticCommand, prompt }) {
     }
 
     if (value === '--write') {
+      options.writeRequested = true;
       options.safetyMode = 'write';
       continue;
     }
 
     if (value === '--real') {
       options.adapter = normalizeWorkAdapter(readRequiredValue(args, index, '--real'));
-      options.safetyMode = 'external';
+      options.realRequested = true;
+      if (!options.writeRequested) {
+        options.safetyMode = 'external';
+      }
       index += 1;
       continue;
     }
@@ -1750,6 +2070,55 @@ function parseWorkProductArgs(args, { semanticCommand, prompt }) {
 
   options.prompt = options.prompt ?? promptParts.join(' ').trim();
   assertNonEmptyString(options.prompt, `${semanticCommand} prompt`);
+
+  if (options.writeRequested) {
+    options.safetyMode = 'write';
+  }
+
+  return options;
+}
+
+function parseConfirmPlanArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    json: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--confirm-plan') {
+      if (options.planId !== undefined) {
+        throw new UsageError('--confirm-plan accepts one plan id');
+      }
+
+      options.planId = readRequiredValue(args, index, '--confirm-plan');
+      assertSafePathSegment(options.planId, 'plan id');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown confirm option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected confirm argument: ${value}`);
+  }
+
+  if (options.planId === undefined) {
+    throw new UsageError('--confirm-plan requires a plan id');
+  }
 
   return options;
 }
@@ -2018,6 +2387,7 @@ function parsePromptInvocation(argv) {
     '--provider-command',
     '--fail-on',
     '--timeout-ms',
+    '--confirm-plan',
     '--host',
     '--port'
   ]);
@@ -2071,9 +2441,17 @@ async function writeProductRunState({ stateDir, summary, updatedAt }) {
     matchedSignals: summary.matchedSignals,
     safetyMode: summary.safetyMode,
     projectWrites: summary.projectWrites,
+    mainWorktreeWrites: summary.mainWorktreeWrites,
+    workspaceWrites: summary.workspaceWrites,
     runtimeWrites: summary.runtimeWrites,
     externalCalls: summary.externalCalls,
     destructiveWrites: summary.destructiveWrites,
+    writeBoundary: summary.writeBoundary,
+    executionPlanId: summary.executionPlanId,
+    executionPlanArtifactPath: summary.executionPlanArtifactPath,
+    plannedRunId: summary.plannedRunId,
+    confirmationCommand: summary.confirmationCommand,
+    requiresGate: summary.requiresGate,
     workflowMode: summary.workflowMode,
     adapter: summary.adapter,
     executionMode: summary.executionMode,
@@ -2175,6 +2553,7 @@ function humanProductSummary(summary) {
     ['Evidence', 'evidenceArtifactPath'],
     ['Harness', 'harnessOutputPath'],
     ['TaskPacket', 'taskPacketPath'],
+    ['Execution plan', 'executionPlanArtifactPath'],
     ['Plan', 'scaffoldPlanArtifactPath'],
     ['Manifest', 'scaffoldManifestArtifactPath'],
     ['Proof', 'proofArtifactPath']
@@ -2209,6 +2588,18 @@ function buildProductWorkRunId({ prompt, mode, adapter, semanticCommand }) {
   return `${buildWorkRunId({ prompt, mode, adapter })}-${safeIdPart(semanticCommand)}-${uniqueProductRunSuffix()}`;
 }
 
+function buildExecutionPlanId({ prompt, mode, adapter }) {
+  return `symphony-plan-${safeIdPart(mode)}-${shortHash([adapter, mode, prompt].join('\0'))}-${uniqueProductRunSuffix()}`;
+}
+
+function buildConfirmedPlanRunId(plan) {
+  return `${buildWorkRunId({
+    prompt: plan.prompt,
+    mode: plan.workflowMode,
+    adapter: plan.adapter
+  })}-confirmed-${shortHash(plan.planId)}-${uniqueProductRunSuffix()}`;
+}
+
 function uniqueProductRunSuffix() {
   productRunSequence += 1;
   return `${Date.now().toString(36)}-${process.pid.toString(36)}-${productRunSequence.toString(36)}`;
@@ -2224,6 +2615,44 @@ function assertProductRealGate(adapter, env) {
   if (env?.[gate] !== '1') {
     throw new UsageError(`Set ${gate}=1 to invoke the real ${adapter} CLI lane.`);
   }
+}
+
+function assertExecutionPlan(plan, expectedPlanId) {
+  if (plan === null || typeof plan !== 'object' || Array.isArray(plan)) {
+    throw new UsageError('execution plan must be an object');
+  }
+
+  if (plan.kind !== 'symphony.execution-plan' || plan.contractName !== 'symphony.execution-plan') {
+    throw new UsageError('execution plan has an unsupported contract');
+  }
+
+  if (plan.planId !== expectedPlanId) {
+    throw new UsageError('execution plan id does not match requested plan');
+  }
+
+  for (const field of [
+    'prompt',
+    'projectRoot',
+    'projectFingerprint',
+    'contextArtifactPath',
+    'workflowMode',
+    'adapter',
+    'executionMode',
+    'workDir'
+  ]) {
+    assertNonEmptyString(plan[field], `execution plan ${field}`);
+  }
+
+  if (plan.writeBoundary !== 'isolated-workspace' || plan.mainWorktreeWrites !== false) {
+    throw new UsageError('execution plan write boundary is unsupported');
+  }
+
+  if (!['dry-run', 'real'].includes(plan.executionMode)) {
+    throw new UsageError('execution plan executionMode must be dry-run or real');
+  }
+
+  normalizeWorkAdapter(plan.adapter);
+  assertWorkMode(plan.workflowMode);
 }
 
 async function prepareWorkIntake({

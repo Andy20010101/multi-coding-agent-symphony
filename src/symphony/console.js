@@ -3132,9 +3132,13 @@ function renderConsoleHtml() {
           definitionList([
             ['Safety', run.safetyMode],
             ['Project writes', formatValue(run.projectWrites)],
+            ['Main worktree writes', formatValue(run.mainWorktreeWrites)],
+            ['Workspace writes', formatValue(run.workspaceWrites)],
+            ['Write boundary', run.writeBoundary],
             ['Runtime writes', formatValue(run.runtimeWrites)],
             ['External calls', formatValue(run.externalCalls)],
             ['Destructive writes', formatValue(run.destructiveWrites)],
+            ['Requires gate', run.requiresGate],
             ['Model invocation', formatValue(run.modelInvocation)]
           ]),
           jsonBlock('Unsupported requests', run.unsupportedRequests)
@@ -3145,6 +3149,9 @@ function renderConsoleHtml() {
             ['Workflow mode', run.workflowMode],
             ['Adapter', run.adapter],
             ['Execution', run.executionMode],
+            ['Execution plan', run.executionPlanId],
+            ['Planned run', run.plannedRunId],
+            ['Confirm command', run.confirmationCommand],
             ['Created', run.createdAt],
             ['Updated', run.updatedAt]
           ])

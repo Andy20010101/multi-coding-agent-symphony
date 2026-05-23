@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -16,6 +16,8 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v9.1 diagnostics may add `runStats`, `riskSummary`, `artifactStatus`, and `commandGroups`; older consumers can ignore these fields.
 - v10 `symphony diagnose` does not start a server, invoke models, execute recommended commands, read artifact content, or write project files. `--html` writes only to stdout and the generated report is static HTML with no scripts or external resources.
 - v10 diagnostics command recommendations remain copy-only text. `--json` and `--html` are mutually exclusive output modes.
+- v11 `symphony do --write` is planning-only until the returned `symphony do --confirm-plan <plan-id>` command is run. Confirmed execution writes only to a managed isolated workspace and keeps `mainWorktreeWrites: false`.
+- v11 real-agent execution plans require the existing adapter gate, such as `MCAS_RUN_REAL_CODEX=1`, during confirmation before any adapter starts.
 
 ## `symphony.product-json`
 
@@ -101,6 +103,80 @@ New product runs persist the contracted state under `.symphony/runs/<run-id>.jso
 ```
 
 Older run-state files can omit v8.2 fields. Consumers should treat missing optional fields as unavailable, not invalid.
+
+Planned v11 write runs add controlled execution metadata without changing `contractVersion`:
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.run-state",
+  "runId": "symphony-plan-writer-reviewer-abc123",
+  "command": "symphony do",
+  "semanticCommand": "do",
+  "safetyMode": "write",
+  "status": "planned",
+  "verifierStatus": "not-run",
+  "projectWrites": true,
+  "mainWorktreeWrites": false,
+  "workspaceWrites": true,
+  "runtimeWrites": true,
+  "externalCalls": false,
+  "writeBoundary": "isolated-workspace",
+  "executionPlanId": "symphony-plan-writer-reviewer-abc123",
+  "executionPlanArtifactPath": ".symphony/plans/symphony-plan-writer-reviewer-abc123.json",
+  "artifactRefs": [
+    {
+      "kind": "execution-plan",
+      "path": ".symphony/plans/symphony-plan-writer-reviewer-abc123.json"
+    }
+  ],
+  "action": {
+    "next": "symphony do --confirm-plan symphony-plan-writer-reviewer-abc123"
+  }
+}
+```
+
+Confirmed v11 runs preserve `executionPlanId`, `plannedRunId`, and `executionPlanArtifactPath`, then add the usual evidence, Harness, task-packet, verifier, and changed-file fields from the kernel workflow.
+
+## `symphony.execution-plan`
+
+`symphony do --write` writes a frozen plan to `.symphony/plans/<plan-id>.json` and persists a planned run. It does not start an adapter. `symphony do --write --real codex` may create a plan without the gate, but `symphony do --confirm-plan <plan-id>` requires `MCAS_RUN_REAL_CODEX=1` before adapter start.
+
+```json
+{
+  "version": "1",
+  "kind": "symphony.execution-plan",
+  "contractVersion": "1",
+  "contractName": "symphony.execution-plan",
+  "planId": "symphony-plan-writer-reviewer-abc123",
+  "command": "symphony do",
+  "intent": "work",
+  "semanticCommand": "do",
+  "prompt": "inspect README",
+  "pipeline": ["scan-if-needed", "do"],
+  "safetyMode": "write",
+  "projectWrites": true,
+  "mainWorktreeWrites": false,
+  "workspaceWrites": true,
+  "runtimeWrites": true,
+  "externalCalls": false,
+  "destructiveWrites": false,
+  "writeBoundary": "isolated-workspace",
+  "projectRoot": "/repo",
+  "projectFingerprint": "sha256:...",
+  "contextArtifactPath": "tmp/symphony-scan/.../project-context.json",
+  "summaryArtifactPath": "tmp/symphony-scan/.../intake-summary.json",
+  "workflowMode": "writer-reviewer",
+  "adapter": "codex",
+  "executionMode": "dry-run",
+  "workDir": "tmp/symphony-work",
+  "requiresGate": null,
+  "confirmationCommand": "symphony do --confirm-plan symphony-plan-writer-reviewer-abc123",
+  "createdAt": "2026-05-23T00:00:00.000Z"
+}
+```
+
+Confirmation accepts only `--confirm-plan <plan-id>`, `--state-dir <path>`, and `--json`. Extra prompt text or execution flags are rejected so the frozen plan cannot drift. Confirmation also rejects missing plans, unsupported plan contracts, stale project fingerprints, unsupported write boundaries, and missing real-agent gates before the kernel workflow starts.
 
 ## `symphony.console-snapshot`
 

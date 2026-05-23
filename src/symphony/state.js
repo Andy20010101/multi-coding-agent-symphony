@@ -14,12 +14,13 @@ const FINGERPRINT_FILES = [
   'mcas.config.json'
 ];
 
-export function symphonyStatePaths({ stateDir = '.symphony', runId } = {}) {
+export function symphonyStatePaths({ stateDir = '.symphony', runId, planId } = {}) {
   return {
     stateDir,
     latestContextPath: join(stateDir, 'context', 'latest.json'),
     latestRunPath: join(stateDir, 'runs', 'latest.json'),
-    ...(runId ? { runPath: join(stateDir, 'runs', `${runId}.json`) } : {})
+    ...(runId ? { runPath: join(stateDir, 'runs', `${runId}.json`) } : {}),
+    ...(planId ? { executionPlanPath: join(stateDir, 'plans', `${planId}.json`) } : {})
   };
 }
 
@@ -55,6 +56,12 @@ export async function readRunState({ stateDir = '.symphony', runId } = {}) {
   assertSafeRunId(runId);
 
   return await readJsonIfExists(symphonyStatePaths({ stateDir, runId }).runPath);
+}
+
+export async function readExecutionPlan({ stateDir = '.symphony', planId } = {}) {
+  assertSafeRunId(planId);
+
+  return await readJsonIfExists(symphonyStatePaths({ stateDir, planId }).executionPlanPath);
 }
 
 export async function listRunStates({ stateDir = '.symphony' } = {}) {
@@ -112,6 +119,16 @@ export async function writeRunState({ stateDir = '.symphony', runState }) {
   await atomicWriteJson(paths.latestRunPath, runState);
 
   return paths;
+}
+
+export async function writeExecutionPlan({ stateDir = '.symphony', plan }) {
+  assertSafeRunId(plan?.planId);
+
+  const paths = symphonyStatePaths({ stateDir, planId: plan.planId });
+
+  await atomicWriteJson(paths.executionPlanPath, plan);
+
+  return paths.executionPlanPath;
 }
 
 export async function atomicWriteJson(path, value) {
