@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
@@ -36,6 +36,7 @@ describe('v8 curl installer', () => {
     try {
       await createFixtureRepo(repoDir);
       await mkdir(projectDir, { recursive: true });
+      const expectedProjectDir = await realpath(projectDir);
 
       const install = spawnSync('sh', ['install.sh'], {
         cwd: process.cwd(),
@@ -76,7 +77,7 @@ describe('v8 curl installer', () => {
 
       const symphonyMarker = JSON.parse(await readFile(symphonyMarkerPath, 'utf8'));
       assert.equal(symphonyMarker.status, 'ok');
-      assert.equal(symphonyMarker.cwd, projectDir);
+      assert.equal(symphonyMarker.cwd, expectedProjectDir);
       assert.deepEqual(symphonyMarker.argv, ['doctor']);
 
       if (doctor.stdout.trim() !== '') {
@@ -97,7 +98,7 @@ describe('v8 curl installer', () => {
 
       const mcasMarker = JSON.parse(await readFile(mcasMarkerPath, 'utf8'));
       assert.equal(mcasMarker.status, 'ok');
-      assert.equal(mcasMarker.cwd, projectDir);
+      assert.equal(mcasMarker.cwd, expectedProjectDir);
       assert.deepEqual(mcasMarker.argv, ['doctor']);
     } finally {
       await rm(root, { recursive: true, force: true });

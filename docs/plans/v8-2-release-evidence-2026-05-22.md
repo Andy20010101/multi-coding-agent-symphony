@@ -1,8 +1,10 @@
 # v8.2 Release Evidence
 
 Date: 2026-05-22
-Status: local verification passed; commit, remote CI, and tag pending
-Release target: `v8.2`
+Updated: 2026-05-23
+Status: released in git; local verification and GitHub Actions passed
+Release tag: `v8.2`
+Release commit: `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d`
 
 ## Scope
 
@@ -62,4 +64,11 @@ Observed results:
 
 ## CI Evidence
 
-Remote CI evidence is pending until `main` is pushed and GitHub Actions completes. The `v8.2` tag must not be created until `main` CI is green.
+Git remote refs and GitHub Actions were checked from this checkout on 2026-05-23:
+
+- `origin/main` points to `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d`.
+- `origin` has annotated tag `v8.2`; `v8.2^{}` dereferences to `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d`.
+- GitHub Actions `main` push run `26281344375` completed with conclusion `success`: https://github.com/Andy20010101/multi-coding-agent-symphony/actions/runs/26281344375
+- GitHub Actions `v8.2` tag push run `26282156189` completed with conclusion `success`: https://github.com/Andy20010101/multi-coding-agent-symphony/actions/runs/26282156189
+
+GitHub CLI authentication was confirmed locally with `gh auth status`, and the Actions runs above were also confirmed with `gh run list --repo Andy20010101/multi-coding-agent-symphony --limit 5`.

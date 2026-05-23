@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 makes the product CLI JSON surface stable for scripts and local UI consumers. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -10,6 +10,8 @@ v8.2 makes the product CLI JSON surface stable for scripts and local UI consumer
 - `artifactRefs` is the only artifact path source used by `symphony console` previews.
 - The console is local and read-only; non-GET HTTP requests return `405`.
 - File previews are capped at 200 KiB and return `truncated: true` when capped.
+- v9 workbench commands are copy-only recommendations. The browser UI does not execute commands or write files.
+- v9 readiness checks may inspect local CLI availability, git state, GitHub auth/CI visibility, and real CLI gate status; they do not invoke models and must not expose token values.
 
 ## `symphony.product-json`
 
@@ -110,9 +112,40 @@ Older run-state files can omit v8.2 fields. Consumers should treat missing optio
     "runId": "symphony-scan-demo-abc123-1",
     "command": "symphony scan",
     "status": "passed",
-    "artifactRefs": []
+    "artifactHealth": {
+      "status": "registered",
+      "total": 1,
+      "kinds": ["context"]
+    },
+    "timeline": [
+      {
+        "id": "verification",
+        "label": "Verifier",
+        "status": "done",
+        "detail": "passed"
+      }
+    ],
+    "artifactRefs": [],
+    "recommendedCommands": [
+      {
+        "id": "status",
+        "label": "Status",
+        "command": "symphony status",
+        "description": "Read the latest product state.",
+        "mode": "copy-only"
+      }
+    ]
   },
   "runs": [],
+  "recommendedCommands": [
+    {
+      "id": "console",
+      "label": "Open workbench",
+      "command": "symphony console",
+      "description": "Return to this read-only dashboard.",
+      "mode": "copy-only"
+    }
+  ],
   "action": {
     "next": "symphony status"
   }
@@ -141,9 +174,140 @@ When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next
       "reason": "unavailable"
     },
     "verifierStatus": "passed",
-    "nextAction": "symphony do --dry-run \"inspect README\""
+    "nextAction": "symphony do --dry-run \"inspect README\"",
+    "timeline": [
+      {
+        "id": "safety",
+        "label": "Safety boundary",
+        "status": "done",
+        "detail": "read-only"
+      }
+    ],
+    "recommendedCommands": [
+      {
+        "id": "next",
+        "label": "Suggested next",
+        "command": "symphony do --dry-run \"inspect README\"",
+        "description": "Copy the next action recorded by the latest run.",
+        "mode": "copy-only"
+      }
+    ]
   },
   "rawRunState": {}
+}
+```
+
+## `symphony.console-readiness`
+
+`GET /api/readiness` returns local readiness data for the v9 workbench. It is read-only and model-free.
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.console-readiness",
+  "status": "ready",
+  "readOnly": true,
+  "modelInvocation": false,
+  "tools": {
+    "node": {
+      "status": "available",
+      "version": "v24.11.1"
+    },
+    "packageManager": {
+      "name": "pnpm",
+      "status": "available",
+      "version": "10.30.3",
+      "command": "pnpm --version"
+    },
+    "git": {
+      "status": "available",
+      "branch": "main",
+      "head": "abc1234",
+      "dirty": false,
+      "dirtyFilesCount": 0
+    },
+    "github": {
+      "status": "authenticated",
+      "account": "Andy20010101",
+      "ci": {
+        "status": "available",
+        "latest": {
+          "workflowName": "CI",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      }
+    },
+    "realCli": {
+      "status": "available",
+      "adapters": [
+        {
+          "adapterId": "codex",
+          "status": "available",
+          "gate": {
+            "envName": "MCAS_RUN_REAL_CODEX",
+            "status": "not-enabled"
+          },
+          "modelInvocation": false
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "id": "pnpm",
+      "label": "pnpm",
+      "status": "ok",
+      "detail": "10.30.3"
+    }
+  ],
+  "recommendedCommands": [
+    {
+      "id": "doctor",
+      "label": "Doctor",
+      "command": "symphony doctor",
+      "description": "Check the base CLI environment.",
+      "mode": "copy-only"
+    }
+  ]
+}
+```
+
+If optional tools such as `gh`, Codex, Claude, or Kiro are missing, their status is reported as unavailable or optional rather than failing the read-only console route.
+
+## `symphony.console-run-timeline`
+
+`GET /api/runs/<run-id>/timeline` derives a compact v9 timeline from persisted run state. It does not introduce new canonical storage.
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.console-run-timeline",
+  "runId": "symphony-scan-demo-abc123-1",
+  "timeline": [
+    {
+      "id": "created",
+      "label": "Run created",
+      "status": "done",
+      "detail": "symphony-scan-demo-abc123-1",
+      "at": "2026-05-23T00:00:00.000Z"
+    },
+    {
+      "id": "artifacts",
+      "label": "Artifacts",
+      "status": "done",
+      "detail": "2 registered"
+    }
+  ],
+  "recommendedCommands": [
+    {
+      "id": "artifacts",
+      "label": "Artifacts",
+      "command": "symphony artifacts symphony-scan-demo-abc123-1",
+      "description": "Print registered artifact references for this run.",
+      "mode": "copy-only"
+    }
+  ]
 }
 ```
 

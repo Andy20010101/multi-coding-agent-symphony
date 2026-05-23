@@ -961,21 +961,65 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(snapshot.latestRun.runId, JSON.parse(scanOutput.stdoutText()).runId);
       assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'context'), true);
 
-      server = createSymphonyConsoleServer({ stateDir });
+      server = createSymphonyConsoleServer({
+        stateDir,
+        cwd: root,
+        env: {
+          MCAS_RUN_REAL_CODEX: '1'
+        },
+        runner: new ConsoleReadinessRunner()
+      });
       const baseUrl = await listenOnRandomPort(server);
 
       const htmlResponse = await fetch(baseUrl);
       const summaryResponse = await fetch(`${baseUrl}/api/summary`);
+      const readinessResponse = await fetch(`${baseUrl}/api/readiness`);
       const latestRunResponse = await fetch(`${baseUrl}/api/runs/latest`);
+      const timelineResponse = await fetch(`${baseUrl}/api/runs/latest/timeline`);
       const contextPreviewResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/context`);
       const writeResponse = await fetch(`${baseUrl}/api/summary`, { method: 'POST' });
 
       assert.equal(htmlResponse.status, 200);
-      assert.match(await htmlResponse.text(), /Symphony Evidence Console/u);
+      const html = await htmlResponse.text();
+
+      assert.match(html, /Symphony Workbench/u);
+      assert.match(html, /\/api\/readiness/u);
+      assert.match(html, /copyCommand/u);
       assert.equal(summaryResponse.status, 200);
-      assert.equal((await summaryResponse.json()).contractName, 'symphony.console-snapshot');
+      const serverSnapshot = await summaryResponse.json();
+
+      assert.equal(serverSnapshot.contractName, 'symphony.console-snapshot');
+      assert.equal(serverSnapshot.latestRun.timeline.some((event) => event.id === 'artifacts'), true);
+      assert.equal(serverSnapshot.latestRun.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
+      assert.equal(serverSnapshot.recommendedCommands.some((command) => command.command === 'symphony console'), true);
+      assert.equal(readinessResponse.status, 200);
+
+      const readiness = await readinessResponse.json();
+
+      assert.equal(readiness.contractName, 'symphony.console-readiness');
+      assert.equal(readiness.readOnly, true);
+      assert.equal(readiness.modelInvocation, false);
+      assert.equal(readiness.tools.packageManager.version, '10.30.3');
+      assert.equal(readiness.tools.git.branch, 'main');
+      assert.equal(readiness.tools.git.dirty, true);
+      assert.equal(readiness.tools.github.account, 'Andy20010101');
+      assert.equal(readiness.tools.github.ci.latest.conclusion, 'success');
+      assert.equal(readiness.tools.realCli.adapters.find((adapter) => adapter.adapterId === 'codex').gate.status, 'enabled');
+      assert.equal(JSON.stringify(readiness).includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
       assert.equal(latestRunResponse.status, 200);
-      assert.equal((await latestRunResponse.json()).run.runId, snapshot.latestRun.runId);
+      const latestRun = await latestRunResponse.json();
+
+      assert.equal(latestRun.run.runId, snapshot.latestRun.runId);
+      assert.equal(latestRun.run.timeline.some((event) => event.id === 'verification'), true);
+      assert.equal(latestRun.run.recommendedCommands.some((command) => command.command === latestRun.run.nextAction), true);
+      assert.equal(timelineResponse.status, 200);
+
+      const timeline = await timelineResponse.json();
+
+      assert.equal(timeline.contractName, 'symphony.console-run-timeline');
+      assert.equal(timeline.runId, snapshot.latestRun.runId);
+      assert.equal(timeline.timeline.some((event) => event.id === 'safety'), true);
+      assert.equal(timeline.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
       assert.equal(contextPreviewResponse.status, 200);
 
       const contextPreview = await contextPreviewResponse.json();
@@ -988,6 +1032,40 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(contextPreview.artifact.json.kind, 'project-context');
       assert.equal(writeResponse.status, 405);
       assert.match((await writeResponse.json()).message, /read-only/u);
+    } finally {
+      if (server !== undefined) {
+        await closeServer(server);
+      }
+
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('serves an empty read-only workbench state with missing readiness tools', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v9-console-empty-'));
+    let server;
+
+    try {
+      const stateDir = join(root, '.symphony');
+
+      server = createSymphonyConsoleServer({
+        stateDir,
+        cwd: root,
+        runner: new MissingReadinessRunner(),
+        env: {}
+      });
+      const baseUrl = await listenOnRandomPort(server);
+      const summary = await (await fetch(`${baseUrl}/api/summary`)).json();
+      const readiness = await (await fetch(`${baseUrl}/api/readiness`)).json();
+
+      assert.equal(summary.status, 'no-runs');
+      assert.equal(summary.latestRun, null);
+      assert.equal(summary.recommendedCommands.some((command) => command.command === 'symphony scan'), true);
+      assert.equal(summary.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
+      assert.equal(readiness.status, 'attention');
+      assert.equal(readiness.tools.packageManager.status, 'unavailable');
+      assert.equal(readiness.tools.github.status, 'unavailable');
+      assert.equal(readiness.tools.realCli.adapters.every((adapter) => adapter.modelInvocation === false), true);
     } finally {
       if (server !== undefined) {
         await closeServer(server);
@@ -1075,6 +1153,13 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.deepEqual(summary.latestRun.unsupportedRequests, runState.unsupportedRequests);
       assert.deepEqual(summary.latestRun.scaffoldPlan, runState.scaffoldPlan);
       assert.deepEqual(summary.latestRun.changedFiles, ['README.md']);
+      assert.deepEqual(summary.latestRun.artifactHealth, {
+        status: 'registered',
+        total: 4,
+        kinds: ['context', 'summary', 'evidence', 'harness']
+      });
+      assert.equal(summary.latestRun.timeline.some((event) => event.id === 'route'), true);
+      assert.equal(summary.latestRun.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
 
       const missingResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/context`);
       const malformedResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/summary`);
@@ -1460,6 +1545,93 @@ class MissingToolRunner {
       stderr: 'missing'
     };
   }
+}
+
+class ConsoleReadinessRunner {
+  async run({ executable, args }) {
+    if (executable === 'pnpm' && args[0] === '--version') {
+      return commandResult({ stdout: '10.30.3\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --is-inside-work-tree') {
+      return commandResult({ stdout: 'true\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'branch --show-current') {
+      return commandResult({ stdout: 'main\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short HEAD') {
+      return commandResult({ stdout: 'abc1234\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'status --porcelain') {
+      return commandResult({ stdout: ' M README.md\n' });
+    }
+
+    if (executable === 'gh' && args.join(' ') === 'auth status') {
+      return commandResult({
+        stderr: 'Logged in to github.com account Andy20010101\nToken: ghp_abcdefghijklmnopqrstuvwxyz123456\n'
+      });
+    }
+
+    if (executable === 'gh' && args[0] === 'run' && args[1] === 'list') {
+      return commandResult({
+        stdout: `${JSON.stringify([{
+          databaseId: 123,
+          workflowName: 'CI',
+          displayTitle: 'v8.2',
+          status: 'completed',
+          conclusion: 'success',
+          headBranch: 'main',
+          headSha: 'abcdef123456',
+          createdAt: '2026-05-23T00:00:00Z'
+        }])}\n`
+      });
+    }
+
+    if (executable === 'codex' && args.join(' ') === '--version') {
+      return commandResult({ stdout: 'codex 1.0.0\n' });
+    }
+
+    if (executable === 'claude' && args.join(' ') === '--version') {
+      return commandResult({
+        exitCode: 1,
+        stderr: 'missing\n'
+      });
+    }
+
+    if (executable === 'kiro-cli' && args.join(' ') === '--version') {
+      const error = new Error('spawn kiro-cli ENOENT');
+      error.code = 'ENOENT';
+      throw error;
+    }
+
+    return commandResult({
+      exitCode: 1,
+      stderr: `unexpected command: ${executable} ${args.join(' ')}`
+    });
+  }
+}
+
+class MissingReadinessRunner {
+  async run({ executable }) {
+    const error = new Error(`spawn ${executable} ENOENT`);
+    error.code = 'ENOENT';
+    throw error;
+  }
+}
+
+function commandResult({
+  exitCode = 0,
+  stdout = '',
+  stderr = ''
+} = {}) {
+  return {
+    exitCode,
+    stdout,
+    stderr
+  };
 }
 
 async function fakePassingHarnessRunner({ argv, stdout }) {

@@ -1,7 +1,8 @@
 # v8.2 Plan: Stable JSON Contract and Read-Only Console
 
 Date: 2026-05-22
-Status: implemented and verified locally in working tree; commit, push, CI, and tag remain
+Updated: 2026-05-23
+Status: released in git as `v8.2`; GitHub Actions passed for `main` and `v8.2`
 Baseline: `v8.1` release
 Repository: `Andy20010101/multi-coding-agent-symphony`
 Primary CLI: `symphony`
@@ -25,9 +26,9 @@ v8.1 has already been released:
 - Remote state: `main` and `v8.1` tag pushed
 - CI state: GitHub Actions passed for both `main` and the `v8.1` tag
 
-The current working tree contains v8.2 work that is implemented and verified locally but not committed. The v8.2 commit and release tag must include every file listed in this plan.
+v8.2 is now represented by git commit `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d` and tag `v8.2`. Local `main`, `origin/main`, and the dereferenced remote `v8.2` tag all point at that commit.
 
-## Already Implemented In Working Tree
+## Implemented In v8.2
 
 Stable product JSON contract:
 
@@ -183,23 +184,23 @@ Results:
 - Summary endpoint returned console snapshot JSON.
 - Artifact preview returned `contractName: "symphony.console-artifact"` and `truncated: false` for the tested scaffold manifest.
 
-## Remaining v8.2 Work
+## v8.2 Completion Status
 
-Implementation update on 2026-05-22: the remaining UX, run-detail, contract documentation, and artifact-preview edge cases below have been completed in the working tree. Local release evidence records passing final verification; remote CI results still need to be checked after push.
+Implementation update on 2026-05-22: the remaining UX, run-detail, contract documentation, and artifact-preview edge cases below were completed before the `v8.2` tag. Local release evidence records passing final verification, and GitHub Actions passed for both the `main` push and the `v8.2` tag push.
 
-Finish the console UX:
+Console UX completed:
 
 - Show clear empty states for no runs, no latest run, no artifact refs, missing artifact file, malformed JSON, and truncated previews.
 - Make selected run and selected artifact state obvious in the UI.
 - Display directory artifact previews as a compact file list.
 - Keep the preview panel read-only and avoid adding write, execute, delete, or retry buttons in v8.2.
 
-Expand run details:
+Run details completed:
 
 - Surface route decision, command, semantic command, safety mode, provider mode, provider fallback, unsupported requests, scaffold plan, changed files, verifier status, and next action where present.
 - Preserve compatibility with older run-state files that do not contain the v8.2 contract fields.
 
-Document the contract:
+Contract documentation completed:
 
 - Add or expand dedicated docs for:
   - `symphony.product-json`
@@ -209,11 +210,11 @@ Document the contract:
   - `symphony.console-artifact`
 - Include small JSON examples and clarify that v1 changes are additive unless a future `contractVersion` is introduced.
 
-Prepare release evidence:
+Release evidence completed:
 
-- Add a v8.2 release evidence file after final verification.
-- Record final command output summaries, test counts, audit status, and any manual console smoke results.
-- Mention that the console is local and read-only by default.
+- Added `docs/plans/v8-2-release-evidence-2026-05-22.md` after final verification.
+- Recorded final command output summaries, test counts, audit status, and manual console smoke results.
+- Documented that the console is local and read-only by default.
 
 ## v8.2 Acceptance Criteria
 
@@ -235,11 +236,11 @@ Prepare release evidence:
 - Do not change the default host away from `127.0.0.1`.
 - Do not remove or rename existing v8.1 command fields from product `--json`.
 - Do not change `mcas` kernel/debug command behavior for this release.
-- Do not tag `v8.2` until final local verification and GitHub Actions checks are clean.
+- `v8.2` is now tagged at `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d`; GitHub Actions passed for both `main` and `v8.2`.
 
-## Final Verification Before Commit
+## Final Verification Recorded
 
-Run these before the v8.2 commit:
+Recorded before the v8.2 commit:
 
 ```sh
 pnpm check
@@ -249,7 +250,7 @@ pnpm audit --audit-level high
 git diff --check
 ```
 
-Run this if time allows before tagging:
+Recorded as the preferred full release gate when available:
 
 ```sh
 pnpm test:mutation:gate
@@ -273,46 +274,13 @@ Expected:
 - Artifact preview returns JSON, text, directory listing, or a safe missing-artifact error.
 - POST requests return HTTP 405.
 
-## Commit And Release Sequence
+## Completed Git State
 
-1. Confirm the v8.2 working tree:
-
-```sh
-git status --short
-git diff --stat
-```
-
-2. Stage all v8.2 files:
-
-```sh
-git add README.md scripts/symphony.js src/symphony/prompt-router.js src/symphony/state.js tests/symphony-cli.test.js src/symphony/console.js src/symphony/contract.js docs/plans/v8-2-console-contract-plan-2026-05-22.md
-```
-
-3. Commit with Lore protocol:
-
-```text
-Prepare v8.2 console contract work
-
-Add a stable product JSON contract and a local read-only console so users and future UI layers can inspect Symphony runs through a documented, scriptable surface.
-
-Constraint: product JSON changes are additive; console remains read-only.
-Rejected: write buttons, execution buttons, and arbitrary artifact path reads.
-Tested: pnpm check; node --test tests/symphony-cli.test.js; pnpm test; pnpm audit --audit-level high; git diff --check.
-Confidence: high
-Scope-risk: product JSON and local console API surface
-Reversibility: single product-layer release commit
-Directive: v8.2 release preparation
-Co-authored-by: OmX <omx@oh-my-codex.dev>
-```
-
-4. Push `main`, wait for CI, then tag:
-
-```sh
-git push origin main
-git tag -a v8.2 -m "v8.2"
-git push origin v8.2
-```
-
-5. Verify GitHub Actions for both `main` and `v8.2`.
-
-6. Add final release evidence under `docs/plans/` or update the release notes with the CI URLs and final local verification results.
+- Local `main` is clean and aligned with `origin/main`.
+- `HEAD` is `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d`.
+- `HEAD` has annotated tag `v8.2`.
+- `origin/main` points to `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d`.
+- Remote `v8.2^{}` dereferences to `f8dfbb5c7a78e27d0355c026bb94d64a22ddff4d`.
+- GitHub Actions `main` push run `26281344375` completed with conclusion `success`: https://github.com/Andy20010101/multi-coding-agent-symphony/actions/runs/26281344375
+- GitHub Actions `v8.2` tag push run `26282156189` completed with conclusion `success`: https://github.com/Andy20010101/multi-coding-agent-symphony/actions/runs/26282156189
+- GitHub CLI authentication was confirmed locally with `gh auth status`, and the Actions runs above were also confirmed with `gh run list --repo Andy20010101/multi-coding-agent-symphony --limit 5`.

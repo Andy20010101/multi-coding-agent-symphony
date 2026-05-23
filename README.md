@@ -54,7 +54,7 @@ Implemented:
 - v8 product commands: `symphony scan`, `symphony do`, `symphony verify`, `symphony status`, `symphony artifacts`, `symphony continue`, `symphony new`, and deterministic prompt routing through `symphony "<prompt>"`.
 - Product state pointers under `.symphony/context/latest.json`, `.symphony/runs/latest.json`, and `.symphony/runs/<run-id>.json`; canonical evidence and artifacts remain in `ArtifactStore` runtime directories.
 - Stable product JSON contract fields for automation: `contractVersion`, `contractName`, `contract`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`.
-- Read-only local `symphony console` for browsing latest runs, verifier status, next actions, and artifact pointers from `.symphony` state.
+- Read-only local `symphony console` workbench for browsing latest runs, verifier status, readiness checks, copy-only next commands, timelines, and artifact pointers from `.symphony` state.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
@@ -63,7 +63,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current install baseline: the `v8` tag is the stable user CLI line. The `v8.2` release adds stable product JSON contracts and the local read-only console; the `v7` tag remains available for historical installs.
+Current released repository tag: `v9`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, and the `v7` tag remains available for historical installs.
 
 ## Design Center
 
@@ -147,8 +147,8 @@ symphony "创建一个新的 node cli 项目" --dry-run
 `symphony scan` is the product name for the v7 intake/grill-me-docs capability. In default `auto` mode it tries optional `grill-me-docs` first, records provider attempts in JSON output, and falls back to the built-in provider when grill-me-docs is unavailable. Use `--builtin` for built-in-only scans and `--require-grill` for a hard failure when grill-me-docs is unavailable.
 `symphony do` uses the latest scan context when its project fingerprint is fresh, and reruns scan when the context is missing or stale. `symphony review`, `symphony qa`, and `symphony verify` use the v8 product work path with qa-swarm workflow mode; `qa` is a product command alias for the `verify` semantic command. Prompt routing is deterministic and model-free; it matches rules for scan, work, review, verify, status, artifacts, continue, and new-project intents.
 New-project prompts produce a `scaffoldPlan` and a separate `scaffold-manifest` artifact. Framework-shaped requests such as React or Vite are reported as unsupported generator requests; Symphony does not run npm installs, framework generators, or dependency installation, and `--write` is still required before any files are created.
-Every product `--json` response keeps its legacy top-level fields and adds a stable machine-readable envelope: `contractVersion`, `contractName`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`. `symphony console --snapshot --json` returns the same read-only run model without starting a server; see [Symphony Product JSON Contracts](docs/symphony-product-contracts.md) for v8.2 contract examples.
-`symphony console` starts a local read-only web console on `127.0.0.1:8765` by default. It serves `/`, `/api/summary`, `/api/runs`, `/api/runs/latest`, `/api/runs/<run-id>`, and `/api/runs/<run-id>/artifacts/<kind>`; all non-GET requests return `405`. Artifact preview only reads paths already referenced by a run state and truncates file previews after 200 KiB.
+Every product `--json` response keeps its legacy top-level fields and adds a stable machine-readable envelope: `contractVersion`, `contractName`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`. `symphony console --snapshot --json` returns the same read-only run model without starting a server; see [Symphony Product JSON Contracts](docs/symphony-product-contracts.md) for v8.2 and v9 contract examples.
+`symphony console` starts a local read-only workbench on `127.0.0.1:8765` by default. It serves `/`, `/api/summary`, `/api/readiness`, `/api/runs`, `/api/runs/latest`, `/api/runs/<run-id>`, `/api/runs/<run-id>/timeline`, and `/api/runs/<run-id>/artifacts/<kind>`; all non-GET requests return `405`. The workbench shows readiness, latest run health, a run timeline, registered artifacts, and copy-only commands. It does not add browser write, execute, retry, delete, or arbitrary path-read controls. Artifact preview only reads paths already referenced by a run state and truncates file previews after 200 KiB.
 
 `.symphony/` stores local user-facing pointers and summaries. Add it to your local ignore rules if you do not want run pointers in source control. Full evidence, TaskPackets, Harness output, scaffold manifests, and intake artifacts stay in the runtime artifact directories written through `ArtifactStore`.
 
@@ -202,7 +202,7 @@ symphony do       product work alias
 symphony verify   product verification alias
 symphony status   latest run state
 symphony artifacts artifact and evidence pointers
-symphony console  read-only local evidence console
+symphony console  read-only local workbench
 symphony new      limited dry-run/write project bootstrap
 symphony agent    native CLI passthrough
 symphony review   shortcut for review workflow
