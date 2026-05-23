@@ -985,10 +985,19 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.match(html, /Symphony Workbench/u);
       assert.match(html, /\/api\/readiness/u);
       assert.match(html, /copyCommand/u);
+      assert.match(html, /Risk Panel/u);
+      assert.match(html, /run-filters/u);
+      assert.match(html, /detailSection\('Intent'/u);
+      assert.match(html, /detailSection\('Verification'/u);
       assert.equal(summaryResponse.status, 200);
       const serverSnapshot = await summaryResponse.json();
 
       assert.equal(serverSnapshot.contractName, 'symphony.console-snapshot');
+      assert.equal(serverSnapshot.runStats.total, 1);
+      assert.equal(serverSnapshot.runStats.recentRuns.length, 1);
+      assert.equal(serverSnapshot.runStats.verifier.passRate, 1);
+      assert.equal(serverSnapshot.runStats.artifacts.status, 'ok');
+      assert.equal(serverSnapshot.commandGroups.some((group) => group.group === 'Inspect'), true);
       assert.equal(serverSnapshot.latestRun.timeline.some((event) => event.id === 'artifacts'), true);
       assert.equal(serverSnapshot.latestRun.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
       assert.equal(serverSnapshot.recommendedCommands.some((command) => command.command === 'symphony console'), true);
@@ -1005,6 +1014,10 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(readiness.tools.github.account, 'Andy20010101');
       assert.equal(readiness.tools.github.ci.latest.conclusion, 'success');
       assert.equal(readiness.tools.realCli.adapters.find((adapter) => adapter.adapterId === 'codex').gate.status, 'enabled');
+      assert.equal(readiness.checks.find((check) => check.id === 'git').status, 'attention');
+      assert.equal(readiness.riskSummary.items.some((risk) => risk.category === 'dirty_git'), true);
+      assert.equal(readiness.recommendedCommands.some((command) => command.command === 'git status --short'), true);
+      assert.equal(readiness.commandGroups.some((group) => group.group === 'Real-agent gates'), true);
       assert.equal(JSON.stringify(readiness).includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
       assert.equal(latestRunResponse.status, 200);
       const latestRun = await latestRunResponse.json();
@@ -1065,7 +1078,153 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(readiness.status, 'attention');
       assert.equal(readiness.tools.packageManager.status, 'unavailable');
       assert.equal(readiness.tools.github.status, 'unavailable');
+      assert.equal(readiness.riskSummary.items.some((risk) => risk.id === 'missing_tool:pnpm'), true);
+      assert.equal(readiness.riskSummary.items.some((risk) => risk.category === 'missing_tools'), true);
+      assert.equal(readiness.recommendedCommands.some((command) => command.command === 'corepack enable'), true);
+      assert.equal(readiness.commandGroups.some((group) => group.group === 'Inspect'), true);
       assert.equal(readiness.tools.realCli.adapters.every((adapter) => adapter.modelInvocation === false), true);
+    } finally {
+      if (server !== undefined) {
+        await closeServer(server);
+      }
+
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('aggregates v9.1 run diagnostics, filters, risks, and grouped copy-only commands', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v91-console-diagnostics-'));
+    let server;
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const runsDir = join(stateDir, 'runs');
+      const artifactDir = join(root, 'artifacts');
+      const availableArtifactPath = join(artifactDir, 'available.json');
+      const missingArtifactPath = join(artifactDir, 'missing.json');
+
+      await mkdir(runsDir, { recursive: true });
+      await mkdir(artifactDir, { recursive: true });
+      await writeFile(availableArtifactPath, '{"ok":true}\n', 'utf8');
+
+      const runStates = [
+        diagnosticRunState({
+          runId: 'scan-passed',
+          command: 'symphony scan',
+          semanticCommand: 'scan',
+          intent: 'scan-project',
+          status: 'passed',
+          verifierStatus: 'passed',
+          safetyMode: 'read-only',
+          executionMode: 'dry-run',
+          contextArtifactPath: availableArtifactPath,
+          updatedAt: '2026-05-23T00:00:01.000Z'
+        }),
+        diagnosticRunState({
+          runId: 'verify-failed',
+          command: 'symphony verify',
+          semanticCommand: 'verify',
+          intent: 'verify',
+          status: 'failed',
+          verifierStatus: 'failed',
+          safetyMode: 'read-only',
+          executionMode: 'dry-run',
+          contextArtifactPath: missingArtifactPath,
+          updatedAt: '2026-05-23T00:00:02.000Z'
+        }),
+        diagnosticRunState({
+          runId: 'real-do',
+          command: 'symphony do',
+          semanticCommand: 'do',
+          intent: 'work',
+          status: 'passed',
+          verifierStatus: 'passed',
+          safetyMode: 'real',
+          executionMode: 'real',
+          externalCalls: true,
+          projectWrites: true,
+          contextArtifactPath: availableArtifactPath,
+          updatedAt: '2026-05-23T00:00:03.000Z'
+        }),
+        diagnosticRunState({
+          runId: 'new-preview',
+          command: 'symphony new',
+          semanticCommand: 'new',
+          intent: 'new-project',
+          status: 'preview',
+          verifierStatus: 'not-run',
+          safetyMode: 'dry-run',
+          executionMode: 'dry-run',
+          unsupportedRequests: [{ request: 'react', reason: 'framework generators are disabled' }],
+          contextArtifactPath: availableArtifactPath,
+          updatedAt: '2026-05-23T00:00:04.000Z'
+        }),
+        diagnosticRunState({
+          runId: 'dry-do',
+          command: 'symphony do',
+          semanticCommand: 'do',
+          intent: 'work',
+          status: 'passed',
+          verifierStatus: 'passed',
+          safetyMode: 'dry-run',
+          executionMode: 'dry-run',
+          contextArtifactPath: availableArtifactPath,
+          updatedAt: '2026-05-23T00:00:05.000Z'
+        }),
+        diagnosticRunState({
+          runId: 'qa-passed',
+          command: 'symphony qa',
+          semanticCommand: 'verify',
+          intent: 'verify',
+          status: 'passed',
+          verifierStatus: 'passed',
+          safetyMode: 'read-only',
+          executionMode: 'dry-run',
+          contextArtifactPath: availableArtifactPath,
+          updatedAt: '2026-05-23T00:00:06.000Z'
+        })
+      ];
+
+      for (const runState of runStates) {
+        await writeFile(join(runsDir, `${runState.runId}.json`), JSON.stringify(runState, null, 2), 'utf8');
+      }
+
+      await writeFile(join(runsDir, 'latest.json'), JSON.stringify(runStates.at(-1), null, 2), 'utf8');
+
+      server = createSymphonyConsoleServer({ stateDir });
+      const baseUrl = await listenOnRandomPort(server);
+      const summary = await (await fetch(`${baseUrl}/api/summary`)).json();
+
+      assert.equal(summary.runStats.total, 6);
+      assert.equal(summary.runStats.recentRuns.length, 5);
+      assert.equal(summary.runStats.recentRuns[0].runId, 'qa-passed');
+      assert.equal(summary.runStats.failedCount, 1);
+      assert.equal(summary.runStats.verifier.passed, 4);
+      assert.equal(summary.runStats.verifier.failed, 1);
+      assert.equal(summary.runStats.artifacts.status, 'missing');
+      assert.equal(summary.runStats.artifacts.missing, 1);
+      assert.equal(summary.runStats.filters.find((filter) => filter.id === 'failed').count, 1);
+      assert.equal(summary.runStats.filters.find((filter) => filter.id === 'real').count, 1);
+      assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'verifier_failed'), true);
+      assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'unsupported_requests'), true);
+      assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'external_calls'), true);
+      assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'project_writes'), true);
+      assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'runtime_writes'), true);
+      assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'missing_artifacts'), true);
+      assert.equal(summary.latestRun.commandGroups.every((group) => group.commands.every((command) => command.mode === 'copy-only')), true);
+
+      const failedRuns = await (await fetch(`${baseUrl}/api/runs?filter=failed`)).json();
+      const realRuns = await (await fetch(`${baseUrl}/api/runs?filter=real`)).json();
+      const scanRuns = await (await fetch(`${baseUrl}/api/runs?filter=scan`)).json();
+      const verifyRuns = await (await fetch(`${baseUrl}/api/runs?filter=verify`)).json();
+      const invalidFilterRuns = await (await fetch(`${baseUrl}/api/runs?filter=unsupported`)).json();
+
+      assert.deepEqual(failedRuns.runs.map((run) => run.runId), ['verify-failed']);
+      assert.deepEqual(realRuns.runs.map((run) => run.runId), ['real-do']);
+      assert.deepEqual(scanRuns.runs.map((run) => run.runId), ['scan-passed']);
+      assert.deepEqual(verifyRuns.runs.map((run) => run.runId), ['qa-passed', 'verify-failed']);
+      assert.equal(invalidFilterRuns.filter, 'all');
+      assert.equal(invalidFilterRuns.runs.length, 6);
     } finally {
       if (server !== undefined) {
         await closeServer(server);
@@ -1137,8 +1296,9 @@ describe('v8 prompt-driven symphony CLI', () => {
       await mkdir(runsDir, { recursive: true });
       await mkdir(directoryArtifactPath, { recursive: true });
       await writeFile(malformedArtifactPath, '{', 'utf8');
-      await writeFile(join(directoryArtifactPath, 'one.txt'), 'one\n', 'utf8');
-      await writeFile(join(directoryArtifactPath, 'two.json'), '{}\n', 'utf8');
+      for (let index = 0; index < 105; index += 1) {
+        await writeFile(join(directoryArtifactPath, `entry-${String(index).padStart(3, '0')}.txt`), `${index}\n`, 'utf8');
+      }
       await writeFile(largeArtifactPath, Buffer.alloc((200 * 1024) + 8, 'a'));
       await writeFile(join(runsDir, `${runId}.json`), JSON.stringify(runState, null, 2), 'utf8');
       await writeFile(join(runsDir, 'latest.json'), JSON.stringify(runState, null, 2), 'utf8');
@@ -1160,6 +1320,9 @@ describe('v8 prompt-driven symphony CLI', () => {
       });
       assert.equal(summary.latestRun.timeline.some((event) => event.id === 'route'), true);
       assert.equal(summary.latestRun.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
+      assert.equal(summary.latestRun.artifactStatus.status, 'missing');
+      assert.equal(summary.latestRun.artifactStatus.missing, 1);
+      assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'missing_artifacts'), true);
 
       const missingResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/context`);
       const malformedResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/summary`);
@@ -1168,20 +1331,31 @@ describe('v8 prompt-driven symphony CLI', () => {
       const unregisteredResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/proof?path=${encodeURIComponent(malformedArtifactPath)}`);
 
       assert.equal(missingResponse.status, 404);
-      assert.equal((await missingResponse.json()).status, 'missing-artifact');
+      const missingPreview = await missingResponse.json();
+
+      assert.equal(missingPreview.status, 'missing-artifact');
+      assert.equal(missingPreview.artifact.message, 'artifact file is missing');
       assert.equal(malformedResponse.status, 200);
-      assert.equal((await malformedResponse.json()).artifact.format, 'malformed-json');
+      const malformedPreview = await malformedResponse.json();
+
+      assert.equal(malformedPreview.artifact.format, 'malformed-json');
+      assert.match(malformedPreview.artifact.parseError, /JSON/u);
       assert.equal(directoryResponse.status, 200);
 
       const directoryPreview = await directoryResponse.json();
 
       assert.equal(directoryPreview.artifact.type, 'directory');
-      assert.deepEqual(directoryPreview.artifact.entries.map((entry) => entry.name).sort(), ['one.txt', 'two.json']);
+      assert.equal(directoryPreview.artifact.entries.length, 100);
+      assert.equal(directoryPreview.artifact.entryCount, 105);
+      assert.equal(directoryPreview.artifact.limit, 100);
+      assert.equal(directoryPreview.artifact.truncated, true);
       assert.equal(largeResponse.status, 200);
 
       const largePreview = await largeResponse.json();
 
       assert.equal(largePreview.artifact.truncated, true);
+      assert.equal(largePreview.artifact.previewLimitBytes, 200 * 1024);
+      assert.equal(largePreview.artifact.message, `preview truncated to ${200 * 1024} bytes`);
       assert.equal(largePreview.artifact.content.length, 200 * 1024);
       assert.equal(unregisteredResponse.status, 404);
       assert.equal((await unregisteredResponse.json()).status, 'missing');
@@ -1631,6 +1805,27 @@ function commandResult({
     exitCode,
     stdout,
     stderr
+  };
+}
+
+function diagnosticRunState(overrides) {
+  return {
+    version: '1',
+    kind: 'symphony-run-state',
+    contractVersion: '1',
+    contractName: 'symphony.run-state',
+    pipeline: [overrides.semanticCommand ?? 'do'],
+    routeDecision: {
+      intent: overrides.intent ?? 'work',
+      safetyMode: overrides.safetyMode ?? 'dry-run'
+    },
+    projectWrites: false,
+    runtimeWrites: true,
+    externalCalls: false,
+    destructiveWrites: false,
+    createdAt: overrides.updatedAt,
+    nextAction: 'symphony status',
+    ...overrides
   };
 }
 

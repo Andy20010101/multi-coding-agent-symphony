@@ -18,7 +18,10 @@ import {
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
 const MAX_ARTIFACT_PREVIEW_BYTES = 200 * 1024;
+const DIRECTORY_PREVIEW_ENTRY_LIMIT = 100;
 const DEFAULT_READINESS_TIMEOUT_MS = 3000;
+const RUN_FILTERS = Object.freeze(['all', 'passed', 'failed', 'dry-run', 'real', 'scan', 'verify']);
+const COMMAND_GROUP_ORDER = Object.freeze(['Inspect', 'Verify', 'Artifacts', 'Real-agent gates']);
 
 export async function buildConsoleSnapshot({
   stateDir = '.symphony',
@@ -30,8 +33,14 @@ export async function buildConsoleSnapshot({
     listRunStates({ stateDir })
   ]);
 
-  const compactLatestRun = decorateConsoleRun(compactRunState(latestRun));
-  const compactRuns = runs.map((run) => decorateConsoleRun(compactRunState(run)));
+  const compactRuns = await decorateConsoleRuns(runs.map((run) => compactRunState(run)));
+  const compactLatestRun = latestRun === null
+    ? null
+    : compactRuns.find((run) => run.runId === latestRun.runId)
+      ?? await decorateConsoleRunWithDiagnostics(compactRunState(latestRun));
+  const recommendedCommands = buildSnapshotRecommendedCommands({
+    latestRun: compactLatestRun
+  });
 
   return {
     contractVersion: PRODUCT_JSON_CONTRACT.version,
@@ -46,9 +55,10 @@ export async function buildConsoleSnapshot({
     latestContext: compactContext(latestContext),
     latestRun: compactLatestRun,
     runs: compactRuns,
-    recommendedCommands: buildSnapshotRecommendedCommands({
-      latestRun: compactLatestRun
-    }),
+    runStats: buildRunStats(compactRuns),
+    riskSummary: buildRunRiskSummary(compactRuns),
+    recommendedCommands,
+    commandGroups: groupCommands(recommendedCommands),
     action: {
       next: latestRun?.nextAction ?? 'symphony scan'
     }
@@ -79,6 +89,12 @@ export async function buildConsoleReadiness({
     && git.status === 'available'
     ? 'ready'
     : 'attention';
+  const recommendedCommands = buildReadinessRecommendedCommands({
+    packageManager,
+    git,
+    github,
+    realCli
+  });
 
   return {
     contractVersion: PRODUCT_JSON_CONTRACT.version,
@@ -107,7 +123,14 @@ export async function buildConsoleReadiness({
       github,
       realCli
     }),
-    recommendedCommands: buildReadinessRecommendedCommands()
+    riskSummary: buildReadinessRiskSummary({
+      packageManager,
+      git,
+      github,
+      realCli
+    }),
+    recommendedCommands,
+    commandGroups: groupCommands(recommendedCommands)
   };
 }
 
@@ -160,11 +183,16 @@ export function createSymphonyConsoleServer({
       }
 
       if (url.pathname === '/api/runs') {
-        const runs = await listRunStates({ stateDir });
+        const runs = await decorateConsoleRuns(
+          (await listRunStates({ stateDir })).map((run) => compactRunState(run))
+        );
+        const filter = normalizeRunFilter(url.searchParams.get('filter'));
         writeJsonResponse(response, 200, {
           contractVersion: PRODUCT_JSON_CONTRACT.version,
           contractName: 'symphony.console-runs',
-          runs: runs.map((run) => decorateConsoleRun(compactRunState(run)))
+          filter,
+          availableFilters: [...RUN_FILTERS],
+          runs: filterRuns(runs, filter)
         });
         return;
       }
@@ -266,7 +294,7 @@ async function writeRunResponse({ response, stateDir, runId }) {
   writeJsonResponse(response, 200, {
     contractVersion: PRODUCT_JSON_CONTRACT.version,
     contractName: 'symphony.console-run',
-    run: decorateConsoleRun(compactRunState(runState)),
+    run: await decorateConsoleRunWithDiagnostics(compactRunState(runState)),
     rawRunState: runState
   });
 }
@@ -282,7 +310,7 @@ async function writeTimelineResponse({ response, stateDir, runId }) {
     return;
   }
 
-  const run = decorateConsoleRun(compactRunState(runState));
+  const run = await decorateConsoleRunWithDiagnostics(compactRunState(runState));
 
   writeJsonResponse(response, 200, {
     contractVersion: PRODUCT_JSON_CONTRACT.version,
@@ -358,11 +386,13 @@ async function previewArtifact(artifactRef) {
     return {
       ...artifactRef,
       type: 'directory',
-      entries: entries.slice(0, 100).map((entry) => ({
+      entries: entries.slice(0, DIRECTORY_PREVIEW_ENTRY_LIMIT).map((entry) => ({
         name: entry.name,
         type: entry.isDirectory() ? 'directory' : 'file'
       })),
-      truncated: entries.length > 100
+      entryCount: entries.length,
+      limit: DIRECTORY_PREVIEW_ENTRY_LIMIT,
+      truncated: entries.length > DIRECTORY_PREVIEW_ENTRY_LIMIT
     };
   }
 
@@ -374,18 +404,23 @@ async function previewArtifact(artifactRef) {
     const buffer = Buffer.alloc(length);
     await handle.read(buffer, 0, length, 0);
     const content = buffer.toString('utf8');
-    const json = parseJsonPreview(content);
     const truncated = size > MAX_ARTIFACT_PREVIEW_BYTES;
-    const malformedJson = !truncated && json === null && isJsonArtifact({ artifactRef, content });
+    const jsonPreview = parseJsonPreviewWithError(content);
+    const json = jsonPreview.value;
+    const looksJson = isJsonArtifact({ artifactRef, content });
+    const malformedJson = !truncated && json === null && looksJson;
+    const truncatedJson = truncated && json === null && looksJson;
 
     return {
       ...artifactRef,
       type: 'file',
       size,
       truncated,
-      format: malformedJson ? 'malformed-json' : json === null ? 'text' : 'json',
+      previewLimitBytes: MAX_ARTIFACT_PREVIEW_BYTES,
+      format: malformedJson ? 'malformed-json' : truncatedJson ? 'truncated-json' : json === null ? 'text' : 'json',
       content,
-      ...(malformedJson ? { parseError: 'invalid JSON artifact preview' } : {}),
+      ...(malformedJson ? { parseError: jsonPreview.error ?? 'invalid JSON artifact preview' } : {}),
+      ...(truncated ? { message: `preview truncated to ${MAX_ARTIFACT_PREVIEW_BYTES} bytes` } : {}),
       ...(json === null ? {} : { json })
     };
   } finally {
@@ -436,6 +471,19 @@ function parseJsonPreview(content) {
   }
 }
 
+function parseJsonPreviewWithError(content) {
+  try {
+    return {
+      value: JSON.parse(content)
+    };
+  } catch (error) {
+    return {
+      value: null,
+      error: error.message
+    };
+  }
+}
+
 function compactContext(context) {
   if (context === null) {
     return null;
@@ -458,11 +506,38 @@ function decorateConsoleRun(run) {
     return null;
   }
 
+  const recommendedCommands = buildRunRecommendedCommands(run);
+
   return stripUndefined({
     ...run,
     artifactHealth: buildArtifactHealth(run),
     timeline: buildRunTimeline(run),
-    recommendedCommands: buildRunRecommendedCommands(run)
+    recommendedCommands,
+    commandGroups: groupCommands(recommendedCommands)
+  });
+}
+
+async function decorateConsoleRuns(runs) {
+  return await Promise.all(
+    runs
+      .filter((run) => run !== null)
+      .map((run) => decorateConsoleRunWithDiagnostics(run))
+  );
+}
+
+async function decorateConsoleRunWithDiagnostics(run) {
+  if (run === null) {
+    return null;
+  }
+
+  const decorated = decorateConsoleRun(run);
+  const artifactStatus = await buildArtifactStatus(decorated);
+  const riskSummary = buildRunRiskSummary([{ ...decorated, artifactStatus }]);
+
+  return stripUndefined({
+    ...decorated,
+    artifactStatus,
+    riskSummary
   });
 }
 
@@ -474,6 +549,187 @@ function buildArtifactHealth(run) {
     total: artifactRefs.length,
     kinds: artifactRefs.map((artifact) => artifact.kind)
   };
+}
+
+async function buildArtifactStatus(run) {
+  const artifactRefs = Array.isArray(run.artifactRefs) ? run.artifactRefs : [];
+
+  if (artifactRefs.length === 0) {
+    return {
+      status: 'empty',
+      total: 0,
+      available: 0,
+      missing: 0,
+      unknown: 0,
+      missingKinds: []
+    };
+  }
+
+  const refs = await Promise.all(artifactRefs.map(async (artifact) => {
+    try {
+      await stat(artifact.path);
+
+      return {
+        ...artifact,
+        status: 'available'
+      };
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        return {
+          ...artifact,
+          status: 'missing'
+        };
+      }
+
+      return {
+        ...artifact,
+        status: 'unknown',
+        message: error.message
+      };
+    }
+  }));
+  const missingRefs = refs.filter((artifact) => artifact.status === 'missing');
+  const unknownRefs = refs.filter((artifact) => artifact.status === 'unknown');
+
+  return stripUndefined({
+    status: missingRefs.length > 0 ? 'missing' : unknownRefs.length > 0 ? 'unknown' : 'ok',
+    total: refs.length,
+    available: refs.filter((artifact) => artifact.status === 'available').length,
+    missing: missingRefs.length,
+    unknown: unknownRefs.length,
+    missingKinds: missingRefs.map((artifact) => artifact.kind),
+    missingRefs
+  });
+}
+
+function buildRunStats(runs) {
+  const verifierRuns = runs.filter((run) => isNonEmptyString(run.verifierStatus));
+  const verifierPassed = verifierRuns.filter((run) => run.verifierStatus === 'passed').length;
+  const artifactMissingCount = runs.reduce((total, run) => total + (run.artifactStatus?.missing ?? 0), 0);
+  const artifactRegisteredCount = runs.reduce((total, run) => total + (run.artifactStatus?.total ?? 0), 0);
+
+  return {
+    total: runs.length,
+    recentRuns: runs.slice(0, 5).map((run) => stripUndefined({
+      runId: run.runId,
+      command: run.command,
+      status: run.status,
+      verifierStatus: run.verifierStatus,
+      semanticCommand: run.semanticCommand,
+      safetyMode: run.safetyMode,
+      executionMode: run.executionMode,
+      artifactStatus: run.artifactStatus?.status,
+      updatedAt: run.updatedAt ?? run.createdAt
+    })),
+    failedCount: runs.filter((run) => run.status === 'failed' || run.verifierStatus === 'failed').length,
+    verifier: {
+      total: verifierRuns.length,
+      passed: verifierPassed,
+      failed: verifierRuns.filter((run) => run.verifierStatus === 'failed').length,
+      passRate: verifierRuns.length === 0 ? null : verifierPassed / verifierRuns.length
+    },
+    artifacts: {
+      status: artifactMissingCount > 0 ? 'missing' : artifactRegisteredCount === 0 ? 'empty' : 'ok',
+      registered: artifactRegisteredCount,
+      missing: artifactMissingCount,
+      runsWithMissing: runs.filter((run) => (run.artifactStatus?.missing ?? 0) > 0).length
+    },
+    filters: RUN_FILTERS.map((filter) => ({
+      id: filter,
+      count: filterRuns(runs, filter).length
+    }))
+  };
+}
+
+function buildRunRiskSummary(runs) {
+  const items = [];
+
+  for (const run of runs) {
+    if (run.status === 'failed') {
+      items.push(runRisk({
+        run,
+        id: 'run_failed',
+        severity: 'high',
+        title: 'Run failed',
+        detail: `${run.command ?? run.runId} ended with status failed.`
+      }));
+    }
+
+    if (run.verifierStatus === 'failed') {
+      items.push(runRisk({
+        run,
+        id: 'verifier_failed',
+        severity: 'high',
+        title: 'Verifier failed',
+        detail: `${run.runId} has verifierStatus=failed.`
+      }));
+    }
+
+    if (Array.isArray(run.unsupportedRequests) && run.unsupportedRequests.length > 0) {
+      items.push(runRisk({
+        run,
+        id: 'unsupported_requests',
+        severity: 'medium',
+        title: 'Unsupported requests',
+        detail: `${run.unsupportedRequests.length} unsupported request(s) were recorded.`
+      }));
+    }
+
+    if (run.externalCalls === true) {
+      items.push(runRisk({
+        run,
+        id: 'external_calls',
+        severity: 'medium',
+        title: 'External calls',
+        detail: `${run.runId} recorded externalCalls=true.`
+      }));
+    }
+
+    if (run.projectWrites === true) {
+      items.push(runRisk({
+        run,
+        id: 'project_writes',
+        severity: 'medium',
+        title: 'Project writes',
+        detail: `${run.runId} recorded projectWrites=true.`
+      }));
+    }
+
+    if (run.runtimeWrites === true) {
+      items.push(runRisk({
+        run,
+        id: 'runtime_writes',
+        severity: 'low',
+        title: 'Runtime writes',
+        detail: `${run.runId} wrote Symphony runtime artifacts.`
+      }));
+    }
+
+    if ((run.artifactStatus?.missing ?? 0) > 0) {
+      items.push(runRisk({
+        run,
+        id: 'missing_artifacts',
+        severity: 'high',
+        title: 'Missing artifacts',
+        detail: `${run.artifactStatus.missing} registered artifact(s) are missing.`,
+        command: run.runId ? `symphony artifacts ${run.runId}` : 'symphony artifacts'
+      }));
+    }
+  }
+
+  return summarizeRiskItems(items);
+}
+
+function runRisk({ run, id, severity, title, detail, command }) {
+  return riskItem({
+    id: `${run.runId ?? 'unknown'}:${id}`,
+    category: id,
+    severity,
+    title,
+    detail,
+    runId: run.runId,
+    command: command ?? 'symphony status'
+  });
 }
 
 function buildRunTimeline(run) {
@@ -551,19 +807,22 @@ function buildSnapshotRecommendedCommands({ latestRun }) {
         id: 'scan',
         label: 'Scan project',
         command: 'symphony scan',
-        description: 'Create the first read-only project context.'
+        description: 'Create the first read-only project context.',
+        group: 'Inspect'
       }),
       commandRecommendation({
         id: 'doctor',
         label: 'Check environment',
         command: 'symphony doctor',
-        description: 'Verify the local CLI setup.'
+        description: 'Verify the local CLI setup.',
+        group: 'Inspect'
       }),
       commandRecommendation({
         id: 'console',
         label: 'Open workbench',
         command: 'symphony console',
-        description: 'Start this local read-only workbench.'
+        description: 'Start this local read-only workbench.',
+        group: 'Inspect'
       })
     ];
   }
@@ -574,7 +833,8 @@ function buildSnapshotRecommendedCommands({ latestRun }) {
       id: 'console',
       label: 'Open workbench',
       command: 'symphony console',
-      description: 'Return to this read-only dashboard.'
+      description: 'Return to this read-only dashboard.',
+      group: 'Inspect'
     })
   ]);
 }
@@ -586,27 +846,31 @@ function buildRunRecommendedCommands(run) {
           id: 'next',
           label: 'Suggested next',
           command: run.nextAction,
-          description: 'Copy the next action recorded by the latest run.'
+          description: 'Copy the next action recorded by the latest run.',
+          group: commandGroupFor(run.nextAction)
         })
       : null,
     commandRecommendation({
       id: 'status',
       label: 'Status',
       command: 'symphony status',
-      description: 'Read the latest product state.'
+      description: 'Read the latest product state.',
+      group: 'Inspect'
     }),
     commandRecommendation({
       id: 'artifacts',
       label: 'Artifacts',
       command: run.runId ? `symphony artifacts ${run.runId}` : 'symphony artifacts',
-      description: 'Print registered artifact references for this run.'
+      description: 'Print registered artifact references for this run.',
+      group: 'Artifacts'
     }),
     run.semanticCommand === 'scan'
       ? commandRecommendation({
           id: 'dry-run-work',
           label: 'Dry-run work',
           command: 'symphony do --dry-run "inspect README"',
-          description: 'Exercise the work path without project writes.'
+          description: 'Exercise the work path without project writes.',
+          group: 'Verify'
         })
       : null,
     run.status && run.status !== 'passed'
@@ -614,59 +878,148 @@ function buildRunRecommendedCommands(run) {
           id: 'continue',
           label: 'Continue safely',
           command: 'symphony continue',
-          description: 'Ask Symphony what can be continued from state.'
+          description: 'Ask Symphony what can be continued from state.',
+          group: 'Inspect'
         })
       : null
   ]);
 }
 
-function buildReadinessRecommendedCommands() {
-  return [
+function buildReadinessRecommendedCommands({ packageManager, git, github, realCli }) {
+  return dedupeCommands([
     commandRecommendation({
       id: 'doctor',
       label: 'Doctor',
       command: 'symphony doctor',
-      description: 'Check the base CLI environment.'
+      description: 'Check the base CLI environment.',
+      group: 'Inspect'
     }),
+    packageManager.status !== 'available'
+      ? commandRecommendation({
+          id: 'enable-pnpm',
+          label: 'Enable pnpm',
+          command: 'corepack enable',
+          description: 'Make the package manager shim available before rechecking.',
+          group: 'Inspect'
+        })
+      : null,
+    packageManager.status !== 'available'
+      ? commandRecommendation({
+          id: 'check-pnpm',
+          label: 'Check pnpm',
+          command: 'pnpm --version',
+          description: 'Confirm pnpm is available on PATH.',
+          group: 'Inspect'
+        })
+      : null,
+    git.status !== 'available'
+      ? commandRecommendation({
+          id: 'check-git-worktree',
+          label: 'Check git',
+          command: 'git rev-parse --is-inside-work-tree',
+          description: 'Confirm the console is running inside a git worktree.',
+          group: 'Inspect'
+        })
+      : null,
+    git.status === 'available' && git.dirty
+      ? commandRecommendation({
+          id: 'git-status',
+          label: 'Inspect dirty git',
+          command: 'git status --short',
+          description: 'Review uncommitted files before trusting run evidence.',
+          group: 'Inspect'
+        })
+      : null,
+    git.status === 'available' && git.dirty
+      ? commandRecommendation({
+          id: 'git-diff-stat',
+          label: 'Diff summary',
+          command: 'git diff --stat',
+          description: 'See the shape of unstaged changes.',
+          group: 'Inspect'
+        })
+      : null,
+    github.status !== 'authenticated'
+      ? commandRecommendation({
+          id: 'gh-auth-status',
+          label: 'Check GitHub auth',
+          command: 'gh auth status',
+          description: 'Inspect GitHub CLI auth without exposing tokens.',
+          group: 'Inspect'
+        })
+      : null,
+    github.status !== 'authenticated'
+      ? commandRecommendation({
+          id: 'gh-auth-login',
+          label: 'GitHub login',
+          command: 'gh auth login',
+          description: 'Start GitHub CLI authentication if needed.',
+          group: 'Inspect'
+        })
+      : null,
+    github.status === 'authenticated' && github.ci?.status !== 'available'
+      ? commandRecommendation({
+          id: 'gh-run-list',
+          label: 'Check CI',
+          command: 'gh run list --limit 5',
+          description: 'Inspect recent GitHub Actions runs.',
+          group: 'Verify'
+        })
+      : null,
     commandRecommendation({
       id: 'check',
       label: 'Static check',
       command: 'pnpm check',
-      description: 'Run repository syntax checks.'
+      description: 'Run repository syntax checks.',
+      group: 'Verify'
     }),
     commandRecommendation({
       id: 'test',
       label: 'Tests',
       command: 'pnpm test',
-      description: 'Run the repository test suite.'
+      description: 'Run the repository test suite.',
+      group: 'Verify'
     }),
+    ...realCli.adapters
+      .filter((adapter) => adapter.status !== 'available')
+      .map((adapter) => commandRecommendation({
+        id: `check-${adapter.adapterId}`,
+        label: `Check ${adapter.displayName}`,
+        command: adapter.command,
+        description: 'Confirm whether this optional real CLI is installed.',
+        group: 'Real-agent gates'
+      })),
     commandRecommendation({
       id: 'real-codex',
       label: 'Real Codex gate',
       command: 'MCAS_RUN_REAL_CODEX=1 symphony do --real codex "inspect README"',
-      description: 'External execution example; copy only and run intentionally.'
+      description: 'External execution example; copy only and run intentionally.',
+      group: 'Real-agent gates'
     }),
     commandRecommendation({
       id: 'real-claude',
       label: 'Real Claude gate',
       command: 'MCAS_RUN_REAL_CLAUDE=1 symphony do --real claude "inspect README"',
-      description: 'External execution example; copy only and run intentionally.'
+      description: 'External execution example; copy only and run intentionally.',
+      group: 'Real-agent gates'
     }),
     commandRecommendation({
       id: 'real-kiro',
       label: 'Real Kiro gate',
       command: 'MCAS_RUN_REAL_KIRO=1 symphony do --real kiro "inspect README"',
-      description: 'External execution example; copy only and run intentionally.'
+      description: 'External execution example; copy only and run intentionally.',
+      group: 'Real-agent gates'
     })
-  ];
+  ]);
 }
 
-function commandRecommendation({ id, label, command, description }) {
+function commandRecommendation({ id, label, command, description, group }) {
   return {
     id,
     label,
     command,
     description,
+    group: group ?? commandGroupFor(command),
     mode: 'copy-only'
   };
 }
@@ -685,6 +1038,90 @@ function dedupeCommands(commands) {
   }
 
   return deduped;
+}
+
+function groupCommands(commands) {
+  const grouped = new Map(COMMAND_GROUP_ORDER.map((group) => [group, []]));
+
+  for (const command of dedupeCommands(commands)) {
+    const group = command.group ?? commandGroupFor(command.command);
+
+    if (!grouped.has(group)) {
+      grouped.set(group, []);
+    }
+
+    grouped.get(group).push({
+      ...command,
+      group
+    });
+  }
+
+  return [...grouped.entries()]
+    .filter(([, groupCommands]) => groupCommands.length > 0)
+    .map(([group, groupCommands]) => ({
+      group,
+      commands: groupCommands
+    }));
+}
+
+function commandGroupFor(command) {
+  const value = String(command ?? '');
+
+  if (/MCAS_RUN_REAL_|--real/u.test(value)) {
+    return 'Real-agent gates';
+  }
+
+  if (/artifacts?/u.test(value)) {
+    return 'Artifacts';
+  }
+
+  if (/\b(check|test|verify|audit|diff --check)\b/u.test(value)) {
+    return 'Verify';
+  }
+
+  return 'Inspect';
+}
+
+function normalizeRunFilter(filter) {
+  return RUN_FILTERS.includes(filter) ? filter : 'all';
+}
+
+function filterRuns(runs, filter) {
+  const normalized = normalizeRunFilter(filter);
+
+  if (normalized === 'all') {
+    return runs;
+  }
+
+  return runs.filter((run) => runMatchesFilter(run, normalized));
+}
+
+function runMatchesFilter(run, filter) {
+  if (filter === 'passed') {
+    return run.status === 'passed' || run.verifierStatus === 'passed';
+  }
+
+  if (filter === 'failed') {
+    return run.status === 'failed' || run.verifierStatus === 'failed';
+  }
+
+  if (filter === 'dry-run') {
+    return run.safetyMode === 'dry-run' || run.executionMode === 'dry-run';
+  }
+
+  if (filter === 'real') {
+    return run.executionMode === 'real';
+  }
+
+  if (filter === 'scan') {
+    return run.semanticCommand === 'scan' || run.intent === 'scan-project' || /\bscan\b/u.test(run.command ?? '');
+  }
+
+  if (filter === 'verify') {
+    return run.semanticCommand === 'verify' || run.intent === 'verify' || /\b(verify|qa)\b/u.test(run.command ?? '');
+  }
+
+  return true;
 }
 
 async function buildPackageManagerReadiness({ runner, cwd, env, timeoutMs }) {
@@ -891,7 +1328,7 @@ function buildReadinessChecks({ node, packageManager, git, github, realCli }) {
     readinessCheck({
       id: 'git',
       label: 'Git worktree',
-      status: git.status === 'available' ? 'ok' : 'attention',
+      status: git.status === 'available' && !git.dirty ? 'ok' : 'attention',
       detail: git.status === 'available'
         ? `${git.branch} @ ${git.head ?? 'unknown'}${git.dirty ? `, ${git.dirtyFilesCount} dirty` : ', clean'}`
         : git.message
@@ -918,6 +1355,113 @@ function readinessCheck({ id, label, status, detail }) {
     status,
     detail
   });
+}
+
+function buildReadinessRiskSummary({ packageManager, git, github, realCli }) {
+  const items = [];
+
+  if (packageManager.status !== 'available') {
+    items.push(riskItem({
+      id: 'missing_tool:pnpm',
+      category: 'missing_tools',
+      severity: 'high',
+      title: 'pnpm unavailable',
+      detail: packageManager.message ?? 'pnpm could not be executed.',
+      command: 'corepack enable'
+    }));
+  }
+
+  if (git.status !== 'available') {
+    items.push(riskItem({
+      id: 'missing_tool:git',
+      category: 'missing_tools',
+      severity: 'high',
+      title: 'Git unavailable',
+      detail: git.message ?? 'git worktree status could not be read.',
+      command: 'git rev-parse --is-inside-work-tree'
+    }));
+  }
+
+  if (git.status === 'available' && git.dirty) {
+    items.push(riskItem({
+      id: 'dirty_git',
+      category: 'dirty_git',
+      severity: 'medium',
+      title: 'Dirty git worktree',
+      detail: `${git.dirtyFilesCount} dirty file(s) may affect run trust.`,
+      command: 'git status --short'
+    }));
+  }
+
+  if (github.status !== 'authenticated') {
+    items.push(riskItem({
+      id: 'github_auth',
+      category: 'missing_tools',
+      severity: 'low',
+      title: 'GitHub auth unavailable',
+      detail: github.message ?? github.status,
+      command: 'gh auth status'
+    }));
+  }
+
+  if (github.status === 'authenticated' && github.ci?.status === 'unavailable') {
+    items.push(riskItem({
+      id: 'github_ci',
+      category: 'missing_tools',
+      severity: 'medium',
+      title: 'GitHub CI unavailable',
+      detail: github.ci.message ?? 'recent workflow status could not be read.',
+      command: 'gh run list --limit 5'
+    }));
+  }
+
+  for (const adapter of realCli.adapters) {
+    if (adapter.status !== 'available') {
+      items.push(riskItem({
+        id: `missing_tool:${adapter.adapterId}`,
+        category: 'missing_tools',
+        severity: 'low',
+        title: `${adapter.displayName} unavailable`,
+        detail: `${adapter.executable} was not available for optional real-agent checks.`,
+        command: adapter.command
+      }));
+    }
+  }
+
+  return summarizeRiskItems(items);
+}
+
+function riskItem({ id, category, severity, title, detail, command, runId }) {
+  return stripUndefined({
+    id,
+    category,
+    severity,
+    title,
+    detail,
+    command: commandRecommendation({
+      id,
+      label: title,
+      command,
+      description: detail,
+      group: commandGroupFor(command)
+    }),
+    runId
+  });
+}
+
+function summarizeRiskItems(items) {
+  const counts = {
+    high: items.filter((item) => item.severity === 'high').length,
+    medium: items.filter((item) => item.severity === 'medium').length,
+    low: items.filter((item) => item.severity === 'low').length
+  };
+
+  return {
+    status: items.length === 0 ? 'ok' : 'attention',
+    total: items.length,
+    counts,
+    items
+  };
 }
 
 async function runFirstReadinessCommand({
@@ -1072,6 +1616,10 @@ function stripUndefined(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)
   );
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim() !== '';
 }
 
 function renderConsoleHtml() {
@@ -1229,6 +1777,20 @@ function renderConsoleHtml() {
       margin: 0 0 18px;
     }
 
+    .command-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .command-group h3,
+    .detail-section h3 {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      text-transform: uppercase;
+    }
+
     .command-row {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1255,6 +1817,18 @@ function renderConsoleHtml() {
     .run-list {
       display: grid;
       gap: 8px;
+    }
+
+    .filter-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 12px;
+    }
+
+    .filter-list button {
+      min-height: 30px;
+      font-size: 12px;
     }
 
     .run-button {
@@ -1287,12 +1861,45 @@ function renderConsoleHtml() {
       margin: 0 0 18px;
     }
 
+    .risk-list {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 18px;
+    }
+
+    .risk-row {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 10px;
+      overflow-wrap: anywhere;
+    }
+
+    .risk-row.high {
+      border-color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .risk-row.medium {
+      border-color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .risk-row.low {
+      border-color: var(--line);
+      background: var(--panel);
+    }
+
     .preview-panel {
       margin-top: 18px;
     }
 
     .section-block {
       margin: 0 0 18px;
+    }
+
+    .detail-section {
+      margin: 0 0 22px;
     }
 
     h2 {
@@ -1475,9 +2082,12 @@ function renderConsoleHtml() {
   <main>
     <aside>
       <div id="dashboard" class="dashboard">Loading...</div>
+      <h2>Risk Panel</h2>
+      <div id="risk-panel" class="risk-list"></div>
       <h2>Next Commands</h2>
       <div id="commands" class="command-list"></div>
       <h2>Runs</h2>
+      <div id="run-filters" class="filter-list"></div>
       <div id="runs" class="run-list"></div>
     </aside>
     <section>
@@ -1490,7 +2100,8 @@ function renderConsoleHtml() {
       readiness: null,
       selectedRunId: null,
       selectedArtifactKind: null,
-      artifactPreview: null
+      artifactPreview: null,
+      runFilter: 'all'
     };
 
     document.getElementById('refresh').addEventListener('click', () => loadSnapshot());
@@ -1520,7 +2131,9 @@ function renderConsoleHtml() {
 
     function render() {
       renderDashboard();
+      renderRiskPanel();
       renderCommands();
+      renderRunFilters();
       renderRuns();
       renderDetails();
     }
@@ -1530,18 +2143,23 @@ function renderConsoleHtml() {
       const snapshot = state.snapshot;
       const readiness = state.readiness;
       const latest = snapshot.latestRun;
+      const stats = snapshot.runStats || {};
+      const artifactState = stats.artifacts
+        ? stats.artifacts.status + (stats.artifacts.missing ? ' / ' + stats.artifacts.missing + ' missing' : '')
+        : latest?.artifactHealth ? latest.artifactHealth.total + ' registered' : 'none';
       const metrics = [
         ['State', snapshot.status],
-        ['Latest run', latest ? latest.status : 'none'],
-        ['Verifier', latest?.verifierStatus || 'none'],
-        ['Artifacts', latest?.artifactHealth ? latest.artifactHealth.total + ' registered' : 'none'],
+        ['Runs', stats.total ?? snapshot.runs.length],
+        ['Failed runs', stats.failedCount ?? 0],
+        ['Verifier pass rate', formatPercent(stats.verifier?.passRate)],
+        ['Artifacts', artifactState],
         ['Readiness', readiness?.status || 'loading'],
         ['Git', readiness?.tools?.git?.status === 'available'
           ? readiness.tools.git.branch + (readiness.tools.git.dirty ? ' dirty' : ' clean')
           : readiness?.tools?.git?.status || 'unknown']
       ];
 
-      dashboard.replaceChildren(metricGrid(metrics), readinessChecks(readiness));
+      dashboard.replaceChildren(metricGrid(metrics), recentRunsOverview(stats), readinessChecks(readiness));
     }
 
     function metricGrid(metrics) {
@@ -1560,6 +2178,43 @@ function renderConsoleHtml() {
         grid.append(metric);
       }
       return grid;
+    }
+
+    function recentRunsOverview(stats) {
+      const recentRuns = stats?.recentRuns || [];
+
+      if (recentRuns.length === 0) {
+        return emptyState('No recent runs are available yet.');
+      }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'command-list';
+      const heading = document.createElement('h2');
+      heading.textContent = 'Recent Runs';
+      wrapper.append(heading);
+
+      for (const run of recentRuns) {
+        const row = document.createElement('div');
+        row.className = 'command-row';
+        const body = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'command-title ' + (run.status || '');
+        title.textContent = run.command || run.runId;
+        const detail = document.createElement('code');
+        detail.className = 'command-code';
+        detail.textContent = [
+          run.runId,
+          run.status,
+          run.verifierStatus,
+          run.artifactStatus,
+          run.updatedAt
+        ].filter(Boolean).join(' / ');
+        body.append(title, detail);
+        row.append(body);
+        wrapper.append(row);
+      }
+
+      return wrapper;
     }
 
     function readinessChecks(readiness) {
@@ -1586,6 +2241,44 @@ function renderConsoleHtml() {
       return list;
     }
 
+    function renderRiskPanel() {
+      const riskPanel = document.getElementById('risk-panel');
+      const risks = [
+        ...(state.snapshot?.riskSummary?.items || []),
+        ...(selectedRun()?.riskSummary?.items || []),
+        ...(state.readiness?.riskSummary?.items || [])
+      ];
+      const dedupedRisks = dedupeRisks(risks);
+
+      if (dedupedRisks.length === 0) {
+        riskPanel.replaceChildren(emptyState('No risk flags are visible in the current read-only snapshot.'));
+        return;
+      }
+
+      riskPanel.replaceChildren(...dedupedRisks.map(riskRow));
+    }
+
+    function riskRow(risk) {
+      const row = document.createElement('div');
+      row.className = 'risk-row ' + (risk.severity || 'low');
+      const title = document.createElement('div');
+      title.className = 'command-title';
+      title.textContent = [risk.title, risk.severity].filter(Boolean).join(' / ');
+      const detail = document.createElement('div');
+      detail.className = 'muted';
+      detail.textContent = [risk.runId, risk.detail].filter(Boolean).join(': ');
+      row.append(title, detail);
+
+      if (risk.command?.command) {
+        const code = document.createElement('code');
+        code.className = 'command-code';
+        code.textContent = risk.command.command;
+        row.append(code);
+      }
+
+      return row;
+    }
+
     function renderCommands() {
       const commands = document.getElementById('commands');
       const run = selectedRun();
@@ -1593,14 +2286,23 @@ function renderConsoleHtml() {
         ...(state.snapshot.recommendedCommands || []),
         ...(run?.recommendedCommands || []),
         ...(state.readiness?.recommendedCommands || [])
-      ]).slice(0, 8);
+      ]);
 
       if (allCommands.length === 0) {
         commands.replaceChildren(emptyState('No recommended commands are available.'));
         return;
       }
 
-      commands.replaceChildren(...allCommands.map(commandRow));
+      commands.replaceChildren(...groupCommands(allCommands).map(commandGroupBlock));
+    }
+
+    function commandGroupBlock(group) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'command-group';
+      const heading = document.createElement('h3');
+      heading.textContent = group.group;
+      wrapper.append(heading, ...group.commands.map(commandRow));
+      return wrapper;
     }
 
     function commandRow(command) {
@@ -1626,14 +2328,52 @@ function renderConsoleHtml() {
       return row;
     }
 
+    function renderRunFilters() {
+      const filters = document.getElementById('run-filters');
+      const filterStats = state.snapshot.runStats?.filters || [
+        { id: 'all', count: state.snapshot.runs.length },
+        { id: 'passed', count: filterRuns(state.snapshot.runs, 'passed').length },
+        { id: 'failed', count: filterRuns(state.snapshot.runs, 'failed').length },
+        { id: 'dry-run', count: filterRuns(state.snapshot.runs, 'dry-run').length },
+        { id: 'real', count: filterRuns(state.snapshot.runs, 'real').length },
+        { id: 'scan', count: filterRuns(state.snapshot.runs, 'scan').length },
+        { id: 'verify', count: filterRuns(state.snapshot.runs, 'verify').length }
+      ];
+
+      filters.replaceChildren(...filterStats.map((filter) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('aria-current', String(filter.id === state.runFilter));
+        button.textContent = filter.id + ' ' + filter.count;
+        button.addEventListener('click', () => {
+          state.runFilter = filter.id;
+          const visibleRuns = filteredRuns();
+          if (!visibleRuns.some((run) => run.runId === state.selectedRunId)) {
+            state.selectedRunId = visibleRuns[0]?.runId || state.snapshot.latestRun?.runId || null;
+            state.selectedArtifactKind = null;
+            state.artifactPreview = null;
+          }
+          render();
+        });
+        return button;
+      }));
+    }
+
     function renderRuns() {
       const runs = document.getElementById('runs');
+      const visibleRuns = filteredRuns();
+
       if (state.snapshot.runs.length === 0) {
         runs.replaceChildren(emptyState('No run states found in this Symphony state directory.'));
         return;
       }
 
-      runs.replaceChildren(...state.snapshot.runs.map((run) => {
+      if (visibleRuns.length === 0) {
+        runs.replaceChildren(emptyState('No runs match the selected filter: ' + state.runFilter));
+        return;
+      }
+
+      runs.replaceChildren(...visibleRuns.map((run) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'run-button';
@@ -1653,6 +2393,10 @@ function renderConsoleHtml() {
       }));
     }
 
+    function filteredRuns() {
+      return filterRuns(state.snapshot.runs || [], state.runFilter);
+    }
+
     function selectedRun() {
       return state.snapshot.runs.find((candidate) => candidate.runId === state.selectedRunId) || state.snapshot.latestRun;
     }
@@ -1668,36 +2412,84 @@ function renderConsoleHtml() {
 
       const statusClass = run.status === 'passed' ? 'passed' : run.status === 'failed' ? 'failed' : '';
       details.replaceChildren(
-        definitionList([
-          ['Run', run.runId],
-          ['Command', run.command],
-          ['Intent', run.intent],
-          ['Semantic', run.semanticCommand],
-          ['Pipeline', formatValue(run.pipeline)],
-          ['Status', run.status, statusClass],
-          ['Verifier', run.verifierStatus],
-          ['Safety', run.safetyMode],
-          ['Project writes', formatValue(run.projectWrites)],
-          ['Runtime writes', formatValue(run.runtimeWrites)],
-          ['External calls', formatValue(run.externalCalls)],
-          ['Workflow mode', run.workflowMode],
-          ['Adapter', run.adapter],
-          ['Execution', run.executionMode],
-          ['Provider mode', run.providerMode],
-          ['Provider', run.provider],
-          ['Provider status', run.providerStatus],
-          ['Project', run.projectRoot],
-          ['Target', run.targetDir],
-          ['Template', run.template],
-          ['Artifact health', run.artifactHealth?.status],
-          ['Next', run.nextAction]
-        ]),
-        timelineBlock(run),
-        commandBlock(run),
-        ...structuredRunBlocks(run),
-        artifactTable(run),
-        artifactPreviewBlock()
+        detailSection('Intent',
+          definitionList([
+            ['Run', run.runId],
+            ['Command', run.command],
+            ['Intent', run.intent],
+            ['Semantic', run.semanticCommand],
+            ['Pipeline', formatValue(run.pipeline)],
+            ['Project', run.projectRoot],
+            ['Target', run.targetDir],
+            ['Template', run.template],
+            ['Next', run.nextAction]
+          ])
+        ),
+        detailSection('Route',
+          definitionList([
+            ['Provider mode', run.providerMode],
+            ['Provider', run.provider],
+            ['Provider status', run.providerStatus],
+            ['Context reused', formatValue(run.contextReused)]
+          ]),
+          jsonBlock('Route decision', run.routeDecision),
+          jsonBlock('Provider fallback', run.providerFallback),
+          jsonBlock('Matched signals', run.matchedSignals)
+        ),
+        detailSection('Safety',
+          definitionList([
+            ['Safety', run.safetyMode],
+            ['Project writes', formatValue(run.projectWrites)],
+            ['Runtime writes', formatValue(run.runtimeWrites)],
+            ['External calls', formatValue(run.externalCalls)],
+            ['Destructive writes', formatValue(run.destructiveWrites)],
+            ['Model invocation', formatValue(run.modelInvocation)]
+          ]),
+          jsonBlock('Unsupported requests', run.unsupportedRequests)
+        ),
+        detailSection('Execution',
+          definitionList([
+            ['Status', run.status, statusClass],
+            ['Workflow mode', run.workflowMode],
+            ['Adapter', run.adapter],
+            ['Execution', run.executionMode],
+            ['Created', run.createdAt],
+            ['Updated', run.updatedAt]
+          ])
+        ),
+        detailSection('Verification',
+          definitionList([
+            ['Verifier', run.verifierStatus],
+            ['Recommended workflow', run.recommendedWorkflow],
+            ['Verification commands', formatValue(run.verificationCommands)]
+          ]),
+          timelineBlock(run),
+          commandBlock(run)
+        ),
+        detailSection('Artifacts',
+          definitionList([
+            ['Artifact health', run.artifactHealth?.status],
+            ['Artifact status', run.artifactStatus?.status],
+            ['Artifact missing', run.artifactStatus?.missing]
+          ]),
+          artifactTable(run),
+          artifactPreviewBlock()
+        ),
+        detailSection('Changes',
+          jsonBlock('Changed files', run.changedFiles),
+          jsonBlock('Created files', run.createdFiles),
+          jsonBlock('Scaffold plan', run.scaffoldPlan)
+        )
       );
+    }
+
+    function detailSection(title, ...children) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'detail-section';
+      const heading = document.createElement('h2');
+      heading.textContent = title;
+      wrapper.append(heading, ...children.filter(Boolean));
+      return wrapper;
     }
 
     function definitionList(rows) {
@@ -1712,17 +2504,6 @@ function renderConsoleHtml() {
         list.append(term, data);
       }
       return list;
-    }
-
-    function structuredRunBlocks(run) {
-      return [
-        structuredBlock('Route decision', run.routeDecision),
-        structuredBlock('Provider fallback', run.providerFallback),
-        structuredBlock('Unsupported requests', run.unsupportedRequests),
-        structuredBlock('Scaffold plan', run.scaffoldPlan),
-        structuredBlock('Changed files', run.changedFiles),
-        structuredBlock('Created files', run.createdFiles)
-      ].filter(Boolean);
     }
 
     function timelineBlock(run) {
@@ -1771,13 +2552,13 @@ function renderConsoleHtml() {
       return wrapper;
     }
 
-    function structuredBlock(title, value) {
+    function jsonBlock(title, value) {
       if (value === undefined || value === null) return null;
       if (Array.isArray(value) && value.length === 0) return null;
 
       const wrapper = document.createElement('div');
       wrapper.className = 'stack';
-      const heading = document.createElement('h2');
+      const heading = document.createElement('h3');
       heading.textContent = title;
       wrapper.append(heading, codeBlock(JSON.stringify(value, null, 2)));
       return wrapper;
@@ -1845,11 +2626,12 @@ function renderConsoleHtml() {
       panel.append(heading);
 
       if (artifact.type === 'missing') {
-        panel.append(emptyState(artifact.message + ': ' + artifact.path, 'error'));
+        panel.append(emptyState('Artifact is registered but the file is missing: ' + artifact.path, 'error'));
         return panel;
       }
 
       if (artifact.type === 'directory') {
+        panel.append(emptyState('Directory preview shows up to ' + (artifact.limit || 100) + ' entries from ' + (artifact.entryCount ?? 'unknown') + ' total.'));
         const list = document.createElement('ul');
         list.className = 'file-list';
         for (const entry of artifact.entries || []) {
@@ -1864,13 +2646,13 @@ function renderConsoleHtml() {
         }
         panel.append(list);
         if (artifact.truncated) {
-          panel.append(emptyState('Directory preview truncated to 100 entries.'));
+          panel.append(emptyState('Directory preview truncated to ' + (artifact.limit || 100) + ' entries.'));
         }
         return panel;
       }
 
       if (artifact.format === 'malformed-json') {
-        panel.append(emptyState('Malformed JSON artifact. Raw content is shown below.', 'error'));
+        panel.append(emptyState('Malformed JSON artifact. ' + (artifact.parseError || 'Raw content is shown below.'), 'error'));
         panel.append(codeBlock(artifact.content || ''));
         return panel;
       }
@@ -1880,7 +2662,7 @@ function renderConsoleHtml() {
         : artifact.content);
 
       if (artifact.truncated) {
-        block.textContent += '\\n\\n[Preview truncated]';
+        block.textContent += '\\n\\n[Preview truncated to ' + formatBytes(artifact.previewLimitBytes) + ' of ' + formatBytes(artifact.size) + ']';
       }
 
       panel.append(block);
@@ -1901,10 +2683,23 @@ function renderConsoleHtml() {
     }
 
     function formatValue(value) {
+      if (value === undefined || value === null) return 'none';
       if (Array.isArray(value)) return value.length === 0 ? 'none' : value.join(', ');
       if (typeof value === 'boolean') return value ? 'true' : 'false';
       if (typeof value === 'object' && value !== null) return JSON.stringify(value);
       return String(value);
+    }
+
+    function formatPercent(value) {
+      if (typeof value !== 'number') return 'none';
+      return Math.round(value * 100) + '%';
+    }
+
+    function formatBytes(value) {
+      if (typeof value !== 'number') return 'unknown size';
+      if (value >= 1024 * 1024) return Math.round(value / (1024 * 1024)) + ' MiB';
+      if (value >= 1024) return Math.round(value / 1024) + ' KiB';
+      return value + ' B';
     }
 
     function dedupeCommands(commands) {
@@ -1915,6 +2710,58 @@ function renderConsoleHtml() {
         if (!command || !command.command || seen.has(command.command)) continue;
         seen.add(command.command);
         deduped.push(command);
+      }
+
+      return deduped;
+    }
+
+    function groupCommands(commands) {
+      const order = ['Inspect', 'Verify', 'Artifacts', 'Real-agent gates'];
+      const groups = new Map(order.map((group) => [group, []]));
+
+      for (const command of dedupeCommands(commands)) {
+        const group = command.group || commandGroupFor(command.command);
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group).push({ ...command, group });
+      }
+
+      return [...groups.entries()]
+        .filter(([, groupCommands]) => groupCommands.length > 0)
+        .map(([group, groupCommands]) => ({ group, commands: groupCommands }));
+    }
+
+    function commandGroupFor(command) {
+      const value = String(command || '');
+      if (/MCAS_RUN_REAL_|--real/u.test(value)) return 'Real-agent gates';
+      if (/artifacts?/u.test(value)) return 'Artifacts';
+      if (/\\b(check|test|verify|audit|diff --check)\\b/u.test(value)) return 'Verify';
+      return 'Inspect';
+    }
+
+    function filterRuns(runs, filter) {
+      if (filter === 'all') return runs;
+      return runs.filter((run) => runMatchesFilter(run, filter));
+    }
+
+    function runMatchesFilter(run, filter) {
+      if (filter === 'passed') return run.status === 'passed' || run.verifierStatus === 'passed';
+      if (filter === 'failed') return run.status === 'failed' || run.verifierStatus === 'failed';
+      if (filter === 'dry-run') return run.safetyMode === 'dry-run' || run.executionMode === 'dry-run';
+      if (filter === 'real') return run.executionMode === 'real';
+      if (filter === 'scan') return run.semanticCommand === 'scan' || run.intent === 'scan-project' || /\\bscan\\b/u.test(run.command || '');
+      if (filter === 'verify') return run.semanticCommand === 'verify' || run.intent === 'verify' || /\\b(verify|qa)\\b/u.test(run.command || '');
+      return true;
+    }
+
+    function dedupeRisks(risks) {
+      const seen = new Set();
+      const deduped = [];
+
+      for (const risk of risks) {
+        const key = risk.id || [risk.title, risk.runId, risk.detail].join(':');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(risk);
       }
 
       return deduped;

@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -12,6 +12,8 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - File previews are capped at 200 KiB and return `truncated: true` when capped.
 - v9 workbench commands are copy-only recommendations. The browser UI does not execute commands or write files.
 - v9 readiness checks may inspect local CLI availability, git state, GitHub auth/CI visibility, and real CLI gate status; they do not invoke models and must not expose token values.
+- v9.1 run filters are read-only selectors. `GET /api/runs?filter=<filter>` supports `all`, `passed`, `failed`, `dry-run`, `real`, `scan`, and `verify`.
+- v9.1 diagnostics may add `runStats`, `riskSummary`, `artifactStatus`, and `commandGroups`; older consumers can ignore these fields.
 
 ## `symphony.product-json`
 
@@ -137,6 +139,40 @@ Older run-state files can omit v8.2 fields. Consumers should treat missing optio
     ]
   },
   "runs": [],
+  "runStats": {
+    "total": 1,
+    "recentRuns": [
+      {
+        "runId": "symphony-scan-demo-abc123-1",
+        "status": "passed",
+        "verifierStatus": "passed",
+        "artifactStatus": "ok"
+      }
+    ],
+    "failedCount": 0,
+    "verifier": {
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "passRate": 1
+    },
+    "artifacts": {
+      "status": "ok",
+      "registered": 1,
+      "missing": 0,
+      "runsWithMissing": 0
+    }
+  },
+  "riskSummary": {
+    "status": "ok",
+    "total": 0,
+    "counts": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "items": []
+  },
   "recommendedCommands": [
     {
       "id": "console",
@@ -146,6 +182,12 @@ Older run-state files can omit v8.2 fields. Consumers should treat missing optio
       "mode": "copy-only"
     }
   ],
+  "commandGroups": [
+    {
+      "group": "Inspect",
+      "commands": []
+    }
+  ],
   "action": {
     "next": "symphony status"
   }
@@ -153,6 +195,18 @@ Older run-state files can omit v8.2 fields. Consumers should treat missing optio
 ```
 
 When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next action is `symphony scan`.
+
+`GET /api/runs` also accepts an optional v9.1 filter query:
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.console-runs",
+  "filter": "failed",
+  "availableFilters": ["all", "passed", "failed", "dry-run", "real", "scan", "verify"],
+  "runs": []
+}
+```
 
 ## `symphony.console-run`
 
@@ -190,6 +244,25 @@ When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next
         "command": "symphony do --dry-run \"inspect README\"",
         "description": "Copy the next action recorded by the latest run.",
         "mode": "copy-only"
+      }
+    ],
+    "artifactStatus": {
+      "status": "ok",
+      "total": 1,
+      "available": 1,
+      "missing": 0,
+      "unknown": 0,
+      "missingKinds": []
+    },
+    "riskSummary": {
+      "status": "ok",
+      "total": 0,
+      "items": []
+    },
+    "commandGroups": [
+      {
+        "group": "Inspect",
+        "commands": []
       }
     ]
   },
@@ -269,6 +342,29 @@ When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next
       "description": "Check the base CLI environment.",
       "mode": "copy-only"
     }
+  ],
+  "riskSummary": {
+    "status": "attention",
+    "total": 1,
+    "items": [
+      {
+        "id": "dirty_git",
+        "category": "dirty_git",
+        "severity": "medium",
+        "title": "Dirty git worktree",
+        "detail": "1 dirty file(s) may affect run trust.",
+        "command": {
+          "command": "git status --short",
+          "mode": "copy-only"
+        }
+      }
+    ]
+  },
+  "commandGroups": [
+    {
+      "group": "Inspect",
+      "commands": []
+    }
   ]
 }
 ```
@@ -346,6 +442,8 @@ Directory preview:
     "kind": "evidence",
     "path": "tmp/evidence",
     "type": "directory",
+    "entryCount": 1,
+    "limit": 100,
     "entries": [
       {
         "name": "summary.json",
@@ -380,7 +478,9 @@ Missing or malformed previews stay read-only and structured:
     "path": "tmp/summary.json",
     "type": "file",
     "format": "malformed-json",
-    "parseError": "invalid JSON artifact preview"
+    "parseError": "Unexpected end of JSON input"
   }
 }
 ```
+
+Large file previews include the same `content` field capped at 200 KiB plus `truncated: true`, `previewLimitBytes: 204800`, and a human-readable `message`. Truncated JSON-shaped files are reported as `format: "truncated-json"` rather than malformed, because the Workbench has intentionally read only the preview window.
