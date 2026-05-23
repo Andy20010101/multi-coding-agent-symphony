@@ -134,6 +134,459 @@ export async function buildConsoleReadiness({
   };
 }
 
+export async function buildConsoleDiagnosticsReport({
+  stateDir = '.symphony',
+  cwd = process.cwd(),
+  env = process.env,
+  runner = new NodeProcessRunner(),
+  generatedAt = new Date().toISOString(),
+  timeoutMs = DEFAULT_READINESS_TIMEOUT_MS
+} = {}) {
+  const [snapshot, readiness] = await Promise.all([
+    buildConsoleSnapshot({
+      stateDir,
+      generatedAt
+    }),
+    buildConsoleReadiness({
+      stateDir,
+      cwd,
+      env,
+      runner,
+      generatedAt,
+      timeoutMs
+    })
+  ]);
+  const risks = combineRiskSummaries([
+    snapshot.riskSummary,
+    readiness.riskSummary
+  ]);
+  const commands = buildDiagnosticsCommands({
+    snapshot,
+    readiness
+  });
+  const status = diagnosticsStatus({
+    snapshot,
+    readiness,
+    risks
+  });
+  const report = {
+    contractVersion: PRODUCT_JSON_CONTRACT.version,
+    contractName: 'symphony.diagnostics-report',
+    contract: {
+      ...PRODUCT_JSON_CONTRACT,
+      name: 'symphony.diagnostics-report'
+    },
+    generatedAt,
+    stateDir,
+    cwd,
+    status,
+    snapshot,
+    readiness,
+    risks,
+    commands,
+    action: buildDiagnosticsAction({
+      status,
+      snapshot,
+      risks,
+      commands
+    })
+  };
+
+  return redactSecrets(report);
+}
+
+export function renderDiagnosticsText(report) {
+  const safeReport = redactSecrets(report);
+  const snapshot = safeReport.snapshot ?? {};
+  const latestRun = snapshot.latestRun ?? null;
+  const runStats = snapshot.runStats ?? {};
+  const artifactStats = runStats.artifacts ?? {};
+  const readiness = safeReport.readiness ?? {};
+  const risks = safeReport.risks ?? emptyRiskSummary();
+  const lines = [
+    `Status: ${formatTextValue(safeReport.status)}`,
+    `Generated: ${formatTextValue(safeReport.generatedAt)}`,
+    `State dir: ${formatTextValue(safeReport.stateDir)}`,
+    `Runs: ${formatTextValue(runStats.total ?? snapshot.runs?.length ?? 0)}`,
+    `Latest run: ${latestRun === null ? 'none' : formatTextValue(latestRun.runId)}`,
+    `Artifact health: ${formatTextValue(artifactStats.status ?? latestRun?.artifactStatus?.status ?? 'unknown')}`,
+    `Readiness: ${formatTextValue(readiness.status ?? 'unknown')}`,
+    `Risks: ${risks.total ?? 0} total / ${risks.counts?.high ?? 0} high / ${risks.counts?.medium ?? 0} medium / ${risks.counts?.low ?? 0} low`
+  ];
+
+  if (latestRun !== null) {
+    lines.push(`Latest command: ${formatTextValue(latestRun.command ?? latestRun.semanticCommand ?? 'unknown')}`);
+    lines.push(`Latest verifier: ${formatTextValue(latestRun.verifierStatus ?? 'unknown')}`);
+  }
+
+  const recentRuns = Array.isArray(runStats.recentRuns) ? runStats.recentRuns : [];
+
+  if (recentRuns.length > 0) {
+    lines.push('', 'Recent runs:');
+    for (const run of recentRuns.slice(0, 5)) {
+      lines.push(`- ${formatTextValue(run.runId)} / ${formatTextValue(run.status ?? 'unknown')} / verifier ${formatTextValue(run.verifierStatus ?? 'unknown')}`);
+    }
+  }
+
+  lines.push('', 'Risk panel:');
+
+  if (!Array.isArray(risks.items) || risks.items.length === 0) {
+    lines.push('- No visible risks.');
+  } else {
+    for (const risk of risks.items.slice(0, 8)) {
+      lines.push(`- [${formatTextValue(risk.severity)}] ${formatTextValue(risk.title)}${risk.runId ? ` (${formatTextValue(risk.runId)})` : ''}: ${formatTextValue(risk.detail)}`);
+    }
+  }
+
+  const checks = Array.isArray(readiness.checks) ? readiness.checks : [];
+
+  lines.push('', 'Readiness checks:');
+
+  if (checks.length === 0) {
+    lines.push('- No readiness checks available.');
+  } else {
+    for (const check of checks) {
+      lines.push(`- ${formatTextValue(check.label)}: ${formatTextValue(check.status)}${check.detail ? ` - ${formatTextValue(check.detail)}` : ''}`);
+    }
+  }
+
+  lines.push('', 'Commands:');
+  appendTextCommandGroups(lines, safeReport.commands?.groups ?? safeReport.commands?.commandGroups ?? []);
+
+  lines.push('', `Next: ${formatTextValue(safeReport.action?.next ?? 'symphony scan')}`);
+
+  return `${lines.join('\n')}\n`;
+}
+
+export function renderDiagnosticsHtml(report) {
+  const safeReport = redactSecrets(report);
+  const snapshot = safeReport.snapshot ?? {};
+  const latestRun = snapshot.latestRun ?? null;
+  const runStats = snapshot.runStats ?? {};
+  const readiness = safeReport.readiness ?? {};
+  const risks = safeReport.risks ?? emptyRiskSummary();
+  const commandGroups = safeReport.commands?.groups ?? safeReport.commands?.commandGroups ?? [];
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Symphony Diagnostics Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #1f252d;
+      --muted: #626d7a;
+      --line: #d9dee6;
+      --ok: #176b4d;
+      --ok-bg: #e4f3ec;
+      --warn: #936419;
+      --warn-bg: #fff4d8;
+      --danger: #a33a2a;
+      --danger-bg: #fae8e4;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    header,
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    header {
+      padding: 28px 0 18px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+      gap: 16px;
+      padding-bottom: 32px;
+    }
+
+    section,
+    aside {
+      min-width: 0;
+    }
+
+    .stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .panel,
+    .metric,
+    .risk,
+    .command,
+    .run-row,
+    .check-row {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+    }
+
+    .panel {
+      padding: 16px;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 10px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .badge.ready,
+    .badge.ok,
+    .badge.passed {
+      border-color: var(--ok);
+      background: var(--ok-bg);
+      color: var(--ok);
+    }
+
+    .badge.attention,
+    .badge.no-runs,
+    .badge.optional,
+    .badge.preview {
+      border-color: var(--warn);
+      background: var(--warn-bg);
+      color: var(--warn);
+    }
+
+    .badge.failed,
+    .badge.high {
+      border-color: var(--danger);
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      min-width: 0;
+      padding: 12px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .value {
+      margin-top: 4px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      background: #eef1f5;
+    }
+
+    code {
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .risk-list,
+    .command-list,
+    .check-list,
+    .run-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .risk,
+    .command,
+    .check-row,
+    .run-row {
+      padding: 10px;
+      overflow-wrap: anywhere;
+    }
+
+    .risk.high {
+      border-color: var(--danger);
+      background: var(--danger-bg);
+    }
+
+    .risk.medium {
+      border-color: var(--warn);
+      background: var(--warn-bg);
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .command-title,
+    .risk-title,
+    .run-title {
+      font-weight: 700;
+    }
+
+    .command-code {
+      display: block;
+      margin-top: 5px;
+      color: #364253;
+    }
+
+    .empty {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 840px) {
+      main,
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Symphony Diagnostics Report</h1>
+    <p class="subtitle">Static read-only diagnostics generated from local Symphony state.</p>
+    <div class="meta">
+      ${statusBadge(safeReport.status)}
+      ${statusBadge(`readiness:${readiness.status ?? 'unknown'}`)}
+      <span class="badge">copy-only commands</span>
+      <span class="badge">${escapeHtml(safeReport.generatedAt)}</span>
+    </div>
+  </header>
+  <main>
+    <section class="stack">
+      <div class="panel">
+        <h2>Overall Status</h2>
+        ${metricsGrid([
+          ['Status', safeReport.status],
+          ['Runs', runStats.total ?? snapshot.runs?.length ?? 0],
+          ['Failed runs', runStats.failedCount ?? 0],
+          ['Risks', `${risks.total ?? 0} total`],
+          ['State dir', safeReport.stateDir],
+          ['CWD', safeReport.cwd],
+          ['Next', safeReport.action?.next ?? 'symphony scan'],
+          ['Artifacts', artifactStatusLabel(runStats, latestRun)]
+        ])}
+      </div>
+      <div class="panel">
+        <h2>Latest Run</h2>
+        ${renderLatestRun(latestRun)}
+      </div>
+      <div class="panel">
+        <h2>Recent Runs</h2>
+        ${renderRecentRuns(runStats.recentRuns ?? [])}
+      </div>
+      <div class="panel">
+        <h2>Artifact Health</h2>
+        ${renderArtifactHealth(runStats, latestRun)}
+      </div>
+    </section>
+    <aside class="stack">
+      <div class="panel">
+        <h2>Risk Panel</h2>
+        ${renderRiskList(risks.items ?? [])}
+      </div>
+      <div class="panel">
+        <h2>Readiness</h2>
+        ${renderReadinessChecks(readiness.checks ?? [])}
+      </div>
+      <div class="panel">
+        <h2>Copy-Only Commands</h2>
+        ${renderCommandGroups(commandGroups)}
+      </div>
+    </aside>
+  </main>
+</body>
+</html>
+`;
+}
+
 export function createSymphonyConsoleServer({
   stateDir = '.symphony',
   cwd = process.cwd(),
@@ -1620,6 +2073,245 @@ function stripUndefined(value) {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+function buildDiagnosticsCommands({ snapshot, readiness }) {
+  const items = dedupeCommands([
+    ...(snapshot.recommendedCommands ?? []),
+    ...(readiness.recommendedCommands ?? [])
+  ]);
+  const groups = groupCommands(items);
+
+  return {
+    mode: 'copy-only',
+    items,
+    groups,
+    commandGroups: groups
+  };
+}
+
+function combineRiskSummaries(summaries) {
+  const seen = new Set();
+  const items = [];
+
+  for (const summary of summaries) {
+    for (const item of summary?.items ?? []) {
+      const key = [
+        item.id,
+        item.runId ?? '',
+        item.title ?? '',
+        item.detail ?? ''
+      ].join('\0');
+
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      items.push(item);
+    }
+  }
+
+  return summarizeRiskItems(items);
+}
+
+function emptyRiskSummary() {
+  return summarizeRiskItems([]);
+}
+
+function diagnosticsStatus({ snapshot, readiness, risks }) {
+  if ((snapshot.runStats?.total ?? snapshot.runs?.length ?? 0) === 0) {
+    return 'no-runs';
+  }
+
+  if ((risks.counts?.high ?? 0) > 0 || requiredReadinessMissing(readiness)) {
+    return 'attention';
+  }
+
+  return 'ready';
+}
+
+function requiredReadinessMissing(readiness) {
+  return readiness.tools?.packageManager?.status !== 'available'
+    || readiness.tools?.git?.status !== 'available';
+}
+
+function buildDiagnosticsAction({ status, snapshot, risks, commands }) {
+  if (status === 'no-runs') {
+    return {
+      next: 'symphony scan',
+      mode: 'copy-only'
+    };
+  }
+
+  const highRiskCommand = risks.items
+    ?.find((risk) => risk.severity === 'high' && isNonEmptyString(risk.command?.command))
+    ?.command
+    ?.command;
+
+  return {
+    next: highRiskCommand
+      ?? snapshot.action?.next
+      ?? commands.items?.[0]?.command
+      ?? 'symphony status',
+    mode: 'copy-only'
+  };
+}
+
+function appendTextCommandGroups(lines, commandGroups) {
+  if (!Array.isArray(commandGroups) || commandGroups.length === 0) {
+    lines.push('- No commands available.');
+    return;
+  }
+
+  for (const group of commandGroups) {
+    lines.push(`${formatTextValue(group.group)}:`);
+    for (const command of group.commands ?? []) {
+      lines.push(`- ${formatTextValue(command.label ?? 'Command')}: ${formatTextValue(command.command)} (${formatTextValue(command.mode ?? 'copy-only')})`);
+    }
+  }
+}
+
+function formatTextValue(value) {
+  if (value === undefined || value === null || value === '') {
+    return 'unknown';
+  }
+
+  return String(redactSecrets(value));
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function statusBadge(value) {
+  const text = String(value ?? 'unknown');
+  const statusClass = text.includes(':') ? text.split(':').at(-1) : text;
+
+  return `<span class="badge ${escapeHtml(statusClass)}">${escapeHtml(text)}</span>`;
+}
+
+function metricsGrid(metrics) {
+  return `<div class="metric-grid">${metrics.map(([label, value]) => `
+    <div class="metric">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="value">${escapeHtml(value ?? 'unknown')}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderLatestRun(run) {
+  if (run === null) {
+    return '<div class="empty">No run states found yet. Copy symphony scan to create the first read-only project context.</div>';
+  }
+
+  return `
+    ${metricsGrid([
+      ['Run ID', run.runId],
+      ['Command', run.command ?? run.semanticCommand],
+      ['Status', run.status],
+      ['Verifier', run.verifierStatus ?? 'unknown'],
+      ['Safety', run.safetyMode ?? 'unknown'],
+      ['Execution', run.executionMode ?? 'unknown'],
+      ['Artifacts', artifactStatusLabel({}, run)],
+      ['Updated', run.updatedAt ?? run.createdAt ?? 'unknown']
+    ])}`;
+}
+
+function renderRecentRuns(runs) {
+  if (!Array.isArray(runs) || runs.length === 0) {
+    return '<div class="empty">No recent runs are available.</div>';
+  }
+
+  return `<table>
+    <thead>
+      <tr>
+        <th>Run</th>
+        <th>Status</th>
+        <th>Verifier</th>
+        <th>Artifacts</th>
+        <th>Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${runs.map((run) => `<tr>
+        <td>${escapeHtml(run.runId)}</td>
+        <td>${escapeHtml(run.status ?? 'unknown')}</td>
+        <td>${escapeHtml(run.verifierStatus ?? 'unknown')}</td>
+        <td>${escapeHtml(run.artifactStatus ?? 'unknown')}</td>
+        <td>${escapeHtml(run.updatedAt ?? 'unknown')}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function renderArtifactHealth(runStats, latestRun) {
+  const artifacts = runStats.artifacts ?? {};
+  const latestArtifactStatus = latestRun?.artifactStatus;
+
+  return metricsGrid([
+    ['Overall', artifactStatusLabel(runStats, latestRun)],
+    ['Registered', artifacts.registered ?? latestRun?.artifactHealth?.total ?? 0],
+    ['Missing', artifacts.missing ?? latestArtifactStatus?.missing ?? 0],
+    ['Runs with missing', artifacts.runsWithMissing ?? ((latestArtifactStatus?.missing ?? 0) > 0 ? 1 : 0)]
+  ]);
+}
+
+function artifactStatusLabel(runStats, latestRun) {
+  return runStats.artifacts?.status
+    ?? latestRun?.artifactStatus?.status
+    ?? latestRun?.artifactHealth?.status
+    ?? 'empty';
+}
+
+function renderRiskList(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return '<div class="empty">No visible risks in this diagnostics report.</div>';
+  }
+
+  return `<div class="risk-list">${items.map((risk) => `
+    <div class="risk ${escapeHtml(risk.severity ?? 'low')}">
+      <div class="risk-title">${escapeHtml(risk.title)} ${statusBadge(risk.severity ?? 'low')}</div>
+      <div class="muted">${escapeHtml([risk.runId, risk.detail].filter(Boolean).join(': '))}</div>
+      ${risk.command?.command ? `<code class="command-code">${escapeHtml(risk.command.command)}</code>` : ''}
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderReadinessChecks(checks) {
+  if (!Array.isArray(checks) || checks.length === 0) {
+    return '<div class="empty">Readiness checks are unavailable.</div>';
+  }
+
+  return `<div class="check-list">${checks.map((check) => `
+    <div class="check-row">
+      <div class="command-title">${escapeHtml(check.label)} ${statusBadge(check.status ?? 'unknown')}</div>
+      <div class="muted">${escapeHtml(check.detail ?? '')}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderCommandGroups(commandGroups) {
+  if (!Array.isArray(commandGroups) || commandGroups.length === 0) {
+    return '<div class="empty">No copy-only commands are available.</div>';
+  }
+
+  return `<div class="command-list">${commandGroups.map((group) => `
+    <div>
+      <h3>${escapeHtml(group.group)}</h3>
+      ${(group.commands ?? []).map((command) => `
+        <div class="command">
+          <div class="command-title">${escapeHtml(command.label ?? 'Command')}</div>
+          <code class="command-code">${escapeHtml(command.command)}</code>
+          <div class="muted">${escapeHtml(command.description ?? command.mode ?? 'copy-only')}</div>
+        </div>`).join('')}
+    </div>`).join('')}
+  </div>`;
 }
 
 function renderConsoleHtml() {

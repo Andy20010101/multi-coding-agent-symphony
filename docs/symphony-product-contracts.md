@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -14,6 +14,8 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v9 readiness checks may inspect local CLI availability, git state, GitHub auth/CI visibility, and real CLI gate status; they do not invoke models and must not expose token values.
 - v9.1 run filters are read-only selectors. `GET /api/runs?filter=<filter>` supports `all`, `passed`, `failed`, `dry-run`, `real`, `scan`, and `verify`.
 - v9.1 diagnostics may add `runStats`, `riskSummary`, `artifactStatus`, and `commandGroups`; older consumers can ignore these fields.
+- v10 `symphony diagnose` does not start a server, invoke models, execute recommended commands, read artifact content, or write project files. `--html` writes only to stdout and the generated report is static HTML with no scripts or external resources.
+- v10 diagnostics command recommendations remain copy-only text. `--json` and `--html` are mutually exclusive output modes.
 
 ## `symphony.product-json`
 
@@ -370,6 +372,125 @@ When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next
 ```
 
 If optional tools such as `gh`, Codex, Claude, or Kiro are missing, their status is reported as unavailable or optional rather than failing the read-only console route.
+
+## `symphony.diagnostics-report`
+
+`symphony diagnose --json` returns a stable v10 report for terminals, CI, and static HTML generation. It combines the v9.1 console snapshot and readiness data without changing the `/api/*` Workbench contracts.
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.diagnostics-report",
+  "generatedAt": "2026-05-23T00:00:00.000Z",
+  "stateDir": ".symphony",
+  "cwd": "/repo",
+  "status": "attention",
+  "snapshot": {
+    "contractName": "symphony.console-snapshot",
+    "runStats": {
+      "total": 2,
+      "failedCount": 1,
+      "artifacts": {
+        "status": "missing",
+        "registered": 2,
+        "missing": 1,
+        "runsWithMissing": 1
+      }
+    },
+    "riskSummary": {
+      "status": "attention",
+      "total": 2,
+      "items": []
+    },
+    "commandGroups": []
+  },
+  "readiness": {
+    "contractName": "symphony.console-readiness",
+    "status": "attention",
+    "readOnly": true,
+    "modelInvocation": false,
+    "riskSummary": {
+      "status": "attention",
+      "total": 1,
+      "items": []
+    },
+    "commandGroups": []
+  },
+  "risks": {
+    "status": "attention",
+    "total": 3,
+    "counts": {
+      "high": 1,
+      "medium": 1,
+      "low": 1
+    },
+    "items": [
+      {
+        "id": "run-1:verifier_failed",
+        "category": "verifier_failed",
+        "severity": "high",
+        "title": "Verifier failed",
+        "runId": "run-1",
+        "command": {
+          "command": "symphony status",
+          "mode": "copy-only"
+        }
+      }
+    ]
+  },
+  "commands": {
+    "mode": "copy-only",
+    "items": [
+      {
+        "id": "status",
+        "label": "Status",
+        "command": "symphony status",
+        "description": "Read the latest product state.",
+        "group": "Inspect",
+        "mode": "copy-only"
+      }
+    ],
+    "groups": [
+      {
+        "group": "Inspect",
+        "commands": [
+          {
+            "id": "status",
+            "label": "Status",
+            "command": "symphony status",
+            "description": "Read the latest product state.",
+            "group": "Inspect",
+            "mode": "copy-only"
+          }
+        ]
+      }
+    ],
+    "commandGroups": [
+      {
+        "group": "Inspect",
+        "commands": [
+          {
+            "id": "status",
+            "label": "Status",
+            "command": "symphony status",
+            "description": "Read the latest product state.",
+            "group": "Inspect",
+            "mode": "copy-only"
+          }
+        ]
+      }
+    ]
+  },
+  "action": {
+    "next": "symphony status",
+    "mode": "copy-only"
+  }
+}
+```
+
+Report `status` is `"no-runs"` when no run states exist, `"attention"` when high-severity risks or required tool gaps are visible, and `"ready"` otherwise. Required readiness currently means Node.js is running and `pnpm` plus git worktree checks are available; optional GitHub and real-agent CLI gaps appear in `risks` but do not by themselves make a report unusable.
+
+`symphony diagnose` without flags renders a short terminal summary. `symphony diagnose --html` renders the same report as a single HTML document to stdout, suitable for `symphony diagnose --html > report.html`. The HTML report escapes all dynamic text, has no `<script>` block, has no external resource references, and presents commands only as copyable text.
 
 ## `symphony.console-run-timeline`
 

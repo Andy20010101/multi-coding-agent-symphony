@@ -10,6 +10,7 @@ symphony scan
 symphony do "inspect README"
 symphony "修复失败的测试"
 symphony status
+symphony diagnose
 ```
 
 The target CLIs are:
@@ -55,6 +56,7 @@ Implemented:
 - Product state pointers under `.symphony/context/latest.json`, `.symphony/runs/latest.json`, and `.symphony/runs/<run-id>.json`; canonical evidence and artifacts remain in `ArtifactStore` runtime directories.
 - Stable product JSON contract fields for automation: `contractVersion`, `contractName`, `contract`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`.
 - Read-only local `symphony console` workbench for browsing latest runs, verifier status, readiness checks, copy-only next commands, timelines, risk summaries, run filters, recent-run diagnostics, and artifact pointers from `.symphony` state.
+- Controlled diagnostics CLI `symphony diagnose` for terminal summaries, stable JSON reports, and redirectable static HTML reports without starting a browser server.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
@@ -63,7 +65,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current released repository tag: `v9`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish on top of that local read-only surface, and the `v7` tag remains available for historical installs.
+Current released repository tag: `v9`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, and the `v7` tag remains available for historical installs.
 
 ## Design Center
 
@@ -105,6 +107,8 @@ pnpm symphony "扫描这个仓库"
 pnpm symphony "审查当前改动"
 pnpm symphony status
 pnpm symphony console --snapshot --json
+pnpm --silent symphony diagnose --json
+pnpm --silent symphony diagnose --html > tmp/symphony-diagnostics.html
 pnpm smoke:codex:help
 pnpm smoke:claude:help
 pnpm smoke:kiro:help
@@ -140,6 +144,9 @@ symphony status
 symphony artifacts
 symphony console
 symphony console --snapshot --json
+symphony diagnose
+symphony diagnose --json
+symphony diagnose --html > report.html
 symphony "创建一个新的 React 看板项目" --dry-run --json
 symphony "创建一个新的 node cli 项目" --dry-run
 ```
@@ -149,6 +156,7 @@ symphony "创建一个新的 node cli 项目" --dry-run
 New-project prompts produce a `scaffoldPlan` and a separate `scaffold-manifest` artifact. Framework-shaped requests such as React or Vite are reported as unsupported generator requests; Symphony does not run npm installs, framework generators, or dependency installation, and `--write` is still required before any files are created.
 Every product `--json` response keeps its legacy top-level fields and adds a stable machine-readable envelope: `contractVersion`, `contractName`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`. `symphony console --snapshot --json` returns the same read-only run model without starting a server; see [Symphony Product JSON Contracts](docs/symphony-product-contracts.md) for v8.2 and v9 contract examples.
 `symphony console` starts a local read-only workbench on `127.0.0.1:8765` by default. It serves `/`, `/api/summary`, `/api/readiness`, `/api/runs`, `/api/runs/latest`, `/api/runs/<run-id>`, `/api/runs/<run-id>/timeline`, and `/api/runs/<run-id>/artifacts/<kind>`; all non-GET requests return `405`. The workbench shows readiness, latest run health, recent run diagnostics, run filters for `all`, `passed`, `failed`, `dry-run`, `real`, `scan`, and `verify`, a risk panel, run detail sections, registered artifacts, and grouped copy-only commands. It does not add browser write, execute, retry, delete, or arbitrary path-read controls. Artifact preview only reads paths already referenced by a run state and truncates file previews after 200 KiB.
+`symphony diagnose` reads the same `.symphony` state and readiness probes without starting the Workbench. The default output is a compact terminal summary; `--json` emits the stable `symphony.diagnostics-report` contract; `--html` writes a single static, script-free HTML document to stdout so it can be redirected with `symphony diagnose --html > report.html`. `--json` and `--html` are mutually exclusive, `--state-dir <path>` selects an alternate state directory, and all suggested commands remain copy-only text.
 
 `.symphony/` stores local user-facing pointers and summaries. Add it to your local ignore rules if you do not want run pointers in source control. Full evidence, TaskPackets, Harness output, scaffold manifests, and intake artifacts stay in the runtime artifact directories written through `ArtifactStore`.
 
@@ -203,6 +211,7 @@ symphony verify   product verification alias
 symphony status   latest run state
 symphony artifacts artifact and evidence pointers
 symphony console  read-only local workbench
+symphony diagnose read-only diagnostics report
 symphony new      limited dry-run/write project bootstrap
 symphony agent    native CLI passthrough
 symphony review   shortcut for review workflow

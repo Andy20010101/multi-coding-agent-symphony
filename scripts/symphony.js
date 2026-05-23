@@ -13,7 +13,10 @@ import {
   withProductJsonContract
 } from '../src/symphony/contract.js';
 import {
+  buildConsoleDiagnosticsReport,
   buildConsoleSnapshot,
+  renderDiagnosticsHtml,
+  renderDiagnosticsText,
   startSymphonyConsoleServer
 } from '../src/symphony/console.js';
 import {
@@ -73,6 +76,7 @@ const KNOWN_COMMANDS = new Set([
   'artifacts',
   'continue',
   'console',
+  'diagnose',
   'new'
 ]);
 let productRunSequence = 0;
@@ -230,6 +234,15 @@ export async function runSymphonyCli({
       return await runSymphonyConsole({
         args: rest,
         stdout
+      });
+    }
+
+    if (command === 'diagnose') {
+      return await runSymphonyDiagnose({
+        args: rest,
+        stdout,
+        runner: runner ?? new NodeProcessRunner(),
+        env
       });
     }
 
@@ -1251,6 +1264,29 @@ async function runSymphonyConsole({ args, stdout }) {
   return EXIT_CODES.ok;
 }
 
+async function runSymphonyDiagnose({ args, stdout, runner, env }) {
+  const options = parseDiagnoseArgs(args);
+  const report = await buildConsoleDiagnosticsReport({
+    stateDir: options.stateDir,
+    cwd: process.cwd(),
+    env,
+    runner
+  });
+
+  if (options.json) {
+    writeJson(stdout, report);
+    return EXIT_CODES.ok;
+  }
+
+  if (options.html) {
+    stdout.write(renderDiagnosticsHtml(report));
+    return EXIT_CODES.ok;
+  }
+
+  stdout.write(renderDiagnosticsText(report));
+  return EXIT_CODES.ok;
+}
+
 async function runSymphonyNew({
   args,
   stdout,
@@ -1831,6 +1867,46 @@ function parseConsoleArgs(args) {
     }
 
     throw new UsageError(`unexpected console argument: ${value}`);
+  }
+
+  return options;
+}
+
+function parseDiagnoseArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    json: false,
+    html: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--html') {
+      options.html = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown diagnose option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected diagnose argument: ${value}`);
+  }
+
+  if (options.json && options.html) {
+    throw new UsageError('diagnose accepts only one output format: --json or --html');
   }
 
   return options;

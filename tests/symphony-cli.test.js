@@ -1234,6 +1234,189 @@ describe('v8 prompt-driven symphony CLI', () => {
     }
   });
 
+  it('reports v10 controlled diagnostics as JSON, text, and static escaped HTML', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v10-diagnose-'));
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const runsDir = join(stateDir, 'runs');
+      const artifactDir = join(root, 'artifacts');
+      const availableArtifactPath = join(artifactDir, 'available.json');
+      const missingArtifactPath = join(artifactDir, 'missing.json');
+      const unsafeCommand = 'symphony verify <script>alert(1)</script>';
+      const runStates = [
+        diagnosticRunState({
+          runId: 'diagnose-older',
+          command: 'symphony scan',
+          semanticCommand: 'scan',
+          intent: 'scan-project',
+          status: 'passed',
+          verifierStatus: 'passed',
+          safetyMode: 'read-only',
+          executionMode: 'dry-run',
+          contextArtifactPath: availableArtifactPath,
+          updatedAt: '2026-05-23T01:00:00.000Z'
+        }),
+        diagnosticRunState({
+          runId: 'diagnose-latest',
+          command: unsafeCommand,
+          semanticCommand: 'verify',
+          intent: 'verify',
+          status: 'failed',
+          verifierStatus: 'failed',
+          safetyMode: 'read-only',
+          executionMode: 'dry-run',
+          contextArtifactPath: missingArtifactPath,
+          nextAction: 'symphony artifacts diagnose-latest',
+          updatedAt: '2026-05-23T01:01:00.000Z'
+        })
+      ];
+
+      await mkdir(runsDir, { recursive: true });
+      await mkdir(artifactDir, { recursive: true });
+      await writeFile(availableArtifactPath, '{"ok":true}\n', 'utf8');
+
+      for (const runState of runStates) {
+        await writeFile(join(runsDir, `${runState.runId}.json`), JSON.stringify(runState, null, 2), 'utf8');
+      }
+
+      await writeFile(join(runsDir, 'latest.json'), JSON.stringify(runStates.at(-1), null, 2), 'utf8');
+
+      const jsonOutput = createOutput();
+      const jsonExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--json'],
+        stdout: jsonOutput.stdout,
+        stderr: jsonOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      assert.equal(jsonExitCode, 0);
+      assert.equal(jsonOutput.stderrText(), '');
+
+      const report = JSON.parse(jsonOutput.stdoutText());
+
+      assert.equal(report.contractName, 'symphony.diagnostics-report');
+      assert.equal(report.contractVersion, '1');
+      assert.equal(report.status, 'attention');
+      assert.equal(report.snapshot.contractName, 'symphony.console-snapshot');
+      assert.equal(report.snapshot.runStats.total, 2);
+      assert.equal(report.snapshot.runStats.artifacts.status, 'missing');
+      assert.equal(report.readiness.contractName, 'symphony.console-readiness');
+      assert.equal(report.readiness.tools.packageManager.status, 'unavailable');
+      assert.equal(report.readiness.tools.git.dirty, true);
+      assert.equal(report.commands.mode, 'copy-only');
+      assert.equal(report.commands.items.every((command) => command.mode === 'copy-only'), true);
+      assert.deepEqual(report.commands.groups.map((group) => group.group), [
+        'Inspect',
+        'Verify',
+        'Artifacts',
+        'Real-agent gates'
+      ]);
+      assert.equal(report.risks.items.some((risk) => risk.category === 'dirty_git'), true);
+      assert.equal(report.risks.items.some((risk) => risk.id === 'missing_tool:pnpm'), true);
+      assert.equal(report.risks.items.some((risk) => risk.id === 'missing_tool:codex'), true);
+      assert.equal(report.risks.items.some((risk) => risk.category === 'verifier_failed'), true);
+      assert.equal(report.risks.items.some((risk) => risk.category === 'missing_artifacts'), true);
+      assert.equal(JSON.stringify(report).includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+
+      const textOutput = createOutput();
+      const textExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir],
+        stdout: textOutput.stdout,
+        stderr: textOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      assert.equal(textExitCode, 0);
+      assert.match(textOutput.stdoutText(), /Status: attention/u);
+      assert.match(textOutput.stdoutText(), /Latest run: diagnose-latest/u);
+      assert.match(textOutput.stdoutText(), /Risks:/u);
+      assert.match(textOutput.stdoutText(), /Commands:/u);
+      assert.equal(textOutput.stdoutText().includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+
+      const htmlOutput = createOutput();
+      const htmlExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--html'],
+        stdout: htmlOutput.stdout,
+        stderr: htmlOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      assert.equal(htmlExitCode, 0);
+
+      const html = htmlOutput.stdoutText();
+
+      assert.match(html, /^<!doctype html>/u);
+      assert.match(html, /<title>Symphony Diagnostics Report<\/title>/u);
+      assert.match(html, /Copy-Only Commands/u);
+      assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/u);
+      assert.equal(/<script/i.test(html), false);
+      assert.equal(/\s(?:src|href)=["']https?:\/\//iu.test(html), false);
+      assert.equal(html.includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports no-runs diagnostics and rejects conflicting diagnose output modes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v10-diagnose-empty-'));
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const jsonOutput = createOutput();
+      const jsonExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--json'],
+        stdout: jsonOutput.stdout,
+        stderr: jsonOutput.stderr,
+        runner: new MissingReadinessRunner(),
+        env: {}
+      });
+
+      assert.equal(jsonExitCode, 0);
+
+      const report = JSON.parse(jsonOutput.stdoutText());
+
+      assert.equal(report.status, 'no-runs');
+      assert.equal(report.action.next, 'symphony scan');
+      assert.equal(report.snapshot.recommendedCommands.some((command) => command.command === 'symphony scan'), true);
+      assert.equal(report.risks.items.some((risk) => risk.id === 'missing_tool:pnpm'), true);
+
+      const textOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir],
+        stdout: textOutput.stdout,
+        stderr: textOutput.stderr,
+        runner: new MissingReadinessRunner(),
+        env: {}
+      });
+
+      assert.match(textOutput.stdoutText(), /Status: no-runs/u);
+      assert.match(textOutput.stdoutText(), /Latest run: none/u);
+      assert.match(textOutput.stdoutText(), /Next: symphony scan/u);
+
+      for (const argv of [
+        ['diagnose', '--state-dir', stateDir, '--json', '--html'],
+        ['diagnose', '--state-dir', stateDir, '--bogus']
+      ]) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv,
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 64);
+        assert.match(JSON.parse(output.stderrText()).message, /diagnose/u);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('keeps console artifact previews bounded to registered refs', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v8-console-artifacts-'));
     let server;
@@ -1777,6 +1960,64 @@ class ConsoleReadinessRunner {
 
     if (executable === 'kiro-cli' && args.join(' ') === '--version') {
       const error = new Error('spawn kiro-cli ENOENT');
+      error.code = 'ENOENT';
+      throw error;
+    }
+
+    return commandResult({
+      exitCode: 1,
+      stderr: `unexpected command: ${executable} ${args.join(' ')}`
+    });
+  }
+}
+
+class DiagnosticReadinessRunner {
+  async run({ executable, args }) {
+    if (executable.endsWith('pnpm') && args[0] === '--version') {
+      const error = new Error(`spawn ${executable} ENOENT`);
+      error.code = 'ENOENT';
+      throw error;
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --is-inside-work-tree') {
+      return commandResult({ stdout: 'true\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'branch --show-current') {
+      return commandResult({ stdout: 'diagnostics\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short HEAD') {
+      return commandResult({ stdout: 'def5678\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'status --porcelain') {
+      return commandResult({ stdout: ' M README.md\n?? tmp.txt\n' });
+    }
+
+    if (executable === 'gh' && args.join(' ') === 'auth status') {
+      return commandResult({
+        stderr: 'Logged in to github.com account Andy20010101\nToken: ghp_abcdefghijklmnopqrstuvwxyz123456\n'
+      });
+    }
+
+    if (executable === 'gh' && args[0] === 'run' && args[1] === 'list') {
+      return commandResult({
+        stdout: `${JSON.stringify([{
+          databaseId: 321,
+          workflowName: 'CI',
+          displayTitle: 'diagnostics',
+          status: 'completed',
+          conclusion: 'success',
+          headBranch: 'diagnostics',
+          headSha: 'def5678',
+          createdAt: '2026-05-23T01:00:00Z'
+        }])}\n`
+      });
+    }
+
+    if (['codex', 'claude', 'kiro-cli'].includes(executable)) {
+      const error = new Error(`spawn ${executable} ENOENT`);
       error.code = 'ENOENT';
       throw error;
     }
