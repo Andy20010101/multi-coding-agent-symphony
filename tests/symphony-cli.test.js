@@ -923,7 +923,7 @@ describe('v8 prompt-driven symphony CLI', () => {
     try {
       await writeFixtureProject(root);
 
-      const stateDir = join(root, '.symphony');
+      const stateDir = join(root, 'state dir');
       const scanOutput = createOutput();
 
       await runSymphonyCli({
@@ -978,6 +978,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(planned.writeBoundary, 'isolated-workspace');
       assert.equal(planned.executionPlanId, planned.runId);
       assert.match(planned.nextAction, new RegExp(`symphony do --confirm-plan ${planned.executionPlanId}`, 'u'));
+      assert.equal(planned.nextAction.includes(`--state-dir '${stateDir}'`), true);
       assert.equal(existsSync(planned.executionPlanArtifactPath), true);
       assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n');
 
@@ -1243,6 +1244,25 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(ungatedExitCode, 64);
       assert.match(JSON.parse(ungatedOutput.stderrText()).message, /MCAS_RUN_REAL_CODEX/u);
 
+      const tamperedPlan = JSON.parse(await readFile(planned.executionPlanArtifactPath, 'utf8'));
+
+      tamperedPlan.externalCalls = false;
+      tamperedPlan.requiresGate = null;
+      tamperedPlan.workspaceWrites = false;
+      await writeFile(planned.executionPlanArtifactPath, `${JSON.stringify(tamperedPlan, null, 2)}\n`, 'utf8');
+
+      const tamperedOutput = createOutput();
+      const tamperedExitCode = await runSymphonyCli({
+        argv: ['do', '--state-dir', stateDir, '--confirm-plan', planned.executionPlanId, '--json'],
+        stdout: tamperedOutput.stdout,
+        stderr: tamperedOutput.stderr,
+        mcasRunner: blockedMcasRunner,
+        env: { MCAS_RUN_REAL_CODEX: '1' }
+      });
+
+      assert.equal(tamperedExitCode, 64);
+      assert.match(JSON.parse(tamperedOutput.stderrText()).message, /execution plan/u);
+
       const dryPlanOutput = createOutput();
 
       await runSymphonyCli({
@@ -1265,7 +1285,7 @@ describe('v8 prompt-driven symphony CLI', () => {
 
       const dryPlan = JSON.parse(dryPlanOutput.stdoutText());
 
-      await writeFile(join(root, 'README.md'), '# Changed\n', 'utf8');
+      await writeFile(join(root, 'tests', 'fixture.test.js'), 'export const ok = false;\n', 'utf8');
 
       const staleOutput = createOutput();
       const staleExitCode = await runSymphonyCli({

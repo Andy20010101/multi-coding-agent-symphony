@@ -1,7 +1,13 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
+import {
+  collectFileInventory,
+  DEFAULT_INTAKE_LIMITS,
+  normalizeRelativePath,
+  readTextFileLimited
+} from '../intake/file-inventory.js';
 import { redactSecrets } from '../redaction.js';
 
 const FINGERPRINT_FILES = [
@@ -13,6 +19,10 @@ const FINGERPRINT_FILES = [
   'AGENTS.md',
   'mcas.config.json'
 ];
+const FINGERPRINT_LIMITS = {
+  ...DEFAULT_INTAKE_LIMITS,
+  maxDepth: 16
+};
 
 export function symphonyStatePaths({ stateDir = '.symphony', runId, planId } = {}) {
   return {
@@ -24,9 +34,10 @@ export function symphonyStatePaths({ stateDir = '.symphony', runId, planId } = {
   };
 }
 
-export async function buildProjectFingerprint({ projectDir = '.' } = {}) {
+export async function buildProjectFingerprint({ projectDir = '.', ignoredPaths = [] } = {}) {
   const root = resolve(projectDir);
   const hash = createHash('sha256');
+  const ignoredRelativePaths = normalizeFingerprintIgnoredPaths({ root, ignoredPaths });
 
   hash.update(`root\0${root}\0`);
 
@@ -34,10 +45,61 @@ export async function buildProjectFingerprint({ projectDir = '.' } = {}) {
     await hashOptionalFile({ hash, root, file });
   }
 
+  await hashProjectInventory({
+    hash,
+    root,
+    ignoredRelativePaths
+  });
   await hashOptionalFile({ hash, root, file: join('.git', 'HEAD') });
   await hashOptionalStat({ hash, root, file: join('.git', 'index') });
 
   return `sha256:${hash.digest('hex')}`;
+}
+
+async function hashProjectInventory({ hash, root, ignoredRelativePaths }) {
+  const inventory = await collectFileInventory({
+    projectDir: root,
+    limits: FINGERPRINT_LIMITS,
+    ignoredPaths: ignoredRelativePaths
+  });
+  const files = inventory.files.filter((file) => !isFingerprintIgnored(file, ignoredRelativePaths));
+
+  hash.update(`inventory\0${files.length}\0${inventory.truncated ? 'truncated' : 'complete'}\0`);
+
+  for (const file of files) {
+    await hashInventoryFile({ hash, root, file });
+  }
+}
+
+async function hashInventoryFile({ hash, root, file }) {
+  const path = join(root, file);
+
+  try {
+    const metadata = await stat(path);
+    const content = await readTextFileLimited(root, file, FINGERPRINT_LIMITS.maxBytesPerTextFile);
+
+    hash.update(`inventory-file\0${file}\0${metadata.size}\0${metadata.mtimeMs}\0`);
+    hash.update(content);
+    hash.update('\0');
+  } catch (error) {
+    if (error.code !== 'ENOENT' && error.code !== 'EISDIR') {
+      throw error;
+    }
+
+    hash.update(`missing-inventory-file\0${file}\0`);
+  }
+}
+
+function normalizeFingerprintIgnoredPaths({ root, ignoredPaths }) {
+  return ignoredPaths
+    .filter((path) => typeof path === 'string' && path.trim() !== '')
+    .map((path) => normalizeRelativePath(relative(root, resolve(root, path))))
+    .filter((path) => path !== '' && !path.startsWith('..') && path !== '..')
+    .sort();
+}
+
+function isFingerprintIgnored(file, ignoredRelativePaths) {
+  return ignoredRelativePaths.some((ignored) => file === ignored || file.startsWith(`${ignored}/`));
 }
 
 export async function readLatestContext({ stateDir = '.symphony' } = {}) {

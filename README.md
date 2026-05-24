@@ -57,7 +57,7 @@ Implemented:
 - Stable product JSON contract fields for automation: `contractVersion`, `contractName`, `contract`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`.
 - Read-only local `symphony console` workbench for browsing latest runs, verifier status, readiness checks, copy-only next commands, timelines, risk summaries, run filters, recent-run diagnostics, and artifact pointers from `.symphony` state.
 - Controlled diagnostics CLI `symphony diagnose` for terminal summaries, stable JSON reports, and redirectable static HTML reports without starting a browser server.
-- v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
+- v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan with the exact confirm command, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.

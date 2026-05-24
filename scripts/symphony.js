@@ -661,7 +661,8 @@ async function executeProductScan({
   }
 
   const projectFingerprint = await buildProjectFingerprint({
-    projectDir: intake.summary.projectDir
+    projectDir: intake.summary.projectDir,
+    ignoredPaths: [options.stateDir]
   });
   const now = new Date().toISOString();
   const contextPointer = {
@@ -966,19 +967,16 @@ async function createProductExecutionPlan({
   const pipeline = ['scan-if-needed', semanticCommand];
   const executionMode = options.realRequested ? 'real' : 'dry-run';
   const requiresGate = options.realRequested ? REAL_WORK_GATES[options.adapter] : null;
-  const confirmationCommand = `symphony do --confirm-plan ${planId}`;
-  const normalizedRouteDecision = routeDecision ?? {
-    version: '1',
-    intent: 'work',
-    confidence: 'explicit',
-    matchedSignals: ['--write'],
-    safetyMode: 'write',
+  const confirmationCommand = buildConfirmationCommand({
+    planId,
+    stateDir: options.stateDir
+  });
+  const normalizedRouteDecision = buildExecutionPlanRouteDecision({
+    routeDecision,
     adapter: options.adapter,
     pipeline,
-    requiresGate,
-    requiresConfirmation: true,
-    reason: 'Explicit --write requested; generated a controlled execution plan.'
-  };
+    requiresGate
+  });
   const plan = {
     version: '1',
     kind: 'symphony.execution-plan',
@@ -1085,7 +1083,8 @@ async function executeConfirmedProductPlan({
   assertExecutionPlan(plan, options.planId);
 
   const currentFingerprint = await buildProjectFingerprint({
-    projectDir: plan.projectRoot
+    projectDir: plan.projectRoot,
+    ignoredPaths: [options.stateDir, plan.workDir]
   });
 
   if (currentFingerprint !== plan.projectFingerprint) {
@@ -1240,7 +1239,10 @@ async function ensureFreshContext({
   env,
   mcasRunner
 }) {
-  const projectFingerprint = await buildProjectFingerprint({ projectDir });
+  const projectFingerprint = await buildProjectFingerprint({
+    projectDir,
+    ignoredPaths: [stateDir]
+  });
   const latest = await readLatestContext({ stateDir });
 
   if (
@@ -2592,6 +2594,46 @@ function buildExecutionPlanId({ prompt, mode, adapter }) {
   return `symphony-plan-${safeIdPart(mode)}-${shortHash([adapter, mode, prompt].join('\0'))}-${uniqueProductRunSuffix()}`;
 }
 
+function buildConfirmationCommand({ planId, stateDir }) {
+  const args = ['symphony', 'do', '--confirm-plan', planId];
+
+  if (stateDir !== '.symphony') {
+    args.push('--state-dir', stateDir);
+  }
+
+  return args.map(shellQuoteArgument).join(' ');
+}
+
+function shellQuoteArgument(value) {
+  const text = String(value);
+
+  if (/^[0-9A-Za-z_./:=@+-]+$/u.test(text)) {
+    return text;
+  }
+
+  return `'${text.replaceAll("'", "'\\''")}'`;
+}
+
+function buildExecutionPlanRouteDecision({
+  routeDecision,
+  adapter,
+  pipeline,
+  requiresGate
+}) {
+  return {
+    version: '1',
+    intent: 'work',
+    confidence: routeDecision?.confidence ?? 'explicit',
+    matchedSignals: routeDecision?.matchedSignals ?? ['--write'],
+    safetyMode: 'write',
+    adapter,
+    pipeline,
+    requiresGate,
+    requiresConfirmation: true,
+    reason: 'Explicit --write requested; generated a controlled execution plan.'
+  };
+}
+
 function buildConfirmedPlanRunId(plan) {
   return `${buildWorkRunId({
     prompt: plan.prompt,
@@ -2622,7 +2664,9 @@ function assertExecutionPlan(plan, expectedPlanId) {
     throw new UsageError('execution plan must be an object');
   }
 
-  if (plan.kind !== 'symphony.execution-plan' || plan.contractName !== 'symphony.execution-plan') {
+  if (plan.kind !== 'symphony.execution-plan'
+    || plan.contractName !== 'symphony.execution-plan'
+    || plan.contractVersion !== '1') {
     throw new UsageError('execution plan has an unsupported contract');
   }
 
@@ -2631,14 +2675,18 @@ function assertExecutionPlan(plan, expectedPlanId) {
   }
 
   for (const field of [
+    'command',
     'prompt',
     'projectRoot',
     'projectFingerprint',
     'contextArtifactPath',
+    'summaryArtifactPath',
     'workflowMode',
     'adapter',
     'executionMode',
-    'workDir'
+    'workDir',
+    'confirmationCommand',
+    'createdAt'
   ]) {
     assertNonEmptyString(plan[field], `execution plan ${field}`);
   }
@@ -2651,8 +2699,61 @@ function assertExecutionPlan(plan, expectedPlanId) {
     throw new UsageError('execution plan executionMode must be dry-run or real');
   }
 
-  normalizeWorkAdapter(plan.adapter);
+  const adapter = normalizeWorkAdapter(plan.adapter);
   assertWorkMode(plan.workflowMode);
+
+  if (plan.command !== 'symphony do'
+    || plan.intent !== 'work'
+    || plan.semanticCommand !== 'do'
+    || plan.safetyMode !== 'write') {
+    throw new UsageError('execution plan command semantics are unsupported');
+  }
+
+  assertExactStringArray(plan.pipeline, ['scan-if-needed', 'do'], 'execution plan pipeline');
+
+  if (plan.projectWrites !== true
+    || plan.mainWorktreeWrites !== false
+    || plan.workspaceWrites !== true
+    || plan.runtimeWrites !== true
+    || plan.destructiveWrites !== false) {
+    throw new UsageError('execution plan write invariants are unsupported');
+  }
+
+  const expectedExternalCalls = plan.executionMode === 'real';
+  const expectedRequiresGate = expectedExternalCalls ? REAL_WORK_GATES[adapter] : null;
+
+  if (plan.externalCalls !== expectedExternalCalls || plan.requiresGate !== expectedRequiresGate) {
+    throw new UsageError('execution plan real-agent gate invariants are unsupported');
+  }
+
+  assertExecutionPlanRouteDecision(plan.routeDecision, {
+    adapter,
+    expectedRequiresGate
+  });
+}
+
+function assertExecutionPlanRouteDecision(routeDecision, { adapter, expectedRequiresGate }) {
+  if (routeDecision === null || typeof routeDecision !== 'object' || Array.isArray(routeDecision)) {
+    throw new UsageError('execution plan route decision must be an object');
+  }
+
+  if (routeDecision.intent !== 'work'
+    || routeDecision.safetyMode !== 'write'
+    || normalizeWorkAdapter(routeDecision.adapter) !== adapter
+    || routeDecision.requiresGate !== expectedRequiresGate
+    || routeDecision.requiresConfirmation !== true) {
+    throw new UsageError('execution plan route decision invariants are unsupported');
+  }
+
+  assertExactStringArray(routeDecision.pipeline, ['scan-if-needed', 'do'], 'execution plan route pipeline');
+}
+
+function assertExactStringArray(value, expected, field) {
+  if (!Array.isArray(value)
+    || value.length !== expected.length
+    || value.some((entry, index) => entry !== expected[index])) {
+    throw new UsageError(`${field} must be ${expected.join(', ')}`);
+  }
 }
 
 async function prepareWorkIntake({

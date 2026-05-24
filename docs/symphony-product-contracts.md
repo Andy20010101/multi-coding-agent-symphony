@@ -176,7 +176,7 @@ Confirmed v11 runs preserve `executionPlanId`, `plannedRunId`, and `executionPla
 }
 ```
 
-Confirmation accepts only `--confirm-plan <plan-id>`, `--state-dir <path>`, and `--json`. Extra prompt text or execution flags are rejected so the frozen plan cannot drift. Confirmation also rejects missing plans, unsupported plan contracts, stale project fingerprints, unsupported write boundaries, and missing real-agent gates before the kernel workflow starts.
+Confirmation accepts only `--confirm-plan <plan-id>`, `--state-dir <path>`, and `--json`. Extra prompt text or execution flags are rejected so the frozen plan cannot drift. The generated `confirmationCommand` includes the non-default state dir when a plan is stored outside `.symphony`. Confirmation also rejects missing plans, unsupported plan contracts, stale project fingerprints, unsupported write boundaries, invalid audit invariants, and missing real-agent gates before the kernel workflow starts.
 
 ## `symphony.console-snapshot`
 
