@@ -13,7 +13,8 @@ const ARTIFACT_FIELDS = [
   ['task-packet', 'taskPacketPath'],
   ['proof', 'proofArtifactPath'],
   ['scaffold-plan', 'scaffoldPlanArtifactPath'],
-  ['scaffold-manifest', 'scaffoldManifestArtifactPath']
+  ['scaffold-manifest', 'scaffoldManifestArtifactPath'],
+  ['execution-plan', 'executionPlanArtifactPath']
 ];
 
 export function withProductJsonContract(summary, {
@@ -69,9 +70,17 @@ export function compactRunState(runState) {
     verifierStatus: runState.verifierStatus,
     safetyMode: runState.safetyMode,
     projectWrites: runState.projectWrites,
+    mainWorktreeWrites: runState.mainWorktreeWrites,
+    workspaceWrites: runState.workspaceWrites,
     runtimeWrites: runState.runtimeWrites,
     externalCalls: runState.externalCalls,
     destructiveWrites: runState.destructiveWrites,
+    writeBoundary: runState.writeBoundary,
+    executionPlanId: runState.executionPlanId,
+    executionPlanArtifactPath: runState.executionPlanArtifactPath,
+    plannedRunId: runState.plannedRunId,
+    confirmationCommand: runState.confirmationCommand,
+    requiresGate: runState.requiresGate,
     routeDecision: cloneStructuredValue(runState.routeDecision),
     matchedSignals: cloneStringArray(runState.matchedSignals),
     workflowMode: runState.workflowMode,
@@ -121,6 +130,8 @@ function buildSafety(summary) {
   return stripUndefined({
     mode: summary.safetyMode,
     projectWrites: summary.projectWrites,
+    mainWorktreeWrites: summary.mainWorktreeWrites,
+    workspaceWrites: summary.workspaceWrites,
     runtimeWrites: summary.runtimeWrites,
     externalCalls: summary.externalCalls,
     destructiveWrites: summary.destructiveWrites ?? false

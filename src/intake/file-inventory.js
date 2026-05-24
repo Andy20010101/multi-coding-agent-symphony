@@ -1,8 +1,9 @@
 import { open, readdir, readFile, stat } from 'node:fs/promises';
-import { basename, dirname, extname, join, relative, sep } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 
 export const INTAKE_IGNORED_ROOTS = [
   '.git',
+  '.symphony',
   'node_modules',
   '.pnpm-store',
   'tmp',
@@ -52,11 +53,15 @@ const TEXT_EXTENSIONS = new Set([
 
 export async function collectFileInventory({
   projectDir,
-  limits = DEFAULT_INTAKE_LIMITS
+  limits = DEFAULT_INTAKE_LIMITS,
+  ignoredPaths = []
 }) {
   const files = [];
   const directories = new Set();
-  const ignoredRoots = [...INTAKE_IGNORED_ROOTS];
+  const ignoredRoots = [...new Set([
+    ...INTAKE_IGNORED_ROOTS,
+    ...normalizeInventoryIgnoredPaths({ projectDir, ignoredPaths })
+  ])];
   const normalizedLimits = {
     ...DEFAULT_INTAKE_LIMITS,
     ...limits
@@ -88,7 +93,7 @@ export async function collectFileInventory({
       const absolutePath = join(directory, entry.name);
       const relativePath = normalizeRelativePath(relative(projectDir, absolutePath));
 
-      if (shouldIgnore(relativePath)) {
+      if (shouldIgnore(relativePath, ignoredRoots)) {
         continue;
       }
 
@@ -154,8 +159,16 @@ export function normalizeRelativePath(value) {
   return value.split(sep).join('/');
 }
 
-function shouldIgnore(relativePath) {
-  return INTAKE_IGNORED_ROOTS.some((root) => relativePath === root || relativePath.startsWith(`${root}/`));
+function normalizeInventoryIgnoredPaths({ projectDir, ignoredPaths }) {
+  return ignoredPaths
+    .filter((path) => typeof path === 'string' && path.trim() !== '')
+    .map((path) => normalizeRelativePath(relative(projectDir, resolve(projectDir, path))))
+    .filter((path) => path !== '' && !path.startsWith('..') && path !== '..')
+    .sort();
+}
+
+function shouldIgnore(relativePath, ignoredRoots = INTAKE_IGNORED_ROOTS) {
+  return ignoredRoots.some((root) => relativePath === root || relativePath.startsWith(`${root}/`));
 }
 
 function isDocumentationFile(file) {

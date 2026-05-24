@@ -403,7 +403,7 @@ async function runNextWorkflow({ args, adapterFactory, env }) {
       ...workflowOptions,
       env
     }),
-    materializeWorkspaces: workflowOptions.executionMode === 'real'
+    materializeWorkspaces: workflowOptions.executionMode === 'real' || workflowOptions.materializeWorkspaces
   });
   const result = await orchestrator.runNextTask({
     commandSequence: readOptionalOption(args, '--sequence') ?? 'standard',
@@ -456,7 +456,7 @@ async function runTaskFileWorkflow({ args, adapterFactory, env }) {
       ...workflowOptions,
       env
     }),
-    materializeWorkspaces: workflowOptions.executionMode === 'real'
+    materializeWorkspaces: workflowOptions.executionMode === 'real' || workflowOptions.materializeWorkspaces
   });
   const result = await orchestrator.runTaskWorkflow({
     taskSpec,
@@ -500,7 +500,7 @@ async function runHarnessTaskPacketWorkflow({ args, adapterFactory, env }) {
     const orchestrator = await buildWorkflowRuntime({
       paths,
       policyEngine: new PolicyEngine(harnessPolicy.config),
-      materializeWorkspaces: workflowOptions.executionMode === 'real',
+      materializeWorkspaces: workflowOptions.executionMode === 'real' || workflowOptions.materializeWorkspaces,
       adapterFactory: () => adapterFactory({
         taskPacket,
         checkCommands: expectedChecks,
@@ -656,7 +656,8 @@ function resolveWorkflowOptions(args) {
   return {
     executionMode,
     adapterId,
-    timeoutMs: readOptionalPositiveInteger(args, '--timeout-ms')
+    timeoutMs: readOptionalPositiveInteger(args, '--timeout-ms'),
+    materializeWorkspaces: args.includes('--materialize-workspaces')
   };
 }
 

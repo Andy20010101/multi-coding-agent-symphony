@@ -917,6 +917,393 @@ describe('v8 prompt-driven symphony CLI', () => {
     }
   });
 
+  it('plans v11 controlled write execution without starting adapters', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v11-plan-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, 'state dir');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const planOutput = createOutput();
+      const blockedMcasRunner = async () => {
+        throw new Error('planning must not invoke the kernel workflow');
+      };
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--work-dir',
+          join(root, 'work'),
+          '--write',
+          '--json',
+          'inspect README'
+        ],
+        stdout: planOutput.stdout,
+        stderr: planOutput.stderr,
+        mcasRunner: blockedMcasRunner
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(planOutput.stderrText(), '');
+
+      const planned = JSON.parse(planOutput.stdoutText());
+
+      assert.equal(planned.status, 'planned');
+      assert.equal(planned.verifierStatus, 'not-run');
+      assert.equal(planned.safetyMode, 'write');
+      assert.equal(planned.projectWrites, true);
+      assert.equal(planned.mainWorktreeWrites, false);
+      assert.equal(planned.workspaceWrites, true);
+      assert.equal(planned.writeBoundary, 'isolated-workspace');
+      assert.equal(planned.executionPlanId, planned.runId);
+      assert.match(planned.nextAction, new RegExp(`symphony do --confirm-plan ${planned.executionPlanId}`, 'u'));
+      assert.equal(planned.nextAction.includes(`--state-dir '${stateDir}'`), true);
+      assert.equal(existsSync(planned.executionPlanArtifactPath), true);
+      assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n');
+
+      const plan = JSON.parse(await readFile(planned.executionPlanArtifactPath, 'utf8'));
+
+      assert.equal(plan.contractName, 'symphony.execution-plan');
+      assert.equal(plan.planId, planned.executionPlanId);
+      assert.equal(plan.prompt, 'inspect README');
+      assert.equal(plan.projectRoot, root);
+      assert.equal(plan.mainWorktreeWrites, false);
+      assert.equal(plan.workspaceWrites, true);
+      assert.equal(plan.confirmationCommand, planned.nextAction);
+
+      const statusOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['status', '--state-dir', stateDir, '--json'],
+        stdout: statusOutput.stdout,
+        stderr: statusOutput.stderr
+      });
+
+      const status = JSON.parse(statusOutput.stdoutText());
+
+      assert.equal(status.status, 'planned');
+      assert.equal(status.executionPlanId, planned.executionPlanId);
+      assert.equal(status.executionPlanArtifactPath, planned.executionPlanArtifactPath);
+
+      const diagnoseOutput = createOutput();
+      const diagnoseExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--json'],
+        stdout: diagnoseOutput.stdout,
+        stderr: diagnoseOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      assert.equal(diagnoseExitCode, 0);
+      assert.equal(diagnoseOutput.stderrText(), '');
+
+      const diagnostics = JSON.parse(diagnoseOutput.stdoutText());
+
+      assert.equal(diagnostics.snapshot.latestRun.status, 'planned');
+      assert.equal(diagnostics.snapshot.latestRun.executionPlanId, planned.executionPlanId);
+      assert.equal(
+        diagnostics.snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'execution-plan'),
+        true
+      );
+
+      const humanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--work-dir',
+          join(root, 'work-human'),
+          '--write',
+          'inspect README'
+        ],
+        stdout: humanOutput.stdout,
+        stderr: humanOutput.stderr,
+        mcasRunner: blockedMcasRunner
+      });
+
+      assert.match(humanOutput.stdoutText(), /Status: planned/u);
+      assert.match(humanOutput.stdoutText(), /Execution plan:/u);
+      assert.match(humanOutput.stdoutText(), /Next: symphony do --confirm-plan/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('confirms v11 execution plans through the frozen plan', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v11-confirm-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const planOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--work-dir',
+          join(root, 'work'),
+          '--write',
+          '--json',
+          'inspect README'
+        ],
+        stdout: planOutput.stdout,
+        stderr: planOutput.stderr,
+        mcasRunner: async () => {
+          throw new Error('planning must not invoke the kernel workflow');
+        }
+      });
+
+      const planned = JSON.parse(planOutput.stdoutText());
+      const confirmOutput = createOutput();
+      const harnessCalls = [];
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--state-dir',
+          stateDir,
+          '--confirm-plan',
+          planned.executionPlanId,
+          '--json'
+        ],
+        stdout: confirmOutput.stdout,
+        stderr: confirmOutput.stderr,
+        mcasRunner: async (invocation) => fakeControlledHarnessRunner(invocation, harnessCalls)
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(confirmOutput.stderrText(), '');
+      assert.equal(harnessCalls.length, 1);
+      assert.equal(harnessCalls[0].includes('--materialize-workspaces'), true);
+      assert.equal(harnessCalls[0].includes('--real'), false);
+
+      const confirmed = JSON.parse(confirmOutput.stdoutText());
+
+      assert.equal(confirmed.status, 'passed');
+      assert.equal(confirmed.plannedRunId, planned.executionPlanId);
+      assert.equal(confirmed.executionPlanId, planned.executionPlanId);
+      assert.equal(confirmed.executionPlanArtifactPath, planned.executionPlanArtifactPath);
+      assert.equal(confirmed.safetyMode, 'write');
+      assert.equal(confirmed.projectWrites, true);
+      assert.equal(confirmed.mainWorktreeWrites, false);
+      assert.equal(confirmed.workspaceWrites, true);
+      assert.equal(confirmed.externalCalls, false);
+      assert.equal(existsSync(confirmed.evidenceArtifactPath), true);
+      assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n');
+
+      const snapshotOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['console', '--snapshot', '--state-dir', stateDir, '--json'],
+        stdout: snapshotOutput.stdout,
+        stderr: snapshotOutput.stderr
+      });
+
+      const snapshot = JSON.parse(snapshotOutput.stdoutText());
+
+      assert.equal(snapshot.latestRun.executionPlanId, planned.executionPlanId);
+      assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'execution-plan'), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid, stale, and ungated v11 plan confirmations before adapters start', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v11-confirm-reject-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const planOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--write',
+          '--real',
+          'codex',
+          '--json',
+          'inspect README'
+        ],
+        stdout: planOutput.stdout,
+        stderr: planOutput.stderr,
+        mcasRunner: async () => {
+          throw new Error('planning must not invoke the kernel workflow');
+        }
+      });
+
+      const planned = JSON.parse(planOutput.stdoutText());
+
+      assert.equal(planned.status, 'planned');
+      assert.equal(planned.externalCalls, true);
+      assert.equal(planned.requiresGate, 'MCAS_RUN_REAL_CODEX');
+
+      const calls = [];
+      const blockedMcasRunner = async (invocation) => {
+        calls.push(invocation.argv);
+        throw new Error('confirmation should fail before the kernel workflow');
+      };
+
+      for (const argv of [
+        ['do', '--state-dir', stateDir, '--confirm-plan', '../bad', '--json'],
+        ['do', '--state-dir', stateDir, '--confirm-plan', 'missing-plan', '--json'],
+        ['do', '--state-dir', stateDir, '--confirm-plan', planned.executionPlanId, '--json', 'inspect README']
+      ]) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv,
+          stdout: output.stdout,
+          stderr: output.stderr,
+          mcasRunner: blockedMcasRunner,
+          env: {}
+        });
+
+        assert.equal(exitCode, 64);
+        assert.match(JSON.parse(output.stderrText()).message, /plan|confirm/u);
+      }
+
+      const ungatedOutput = createOutput();
+      const ungatedExitCode = await runSymphonyCli({
+        argv: ['do', '--state-dir', stateDir, '--confirm-plan', planned.executionPlanId, '--json'],
+        stdout: ungatedOutput.stdout,
+        stderr: ungatedOutput.stderr,
+        mcasRunner: blockedMcasRunner,
+        env: {}
+      });
+
+      assert.equal(ungatedExitCode, 64);
+      assert.match(JSON.parse(ungatedOutput.stderrText()).message, /MCAS_RUN_REAL_CODEX/u);
+
+      const tamperedPlan = JSON.parse(await readFile(planned.executionPlanArtifactPath, 'utf8'));
+
+      tamperedPlan.externalCalls = false;
+      tamperedPlan.requiresGate = null;
+      tamperedPlan.workspaceWrites = false;
+      await writeFile(planned.executionPlanArtifactPath, `${JSON.stringify(tamperedPlan, null, 2)}\n`, 'utf8');
+
+      const tamperedOutput = createOutput();
+      const tamperedExitCode = await runSymphonyCli({
+        argv: ['do', '--state-dir', stateDir, '--confirm-plan', planned.executionPlanId, '--json'],
+        stdout: tamperedOutput.stdout,
+        stderr: tamperedOutput.stderr,
+        mcasRunner: blockedMcasRunner,
+        env: { MCAS_RUN_REAL_CODEX: '1' }
+      });
+
+      assert.equal(tamperedExitCode, 64);
+      assert.match(JSON.parse(tamperedOutput.stderrText()).message, /execution plan/u);
+
+      const dryPlanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--write',
+          '--json',
+          'inspect README'
+        ],
+        stdout: dryPlanOutput.stdout,
+        stderr: dryPlanOutput.stderr,
+        mcasRunner: async () => {
+          throw new Error('planning must not invoke the kernel workflow');
+        }
+      });
+
+      const dryPlan = JSON.parse(dryPlanOutput.stdoutText());
+
+      await writeFile(join(root, 'tests', 'fixture.test.js'), 'export const ok = false;\n', 'utf8');
+
+      const staleOutput = createOutput();
+      const staleExitCode = await runSymphonyCli({
+        argv: ['do', '--state-dir', stateDir, '--confirm-plan', dryPlan.executionPlanId, '--json'],
+        stdout: staleOutput.stdout,
+        stderr: staleOutput.stderr,
+        mcasRunner: blockedMcasRunner,
+        env: {}
+      });
+
+      assert.equal(staleExitCode, 64);
+      assert.match(JSON.parse(staleOutput.stderrText()).message, /stale|fingerprint/u);
+      assert.deepEqual(calls, []);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('serves a read-only local console snapshot and API from state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v8-console-'));
     let server;
@@ -1230,6 +1617,189 @@ describe('v8 prompt-driven symphony CLI', () => {
         await closeServer(server);
       }
 
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports v10 controlled diagnostics as JSON, text, and static escaped HTML', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v10-diagnose-'));
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const runsDir = join(stateDir, 'runs');
+      const artifactDir = join(root, 'artifacts');
+      const availableArtifactPath = join(artifactDir, 'available.json');
+      const missingArtifactPath = join(artifactDir, 'missing.json');
+      const unsafeCommand = 'symphony verify <script>alert(1)</script>';
+      const runStates = [
+        diagnosticRunState({
+          runId: 'diagnose-older',
+          command: 'symphony scan',
+          semanticCommand: 'scan',
+          intent: 'scan-project',
+          status: 'passed',
+          verifierStatus: 'passed',
+          safetyMode: 'read-only',
+          executionMode: 'dry-run',
+          contextArtifactPath: availableArtifactPath,
+          updatedAt: '2026-05-23T01:00:00.000Z'
+        }),
+        diagnosticRunState({
+          runId: 'diagnose-latest',
+          command: unsafeCommand,
+          semanticCommand: 'verify',
+          intent: 'verify',
+          status: 'failed',
+          verifierStatus: 'failed',
+          safetyMode: 'read-only',
+          executionMode: 'dry-run',
+          contextArtifactPath: missingArtifactPath,
+          nextAction: 'symphony artifacts diagnose-latest',
+          updatedAt: '2026-05-23T01:01:00.000Z'
+        })
+      ];
+
+      await mkdir(runsDir, { recursive: true });
+      await mkdir(artifactDir, { recursive: true });
+      await writeFile(availableArtifactPath, '{"ok":true}\n', 'utf8');
+
+      for (const runState of runStates) {
+        await writeFile(join(runsDir, `${runState.runId}.json`), JSON.stringify(runState, null, 2), 'utf8');
+      }
+
+      await writeFile(join(runsDir, 'latest.json'), JSON.stringify(runStates.at(-1), null, 2), 'utf8');
+
+      const jsonOutput = createOutput();
+      const jsonExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--json'],
+        stdout: jsonOutput.stdout,
+        stderr: jsonOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      assert.equal(jsonExitCode, 0);
+      assert.equal(jsonOutput.stderrText(), '');
+
+      const report = JSON.parse(jsonOutput.stdoutText());
+
+      assert.equal(report.contractName, 'symphony.diagnostics-report');
+      assert.equal(report.contractVersion, '1');
+      assert.equal(report.status, 'attention');
+      assert.equal(report.snapshot.contractName, 'symphony.console-snapshot');
+      assert.equal(report.snapshot.runStats.total, 2);
+      assert.equal(report.snapshot.runStats.artifacts.status, 'missing');
+      assert.equal(report.readiness.contractName, 'symphony.console-readiness');
+      assert.equal(report.readiness.tools.packageManager.status, 'unavailable');
+      assert.equal(report.readiness.tools.git.dirty, true);
+      assert.equal(report.commands.mode, 'copy-only');
+      assert.equal(report.commands.items.every((command) => command.mode === 'copy-only'), true);
+      assert.deepEqual(report.commands.groups.map((group) => group.group), [
+        'Inspect',
+        'Verify',
+        'Artifacts',
+        'Real-agent gates'
+      ]);
+      assert.equal(report.risks.items.some((risk) => risk.category === 'dirty_git'), true);
+      assert.equal(report.risks.items.some((risk) => risk.id === 'missing_tool:pnpm'), true);
+      assert.equal(report.risks.items.some((risk) => risk.id === 'missing_tool:codex'), true);
+      assert.equal(report.risks.items.some((risk) => risk.category === 'verifier_failed'), true);
+      assert.equal(report.risks.items.some((risk) => risk.category === 'missing_artifacts'), true);
+      assert.equal(JSON.stringify(report).includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+
+      const textOutput = createOutput();
+      const textExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir],
+        stdout: textOutput.stdout,
+        stderr: textOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      assert.equal(textExitCode, 0);
+      assert.match(textOutput.stdoutText(), /Status: attention/u);
+      assert.match(textOutput.stdoutText(), /Latest run: diagnose-latest/u);
+      assert.match(textOutput.stdoutText(), /Risks:/u);
+      assert.match(textOutput.stdoutText(), /Commands:/u);
+      assert.equal(textOutput.stdoutText().includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+
+      const htmlOutput = createOutput();
+      const htmlExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--html'],
+        stdout: htmlOutput.stdout,
+        stderr: htmlOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      assert.equal(htmlExitCode, 0);
+
+      const html = htmlOutput.stdoutText();
+
+      assert.match(html, /^<!doctype html>/u);
+      assert.match(html, /<title>Symphony Diagnostics Report<\/title>/u);
+      assert.match(html, /Copy-Only Commands/u);
+      assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/u);
+      assert.equal(/<script/i.test(html), false);
+      assert.equal(/\s(?:src|href)=["']https?:\/\//iu.test(html), false);
+      assert.equal(html.includes('ghp_abcdefghijklmnopqrstuvwxyz123456'), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('reports no-runs diagnostics and rejects conflicting diagnose output modes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v10-diagnose-empty-'));
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const jsonOutput = createOutput();
+      const jsonExitCode = await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--json'],
+        stdout: jsonOutput.stdout,
+        stderr: jsonOutput.stderr,
+        runner: new MissingReadinessRunner(),
+        env: {}
+      });
+
+      assert.equal(jsonExitCode, 0);
+
+      const report = JSON.parse(jsonOutput.stdoutText());
+
+      assert.equal(report.status, 'no-runs');
+      assert.equal(report.action.next, 'symphony scan');
+      assert.equal(report.snapshot.recommendedCommands.some((command) => command.command === 'symphony scan'), true);
+      assert.equal(report.risks.items.some((risk) => risk.id === 'missing_tool:pnpm'), true);
+
+      const textOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir],
+        stdout: textOutput.stdout,
+        stderr: textOutput.stderr,
+        runner: new MissingReadinessRunner(),
+        env: {}
+      });
+
+      assert.match(textOutput.stdoutText(), /Status: no-runs/u);
+      assert.match(textOutput.stdoutText(), /Latest run: none/u);
+      assert.match(textOutput.stdoutText(), /Next: symphony scan/u);
+
+      for (const argv of [
+        ['diagnose', '--state-dir', stateDir, '--json', '--html'],
+        ['diagnose', '--state-dir', stateDir, '--bogus']
+      ]) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv,
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 64);
+        assert.match(JSON.parse(output.stderrText()).message, /diagnose/u);
+      }
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
@@ -1788,6 +2358,64 @@ class ConsoleReadinessRunner {
   }
 }
 
+class DiagnosticReadinessRunner {
+  async run({ executable, args }) {
+    if (executable.endsWith('pnpm') && args[0] === '--version') {
+      const error = new Error(`spawn ${executable} ENOENT`);
+      error.code = 'ENOENT';
+      throw error;
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --is-inside-work-tree') {
+      return commandResult({ stdout: 'true\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'branch --show-current') {
+      return commandResult({ stdout: 'diagnostics\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short HEAD') {
+      return commandResult({ stdout: 'def5678\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'status --porcelain') {
+      return commandResult({ stdout: ' M README.md\n?? tmp.txt\n' });
+    }
+
+    if (executable === 'gh' && args.join(' ') === 'auth status') {
+      return commandResult({
+        stderr: 'Logged in to github.com account Andy20010101\nToken: ghp_abcdefghijklmnopqrstuvwxyz123456\n'
+      });
+    }
+
+    if (executable === 'gh' && args[0] === 'run' && args[1] === 'list') {
+      return commandResult({
+        stdout: `${JSON.stringify([{
+          databaseId: 321,
+          workflowName: 'CI',
+          displayTitle: 'diagnostics',
+          status: 'completed',
+          conclusion: 'success',
+          headBranch: 'diagnostics',
+          headSha: 'def5678',
+          createdAt: '2026-05-23T01:00:00Z'
+        }])}\n`
+      });
+    }
+
+    if (['codex', 'claude', 'kiro-cli'].includes(executable)) {
+      const error = new Error(`spawn ${executable} ENOENT`);
+      error.code = 'ENOENT';
+      throw error;
+    }
+
+    return commandResult({
+      exitCode: 1,
+      stderr: `unexpected command: ${executable} ${args.join(' ')}`
+    });
+  }
+}
+
 class MissingReadinessRunner {
   async run({ executable }) {
     const error = new Error(`spawn ${executable} ENOENT`);
@@ -1857,6 +2485,47 @@ async function fakePassingHarnessRunner({ argv, stdout }) {
     runId,
     workflowMode: 'qa-swarm',
     executionMode: 'real',
+    adapterId: 'codex',
+    taskId,
+    artifactDirectory,
+    verifierStatus: 'passed',
+    commands: [{
+      artifactId
+    }]
+  }, null, 2)}\n`);
+
+  return 0;
+}
+
+async function fakeControlledHarnessRunner({ argv, stdout }, calls) {
+  calls.push([...argv]);
+  assert.equal(argv[0], 'harness');
+  assert.equal(argv[1], 'run-taskpacket');
+
+  const runId = optionValue(argv, '--run-id');
+  const runtimeDir = optionValue(argv, '--runtime-dir');
+  const artifactDirectory = join(runtimeDir, 'artifacts');
+  const taskId = `symphony.work.${runId}`;
+  const artifactId = 'implement-evidence';
+
+  await mkdir(join(artifactDirectory, taskId), { recursive: true });
+  await writeFile(join(artifactDirectory, taskId, `${artifactId}.json`), `${JSON.stringify({
+    version: '1',
+    changedFiles: ['isolated-workspace-output.txt'],
+    checks: [{
+      command: 'controlled dry-run harness',
+      exitCode: 0
+    }]
+  }, null, 2)}\n`, 'utf8');
+
+  stdout.write(`${JSON.stringify({
+    version: '1',
+    command: 'harness run-taskpacket',
+    status: 'passed',
+    exitCode: 0,
+    runId,
+    workflowMode: 'writer-reviewer',
+    executionMode: 'dry-run',
     adapterId: 'codex',
     taskId,
     artifactDirectory,
