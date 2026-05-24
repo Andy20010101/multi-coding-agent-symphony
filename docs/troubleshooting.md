@@ -21,11 +21,11 @@ Symptom: `symphony doctor` is not found after checkout.
 Check:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v7/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh | sh
 symphony doctor
 ```
 
-The installer writes shims to `~/.local/bin` by default. If the curl command returns `404`, confirm the repository is public and the `v7` tag exists. If `symphony` still is not found, add `~/.local/bin` to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`.
+The installer writes shims to `~/.local/bin` by default. If the curl command returns `404`, confirm the repository is public and the requested tag exists. If `symphony` still is not found, add `~/.local/bin` to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`. The `v8` tag remains the stable installer baseline; use `MCAS_INSTALL_REF=v11` after the v11 tag is pushed when you intentionally want the latest controlled diagnostics and execution-plan release.
 
 Development fallback:
 
