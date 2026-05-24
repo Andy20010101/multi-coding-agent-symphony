@@ -881,6 +881,8 @@ function summarizeCommandRun(commandRun) {
     adapterId: commandRun.adapterId,
     ...(commandRun.writeSet ? { writeSet: commandRun.writeSet } : {}),
     workspaceId: commandRun.workspace.workspaceId,
+    workspacePath: commandRun.workspace.path,
+    workspaceManifestPath: commandRun.workspace.manifestPath,
     ...(commandRun.workspace.sourceWorkspaceId ? { sourceWorkspaceId: commandRun.workspace.sourceWorkspaceId } : {}),
     artifactId: commandRun.artifactId,
     ...(commandRun.patchArtifactId ? { patchArtifactId: commandRun.patchArtifactId } : {}),

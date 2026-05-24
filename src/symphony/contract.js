@@ -14,7 +14,11 @@ const ARTIFACT_FIELDS = [
   ['proof', 'proofArtifactPath'],
   ['scaffold-plan', 'scaffoldPlanArtifactPath'],
   ['scaffold-manifest', 'scaffoldManifestArtifactPath'],
-  ['execution-plan', 'executionPlanArtifactPath']
+  ['execution-plan', 'executionPlanArtifactPath'],
+  ['adoption-plan', 'adoptionPlanArtifactPath'],
+  ['adoption-patch', 'patchArtifactPath'],
+  ['adoption-journal', 'adoptionJournalArtifactPath'],
+  ['workspace-manifest', 'sourceWorkspaceManifestPath']
 ];
 
 export function withProductJsonContract(summary, {
@@ -79,6 +83,25 @@ export function compactRunState(runState) {
     executionPlanId: runState.executionPlanId,
     executionPlanArtifactPath: runState.executionPlanArtifactPath,
     plannedRunId: runState.plannedRunId,
+    plannedAdoptionRunId: runState.plannedAdoptionRunId,
+    adoptionPlanId: runState.adoptionPlanId,
+    adoptionPlanArtifactPath: runState.adoptionPlanArtifactPath,
+    sourceRunId: runState.sourceRunId,
+    sourceRunArtifactPath: runState.sourceRunArtifactPath,
+    sourceWorkspacePath: runState.sourceWorkspacePath,
+    sourceWorkspaceManifestPath: runState.sourceWorkspaceManifestPath,
+    sourceWorkspaceFingerprint: runState.sourceWorkspaceFingerprint,
+    sourceEvidenceArtifactPath: runState.sourceEvidenceArtifactPath,
+    sourceVerifierStatus: runState.sourceVerifierStatus,
+    patchArtifactPath: runState.patchArtifactPath,
+    patchHash: runState.patchHash,
+    adoptionJournalArtifactPath: runState.adoptionJournalArtifactPath,
+    fileOperations: cloneStructuredValue(runState.fileOperations),
+    unsupportedChanges: cloneStructuredValue(runState.unsupportedChanges),
+    failurePhase: runState.failurePhase,
+    failureMessage: runState.failureMessage,
+    gitHead: runState.gitHead,
+    gitStatusFingerprint: runState.gitStatusFingerprint,
     confirmationCommand: runState.confirmationCommand,
     requiresGate: runState.requiresGate,
     routeDecision: cloneStructuredValue(runState.routeDecision),

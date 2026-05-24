@@ -5,6 +5,8 @@ import { NodeProcessRunner } from '../process-runner.js';
 import { redactSecrets } from '../redaction.js';
 import { REAL_CLI_DOCTOR_ADAPTERS } from '../real-cli-doctor.js';
 import {
+  listAdoptionJournals,
+  listAdoptionPlans,
   listRunStates,
   readLatestContext,
   readLatestRun,
@@ -27,10 +29,12 @@ export async function buildConsoleSnapshot({
   stateDir = '.symphony',
   generatedAt = new Date().toISOString()
 } = {}) {
-  const [latestContext, latestRun, runs] = await Promise.all([
+  const [latestContext, latestRun, runs, adoptionPlans, adoptionJournals] = await Promise.all([
     readLatestContext({ stateDir }),
     readLatestRun({ stateDir }),
-    listRunStates({ stateDir })
+    listRunStates({ stateDir }),
+    listAdoptionPlans({ stateDir }),
+    listAdoptionJournals({ stateDir })
   ]);
 
   const compactRuns = await decorateConsoleRuns(runs.map((run) => compactRunState(run)));
@@ -55,6 +59,11 @@ export async function buildConsoleSnapshot({
     latestContext: compactContext(latestContext),
     latestRun: compactLatestRun,
     runs: compactRuns,
+    adoptionPlans: compactAdoptionPlans(adoptionPlans),
+    adoptionJournals: compactAdoptionJournals({
+      journals: adoptionJournals,
+      stateDir
+    }),
     runStats: buildRunStats(compactRuns),
     riskSummary: buildRunRiskSummary(compactRuns),
     recommendedCommands,
@@ -158,7 +167,11 @@ export async function buildConsoleDiagnosticsReport({
   ]);
   const risks = combineRiskSummaries([
     snapshot.riskSummary,
-    readiness.riskSummary
+    readiness.riskSummary,
+    buildAdoptionDiagnosticsRiskSummary({
+      snapshot,
+      readiness
+    })
   ]);
   const commands = buildDiagnosticsCommands({
     snapshot,
@@ -954,6 +967,41 @@ function compactContext(context) {
   });
 }
 
+function compactAdoptionPlans(plans) {
+  return plans.map((plan) => stripUndefined({
+    adoptionPlanId: plan.adoptionId,
+    sourceRunId: plan.sourceRunId,
+    executionPlanId: plan.executionPlanId,
+    plannedRunId: plan.plannedRunId,
+    status: 'adoption-planned',
+    patchArtifactPath: plan.patchArtifactPath,
+    patchHash: plan.patchHash,
+    changedFiles: Array.isArray(plan.changedFiles) ? [...plan.changedFiles] : undefined,
+    fileOperations: plan.fileOperations === undefined ? undefined : structuredClone(plan.fileOperations),
+    confirmationCommand: plan.confirmationCommand,
+    createdAt: plan.createdAt
+  }));
+}
+
+function compactAdoptionJournals({ journals, stateDir }) {
+  return journals.map((journal) => stripUndefined({
+    adoptionPlanId: journal.adoptionPlanId,
+    confirmationRunId: journal.confirmationRunId,
+    sourceRunId: journal.sourceRunId,
+    executionPlanId: journal.executionPlanId,
+    status: journal.status,
+    patchArtifactPath: journal.patchArtifactPath,
+    patchHash: journal.patchHash,
+    changedFiles: Array.isArray(journal.changedFiles) ? [...journal.changedFiles] : undefined,
+    fileOperations: journal.fileOperations === undefined ? undefined : structuredClone(journal.fileOperations),
+    beforeFiles: journal.beforeFiles === undefined ? undefined : structuredClone(journal.beforeFiles),
+    adoptionJournalArtifactPath: journal.adoptionPlanId
+      ? `${stateDir}/adoptions/${journal.adoptionPlanId}-journal.json`
+      : undefined,
+    createdAt: journal.createdAt
+  }));
+}
+
 function decorateConsoleRun(run) {
   if (run === null) {
     return null;
@@ -1168,6 +1216,133 @@ function buildRunRiskSummary(runs) {
         command: run.runId ? `symphony artifacts ${run.runId}` : 'symphony artifacts'
       }));
     }
+
+    if (run.status === 'adoption-planned') {
+      items.push(runRisk({
+        run,
+        id: 'pending_adoption',
+        severity: 'medium',
+        title: 'Pending adoption',
+        detail: `${run.runId} has a frozen adoption plan waiting for confirmation.`,
+        command: run.confirmationCommand ?? 'symphony status'
+      }));
+    }
+
+    if (run.failurePhase === 'adoption-planning' && Array.isArray(run.unsupportedChanges) && run.unsupportedChanges.length > 0) {
+      items.push(runRisk({
+        run,
+        id: 'unsupported_adoption_changes',
+        severity: 'high',
+        title: 'Unsupported adoption changes',
+        detail: `${run.unsupportedChanges.length} unsupported source change(s) blocked adoption planning.`
+      }));
+    }
+
+    if (run.failurePhase === 'adoption-confirmation-preflight' && /stale|fingerprint|HEAD/u.test(run.failureMessage ?? '')) {
+      items.push(runRisk({
+        run,
+        id: 'stale_adoption',
+        severity: 'high',
+        title: 'Stale adoption',
+        detail: run.failureMessage ?? 'Adoption confirmation preflight detected stale state.'
+      }));
+    }
+
+    if (run.status === 'applying'
+      && run.adoptionPlanId !== undefined
+      && Array.isArray(run.pipeline)
+      && run.pipeline.includes('adopt-confirm')) {
+      items.push(runRisk({
+        run,
+        id: 'adoption_apply_in_progress',
+        severity: 'high',
+        title: 'Adoption apply in progress',
+        detail: `${run.runId} reached the main-worktree apply phase.`,
+        command: `symphony adopt --inspect ${run.adoptionPlanId} --json`
+      }));
+    }
+
+    if (run.failurePhase === 'post-apply-evidence') {
+      items.push(runRisk({
+        run,
+        id: 'adoption_post_apply_failed',
+        severity: 'high',
+        title: 'Adoption post-apply evidence failed',
+        detail: run.failureMessage ?? 'Patch application succeeded but evidence or final state persistence failed.',
+        command: `symphony adopt --inspect ${run.adoptionPlanId ?? ''} --json`.trim()
+      }));
+    }
+  }
+
+  return summarizeRiskItems(items);
+}
+
+function buildAdoptionDiagnosticsRiskSummary({ snapshot, readiness }) {
+  const items = [];
+  const pendingRuns = Array.isArray(snapshot.runs)
+    ? snapshot.runs.filter((run) => run.status === 'adoption-planned')
+    : [];
+  const staleRuns = Array.isArray(snapshot.runs)
+    ? snapshot.runs.filter((run) => run.failurePhase === 'adoption-confirmation-preflight'
+      && /stale|fingerprint|HEAD/u.test(run.failureMessage ?? ''))
+    : [];
+  const applyingRuns = Array.isArray(snapshot.runs)
+    ? snapshot.runs.filter((run) => run.status === 'applying'
+      && run.adoptionPlanId !== undefined
+      && Array.isArray(run.pipeline)
+      && run.pipeline.includes('adopt-confirm'))
+    : [];
+  const applyingJournals = Array.isArray(snapshot.adoptionJournals)
+    ? snapshot.adoptionJournals.filter((journal) => journal.status === 'applying')
+    : [];
+
+  if (pendingRuns.length > 0 && readiness.tools?.git?.dirty === true) {
+    items.push(riskItem({
+      id: 'dirty_worktree_blocks_adoption',
+      category: 'dirty_worktree_blocks_adoption',
+      severity: 'high',
+      title: 'Dirty worktree blocks adoption',
+      detail: `${pendingRuns.length} pending adoption plan(s) require a clean non-Symphony worktree before confirmation.`,
+      command: 'git status --short'
+    }));
+    items.push(riskItem({
+      id: 'adoption_dirty_file_details',
+      category: 'adoption_dirty_file_details',
+      severity: 'high',
+      title: 'Adoption dirty file details',
+      detail: `${pendingRuns.length} pending adoption plan(s) are blocked by ${readiness.tools.git.dirtyFilesCount ?? 0} dirty file(s).`,
+      command: 'git status --short',
+      dirtyPaths: readiness.tools.git.dirtyPaths,
+      dirtyPathCount: readiness.tools.git.dirtyFilesCount
+    }));
+  }
+
+  if (staleRuns.length > 0 && readiness.tools?.git?.dirty === true) {
+    items.push(riskItem({
+      id: 'adoption_dirty_file_details:stale',
+      category: 'adoption_dirty_file_details',
+      severity: 'high',
+      title: 'Adoption dirty file details',
+      detail: `${staleRuns.length} stale adoption confirmation run(s) are associated with ${readiness.tools.git.dirtyFilesCount ?? 0} dirty file(s).`,
+      command: 'git status --short',
+      dirtyPaths: readiness.tools.git.dirtyPaths,
+      dirtyPathCount: readiness.tools.git.dirtyFilesCount
+    }));
+  }
+
+  if (applyingRuns.length > 0 || applyingJournals.length > 0) {
+    items.push(riskItem({
+      id: 'adoption_apply_in_progress',
+      category: 'adoption_apply_in_progress',
+      severity: 'high',
+      title: 'Adoption apply in progress',
+      detail: `${applyingRuns.length} applying confirmation run(s), ${applyingJournals.length} applying journal(s).`,
+      command: applyingRuns[0]?.adoptionPlanId
+        ? `symphony adopt --inspect ${applyingRuns[0].adoptionPlanId} --json`
+        : applyingJournals[0]?.adoptionPlanId
+          ? `symphony adopt --inspect ${applyingJournals[0].adoptionPlanId} --json`
+        : 'symphony status'
+    }));
   }
 
   return summarizeRiskItems(items);
@@ -1637,7 +1812,8 @@ async function buildGitReadiness({ runner, cwd, timeoutMs }) {
       timeoutMs
     })
   ]);
-  const dirtyFilesCount = checkOutputLines(status).length;
+  const dirtyPaths = parseGitStatusDirtyPaths(status.stdout);
+  const dirtyFilesCount = dirtyPaths.length;
 
   return stripUndefined({
     status: 'available',
@@ -1645,6 +1821,7 @@ async function buildGitReadiness({ runner, cwd, timeoutMs }) {
     head: firstOutputLine(head) || undefined,
     dirty: dirtyFilesCount > 0,
     dirtyFilesCount,
+    dirtyPaths,
     command: 'git status --short'
   });
 }
@@ -1884,13 +2061,15 @@ function buildReadinessRiskSummary({ packageManager, git, github, realCli }) {
   return summarizeRiskItems(items);
 }
 
-function riskItem({ id, category, severity, title, detail, command, runId }) {
+function riskItem({ id, category, severity, title, detail, command, runId, dirtyPaths, dirtyPathCount }) {
   return stripUndefined({
     id,
     category,
     severity,
     title,
     detail,
+    dirtyPaths,
+    dirtyPathCount,
     command: commandRecommendation({
       id,
       label: title,
@@ -2031,6 +2210,23 @@ function checkOutputLines(check) {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '');
+}
+
+function parseGitStatusDirtyPaths(output) {
+  return [...new Set(String(output ?? '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line !== '')
+    .flatMap((line) => {
+      const pathPart = line.slice(3).trim();
+
+      if (pathPart.includes(' -> ')) {
+        return pathPart.split(' -> ').map((path) => path.trim()).filter(Boolean);
+      }
+
+      return pathPart === '' ? [] : [pathPart];
+    }))]
+    .sort();
 }
 
 function commandOutput(check) {
@@ -3151,6 +3347,11 @@ function renderConsoleHtml() {
             ['Execution', run.executionMode],
             ['Execution plan', run.executionPlanId],
             ['Planned run', run.plannedRunId],
+            ['Adoption plan', run.adoptionPlanId],
+            ['Source run', run.sourceRunId],
+            ['Patch', run.patchArtifactPath],
+            ['Patch hash', run.patchHash],
+            ['Journal', run.adoptionJournalArtifactPath],
             ['Confirm command', run.confirmationCommand],
             ['Created', run.createdAt],
             ['Updated', run.updatedAt]
@@ -3176,6 +3377,8 @@ function renderConsoleHtml() {
         ),
         detailSection('Changes',
           jsonBlock('Changed files', run.changedFiles),
+          jsonBlock('File operations', run.fileOperations),
+          jsonBlock('Unsupported adoption changes', run.unsupportedChanges),
           jsonBlock('Created files', run.createdFiles),
           jsonBlock('Scaffold plan', run.scaffoldPlan)
         )

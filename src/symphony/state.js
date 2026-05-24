@@ -24,13 +24,21 @@ const FINGERPRINT_LIMITS = {
   maxDepth: 16
 };
 
-export function symphonyStatePaths({ stateDir = '.symphony', runId, planId } = {}) {
+export function symphonyStatePaths({ stateDir = '.symphony', runId, planId, adoptionId } = {}) {
   return {
     stateDir,
     latestContextPath: join(stateDir, 'context', 'latest.json'),
     latestRunPath: join(stateDir, 'runs', 'latest.json'),
     ...(runId ? { runPath: join(stateDir, 'runs', `${runId}.json`) } : {}),
-    ...(planId ? { executionPlanPath: join(stateDir, 'plans', `${planId}.json`) } : {})
+    ...(planId ? { executionPlanPath: join(stateDir, 'plans', `${planId}.json`) } : {}),
+    ...(adoptionId
+      ? {
+          adoptionPlanPath: join(stateDir, 'adoptions', `${adoptionId}.json`),
+          adoptionPatchPath: join(stateDir, 'adoptions', `${adoptionId}.patch`),
+          adoptionEvidencePath: join(stateDir, 'adoptions', `${adoptionId}-evidence.json`),
+          adoptionJournalPath: join(stateDir, 'adoptions', `${adoptionId}-journal.json`)
+        }
+      : {})
   };
 }
 
@@ -126,6 +134,18 @@ export async function readExecutionPlan({ stateDir = '.symphony', planId } = {})
   return await readJsonIfExists(symphonyStatePaths({ stateDir, planId }).executionPlanPath);
 }
 
+export async function readAdoptionPlan({ stateDir = '.symphony', adoptionId } = {}) {
+  assertSafeRunId(adoptionId);
+
+  return await readJsonIfExists(symphonyStatePaths({ stateDir, adoptionId }).adoptionPlanPath);
+}
+
+export async function readAdoptionJournal({ stateDir = '.symphony', adoptionId } = {}) {
+  assertSafeRunId(adoptionId);
+
+  return await readJsonIfExists(symphonyStatePaths({ stateDir, adoptionId }).adoptionJournalPath);
+}
+
 export async function listRunStates({ stateDir = '.symphony' } = {}) {
   const runsDir = join(stateDir, 'runs');
   let entries;
@@ -155,6 +175,87 @@ export async function listRunStates({ stateDir = '.symphony' } = {}) {
   }
 
   return runStates.sort(compareRunStatesNewestFirst);
+}
+
+export async function listAdoptionPlans({ stateDir = '.symphony' } = {}) {
+  const adoptionDir = join(stateDir, 'adoptions');
+  let entries;
+
+  try {
+    entries = await readdir(adoptionDir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const plans = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile()
+      || !entry.name.endsWith('.json')
+      || entry.name.endsWith('-evidence.json')
+      || entry.name.endsWith('-journal.json')) {
+      continue;
+    }
+
+    const adoptionId = entry.name.slice(0, -'.json'.length);
+
+    try {
+      assertSafeRunId(adoptionId);
+    } catch {
+      continue;
+    }
+
+    const plan = await readJsonIfExists(join(adoptionDir, entry.name));
+
+    if (plan !== null) {
+      plans.push(plan);
+    }
+  }
+
+  return plans.sort(compareRunStatesNewestFirst);
+}
+
+export async function listAdoptionJournals({ stateDir = '.symphony' } = {}) {
+  const adoptionDir = join(stateDir, 'adoptions');
+  let entries;
+
+  try {
+    entries = await readdir(adoptionDir, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const journals = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('-journal.json')) {
+      continue;
+    }
+
+    const adoptionId = entry.name.slice(0, -'-journal.json'.length);
+
+    try {
+      assertSafeRunId(adoptionId);
+    } catch {
+      continue;
+    }
+
+    const journal = await readJsonIfExists(join(adoptionDir, entry.name));
+
+    if (journal !== null) {
+      journals.push(journal);
+    }
+  }
+
+  return journals.sort(compareRunStatesNewestFirst);
 }
 
 export async function writeLatestContext({ stateDir = '.symphony', pointer }) {
@@ -191,6 +292,16 @@ export async function writeExecutionPlan({ stateDir = '.symphony', plan }) {
   await atomicWriteJson(paths.executionPlanPath, plan);
 
   return paths.executionPlanPath;
+}
+
+export async function writeAdoptionPlan({ stateDir = '.symphony', plan }) {
+  assertSafeRunId(plan?.adoptionId);
+
+  const paths = symphonyStatePaths({ stateDir, adoptionId: plan.adoptionId });
+
+  await atomicWriteJson(paths.adoptionPlanPath, plan);
+
+  return paths.adoptionPlanPath;
 }
 
 export async function atomicWriteJson(path, value) {

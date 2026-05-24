@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { lstat, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ArtifactStore } from '../src/artifact-store.js';
@@ -28,11 +28,15 @@ import {
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
+  listRunStates,
+  readAdoptionPlan,
+  readAdoptionJournal,
   readExecutionPlan,
   readLatestContext,
   readLatestRun,
   readRunState,
   symphonyStatePaths,
+  writeAdoptionPlan,
   writeExecutionPlan,
   writeLatestContext,
   writeRunState
@@ -79,6 +83,7 @@ const KNOWN_COMMANDS = new Set([
   'continue',
   'console',
   'diagnose',
+  'adopt',
   'new'
 ]);
 let productRunSequence = 0;
@@ -241,6 +246,15 @@ export async function runSymphonyCli({
 
     if (command === 'diagnose') {
       return await runSymphonyDiagnose({
+        args: rest,
+        stdout,
+        runner: runner ?? new NodeProcessRunner(),
+        env
+      });
+    }
+
+    if (command === 'adopt') {
+      return await runSymphonyAdopt({
         args: rest,
         stdout,
         runner: runner ?? new NodeProcessRunner(),
@@ -919,6 +933,8 @@ async function executeProductWork({
     evidenceArtifactPath: legacy.summary.evidenceArtifactPath,
     harnessOutputPath: legacy.summary.harnessOutputPath,
     taskPacketPath: legacy.summary.taskPacketPath,
+    sourceWorkspacePath: legacy.summary.sourceWorkspacePath,
+    sourceWorkspaceManifestPath: legacy.summary.sourceWorkspaceManifestPath,
     changedFiles: legacy.summary.changedFiles,
     ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
     nextAction: 'symphony status'
@@ -1172,6 +1188,8 @@ async function executeConfirmedProductPlan({
     evidenceArtifactPath: legacy.summary.evidenceArtifactPath,
     harnessOutputPath: legacy.summary.harnessOutputPath,
     taskPacketPath: legacy.summary.taskPacketPath,
+    sourceWorkspacePath: legacy.summary.sourceWorkspacePath,
+    sourceWorkspaceManifestPath: legacy.summary.sourceWorkspaceManifestPath,
     changedFiles: legacy.summary.changedFiles,
     matchedSignals: plan.matchedSignals,
     routeDecision: plan.routeDecision,
@@ -1418,6 +1436,13 @@ async function runSymphonyStatus({ args, stdout, routeDecision }) {
         evidenceArtifactPath: latestRun.evidenceArtifactPath,
         executionPlanArtifactPath: latestRun.executionPlanArtifactPath,
         executionPlanId: latestRun.executionPlanId,
+        adoptionPlanArtifactPath: latestRun.adoptionPlanArtifactPath,
+        adoptionPlanId: latestRun.adoptionPlanId,
+        sourceRunId: latestRun.sourceRunId,
+        patchArtifactPath: latestRun.patchArtifactPath,
+        patchHash: latestRun.patchHash,
+        changedFiles: latestRun.changedFiles,
+        confirmationCommand: latestRun.confirmationCommand,
         harnessOutputPath: latestRun.harnessOutputPath,
         taskPacketPath: latestRun.taskPacketPath,
         nextAction: latestRun.nextAction ?? 'symphony artifacts',
@@ -1472,6 +1497,13 @@ async function runSymphonyArtifacts({ args, stdout, routeDecision }) {
         scaffoldManifestArtifactPath: runState.scaffoldManifestArtifactPath,
         executionPlanArtifactPath: runState.executionPlanArtifactPath,
         executionPlanId: runState.executionPlanId,
+        adoptionPlanArtifactPath: runState.adoptionPlanArtifactPath,
+        adoptionPlanId: runState.adoptionPlanId,
+        sourceRunId: runState.sourceRunId,
+        patchArtifactPath: runState.patchArtifactPath,
+        patchHash: runState.patchHash,
+        changedFiles: runState.changedFiles,
+        confirmationCommand: runState.confirmationCommand,
         nextAction: 'symphony status',
         ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {})
       };
@@ -1594,6 +1626,467 @@ async function runSymphonyDiagnose({ args, stdout, runner, env }) {
 
   stdout.write(renderDiagnosticsText(report));
   return EXIT_CODES.ok;
+}
+
+async function runSymphonyAdopt({ args, stdout, runner }) {
+  const options = parseAdoptArgs(args);
+  const result = options.mode === 'plan'
+    ? await executeAdoptionPlanning({ options, runner })
+    : options.mode === 'confirm'
+      ? await executeAdoptionConfirmation({ options, runner })
+      : await executeAdoptionInspection({ options });
+
+  writeProductOutput(stdout, result.summary, options.json);
+
+  return result.exitCode;
+}
+
+async function executeAdoptionPlanning({ options, runner }) {
+  const source = await loadAndValidateAdoptionSource({
+    stateDir: options.stateDir,
+    sourceRunId: options.sourceRunId
+  });
+  const projectFingerprintIgnoredPaths = normalizeIgnoredPathList({
+    projectRoot: source.projectRoot,
+    paths: [options.stateDir, source.executionPlan.workDir]
+  });
+  const gitHead = await readGitHead({
+    runner,
+    cwd: source.projectRoot
+  });
+  const gitStatusIgnoredPaths = normalizeIgnoredPathList({
+    projectRoot: source.projectRoot,
+    paths: [
+      options.stateDir,
+      '.symphony',
+      source.executionPlan.workDir,
+      source.sourceRun.harnessOutputPath,
+      source.sourceRun.taskPacketPath,
+      source.sourceRun.evidenceArtifactPath,
+      source.sourceWorkspacePath
+    ]
+  });
+  const gitStatus = await buildGitStatusFingerprint({
+    runner,
+    cwd: source.projectRoot,
+    ignoredPaths: gitStatusIgnoredPaths
+  });
+
+  if (gitStatus.entries.length > 0) {
+    throw new UsageError('dirty worktree blocks adoption planning');
+  }
+
+  const currentProjectFingerprint = await buildProjectFingerprint({
+    projectDir: source.projectRoot,
+    ignoredPaths: projectFingerprintIgnoredPaths
+  });
+
+  if (currentProjectFingerprint !== source.sourceRun.projectFingerprint
+    || currentProjectFingerprint !== source.executionPlan.projectFingerprint) {
+    throw new UsageError('source metadata is stale: project fingerprint changed');
+  }
+
+  const adoptionId = buildAdoptionPlanId({
+    sourceRunId: source.sourceRun.runId,
+    executionPlanId: source.executionPlan.planId
+  });
+  const plannedRunId = buildAdoptionPlanningRunId(adoptionId);
+  const confirmationCommand = buildAdoptionConfirmationCommand({
+    adoptionId,
+    stateDir: options.stateDir
+  });
+  const paths = symphonyStatePaths({
+    stateDir: options.stateDir,
+    adoptionId
+  });
+  const now = new Date().toISOString();
+  let patchCandidate;
+
+  try {
+    patchCandidate = await buildAdoptionPatchCandidate({
+      projectRoot: source.projectRoot,
+      sourceRun: source.sourceRun,
+      sourceWorkspacePath: source.sourceWorkspacePath,
+      evidenceArtifactPath: source.sourceRun.evidenceArtifactPath,
+      ignoredRoots: buildAdoptionCandidateIgnoredRoots({
+        projectRoot: source.projectRoot,
+        stateDir: options.stateDir,
+        workDir: source.executionPlan.workDir
+      })
+    });
+  } catch (error) {
+    if (error instanceof AdoptionUnsupportedChangesError) {
+      await writeFailedAdoptionPlanningRun({
+        stateDir: options.stateDir,
+        source,
+        runId: plannedRunId,
+        unsupportedChanges: error.unsupportedChanges,
+        now
+      });
+      throw new UsageError(error.message);
+    }
+
+    throw error;
+  }
+
+  await mkdir(dirname(paths.adoptionPatchPath), { recursive: true });
+  await writeFile(paths.adoptionPatchPath, patchCandidate.patch, 'utf8');
+
+  const patchHash = sha256Text(patchCandidate.patch);
+  const changedFiles = patchCandidate.operations.map((operation) => operation.path);
+  const fileOperations = patchCandidate.operations.map(publicFileOperation);
+  const plan = {
+    version: '1',
+    kind: 'symphony.adoption-plan',
+    contractName: 'symphony.adoption-plan',
+    contractVersion: '1',
+    adoptionId,
+    command: 'symphony adopt',
+    intent: 'adopt',
+    semanticCommand: 'adopt',
+    pipeline: ['adopt-plan'],
+    safetyMode: 'write',
+    stateDir: options.stateDir,
+    sourceRunId: source.sourceRun.runId,
+    sourceRunArtifactPath: source.sourceRunArtifactPath,
+    executionPlanId: source.executionPlan.planId,
+    executionPlanArtifactPath: source.executionPlanArtifactPath,
+    plannedRunId,
+    projectRoot: source.projectRoot,
+    projectFingerprint: currentProjectFingerprint,
+    projectFingerprintIgnoredPaths,
+    gitHead,
+    gitStatusFingerprint: gitStatus.fingerprint,
+    gitStatusIgnoredPaths,
+    sourceWorkspacePath: source.sourceWorkspacePath,
+    sourceWorkspaceManifestPath: source.sourceWorkspaceManifestPath,
+    sourceWorkspaceFingerprint: patchCandidate.sourceWorkspaceFingerprint,
+    sourceEvidenceArtifactPath: source.sourceRun.evidenceArtifactPath,
+    sourceVerifierStatus: source.sourceRun.verifierStatus,
+    sourceWriteBoundary: 'isolated-workspace',
+    writeBoundary: 'main-worktree',
+    projectWrites: true,
+    mainWorktreeWrites: true,
+    workspaceWrites: false,
+    runtimeWrites: true,
+    externalCalls: false,
+    destructiveWrites: false,
+    patchArtifactPath: paths.adoptionPatchPath,
+    patchHash,
+    changedFiles,
+    fileOperations,
+    unsupportedChanges: [],
+    confirmationCommand,
+    createdAt: now
+  };
+  const adoptionPlanArtifactPath = await writeAdoptionPlan({
+    stateDir: options.stateDir,
+    plan
+  });
+  const summary = {
+    version: '1',
+    command: 'symphony adopt',
+    intent: 'adopt',
+    semanticCommand: 'adopt',
+    pipeline: ['adopt-plan'],
+    safetyMode: 'write',
+    projectWrites: true,
+    mainWorktreeWrites: false,
+    workspaceWrites: false,
+    runtimeWrites: true,
+    externalCalls: false,
+    destructiveWrites: false,
+    status: 'adoption-planned',
+    exitCode: EXIT_CODES.ok,
+    verifierStatus: 'not-run',
+    runId: plannedRunId,
+    adoptionPlanId: adoptionId,
+    adoptionPlanArtifactPath,
+    sourceRunId: source.sourceRun.runId,
+    sourceRunArtifactPath: source.sourceRunArtifactPath,
+    executionPlanId: source.executionPlan.planId,
+    executionPlanArtifactPath: source.executionPlanArtifactPath,
+    patchArtifactPath: paths.adoptionPatchPath,
+    patchHash,
+    changedFiles,
+    fileOperations,
+    sourceWorkspacePath: source.sourceWorkspacePath,
+    sourceWorkspaceManifestPath: source.sourceWorkspaceManifestPath,
+    sourceWorkspaceFingerprint: patchCandidate.sourceWorkspaceFingerprint,
+    sourceEvidenceArtifactPath: source.sourceRun.evidenceArtifactPath,
+    sourceVerifierStatus: source.sourceRun.verifierStatus,
+    projectRoot: source.projectRoot,
+    projectFingerprint: currentProjectFingerprint,
+    gitHead,
+    gitStatusFingerprint: gitStatus.fingerprint,
+    writeBoundary: 'main-worktree',
+    confirmationCommand,
+    nextAction: confirmationCommand
+  };
+
+  await writeProductRunState({
+    stateDir: options.stateDir,
+    summary,
+    updatedAt: now
+  });
+
+  return {
+    exitCode: EXIT_CODES.ok,
+    summary
+  };
+}
+
+async function executeAdoptionConfirmation({ options, runner }) {
+  const plan = await readAdoptionPlan({
+    stateDir: options.stateDir,
+    adoptionId: options.adoptionId
+  });
+
+  if (plan === null) {
+    throw new UsageError(`adoption plan not found: ${options.adoptionId}`);
+  }
+
+  assertAdoptionPlan(plan, options.adoptionId);
+
+  const runId = buildAdoptionConfirmationRunId(plan);
+  const now = new Date().toISOString();
+  let journalPath;
+  let patchApplied = false;
+
+  try {
+    await revalidateAdoptionPlanBeforeWrite({
+      plan,
+      stateDir: options.stateDir,
+      runner
+    });
+
+    const check = await runGitCommand({
+      runner,
+      cwd: plan.projectRoot,
+      args: ['apply', '--check', plan.patchArtifactPath],
+      failureMessage: 'git apply --check failed for frozen adoption patch'
+    });
+
+    if (check.exitCode !== 0) {
+      throw new UsageError('git apply --check failed for frozen adoption patch');
+    }
+
+    const journal = await buildAdoptionJournal({
+      plan,
+      runId,
+      createdAt: now
+    });
+    journalPath = symphonyStatePaths({
+      stateDir: options.stateDir,
+      adoptionId: plan.adoptionId
+    }).adoptionJournalPath;
+
+    await writeFile(journalPath, `${JSON.stringify(redactSecrets(journal), null, 2)}\n`, 'utf8');
+
+    const applyingSummary = buildAdoptionConfirmationSummary({
+      plan,
+      runId,
+      evidencePath: undefined,
+      journalPath,
+      status: 'applying',
+      exitCode: null,
+      verifierStatus: 'not-run',
+      mainWorktreeWrites: false,
+      failurePhase: undefined
+    });
+
+    await writeProductRunState({
+      stateDir: options.stateDir,
+      summary: applyingSummary,
+      updatedAt: now
+    });
+
+    const apply = await runGitCommand({
+      runner,
+      cwd: plan.projectRoot,
+      args: ['apply', plan.patchArtifactPath],
+      failureMessage: 'git apply failed for frozen adoption patch'
+    });
+
+    if (apply.exitCode !== 0) {
+      throw new UsageError('git apply failed for frozen adoption patch');
+    }
+
+    patchApplied = true;
+
+    const evidence = await buildAdoptionConfirmationEvidence({
+      plan,
+      runner,
+      generatedAt: now
+    });
+    const evidencePath = symphonyStatePaths({
+      stateDir: options.stateDir,
+      adoptionId: plan.adoptionId
+    }).adoptionEvidencePath;
+
+    await writeFile(evidencePath, `${JSON.stringify(redactSecrets(evidence), null, 2)}\n`, 'utf8');
+    await writeAdoptionJournalStatus({
+      journalPath,
+      status: 'applied',
+      updatedAt: new Date().toISOString()
+    });
+
+    const summary = buildAdoptionConfirmationSummary({
+      plan,
+      runId,
+      evidencePath,
+      journalPath,
+      status: 'passed',
+      exitCode: EXIT_CODES.ok,
+      verifierStatus: 'passed',
+      mainWorktreeWrites: true,
+      failurePhase: undefined
+    });
+
+    await writeProductRunState({
+      stateDir: options.stateDir,
+      summary,
+      updatedAt: now
+    });
+
+    return {
+      exitCode: EXIT_CODES.ok,
+      summary
+    };
+  } catch (error) {
+    if (patchApplied) {
+      await writeFailedAdoptionConfirmationRunBestEffort({
+        stateDir: options.stateDir,
+        plan,
+        runId,
+        now,
+        mainWorktreeWrites: true,
+        failurePhase: 'post-apply-evidence',
+        message: error.message,
+        journalPath
+      });
+    } else if (error instanceof UsageError) {
+      await writeFailedAdoptionConfirmationRun({
+        stateDir: options.stateDir,
+        plan,
+        runId,
+        now,
+        mainWorktreeWrites: false,
+        failurePhase: 'adoption-confirmation-preflight',
+        message: error.message,
+        journalPath
+      });
+    }
+
+    throw error;
+  }
+}
+
+async function executeAdoptionInspection({ options }) {
+  const plan = await readAdoptionPlan({
+    stateDir: options.stateDir,
+    adoptionId: options.adoptionId
+  });
+
+  if (plan === null) {
+    throw new UsageError(`adoption plan not found: ${options.adoptionId}`);
+  }
+
+  assertAdoptionPlan(plan, options.adoptionId);
+
+  const journal = await readAdoptionJournal({
+    stateDir: options.stateDir,
+    adoptionId: options.adoptionId
+  });
+  const latestConfirmationRun = await findLatestAdoptionConfirmationRun({
+    stateDir: options.stateDir,
+    adoptionId: options.adoptionId
+  });
+  const afterMatch = await compareWorktreeToFileOperationsAfter(plan);
+  const beforeMatch = journal === null
+    ? {
+        matches: null,
+        reason: 'adoption journal not found',
+        files: []
+      }
+    : await compareWorktreeToBeforeFiles({
+        projectRoot: plan.projectRoot,
+        beforeFiles: journal.beforeFiles
+      });
+  const paths = symphonyStatePaths({
+    stateDir: options.stateDir,
+    adoptionId: plan.adoptionId
+  });
+  const summary = {
+    version: '1',
+    command: 'symphony adopt',
+    intent: 'adopt-inspect',
+    semanticCommand: 'adopt',
+    pipeline: ['adopt-inspect'],
+    safetyMode: 'read-only',
+    projectWrites: false,
+    mainWorktreeWrites: false,
+    workspaceWrites: false,
+    runtimeWrites: false,
+    externalCalls: false,
+    destructiveWrites: false,
+    status: 'inspected',
+    exitCode: EXIT_CODES.ok,
+    verifierStatus: 'not-run',
+    adoptionPlanId: plan.adoptionId,
+    adoptionPlanArtifactPath: paths.adoptionPlanPath,
+    adoptionJournalArtifactPath: journal === null ? undefined : paths.adoptionJournalPath,
+    adoptionPlanRefs: {
+      adoptionPlanArtifactPath: paths.adoptionPlanPath,
+      executionPlanArtifactPath: plan.executionPlanArtifactPath,
+      patchArtifactPath: plan.patchArtifactPath,
+      sourceRunArtifactPath: plan.sourceRunArtifactPath
+    },
+    journalRef: journal === null
+      ? null
+      : {
+          kind: 'adoption-journal',
+          path: paths.adoptionJournalPath
+        },
+    sourceRunId: plan.sourceRunId,
+    sourceRunArtifactPath: plan.sourceRunArtifactPath,
+    sourceRun: {
+      runId: plan.sourceRunId,
+      artifactPath: plan.sourceRunArtifactPath,
+      verifierStatus: plan.sourceVerifierStatus,
+      workspacePath: plan.sourceWorkspacePath,
+      workspaceManifestPath: plan.sourceWorkspaceManifestPath
+    },
+    executionPlanId: plan.executionPlanId,
+    executionPlanArtifactPath: plan.executionPlanArtifactPath,
+    patchArtifactPath: plan.patchArtifactPath,
+    patchHash: plan.patchHash,
+    changedFiles: [...plan.changedFiles],
+    fileOperations: structuredClone(plan.fileOperations),
+    journal: journal === null
+      ? null
+      : {
+          adoptionPlanId: journal.adoptionPlanId,
+          confirmationRunId: journal.confirmationRunId,
+          artifactPath: paths.adoptionJournalPath,
+          status: journal.status,
+          createdAt: journal.createdAt
+        },
+    latestConfirmationRun,
+    currentWorktreeMatchesAfterHash: afterMatch.matches,
+    currentWorktreeMatchesAfterHashDetails: afterMatch,
+    currentWorktreeMatchesJournalBeforeFiles: beforeMatch.matches,
+    currentWorktreeMatchesJournalBeforeFilesDetails: beforeMatch,
+    nextAction: buildAdoptionConfirmationCommand({
+      adoptionId: plan.adoptionId,
+      stateDir: options.stateDir
+    })
+  };
+
+  return {
+    exitCode: EXIT_CODES.ok,
+    summary
+  };
 }
 
 async function runSymphonyNew({
@@ -2283,6 +2776,80 @@ function parseDiagnoseArgs(args) {
   return options;
 }
 
+function parseAdoptArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    json: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--run') {
+      if (options.mode !== undefined) {
+        throw new UsageError('symphony adopt accepts exactly one mode: --run, --confirm, or --inspect');
+      }
+
+      options.mode = 'plan';
+      options.sourceRunId = readRequiredValue(args, index, '--run');
+      assertSafePathSegment(options.sourceRunId, 'source run id');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--confirm') {
+      if (options.mode !== undefined) {
+        throw new UsageError('symphony adopt accepts exactly one mode: --run, --confirm, or --inspect');
+      }
+
+      options.mode = 'confirm';
+      options.adoptionId = readRequiredValue(args, index, '--confirm');
+      assertSafePathSegment(options.adoptionId, 'adoption id');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--inspect') {
+      if (options.mode !== undefined) {
+        throw new UsageError('symphony adopt accepts exactly one mode: --run, --confirm, or --inspect');
+      }
+
+      options.mode = 'inspect';
+      options.adoptionId = readRequiredValue(args, index, '--inspect');
+      assertSafePathSegment(options.adoptionId, 'adoption id');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown adopt option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected adopt argument: ${value}`);
+  }
+
+  if (options.mode === undefined) {
+    throw new UsageError('symphony adopt requires --run <run-id>, --confirm <adoption-id>, or --inspect <adoption-id>');
+  }
+
+  if (options.mode === 'inspect' && options.json !== true) {
+    throw new UsageError('symphony adopt --inspect requires --json');
+  }
+
+  return options;
+}
+
 function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
   const options = {
     targetDir: promptTarget,
@@ -2452,6 +3019,25 @@ async function writeProductRunState({ stateDir, summary, updatedAt }) {
     executionPlanId: summary.executionPlanId,
     executionPlanArtifactPath: summary.executionPlanArtifactPath,
     plannedRunId: summary.plannedRunId,
+    plannedAdoptionRunId: summary.plannedAdoptionRunId,
+    adoptionPlanId: summary.adoptionPlanId,
+    adoptionPlanArtifactPath: summary.adoptionPlanArtifactPath,
+    sourceRunId: summary.sourceRunId,
+    sourceRunArtifactPath: summary.sourceRunArtifactPath,
+    sourceWorkspacePath: summary.sourceWorkspacePath,
+    sourceWorkspaceManifestPath: summary.sourceWorkspaceManifestPath,
+    sourceWorkspaceFingerprint: summary.sourceWorkspaceFingerprint,
+    sourceEvidenceArtifactPath: summary.sourceEvidenceArtifactPath,
+    sourceVerifierStatus: summary.sourceVerifierStatus,
+    patchArtifactPath: summary.patchArtifactPath,
+    patchHash: summary.patchHash,
+    adoptionJournalArtifactPath: summary.adoptionJournalArtifactPath,
+    fileOperations: summary.fileOperations,
+    unsupportedChanges: summary.unsupportedChanges,
+    failurePhase: summary.failurePhase,
+    failureMessage: summary.failureMessage,
+    gitHead: summary.gitHead,
+    gitStatusFingerprint: summary.gitStatusFingerprint,
     confirmationCommand: summary.confirmationCommand,
     requiresGate: summary.requiresGate,
     workflowMode: summary.workflowMode,
@@ -2556,6 +3142,9 @@ function humanProductSummary(summary) {
     ['Harness', 'harnessOutputPath'],
     ['TaskPacket', 'taskPacketPath'],
     ['Execution plan', 'executionPlanArtifactPath'],
+    ['Adoption plan', 'adoptionPlanArtifactPath'],
+    ['Patch', 'patchArtifactPath'],
+    ['Journal', 'adoptionJournalArtifactPath'],
     ['Plan', 'scaffoldPlanArtifactPath'],
     ['Manifest', 'scaffoldManifestArtifactPath'],
     ['Proof', 'proofArtifactPath']
@@ -2594,8 +3183,30 @@ function buildExecutionPlanId({ prompt, mode, adapter }) {
   return `symphony-plan-${safeIdPart(mode)}-${shortHash([adapter, mode, prompt].join('\0'))}-${uniqueProductRunSuffix()}`;
 }
 
+function buildAdoptionPlanId({ sourceRunId, executionPlanId }) {
+  return `symphony-adoption-${safeIdPart(sourceRunId)}-${shortHash([sourceRunId, executionPlanId].join('\0'))}-${uniqueProductRunSuffix()}`;
+}
+
+function buildAdoptionPlanningRunId(adoptionId) {
+  return `${adoptionId}-planned`;
+}
+
+function buildAdoptionConfirmationRunId(plan) {
+  return `symphony-adopt-confirm-${safeIdPart(plan.adoptionId)}-${uniqueProductRunSuffix()}`;
+}
+
 function buildConfirmationCommand({ planId, stateDir }) {
   const args = ['symphony', 'do', '--confirm-plan', planId];
+
+  if (stateDir !== '.symphony') {
+    args.push('--state-dir', stateDir);
+  }
+
+  return args.map(shellQuoteArgument).join(' ');
+}
+
+function buildAdoptionConfirmationCommand({ adoptionId, stateDir }) {
+  const args = ['symphony', 'adopt', '--confirm', adoptionId];
 
   if (stateDir !== '.symphony') {
     args.push('--state-dir', stateDir);
@@ -2746,6 +3357,1250 @@ function assertExecutionPlanRouteDecision(routeDecision, { adapter, expectedRequ
   }
 
   assertExactStringArray(routeDecision.pipeline, ['scan-if-needed', 'do'], 'execution plan route pipeline');
+}
+
+class AdoptionUnsupportedChangesError extends Error {
+  constructor(message, unsupportedChanges) {
+    super(message);
+    this.name = 'AdoptionUnsupportedChangesError';
+    this.unsupportedChanges = unsupportedChanges;
+  }
+}
+
+async function loadAndValidateAdoptionSource({ stateDir, sourceRunId }) {
+  const sourceRun = await readRunState({
+    stateDir,
+    runId: sourceRunId
+  });
+
+  if (sourceRun === null) {
+    throw new UsageError(`source run not found: ${sourceRunId}`);
+  }
+
+  if (sourceRun.status === 'planned' || sourceRun.verifierStatus === 'not-run') {
+    throw new UsageError('source run is not a confirmed v11 run');
+  }
+
+  if (sourceRun.status !== 'passed' || sourceRun.verifierStatus !== 'passed') {
+    throw new UsageError('source run must have status=passed and verifierStatus=passed');
+  }
+
+  if (sourceRun.command !== 'symphony do'
+    || sourceRun.semanticCommand !== 'do'
+    || sourceRun.safetyMode !== 'write'
+    || !isNonEmptyString(sourceRun.plannedRunId)
+    || !isNonEmptyString(sourceRun.executionPlanId)) {
+    throw new UsageError('source run is not a confirmed v11 run');
+  }
+
+  if (sourceRun.writeBoundary !== 'isolated-workspace'
+    || sourceRun.mainWorktreeWrites !== false
+    || sourceRun.workspaceWrites !== true) {
+    throw new UsageError('source run write boundary is unsupported for adoption');
+  }
+
+  if (!isNonEmptyString(sourceRun.evidenceArtifactPath)) {
+    throw new UsageError('source run is missing verifier evidence');
+  }
+
+  const executionPlan = await readExecutionPlan({
+    stateDir,
+    planId: sourceRun.executionPlanId
+  });
+
+  if (executionPlan === null) {
+    throw new UsageError('source run execution plan is missing');
+  }
+
+  assertExecutionPlan(executionPlan, sourceRun.executionPlanId);
+
+  if (sourceRun.plannedRunId !== executionPlan.planId) {
+    throw new UsageError('source run does not reference its frozen v11 execution plan');
+  }
+
+  const workspaceRefs = await resolveSourceWorkspaceRefs({
+    sourceRun,
+    projectRoot: executionPlan.projectRoot,
+    workDir: executionPlan.workDir
+  });
+
+  return {
+    sourceRun,
+    sourceRunArtifactPath: symphonyStatePaths({ stateDir, runId: sourceRun.runId }).runPath,
+    executionPlan,
+    executionPlanArtifactPath: symphonyStatePaths({ stateDir, planId: executionPlan.planId }).executionPlanPath,
+    projectRoot: executionPlan.projectRoot,
+    ...workspaceRefs
+  };
+}
+
+async function resolveSourceWorkspaceRefs({ sourceRun, projectRoot, workDir }) {
+  let sourceWorkspacePath = sourceRun.sourceWorkspacePath;
+  let sourceWorkspaceManifestPath = sourceRun.sourceWorkspaceManifestPath;
+
+  if (!isNonEmptyString(sourceWorkspacePath) || !isNonEmptyString(sourceWorkspaceManifestPath)) {
+    const workspaceManifestRef = Array.isArray(sourceRun.artifactRefs)
+      ? sourceRun.artifactRefs.find((artifact) => artifact.kind === 'workspace-manifest' && isNonEmptyString(artifact.path))
+      : undefined;
+
+    if (workspaceManifestRef !== undefined) {
+      sourceWorkspaceManifestPath = workspaceManifestRef.path;
+      const manifest = await readJsonArtifact(sourceWorkspaceManifestPath, 'source workspace manifest');
+      sourceWorkspacePath = manifest.path;
+    }
+  }
+
+  if (!isNonEmptyString(sourceWorkspacePath) || !isNonEmptyString(sourceWorkspaceManifestPath)) {
+    throw new UsageError('source-run-missing-workspace-ref');
+  }
+
+  const resolvedWorkspacePath = resolve(projectRoot, sourceWorkspacePath);
+  const resolvedManifestPath = resolve(projectRoot, sourceWorkspaceManifestPath);
+  const resolvedWorkDir = resolve(projectRoot, workDir);
+
+  assertPathInside({
+    root: resolvedWorkDir,
+    target: resolvedWorkspacePath,
+    message: 'source workspace is outside the managed v11 work directory'
+  });
+  assertPathInside({
+    root: resolvedWorkspacePath,
+    target: resolvedManifestPath,
+    message: 'source workspace manifest is outside the source workspace'
+  });
+
+  const [workspaceStat, manifest] = await Promise.all([
+    lstat(resolvedWorkspacePath),
+    readJsonArtifact(resolvedManifestPath, 'source workspace manifest')
+  ]);
+
+  if (!workspaceStat.isDirectory()) {
+    throw new UsageError('source workspace is not a directory');
+  }
+
+  if (manifest.path !== undefined && resolve(projectRoot, manifest.path) !== resolvedWorkspacePath) {
+    throw new UsageError('source workspace manifest path does not match source run state');
+  }
+
+  return {
+    sourceWorkspacePath: resolvedWorkspacePath,
+    sourceWorkspaceManifestPath: resolvedManifestPath
+  };
+}
+
+async function buildAdoptionPatchCandidate({
+  projectRoot,
+  sourceRun,
+  sourceWorkspacePath,
+  evidenceArtifactPath,
+  ignoredRoots
+}) {
+  const evidence = await readJsonArtifact(evidenceArtifactPath, 'source evidence');
+  const evidenceChangedFiles = normalizeChangedFiles(evidence.changedFiles, 'evidence changedFiles');
+  const runChangedFiles = normalizeChangedFiles(sourceRun.changedFiles ?? [], 'source run changedFiles');
+
+  assertSameStringSet({
+    left: evidenceChangedFiles,
+    right: runChangedFiles,
+    message: 'source evidence changedFiles do not match source run changedFiles'
+  });
+
+  const workspaceDiff = await collectWorkspaceDiff({
+    projectRoot,
+    sourceWorkspacePath,
+    ignoredRoots
+  });
+
+  if (workspaceDiff.unsupportedChanges.length > 0) {
+    throw new AdoptionUnsupportedChangesError(
+      'source workspace contains unsupported adoption changes',
+      workspaceDiff.unsupportedChanges
+    );
+  }
+
+  assertSameStringSet({
+    left: evidenceChangedFiles,
+    right: workspaceDiff.changedFiles,
+    message: 'source evidence changedFiles do not match the actual source workspace diff'
+  });
+
+  if (workspaceDiff.operations.length === 0) {
+    throw new AdoptionUnsupportedChangesError('source workspace contains no supported text changes', [{
+      path: null,
+      reason: 'empty-diff'
+    }]);
+  }
+
+  const operations = workspaceDiff.operations.sort((left, right) => left.path.localeCompare(right.path));
+  const sourceWorkspaceFingerprint = fingerprintFileOperations(operations.map(publicFileOperation));
+  const patch = buildUnifiedPatch(operations);
+
+  return {
+    operations,
+    patch,
+    sourceWorkspaceFingerprint
+  };
+}
+
+async function collectWorkspaceDiff({ projectRoot, sourceWorkspacePath, ignoredRoots }) {
+  const sourceFiles = await listWorkspaceFiles(sourceWorkspacePath);
+  const operations = [];
+  const unsupportedChanges = [];
+
+  for (const sourceFile of sourceFiles) {
+    let relativePath;
+
+    try {
+      relativePath = normalizeAdoptionRelativePath(sourceFile);
+      assertAdoptionPathAllowed(relativePath, ignoredRoots);
+    } catch (error) {
+      unsupportedChanges.push({
+        path: sourceFile,
+        reason: error.message
+      });
+      continue;
+    }
+
+    const sourcePath = resolve(sourceWorkspacePath, relativePath);
+    const targetPath = resolve(projectRoot, relativePath);
+    let sourceMetadata;
+
+    try {
+      sourceMetadata = await lstat(sourcePath);
+    } catch (error) {
+      unsupportedChanges.push({
+        path: relativePath,
+        reason: `source file is missing: ${error.message}`
+      });
+      continue;
+    }
+
+    if (sourceMetadata.isSymbolicLink()) {
+      unsupportedChanges.push({
+        path: relativePath,
+        reason: 'symlink'
+      });
+      continue;
+    }
+
+    if (!sourceMetadata.isFile()) {
+      unsupportedChanges.push({
+        path: relativePath,
+        reason: 'not-a-regular-file'
+      });
+      continue;
+    }
+
+    let targetMetadata;
+
+    try {
+      targetMetadata = await lstat(targetPath);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+
+    if (targetMetadata?.isSymbolicLink()) {
+      unsupportedChanges.push({
+        path: relativePath,
+        reason: 'target-symlink'
+      });
+      continue;
+    }
+
+    if (targetMetadata !== undefined && !targetMetadata.isFile()) {
+      unsupportedChanges.push({
+        path: relativePath,
+        reason: 'target-not-a-regular-file'
+      });
+      continue;
+    }
+
+    const [afterBuffer, beforeBuffer] = await Promise.all([
+      readFile(sourcePath),
+      targetMetadata === undefined ? null : readFile(targetPath)
+    ]);
+
+    let afterText;
+    let beforeText;
+
+    try {
+      afterText = decodeUtf8Text(afterBuffer, relativePath);
+      beforeText = beforeBuffer === null ? null : decodeUtf8Text(beforeBuffer, relativePath);
+    } catch (error) {
+      unsupportedChanges.push({
+        path: relativePath,
+        reason: error.message
+      });
+      continue;
+    }
+
+    const beforeHash = beforeBuffer === null ? null : sha256Buffer(beforeBuffer);
+    const afterHash = sha256Buffer(afterBuffer);
+    const operation = beforeBuffer === null ? 'add' : 'modify';
+
+    if (operation === 'modify' && beforeHash === afterHash) {
+      if ((targetMetadata.mode & 0o111) !== (sourceMetadata.mode & 0o111)) {
+        unsupportedChanges.push({
+          path: relativePath,
+          reason: 'chmod-only'
+        });
+      }
+      continue;
+    }
+
+    if (operation === 'modify' && (targetMetadata.mode & 0o111) !== (sourceMetadata.mode & 0o111)) {
+      unsupportedChanges.push({
+        path: relativePath,
+        reason: 'chmod-change'
+      });
+      continue;
+    }
+
+    operations.push({
+      path: relativePath,
+      operation,
+      beforeHash,
+      afterHash,
+      size: afterBuffer.length,
+      textEncoding: 'utf8',
+      beforeText,
+      afterText
+    });
+  }
+
+  return {
+    operations,
+    unsupportedChanges,
+    changedFiles: operations.map((operation) => operation.path).sort()
+  };
+}
+
+async function listWorkspaceFiles(root) {
+  const files = [];
+
+  async function visit(directory, relativeDirectory = '') {
+    const entries = await readdir(directory, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const relativePath = relativeDirectory === '' ? entry.name : `${relativeDirectory}/${entry.name}`;
+
+      if (relativeDirectory === ''
+        && ['workspace-manifest.json', 'workspace-lock.json', 'workspace-cleanup.json'].includes(entry.name)) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        await visit(join(directory, entry.name), relativePath);
+        continue;
+      }
+
+      files.push(relativePath);
+    }
+  }
+
+  await visit(root);
+  return files.sort();
+}
+
+function buildUnifiedPatch(operations) {
+  return operations.map((operation) => buildUnifiedPatchForOperation(operation)).join('');
+}
+
+function buildUnifiedPatchForOperation(operation) {
+  const quotedA = quoteGitPatchPath(`a/${operation.path}`);
+  const quotedB = quoteGitPatchPath(`b/${operation.path}`);
+  const beforeLines = operation.beforeText === null ? [] : patchLineRecords(operation.beforeText);
+  const afterLines = patchLineRecords(operation.afterText);
+  const oldRange = patchRange({
+    start: beforeLines.length === 0 ? 0 : 1,
+    count: beforeLines.length
+  });
+  const newRange = patchRange({
+    start: afterLines.length === 0 ? 0 : 1,
+    count: afterLines.length
+  });
+  const lines = [
+    `diff --git ${quotedA} ${quotedB}\n`
+  ];
+
+  if (operation.operation === 'add') {
+    lines.push('new file mode 100644\n');
+    lines.push('--- /dev/null\n');
+  } else {
+    lines.push(`--- ${quotedA}\n`);
+  }
+
+  lines.push(`+++ ${quotedB}\n`);
+  lines.push(`@@ -${oldRange} +${newRange} @@\n`);
+
+  for (const line of beforeLines) {
+    lines.push(`-${line.text}\n`);
+    if (!line.newline) {
+      lines.push('\\ No newline at end of file\n');
+    }
+  }
+
+  for (const line of afterLines) {
+    lines.push(`+${line.text}\n`);
+    if (!line.newline) {
+      lines.push('\\ No newline at end of file\n');
+    }
+  }
+
+  return lines.join('');
+}
+
+function patchRange({ start, count }) {
+  return count === 1 ? String(start) : `${start},${count}`;
+}
+
+function patchLineRecords(text) {
+  if (text === '') {
+    return [];
+  }
+
+  const records = [];
+  let offset = 0;
+
+  while (offset < text.length) {
+    const newlineIndex = text.indexOf('\n', offset);
+
+    if (newlineIndex === -1) {
+      records.push({
+        text: text.slice(offset),
+        newline: false
+      });
+      break;
+    }
+
+    records.push({
+      text: text.slice(offset, newlineIndex),
+      newline: true
+    });
+    offset = newlineIndex + 1;
+  }
+
+  return records;
+}
+
+function quoteGitPatchPath(path) {
+  if (/^[A-Za-z0-9_./@:+-]+$/u.test(path)) {
+    return path;
+  }
+
+  return `"${path
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"')
+    .replaceAll('\n', '\\n')
+    .replaceAll('\t', '\\t')}"`;
+}
+
+async function revalidateAdoptionPlanBeforeWrite({ plan, stateDir, runner }) {
+  const currentProjectFingerprint = await buildProjectFingerprint({
+    projectDir: plan.projectRoot,
+    ignoredPaths: plan.projectFingerprintIgnoredPaths ?? [stateDir]
+  });
+
+  if (currentProjectFingerprint !== plan.projectFingerprint) {
+    throw new UsageError('adoption plan is stale: project fingerprint changed');
+  }
+
+  const gitHead = await readGitHead({
+    runner,
+    cwd: plan.projectRoot
+  });
+
+  if (gitHead !== plan.gitHead) {
+    throw new UsageError('adoption plan is stale: git HEAD changed');
+  }
+
+  const gitStatus = await buildGitStatusFingerprint({
+    runner,
+    cwd: plan.projectRoot,
+    ignoredPaths: plan.gitStatusIgnoredPaths ?? [stateDir]
+  });
+
+  if (gitStatus.fingerprint !== plan.gitStatusFingerprint) {
+    throw new UsageError('adoption plan is stale: dirty worktree fingerprint changed');
+  }
+
+  const source = await loadAndValidateAdoptionSource({
+    stateDir,
+    sourceRunId: plan.sourceRunId
+  });
+
+  if (source.executionPlan.planId !== plan.executionPlanId
+    || source.sourceWorkspacePath !== plan.sourceWorkspacePath
+    || source.sourceWorkspaceManifestPath !== plan.sourceWorkspaceManifestPath) {
+    throw new UsageError('adoption plan source refs changed');
+  }
+
+  const patchCandidate = await buildAdoptionPatchCandidate({
+    projectRoot: plan.projectRoot,
+    sourceRun: source.sourceRun,
+    sourceWorkspacePath: source.sourceWorkspacePath,
+    evidenceArtifactPath: source.sourceRun.evidenceArtifactPath,
+    ignoredRoots: buildAdoptionCandidateIgnoredRoots({
+      projectRoot: plan.projectRoot,
+      stateDir,
+      workDir: source.executionPlan.workDir
+    })
+  });
+
+  if (patchCandidate.sourceWorkspaceFingerprint !== plan.sourceWorkspaceFingerprint) {
+    throw new UsageError('adoption plan is stale: source workspace fingerprint changed');
+  }
+
+  assertSameStringSet({
+    left: patchCandidate.operations.map((operation) => operation.path),
+    right: plan.changedFiles,
+    message: 'adoption plan changedFiles no longer match source workspace'
+  });
+
+  const patch = await readFile(plan.patchArtifactPath);
+  const patchHash = sha256Buffer(patch);
+
+  if (patchHash !== plan.patchHash) {
+    throw new UsageError('adoption patch artifact hash changed');
+  }
+}
+
+async function buildAdoptionConfirmationEvidence({ plan, runner, generatedAt }) {
+  const files = [];
+
+  for (const operation of plan.fileOperations) {
+    const path = normalizeAdoptionRelativePath(operation.path);
+    const content = await readFile(resolve(plan.projectRoot, path));
+    const hash = sha256Buffer(content);
+
+    if (hash !== operation.afterHash) {
+      throw new UsageError(`post-apply file hash mismatch: ${path}`);
+    }
+
+    files.push({
+      path,
+      operation: operation.operation,
+      afterHash: hash,
+      size: content.length,
+      textEncoding: operation.textEncoding
+    });
+  }
+
+  const gitStatus = await readGitStatusEntries({
+    runner,
+    cwd: plan.projectRoot,
+    ignoredPaths: plan.gitStatusIgnoredPaths ?? []
+  });
+  const dirtyPaths = gitStatus.map((entry) => entry.path).sort();
+
+  assertSameStringSet({
+    left: dirtyPaths,
+    right: plan.changedFiles,
+    message: 'post-apply dirty worktree does not match planned changed files'
+  });
+
+  return {
+    version: '1',
+    kind: 'symphony.adoption-evidence',
+    contractName: 'symphony.adoption-evidence',
+    contractVersion: '1',
+    adoptionPlanId: plan.adoptionId,
+    sourceRunId: plan.sourceRunId,
+    executionPlanId: plan.executionPlanId,
+    patchArtifactPath: plan.patchArtifactPath,
+    patchHash: plan.patchHash,
+    changedFiles: [...plan.changedFiles],
+    files,
+    gitStatusFingerprintAfterApply: fingerprintGitStatusEntries(gitStatus),
+    generatedAt
+  };
+}
+
+async function buildAdoptionJournal({ plan, runId, createdAt }) {
+  return {
+    version: '1',
+    kind: 'symphony.adoption-journal',
+    contractName: 'symphony.adoption-journal',
+    contractVersion: '1',
+    adoptionPlanId: plan.adoptionId,
+    confirmationRunId: runId,
+    sourceRunId: plan.sourceRunId,
+    executionPlanId: plan.executionPlanId,
+    patchArtifactPath: plan.patchArtifactPath,
+    patchHash: plan.patchHash,
+    changedFiles: [...plan.changedFiles],
+    fileOperations: structuredClone(plan.fileOperations),
+    beforeFiles: await collectAdoptionBeforeFiles(plan),
+    createdAt,
+    status: 'applying'
+  };
+}
+
+async function writeAdoptionJournalStatus({ journalPath, status, updatedAt }) {
+  const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+
+  await writeFile(journalPath, `${JSON.stringify(redactSecrets({
+    ...journal,
+    status,
+    updatedAt
+  }), null, 2)}\n`, 'utf8');
+}
+
+async function collectAdoptionBeforeFiles(plan) {
+  const beforeFiles = [];
+
+  for (const operation of plan.fileOperations) {
+    const path = normalizeAdoptionRelativePath(operation.path);
+    const snapshot = await readWorktreeFileSnapshot({
+      projectRoot: plan.projectRoot,
+      path
+    });
+
+    if (operation.operation === 'modify' && snapshot.hash !== operation.beforeHash) {
+      throw new UsageError(`pre-apply file hash mismatch: ${path}`);
+    }
+
+    if (operation.operation === 'add' && snapshot.exists) {
+      throw new UsageError(`pre-apply add target already exists: ${path}`);
+    }
+
+    beforeFiles.push({
+      path,
+      exists: snapshot.exists,
+      hash: snapshot.hash,
+      size: snapshot.size,
+      textEncoding: snapshot.textEncoding
+    });
+  }
+
+  return beforeFiles;
+}
+
+async function readWorktreeFileSnapshot({ projectRoot, path }) {
+  const filePath = resolve(projectRoot, path);
+  assertPathInside({
+    root: resolve(projectRoot),
+    target: filePath,
+    message: 'adoption path must stay inside the project'
+  });
+
+  let metadata;
+
+  try {
+    metadata = await lstat(filePath);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return {
+        path,
+        exists: false,
+        hash: null,
+        size: 0,
+        textEncoding: null
+      };
+    }
+
+    throw error;
+  }
+
+  if (metadata.isSymbolicLink()) {
+    throw new UsageError(`adoption file is a symlink: ${path}`);
+  }
+
+  if (!metadata.isFile()) {
+    throw new UsageError(`adoption path is not a regular file: ${path}`);
+  }
+
+  const content = await readFile(filePath);
+
+  decodeUtf8Text(content, path);
+
+  return {
+    path,
+    exists: true,
+    hash: sha256Buffer(content),
+    size: content.length,
+    textEncoding: 'utf8'
+  };
+}
+
+async function compareWorktreeToFileOperationsAfter(plan) {
+  const files = [];
+
+  for (const operation of plan.fileOperations) {
+    const path = normalizeAdoptionRelativePath(operation.path);
+    const snapshot = await readComparableWorktreeFileSnapshot({
+      projectRoot: plan.projectRoot,
+      path
+    });
+    const matches = snapshot.exists === true
+      && snapshot.hash === operation.afterHash
+      && snapshot.size === operation.size
+      && snapshot.textEncoding === operation.textEncoding;
+
+    files.push({
+      path,
+      matches,
+      expected: {
+        exists: true,
+        hash: operation.afterHash,
+        size: operation.size,
+        textEncoding: operation.textEncoding
+      },
+      actual: snapshot
+    });
+  }
+
+  return {
+    matches: files.every((file) => file.matches),
+    files
+  };
+}
+
+async function compareWorktreeToBeforeFiles({ projectRoot, beforeFiles }) {
+  if (!Array.isArray(beforeFiles)) {
+    return {
+      matches: null,
+      reason: 'journal beforeFiles is missing',
+      files: []
+    };
+  }
+
+  const files = [];
+
+  for (const beforeFile of beforeFiles) {
+    const path = normalizeAdoptionRelativePath(beforeFile.path);
+    const snapshot = await readComparableWorktreeFileSnapshot({
+      projectRoot,
+      path
+    });
+    const expected = {
+      exists: beforeFile.exists,
+      hash: beforeFile.hash ?? null,
+      size: beforeFile.size,
+      textEncoding: beforeFile.textEncoding ?? null
+    };
+    const matches = snapshot.exists === expected.exists
+      && snapshot.hash === expected.hash
+      && snapshot.size === expected.size
+      && snapshot.textEncoding === expected.textEncoding;
+
+    files.push({
+      path,
+      matches,
+      expected,
+      actual: snapshot
+    });
+  }
+
+  return {
+    matches: files.every((file) => file.matches),
+    files
+  };
+}
+
+async function readComparableWorktreeFileSnapshot({ projectRoot, path }) {
+  try {
+    return await readWorktreeFileSnapshot({
+      projectRoot,
+      path
+    });
+  } catch (error) {
+    return {
+      path,
+      exists: null,
+      hash: null,
+      size: null,
+      textEncoding: null,
+      error: error.message
+    };
+  }
+}
+
+async function findLatestAdoptionConfirmationRun({ stateDir, adoptionId }) {
+  const runs = await listRunStates({ stateDir });
+  const run = runs.find((candidate) => candidate.adoptionPlanId === adoptionId
+    && Array.isArray(candidate.pipeline)
+    && candidate.pipeline.includes('adopt-confirm'));
+
+  if (run === undefined) {
+    return null;
+  }
+
+  return {
+    runId: run.runId,
+    status: run.status,
+    verifierStatus: run.verifierStatus,
+    mainWorktreeWrites: run.mainWorktreeWrites,
+    failurePhase: run.failurePhase,
+    adoptionJournalArtifactPath: run.adoptionJournalArtifactPath,
+    evidenceArtifactPath: run.evidenceArtifactPath,
+    updatedAt: run.updatedAt,
+    nextAction: run.nextAction
+  };
+}
+
+async function writeFailedAdoptionPlanningRun({
+  stateDir,
+  source,
+  runId,
+  unsupportedChanges,
+  now
+}) {
+  const summary = {
+    version: '1',
+    command: 'symphony adopt',
+    intent: 'adopt',
+    semanticCommand: 'adopt',
+    pipeline: ['adopt-plan'],
+    safetyMode: 'write',
+    projectWrites: true,
+    mainWorktreeWrites: false,
+    workspaceWrites: false,
+    runtimeWrites: true,
+    externalCalls: false,
+    destructiveWrites: false,
+    status: 'failed',
+    exitCode: EXIT_CODES.usage,
+    verifierStatus: 'not-run',
+    runId,
+    sourceRunId: source.sourceRun.runId,
+    executionPlanId: source.executionPlan.planId,
+    adoptionPlanArtifactPath: null,
+    unsupportedChanges,
+    failurePhase: 'adoption-planning',
+    writeBoundary: 'main-worktree',
+    nextAction: 'symphony status'
+  };
+
+  await writeProductRunState({
+    stateDir,
+    summary,
+    updatedAt: now
+  });
+}
+
+async function writeFailedAdoptionConfirmationRun({
+  stateDir,
+  plan,
+  runId,
+  now,
+  mainWorktreeWrites,
+  failurePhase,
+  message,
+  journalPath
+}) {
+  const summary = buildAdoptionConfirmationSummary({
+    plan,
+    runId,
+    evidencePath: undefined,
+    journalPath,
+    status: 'failed',
+    exitCode: EXIT_CODES.usage,
+    verifierStatus: 'failed',
+    mainWorktreeWrites,
+    failurePhase,
+    message
+  });
+
+  await writeProductRunState({
+    stateDir,
+    summary,
+    updatedAt: now
+  });
+}
+
+async function writeFailedAdoptionConfirmationRunBestEffort(options) {
+  try {
+    await writeFailedAdoptionConfirmationRun(options);
+  } catch {
+    // The patch is already in the main worktree; preserving the original post-apply error matters most.
+  }
+}
+
+function buildAdoptionConfirmationSummary({
+  plan,
+  runId,
+  evidencePath,
+  journalPath,
+  status,
+  exitCode,
+  verifierStatus,
+  mainWorktreeWrites,
+  failurePhase,
+  message
+}) {
+  return {
+    version: '1',
+    command: 'symphony adopt',
+    intent: 'adopt',
+    semanticCommand: 'adopt',
+    pipeline: ['adopt-confirm'],
+    safetyMode: 'write',
+    projectWrites: true,
+    mainWorktreeWrites,
+    workspaceWrites: false,
+    runtimeWrites: true,
+    externalCalls: false,
+    destructiveWrites: false,
+    status,
+    exitCode,
+    verifierStatus,
+    runId,
+    adoptionPlanId: plan.adoptionId,
+    adoptionPlanArtifactPath: symphonyStatePaths({
+      stateDir: plan.stateDir,
+      adoptionId: plan.adoptionId
+    }).adoptionPlanPath,
+    plannedAdoptionRunId: plan.plannedRunId,
+    sourceRunId: plan.sourceRunId,
+    sourceRunArtifactPath: plan.sourceRunArtifactPath,
+    executionPlanId: plan.executionPlanId,
+    executionPlanArtifactPath: plan.executionPlanArtifactPath,
+    patchArtifactPath: plan.patchArtifactPath,
+    patchHash: plan.patchHash,
+    adoptionJournalArtifactPath: journalPath,
+    changedFiles: [...plan.changedFiles],
+    fileOperations: structuredClone(plan.fileOperations),
+    evidenceArtifactPath: evidencePath,
+    projectRoot: plan.projectRoot,
+    projectFingerprint: plan.projectFingerprint,
+    sourceWorkspacePath: plan.sourceWorkspacePath,
+    sourceWorkspaceManifestPath: plan.sourceWorkspaceManifestPath,
+    sourceWorkspaceFingerprint: plan.sourceWorkspaceFingerprint,
+    sourceEvidenceArtifactPath: plan.sourceEvidenceArtifactPath,
+    sourceVerifierStatus: plan.sourceVerifierStatus,
+    gitHead: plan.gitHead,
+    gitStatusFingerprint: plan.gitStatusFingerprint,
+    writeBoundary: 'main-worktree',
+    ...(failurePhase ? { failurePhase } : {}),
+    ...(message ? { failureMessage: message } : {}),
+    nextAction: 'symphony status'
+  };
+}
+
+function assertAdoptionPlan(plan, expectedAdoptionId) {
+  if (plan === null || typeof plan !== 'object' || Array.isArray(plan)) {
+    throw new UsageError('adoption plan must be an object');
+  }
+
+  if (plan.kind !== 'symphony.adoption-plan'
+    || plan.contractName !== 'symphony.adoption-plan'
+    || plan.contractVersion !== '1') {
+    throw new UsageError('adoption plan has an unsupported contract');
+  }
+
+  if (plan.adoptionId !== expectedAdoptionId) {
+    throw new UsageError('adoption plan id does not match requested adoption');
+  }
+
+  for (const field of [
+    'sourceRunId',
+    'executionPlanId',
+    'plannedRunId',
+    'projectRoot',
+    'projectFingerprint',
+    'gitHead',
+    'gitStatusFingerprint',
+    'sourceWorkspacePath',
+    'sourceWorkspaceManifestPath',
+    'sourceWorkspaceFingerprint',
+    'sourceEvidenceArtifactPath',
+    'patchArtifactPath',
+    'patchHash',
+    'confirmationCommand',
+    'createdAt'
+  ]) {
+    assertNonEmptyString(plan[field], `adoption plan ${field}`);
+  }
+
+  if (plan.command !== 'symphony adopt'
+    || plan.intent !== 'adopt'
+    || plan.semanticCommand !== 'adopt'
+    || plan.safetyMode !== 'write') {
+    throw new UsageError('adoption plan command semantics are unsupported');
+  }
+
+  assertExactStringArray(plan.pipeline, ['adopt-plan'], 'adoption plan pipeline');
+
+  if (plan.writeBoundary !== 'main-worktree'
+    || plan.sourceWriteBoundary !== 'isolated-workspace'
+    || plan.projectWrites !== true
+    || plan.mainWorktreeWrites !== true
+    || plan.workspaceWrites !== false
+    || plan.runtimeWrites !== true
+    || plan.externalCalls !== false
+    || plan.destructiveWrites !== false) {
+    throw new UsageError('adoption plan write invariants are unsupported');
+  }
+
+  if (!Array.isArray(plan.changedFiles) || !Array.isArray(plan.fileOperations)) {
+    throw new UsageError('adoption plan changedFiles and fileOperations must be arrays');
+  }
+
+  assertSameStringSet({
+    left: plan.changedFiles,
+    right: plan.fileOperations.map((operation) => operation.path),
+    message: 'adoption plan changedFiles do not match fileOperations'
+  });
+
+  for (const operation of plan.fileOperations) {
+    assertFileOperation(operation);
+  }
+}
+
+function assertFileOperation(operation) {
+  if (operation === null || typeof operation !== 'object' || Array.isArray(operation)) {
+    throw new UsageError('adoption file operation must be an object');
+  }
+
+  const path = normalizeAdoptionRelativePath(operation.path);
+
+  if (path !== operation.path) {
+    throw new UsageError('adoption file operation path is not normalized');
+  }
+
+  if (!['add', 'modify'].includes(operation.operation)) {
+    throw new UsageError('adoption file operation must be add or modify');
+  }
+
+  if (operation.operation === 'add' && operation.beforeHash !== null) {
+    throw new UsageError('add operation beforeHash must be null');
+  }
+
+  if (operation.operation === 'modify') {
+    assertNonEmptyString(operation.beforeHash, 'file operation beforeHash');
+  }
+
+  assertNonEmptyString(operation.afterHash, 'file operation afterHash');
+
+  if (!Number.isInteger(operation.size) || operation.size < 0) {
+    throw new UsageError('file operation size must be a non-negative integer');
+  }
+
+  if (operation.textEncoding !== 'utf8') {
+    throw new UsageError('file operation textEncoding must be utf8');
+  }
+}
+
+async function readGitHead({ runner, cwd }) {
+  const result = await runGitCommand({
+    runner,
+    cwd,
+    args: ['rev-parse', 'HEAD'],
+    failureMessage: 'git HEAD could not be read'
+  });
+
+  if (result.exitCode !== 0) {
+    throw new UsageError('git HEAD could not be read');
+  }
+
+  return result.stdout.trim();
+}
+
+async function buildGitStatusFingerprint({ runner, cwd, ignoredPaths }) {
+  const entries = await readGitStatusEntries({
+    runner,
+    cwd,
+    ignoredPaths
+  });
+
+  return {
+    entries,
+    fingerprint: fingerprintGitStatusEntries(entries)
+  };
+}
+
+async function readGitStatusEntries({ runner, cwd, ignoredPaths }) {
+  const result = await runGitCommand({
+    runner,
+    cwd,
+    args: ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+    failureMessage: 'git status could not be read'
+  });
+
+  if (result.exitCode !== 0) {
+    throw new UsageError('git status could not be read');
+  }
+
+  const ignored = [...ignoredPaths].sort();
+  const entries = [];
+  const parts = result.stdout.split('\0').filter((part) => part !== '');
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const entry = parts[index];
+
+    if (entry.length < 4) {
+      continue;
+    }
+
+    const status = entry.slice(0, 2);
+    const rawPath = entry.slice(3);
+    const path = normalizeAdoptionRelativePath(rawPath);
+
+    if (isPathIgnored(path, ignored)) {
+      continue;
+    }
+
+    entries.push({
+      status,
+      path
+    });
+
+    if (status.includes('R') || status.includes('C')) {
+      index += 1;
+    }
+  }
+
+  return entries.sort((left, right) => `${left.path}\0${left.status}`.localeCompare(`${right.path}\0${right.status}`));
+}
+
+function fingerprintGitStatusEntries(entries) {
+  const hash = createHash('sha256');
+
+  for (const entry of entries) {
+    hash.update(`${entry.status}\0${entry.path}\0`);
+  }
+
+  return `sha256:${hash.digest('hex')}`;
+}
+
+async function runGitCommand({ runner, cwd, args, failureMessage }) {
+  try {
+    return await runner.run({
+      executable: 'git',
+      args,
+      cwd,
+      timeoutMs: 30000
+    });
+  } catch (error) {
+    throw new UsageError(`${failureMessage}: ${error.message}`);
+  }
+}
+
+function normalizeChangedFiles(value, field) {
+  if (!Array.isArray(value)) {
+    throw new UsageError(`${field} must be an array`);
+  }
+
+  return [...new Set(value.map((entry) => normalizeAdoptionRelativePath(entry)))].sort();
+}
+
+function normalizeAdoptionRelativePath(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new UsageError('adoption path must be a non-empty string');
+  }
+
+  if (value.includes('\0') || value.includes('\\')) {
+    throw new UsageError('adoption path must be a canonical POSIX relative path');
+  }
+
+  if (posix.isAbsolute(value) || /^[A-Za-z]:/u.test(value)) {
+    throw new UsageError('adoption path must be relative');
+  }
+
+  const normalized = posix.normalize(value);
+
+  if (normalized === '.' || normalized === '..' || normalized.startsWith('../')) {
+    throw new UsageError('adoption path must not traverse outside the project');
+  }
+
+  return normalized;
+}
+
+function buildAdoptionCandidateIgnoredRoots({ projectRoot, stateDir, workDir }) {
+  return normalizeIgnoredPathList({
+    projectRoot,
+    paths: ['.git', '.symphony', 'node_modules', stateDir, workDir]
+  });
+}
+
+function assertAdoptionPathAllowed(path, ignoredRoots) {
+  if (isPathIgnored(path, ignoredRoots)) {
+    throw new UsageError('adoption path touches an ignored root');
+  }
+}
+
+function normalizeIgnoredPathList({ projectRoot, paths }) {
+  return [...new Set(paths
+    .filter((path) => isNonEmptyString(path))
+    .map((path) => relative(projectRoot, resolve(projectRoot, path)).split(sep).join('/'))
+    .filter((path) => path !== '' && path !== '.' && path !== '..' && !path.startsWith('../'))
+    .map((path) => normalizeAdoptionRelativePath(path)))]
+    .sort();
+}
+
+function isPathIgnored(path, ignoredPaths) {
+  return ignoredPaths.some((ignored) => path === ignored || path.startsWith(`${ignored}/`));
+}
+
+function decodeUtf8Text(buffer, path) {
+  if (buffer.includes(0)) {
+    throw new UsageError(`binary file is unsupported: ${path}`);
+  }
+
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    throw new UsageError(`non-utf8 text is unsupported: ${path}`);
+  }
+}
+
+function publicFileOperation(operation) {
+  return {
+    path: operation.path,
+    operation: operation.operation,
+    beforeHash: operation.beforeHash,
+    afterHash: operation.afterHash,
+    size: operation.size,
+    textEncoding: operation.textEncoding
+  };
+}
+
+function fingerprintFileOperations(operations) {
+  const hash = createHash('sha256');
+
+  for (const operation of operations) {
+    hash.update(`${operation.path}\0${operation.operation}\0${operation.beforeHash ?? ''}\0${operation.afterHash}\0${operation.size}\0${operation.textEncoding}\0`);
+  }
+
+  return `sha256:${hash.digest('hex')}`;
+}
+
+function sha256Buffer(buffer) {
+  return `sha256:${createHash('sha256').update(buffer).digest('hex')}`;
+}
+
+function sha256Text(text) {
+  return sha256Buffer(Buffer.from(text, 'utf8'));
+}
+
+async function readJsonArtifact(path, label) {
+  try {
+    return JSON.parse(await readFile(path, 'utf8'));
+  } catch (error) {
+    throw new UsageError(`${label} is missing or unreadable: ${error.message}`);
+  }
+}
+
+function assertPathInside({ root, target, message }) {
+  const relativePath = relative(root, target);
+
+  if (relativePath === '' || (!relativePath.startsWith('..') && !relativePath.includes(`..${sep}`) && !posix.isAbsolute(relativePath.split(sep).join('/')))) {
+    return;
+  }
+
+  throw new UsageError(message);
+}
+
+function assertSameStringSet({ left, right, message }) {
+  const leftSet = [...new Set(left)].sort();
+  const rightSet = [...new Set(right)].sort();
+
+  if (leftSet.length !== rightSet.length || leftSet.some((value, index) => value !== rightSet[index])) {
+    throw new UsageError(message);
+  }
 }
 
 function assertExactStringArray(value, expected, field) {
@@ -2906,6 +4761,7 @@ async function buildWorkSummary({
     taskId: kernelOutput.taskId,
     commands: kernelOutput.commands
   });
+  const workspaceRefs = extractSourceWorkspaceRefs(kernelOutput);
   const summary = {
     version: '1',
     command: summaryCommand,
@@ -2921,6 +4777,7 @@ async function buildWorkSummary({
     evidenceArtifactPath: evidence.firstArtifactPath,
     harnessOutputPath: harnessDirectory,
     taskPacketPath,
+    ...workspaceRefs,
     ...(intake.intakeContextArtifactPath
       ? { intakeContextArtifactPath: intake.intakeContextArtifactPath }
       : {}),
@@ -3006,6 +4863,32 @@ async function collectEvidence({ artifactDirectory, taskId, commands }) {
   return {
     changedFiles: [...changedFiles],
     firstArtifactPath
+  };
+}
+
+function extractSourceWorkspaceRefs(kernelOutput) {
+  const commands = Array.isArray(kernelOutput.commands) ? kernelOutput.commands : [];
+  const sourceCommand = commands.find((command) => (
+    isNonEmptyString(command.workspacePath)
+    || (isNonEmptyString(kernelOutput.workspaceDirectory)
+      && isNonEmptyString(kernelOutput.taskId)
+      && isNonEmptyString(command.workspaceId))
+  ));
+
+  if (sourceCommand === undefined) {
+    return {};
+  }
+
+  const sourceWorkspacePath = isNonEmptyString(sourceCommand.workspacePath)
+    ? sourceCommand.workspacePath
+    : join(kernelOutput.workspaceDirectory, kernelOutput.taskId, sourceCommand.workspaceId);
+  const sourceWorkspaceManifestPath = isNonEmptyString(sourceCommand.workspaceManifestPath)
+    ? sourceCommand.workspaceManifestPath
+    : join(sourceWorkspacePath, 'workspace-manifest.json');
+
+  return {
+    sourceWorkspacePath,
+    sourceWorkspaceManifestPath
   };
 }
 
@@ -3424,6 +5307,10 @@ function assertNonEmptyString(value, field) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new UsageError(`${field} must be a non-empty string`);
   }
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim() !== '';
 }
 
 function assertSafePathSegment(value, field) {

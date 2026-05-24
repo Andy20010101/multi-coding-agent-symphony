@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -18,6 +18,10 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v10 diagnostics command recommendations remain copy-only text. `--json` and `--html` are mutually exclusive output modes.
 - v11 `symphony do --write` is planning-only until the returned `symphony do --confirm-plan <plan-id>` command is run. Confirmed execution writes only to a managed isolated workspace and keeps `mainWorktreeWrites: false`.
 - v11 real-agent execution plans require the existing adapter gate, such as `MCAS_RUN_REAL_CODEX=1`, during confirmation before any adapter starts.
+- v12 `symphony adopt --run <run-id>` is planning-only. It creates a frozen `symphony.adoption-plan` and a registered patch artifact, and keeps the main worktree unchanged.
+- v12 `symphony adopt --confirm <adoption-id>` accepts only `--confirm`, `--state-dir`, and `--json`; it revalidates the frozen plan, patch hash, source workspace fingerprint, git HEAD, dirty-worktree fingerprint, and `git apply --check` before writing. After those checks and before `git apply`, it writes an adoption journal and an `applying` confirmation run state.
+- v12 `symphony adopt --inspect <adoption-id> --json` accepts only `--inspect`, `--state-dir`, and `--json`. It is read-only and reports plan, journal, latest confirmation, and current worktree hash matches.
+- v12 adoption does not invoke adapters, models, package installers, generated execution plans, or external services.
 
 ## `symphony.product-json`
 
@@ -138,6 +142,78 @@ Planned v11 write runs add controlled execution metadata without changing `contr
 
 Confirmed v11 runs preserve `executionPlanId`, `plannedRunId`, and `executionPlanArtifactPath`, then add the usual evidence, Harness, task-packet, verifier, and changed-file fields from the kernel workflow.
 
+Planned v12 adoption runs add frozen patch metadata while keeping `mainWorktreeWrites: false`:
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.run-state",
+  "runId": "symphony-adoption-source-abc123-planned",
+  "command": "symphony adopt",
+  "semanticCommand": "adopt",
+  "status": "adoption-planned",
+  "verifierStatus": "not-run",
+  "sourceRunId": "symphony-work-confirmed-abc123",
+  "executionPlanId": "symphony-plan-writer-reviewer-abc123",
+  "adoptionPlanId": "symphony-adoption-source-abc123",
+  "adoptionPlanArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123.json",
+  "patchArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123.patch",
+  "patchHash": "sha256:...",
+  "changedFiles": ["README.md"],
+  "fileOperations": [
+    {
+      "path": "README.md",
+      "operation": "modify",
+      "beforeHash": "sha256:...",
+      "afterHash": "sha256:...",
+      "size": 42,
+      "textEncoding": "utf8"
+    }
+  ],
+  "mainWorktreeWrites": false,
+  "writeBoundary": "main-worktree",
+  "artifactRefs": [
+    {
+      "kind": "adoption-plan",
+      "path": ".symphony/adoptions/symphony-adoption-source-abc123.json"
+    },
+    {
+      "kind": "adoption-patch",
+      "path": ".symphony/adoptions/symphony-adoption-source-abc123.patch"
+    }
+  ],
+  "action": {
+    "next": "symphony adopt --confirm symphony-adoption-source-abc123"
+  }
+}
+```
+
+V12 confirmation first writes an `applying` run state after the journal is durable and before `git apply`:
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.run-state",
+  "runId": "symphony-adopt-confirm-symphony-adoption-source-abc123-1",
+  "command": "symphony adopt",
+  "semanticCommand": "adopt",
+  "pipeline": ["adopt-confirm"],
+  "status": "applying",
+  "verifierStatus": "not-run",
+  "mainWorktreeWrites": false,
+  "adoptionPlanId": "symphony-adoption-source-abc123",
+  "adoptionJournalArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123-journal.json",
+  "artifactRefs": [
+    {
+      "kind": "adoption-journal",
+      "path": ".symphony/adoptions/symphony-adoption-source-abc123-journal.json"
+    }
+  ]
+}
+```
+
+Confirmed v12 adoption runs set `mainWorktreeWrites: true` only after the frozen patch is applied, post-apply evidence is recorded, and journal status is advanced from `applying` to `applied`. Failed preflight confirmations write a failed adoption run with `mainWorktreeWrites: false`; post-apply evidence or final state persistence failures do not roll back and best-effort write a failed run with `mainWorktreeWrites: true`, `failurePhase: "post-apply-evidence"`, `adoptionJournalArtifactPath`, and `nextAction: "symphony status"`.
+
 ## `symphony.execution-plan`
 
 `symphony do --write` writes a frozen plan to `.symphony/plans/<plan-id>.json` and persists a planned run. It does not start an adapter. `symphony do --write --real codex` may create a plan without the gate, but `symphony do --confirm-plan <plan-id>` requires `MCAS_RUN_REAL_CODEX=1` before adapter start.
@@ -178,6 +254,160 @@ Confirmed v11 runs preserve `executionPlanId`, `plannedRunId`, and `executionPla
 
 Confirmation accepts only `--confirm-plan <plan-id>`, `--state-dir <path>`, and `--json`. Extra prompt text or execution flags are rejected so the frozen plan cannot drift. The generated `confirmationCommand` includes the non-default state dir when a plan is stored outside `.symphony`. Confirmation also rejects missing plans, unsupported plan contracts, stale project fingerprints, unsupported write boundaries, invalid audit invariants, and missing real-agent gates before the kernel workflow starts.
 
+## `symphony.adoption-plan`
+
+`symphony adopt --run <run-id>` writes a frozen adoption plan to `.symphony/adoptions/<adoption-id>.json` and a registered patch artifact to `.symphony/adoptions/<adoption-id>.patch`. The source run must be a confirmed v11 run with `status: "passed"`, `verifierStatus: "passed"`, `writeBoundary: "isolated-workspace"`, `mainWorktreeWrites: false`, verifier evidence, and source workspace refs.
+
+```json
+{
+  "version": "1",
+  "kind": "symphony.adoption-plan",
+  "contractName": "symphony.adoption-plan",
+  "contractVersion": "1",
+  "adoptionId": "symphony-adoption-source-abc123",
+  "command": "symphony adopt",
+  "intent": "adopt",
+  "semanticCommand": "adopt",
+  "pipeline": ["adopt-plan"],
+  "safetyMode": "write",
+  "stateDir": ".symphony",
+  "sourceRunId": "symphony-work-confirmed-abc123",
+  "sourceRunArtifactPath": ".symphony/runs/symphony-work-confirmed-abc123.json",
+  "executionPlanId": "symphony-plan-writer-reviewer-abc123",
+  "executionPlanArtifactPath": ".symphony/plans/symphony-plan-writer-reviewer-abc123.json",
+  "plannedRunId": "symphony-adoption-source-abc123-planned",
+  "projectRoot": "/repo",
+  "projectFingerprint": "sha256:...",
+  "gitHead": "0123456789abcdef...",
+  "gitStatusFingerprint": "sha256:...",
+  "sourceWorkspacePath": "/repo/.symphony/work/run/runtime/workspaces/task/ws",
+  "sourceWorkspaceManifestPath": "/repo/.symphony/work/run/runtime/workspaces/task/ws/workspace-manifest.json",
+  "sourceWorkspaceFingerprint": "sha256:...",
+  "sourceEvidenceArtifactPath": "/repo/.symphony/work/run/runtime/artifacts/task/implement-evidence.json",
+  "sourceVerifierStatus": "passed",
+  "sourceWriteBoundary": "isolated-workspace",
+  "writeBoundary": "main-worktree",
+  "projectWrites": true,
+  "mainWorktreeWrites": true,
+  "workspaceWrites": false,
+  "runtimeWrites": true,
+  "externalCalls": false,
+  "destructiveWrites": false,
+  "patchArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123.patch",
+  "patchHash": "sha256:...",
+  "changedFiles": ["README.md"],
+  "fileOperations": [
+    {
+      "path": "README.md",
+      "operation": "modify",
+      "beforeHash": "sha256:...",
+      "afterHash": "sha256:...",
+      "size": 42,
+      "textEncoding": "utf8"
+    }
+  ],
+  "unsupportedChanges": [],
+  "confirmationCommand": "symphony adopt --confirm symphony-adoption-source-abc123",
+  "createdAt": "2026-05-24T00:00:00.000Z"
+}
+```
+
+v12 supports only text-file `add` and `modify` operations. Planning rejects deletion, rename, binary files, symlinks, chmod-only changes, ignored-root changes such as `.symphony/`, `.git/`, `node_modules/`, path traversal, missing workspace refs, missing evidence, stale source metadata, and dirty non-Symphony main worktree changes. Confirmation never regenerates the patch from the current isolated workspace; it uses the registered patch artifact and plan hashes only.
+
+## `symphony.adoption-journal`
+
+`symphony adopt --confirm <adoption-id>` writes `.symphony/adoptions/<adoption-id>-journal.json` after all pre-write checks and before `git apply`. The journal is also exposed through run-state `artifactRefs` with `kind: "adoption-journal"`.
+
+```json
+{
+  "version": "1",
+  "kind": "symphony.adoption-journal",
+  "contractName": "symphony.adoption-journal",
+  "contractVersion": "1",
+  "adoptionPlanId": "symphony-adoption-source-abc123",
+  "confirmationRunId": "symphony-adopt-confirm-symphony-adoption-source-abc123-1",
+  "sourceRunId": "symphony-work-confirmed-abc123",
+  "executionPlanId": "symphony-plan-writer-reviewer-abc123",
+  "patchArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123.patch",
+  "patchHash": "sha256:...",
+  "changedFiles": ["README.md"],
+  "fileOperations": [
+    {
+      "path": "README.md",
+      "operation": "modify",
+      "beforeHash": "sha256:...",
+      "afterHash": "sha256:...",
+      "size": 42,
+      "textEncoding": "utf8"
+    }
+  ],
+  "beforeFiles": [
+    {
+      "path": "README.md",
+      "exists": true,
+      "hash": "sha256:...",
+      "size": 10,
+      "textEncoding": "utf8"
+    }
+  ],
+  "createdAt": "2026-05-24T00:00:00.000Z",
+  "status": "applying"
+}
+```
+
+If post-apply evidence succeeds, the same artifact status is advanced to `"applied"`. If patch application succeeds but post-apply evidence or state persistence fails, the journal may remain `"applying"` and diagnostics use it as recovery visibility.
+
+## `symphony adopt --inspect`
+
+`symphony adopt --inspect <adoption-id> --json` is a read-only inspection surface. It rejects prompt text, `--write`, execution flags, and mixed modes such as `--inspect` plus `--confirm`.
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.product-summary",
+  "command": "symphony adopt",
+  "intent": "adopt-inspect",
+  "semanticCommand": "adopt",
+  "pipeline": ["adopt-inspect"],
+  "safety": {
+    "mode": "read-only",
+    "projectWrites": false,
+    "mainWorktreeWrites": false,
+    "runtimeWrites": false,
+    "externalCalls": false,
+    "destructiveWrites": false
+  },
+  "adoptionPlanId": "symphony-adoption-source-abc123",
+  "adoptionPlanRefs": {
+    "adoptionPlanArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123.json",
+    "executionPlanArtifactPath": ".symphony/plans/symphony-plan-writer-reviewer-abc123.json",
+    "patchArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123.patch",
+    "sourceRunArtifactPath": ".symphony/runs/symphony-work-confirmed-abc123.json"
+  },
+  "journalRef": {
+    "kind": "adoption-journal",
+    "path": ".symphony/adoptions/symphony-adoption-source-abc123-journal.json"
+  },
+  "sourceRun": {
+    "runId": "symphony-work-confirmed-abc123",
+    "verifierStatus": "passed",
+    "workspacePath": "/repo/.symphony/work/run/runtime/workspaces/task/ws"
+  },
+  "patchHash": "sha256:...",
+  "changedFiles": ["README.md"],
+  "latestConfirmationRun": {
+    "runId": "symphony-adopt-confirm-symphony-adoption-source-abc123-1",
+    "status": "passed",
+    "mainWorktreeWrites": true
+  },
+  "currentWorktreeMatchesAfterHash": true,
+  "currentWorktreeMatchesJournalBeforeFiles": false,
+  "action": {
+    "next": "symphony adopt --confirm symphony-adoption-source-abc123"
+  }
+}
+```
+
 ## `symphony.console-snapshot`
 
 `symphony console --snapshot --json` and `GET /api/summary` return the read-only state overview.
@@ -217,6 +447,28 @@ Confirmation accepts only `--confirm-plan <plan-id>`, `--state-dir <path>`, and 
     ]
   },
   "runs": [],
+  "adoptionPlans": [
+    {
+      "adoptionPlanId": "symphony-adoption-source-abc123",
+      "sourceRunId": "symphony-work-confirmed-abc123",
+      "executionPlanId": "symphony-plan-writer-reviewer-abc123",
+      "status": "adoption-planned",
+      "patchArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123.patch",
+      "patchHash": "sha256:...",
+      "changedFiles": ["README.md"],
+      "confirmationCommand": "symphony adopt --confirm symphony-adoption-source-abc123"
+    }
+  ],
+  "adoptionJournals": [
+    {
+      "adoptionPlanId": "symphony-adoption-source-abc123",
+      "confirmationRunId": "symphony-adopt-confirm-symphony-adoption-source-abc123-1",
+      "status": "applied",
+      "patchHash": "sha256:...",
+      "changedFiles": ["README.md"],
+      "adoptionJournalArtifactPath": ".symphony/adoptions/symphony-adoption-source-abc123-journal.json"
+    }
+  ],
   "runStats": {
     "total": 1,
     "recentRuns": [
@@ -375,7 +627,8 @@ When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next
       "branch": "main",
       "head": "abc1234",
       "dirty": false,
-      "dirtyFilesCount": 0
+      "dirtyFilesCount": 0,
+      "dirtyPaths": []
     },
     "github": {
       "status": "authenticated",
@@ -568,6 +821,16 @@ Report `status` is `"no-runs"` when no run states exist, `"attention"` when high
 
 `symphony diagnose` without flags renders a short terminal summary. `symphony diagnose --html` renders the same report as a single HTML document to stdout, suitable for `symphony diagnose --html > report.html`. The HTML report escapes all dynamic text, has no `<script>` block, has no external resource references, and presents commands only as copyable text.
 
+v12 diagnostics add adoption-specific risk categories as additive values:
+
+- `pending_adoption` for frozen plans waiting on copy-only confirmation.
+- `stale_adoption` for confirmation preflights that detect drift.
+- `dirty_worktree_blocks_adoption` when local git dirtiness blocks pending adoption.
+- `adoption_dirty_file_details` when pending or stale adoption is blocked by dirty files; the risk includes `dirtyPaths` when available and always includes `dirtyPathCount`.
+- `adoption_apply_in_progress` when an adoption confirmation run is `applying` or an adoption journal remains `applying`.
+- `adoption_post_apply_failed` when patch application succeeded but post-apply evidence or final state persistence failed with `failurePhase: "post-apply-evidence"`.
+- `unsupported_adoption_changes` when the source workspace contains changes outside v12 text add/modify support.
+
 ## `symphony.console-run-timeline`
 
 `GET /api/runs/<run-id>/timeline` derives a compact v9 timeline from persisted run state. It does not introduce new canonical storage.
@@ -606,7 +869,7 @@ Report `status` is `"no-runs"` when no run states exist, `"attention"` when high
 
 ## `symphony.console-artifact`
 
-`GET /api/runs/<run-id>/artifacts/<kind>` reads only a path already registered in that run's `artifactRefs`.
+`GET /api/runs/<run-id>/artifacts/<kind>` reads only a path already registered in that run's `artifactRefs`. v12 adoption patch and journal previews use the normal `adoption-patch` and `adoption-journal` artifact refs and keep the same 200 KiB cap.
 
 JSON file preview:
 

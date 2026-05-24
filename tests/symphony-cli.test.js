@@ -1,9 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
 
 import { taskPacketToTaskSpec } from '../src/integrations/harness-bridge.js';
 import {
@@ -16,6 +18,7 @@ import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
 const FAKE_BEARER_TOKEN = ['abcdefghijkl', 'mnopqrstuvwx'].join('');
+const execFileAsync = promisify(execFile);
 
 describe('v5 symphony CLI identity', () => {
   it('declares symphony and mcas package bins without replacing the mcas script', async () => {
@@ -1304,6 +1307,435 @@ describe('v8 prompt-driven symphony CLI', () => {
     }
   });
 
+  it('plans and confirms v12 verified adoption from a passed isolated workspace run', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v12-adopt-'));
+    let server;
+
+    try {
+      await writeFixtureProject(root);
+      await initFixtureGit(root);
+
+      const stateDir = join(root, 'state dir');
+      const sourceRun = await createConfirmedAdoptionSourceRun({
+        root,
+        stateDir,
+        workspaceText: '# Fixture\n\nAdopted v12 change.\n'
+      });
+
+      assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n');
+      assert.equal(existsSync(sourceRun.sourceWorkspaceManifestPath), true);
+
+      const planOutput = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'adopt',
+          '--run',
+          sourceRun.runId,
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: planOutput.stdout,
+        stderr: planOutput.stderr,
+        mcasRunner: async () => {
+          throw new Error('adoption planning must not invoke the kernel');
+        }
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(planOutput.stderrText(), '');
+
+      const planned = JSON.parse(planOutput.stdoutText());
+
+      assert.equal(planned.command, 'symphony adopt');
+      assert.equal(planned.status, 'adoption-planned');
+      assert.equal(planned.verifierStatus, 'not-run');
+      assert.equal(planned.sourceRunId, sourceRun.runId);
+      assert.equal(planned.executionPlanId, sourceRun.executionPlanId);
+      assert.equal(planned.mainWorktreeWrites, false);
+      assert.equal(planned.workspaceWrites, false);
+      assert.deepEqual(planned.changedFiles, ['README.md']);
+      assert.deepEqual(planned.fileOperations.map((operation) => operation.operation), ['modify']);
+      assert.equal(existsSync(planned.adoptionPlanArtifactPath), true);
+      assert.equal(existsSync(planned.patchArtifactPath), true);
+      assert.equal(planned.nextAction, planned.confirmationCommand);
+      assert.equal(
+        planned.confirmationCommand,
+        `symphony adopt --confirm ${planned.adoptionPlanId} --state-dir '${stateDir}'`
+      );
+      assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n');
+
+      const adoptionPlan = JSON.parse(await readFile(planned.adoptionPlanArtifactPath, 'utf8'));
+      const patch = await readFile(planned.patchArtifactPath, 'utf8');
+
+      assert.equal(adoptionPlan.contractName, 'symphony.adoption-plan');
+      assert.equal(adoptionPlan.contractVersion, '1');
+      assert.equal(adoptionPlan.mainWorktreeWrites, true);
+      assert.equal(adoptionPlan.patchHash, planned.patchHash);
+      assert.equal(patch.includes('+Adopted v12 change.'), true);
+
+      const snapshotOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['console', '--snapshot', '--state-dir', stateDir, '--json'],
+        stdout: snapshotOutput.stdout,
+        stderr: snapshotOutput.stderr
+      });
+
+      const snapshot = JSON.parse(snapshotOutput.stdoutText());
+
+      assert.equal(snapshot.latestRun.adoptionPlanId, planned.adoptionPlanId);
+      assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-plan'), true);
+      assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-patch'), true);
+      assert.equal(snapshot.adoptionPlans.some((plan) => plan.adoptionPlanId === planned.adoptionPlanId), true);
+
+      const diagnoseOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--json'],
+        stdout: diagnoseOutput.stdout,
+        stderr: diagnoseOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      const diagnostics = JSON.parse(diagnoseOutput.stdoutText());
+
+      assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'pending_adoption'), true);
+      assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'dirty_worktree_blocks_adoption'), true);
+      assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'adoption_dirty_file_details'), true);
+      assert.deepEqual(
+        diagnostics.risks.items.find((risk) => risk.category === 'adoption_dirty_file_details').dirtyPaths,
+        ['README.md', 'tmp.txt']
+      );
+
+      server = createSymphonyConsoleServer({ stateDir });
+      const baseUrl = await listenOnRandomPort(server);
+      const patchPreviewResponse = await fetch(`${baseUrl}/api/runs/latest/artifacts/adoption-patch`);
+
+      assert.equal(patchPreviewResponse.status, 200);
+
+      const patchPreview = await patchPreviewResponse.json();
+
+      assert.equal(patchPreview.artifact.kind, 'adoption-patch');
+      assert.equal(patchPreview.artifact.truncated, false);
+      assert.equal(patchPreview.artifact.content.includes('Adopted v12 change.'), true);
+
+      await closeServer(server);
+      server = undefined;
+
+      let observedApplyingState = false;
+      const preApplyRunner = new PreApplyInspectingGitRunner({
+        stateDir,
+        adoptionId: planned.adoptionPlanId,
+        onBeforeApply: async () => {
+          const applyingRun = JSON.parse(await readFile(join(stateDir, 'runs', 'latest.json'), 'utf8'));
+          const journalPath = join(stateDir, 'adoptions', `${planned.adoptionPlanId}-journal.json`);
+          const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+
+          observedApplyingState = true;
+          assert.equal(applyingRun.status, 'applying');
+          assert.equal(applyingRun.mainWorktreeWrites, false);
+          assert.equal(applyingRun.adoptionJournalArtifactPath, journalPath);
+          assert.equal(applyingRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-journal'), true);
+          assert.equal(journal.kind, 'symphony.adoption-journal');
+          assert.equal(journal.contractVersion, '1');
+          assert.equal(journal.status, 'applying');
+          assert.equal(journal.adoptionPlanId, planned.adoptionPlanId);
+          assert.equal(journal.confirmationRunId, applyingRun.runId);
+          assert.equal(journal.patchHash, planned.patchHash);
+          assert.deepEqual(journal.changedFiles, ['README.md']);
+          assert.deepEqual(journal.beforeFiles, [{
+            path: 'README.md',
+            exists: true,
+            hash: planned.fileOperations[0].beforeHash,
+            size: Buffer.byteLength('# Fixture\n'),
+            textEncoding: 'utf8'
+          }]);
+        }
+      });
+      const confirmOutput = createOutput();
+      const confirmExitCode = await runSymphonyCli({
+        argv: [
+          'adopt',
+          '--confirm',
+          planned.adoptionPlanId,
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: confirmOutput.stdout,
+        stderr: confirmOutput.stderr,
+        runner: preApplyRunner,
+        mcasRunner: async () => {
+          throw new Error('adoption confirmation must not invoke the kernel');
+        }
+      });
+
+      assert.equal(confirmExitCode, 0);
+      assert.equal(confirmOutput.stderrText(), '');
+      assert.equal(observedApplyingState, true);
+
+      const confirmed = JSON.parse(confirmOutput.stdoutText());
+
+      assert.equal(confirmed.status, 'passed');
+      assert.equal(confirmed.verifierStatus, 'passed');
+      assert.equal(confirmed.adoptionPlanId, planned.adoptionPlanId);
+      assert.equal(confirmed.plannedAdoptionRunId, planned.runId);
+      assert.equal(confirmed.mainWorktreeWrites, true);
+      assert.equal(confirmed.workspaceWrites, false);
+      assert.deepEqual(confirmed.changedFiles, ['README.md']);
+      assert.equal(existsSync(confirmed.evidenceArtifactPath), true);
+      assert.equal(existsSync(confirmed.adoptionJournalArtifactPath), true);
+      assert.equal(confirmed.artifactRefs.some((artifact) => artifact.kind === 'adoption-journal'), true);
+      assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n\nAdopted v12 change.\n');
+
+      const finalRunState = JSON.parse(await readFile(join(stateDir, 'runs', 'latest.json'), 'utf8'));
+      const finalJournal = JSON.parse(await readFile(confirmed.adoptionJournalArtifactPath, 'utf8'));
+
+      assert.equal(finalRunState.status, 'passed');
+      assert.equal(finalRunState.mainWorktreeWrites, true);
+      assert.equal(finalRunState.adoptionJournalArtifactPath, confirmed.adoptionJournalArtifactPath);
+      assert.equal(finalRunState.artifactRefs.some((artifact) => artifact.kind === 'adoption-journal'), true);
+      assert.equal(finalJournal.status, 'applied');
+
+      const beforeInspectSnapshot = await snapshotDirectoryFiles(stateDir);
+      const inspectOutput = createOutput();
+      const inspectExitCode = await runSymphonyCli({
+        argv: ['adopt', '--inspect', planned.adoptionPlanId, '--state-dir', stateDir, '--json'],
+        stdout: inspectOutput.stdout,
+        stderr: inspectOutput.stderr
+      });
+      const afterInspectSnapshot = await snapshotDirectoryFiles(stateDir);
+      const inspection = JSON.parse(inspectOutput.stdoutText());
+
+      assert.equal(inspectExitCode, 0);
+      assert.equal(inspectOutput.stderrText(), '');
+      assert.deepEqual(afterInspectSnapshot, beforeInspectSnapshot);
+      assert.equal(inspection.status, 'inspected');
+      assert.equal(inspection.safety.runtimeWrites, false);
+      assert.equal(inspection.adoptionPlanRefs.patchArtifactPath, planned.patchArtifactPath);
+      assert.equal(inspection.journalRef.path, confirmed.adoptionJournalArtifactPath);
+      assert.equal(inspection.sourceRun.runId, sourceRun.runId);
+      assert.equal(inspection.latestConfirmationRun.status, 'passed');
+      assert.equal(inspection.currentWorktreeMatchesAfterHash, true);
+      assert.equal(inspection.currentWorktreeMatchesJournalBeforeFiles, false);
+      assert.equal(inspection.currentWorktreeMatchesAfterHashDetails.files[0].matches, true);
+      assert.equal(inspection.currentWorktreeMatchesJournalBeforeFilesDetails.files[0].matches, false);
+    } finally {
+      if (server !== undefined) {
+        await closeServer(server);
+      }
+
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('records post-apply adoption evidence failures without rolling back the main worktree', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v12-adopt-post-apply-fail-'));
+
+    try {
+      await writeFixtureProject(root);
+      await initFixtureGit(root);
+
+      const stateDir = join(root, '.symphony');
+      const sourceRun = await createConfirmedAdoptionSourceRun({
+        root,
+        stateDir,
+        workspaceText: '# Fixture\n\nPost apply failure.\n'
+      });
+      const planOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['adopt', '--run', sourceRun.runId, '--state-dir', stateDir, '--json'],
+        stdout: planOutput.stdout,
+        stderr: planOutput.stderr
+      });
+
+      const planned = JSON.parse(planOutput.stdoutText());
+      const adoptionPlan = JSON.parse(await readFile(planned.adoptionPlanArtifactPath, 'utf8'));
+
+      adoptionPlan.fileOperations[0].afterHash = 'sha256:not-the-real-post-apply-hash';
+      await writeFile(planned.adoptionPlanArtifactPath, `${JSON.stringify(adoptionPlan, null, 2)}\n`, 'utf8');
+
+      const confirmOutput = createOutput();
+      const confirmExitCode = await runSymphonyCli({
+        argv: ['adopt', '--confirm', planned.adoptionPlanId, '--state-dir', stateDir, '--json'],
+        stdout: confirmOutput.stdout,
+        stderr: confirmOutput.stderr
+      });
+
+      assert.equal(confirmExitCode, 64);
+      assert.match(JSON.parse(confirmOutput.stderrText()).message, /post-apply file hash mismatch/u);
+      assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n\nPost apply failure.\n');
+
+      const failedRun = JSON.parse(await readFile(join(stateDir, 'runs', 'latest.json'), 'utf8'));
+      const journalPath = join(stateDir, 'adoptions', `${planned.adoptionPlanId}-journal.json`);
+      const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+
+      assert.equal(failedRun.status, 'failed');
+      assert.equal(failedRun.mainWorktreeWrites, true);
+      assert.equal(failedRun.failurePhase, 'post-apply-evidence');
+      assert.equal(failedRun.adoptionJournalArtifactPath, journalPath);
+      assert.equal(failedRun.nextAction, 'symphony status');
+      assert.equal(failedRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-journal'), true);
+      assert.equal(journal.status, 'applying');
+
+      const diagnoseOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['diagnose', '--state-dir', stateDir, '--json'],
+        stdout: diagnoseOutput.stdout,
+        stderr: diagnoseOutput.stderr,
+        runner: new DiagnosticReadinessRunner(),
+        env: { HOME: root }
+      });
+
+      const diagnostics = JSON.parse(diagnoseOutput.stdoutText());
+
+      assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'adoption_post_apply_failed'), true);
+      assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'adoption_apply_in_progress'), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects v12 adoption modes and pre-write drift without touching the main worktree', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v12-adopt-reject-'));
+
+    try {
+      await writeFixtureProject(root);
+      await initFixtureGit(root);
+
+      const stateDir = join(root, '.symphony');
+      const sourceRun = await createConfirmedAdoptionSourceRun({
+        root,
+        stateDir,
+        workspaceText: '# Fixture\n\nFrozen patch.\n'
+      });
+      const planOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['adopt', '--run', sourceRun.runId, '--state-dir', stateDir, '--json'],
+        stdout: planOutput.stdout,
+        stderr: planOutput.stderr
+      });
+
+      const planned = JSON.parse(planOutput.stdoutText());
+
+      for (const argv of [
+        ['adopt', '--run', sourceRun.runId, '--confirm', planned.adoptionPlanId, '--state-dir', stateDir, '--json'],
+        ['adopt', '--confirm', planned.adoptionPlanId, '--state-dir', stateDir, '--write', '--json'],
+        ['adopt', '--confirm', planned.adoptionPlanId, '--state-dir', stateDir, '--json', 'apply it'],
+        ['adopt', '--inspect', planned.adoptionPlanId, '--state-dir', stateDir, '--write', '--json'],
+        ['adopt', '--inspect', planned.adoptionPlanId, '--state-dir', stateDir, '--json', 'apply it'],
+        ['adopt', '--inspect', planned.adoptionPlanId, '--confirm', planned.adoptionPlanId, '--state-dir', stateDir, '--json'],
+        ['adopt', '--inspect', planned.adoptionPlanId, '--state-dir', stateDir]
+      ]) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv,
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 64);
+        assert.match(JSON.parse(output.stderrText()).message, /adopt|confirm|argument|option/u);
+      }
+
+      await writeFile(planned.patchArtifactPath, 'tampered\n', 'utf8');
+
+      const tamperedOutput = createOutput();
+      const tamperedExitCode = await runSymphonyCli({
+        argv: ['adopt', '--confirm', planned.adoptionPlanId, '--state-dir', stateDir, '--json'],
+        stdout: tamperedOutput.stdout,
+        stderr: tamperedOutput.stderr
+      });
+
+      assert.equal(tamperedExitCode, 64);
+      assert.match(JSON.parse(tamperedOutput.stderrText()).message, /patch|hash/u);
+      assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects v12 adoption planning for legacy, dirty, and unsupported source workspaces', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v12-adopt-source-reject-'));
+    let unsupportedRoot;
+
+    try {
+      await writeFixtureProject(root);
+      await initFixtureGit(root);
+
+      const stateDir = join(root, '.symphony');
+      const legacySourceRun = await createConfirmedLegacySourceRun({ root, stateDir });
+      const legacyOutput = createOutput();
+      const legacyExitCode = await runSymphonyCli({
+        argv: ['adopt', '--run', legacySourceRun.runId, '--state-dir', stateDir, '--json'],
+        stdout: legacyOutput.stdout,
+        stderr: legacyOutput.stderr
+      });
+
+      assert.equal(legacyExitCode, 64);
+      assert.match(JSON.parse(legacyOutput.stderrText()).message, /workspace-ref/u);
+
+      const sourceRun = await createConfirmedAdoptionSourceRun({
+        root,
+        stateDir,
+        workspaceText: '# Fixture\n\nUnsupported check.\n'
+      });
+
+      await writeFile(join(root, 'tests', 'fixture.test.js'), 'export const ok = false;\n', 'utf8');
+
+      const dirtyOutput = createOutput();
+      const dirtyExitCode = await runSymphonyCli({
+        argv: ['adopt', '--run', sourceRun.runId, '--state-dir', stateDir, '--json'],
+        stdout: dirtyOutput.stdout,
+        stderr: dirtyOutput.stderr
+      });
+
+      assert.equal(dirtyExitCode, 64);
+      assert.match(JSON.parse(dirtyOutput.stderrText()).message, /dirty worktree/u);
+
+      unsupportedRoot = await mkdtemp(join(tmpdir(), 'symphony-v12-adopt-unsupported-'));
+      await writeFixtureProject(unsupportedRoot);
+      await initFixtureGit(unsupportedRoot);
+
+      const unsupportedStateDir = join(unsupportedRoot, '.symphony');
+      const unsupportedSourceRun = await createConfirmedAdoptionSourceRun({
+        root: unsupportedRoot,
+        stateDir: unsupportedStateDir,
+        workspaceText: '# Fixture\n\nUnsupported check.\n'
+      });
+
+      await writeFile(join(unsupportedSourceRun.sourceWorkspacePath, 'README.md'), Buffer.from([0, 1, 2]));
+
+      const binaryOutput = createOutput();
+      const binaryExitCode = await runSymphonyCli({
+        argv: ['adopt', '--run', unsupportedSourceRun.runId, '--state-dir', unsupportedStateDir, '--json'],
+        stdout: binaryOutput.stdout,
+        stderr: binaryOutput.stderr
+      });
+
+      assert.equal(binaryExitCode, 64);
+      assert.match(JSON.parse(binaryOutput.stderrText()).message, /unsupported adoption changes/u);
+
+      const latestRun = JSON.parse(await readFile(join(unsupportedStateDir, 'runs', 'latest.json'), 'utf8'));
+
+      assert.equal(latestRun.status, 'failed');
+      assert.equal(latestRun.failurePhase, 'adoption-planning');
+      assert.equal(latestRun.mainWorktreeWrites, false);
+      assert.equal(latestRun.unsupportedChanges.some((change) => /binary/u.test(change.reason)), true);
+    } finally {
+      if (unsupportedRoot !== undefined) {
+        await rm(unsupportedRoot, { recursive: true, force: true });
+      }
+
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('serves a read-only local console snapshot and API from state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v8-console-'));
     let server;
@@ -2291,6 +2723,40 @@ class MissingToolRunner {
   }
 }
 
+class PreApplyInspectingGitRunner {
+  constructor({ onBeforeApply }) {
+    this.onBeforeApply = onBeforeApply;
+  }
+
+  async run({ executable, args, cwd }) {
+    if (executable !== 'git') {
+      return commandResult({
+        exitCode: 1,
+        stderr: `unexpected command: ${executable} ${args.join(' ')}`
+      });
+    }
+
+    if (args[0] === 'apply' && args[1] !== '--check') {
+      await this.onBeforeApply();
+    }
+
+    try {
+      const result = await execFileAsync('git', args, { cwd });
+
+      return commandResult({
+        stdout: result.stdout,
+        stderr: result.stderr
+      });
+    } catch (error) {
+      return commandResult({
+        exitCode: error.exitCode ?? 1,
+        stdout: error.stdout ?? '',
+        stderr: error.stderr ?? error.message
+      });
+    }
+  }
+}
+
 class ConsoleReadinessRunner {
   async run({ executable, args }) {
     if (executable === 'pnpm' && args[0] === '--version') {
@@ -2436,6 +2902,39 @@ function commandResult({
   };
 }
 
+async function snapshotDirectoryFiles(root) {
+  const files = {};
+
+  async function visit(directory, relativeDirectory = '') {
+    let entries;
+
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return;
+      }
+
+      throw error;
+    }
+
+    for (const entry of entries) {
+      const relativePath = relativeDirectory === '' ? entry.name : `${relativeDirectory}/${entry.name}`;
+      const fullPath = join(directory, entry.name);
+
+      if (entry.isDirectory()) {
+        await visit(fullPath, relativePath);
+        continue;
+      }
+
+      files[relativePath] = await readFile(fullPath, 'utf8');
+    }
+  }
+
+  await visit(root);
+  return files;
+}
+
 function diagnosticRunState(overrides) {
   return {
     version: '1',
@@ -2491,6 +2990,176 @@ async function fakePassingHarnessRunner({ argv, stdout }) {
     verifierStatus: 'passed',
     commands: [{
       artifactId
+    }]
+  }, null, 2)}\n`);
+
+  return 0;
+}
+
+async function createConfirmedAdoptionSourceRun({ root, stateDir, workspaceText }) {
+  const scanOutput = createOutput();
+
+  await runSymphonyCli({
+    argv: [
+      'scan',
+      '--project-dir',
+      root,
+      '--output-dir',
+      join(stateDir, 'scan-out'),
+      '--state-dir',
+      stateDir,
+      '--json'
+    ],
+    stdout: scanOutput.stdout,
+    stderr: scanOutput.stderr,
+    runner: new MissingToolRunner()
+  });
+
+  const planOutput = createOutput();
+
+  await runSymphonyCli({
+    argv: [
+      'do',
+      '--project-dir',
+      root,
+      '--state-dir',
+      stateDir,
+      '--work-dir',
+      join(stateDir, 'work'),
+      '--write',
+      '--json',
+      'edit README'
+    ],
+    stdout: planOutput.stdout,
+    stderr: planOutput.stderr,
+    mcasRunner: async () => {
+      throw new Error('planning must not invoke the kernel workflow');
+    }
+  });
+
+  const planned = JSON.parse(planOutput.stdoutText());
+  const confirmOutput = createOutput();
+
+  await runSymphonyCli({
+    argv: ['do', '--state-dir', stateDir, '--confirm-plan', planned.executionPlanId, '--json'],
+    stdout: confirmOutput.stdout,
+    stderr: confirmOutput.stderr,
+    mcasRunner: (invocation) => fakeAdoptionHarnessRunner(invocation, { workspaceText })
+  });
+
+  return JSON.parse(confirmOutput.stdoutText());
+}
+
+async function createConfirmedLegacySourceRun({ root, stateDir }) {
+  const scanOutput = createOutput();
+
+  await runSymphonyCli({
+    argv: [
+      'scan',
+      '--project-dir',
+      root,
+      '--output-dir',
+      join(stateDir, 'legacy-scan-out'),
+      '--state-dir',
+      stateDir,
+      '--json'
+    ],
+    stdout: scanOutput.stdout,
+    stderr: scanOutput.stderr,
+    runner: new MissingToolRunner()
+  });
+
+  const planOutput = createOutput();
+
+  await runSymphonyCli({
+    argv: [
+      'do',
+      '--project-dir',
+      root,
+      '--state-dir',
+      stateDir,
+      '--work-dir',
+      join(stateDir, 'legacy-work'),
+      '--write',
+      '--json',
+      'edit README'
+    ],
+    stdout: planOutput.stdout,
+    stderr: planOutput.stderr,
+    mcasRunner: async () => {
+      throw new Error('planning must not invoke the kernel workflow');
+    }
+  });
+
+  const planned = JSON.parse(planOutput.stdoutText());
+  const confirmOutput = createOutput();
+
+  await runSymphonyCli({
+    argv: ['do', '--state-dir', stateDir, '--confirm-plan', planned.executionPlanId, '--json'],
+    stdout: confirmOutput.stdout,
+    stderr: confirmOutput.stderr,
+    mcasRunner: async (invocation) => fakeControlledHarnessRunner(invocation, [])
+  });
+
+  return JSON.parse(confirmOutput.stdoutText());
+}
+
+async function fakeAdoptionHarnessRunner({ argv, stdout }, { workspaceText }) {
+  assert.equal(argv.includes('--materialize-workspaces'), true);
+
+  const runId = optionValue(argv, '--run-id');
+  const runtimeDir = optionValue(argv, '--runtime-dir');
+  const artifactDirectory = join(runtimeDir, 'artifacts');
+  const workspaceDirectory = join(runtimeDir, 'workspaces');
+  const taskId = `symphony.work.${runId}`;
+  const artifactId = 'implement-evidence';
+  const workspaceId = `${taskId}-primary-writer-1`;
+  const workspacePath = join(workspaceDirectory, taskId, workspaceId);
+  const workspaceManifestPath = join(workspacePath, 'workspace-manifest.json');
+
+  await mkdir(join(artifactDirectory, taskId), { recursive: true });
+  await mkdir(workspacePath, { recursive: true });
+  await writeFile(workspaceManifestPath, `${JSON.stringify({
+    version: '1',
+    workspaceId,
+    taskId,
+    role: 'primary-writer',
+    adapterId: 'codex',
+    path: workspacePath,
+    writable: true,
+    allocatedAt: '2026-05-24T00:00:00.000Z'
+  }, null, 2)}\n`, 'utf8');
+  await writeFile(join(workspacePath, 'README.md'), workspaceText, 'utf8');
+  await writeFile(join(artifactDirectory, taskId, `${artifactId}.json`), `${JSON.stringify({
+    version: '1',
+    changedFiles: ['README.md'],
+    checks: [{
+      command: 'fake adoption harness',
+      exitCode: 0
+    }]
+  }, null, 2)}\n`, 'utf8');
+
+  stdout.write(`${JSON.stringify({
+    version: '1',
+    command: 'harness run-taskpacket',
+    status: 'passed',
+    exitCode: 0,
+    runId,
+    workflowMode: 'writer-reviewer',
+    executionMode: 'dry-run',
+    adapterId: 'codex',
+    taskId,
+    artifactDirectory,
+    workspaceDirectory,
+    verifierStatus: 'passed',
+    commands: [{
+      role: 'primary-writer',
+      command: 'implement',
+      workspaceId,
+      workspacePath,
+      workspaceManifestPath,
+      artifactId,
+      verificationStatus: 'passed'
     }]
   }, null, 2)}\n`);
 
@@ -2558,6 +3227,10 @@ async function listenOnRandomPort(server) {
 }
 
 async function closeServer(server) {
+  if (!server.listening) {
+    return;
+  }
+
   await new Promise((resolve, reject) => {
     server.close((error) => {
       if (error) {
@@ -2583,4 +3256,26 @@ async function writeFixtureProject(root) {
       test: 'node --test'
     }
   }, null, 2)}\n`, 'utf8');
+}
+
+async function initFixtureGit(root) {
+  try {
+    await git(root, ['init', '-b', 'main']);
+  } catch {
+    await git(root, ['init']);
+    try {
+      await git(root, ['checkout', '-b', 'main']);
+    } catch {
+      // Older/newer git defaults may already be on main; branch name is not relevant for adoption.
+    }
+  }
+
+  await git(root, ['config', 'user.email', 'fixture@example.test']);
+  await git(root, ['config', 'user.name', 'Fixture']);
+  await git(root, ['add', '.']);
+  await git(root, ['commit', '-m', 'initial fixture']);
+}
+
+async function git(cwd, args) {
+  await execFileAsync('git', args, { cwd });
 }
