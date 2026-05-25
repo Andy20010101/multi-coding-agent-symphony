@@ -20,6 +20,9 @@ import {
   startSymphonyConsoleServer
 } from '../src/symphony/console.js';
 import {
+  buildAdoptionInspectionSummary
+} from '../src/symphony/adoption-inspect.js';
+import {
   ScaffoldError,
   buildScaffoldPlan,
   normalizeTemplate,
@@ -28,9 +31,7 @@ import {
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
-  listRunStates,
   readAdoptionPlan,
-  readAdoptionJournal,
   readExecutionPlan,
   readLatestContext,
   readLatestRun,
@@ -1983,105 +1984,17 @@ async function executeAdoptionConfirmation({ options, runner }) {
 }
 
 async function executeAdoptionInspection({ options }) {
-  const plan = await readAdoptionPlan({
-    stateDir: options.stateDir,
-    adoptionId: options.adoptionId
-  });
+  let summary;
 
-  if (plan === null) {
-    throw new UsageError(`adoption plan not found: ${options.adoptionId}`);
+  try {
+    summary = await buildAdoptionInspectionSummary({
+      stateDir: options.stateDir,
+      adoptionId: options.adoptionId,
+      exitCode: EXIT_CODES.ok
+    });
+  } catch (error) {
+    throw new UsageError(error.message);
   }
-
-  assertAdoptionPlan(plan, options.adoptionId);
-
-  const journal = await readAdoptionJournal({
-    stateDir: options.stateDir,
-    adoptionId: options.adoptionId
-  });
-  const latestConfirmationRun = await findLatestAdoptionConfirmationRun({
-    stateDir: options.stateDir,
-    adoptionId: options.adoptionId
-  });
-  const afterMatch = await compareWorktreeToFileOperationsAfter(plan);
-  const beforeMatch = journal === null
-    ? {
-        matches: null,
-        reason: 'adoption journal not found',
-        files: []
-      }
-    : await compareWorktreeToBeforeFiles({
-        projectRoot: plan.projectRoot,
-        beforeFiles: journal.beforeFiles
-      });
-  const paths = symphonyStatePaths({
-    stateDir: options.stateDir,
-    adoptionId: plan.adoptionId
-  });
-  const summary = {
-    version: '1',
-    command: 'symphony adopt',
-    intent: 'adopt-inspect',
-    semanticCommand: 'adopt',
-    pipeline: ['adopt-inspect'],
-    safetyMode: 'read-only',
-    projectWrites: false,
-    mainWorktreeWrites: false,
-    workspaceWrites: false,
-    runtimeWrites: false,
-    externalCalls: false,
-    destructiveWrites: false,
-    status: 'inspected',
-    exitCode: EXIT_CODES.ok,
-    verifierStatus: 'not-run',
-    adoptionPlanId: plan.adoptionId,
-    adoptionPlanArtifactPath: paths.adoptionPlanPath,
-    adoptionJournalArtifactPath: journal === null ? undefined : paths.adoptionJournalPath,
-    adoptionPlanRefs: {
-      adoptionPlanArtifactPath: paths.adoptionPlanPath,
-      executionPlanArtifactPath: plan.executionPlanArtifactPath,
-      patchArtifactPath: plan.patchArtifactPath,
-      sourceRunArtifactPath: plan.sourceRunArtifactPath
-    },
-    journalRef: journal === null
-      ? null
-      : {
-          kind: 'adoption-journal',
-          path: paths.adoptionJournalPath
-        },
-    sourceRunId: plan.sourceRunId,
-    sourceRunArtifactPath: plan.sourceRunArtifactPath,
-    sourceRun: {
-      runId: plan.sourceRunId,
-      artifactPath: plan.sourceRunArtifactPath,
-      verifierStatus: plan.sourceVerifierStatus,
-      workspacePath: plan.sourceWorkspacePath,
-      workspaceManifestPath: plan.sourceWorkspaceManifestPath
-    },
-    executionPlanId: plan.executionPlanId,
-    executionPlanArtifactPath: plan.executionPlanArtifactPath,
-    patchArtifactPath: plan.patchArtifactPath,
-    patchHash: plan.patchHash,
-    changedFiles: [...plan.changedFiles],
-    fileOperations: structuredClone(plan.fileOperations),
-    journal: journal === null
-      ? null
-      : {
-          adoptionPlanId: journal.adoptionPlanId,
-          confirmationRunId: journal.confirmationRunId,
-          artifactPath: paths.adoptionJournalPath,
-          status: journal.status,
-          createdAt: journal.createdAt
-        },
-    latestConfirmationRun,
-    currentWorktreeMatchesAfterHash: afterMatch.matches,
-    currentWorktreeMatchesAfterHashDetails: afterMatch,
-    currentWorktreeMatchesJournalBeforeFiles: beforeMatch.matches,
-    currentWorktreeMatchesJournalBeforeFilesDetails: beforeMatch,
-    nextAction: buildAdoptionConfirmationCommand({
-      adoptionId: plan.adoptionId,
-      stateDir: options.stateDir
-    })
-  };
 
   return {
     exitCode: EXIT_CODES.ok,
@@ -4022,122 +3935,6 @@ async function readWorktreeFileSnapshot({ projectRoot, path }) {
     hash: sha256Buffer(content),
     size: content.length,
     textEncoding: 'utf8'
-  };
-}
-
-async function compareWorktreeToFileOperationsAfter(plan) {
-  const files = [];
-
-  for (const operation of plan.fileOperations) {
-    const path = normalizeAdoptionRelativePath(operation.path);
-    const snapshot = await readComparableWorktreeFileSnapshot({
-      projectRoot: plan.projectRoot,
-      path
-    });
-    const matches = snapshot.exists === true
-      && snapshot.hash === operation.afterHash
-      && snapshot.size === operation.size
-      && snapshot.textEncoding === operation.textEncoding;
-
-    files.push({
-      path,
-      matches,
-      expected: {
-        exists: true,
-        hash: operation.afterHash,
-        size: operation.size,
-        textEncoding: operation.textEncoding
-      },
-      actual: snapshot
-    });
-  }
-
-  return {
-    matches: files.every((file) => file.matches),
-    files
-  };
-}
-
-async function compareWorktreeToBeforeFiles({ projectRoot, beforeFiles }) {
-  if (!Array.isArray(beforeFiles)) {
-    return {
-      matches: null,
-      reason: 'journal beforeFiles is missing',
-      files: []
-    };
-  }
-
-  const files = [];
-
-  for (const beforeFile of beforeFiles) {
-    const path = normalizeAdoptionRelativePath(beforeFile.path);
-    const snapshot = await readComparableWorktreeFileSnapshot({
-      projectRoot,
-      path
-    });
-    const expected = {
-      exists: beforeFile.exists,
-      hash: beforeFile.hash ?? null,
-      size: beforeFile.size,
-      textEncoding: beforeFile.textEncoding ?? null
-    };
-    const matches = snapshot.exists === expected.exists
-      && snapshot.hash === expected.hash
-      && snapshot.size === expected.size
-      && snapshot.textEncoding === expected.textEncoding;
-
-    files.push({
-      path,
-      matches,
-      expected,
-      actual: snapshot
-    });
-  }
-
-  return {
-    matches: files.every((file) => file.matches),
-    files
-  };
-}
-
-async function readComparableWorktreeFileSnapshot({ projectRoot, path }) {
-  try {
-    return await readWorktreeFileSnapshot({
-      projectRoot,
-      path
-    });
-  } catch (error) {
-    return {
-      path,
-      exists: null,
-      hash: null,
-      size: null,
-      textEncoding: null,
-      error: error.message
-    };
-  }
-}
-
-async function findLatestAdoptionConfirmationRun({ stateDir, adoptionId }) {
-  const runs = await listRunStates({ stateDir });
-  const run = runs.find((candidate) => candidate.adoptionPlanId === adoptionId
-    && Array.isArray(candidate.pipeline)
-    && candidate.pipeline.includes('adopt-confirm'));
-
-  if (run === undefined) {
-    return null;
-  }
-
-  return {
-    runId: run.runId,
-    status: run.status,
-    verifierStatus: run.verifierStatus,
-    mainWorktreeWrites: run.mainWorktreeWrites,
-    failurePhase: run.failurePhase,
-    adoptionJournalArtifactPath: run.adoptionJournalArtifactPath,
-    evidenceArtifactPath: run.evidenceArtifactPath,
-    updatedAt: run.updatedAt,
-    nextAction: run.nextAction
   };
 }
 

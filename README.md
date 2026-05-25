@@ -41,6 +41,10 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [v12 Verified Adoption Plan](docs/plans/v12-verified-adoption-plan-2026-05-24.md)
 - [v12 Release Evidence](docs/plans/v12-release-evidence-2026-05-24.md)
 - [v12 Execution Prompt](docs/plans/v12-execution-prompt-2026-05-24.md)
+- [v13 Workbench Information Architecture Plan](docs/plans/v13-workbench-information-architecture-plan-2026-05-25.md)
+- [v13 Release Evidence](docs/plans/v13-release-evidence-2026-05-25.md)
+- [v13.1 Release Evidence](docs/plans/v13.1-release-evidence-2026-05-25.md)
+- [v13 Execution Prompt](docs/plans/v13-execution-prompt-2026-05-25.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
 - [V1 to V2 Evolution Plan](docs/plans/v1-to-v2-evolution-plan-2026-05-14.md)
@@ -64,6 +68,8 @@ Implemented:
 - v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan with the exact confirm command, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
 - v12 verified adoption: `symphony adopt --run <run-id>` freezes verifier-passing isolated workspace changes as a text-only patch plan, and `symphony adopt --confirm <adoption-id>` applies only that frozen patch after fingerprint and `git apply --check` validation.
 - v12 adoption recovery visibility: confirmation writes a registered journal before `git apply`, and `symphony adopt --inspect <adoption-id> --json` reports plan refs, journal refs, latest confirmation state, and current worktree hash matches without writing files.
+- v13 Workbench information architecture: the default console view is a compact Overview, with adoption recovery, runs, diagnostics, artifacts, and raw/debug detail behind dedicated read-only sections.
+- v13.1 Workbench Chinese presentation layer: visible Workbench labels, empty states, status text, and command descriptions render in Chinese while JSON contracts, status enums, and copy-only commands remain stable.
 - Curl-installable global `symphony` and `mcas` shims for use from any repository without `pnpm link --global`.
 - Kernel/debug `pnpm mcas` commands for doctor, project intake, GitHub issue intake, manual queueing, task execution, smoke dispatch, Harness Bridge execution, and eval replay dispatch.
 - V1.5 Harness Bridge dry-run execution across implemented TaskPacket modes, plus gated real CLI lanes from JSON TaskPackets into Symphony artifacts and Harness verification records.
@@ -72,7 +78,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current released repository tag: `v12`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, and v12 adds verified adoption with confirmation recovery visibility. The `v7` tag remains available for historical installs.
+Current released repository tag: `v12`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 is implemented locally as the Workbench information architecture cut, and v13.1 is implemented locally as the Workbench Chinese presentation layer. The `v7` tag remains available for historical installs.
 
 ## Design Center
 

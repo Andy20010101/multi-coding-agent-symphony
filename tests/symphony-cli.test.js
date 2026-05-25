@@ -13,7 +13,10 @@ import {
   runSymphonyCli
 } from '../scripts/symphony.js';
 import { runMcasCli } from '../scripts/mcas.js';
-import { createSymphonyConsoleServer } from '../src/symphony/console.js';
+import {
+  buildConsoleSnapshot,
+  createSymphonyConsoleServer
+} from '../src/symphony/console.js';
 
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
@@ -1388,6 +1391,11 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-plan'), true);
       assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-patch'), true);
       assert.equal(snapshot.adoptionPlans.some((plan) => plan.adoptionPlanId === planned.adoptionPlanId), true);
+      assert.equal(snapshot.adoptionSummary.status, 'pending');
+      assert.equal(snapshot.adoptionSummary.pendingCount, 1);
+      assert.equal(['attention', 'blocked'].includes(snapshot.overview.status), true);
+      assert.equal(snapshot.overview.topRisks.length <= 3, true);
+      assert.equal(snapshot.overview.topRisks.some((risk) => risk.category === 'pending_adoption'), true);
 
       const diagnoseOutput = createOutput();
 
@@ -1401,6 +1409,10 @@ describe('v8 prompt-driven symphony CLI', () => {
 
       const diagnostics = JSON.parse(diagnoseOutput.stdoutText());
 
+      assert.equal(diagnostics.snapshot.adoptionSummary.status, 'dirty-blocked');
+      assert.equal(diagnostics.snapshot.adoptionSummary.dirtyBlocked, true);
+      assert.equal(diagnostics.snapshot.overview.status, 'blocked');
+      assert.equal(diagnostics.snapshot.overview.nextAction, 'git status --short');
       assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'pending_adoption'), true);
       assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'dirty_worktree_blocks_adoption'), true);
       assert.equal(diagnostics.risks.items.some((risk) => risk.category === 'adoption_dirty_file_details'), true);
@@ -1452,6 +1464,11 @@ describe('v8 prompt-driven symphony CLI', () => {
             size: Buffer.byteLength('# Fixture\n'),
             textEncoding: 'utf8'
           }]);
+
+          const applyingSnapshot = await buildConsoleSnapshot({ stateDir });
+
+          assert.equal(applyingSnapshot.adoptionSummary.status, 'applying');
+          assert.equal(applyingSnapshot.adoptionSummary.applyingCount, 1);
         }
       });
       const confirmOutput = createOutput();
@@ -1522,6 +1539,30 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(inspection.currentWorktreeMatchesJournalBeforeFiles, false);
       assert.equal(inspection.currentWorktreeMatchesAfterHashDetails.files[0].matches, true);
       assert.equal(inspection.currentWorktreeMatchesJournalBeforeFilesDetails.files[0].matches, false);
+
+      const beforeApiInspectSnapshot = await snapshotDirectoryFiles(stateDir);
+
+      server = createSymphonyConsoleServer({ stateDir });
+      const inspectBaseUrl = await listenOnRandomPort(server);
+      const apiInspectResponse = await fetch(`${inspectBaseUrl}/api/adoptions/${encodeURIComponent(planned.adoptionPlanId)}/inspect`);
+      const unsafeInspectResponse = await fetch(`${inspectBaseUrl}/api/adoptions/${encodeURIComponent('../bad')}/inspect`);
+      const afterApiInspectSnapshot = await snapshotDirectoryFiles(stateDir);
+
+      assert.equal(apiInspectResponse.status, 200);
+      const apiInspection = await apiInspectResponse.json();
+
+      assert.deepEqual(afterApiInspectSnapshot, beforeApiInspectSnapshot);
+      assert.equal(apiInspection.contractName, 'symphony.console-adoption-inspect');
+      assert.equal(apiInspection.adoptionPlanId, planned.adoptionPlanId);
+      assert.equal(apiInspection.journalRef.path, confirmed.adoptionJournalArtifactPath);
+      assert.equal(apiInspection.latestConfirmationRun.status, 'passed');
+      assert.equal(apiInspection.currentWorktreeMatchesAfterHash, inspection.currentWorktreeMatchesAfterHash);
+      assert.equal(apiInspection.currentWorktreeMatchesJournalBeforeFiles, inspection.currentWorktreeMatchesJournalBeforeFiles);
+      assert.equal(apiInspection.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
+      assert.equal(unsafeInspectResponse.status, 400);
+
+      await closeServer(server);
+      server = undefined;
     } finally {
       if (server !== undefined) {
         await closeServer(server);
@@ -1572,6 +1613,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       const failedRun = JSON.parse(await readFile(join(stateDir, 'runs', 'latest.json'), 'utf8'));
       const journalPath = join(stateDir, 'adoptions', `${planned.adoptionPlanId}-journal.json`);
       const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+      const snapshot = await buildConsoleSnapshot({ stateDir });
 
       assert.equal(failedRun.status, 'failed');
       assert.equal(failedRun.mainWorktreeWrites, true);
@@ -1580,6 +1622,8 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(failedRun.nextAction, 'symphony status');
       assert.equal(failedRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-journal'), true);
       assert.equal(journal.status, 'applying');
+      assert.equal(snapshot.adoptionSummary.status, 'post-apply-failed');
+      assert.equal(snapshot.adoptionSummary.postApplyFailedCount, 1);
 
       const diagnoseOutput = createOutput();
 
@@ -1776,6 +1820,10 @@ describe('v8 prompt-driven symphony CLI', () => {
 
       assert.equal(snapshot.contractName, 'symphony.console-snapshot');
       assert.equal(snapshot.status, 'ready');
+      assert.equal(snapshot.overview.status, 'ready');
+      assert.equal(snapshot.overview.latestRunId, JSON.parse(scanOutput.stdoutText()).runId);
+      assert.equal(snapshot.overview.topRisks.length <= 3, true);
+      assert.equal(snapshot.adoptionSummary.status, 'clear');
       assert.equal(snapshot.runs.length, 1);
       assert.equal(snapshot.latestRun.runId, JSON.parse(scanOutput.stdoutText()).runId);
       assert.equal(snapshot.latestRun.artifactRefs.some((artifact) => artifact.kind === 'context'), true);
@@ -1802,12 +1850,18 @@ describe('v8 prompt-driven symphony CLI', () => {
       const html = await htmlResponse.text();
 
       assert.match(html, /Symphony Workbench/u);
+      assert.match(html, /data-view="overview"/u);
+      assert.match(html, /data-view="adoptions"/u);
+      assert.match(html, /data-view="runs"/u);
+      assert.match(html, /data-view="diagnostics"/u);
+      assert.match(html, /data-view="artifacts"/u);
       assert.match(html, /\/api\/readiness/u);
+      assert.match(html, /\/api\/adoptions\//u);
       assert.match(html, /copyCommand/u);
-      assert.match(html, /Risk Panel/u);
+      assert.match(html, /前三风险/u);
       assert.match(html, /run-filters/u);
-      assert.match(html, /detailSection\('Intent'/u);
-      assert.match(html, /detailSection\('Verification'/u);
+      assert.match(html, /detailSection\('意图'/u);
+      assert.match(html, /detailSection\('验证'/u);
       assert.equal(summaryResponse.status, 200);
       const serverSnapshot = await summaryResponse.json();
 
@@ -1891,6 +1945,9 @@ describe('v8 prompt-driven symphony CLI', () => {
       const readiness = await (await fetch(`${baseUrl}/api/readiness`)).json();
 
       assert.equal(summary.status, 'no-runs');
+      assert.equal(summary.overview.status, 'no-runs');
+      assert.equal(summary.overview.nextAction, 'symphony scan');
+      assert.equal(summary.adoptionSummary.status, 'clear');
       assert.equal(summary.latestRun, null);
       assert.equal(summary.recommendedCommands.some((command) => command.command === 'symphony scan'), true);
       assert.equal(summary.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
@@ -2024,6 +2081,9 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(summary.runStats.artifacts.missing, 1);
       assert.equal(summary.runStats.filters.find((filter) => filter.id === 'failed').count, 1);
       assert.equal(summary.runStats.filters.find((filter) => filter.id === 'real').count, 1);
+      assert.equal(summary.runStats.filters.find((filter) => filter.id === 'adoption').count, 0);
+      assert.equal(summary.overview.topRisks.length, 3);
+      assert.equal(summary.overview.status, 'blocked');
       assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'verifier_failed'), true);
       assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'unsupported_requests'), true);
       assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'external_calls'), true);

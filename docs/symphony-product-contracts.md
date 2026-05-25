@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -12,7 +12,7 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - File previews are capped at 200 KiB and return `truncated: true` when capped.
 - v9 workbench commands are copy-only recommendations. The browser UI does not execute commands or write files.
 - v9 readiness checks may inspect local CLI availability, git state, GitHub auth/CI visibility, and real CLI gate status; they do not invoke models and must not expose token values.
-- v9.1 run filters are read-only selectors. `GET /api/runs?filter=<filter>` supports `all`, `passed`, `failed`, `dry-run`, `real`, `scan`, and `verify`.
+- v9.1 run filters are read-only selectors. `GET /api/runs?filter=<filter>` supports `all`, `passed`, `failed`, `dry-run`, `real`, `scan`, `verify`, and the v13 additive `adoption` filter.
 - v9.1 diagnostics may add `runStats`, `riskSummary`, `artifactStatus`, and `commandGroups`; older consumers can ignore these fields.
 - v10 `symphony diagnose` does not start a server, invoke models, execute recommended commands, read artifact content, or write project files. `--html` writes only to stdout and the generated report is static HTML with no scripts or external resources.
 - v10 diagnostics command recommendations remain copy-only text. `--json` and `--html` are mutually exclusive output modes.
@@ -22,6 +22,8 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v12 `symphony adopt --confirm <adoption-id>` accepts only `--confirm`, `--state-dir`, and `--json`; it revalidates the frozen plan, patch hash, source workspace fingerprint, git HEAD, dirty-worktree fingerprint, and `git apply --check` before writing. After those checks and before `git apply`, it writes an adoption journal and an `applying` confirmation run state.
 - v12 `symphony adopt --inspect <adoption-id> --json` accepts only `--inspect`, `--state-dir`, and `--json`. It is read-only and reports plan, journal, latest confirmation, and current worktree hash matches.
 - v12 adoption does not invoke adapters, models, package installers, generated execution plans, or external services.
+- v13 Workbench `overview` and `adoptionSummary` are derived summaries, not canonical storage. They can be recomputed from run states, adoption plans, adoption journals, readiness, and diagnostics.
+- v13 `GET /api/adoptions/<adoption-id>/inspect` reuses the CLI adoption inspection builder. It is read-only, writes no state files, executes no recommended commands, and returns only copy-only command recommendations.
 
 ## `symphony.product-json`
 
@@ -418,6 +420,23 @@ If post-apply evidence succeeds, the same artifact status is advanced to `"appli
   "contractName": "symphony.console-snapshot",
   "stateDir": ".symphony",
   "status": "ready",
+  "overview": {
+    "status": "ready",
+    "headline": "Latest run passed and no high-priority risks are visible.",
+    "latestRunId": "symphony-scan-demo-abc123-1",
+    "topRisks": [],
+    "nextAction": "symphony status"
+  },
+  "adoptionSummary": {
+    "status": "clear",
+    "pendingCount": 0,
+    "applyingCount": 0,
+    "postApplyFailedCount": 0,
+    "staleCount": 0,
+    "unsupportedCount": 0,
+    "completedCount": 0,
+    "dirtyBlocked": false
+  },
   "latestRun": {
     "runId": "symphony-scan-demo-abc123-1",
     "command": "symphony scan",
@@ -524,7 +543,14 @@ If post-apply evidence succeeds, the same artifact status is advanced to `"appli
 }
 ```
 
-When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next action is `symphony scan`.
+When no runs exist, `status` and `overview.status` are `"no-runs"`, `latestRun` is `null`, and the next action is `symphony scan`. The v13 Workbench renders the compact Overview by default, with deeper details separated into Overview, Adoptions, Runs, Diagnostics, and Artifacts sections. v13.1 localizes visible Workbench presentation text to Chinese, but it does not localize JSON field names, status enum values, copy-only command strings, or raw/debug JSON blocks. Field ownership is:
+
+- Overview: `overview`, latest run summary, top risks capped to three, compact readiness, and current next action.
+- Adoptions: `adoptionSummary`, `adoptionPlans`, `adoptionJournals`, adoption run fields, and inspect match results.
+- Runs: `runs`, `runStats`, filters, timelines, selected run details, and run-level commands.
+- Diagnostics: full risk/readiness payloads and grouped copy-only commands.
+- Artifacts: registered `artifactRefs`, artifact health/status, and bounded previews.
+- Raw/debug: raw run state, route/provider blocks, unsupported requests, scaffold plans, and JSON detail blocks.
 
 `GET /api/runs` also accepts an optional v9.1 filter query:
 
@@ -533,7 +559,7 @@ When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next
   "contractVersion": "1",
   "contractName": "symphony.console-runs",
   "filter": "failed",
-  "availableFilters": ["all", "passed", "failed", "dry-run", "real", "scan", "verify"],
+  "availableFilters": ["all", "passed", "failed", "dry-run", "real", "scan", "verify", "adoption"],
   "runs": []
 }
 ```
@@ -597,6 +623,40 @@ When no runs exist, `status` is `"no-runs"`, `latestRun` is `null`, and the next
     ]
   },
   "rawRunState": {}
+}
+```
+
+## `symphony.console-adoption-inspect`
+
+`GET /api/adoptions/<adoption-id>/inspect` returns read-only adoption recovery data using the same inspection builder as `symphony adopt --inspect <adoption-id> --json`. It rejects unsafe ids before reading state and does not write files, run `git apply`, invoke adapters, invoke models, run installers, or execute recommended commands.
+
+```json
+{
+  "contractVersion": "1",
+  "contractName": "symphony.console-adoption-inspect",
+  "status": "inspected",
+  "safetyMode": "read-only",
+  "runtimeWrites": false,
+  "adoptionPlanId": "symphony-adoption-source-abc123",
+  "journalRef": {
+    "kind": "adoption-journal",
+    "path": ".symphony/adoptions/symphony-adoption-source-abc123-journal.json"
+  },
+  "latestConfirmationRun": {
+    "runId": "symphony-adopt-confirm-symphony-adoption-source-abc123-1",
+    "status": "passed",
+    "mainWorktreeWrites": true
+  },
+  "currentWorktreeMatchesAfterHash": true,
+  "currentWorktreeMatchesJournalBeforeFiles": false,
+  "recommendedCommands": [
+    {
+      "id": "inspect-adoption",
+      "label": "Inspect adoption",
+      "command": "symphony adopt --inspect symphony-adoption-source-abc123 --json",
+      "mode": "copy-only"
+    }
+  ]
 }
 ```
 
