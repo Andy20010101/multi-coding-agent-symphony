@@ -24,11 +24,12 @@ const FINGERPRINT_LIMITS = {
   maxDepth: 16
 };
 
-export function symphonyStatePaths({ stateDir = '.symphony', runId, planId, adoptionId } = {}) {
+export function symphonyStatePaths({ stateDir = '.symphony', runId, planId, adoptionId, stageId, gateEventId } = {}) {
   return {
     stateDir,
     latestContextPath: join(stateDir, 'context', 'latest.json'),
     latestRunPath: join(stateDir, 'runs', 'latest.json'),
+    latestStagePath: join(stateDir, 'stages', 'latest.json'),
     ...(runId ? { runPath: join(stateDir, 'runs', `${runId}.json`) } : {}),
     ...(planId ? { executionPlanPath: join(stateDir, 'plans', `${planId}.json`) } : {}),
     ...(adoptionId
@@ -37,6 +38,12 @@ export function symphonyStatePaths({ stateDir = '.symphony', runId, planId, adop
           adoptionPatchPath: join(stateDir, 'adoptions', `${adoptionId}.patch`),
           adoptionEvidencePath: join(stateDir, 'adoptions', `${adoptionId}-evidence.json`),
           adoptionJournalPath: join(stateDir, 'adoptions', `${adoptionId}-journal.json`)
+        }
+      : {}),
+    ...(stageId
+      ? {
+          stagePath: join(stateDir, 'stages', `${stageId}.json`),
+          ...(gateEventId ? { stageGateEventPath: join(stateDir, 'stages', `${stageId}-${gateEventId}.json`) } : {})
         }
       : {})
   };

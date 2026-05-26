@@ -18,7 +18,12 @@ const ARTIFACT_FIELDS = [
   ['adoption-plan', 'adoptionPlanArtifactPath'],
   ['adoption-patch', 'patchArtifactPath'],
   ['adoption-journal', 'adoptionJournalArtifactPath'],
-  ['workspace-manifest', 'sourceWorkspaceManifestPath']
+  ['workspace-manifest', 'sourceWorkspaceManifestPath'],
+  ['stage-charter', 'stageCharterArtifactPath'],
+  ['stage-charter-html', 'stageCharterHtmlArtifactPath'],
+  ['stage-gate-event', 'stageGateEventArtifactPath'],
+  ['charter-repair-plan', 'charterRepairPlanArtifactPath'],
+  ['blocked-snapshot', 'blockedSnapshotArtifactPath']
 ];
 
 export function withProductJsonContract(summary, {
@@ -104,6 +109,16 @@ export function compactRunState(runState) {
     gitStatusFingerprint: runState.gitStatusFingerprint,
     confirmationCommand: runState.confirmationCommand,
     requiresGate: runState.requiresGate,
+    stageBinding: cloneStructuredValue(runState.stageBinding),
+    stageSummary: cloneStructuredValue(runState.stageSummary),
+    stageGate: cloneStructuredValue(runState.stageGate),
+    stageAdoptionSummary: cloneStructuredValue(runState.stageAdoptionSummary),
+    blocker: cloneStructuredValue(runState.blocker),
+    stageCharterArtifactPath: runState.stageCharterArtifactPath,
+    stageCharterHtmlArtifactPath: runState.stageCharterHtmlArtifactPath,
+    stageGateEventArtifactPath: runState.stageGateEventArtifactPath,
+    charterRepairPlanArtifactPath: runState.charterRepairPlanArtifactPath,
+    blockedSnapshotArtifactPath: runState.blockedSnapshotArtifactPath,
     routeDecision: cloneStructuredValue(runState.routeDecision),
     matchedSignals: cloneStringArray(runState.matchedSignals),
     workflowMode: runState.workflowMode,

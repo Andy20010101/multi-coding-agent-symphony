@@ -20,6 +20,18 @@ import {
   startSymphonyConsoleServer
 } from '../src/symphony/console.js';
 import {
+  buildAdoptionInspectionSummary
+} from '../src/symphony/adoption-inspect.js';
+import {
+  DEFAULT_STAGE_DOCS_DIR,
+  activateStage,
+  buildStageAdoptionSummary,
+  buildStageCommandSummary,
+  createStageCharter,
+  enforceStageConsistencyGate,
+  renderStageCharterFile
+} from '../src/symphony/stage.js';
+import {
   ScaffoldError,
   buildScaffoldPlan,
   normalizeTemplate,
@@ -28,9 +40,7 @@ import {
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
-  listRunStates,
   readAdoptionPlan,
-  readAdoptionJournal,
   readExecutionPlan,
   readLatestContext,
   readLatestRun,
@@ -84,7 +94,9 @@ const KNOWN_COMMANDS = new Set([
   'console',
   'diagnose',
   'adopt',
-  'new'
+  'new',
+  'stage',
+  'next'
 ]);
 let productRunSequence = 0;
 
@@ -250,6 +262,20 @@ export async function runSymphonyCli({
         stdout,
         runner: runner ?? new NodeProcessRunner(),
         env
+      });
+    }
+
+    if (command === 'stage') {
+      return await runSymphonyStage({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'next') {
+      return await runSymphonyNext({
+        args: rest,
+        stdout
       });
     }
 
@@ -828,6 +854,33 @@ async function executeProductWork({
   mcasRunner,
   routeDecision
 }) {
+  const highRisk = options.safetyMode === 'write' || options.safetyMode === 'external';
+  const projectState = await buildStageGateProjectState({
+    projectDir: options.projectDir,
+    stateDir: options.stateDir,
+    ignoredPaths: [options.stateDir, options.workDir, options.stageDocsDir],
+    runner
+  });
+  const stageGate = await enforceStageConsistencyGate({
+    stateDir: options.stateDir,
+    docsDir: options.stageDocsDir,
+    explicitStageId: options.stageId,
+    noStage: options.noStage,
+    action: buildProductStageGateAction({
+      command: productCommand ?? semanticCommand,
+      semanticCommand,
+      options,
+      highRisk
+    }),
+    attemptedCommand: `symphony ${productCommand ?? semanticCommand}`,
+    projectState,
+    highRisk
+  });
+
+  if (stageGate.blocked) {
+    throwStageGateBlocked(stageGate, `symphony ${productCommand ?? semanticCommand}`);
+  }
+
   if (options.safetyMode === 'write') {
     if (semanticCommand !== 'do') {
       throw new UsageError('write-mode execution plans are only supported for symphony do');
@@ -840,7 +893,9 @@ async function executeProductWork({
       runner,
       env,
       mcasRunner,
-      routeDecision
+      routeDecision,
+      stageBinding: stageGate.stageBinding ?? undefined,
+      stageGate: stageGate.stageGate ?? undefined
     });
   }
 
@@ -936,6 +991,8 @@ async function executeProductWork({
     sourceWorkspacePath: legacy.summary.sourceWorkspacePath,
     sourceWorkspaceManifestPath: legacy.summary.sourceWorkspaceManifestPath,
     changedFiles: legacy.summary.changedFiles,
+    stageBinding: stageGate.stageBinding ?? undefined,
+    stageGate: stageGate.stageGate ?? undefined,
     ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
     nextAction: 'symphony status'
   };
@@ -964,7 +1021,9 @@ async function createProductExecutionPlan({
   runner,
   env,
   mcasRunner,
-  routeDecision
+  routeDecision,
+  stageBinding,
+  stageGate
 }) {
   const context = await ensureFreshContext({
     projectDir: options.projectDir,
@@ -1006,6 +1065,8 @@ async function createProductExecutionPlan({
     pipeline,
     routeDecision: normalizedRouteDecision,
     matchedSignals: normalizedRouteDecision.matchedSignals,
+    stageBinding: stageBinding ?? undefined,
+    stageGate: stageGate ?? undefined,
     safetyMode: 'write',
     projectWrites: true,
     mainWorktreeWrites: false,
@@ -1064,6 +1125,8 @@ async function createProductExecutionPlan({
     summaryArtifactPath: context.pointer.summaryArtifactPath,
     matchedSignals: normalizedRouteDecision.matchedSignals,
     routeDecision: normalizedRouteDecision,
+    stageBinding: stageBinding ?? undefined,
+    stageGate: stageGate ?? undefined,
     confirmationCommand,
     nextAction: confirmationCommand
   };
@@ -1087,10 +1150,37 @@ async function executeConfirmedProductPlan({
   env,
   mcasRunner
 }) {
-  const plan = await readExecutionPlan({
+  const preflightPlan = await readExecutionPlan({
     stateDir: options.stateDir,
     planId: options.planId
   });
+  const projectState = preflightPlan === null
+    ? null
+    : await buildStageGateProjectState({
+        projectDir: preflightPlan.projectRoot,
+        stateDir: options.stateDir,
+        ignoredPaths: [options.stateDir, preflightPlan.workDir, options.stageDocsDir],
+        runner
+      });
+  const stageGate = await enforceStageConsistencyGate({
+    stateDir: options.stateDir,
+    docsDir: options.stageDocsDir,
+    explicitStageId: options.stageId,
+    noStage: options.noStage,
+    action: buildConfirmPlanStageGateAction({
+      options,
+      plan: preflightPlan
+    }),
+    attemptedCommand: 'symphony do --confirm-plan',
+    projectState,
+    highRisk: true
+  });
+
+  if (stageGate.blocked) {
+    throwStageGateBlocked(stageGate, 'symphony do --confirm-plan');
+  }
+
+  const plan = preflightPlan;
 
   if (plan === null) {
     throw new UsageError(`execution plan not found: ${options.planId}`);
@@ -1193,6 +1283,8 @@ async function executeConfirmedProductPlan({
     changedFiles: legacy.summary.changedFiles,
     matchedSignals: plan.matchedSignals,
     routeDecision: plan.routeDecision,
+    stageBinding: options.noStage ? undefined : plan.stageBinding ?? stageGate.stageBinding ?? undefined,
+    stageGate: stageGate.stageGate ?? undefined,
     confirmationCommand: plan.confirmationCommand,
     nextAction: 'symphony status'
   };
@@ -1628,6 +1720,153 @@ async function runSymphonyDiagnose({ args, stdout, runner, env }) {
   return EXIT_CODES.ok;
 }
 
+async function runSymphonyStage({ args, stdout }) {
+  const options = parseStageArgs(args);
+  let summary;
+
+  if (options.help) {
+    stdout.write(stageHelpText(options.subcommand));
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'create') {
+    const created = await createStageCharter({
+      stageId: options.stageId,
+      docsDir: options.stageDocsDir,
+      overwrite: options.write
+    });
+    summary = {
+      version: '1',
+      command: 'symphony stage create',
+      intent: 'stage',
+      semanticCommand: 'stage',
+      pipeline: ['stage', 'create'],
+      safetyMode: 'write',
+      projectWrites: true,
+      runtimeWrites: false,
+      externalCalls: false,
+      destructiveWrites: false,
+      status: created.status,
+      stageId: created.stageId,
+      stageCharterArtifactPath: created.paths.charterPath,
+      stageCharterHtmlArtifactPath: created.paths.htmlPath,
+      writtenFiles: created.writes,
+      nextAction: `symphony stage activate ${created.stageId}`
+    };
+    writeProductOutput(stdout, summary, options.json);
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'activate') {
+    const activated = await activateStage({
+      stateDir: options.stateDir,
+      docsDir: options.stageDocsDir,
+      stageId: options.stageId
+    });
+    summary = {
+      version: '1',
+      command: 'symphony stage activate',
+      intent: 'stage',
+      semanticCommand: 'stage',
+      pipeline: ['stage', 'activate'],
+      safetyMode: 'write',
+      projectWrites: false,
+      runtimeWrites: true,
+      externalCalls: false,
+      destructiveWrites: false,
+      status: activated.status,
+      stageId: activated.stageId,
+      active: true,
+      consistency: activated.state.consistency,
+      blocker: activated.state.blocker,
+      stageCharterArtifactPath: activated.state.charterPath,
+      stageCharterHtmlArtifactPath: activated.state.htmlPath,
+      statePath: symphonyStatePaths({
+        stateDir: options.stateDir,
+        stageId: activated.stageId
+      }).stagePath,
+      latestStagePath: symphonyStatePaths({ stateDir: options.stateDir }).latestStagePath,
+      nextAction: 'symphony stage summary'
+    };
+    writeProductOutput(stdout, summary, options.json);
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'render') {
+    const rendered = await renderStageCharterFile({
+      stageId: options.stageId,
+      docsDir: options.stageDocsDir,
+      write: options.write
+    });
+    summary = {
+      version: '1',
+      command: 'symphony stage render',
+      intent: 'stage',
+      semanticCommand: 'stage',
+      pipeline: ['stage', 'render'],
+      safetyMode: rendered.runtimeWrites ? 'write' : 'read-only',
+      projectWrites: rendered.runtimeWrites,
+      runtimeWrites: false,
+      externalCalls: false,
+      destructiveWrites: false,
+      status: rendered.status,
+      stageId: rendered.stageId,
+      stageCharterArtifactPath: rendered.paths.charterPath,
+      stageCharterHtmlArtifactPath: rendered.paths.htmlPath,
+      html: options.json ? rendered.html : undefined,
+      nextAction: `symphony stage activate ${rendered.stageId}`
+    };
+
+    if (!options.json && !options.write) {
+      stdout.write(rendered.html);
+      return EXIT_CODES.ok;
+    }
+
+    writeProductOutput(stdout, summary, options.json);
+    return EXIT_CODES.ok;
+  }
+
+  summary = await buildStageCommandSummary({
+    stateDir: options.stateDir,
+    docsDir: options.stageDocsDir,
+    stageId: options.stageId,
+    command: options.subcommand === 'summary' ? 'symphony stage summary' : 'symphony stage'
+  });
+  writeStageStatusOutput(stdout, summary, options.json);
+  return EXIT_CODES.ok;
+}
+
+async function runSymphonyNext({ args, stdout }) {
+  const options = parseNextArgs(args);
+  const stage = await buildStageCommandSummary({
+    stateDir: options.stateDir,
+    docsDir: options.stageDocsDir,
+    command: 'symphony next'
+  });
+  const summary = {
+    version: '1',
+    command: 'symphony next',
+    intent: 'next',
+    semanticCommand: 'next',
+    pipeline: ['next'],
+    safetyMode: 'read-only',
+    projectWrites: false,
+    runtimeWrites: false,
+    externalCalls: false,
+    destructiveWrites: false,
+    status: stage.status,
+    stageId: stage.stageId,
+    stage: stage.stage,
+    goal: stage.goal,
+    topRisks: stage.topRisks,
+    blocker: stage.blocker,
+    nextAction: stage.nextAction
+  };
+
+  writeProductOutput(stdout, summary, options.json);
+  return EXIT_CODES.ok;
+}
+
 async function runSymphonyAdopt({ args, stdout, runner }) {
   const options = parseAdoptArgs(args);
   const result = options.mode === 'plan'
@@ -1642,9 +1881,39 @@ async function runSymphonyAdopt({ args, stdout, runner }) {
 }
 
 async function executeAdoptionPlanning({ options, runner }) {
+  const stageGate = await enforceStageConsistencyGate({
+    stateDir: options.stateDir,
+    docsDir: options.stageDocsDir,
+    action: {
+      kind: 'adoption-plan',
+      command: 'adopt',
+      subcommand: 'run',
+      sourceRunId: options.sourceRunId,
+      targetId: options.sourceRunId,
+      safetyMode: 'write',
+      writeMode: 'write',
+      riskMode: 'high',
+      flags: {
+        sourceRunId: options.sourceRunId,
+        stateDir: options.stateDir
+      }
+    },
+    attemptedCommand: 'symphony adopt --run',
+    highRisk: true
+  });
+
+  if (stageGate.blocked) {
+    throwStageGateBlocked(stageGate, 'symphony adopt --run');
+  }
+
   const source = await loadAndValidateAdoptionSource({
     stateDir: options.stateDir,
     sourceRunId: options.sourceRunId
+  });
+  const adoptionStageBinding = stageGate.stageBinding ?? source.sourceRun.stageBinding;
+  const stageAdoptionSummary = buildStageAdoptionSummary({
+    stageBinding: adoptionStageBinding,
+    sourceRun: source.sourceRun
   });
   const projectFingerprintIgnoredPaths = normalizeIgnoredPathList({
     projectRoot: source.projectRoot,
@@ -1721,7 +1990,10 @@ async function executeAdoptionPlanning({ options, runner }) {
         source,
         runId: plannedRunId,
         unsupportedChanges: error.unsupportedChanges,
-        now
+        now,
+        stageBinding: adoptionStageBinding,
+        stageGate: stageGate.stageGate,
+        stageAdoptionSummary
       });
       throw new UsageError(error.message);
     }
@@ -1758,6 +2030,9 @@ async function executeAdoptionPlanning({ options, runner }) {
     gitHead,
     gitStatusFingerprint: gitStatus.fingerprint,
     gitStatusIgnoredPaths,
+    stageBinding: adoptionStageBinding,
+    stageGate: stageGate.stageGate,
+    stageAdoptionSummary,
     sourceWorkspacePath: source.sourceWorkspacePath,
     sourceWorkspaceManifestPath: source.sourceWorkspaceManifestPath,
     sourceWorkspaceFingerprint: patchCandidate.sourceWorkspaceFingerprint,
@@ -1819,6 +2094,9 @@ async function executeAdoptionPlanning({ options, runner }) {
     projectFingerprint: currentProjectFingerprint,
     gitHead,
     gitStatusFingerprint: gitStatus.fingerprint,
+    stageBinding: adoptionStageBinding,
+    stageGate: stageGate.stageGate,
+    stageAdoptionSummary,
     writeBoundary: 'main-worktree',
     confirmationCommand,
     nextAction: confirmationCommand
@@ -1837,10 +2115,50 @@ async function executeAdoptionPlanning({ options, runner }) {
 }
 
 async function executeAdoptionConfirmation({ options, runner }) {
-  const plan = await readAdoptionPlan({
+  const preflightPlan = await readAdoptionPlan({
     stateDir: options.stateDir,
     adoptionId: options.adoptionId
   });
+  const projectState = preflightPlan === null
+    ? null
+    : await buildStageGateProjectState({
+        projectDir: preflightPlan.projectRoot,
+        stateDir: options.stateDir,
+        ignoredPaths: [
+          options.stateDir,
+          options.stageDocsDir,
+          ...(Array.isArray(preflightPlan.gitStatusIgnoredPaths) ? preflightPlan.gitStatusIgnoredPaths : [])
+        ],
+        runner
+      });
+  const stageGate = await enforceStageConsistencyGate({
+    stateDir: options.stateDir,
+    docsDir: options.stageDocsDir,
+    action: {
+      kind: 'adoption-confirm',
+      command: 'adopt',
+      subcommand: 'confirm',
+      adoptionId: options.adoptionId,
+      targetId: options.adoptionId,
+      safetyMode: 'write',
+      writeMode: 'write',
+      riskMode: 'high',
+      adoptionPatchHash: preflightPlan?.patchHash,
+      flags: {
+        adoptionId: options.adoptionId,
+        stateDir: options.stateDir
+      }
+    },
+    attemptedCommand: 'symphony adopt --confirm',
+    projectState,
+    highRisk: true
+  });
+
+  if (stageGate.blocked) {
+    throwStageGateBlocked(stageGate, 'symphony adopt --confirm');
+  }
+
+  const plan = preflightPlan;
 
   if (plan === null) {
     throw new UsageError(`adoption plan not found: ${options.adoptionId}`);
@@ -1850,6 +2168,11 @@ async function executeAdoptionConfirmation({ options, runner }) {
 
   const runId = buildAdoptionConfirmationRunId(plan);
   const now = new Date().toISOString();
+  const confirmationStageBinding = plan.stageBinding ?? stageGate.stageBinding;
+  const stageAdoptionSummary = buildStageAdoptionSummary({
+    stageBinding: confirmationStageBinding,
+    plan
+  });
   let journalPath;
   let patchApplied = false;
 
@@ -1892,7 +2215,10 @@ async function executeAdoptionConfirmation({ options, runner }) {
       exitCode: null,
       verifierStatus: 'not-run',
       mainWorktreeWrites: false,
-      failurePhase: undefined
+      failurePhase: undefined,
+      stageBinding: confirmationStageBinding,
+      stageGate: stageGate.stageGate,
+      stageAdoptionSummary
     });
 
     await writeProductRunState({
@@ -1940,7 +2266,10 @@ async function executeAdoptionConfirmation({ options, runner }) {
       exitCode: EXIT_CODES.ok,
       verifierStatus: 'passed',
       mainWorktreeWrites: true,
-      failurePhase: undefined
+      failurePhase: undefined,
+      stageBinding: confirmationStageBinding,
+      stageGate: stageGate.stageGate,
+      stageAdoptionSummary
     });
 
     await writeProductRunState({
@@ -1963,7 +2292,10 @@ async function executeAdoptionConfirmation({ options, runner }) {
         mainWorktreeWrites: true,
         failurePhase: 'post-apply-evidence',
         message: error.message,
-        journalPath
+        journalPath,
+        stageBinding: confirmationStageBinding,
+        stageGate: stageGate.stageGate,
+        stageAdoptionSummary
       });
     } else if (error instanceof UsageError) {
       await writeFailedAdoptionConfirmationRun({
@@ -1974,7 +2306,10 @@ async function executeAdoptionConfirmation({ options, runner }) {
         mainWorktreeWrites: false,
         failurePhase: 'adoption-confirmation-preflight',
         message: error.message,
-        journalPath
+        journalPath,
+        stageBinding: confirmationStageBinding,
+        stageGate: stageGate.stageGate,
+        stageAdoptionSummary
       });
     }
 
@@ -1983,105 +2318,17 @@ async function executeAdoptionConfirmation({ options, runner }) {
 }
 
 async function executeAdoptionInspection({ options }) {
-  const plan = await readAdoptionPlan({
-    stateDir: options.stateDir,
-    adoptionId: options.adoptionId
-  });
+  let summary;
 
-  if (plan === null) {
-    throw new UsageError(`adoption plan not found: ${options.adoptionId}`);
+  try {
+    summary = await buildAdoptionInspectionSummary({
+      stateDir: options.stateDir,
+      adoptionId: options.adoptionId,
+      exitCode: EXIT_CODES.ok
+    });
+  } catch (error) {
+    throw new UsageError(error.message);
   }
-
-  assertAdoptionPlan(plan, options.adoptionId);
-
-  const journal = await readAdoptionJournal({
-    stateDir: options.stateDir,
-    adoptionId: options.adoptionId
-  });
-  const latestConfirmationRun = await findLatestAdoptionConfirmationRun({
-    stateDir: options.stateDir,
-    adoptionId: options.adoptionId
-  });
-  const afterMatch = await compareWorktreeToFileOperationsAfter(plan);
-  const beforeMatch = journal === null
-    ? {
-        matches: null,
-        reason: 'adoption journal not found',
-        files: []
-      }
-    : await compareWorktreeToBeforeFiles({
-        projectRoot: plan.projectRoot,
-        beforeFiles: journal.beforeFiles
-      });
-  const paths = symphonyStatePaths({
-    stateDir: options.stateDir,
-    adoptionId: plan.adoptionId
-  });
-  const summary = {
-    version: '1',
-    command: 'symphony adopt',
-    intent: 'adopt-inspect',
-    semanticCommand: 'adopt',
-    pipeline: ['adopt-inspect'],
-    safetyMode: 'read-only',
-    projectWrites: false,
-    mainWorktreeWrites: false,
-    workspaceWrites: false,
-    runtimeWrites: false,
-    externalCalls: false,
-    destructiveWrites: false,
-    status: 'inspected',
-    exitCode: EXIT_CODES.ok,
-    verifierStatus: 'not-run',
-    adoptionPlanId: plan.adoptionId,
-    adoptionPlanArtifactPath: paths.adoptionPlanPath,
-    adoptionJournalArtifactPath: journal === null ? undefined : paths.adoptionJournalPath,
-    adoptionPlanRefs: {
-      adoptionPlanArtifactPath: paths.adoptionPlanPath,
-      executionPlanArtifactPath: plan.executionPlanArtifactPath,
-      patchArtifactPath: plan.patchArtifactPath,
-      sourceRunArtifactPath: plan.sourceRunArtifactPath
-    },
-    journalRef: journal === null
-      ? null
-      : {
-          kind: 'adoption-journal',
-          path: paths.adoptionJournalPath
-        },
-    sourceRunId: plan.sourceRunId,
-    sourceRunArtifactPath: plan.sourceRunArtifactPath,
-    sourceRun: {
-      runId: plan.sourceRunId,
-      artifactPath: plan.sourceRunArtifactPath,
-      verifierStatus: plan.sourceVerifierStatus,
-      workspacePath: plan.sourceWorkspacePath,
-      workspaceManifestPath: plan.sourceWorkspaceManifestPath
-    },
-    executionPlanId: plan.executionPlanId,
-    executionPlanArtifactPath: plan.executionPlanArtifactPath,
-    patchArtifactPath: plan.patchArtifactPath,
-    patchHash: plan.patchHash,
-    changedFiles: [...plan.changedFiles],
-    fileOperations: structuredClone(plan.fileOperations),
-    journal: journal === null
-      ? null
-      : {
-          adoptionPlanId: journal.adoptionPlanId,
-          confirmationRunId: journal.confirmationRunId,
-          artifactPath: paths.adoptionJournalPath,
-          status: journal.status,
-          createdAt: journal.createdAt
-        },
-    latestConfirmationRun,
-    currentWorktreeMatchesAfterHash: afterMatch.matches,
-    currentWorktreeMatchesAfterHashDetails: afterMatch,
-    currentWorktreeMatchesJournalBeforeFiles: beforeMatch.matches,
-    currentWorktreeMatchesJournalBeforeFilesDetails: beforeMatch,
-    nextAction: buildAdoptionConfirmationCommand({
-      adoptionId: plan.adoptionId,
-      stateDir: options.stateDir
-    })
-  };
 
   return {
     exitCode: EXIT_CODES.ok,
@@ -2114,7 +2361,52 @@ async function runSymphonyNew({
     templateOverride: options.templateOverride,
     write: options.write
   });
+  let stageGate = {
+    stageBinding: undefined,
+    stageGate: undefined
+  };
   let scaffold;
+
+  if (options.write) {
+    const projectState = await buildStageGateProjectState({
+      projectDir: dirname(resolve(options.targetDir)),
+      stateDir: options.stateDir,
+      ignoredPaths: [options.stateDir, options.runtimeDir, options.targetDir, options.stageDocsDir],
+      runner
+    });
+
+    stageGate = await enforceStageConsistencyGate({
+      stateDir: options.stateDir,
+      docsDir: options.stageDocsDir,
+      explicitStageId: options.stageId,
+      noStage: options.noStage,
+      action: {
+        kind: 'new-write',
+        command: 'new',
+        subcommand: 'write',
+        targetId: options.targetDir,
+        safetyMode: 'write',
+        writeMode: 'write',
+        riskMode: 'high',
+        prompt: prompt ?? null,
+        flags: {
+          targetDir: options.targetDir,
+          template: options.template,
+          templateOverride: options.templateOverride,
+          runtimeDir: options.runtimeDir,
+          stateDir: options.stateDir,
+          write: true
+        }
+      },
+      attemptedCommand: 'symphony new --write',
+      projectState,
+      highRisk: true
+    });
+
+    if (stageGate.blocked) {
+      throwStageGateBlocked(stageGate, 'symphony new --write');
+    }
+  }
 
   try {
     scaffold = await scaffoldProject({
@@ -2192,6 +2484,8 @@ async function runSymphonyNew({
     scaffoldManifestArtifactPath: manifestArtifactPath,
     contextArtifactPath: scanSummary?.contextArtifactPath,
     summaryArtifactPath: scanSummary?.summaryArtifactPath,
+    stageBinding: stageGate.stageBinding ?? undefined,
+    stageGate: stageGate.stageGate ?? undefined,
     ...(routeDecision ? { matchedSignals: routeDecision.matchedSignals, routeDecision } : {}),
     nextAction: options.write
       ? 'symphony status'
@@ -2476,6 +2770,7 @@ function parseWorkProductArgs(args, { semanticCommand, prompt }) {
     prompt,
     projectDir: '.',
     stateDir: '.symphony',
+    stageDocsDir: DEFAULT_STAGE_DOCS_DIR,
     workDir: 'tmp/symphony-work',
     safetyMode: semanticCommand === 'review' ? 'read-only' : 'dry-run',
     adapter: 'codex',
@@ -2518,6 +2813,24 @@ function parseWorkProductArgs(args, { semanticCommand, prompt }) {
     if (value === '--state-dir') {
       options.stateDir = readRequiredValue(args, index, '--state-dir');
       index += 1;
+      continue;
+    }
+
+    if (value === '--stage-docs-dir') {
+      options.stageDocsDir = readRequiredValue(args, index, '--stage-docs-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--stage') {
+      options.stageId = readRequiredValue(args, index, '--stage');
+      assertSafePathSegment(options.stageId, 'stage id');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--no-stage') {
+      options.noStage = true;
       continue;
     }
 
@@ -2570,12 +2883,17 @@ function parseWorkProductArgs(args, { semanticCommand, prompt }) {
     options.safetyMode = 'write';
   }
 
+  if (options.noStage && options.stageId !== undefined) {
+    throw new UsageError('--stage and --no-stage cannot be combined');
+  }
+
   return options;
 }
 
 function parseConfirmPlanArgs(args) {
   const options = {
     stateDir: '.symphony',
+    stageDocsDir: DEFAULT_STAGE_DOCS_DIR,
     json: false
   };
 
@@ -2590,6 +2908,24 @@ function parseConfirmPlanArgs(args) {
     if (value === '--state-dir') {
       options.stateDir = readRequiredValue(args, index, '--state-dir');
       index += 1;
+      continue;
+    }
+
+    if (value === '--stage-docs-dir') {
+      options.stageDocsDir = readRequiredValue(args, index, '--stage-docs-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--stage') {
+      options.stageId = readRequiredValue(args, index, '--stage');
+      assertSafePathSegment(options.stageId, 'stage id');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--no-stage') {
+      options.noStage = true;
       continue;
     }
 
@@ -2613,6 +2949,10 @@ function parseConfirmPlanArgs(args) {
 
   if (options.planId === undefined) {
     throw new UsageError('--confirm-plan requires a plan id');
+  }
+
+  if (options.noStage && options.stageId !== undefined) {
+    throw new UsageError('--stage and --no-stage cannot be combined');
   }
 
   return options;
@@ -2776,9 +3116,99 @@ function parseDiagnoseArgs(args) {
   return options;
 }
 
-function parseAdoptArgs(args) {
+function parseStageArgs(args) {
   const options = {
     stateDir: '.symphony',
+    stageDocsDir: DEFAULT_STAGE_DOCS_DIR,
+    subcommand: 'current',
+    json: false,
+    write: false,
+    help: false
+  };
+  const positional = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--write') {
+      options.write = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--stage-docs-dir') {
+      options.stageDocsDir = readRequiredValue(args, index, '--stage-docs-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown stage option: ${value}`);
+    }
+
+    positional.push(value);
+  }
+
+  if (positional.length > 0) {
+    options.subcommand = positional[0];
+  }
+
+  if (!['current', 'create', 'activate', 'render', 'summary'].includes(options.subcommand)) {
+    throw new UsageError('stage command must be one of: create, activate, render, summary');
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.subcommand === 'activate' || options.subcommand === 'render') {
+    if (positional.length !== 2) {
+      throw new UsageError(`stage ${options.subcommand} requires one stage id`);
+    }
+    options.stageId = positional[1];
+    assertSafePathSegment(options.stageId, 'stage id');
+  } else if (options.subcommand === 'create') {
+    if (positional.length > 2) {
+      throw new UsageError('stage create accepts at most one stage id');
+    }
+    options.stageId = positional[1] ?? 'v14-stage-kernel-refactor';
+    assertSafePathSegment(options.stageId, 'stage id');
+  } else {
+    if (positional.length > 2) {
+      throw new UsageError(`stage ${options.subcommand} accepts at most one stage id`);
+    }
+    options.stageId = positional[1];
+    if (options.stageId !== undefined) {
+      assertSafePathSegment(options.stageId, 'stage id');
+    }
+  }
+
+  if (options.write && !['create', 'render'].includes(options.subcommand)) {
+    throw new UsageError('--write is only supported for stage create and stage render');
+  }
+
+  return options;
+}
+
+function parseNextArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    stageDocsDir: DEFAULT_STAGE_DOCS_DIR,
     json: false
   };
 
@@ -2792,6 +3222,49 @@ function parseAdoptArgs(args) {
 
     if (value === '--state-dir') {
       options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--stage-docs-dir') {
+      options.stageDocsDir = readRequiredValue(args, index, '--stage-docs-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown next option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected next argument: ${value}`);
+  }
+
+  return options;
+}
+
+function parseAdoptArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    stageDocsDir: DEFAULT_STAGE_DOCS_DIR,
+    json: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--stage-docs-dir') {
+      options.stageDocsDir = readRequiredValue(args, index, '--stage-docs-dir');
       index += 1;
       continue;
     }
@@ -2857,6 +3330,7 @@ function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
     templateOverride: false,
     runtimeDir: 'tmp/symphony-new',
     stateDir: '.symphony',
+    stageDocsDir: DEFAULT_STAGE_DOCS_DIR,
     write: false,
     json: false
   };
@@ -2905,6 +3379,24 @@ function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
       continue;
     }
 
+    if (value === '--stage-docs-dir') {
+      options.stageDocsDir = readRequiredValue(args, index, '--stage-docs-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--stage') {
+      options.stageId = readRequiredValue(args, index, '--stage');
+      assertSafePathSegment(options.stageId, 'stage id');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--no-stage') {
+      options.noStage = true;
+      continue;
+    }
+
     if (value.startsWith('--')) {
       throw new UsageError(`unknown new option: ${value}`);
     }
@@ -2919,6 +3411,10 @@ function parseNewProjectArgs(args, { promptTarget, promptTemplate } = {}) {
   options.targetDir = positional[0] ?? options.targetDir;
   options.template = normalizeTemplate(options.template);
   assertNonEmptyString(options.targetDir, 'new target');
+
+  if (options.noStage && options.stageId !== undefined) {
+    throw new UsageError('--stage and --no-stage cannot be combined');
+  }
 
   return options;
 }
@@ -2946,6 +3442,8 @@ function parsePromptInvocation(argv) {
   const valueOptions = new Set([
     '--real',
     '--state-dir',
+    '--stage',
+    '--stage-docs-dir',
     '--template',
     '--runtime-dir',
     '--target',
@@ -2960,7 +3458,7 @@ function parsePromptInvocation(argv) {
     '--host',
     '--port'
   ]);
-  const flagOptions = new Set(['--json', '--dry-run', '--write', '--confirm-destructive', '--snapshot']);
+  const flagOptions = new Set(['--json', '--dry-run', '--write', '--confirm-destructive', '--snapshot', '--no-stage']);
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
@@ -3040,6 +3538,16 @@ async function writeProductRunState({ stateDir, summary, updatedAt }) {
     gitStatusFingerprint: summary.gitStatusFingerprint,
     confirmationCommand: summary.confirmationCommand,
     requiresGate: summary.requiresGate,
+    stageBinding: summary.stageBinding,
+    stageSummary: summary.stageSummary,
+    stageGate: summary.stageGate,
+    stageAdoptionSummary: summary.stageAdoptionSummary,
+    blocker: summary.blocker,
+    stageCharterArtifactPath: summary.stageCharterArtifactPath,
+    stageCharterHtmlArtifactPath: summary.stageCharterHtmlArtifactPath,
+    stageGateEventArtifactPath: summary.stageGateEventArtifactPath,
+    charterRepairPlanArtifactPath: summary.charterRepairPlanArtifactPath,
+    blockedSnapshotArtifactPath: summary.blockedSnapshotArtifactPath,
     workflowMode: summary.workflowMode,
     adapter: summary.adapter,
     executionMode: summary.executionMode,
@@ -3098,6 +3606,163 @@ function writeProductOutput(stdout, summary, json) {
   }
 
   stdout.write(`${humanProductSummary(summary)}\n`);
+}
+
+function writeStageStatusOutput(stdout, summary, json) {
+  if (json) {
+    const contracted = withProductJsonContract(summary, {
+      contractName: 'symphony.stage-status'
+    });
+
+    writeJson(stdout, {
+      ...contracted,
+      contractVersion: '1.0',
+      activeStage: summary.activeStage ?? null
+    });
+    return;
+  }
+
+  stdout.write(`${humanStageStatus(summary)}\n`);
+}
+
+function humanStageStatus(summary) {
+  const activeStage = summary.activeStage ?? summary.stage;
+  const lines = [
+    `Stage: ${activeStage?.stageId ?? summary.stageId ?? 'none'}`,
+    `Title: ${activeStage?.title ?? 'none'}`,
+    `Status: ${summary.status ?? 'unknown'}`,
+    `Goal: ${summary.goal ?? activeStage?.goal ?? 'none'}`,
+    `Blocker: ${summary.blocker?.reason ?? 'none'}`,
+    `Next: ${summary.nextAction ?? 'symphony stage summary'}`
+  ];
+
+  return lines.join('\n');
+}
+
+async function buildStageGateProjectState({
+  projectDir,
+  stateDir,
+  ignoredPaths = [],
+  runner
+}) {
+  const resolvedProjectDir = resolve(projectDir ?? '.');
+  const normalizedIgnoredPaths = normalizeIgnoredPathList({
+    projectRoot: resolvedProjectDir,
+    paths: ignoredPaths
+  });
+  let projectFingerprint = null;
+  let gitHead = null;
+  let dirtyWorktreeHash = null;
+
+  try {
+    projectFingerprint = await buildProjectFingerprint({
+      projectDir: resolvedProjectDir,
+      ignoredPaths
+    });
+  } catch {
+    projectFingerprint = null;
+  }
+
+  try {
+    gitHead = await readGitHead({
+      runner: runner ?? new NodeProcessRunner(),
+      cwd: resolvedProjectDir
+    });
+  } catch {
+    gitHead = null;
+  }
+
+  try {
+    dirtyWorktreeHash = (await buildGitStatusFingerprint({
+      runner: runner ?? new NodeProcessRunner(),
+      cwd: resolvedProjectDir,
+      ignoredPaths: normalizedIgnoredPaths
+    })).fingerprint;
+  } catch {
+    dirtyWorktreeHash = null;
+  }
+
+  return {
+    gitHead,
+    projectFingerprint,
+    dirtyWorktreeHash
+  };
+}
+
+function buildProductStageGateAction({
+  command,
+  semanticCommand,
+  options,
+  highRisk
+}) {
+  return {
+    kind: 'product-work',
+    command,
+    subcommand: semanticCommand,
+    semanticCommand,
+    prompt: options.prompt,
+    targetId: semanticCommand,
+    safetyMode: options.safetyMode,
+    writeMode: options.safetyMode,
+    riskMode: highRisk ? 'high' : 'standard',
+    flags: {
+      adapter: options.adapter,
+      mode: options.mode,
+      projectDir: options.projectDir,
+      proofDir: options.proofDir,
+      realRequested: options.realRequested,
+      stageId: options.stageId,
+      timeoutMs: options.timeoutMs,
+      workDir: options.workDir,
+      writeRequested: options.writeRequested
+    }
+  };
+}
+
+function buildConfirmPlanStageGateAction({ options, plan }) {
+  return {
+    kind: 'confirm-plan',
+    command: 'do',
+    subcommand: 'confirm-plan',
+    planId: options.planId,
+    targetId: options.planId,
+    prompt: plan?.prompt,
+    safetyMode: 'write',
+    writeMode: 'write',
+    riskMode: 'high',
+    flags: {
+      adapter: plan?.adapter,
+      executionMode: plan?.executionMode,
+      mode: plan?.workflowMode,
+      planId: options.planId,
+      stateDir: options.stateDir,
+      workDir: plan?.workDir
+    }
+  };
+}
+
+function stageHelpText(subcommand = 'current') {
+  const header = subcommand === 'current'
+    ? 'Usage: symphony stage [create|activate|render|summary] [stage-id] [options]'
+    : `Usage: symphony stage ${subcommand} [stage-id] [options]`;
+
+  return `${header}
+
+Stage commands:
+  symphony stage
+  symphony stage --json
+  symphony stage create [stage-id]
+  symphony stage activate <stage-id>
+  symphony stage render <stage-id> [--write]
+  symphony stage summary [stage-id]
+
+Options:
+  --state-dir <dir>
+  --stage-docs-dir <dir>
+  --json
+  --write
+  --help
+`;
 }
 
 function humanConsoleSnapshot(snapshot) {
@@ -3213,6 +3878,12 @@ function buildAdoptionConfirmationCommand({ adoptionId, stateDir }) {
   }
 
   return args.map(shellQuoteArgument).join(' ');
+}
+
+function throwStageGateBlocked(stageGate, command) {
+  throw new UsageError(
+    `Stage Charter consistency gate blocked ${command}; repair artifact: ${stageGate.repairArtifactPath}`
+  );
 }
 
 function shellQuoteArgument(value) {
@@ -4025,128 +4696,15 @@ async function readWorktreeFileSnapshot({ projectRoot, path }) {
   };
 }
 
-async function compareWorktreeToFileOperationsAfter(plan) {
-  const files = [];
-
-  for (const operation of plan.fileOperations) {
-    const path = normalizeAdoptionRelativePath(operation.path);
-    const snapshot = await readComparableWorktreeFileSnapshot({
-      projectRoot: plan.projectRoot,
-      path
-    });
-    const matches = snapshot.exists === true
-      && snapshot.hash === operation.afterHash
-      && snapshot.size === operation.size
-      && snapshot.textEncoding === operation.textEncoding;
-
-    files.push({
-      path,
-      matches,
-      expected: {
-        exists: true,
-        hash: operation.afterHash,
-        size: operation.size,
-        textEncoding: operation.textEncoding
-      },
-      actual: snapshot
-    });
-  }
-
-  return {
-    matches: files.every((file) => file.matches),
-    files
-  };
-}
-
-async function compareWorktreeToBeforeFiles({ projectRoot, beforeFiles }) {
-  if (!Array.isArray(beforeFiles)) {
-    return {
-      matches: null,
-      reason: 'journal beforeFiles is missing',
-      files: []
-    };
-  }
-
-  const files = [];
-
-  for (const beforeFile of beforeFiles) {
-    const path = normalizeAdoptionRelativePath(beforeFile.path);
-    const snapshot = await readComparableWorktreeFileSnapshot({
-      projectRoot,
-      path
-    });
-    const expected = {
-      exists: beforeFile.exists,
-      hash: beforeFile.hash ?? null,
-      size: beforeFile.size,
-      textEncoding: beforeFile.textEncoding ?? null
-    };
-    const matches = snapshot.exists === expected.exists
-      && snapshot.hash === expected.hash
-      && snapshot.size === expected.size
-      && snapshot.textEncoding === expected.textEncoding;
-
-    files.push({
-      path,
-      matches,
-      expected,
-      actual: snapshot
-    });
-  }
-
-  return {
-    matches: files.every((file) => file.matches),
-    files
-  };
-}
-
-async function readComparableWorktreeFileSnapshot({ projectRoot, path }) {
-  try {
-    return await readWorktreeFileSnapshot({
-      projectRoot,
-      path
-    });
-  } catch (error) {
-    return {
-      path,
-      exists: null,
-      hash: null,
-      size: null,
-      textEncoding: null,
-      error: error.message
-    };
-  }
-}
-
-async function findLatestAdoptionConfirmationRun({ stateDir, adoptionId }) {
-  const runs = await listRunStates({ stateDir });
-  const run = runs.find((candidate) => candidate.adoptionPlanId === adoptionId
-    && Array.isArray(candidate.pipeline)
-    && candidate.pipeline.includes('adopt-confirm'));
-
-  if (run === undefined) {
-    return null;
-  }
-
-  return {
-    runId: run.runId,
-    status: run.status,
-    verifierStatus: run.verifierStatus,
-    mainWorktreeWrites: run.mainWorktreeWrites,
-    failurePhase: run.failurePhase,
-    adoptionJournalArtifactPath: run.adoptionJournalArtifactPath,
-    evidenceArtifactPath: run.evidenceArtifactPath,
-    updatedAt: run.updatedAt,
-    nextAction: run.nextAction
-  };
-}
-
 async function writeFailedAdoptionPlanningRun({
   stateDir,
   source,
   runId,
   unsupportedChanges,
-  now
+  now,
+  stageBinding,
+  stageGate,
+  stageAdoptionSummary
 }) {
   const summary = {
     version: '1',
@@ -4170,6 +4728,9 @@ async function writeFailedAdoptionPlanningRun({
     adoptionPlanArtifactPath: null,
     unsupportedChanges,
     failurePhase: 'adoption-planning',
+    stageBinding,
+    stageGate,
+    stageAdoptionSummary,
     writeBoundary: 'main-worktree',
     nextAction: 'symphony status'
   };
@@ -4189,7 +4750,10 @@ async function writeFailedAdoptionConfirmationRun({
   mainWorktreeWrites,
   failurePhase,
   message,
-  journalPath
+  journalPath,
+  stageBinding,
+  stageGate,
+  stageAdoptionSummary
 }) {
   const summary = buildAdoptionConfirmationSummary({
     plan,
@@ -4201,7 +4765,10 @@ async function writeFailedAdoptionConfirmationRun({
     verifierStatus: 'failed',
     mainWorktreeWrites,
     failurePhase,
-    message
+    message,
+    stageBinding,
+    stageGate,
+    stageAdoptionSummary
   });
 
   await writeProductRunState({
@@ -4229,7 +4796,10 @@ function buildAdoptionConfirmationSummary({
   verifierStatus,
   mainWorktreeWrites,
   failurePhase,
-  message
+  message,
+  stageBinding,
+  stageGate,
+  stageAdoptionSummary
 }) {
   return {
     version: '1',
@@ -4273,6 +4843,9 @@ function buildAdoptionConfirmationSummary({
     sourceVerifierStatus: plan.sourceVerifierStatus,
     gitHead: plan.gitHead,
     gitStatusFingerprint: plan.gitStatusFingerprint,
+    stageBinding,
+    stageGate,
+    stageAdoptionSummary,
     writeBoundary: 'main-worktree',
     ...(failurePhase ? { failurePhase } : {}),
     ...(message ? { failureMessage: message } : {}),
