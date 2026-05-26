@@ -1,0 +1,262 @@
+{
+  "version": "1",
+  "kind": "symphony.stage-charter",
+  "contractName": "symphony.stage-charter",
+  "contractVersion": "1.0",
+  "stageId": "v15-workbench-react-vite-migration",
+  "title": "v15 Workbench React/Vite Migration",
+  "goal": "Migrate the read-only Symphony Workbench display to React/Vite as a Chinese-first / 中文优先, low-density / 低信息密度, copy-only state surface while preserving v12 adoption safety, v14 Stage kernel behavior, ArtifactStore evidence boundaries, and Stage Charter HTML as a separate display artifact.",
+  "goals": [
+    "Inventory and stabilize the existing Workbench GET API contracts before frontend migration.",
+    "Plan a React/Vite Workbench shell for Stage, Run, Evidence, Blocker, Adoption, and Diagnostics views.",
+    "Keep the browser Workbench read-only and copy-only during and after migration.",
+    "Keep the Workbench as a status surface, not an execution surface.",
+    "Preserve v13/v14 UI principles: Chinese-first / 中文优先 visible copy, low information density / 低信息密度, first screen limited to Stage, goal, status, top risks, blocker, and next action.",
+    "Keep run, evidence, adoption, and raw JSON details behind folded detail surfaces.",
+    "Separate Stage Charter HTML from the React/Vite Workbench runtime surface.",
+    "Define a legacy Workbench fallback until React bundle smoke and fixture parity gates pass.",
+    "Keep package.json, pnpm-lock.yaml, and production code unchanged during this candidate discovery stage."
+  ],
+  "status": "candidate",
+  "owner": "discovery",
+  "createdAt": "2026-05-26T00:00:00.000Z",
+  "updatedAt": "2026-05-26T00:00:00.000Z",
+  "nonGoals": [
+    "Do not change the v12 adoption apply safety kernel.",
+    "Do not modify v12 fingerprint verification logic.",
+    "Do not modify v12 dirty worktree check logic.",
+    "Do not modify v12 git apply --check logic.",
+    "Do not rewrite the v14 Stage kernel.",
+    "Do not rewrite the Stage gate.",
+    "Do not rewrite blocked snapshot recovery.",
+    "Do not add GitHub / PR integration.",
+    "Do not make mcas the daily primary entry point again.",
+    "Do not add browser write, execute, retry, adopt, adopt-confirm, confirm-adoption, apply, rollback, delete, package install, dependency install, model invocation, real agent invocation, arbitrary file read, arbitrary path read, arbitrary path input, mutation trigger, or audit trigger controls.",
+    "Do not replace Stage Charter HTML with React/Vite Workbench.",
+    "Do not implement full Autopilot.",
+    "Do not implement Agent Capability Registry.",
+    "Do not turn the React/Vite migration into a UI redesign or visual system rebuild.",
+    "Do not modify package.json or pnpm-lock.yaml during discovery.",
+    "Do not install dependencies during discovery.",
+    "Do not install React/Vite during implementation without an approved dependency plan."
+  ],
+  "boundaries": [
+    {
+      "id": "api-contract-first",
+      "title": "API contract before frontend migration",
+      "rule": "React/Vite work starts only after existing Workbench GET API shapes are inventoried and fixture-backed."
+    },
+    {
+      "id": "read-only-copy-only",
+      "title": "Workbench remains read-only and copy-only",
+      "rule": "The browser UI may fetch local GET APIs and copy command text only. It must not expose browser controls for write, execute, retry, adopt, adopt-confirm, confirm-adoption, apply, rollback, delete, package install, dependency install, model invocation, real agent invocation, arbitrary file read, arbitrary path read, arbitrary path input, mutation trigger, or audit trigger actions."
+    },
+    {
+      "id": "symphony-artifactstore-boundary",
+      "title": ".symphony stores summaries and refs only",
+      "rule": ".symphony continues to store only compact summary, ref, and pointer state such as active Stage pointers, latest run pointers, ids, statuses, timestamps, counts, artifact refs, registered local paths, top risk summaries, blocker summaries, next-action summaries, and copy-only command text. It must not store complete high-risk evidence, complete repair plans, complete blocked snapshots, or complete adoption-aware evidence. ArtifactStore remains canonical for TaskPackets, Harness output, evidence packages, full high-risk evidence, repair plans, blocked snapshots, adoption-aware evidence, patch artifacts, scaffold manifests, intake artifacts, and verifier-readable artifacts. React/Vite Workbench reads .symphony summaries/refs and /api/* aggregate results only; it must not treat .symphony as canonical evidence storage or bypass ArtifactStore to interpret high-risk evidence directly."
+    },
+    {
+      "id": "artifact-preview-contract",
+      "title": "Artifact preview contract is explicit before React binding",
+      "rule": "Before React renders artifact previews, the API contract must expose stable artifact uri or ref, size or sizeBytes, mime, title or displayTitle, type, format, safeToRenderInline, truncated, sourceRunId, artifactKind, previewAvailable, and a consistent error envelope. React must not infer these fields from local paths or raw .symphony state."
+    },
+    {
+      "id": "stage-charter-html-separate",
+      "title": "Stage Charter HTML is separate",
+      "rule": "Stage Charter HTML remains the JSON-derived Stage display artifact; the React/Vite Workbench is a local runtime UI and does not replace or edit it."
+    },
+    {
+      "id": "v13-v14-ui-principles",
+      "title": "Preserve v13/v14 Workbench principles",
+      "rule": "The migrated Workbench stays Chinese-first / 中文优先, low information density / 低信息密度, read-only, copy-only, and state-focused. Visible labels, empty states, status text, command descriptions, and primary copy are Chinese unless stable JSON enums, ids, commands, or file paths must stay literal. The homepage defaults to Stage, goal, status, top risks, blocker, and next action only. Run, evidence, adoption, diagnostics, and raw JSON details stay folded or secondary. The migration is parity-first, not a UI redesign."
+    },
+    {
+      "id": "phased-fallback",
+      "title": "Phased rollout with legacy fallback",
+      "rule": "Keep a safe legacy Workbench fallback until React bundle smoke and fixture parity gates pass. Missing bundles, build failures, or static asset serving failures must fall back to existing server-rendered or legacy static HTML behavior, and /api/* plus console snapshot JSON must remain v14-compatible. Fallback removal requires a later reviewer-approved removal step after parity passes."
+    },
+    {
+      "id": "kernel-preservation",
+      "title": "Preserve v12/v14 kernels and gates",
+      "rule": "The migration must not modify the v12 adoption apply safety kernel, v12 fingerprint verification logic, v12 dirty worktree check logic, or v12 git apply --check logic. It must not rewrite the v14 Stage kernel, the Stage gate, blocked snapshot recovery, or ArtifactStore boundaries."
+    },
+    {
+      "id": "project-scope-non-goals",
+      "title": "No GitHub/PR integration or mcas re-entry",
+      "rule": "The migration must not add GitHub / PR integration and must not make mcas the daily primary entry point again. React/Vite Workbench remains a local read-only status surface."
+    },
+    {
+      "id": "dependency-high-risk",
+      "title": "React/Vite dependency introduction is high risk",
+      "rule": "React/Vite dependency introduction is an independent high-risk task. It must start plan-only, receive independent reviewer approval, use a separate commit or separate change group, never be auto-adopted, have no auto-adopt path, never be mixed with UI migration code in one large task, and require reviewer approval for package.json and pnpm-lock.yaml changes. After lockfile updates, run pnpm audit --audit-level high."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "stage-charter-candidate",
+      "title": "Create v15 Stage Charter JSON and HTML candidate discovery artifacts",
+      "status": "planned"
+    },
+    {
+      "id": "api-contract-inventory",
+      "title": "Inventory existing Workbench API routes and response contracts",
+      "status": "planned"
+    },
+    {
+      "id": "field-gap-analysis",
+      "title": "Classify fields that are React-ready and fields that need v15 contract work",
+      "status": "planned"
+    },
+    {
+      "id": "dependency-strategy",
+      "title": "Define React/Vite dependency introduction as an independent high-risk task without installing dependencies",
+      "status": "planned"
+    },
+    {
+      "id": "frontend-architecture",
+      "title": "Plan React/Vite Workbench shell and component boundaries",
+      "status": "planned"
+    },
+    {
+      "id": "fixture-contract-tests",
+      "title": "Plan fixtures and regression tests for API parity and read-only safety",
+      "status": "planned"
+    },
+    {
+      "id": "legacy-fallback-rollout",
+      "title": "Plan phased rollout and legacy Workbench fallback until parity gates pass",
+      "status": "planned"
+    },
+    {
+      "id": "release-evidence",
+      "title": "Prepare v15 acceptance and release evidence expectations",
+      "status": "planned"
+    }
+  ],
+  "risks": [
+    {
+      "id": "read-only-regression",
+      "severity": "high",
+      "title": "Workbench accidentally gains browser write controls",
+      "mitigation": "Keep server GET-only and require UI tests proving no write, execute, retry, adopt, adopt-confirm, confirm-adoption, apply, rollback, delete, package install, dependency install, model invocation, real agent invocation, arbitrary file read, arbitrary path read, arbitrary path input, mutation trigger, or audit trigger controls exist."
+    },
+    {
+      "id": "artifact-boundary-regression",
+      "severity": "high",
+      "title": "Workbench bypasses ArtifactStore evidence boundaries",
+      "mitigation": "Expose high-risk evidence through API summaries and ArtifactStore refs only; never treat .symphony as canonical evidence storage or parse high-risk evidence directly from .symphony."
+    },
+    {
+      "id": "artifact-contract-gap",
+      "severity": "high",
+      "title": "Artifact preview contract omits React-safe rendering fields",
+      "mitigation": "Require uri/ref, size or sizeBytes, mime, title/displayTitle, type, format, safeToRenderInline, truncated, sourceRunId, artifactKind, previewAvailable, and consistent error envelope fields before React preview binding."
+    },
+    {
+      "id": "api-drift",
+      "severity": "medium",
+      "title": "React components bind to unstable raw state fields",
+      "mitigation": "Introduce fixture-backed API contracts and a frontend API client boundary before component work."
+    },
+    {
+      "id": "dependency-supply-chain",
+      "severity": "high",
+      "title": "React/Vite dependency introduction expands audit surface",
+      "mitigation": "Treat dependency introduction as a separate high-risk plan-only task requiring independent review, a separate change group, no auto-adoption, package.json and pnpm-lock.yaml review, and pnpm audit --audit-level high after lockfile update."
+    },
+    {
+      "id": "charter-workbench-confusion",
+      "severity": "medium",
+      "title": "Stage Charter HTML is confused with the Workbench app",
+      "mitigation": "Document Stage Charter HTML as JSON-derived display-only output and keep Workbench runtime assets separate."
+    },
+    {
+      "id": "ui-parity-gap",
+      "severity": "medium",
+      "title": "Migration hides current Workbench diagnostics or recovery details",
+      "mitigation": "Use v14 fixtures for Stage, runs, adoption, blockers, artifacts, and readiness before replacing the UI."
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "kind": "plan",
+      "path": "docs/plans/v15-workbench-react-vite-migration-plan-2026-05-26.md"
+    },
+    {
+      "kind": "baseline-release-evidence",
+      "path": "docs/plans/v14-release-evidence-2026-05-26.md"
+    },
+    {
+      "kind": "baseline-review-approval",
+      "path": "docs/plans/v14-reviewer-approval-2026-05-26.md"
+    }
+  ],
+  "verificationProfile": {
+    "developmentGate": [
+      "node --test tests/symphony-cli.test.js",
+      "pnpm check",
+      "pnpm test",
+      "git diff --check"
+    ],
+    "releaseGate": [
+      "node --test tests/symphony-cli.test.js",
+      "pnpm check",
+      "pnpm test",
+      "git diff --check",
+      "pnpm audit --audit-level high",
+      "pnpm test:mutation:gate"
+    ],
+    "stageSmoke": [
+      "symphony stage --json",
+      "symphony console --snapshot --json",
+      "GET /api/summary",
+      "GET /api/readiness",
+      "GET /api/runs",
+      "GET /api/runs/latest",
+      "POST /api/summary returns 405",
+      "PUT /api/summary returns 405",
+      "PATCH /api/summary returns 405",
+      "DELETE /api/summary returns 405",
+      "fixture parity: no runs, no active Stage, active Stage, blocked Stage, Charter mismatch, missing artifact, pending adoption, dirty adoption",
+      "artifact preview contract includes uri/ref, size, mime, title/displayTitle, safeToRenderInline, sourceRunId, artifactKind, previewAvailable"
+    ]
+  },
+  "riskPolicy": {
+    "stageRequiredAreas": [
+      "Workbench frontend migration",
+      "console server static asset serving",
+      "dependency changes",
+      "API contract changes",
+      "Stage-related UI",
+      "adoption visibility UI",
+      "artifact preview UI",
+      "artifact preview contract fields",
+      ".symphony and ArtifactStore evidence boundary",
+      "legacy fallback removal"
+    ],
+    "autoAdoptAllowedAreas": [],
+    "autoAdoptForbiddenAreas": [
+      "adoption apply kernel",
+      "v12 fingerprint verification",
+      "v12 dirty worktree checks",
+      "v12 git apply --check validation",
+      "Stage kernel",
+      "Stage gate",
+      "blocked snapshot recovery",
+      "policy engine",
+      "workspace manager",
+      "verifier",
+      "browser write controls",
+      "GitHub / PR integration",
+      "mcas daily entry point",
+      "dependency introduction",
+      "package.json changes",
+      "pnpm-lock.yaml changes",
+      "high-risk evidence handling",
+      "artifact contract inference from local paths"
+    ]
+  },
+  "nextAction": "Independent reviewer must approve the candidate v15 plan before any package.json, pnpm-lock.yaml, dependency installation, production code, or React/Vite implementation change.",
+  "charterHash": "sha256:fa3ccc13bd2ba76986fb0547a84aaa37f1beee27b52e53a869aabff4b722e985"
+}

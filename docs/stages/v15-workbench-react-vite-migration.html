@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>v15 Workbench React/Vite Migration</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fa;
+      --panel: #ffffff;
+      --text: #20242c;
+      --muted: #5f6b7a;
+      --line: #d8dee8;
+      --accent: #0b6b57;
+      --accent-soft: #e4f3ee;
+      --warn: #9b6b1f;
+      --warn-soft: #fff5dc;
+      --danger: #a53d2d;
+      --danger-soft: #fae8e4;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+    main {
+      width: min(1040px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 36px;
+    }
+    header {
+      margin-bottom: 18px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 26px; font-weight: 700; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    h3 { margin: 0 0 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .subtitle {
+      margin-top: 8px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 10px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .badge.active, .badge.low, .badge.planned { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+    .badge.medium { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+    .badge.high { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+      gap: 16px;
+      align-items: start;
+    }
+    .stack { display: grid; gap: 16px; }
+    section {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      padding: 16px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    li { margin: 8px 0; line-height: 1.45; }
+    .item {
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      margin-top: 10px;
+    }
+    .item:first-of-type {
+      border-top: 0;
+      padding-top: 0;
+      margin-top: 0;
+    }
+    code {
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      overflow-wrap: anywhere;
+    }
+    @media (max-width: 820px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>v15 Workbench React/Vite Migration</h1>
+      <p class="subtitle">Migrate the read-only Symphony Workbench display to React/Vite as a Chinese-first / 中文优先, low-density / 低信息密度, copy-only state surface while preserving v12 adoption safety, v14 Stage kernel behavior, ArtifactStore evidence boundaries, and Stage Charter HTML as a separate display artifact.</p>
+      <div class="meta">
+        <span class="badge candidate">candidate</span>
+        <span class="badge">v15-workbench-react-vite-migration</span>
+        <span class="badge">JSON source of truth</span>
+      </div>
+    </header>
+    <div class="grid">
+      <div class="stack">
+        <section>
+          <h2>Boundaries</h2>
+
+            <div class="item">
+              <h3>api-contract-first</h3>
+              <p><strong>API contract before frontend migration</strong></p>
+              <p class="subtitle">React/Vite work starts only after existing Workbench GET API shapes are inventoried and fixture-backed.</p>
+            </div>
+            <div class="item">
+              <h3>read-only-copy-only</h3>
+              <p><strong>Workbench remains read-only and copy-only</strong></p>
+              <p class="subtitle">The browser UI may fetch local GET APIs and copy command text only. It must not expose browser controls for write, execute, retry, adopt, adopt-confirm, confirm-adoption, apply, rollback, delete, package install, dependency install, model invocation, real agent invocation, arbitrary file read, arbitrary path read, arbitrary path input, mutation trigger, or audit trigger actions.</p>
+            </div>
+            <div class="item">
+              <h3>symphony-artifactstore-boundary</h3>
+              <p><strong>.symphony stores summaries and refs only</strong></p>
+              <p class="subtitle">.symphony continues to store only compact summary, ref, and pointer state such as active Stage pointers, latest run pointers, ids, statuses, timestamps, counts, artifact refs, registered local paths, top risk summaries, blocker summaries, next-action summaries, and copy-only command text. It must not store complete high-risk evidence, complete repair plans, complete blocked snapshots, or complete adoption-aware evidence. ArtifactStore remains canonical for TaskPackets, Harness output, evidence packages, full high-risk evidence, repair plans, blocked snapshots, adoption-aware evidence, patch artifacts, scaffold manifests, intake artifacts, and verifier-readable artifacts. React/Vite Workbench reads .symphony summaries/refs and /api/* aggregate results only; it must not treat .symphony as canonical evidence storage or bypass ArtifactStore to interpret high-risk evidence directly.</p>
+            </div>
+            <div class="item">
+              <h3>artifact-preview-contract</h3>
+              <p><strong>Artifact preview contract is explicit before React binding</strong></p>
+              <p class="subtitle">Before React renders artifact previews, the API contract must expose stable artifact uri or ref, size or sizeBytes, mime, title or displayTitle, type, format, safeToRenderInline, truncated, sourceRunId, artifactKind, previewAvailable, and a consistent error envelope. React must not infer these fields from local paths or raw .symphony state.</p>
+            </div>
+            <div class="item">
+              <h3>stage-charter-html-separate</h3>
+              <p><strong>Stage Charter HTML is separate</strong></p>
+              <p class="subtitle">Stage Charter HTML remains the JSON-derived Stage display artifact; the React/Vite Workbench is a local runtime UI and does not replace or edit it.</p>
+            </div>
+            <div class="item">
+              <h3>v13-v14-ui-principles</h3>
+              <p><strong>Preserve v13/v14 Workbench principles</strong></p>
+              <p class="subtitle">The migrated Workbench stays Chinese-first / 中文优先, low information density / 低信息密度, read-only, copy-only, and state-focused. Visible labels, empty states, status text, command descriptions, and primary copy are Chinese unless stable JSON enums, ids, commands, or file paths must stay literal. The homepage defaults to Stage, goal, status, top risks, blocker, and next action only. Run, evidence, adoption, diagnostics, and raw JSON details stay folded or secondary. The migration is parity-first, not a UI redesign.</p>
+            </div>
+            <div class="item">
+              <h3>phased-fallback</h3>
+              <p><strong>Phased rollout with legacy fallback</strong></p>
+              <p class="subtitle">Keep a safe legacy Workbench fallback until React bundle smoke and fixture parity gates pass. Missing bundles, build failures, or static asset serving failures must fall back to existing server-rendered or legacy static HTML behavior, and /api/* plus console snapshot JSON must remain v14-compatible. Fallback removal requires a later reviewer-approved removal step after parity passes.</p>
+            </div>
+            <div class="item">
+              <h3>kernel-preservation</h3>
+              <p><strong>Preserve v12/v14 kernels and gates</strong></p>
+              <p class="subtitle">The migration must not modify the v12 adoption apply safety kernel, v12 fingerprint verification logic, v12 dirty worktree check logic, or v12 git apply --check logic. It must not rewrite the v14 Stage kernel, the Stage gate, blocked snapshot recovery, or ArtifactStore boundaries.</p>
+            </div>
+            <div class="item">
+              <h3>project-scope-non-goals</h3>
+              <p><strong>No GitHub/PR integration or mcas re-entry</strong></p>
+              <p class="subtitle">The migration must not add GitHub / PR integration and must not make mcas the daily primary entry point again. React/Vite Workbench remains a local read-only status surface.</p>
+            </div>
+            <div class="item">
+              <h3>dependency-high-risk</h3>
+              <p><strong>React/Vite dependency introduction is high risk</strong></p>
+              <p class="subtitle">React/Vite dependency introduction is an independent high-risk task. It must start plan-only, receive independent reviewer approval, use a separate commit or separate change group, never be auto-adopted, have no auto-adopt path, never be mixed with UI migration code in one large task, and require reviewer approval for package.json and pnpm-lock.yaml changes. After lockfile updates, run pnpm audit --audit-level high.</p>
+            </div>
+        </section>
+        <section>
+          <h2>Tasks</h2>
+
+            <div class="item">
+              <h3>stage-charter-candidate</h3>
+              <p><strong>Create v15 Stage Charter JSON and HTML candidate discovery artifacts</strong> <span class="badge planned">planned</span></p>
+            </div>
+            <div class="item">
+              <h3>api-contract-inventory</h3>
+              <p><strong>Inventory existing Workbench API routes and response contracts</strong> <span class="badge planned">planned</span></p>
+            </div>
+            <div class="item">
+              <h3>field-gap-analysis</h3>
+              <p><strong>Classify fields that are React-ready and fields that need v15 contract work</strong> <span class="badge planned">planned</span></p>
+            </div>
+            <div class="item">
+              <h3>dependency-strategy</h3>
+              <p><strong>Define React/Vite dependency introduction as an independent high-risk task without installing dependencies</strong> <span class="badge planned">planned</span></p>
+            </div>
+            <div class="item">
+              <h3>frontend-architecture</h3>
+              <p><strong>Plan React/Vite Workbench shell and component boundaries</strong> <span class="badge planned">planned</span></p>
+            </div>
+            <div class="item">
+              <h3>fixture-contract-tests</h3>
+              <p><strong>Plan fixtures and regression tests for API parity and read-only safety</strong> <span class="badge planned">planned</span></p>
+            </div>
+            <div class="item">
+              <h3>legacy-fallback-rollout</h3>
+              <p><strong>Plan phased rollout and legacy Workbench fallback until parity gates pass</strong> <span class="badge planned">planned</span></p>
+            </div>
+            <div class="item">
+              <h3>release-evidence</h3>
+              <p><strong>Prepare v15 acceptance and release evidence expectations</strong> <span class="badge planned">planned</span></p>
+            </div>
+        </section>
+      </div>
+      <div class="stack">
+        <section>
+          <h2>Top Risks</h2>
+
+            <div class="item">
+              <h3>read-only-regression</h3>
+              <p><strong>Workbench accidentally gains browser write controls</strong> <span class="badge high">high</span></p>
+              <p class="subtitle">Keep server GET-only and require UI tests proving no write, execute, retry, adopt, adopt-confirm, confirm-adoption, apply, rollback, delete, package install, dependency install, model invocation, real agent invocation, arbitrary file read, arbitrary path read, arbitrary path input, mutation trigger, or audit trigger controls exist.</p>
+            </div>
+            <div class="item">
+              <h3>artifact-boundary-regression</h3>
+              <p><strong>Workbench bypasses ArtifactStore evidence boundaries</strong> <span class="badge high">high</span></p>
+              <p class="subtitle">Expose high-risk evidence through API summaries and ArtifactStore refs only; never treat .symphony as canonical evidence storage or parse high-risk evidence directly from .symphony.</p>
+            </div>
+            <div class="item">
+              <h3>artifact-contract-gap</h3>
+              <p><strong>Artifact preview contract omits React-safe rendering fields</strong> <span class="badge high">high</span></p>
+              <p class="subtitle">Require uri/ref, size or sizeBytes, mime, title/displayTitle, type, format, safeToRenderInline, truncated, sourceRunId, artifactKind, previewAvailable, and consistent error envelope fields before React preview binding.</p>
+            </div>
+            <div class="item">
+              <h3>api-drift</h3>
+              <p><strong>React components bind to unstable raw state fields</strong> <span class="badge medium">medium</span></p>
+              <p class="subtitle">Introduce fixture-backed API contracts and a frontend API client boundary before component work.</p>
+            </div>
+            <div class="item">
+              <h3>dependency-supply-chain</h3>
+              <p><strong>React/Vite dependency introduction expands audit surface</strong> <span class="badge high">high</span></p>
+              <p class="subtitle">Treat dependency introduction as a separate high-risk plan-only task requiring independent review, a separate change group, no auto-adoption, package.json and pnpm-lock.yaml review, and pnpm audit --audit-level high after lockfile update.</p>
+            </div>
+            <div class="item">
+              <h3>charter-workbench-confusion</h3>
+              <p><strong>Stage Charter HTML is confused with the Workbench app</strong> <span class="badge medium">medium</span></p>
+              <p class="subtitle">Document Stage Charter HTML as JSON-derived display-only output and keep Workbench runtime assets separate.</p>
+            </div>
+            <div class="item">
+              <h3>ui-parity-gap</h3>
+              <p><strong>Migration hides current Workbench diagnostics or recovery details</strong> <span class="badge medium">medium</span></p>
+              <p class="subtitle">Use v14 fixtures for Stage, runs, adoption, blockers, artifacts, and readiness before replacing the UI.</p>
+            </div>
+        </section>
+        <section>
+          <h2>Non-Goals</h2>
+          <ul><li>Do not change the v12 adoption apply safety kernel.</li><li>Do not modify v12 fingerprint verification logic.</li><li>Do not modify v12 dirty worktree check logic.</li><li>Do not modify v12 git apply --check logic.</li><li>Do not rewrite the v14 Stage kernel.</li><li>Do not rewrite the Stage gate.</li><li>Do not rewrite blocked snapshot recovery.</li><li>Do not add GitHub / PR integration.</li><li>Do not make mcas the daily primary entry point again.</li><li>Do not add browser write, execute, retry, adopt, adopt-confirm, confirm-adoption, apply, rollback, delete, package install, dependency install, model invocation, real agent invocation, arbitrary file read, arbitrary path read, arbitrary path input, mutation trigger, or audit trigger controls.</li><li>Do not replace Stage Charter HTML with React/Vite Workbench.</li><li>Do not implement full Autopilot.</li><li>Do not implement Agent Capability Registry.</li><li>Do not turn the React/Vite migration into a UI redesign or visual system rebuild.</li><li>Do not modify package.json or pnpm-lock.yaml during discovery.</li><li>Do not install dependencies during discovery.</li><li>Do not install React/Vite during implementation without an approved dependency plan.</li></ul>
+        </section>
+        <section>
+          <h2>Next Action</h2>
+          <code>Independent reviewer must approve the candidate v15 plan before any package.json, pnpm-lock.yaml, dependency installation, production code, or React/Vite implementation change.</code>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
