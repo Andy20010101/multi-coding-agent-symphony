@@ -17,6 +17,11 @@ import {
   buildConsoleSnapshot,
   createSymphonyConsoleServer
 } from '../src/symphony/console.js';
+import {
+  checkStageCharterConsistency,
+  defaultStageCharter,
+  renderStageCharterHtml
+} from '../src/symphony/stage.js';
 
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
@@ -520,7 +525,7 @@ describe('v8 prompt-driven symphony CLI', () => {
           '--project-dir',
           root,
           '--output-dir',
-          join(root, 'scan-out'),
+          join(stateDir, 'scan-out'),
           '--state-dir',
           stateDir,
           '--json'
@@ -1319,6 +1324,21 @@ describe('v8 prompt-driven symphony CLI', () => {
       await initFixtureGit(root);
 
       const stateDir = join(root, 'state dir');
+      const stageOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'stage',
+          'activate',
+          'v14-stage-kernel-refactor',
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: stageOutput.stdout,
+        stderr: stageOutput.stderr
+      });
+
       const sourceRun = await createConfirmedAdoptionSourceRun({
         root,
         stateDir,
@@ -1362,6 +1382,8 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(existsSync(planned.adoptionPlanArtifactPath), true);
       assert.equal(existsSync(planned.patchArtifactPath), true);
       assert.equal(planned.nextAction, planned.confirmationCommand);
+      assert.equal(planned.stageAdoptionSummary.behavior, 'summary-only');
+      assert.equal(planned.stageAdoptionSummary.v12ApplyLogicChanged, false);
       assert.equal(
         planned.confirmationCommand,
         `symphony adopt --confirm ${planned.adoptionPlanId} --state-dir '${stateDir}'`
@@ -1505,6 +1527,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(existsSync(confirmed.evidenceArtifactPath), true);
       assert.equal(existsSync(confirmed.adoptionJournalArtifactPath), true);
       assert.equal(confirmed.artifactRefs.some((artifact) => artifact.kind === 'adoption-journal'), true);
+      assert.equal(confirmed.stageAdoptionSummary.v12ApplyLogicChanged, false);
       assert.equal(await readFile(join(root, 'README.md'), 'utf8'), '# Fixture\n\nAdopted v12 change.\n');
 
       const finalRunState = JSON.parse(await readFile(join(stateDir, 'runs', 'latest.json'), 'utf8'));
@@ -1780,6 +1803,831 @@ describe('v8 prompt-driven symphony CLI', () => {
     }
   });
 
+  it('validates Stage Charter JSON, generated HTML, render modes, activation, summary, and next', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v14-stage-cli-'));
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const stage = await writeStageFixture(root, { html: 'missing' });
+      const initialConsistency = await checkStageCharterConsistency({
+        stageId: stage.stageId,
+        docsDir: stage.docsDir
+      });
+
+      assert.equal(initialConsistency.status, 'failed');
+      assert.equal(initialConsistency.errors.some((error) => error.code === 'stage-charter-html-missing'), true);
+
+      const renderMissingOutput = createOutput();
+      const renderMissingExitCode = await runSymphonyCli({
+        argv: [
+          'stage',
+          'render',
+          stage.stageId,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--json'
+        ],
+        stdout: renderMissingOutput.stdout,
+        stderr: renderMissingOutput.stderr
+      });
+
+      assert.equal(renderMissingExitCode, 0);
+      const generated = JSON.parse(renderMissingOutput.stdoutText());
+
+      assert.equal(generated.status, 'generated');
+      assert.equal(existsSync(stage.htmlPath), true);
+      assert.match(generated.html, /v14 Stage Kernel Refactor/u);
+
+      const passedConsistency = await checkStageCharterConsistency({
+        stageId: stage.stageId,
+        docsDir: stage.docsDir
+      });
+
+      assert.equal(passedConsistency.status, 'passed');
+
+      await writeFile(stage.htmlPath, 'stale html\n', 'utf8');
+
+      const previewOutput = createOutput();
+      const previewExitCode = await runSymphonyCli({
+        argv: [
+          'stage',
+          'render',
+          stage.stageId,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--json'
+        ],
+        stdout: previewOutput.stdout,
+        stderr: previewOutput.stderr
+      });
+
+      assert.equal(previewExitCode, 0);
+      assert.equal(JSON.parse(previewOutput.stdoutText()).status, 'preview');
+      assert.equal(await readFile(stage.htmlPath, 'utf8'), 'stale html\n');
+
+      const overwriteOutput = createOutput();
+      const overwriteExitCode = await runSymphonyCli({
+        argv: [
+          'stage',
+          'render',
+          stage.stageId,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--write',
+          '--json'
+        ],
+        stdout: overwriteOutput.stdout,
+        stderr: overwriteOutput.stderr
+      });
+
+      assert.equal(overwriteExitCode, 0);
+      assert.equal(JSON.parse(overwriteOutput.stdoutText()).status, 'written');
+      assert.equal((await checkStageCharterConsistency({
+        stageId: stage.stageId,
+        docsDir: stage.docsDir
+      })).status, 'passed');
+
+      const activateOutput = createOutput();
+      const activateExitCode = await runSymphonyCli({
+        argv: [
+          'stage',
+          'activate',
+          stage.stageId,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--json'
+        ],
+        stdout: activateOutput.stdout,
+        stderr: activateOutput.stderr
+      });
+
+      assert.equal(activateExitCode, 0);
+      assert.equal(JSON.parse(activateOutput.stdoutText()).status, 'active');
+      assert.equal(existsSync(join(stateDir, 'stages', 'latest.json')), true);
+
+      const helpOutput = createOutput();
+      const helpExitCode = await runSymphonyCli({
+        argv: ['stage', 'create', '--help'],
+        stdout: helpOutput.stdout,
+        stderr: helpOutput.stderr
+      });
+
+      assert.equal(helpExitCode, 0);
+      assert.match(helpOutput.stdoutText(), /symphony stage create/u);
+      assert.equal(helpOutput.stderrText(), '');
+
+      const beforeReadOnly = await snapshotDirectoryFiles(stateDir);
+
+      for (const argv of [
+        ['stage', '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json'],
+        ['stage', 'summary', '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json'],
+        ['next', '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json']
+      ]) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv,
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 0);
+        assert.equal(output.stderrText(), '');
+        const summary = JSON.parse(output.stdoutText());
+
+        assert.equal(summary.stageId, stage.stageId);
+        if (argv[0] === 'stage') {
+          assert.equal(summary.contractName, 'symphony.stage-status');
+          assert.equal(summary.contractVersion, '1.0');
+          assert.equal(summary.activeStage.stageId, stage.stageId);
+        } else {
+          assert.equal(summary.nextAction, 'symphony do --dry-run "inspect README"');
+        }
+      }
+
+      const humanStageOutput = createOutput();
+      const humanStageExitCode = await runSymphonyCli({
+        argv: ['stage', '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir],
+        stdout: humanStageOutput.stdout,
+        stderr: humanStageOutput.stderr
+      });
+
+      assert.equal(humanStageExitCode, 0);
+      assert.match(humanStageOutput.stdoutText(), new RegExp(stage.stageId, 'u'));
+      assert.match(humanStageOutput.stdoutText(), /v14 Stage Kernel Refactor/u);
+      assert.match(humanStageOutput.stdoutText(), /Upgrade Symphony/u);
+      assert.match(humanStageOutput.stdoutText(), /Status: active/u);
+      assert.match(humanStageOutput.stdoutText(), /Blocker: none/u);
+      assert.match(humanStageOutput.stdoutText(), /Next: symphony do --dry-run "inspect README"/u);
+
+      assert.deepEqual(await snapshotDirectoryFiles(stateDir), beforeReadOnly);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('records active Stage binding for do, review, and verify while honoring --no-stage', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v14-stage-binding-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const stage = await writeStageFixture(root);
+      const activateOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'stage',
+          'activate',
+          stage.stageId,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--json'
+        ],
+        stdout: activateOutput.stdout,
+        stderr: activateOutput.stderr
+      });
+
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(root, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      for (const command of ['do', 'review', 'verify']) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv: [
+            command,
+            '--project-dir',
+            root,
+            '--state-dir',
+            stateDir,
+            '--stage-docs-dir',
+            stage.docsDir,
+            '--work-dir',
+            join(stateDir, `${command}-work`),
+            '--dry-run',
+            '--json',
+            'inspect README'
+          ],
+          stdout: output.stdout,
+          stderr: output.stderr,
+          runner: new MissingToolRunner(),
+          mcasRunner: fakePassingHarnessRunner
+        });
+
+        assert.equal(exitCode, 0);
+        assert.equal(output.stderrText(), '');
+        const summary = JSON.parse(output.stdoutText());
+
+        assert.equal(summary.stageBinding.stageId, stage.stageId);
+        assert.equal(summary.stageBinding.bindingSource, 'active-stage');
+        assert.equal(summary.stageBinding.boundaryCheck.status, 'passed');
+
+        const persisted = JSON.parse(await readFile(join(stateDir, 'runs', `${summary.runId}.json`), 'utf8'));
+
+        assert.equal(persisted.stageBinding.stageId, stage.stageId);
+      }
+
+      const explicitStageOutput = createOutput();
+      const explicitStageExitCode = await runSymphonyCli({
+        argv: [
+          'verify',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--stage',
+          stage.stageId,
+          '--work-dir',
+          join(stateDir, 'explicit-stage-work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: explicitStageOutput.stdout,
+        stderr: explicitStageOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+      const explicitStage = JSON.parse(explicitStageOutput.stdoutText());
+
+      assert.equal(explicitStageExitCode, 0);
+      assert.equal(explicitStage.stageBinding.stageId, stage.stageId);
+      assert.equal(explicitStage.stageBinding.bindingSource, 'explicit-stage');
+      assert.equal(explicitStage.stageBinding.boundaryCheck.status, 'passed');
+
+      const noStageOutput = createOutput();
+      const noStageExitCode = await runSymphonyCli({
+        argv: [
+          'verify',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--no-stage',
+          '--work-dir',
+          join(stateDir, 'no-stage-work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: noStageOutput.stdout,
+        stderr: noStageOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+
+      assert.equal(noStageExitCode, 0);
+      const noStage = JSON.parse(noStageOutput.stdoutText());
+
+      assert.equal(noStage.stageBinding.stageId, null);
+      assert.equal(noStage.stageBinding.bindingSource, 'no-stage');
+      assert.equal(noStage.stageBinding.boundaryCheck.status, 'not-run');
+
+      const noActiveStateDir = join(root, '.symphony-no-active');
+      const noActiveScanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(noActiveStateDir, 'scan-out'),
+          '--state-dir',
+          noActiveStateDir,
+          '--json'
+        ],
+        stdout: noActiveScanOutput.stdout,
+        stderr: noActiveScanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const noActiveOutput = createOutput();
+      const noActiveExitCode = await runSymphonyCli({
+        argv: [
+          'verify',
+          '--project-dir',
+          root,
+          '--state-dir',
+          noActiveStateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(noActiveStateDir, 'work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: noActiveOutput.stdout,
+        stderr: noActiveOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+      const noActive = JSON.parse(noActiveOutput.stdoutText());
+
+      assert.equal(noActiveExitCode, 0);
+      assert.equal(noActive.stageBinding.stageId, null);
+      assert.equal(noActive.stageBinding.bindingSource, 'no-active-stage');
+      assert.equal(noActive.stageBinding.boundaryCheck.status, 'not-run');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks Stage Charter mismatches before executions and creates blocker repair artifacts without a normal run', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v14-stage-gate-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const stage = await writeStageFixture(root, { html: 'stale html\n' });
+      const activateOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'stage',
+          'activate',
+          stage.stageId,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--json'
+        ],
+        stdout: activateOutput.stdout,
+        stderr: activateOutput.stderr
+      });
+
+      assert.equal(JSON.parse(activateOutput.stdoutText()).status, 'attention');
+
+      const blockedOutput = createOutput();
+      const blockedExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(root, 'work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: blockedOutput.stdout,
+        stderr: blockedOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: async () => {
+          throw new Error('stage gate must block before execution');
+        }
+      });
+
+      assert.equal(blockedExitCode, 64);
+      assert.match(JSON.parse(blockedOutput.stderrText()).message, /Stage Charter consistency gate blocked/u);
+      assert.equal(existsSync(join(stateDir, 'runs', 'latest.json')), false);
+
+      const stageState = JSON.parse(await readFile(join(stateDir, 'stages', `${stage.stageId}.json`), 'utf8'));
+
+      assert.equal(stageState.status, 'blocked');
+      assert.equal(stageState.blocker.reason, 'stage-charter-inconsistent');
+      assert.equal(stageState.gateEvents[0].normalRunCreated, false);
+      assert.equal(existsSync(stageState.blocker.repairArtifactPath), true);
+      assert.equal(existsSync(stageState.blocker.blockedSnapshotPath), true);
+      assert.equal(stageState.blockedSnapshot.kind, 'symphony.stage-blocked-snapshot-summary');
+      assert.equal(stageState.blockedSnapshot.projectState, undefined);
+      assert.equal(stageState.blockedSnapshot.frozenRefs, undefined);
+      assert.match(stageState.blockedSnapshotRef.uri, /^artifact:\/\//u);
+      assert.match(stageState.blocker.repairArtifactRef.uri, /^artifact:\/\//u);
+
+      const fullBlockedSnapshot = JSON.parse(await readFile(stageState.blockedSnapshotRef.path, 'utf8'));
+
+      assert.equal(fullBlockedSnapshot.kind, 'symphony.stage-blocked-snapshot');
+      assert.equal(fullBlockedSnapshot.frozenRefs.repairPlanRef.uri, stageState.blocker.repairArtifactRef.uri);
+      assert.equal(fullBlockedSnapshot.frozenRefs.executionPlanHash, null);
+
+      for (const argv of [
+        ['status', '--state-dir', stateDir, '--json'],
+        ['stage', '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json']
+      ]) {
+        const output = createOutput();
+        const exitCode = await runSymphonyCli({
+          argv,
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 0);
+        assert.equal(output.stderrText(), '');
+      }
+
+      const consoleOutput = createOutput();
+      const consoleExitCode = await runSymphonyCli({
+        argv: ['console', '--snapshot', '--state-dir', stateDir, '--json'],
+        stdout: consoleOutput.stdout,
+        stderr: consoleOutput.stderr
+      });
+      const snapshot = JSON.parse(consoleOutput.stdoutText());
+
+      assert.equal(consoleExitCode, 0);
+      assert.equal(snapshot.stageSummary.stageId, stage.stageId);
+      assert.equal(snapshot.stageSummary.status, 'blocked');
+      assert.equal(snapshot.overview.stage.blocker.reason, 'stage-charter-inconsistent');
+
+      const repairOutput = createOutput();
+      const repairExitCode = await runSymphonyCli({
+        argv: [
+          'stage',
+          'render',
+          stage.stageId,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--write',
+          '--json'
+        ],
+        stdout: repairOutput.stdout,
+        stderr: repairOutput.stderr
+      });
+
+      assert.equal(repairExitCode, 0);
+      assert.equal(JSON.parse(repairOutput.stdoutText()).status, 'written');
+
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(stateDir, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const unblockedOutput = createOutput();
+      const unblockedExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(root, 'work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: unblockedOutput.stdout,
+        stderr: unblockedOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+      const unblocked = JSON.parse(unblockedOutput.stdoutText());
+      const repairedStageState = JSON.parse(await readFile(join(stateDir, 'stages', `${stage.stageId}.json`), 'utf8'));
+
+      assert.equal(unblockedExitCode, 0);
+      assert.equal(unblocked.stageGate.status, 'passed');
+      assert.equal(repairedStageState.status, 'active');
+      assert.equal(repairedStageState.blocker, null);
+      assert.equal(repairedStageState.gateEvents.some((event) => event.status === 'resolved'), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps Stage blocker frozen when Stage JSON changes after a block', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v14-stage-json-drift-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const stage = await writeStageFixture(root, { html: 'stale html\n' });
+      const activateOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['stage', 'activate', stage.stageId, '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json'],
+        stdout: activateOutput.stdout,
+        stderr: activateOutput.stderr
+      });
+
+      const blockedOutput = createOutput();
+      const blockedExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(stateDir, 'work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: blockedOutput.stdout,
+        stderr: blockedOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+
+      assert.equal(blockedExitCode, 64);
+
+      const charter = JSON.parse(await readFile(stage.charterPath, 'utf8'));
+
+      charter.goal = 'Changed after the blocker was frozen.';
+      await writeFile(stage.charterPath, `${JSON.stringify(charter, null, 2)}\n`, 'utf8');
+
+      const repairOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['stage', 'render', stage.stageId, '--stage-docs-dir', stage.docsDir, '--write', '--json'],
+        stdout: repairOutput.stdout,
+        stderr: repairOutput.stderr
+      });
+
+      const retryOutput = createOutput();
+      const retryExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(stateDir, 'work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: retryOutput.stdout,
+        stderr: retryOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+      const stageState = JSON.parse(await readFile(join(stateDir, 'stages', `${stage.stageId}.json`), 'utf8'));
+
+      assert.equal(retryExitCode, 64);
+      assert.match(JSON.parse(retryOutput.stderrText()).message, /Stage Charter consistency gate blocked/u);
+      assert.equal(stageState.status, 'blocked');
+      assert.equal(stageState.blocker.reason, 'stage-charter-inconsistent');
+      assert.equal(stageState.gateEvents.some((event) => event.status === 'resolved'), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps Stage blocker frozen when a different effective action is retried', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v14-stage-action-drift-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const stage = await writeStageFixture(root, { html: 'stale html\n' });
+      const activateOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['stage', 'activate', stage.stageId, '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json'],
+        stdout: activateOutput.stdout,
+        stderr: activateOutput.stderr
+      });
+
+      const blockedOutput = createOutput();
+      const blockedExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(stateDir, 'work'),
+          '--dry-run',
+          '--json',
+          'inspect README'
+        ],
+        stdout: blockedOutput.stdout,
+        stderr: blockedOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+
+      assert.equal(blockedExitCode, 64);
+
+      await runSymphonyCli({
+        argv: ['stage', 'render', stage.stageId, '--stage-docs-dir', stage.docsDir, '--write', '--json'],
+        stdout: createOutput().stdout,
+        stderr: createOutput().stderr
+      });
+
+      const changedActionOutput = createOutput();
+      const changedActionExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(stateDir, 'write-work'),
+          '--write',
+          '--json',
+          'different prompt'
+        ],
+        stdout: changedActionOutput.stdout,
+        stderr: changedActionOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+      const stageState = JSON.parse(await readFile(join(stateDir, 'stages', `${stage.stageId}.json`), 'utf8'));
+
+      assert.equal(changedActionExitCode, 64);
+      assert.match(JSON.parse(changedActionOutput.stderrText()).message, /Stage Charter consistency gate blocked/u);
+      assert.equal(stageState.status, 'blocked');
+      assert.equal(stageState.gateEvents.some((event) => event.status === 'resolved'), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('stores real execution plan hashes in Stage blocked snapshots', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v14-stage-plan-hash-'));
+
+    try {
+      await writeFixtureProject(root);
+
+      const stateDir = join(root, '.symphony');
+      const stage = await writeStageFixture(root);
+
+      await runSymphonyCli({
+        argv: ['stage', 'activate', stage.stageId, '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json'],
+        stdout: createOutput().stdout,
+        stderr: createOutput().stderr
+      });
+
+      const scanOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: [
+          'scan',
+          '--project-dir',
+          root,
+          '--output-dir',
+          join(stateDir, 'scan-out'),
+          '--state-dir',
+          stateDir,
+          '--json'
+        ],
+        stdout: scanOutput.stdout,
+        stderr: scanOutput.stderr,
+        runner: new MissingToolRunner()
+      });
+
+      const planOutput = createOutput();
+      const planExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--project-dir',
+          root,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--work-dir',
+          join(stateDir, 'planned-work'),
+          '--write',
+          '--json',
+          'inspect README'
+        ],
+        stdout: planOutput.stdout,
+        stderr: planOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: async () => {
+          throw new Error('write planning must not invoke the kernel');
+        }
+      });
+
+      assert.equal(planExitCode, 0);
+      const planned = JSON.parse(planOutput.stdoutText());
+
+      await writeFile(stage.htmlPath, 'stale html\n', 'utf8');
+
+      const blockedOutput = createOutput();
+      const blockedExitCode = await runSymphonyCli({
+        argv: [
+          'do',
+          '--confirm-plan',
+          planned.executionPlanId,
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--json'
+        ],
+        stdout: blockedOutput.stdout,
+        stderr: blockedOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+      const stageState = JSON.parse(await readFile(join(stateDir, 'stages', `${stage.stageId}.json`), 'utf8'));
+      const blockedSnapshot = JSON.parse(await readFile(stageState.blockedSnapshotRef.path, 'utf8'));
+
+      assert.equal(blockedExitCode, 64);
+      assert.match(blockedSnapshot.frozenRefs.executionPlanHash, /^sha256:/u);
+      assert.notEqual(blockedSnapshot.frozenRefs.executionPlanHash, planned.executionPlanId);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('blocks symphony new --write when active Stage Charter is inconsistent', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v14-stage-new-gate-'));
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const targetDir = join(root, 'created-app');
+      const stage = await writeStageFixture(root, { html: 'stale html\n' });
+      const activateOutput = createOutput();
+
+      await runSymphonyCli({
+        argv: ['stage', 'activate', stage.stageId, '--state-dir', stateDir, '--stage-docs-dir', stage.docsDir, '--json'],
+        stdout: activateOutput.stdout,
+        stderr: activateOutput.stderr
+      });
+
+      const newOutput = createOutput();
+      const newExitCode = await runSymphonyCli({
+        argv: [
+          'new',
+          targetDir,
+          '--template',
+          'node-cli',
+          '--write',
+          '--state-dir',
+          stateDir,
+          '--stage-docs-dir',
+          stage.docsDir,
+          '--runtime-dir',
+          join(stateDir, 'new-runtime'),
+          '--json'
+        ],
+        stdout: newOutput.stdout,
+        stderr: newOutput.stderr,
+        runner: new MissingToolRunner(),
+        mcasRunner: fakePassingHarnessRunner
+      });
+
+      assert.equal(newExitCode, 64);
+      assert.match(JSON.parse(newOutput.stderrText()).message, /Stage Charter consistency gate blocked/u);
+      assert.equal(existsSync(targetDir), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('serves a read-only local console snapshot and API from state', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v8-console-'));
     let server;
@@ -1850,6 +2698,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       const html = await htmlResponse.text();
 
       assert.match(html, /Symphony Workbench/u);
+      assert.match(html, /当前 Stage/u);
       assert.match(html, /data-view="overview"/u);
       assert.match(html, /data-view="adoptions"/u);
       assert.match(html, /data-view="runs"/u);
@@ -3316,6 +4165,36 @@ async function writeFixtureProject(root) {
       test: 'node --test'
     }
   }, null, 2)}\n`, 'utf8');
+}
+
+async function writeStageFixture(root, { html = 'generated' } = {}) {
+  const docsDir = join(root, 'stage-docs');
+  const stageId = 'v14-stage-kernel-refactor';
+  const charter = defaultStageCharter({
+    stageId,
+    createdAt: '2026-05-26T00:00:00.000Z'
+  });
+  const charterPath = join(docsDir, `${stageId}.stage.json`);
+  const htmlPath = join(docsDir, `${stageId}.html`);
+
+  await mkdir(docsDir, { recursive: true });
+  await writeFile(charterPath, `${JSON.stringify(charter, null, 2)}\n`, 'utf8');
+
+  if (html !== 'missing') {
+    await writeFile(
+      htmlPath,
+      html === 'generated' ? renderStageCharterHtml(charter) : html,
+      'utf8'
+    );
+  }
+
+  return {
+    docsDir,
+    stageId,
+    charter,
+    charterPath,
+    htmlPath
+  };
 }
 
 async function initFixtureGit(root) {

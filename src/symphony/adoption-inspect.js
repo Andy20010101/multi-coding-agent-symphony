@@ -8,6 +8,9 @@ import {
   readAdoptionPlan,
   symphonyStatePaths
 } from './state.js';
+import {
+  buildStageAdoptionSummary
+} from './stage.js';
 
 export async function buildAdoptionInspectionSummary({
   stateDir = '.symphony',
@@ -95,6 +98,11 @@ export async function buildAdoptionInspectionSummary({
     patchHash: plan.patchHash,
     changedFiles: [...plan.changedFiles],
     fileOperations: structuredClone(plan.fileOperations),
+    stageBinding: plan.stageBinding,
+    stageAdoptionSummary: plan.stageAdoptionSummary ?? buildStageAdoptionSummary({
+      stageBinding: plan.stageBinding,
+      plan
+    }),
     journal: journal === null
       ? null
       : {

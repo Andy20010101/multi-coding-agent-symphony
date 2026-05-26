@@ -1,0 +1,150 @@
+{
+  "version": "1",
+  "kind": "symphony.stage-charter",
+  "contractName": "symphony.stage-charter",
+  "contractVersion": "1.0",
+  "stageId": "v14-stage-kernel-refactor",
+  "title": "v14 Stage Kernel Refactor",
+  "goal": "Upgrade Symphony from prompt/workflow/run-driven orchestration into a Stage-aware wrapper kernel.",
+  "goals": [
+    "把 Symphony 从 prompt / workflow / run 驱动，升级成 Stage 驱动的项目推进内核。",
+    "Make existing do/review/verify/adopt/diagnose/console flows Stage-aware without replacing the kernel."
+  ],
+  "status": "active",
+  "owner": "writer",
+  "createdAt": "2026-05-26T00:00:00.000Z",
+  "updatedAt": "2026-05-26T00:00:00.000Z",
+  "nonGoals": [
+    "Do not change v12 verified adoption apply safety semantics.",
+    "Do not add browser write controls.",
+    "Do not migrate Workbench to React or Vite in v14.",
+    "Do not implement full Autopilot or Agent Capability Registry.",
+    "Do not make .symphony replace ArtifactStore."
+  ],
+  "boundaries": [
+    {
+      "id": "wrapper-first",
+      "title": "Wrapper-first Stage kernel",
+      "rule": "Stage behavior wraps existing scan/do/review/verify/adopt flows instead of replacing the kernel."
+    },
+    {
+      "id": "v12-adoption-safety",
+      "title": "Preserve v12 adoption safety",
+      "rule": "Adoption keeps isolated workspace, frozen plan, verifier gate, frozen patch, fingerprint checks, git apply --check, and confirmation journal behavior."
+    },
+    {
+      "id": "workbench-read-only",
+      "title": "Workbench remains read-only",
+      "rule": "Workbench may display and copy commands, but must not add write, retry, adopt, delete, rollback, or browser-execute controls."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "charter-contract",
+      "title": "Add Stage Charter JSON and generated HTML support",
+      "status": "planned"
+    },
+    {
+      "id": "local-state",
+      "title": "Persist active Stage runtime state under .symphony/stages",
+      "status": "planned"
+    },
+    {
+      "id": "cli",
+      "title": "Add Stage CLI commands and advisory next command",
+      "status": "planned"
+    },
+    {
+      "id": "run-binding",
+      "title": "Bind do/review/verify runs to active Stage",
+      "status": "planned"
+    },
+    {
+      "id": "gate",
+      "title": "Block writes/executions/adoption confirm when the Stage Charter is inconsistent",
+      "status": "planned"
+    },
+    {
+      "id": "workbench",
+      "title": "Show current Stage overview in Workbench without write controls",
+      "status": "planned"
+    },
+    {
+      "id": "evidence",
+      "title": "Add tests and v14 release evidence",
+      "status": "planned"
+    }
+  ],
+  "risks": [
+    {
+      "id": "adoption-regression",
+      "severity": "high",
+      "title": "v12 adoption safety regression",
+      "mitigation": "Keep adoption apply logic intact and add only wrapper summary/gate checks before confirmation."
+    },
+    {
+      "id": "charter-drift",
+      "severity": "medium",
+      "title": "Stage JSON and HTML drift",
+      "mitigation": "Treat JSON as source of truth and gate write/execution actions on deterministic HTML consistency."
+    },
+    {
+      "id": "workbench-write-controls",
+      "severity": "medium",
+      "title": "Workbench accidentally grows write controls",
+      "mitigation": "Expose Stage details through GET APIs and copy-only commands only."
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "kind": "release-evidence",
+      "path": "docs/plans/v14-release-evidence-2026-05-26.md"
+    }
+  ],
+  "verificationProfile": {
+    "developmentGate": [
+      "node --test tests/symphony-cli.test.js",
+      "pnpm check",
+      "pnpm test",
+      "git diff --check"
+    ],
+    "releaseGate": [
+      "node --test tests/symphony-cli.test.js",
+      "pnpm check",
+      "pnpm test",
+      "git diff --check",
+      "pnpm audit --audit-level high",
+      "pnpm test:mutation:gate"
+    ],
+    "stageSmoke": [
+      "symphony stage",
+      "symphony stage --json",
+      "symphony stage activate v14-stage-kernel-refactor",
+      "symphony stage render v14-stage-kernel-refactor",
+      "symphony stage summary",
+      "symphony next"
+    ]
+  },
+  "riskPolicy": {
+    "stageRequiredAreas": [
+      "Stage kernel",
+      "adoption",
+      "verifier",
+      "policy",
+      "workspace",
+      "adapter",
+      "dependency changes",
+      "main-worktree writes"
+    ],
+    "autoAdoptAllowedAreas": [],
+    "autoAdoptForbiddenAreas": [
+      "adoption kernel",
+      "policy engine",
+      "workspace manager",
+      "verifier",
+      "dependencies"
+    ]
+  },
+  "nextAction": "symphony stage activate v14-stage-kernel-refactor",
+  "charterHash": "sha256:2c97704b5a1a995d0be3739c31c1b9dc19793ad3c418131c64e310fb8f7cdb74"
+}

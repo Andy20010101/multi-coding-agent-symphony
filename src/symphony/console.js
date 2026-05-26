@@ -20,6 +20,9 @@ import {
   buildAdoptionInspectionSummary,
   buildConsoleAdoptionInspectContract
 } from './adoption-inspect.js';
+import {
+  buildStageCommandSummary
+} from './stage.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
@@ -34,12 +37,13 @@ export async function buildConsoleSnapshot({
   stateDir = '.symphony',
   generatedAt = new Date().toISOString()
 } = {}) {
-  const [latestContext, latestRun, runs, adoptionPlans, adoptionJournals] = await Promise.all([
+  const [latestContext, latestRun, runs, adoptionPlans, adoptionJournals, stageSummary] = await Promise.all([
     readLatestContext({ stateDir }),
     readLatestRun({ stateDir }),
     listRunStates({ stateDir }),
     listAdoptionPlans({ stateDir }),
-    listAdoptionJournals({ stateDir })
+    listAdoptionJournals({ stateDir }),
+    buildStageCommandSummary({ stateDir })
   ]);
 
   const compactRuns = await decorateConsoleRuns(runs.map((run) => compactRunState(run)));
@@ -67,6 +71,7 @@ export async function buildConsoleSnapshot({
     runStats,
     riskSummary,
     adoptionSummary,
+    stageSummary,
     nextAction: latestRun?.nextAction ?? 'symphony scan'
   });
 
@@ -81,6 +86,7 @@ export async function buildConsoleSnapshot({
     stateDir,
     status: latestRun === null ? 'no-runs' : 'ready',
     overview,
+    stageSummary,
     adoptionSummary,
     latestContext: compactContext(latestContext),
     latestRun: compactLatestRun,
@@ -221,6 +227,7 @@ export async function buildConsoleDiagnosticsReport({
       riskSummary: risks,
       adoptionSummary,
       readiness,
+      stageSummary: snapshot.stageSummary,
       nextAction: snapshot.action?.next ?? 'symphony scan'
     })
   };
@@ -1239,14 +1246,19 @@ function buildConsoleOverview({
   runStats,
   riskSummary,
   adoptionSummary,
+  stageSummary,
   readiness,
   nextAction
 }) {
-  const topRisks = topOverviewRisks(riskSummary?.items ?? []);
+  const topRisks = topOverviewRisks([
+    ...stageRisksForOverview(stageSummary),
+    ...(riskSummary?.items ?? [])
+  ]);
   const status = overviewStatus({
     latestRun,
     topRisks,
     adoptionSummary,
+    stageSummary,
     readiness
   });
 
@@ -1257,6 +1269,7 @@ function buildConsoleOverview({
       latestRun,
       topRisks,
       adoptionSummary,
+      stageSummary,
       readiness
     }),
     latestRunId: latestRun?.runId,
@@ -1271,16 +1284,79 @@ function buildConsoleOverview({
         }),
     runCount: runStats?.total,
     topRisks,
+    stage: compactStageForOverview(stageSummary),
     nextAction: overviewNextAction({
       topRisks,
       latestRun,
       adoptionSummary,
+      stageSummary,
       readiness,
       fallback: nextAction
     }),
     readiness: readiness === undefined ? undefined : compactReadinessForOverview(readiness),
     adoptionStatus: adoptionSummary?.status
   });
+}
+
+function compactStageForOverview(stageSummary) {
+  if (stageSummary === null || stageSummary === undefined || stageSummary.active !== true) {
+    return undefined;
+  }
+
+  return stripUndefined({
+    stageId: stageSummary.stageId,
+    status: stageSummary.status,
+    goal: stageSummary.goal,
+    topRisks: stageSummary.topRisks,
+    blocker: stageSummary.blocker,
+    nextAction: stageSummary.nextAction,
+    active: stageSummary.active
+  });
+}
+
+function stageRisksForOverview(stageSummary) {
+  if (stageSummary?.active !== true) {
+    return [];
+  }
+
+  if (stageSummary?.blocker) {
+    return [{
+      id: `stage:${stageSummary.stageId}:blocker`,
+      category: 'stage_blocker',
+      severity: 'high',
+      title: 'Stage blocker',
+      detail: stageSummary.blocker.reason ?? 'Active Stage is blocked.',
+      command: stageOverviewCommand('stage-blocker', 'Stage blocker', 'symphony stage summary')
+    }];
+  }
+
+  if (stageSummary?.consistency?.status === 'failed') {
+    return [{
+      id: `stage:${stageSummary.stageId}:charter_inconsistent`,
+      category: 'stage_charter_inconsistent',
+      severity: 'high',
+      title: 'Stage Charter inconsistent',
+      detail: 'Stage JSON and generated HTML are not consistent.',
+      command: stageOverviewCommand(
+        'stage-charter-inconsistent',
+        'Stage Charter inconsistent',
+        `symphony stage render ${stageSummary.stageId} --write`
+      )
+    }];
+  }
+
+  return [];
+}
+
+function stageOverviewCommand(id, label, command) {
+  return {
+    id,
+    label,
+    command,
+    description: 'Inspect the current Stage state.',
+    mode: 'copy-only',
+    group: 'Inspect'
+  };
 }
 
 function topOverviewRisks(items) {
@@ -1298,9 +1374,13 @@ function topOverviewRisks(items) {
     }));
 }
 
-function overviewStatus({ latestRun, topRisks, adoptionSummary, readiness }) {
+function overviewStatus({ latestRun, topRisks, adoptionSummary, stageSummary, readiness }) {
+  if (stageSummary?.active === true && (stageSummary.blocker || stageSummary.status === 'blocked')) {
+    return 'blocked';
+  }
+
   if (latestRun === null || latestRun === undefined) {
-    return 'no-runs';
+    return stageSummary?.active === true && stageSummary?.stageId ? 'ready' : 'no-runs';
   }
 
   if (adoptionSummary?.status === 'dirty-blocked'
@@ -1322,7 +1402,11 @@ function overviewStatus({ latestRun, topRisks, adoptionSummary, readiness }) {
   return 'ready';
 }
 
-function overviewHeadline({ status, latestRun, topRisks, adoptionSummary, readiness }) {
+function overviewHeadline({ status, latestRun, topRisks, adoptionSummary, stageSummary, readiness }) {
+  if (stageSummary?.active === true && stageSummary?.stageId && stageSummary.goal) {
+    return stageSummary.goal;
+  }
+
   if (status === 'no-runs') {
     return 'No Symphony runs found yet.';
   }
@@ -1362,7 +1446,11 @@ function overviewHeadline({ status, latestRun, topRisks, adoptionSummary, readin
     : `Latest run is ${latestRun?.status ?? 'available'}.`;
 }
 
-function overviewNextAction({ topRisks, latestRun, adoptionSummary, readiness, fallback }) {
+function overviewNextAction({ topRisks, latestRun, adoptionSummary, stageSummary, readiness, fallback }) {
+  if (stageSummary?.active === true && stageSummary?.blocker) {
+    return stageSummary.nextAction ?? 'symphony stage summary';
+  }
+
   if (adoptionSummary?.dirtyBlocked === true || readiness?.tools?.git?.dirty === true) {
     return 'git status --short';
   }
@@ -1373,7 +1461,9 @@ function overviewNextAction({ topRisks, latestRun, adoptionSummary, readiness, f
     return riskCommand;
   }
 
-  return latestRun?.nextAction ?? fallback ?? 'symphony scan';
+  return stageSummary?.active === true
+    ? stageSummary.nextAction ?? latestRun?.nextAction ?? fallback ?? 'symphony scan'
+    : latestRun?.nextAction ?? fallback ?? 'symphony scan';
 }
 
 function compactReadinessForOverview(readiness) {
@@ -3502,6 +3592,10 @@ function renderConsoleHtml() {
         <div class="overview-grid">
           <div>
             <div class="compact-panel">
+              <h2>当前 Stage</h2>
+              <div id="stage-overview" class="stack"></div>
+            </div>
+            <div class="compact-panel">
               <h2>最新状态</h2>
               <div id="dashboard" class="dashboard">正在加载...</div>
             </div>
@@ -3624,6 +3718,7 @@ function renderConsoleHtml() {
       renderNavigation();
       renderSideSummary();
       renderViewVisibility();
+      renderStageOverview();
       renderDashboard();
       renderAdoptionBanner();
       renderRiskPanel();
@@ -3652,9 +3747,11 @@ function renderConsoleHtml() {
       const side = document.getElementById('side-summary');
       const overview = state.snapshot?.overview || {};
       const adoption = state.snapshot?.adoptionSummary || {};
+      const stage = state.snapshot?.stageSummary || {};
       const readiness = state.readiness || {};
       side.replaceChildren(
         compactSummaryBlock('状态', [
+          ['Stage', stage.active ? stage.stageId + ' / ' + (stage.status || 'unknown') : 'none'],
           ['总体', overview.status || state.snapshot?.status],
           ['采纳', adoption.status || 'clear'],
           ['就绪状态', readiness.status || 'unknown']
@@ -3715,6 +3812,52 @@ function renderConsoleHtml() {
         topRisks: risks,
         nextAction: adoption.dirtyBlocked ? 'git status --short' : overview.nextAction
       };
+    }
+
+    function renderStageOverview() {
+      const container = document.getElementById('stage-overview');
+      const stage = state.snapshot?.stageSummary;
+
+      if (!stage || !stage.stageId || stage.active !== true || stage.status === 'missing') {
+        container.replaceChildren(emptyState('当前没有激活的 Stage。'));
+        return;
+      }
+
+      const rows = [
+        ['Stage', stage.stageId],
+        ['目标', stage.goal],
+        ['状态', stage.status],
+        ['阻塞', stage.blocker?.reason || 'none']
+      ];
+      const risks = stage.topRisks || [];
+      const riskList = document.createElement('div');
+      riskList.className = 'risk-list';
+
+      if (risks.length === 0) {
+        riskList.append(emptyState('当前 Stage 没有登记风险。'));
+      } else {
+        riskList.append(...risks.slice(0, 3).map((risk) => riskRow({
+          severity: risk.severity,
+          title: risk.title,
+          detail: risk.detail,
+          command: {
+            command: 'symphony stage summary',
+            mode: 'copy-only'
+          }
+        })));
+      }
+
+      const next = stage.nextAction
+        ? commandRow({
+            id: 'stage-next',
+            label: 'Stage next action',
+            command: stage.nextAction,
+            description: 'Copy-only Stage advisory command.',
+            mode: 'copy-only'
+          })
+        : emptyState('当前 Stage 没有下一步命令。');
+
+      container.replaceChildren(definitionList(rows), riskList, next);
     }
 
     function renderDashboard() {
