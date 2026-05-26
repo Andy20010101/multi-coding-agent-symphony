@@ -52,3 +52,56 @@ This section records the follow-up fixes for `docs/plans/v14-independent-review-
 - `node scripts/symphony.js stage activate v14-stage-kernel-refactor --state-dir /private/tmp/symphony-v14-stage-smoke-codex --json`: passed.
 - `node scripts/symphony.js stage summary --state-dir /private/tmp/symphony-v14-stage-smoke-codex --json`: passed.
 - `node scripts/symphony.js next --state-dir /private/tmp/symphony-v14-stage-smoke-codex --json`: passed.
+
+## Release Conclusion
+
+### Scope
+
+- Stage Contract.
+- Stage CLI.
+- Stage-aware `do` / `review` / `verify` / `adopt` / `diagnose` / `console`.
+- Workbench Stage overview.
+- Stage Charter HTML/JSON consistency gate.
+- `blockedSnapshot` / frozen refs recovery.
+- Repair artifact / Stage blocker / resolved gate event.
+
+### Non-goals confirmed
+
+- No React/Vite migration.
+- No full Autopilot.
+- No Agent Capability Registry.
+- No GitHub/PR integration.
+- No browser write/adopt/retry/rollback buttons.
+- No v12 adoption apply rewrite.
+
+### Reviewer result
+
+- Verdict: APPROVE.
+- Time: 19:31.
+- Summary: writer fixed `NEEDS_REVISION` findings.
+- Approval report: `docs/plans/v14-reviewer-approval-2026-05-26.md`.
+
+### Gates
+
+- `node --test tests/symphony-cli.test.js`: PASS, 47 tests.
+- `pnpm check`: PASS.
+- `pnpm test`: PASS, 514 tests.
+- `git diff --check`: PASS.
+- `pnpm audit --audit-level high`: PASS, no high, 1 moderate.
+- `pnpm test:mutation:gate`: PASS, mutation score 74.31, threshold 60.
+
+### Targeted smoke
+
+- Stage gate covers `new --write`.
+- `blockedSnapshot` stored correctly.
+- `.symphony` stores summary/ref only.
+- Frozen snapshot recovery checks Stage JSON hash, action digest, project state, git, dirty worktree state, and frozen refs.
+- Mismatched Charter blocks writes without creating a normal run.
+- Resolved gate event recorded.
+- Workbench remains GET-only/copy-only.
+- POST returns 405.
+
+### Residual risks
+
+- Audit reports 1 moderate vulnerability, no high/critical.
+- React/Vite Workbench remains v15 candidate.
