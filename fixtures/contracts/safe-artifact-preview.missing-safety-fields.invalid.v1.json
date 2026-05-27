@@ -1,0 +1,12 @@
+{
+  "contractName": "safe-artifact-preview.v1",
+  "contractVersion": "1",
+  "ref": "artifact:run-missing-safety:evidence",
+  "uri": "/api/runs/run-missing-safety/artifacts/evidence/preview",
+  "mime": "text/plain; charset=utf-8",
+  "displayTitle": "Missing safety field example",
+  "artifactKind": "evidence",
+  "sourceRunId": "run-missing-safety",
+  "sizeBytes": 64,
+  "previewText": "This invalid fixture intentionally omits explicit safety fields."
+}

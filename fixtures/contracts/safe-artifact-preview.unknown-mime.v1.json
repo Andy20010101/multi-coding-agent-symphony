@@ -1,0 +1,17 @@
+{
+  "contractName": "safe-artifact-preview.v1",
+  "contractVersion": "1",
+  "ref": "artifact:run-unknown-mime:intake-summary",
+  "uri": "/api/runs/run-unknown-mime/artifacts/intake-summary/preview",
+  "mime": "application/x-unknown",
+  "displayTitle": "Intake summary with unknown MIME",
+  "artifactKind": "intake-summary",
+  "sourceRunId": "run-unknown-mime",
+  "sizeBytes": 1200,
+  "previewAvailable": false,
+  "safeToRenderInline": false,
+  "truncated": false,
+  "truncationReason": null,
+  "maxPreviewBytes": 204800,
+  "downloadAvailable": false
+}

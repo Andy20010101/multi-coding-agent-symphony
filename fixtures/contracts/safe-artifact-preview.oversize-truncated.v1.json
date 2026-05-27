@@ -1,0 +1,18 @@
+{
+  "contractName": "safe-artifact-preview.v1",
+  "contractVersion": "1",
+  "ref": "artifact:run-oversize:patch-plan",
+  "uri": "/api/runs/run-oversize/artifacts/patch-plan/preview",
+  "mime": "text/markdown; charset=utf-8",
+  "displayTitle": "Large patch plan",
+  "artifactKind": "patch-plan",
+  "sourceRunId": "run-oversize",
+  "sizeBytes": 350000,
+  "previewAvailable": true,
+  "safeToRenderInline": true,
+  "truncated": true,
+  "truncationReason": "size-exceeds-max-preview-bytes",
+  "maxPreviewBytes": 1024,
+  "contentText": "# Large patch plan\n\nOnly the first bounded preview chunk is exposed.",
+  "downloadAvailable": false
+}

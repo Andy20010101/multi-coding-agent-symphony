@@ -1,0 +1,17 @@
+{
+  "contractName": "safe-artifact-preview.v1",
+  "contractVersion": "1",
+  "ref": "artifact:run-unsafe-binary:evidence",
+  "uri": "/api/runs/run-unsafe-binary/artifacts/evidence/preview",
+  "mime": "application/octet-stream",
+  "displayTitle": "Binary evidence payload",
+  "artifactKind": "evidence",
+  "sourceRunId": "run-unsafe-binary",
+  "sizeBytes": 4096,
+  "previewAvailable": false,
+  "safeToRenderInline": false,
+  "truncated": false,
+  "truncationReason": null,
+  "maxPreviewBytes": 204800,
+  "downloadAvailable": false
+}

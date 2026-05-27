@@ -1,0 +1,18 @@
+{
+  "contractName": "safe-artifact-preview.v1",
+  "contractVersion": "1",
+  "ref": "artifact:run-safe-text:project-context",
+  "uri": "/api/runs/run-safe-text/artifacts/project-context/preview",
+  "mime": "text/plain; charset=utf-8",
+  "displayTitle": "Project context summary",
+  "artifactKind": "project-context",
+  "sourceRunId": "run-safe-text",
+  "sizeBytes": 96,
+  "previewAvailable": true,
+  "safeToRenderInline": true,
+  "truncated": false,
+  "truncationReason": null,
+  "maxPreviewBytes": 204800,
+  "previewText": "Repository shape: JavaScript package with Workbench routes. No secrets included.",
+  "downloadAvailable": false
+}
