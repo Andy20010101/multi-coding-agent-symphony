@@ -37,6 +37,11 @@ import {
   normalizeTemplate,
   scaffoldProject
 } from '../src/symphony/new-project.js';
+import {
+  buildGuidedGoalHandoffJson,
+  loadGuidedGoalHandoffFixture,
+  renderGuidedGoalHandoffMarkdown
+} from '../src/symphony/guided-goal-handoff-output.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -93,6 +98,7 @@ const KNOWN_COMMANDS = new Set([
   'continue',
   'console',
   'diagnose',
+  'handoff',
   'adopt',
   'new',
   'stage',
@@ -262,6 +268,13 @@ export async function runSymphonyCli({
         stdout,
         runner: runner ?? new NodeProcessRunner(),
         env
+      });
+    }
+
+    if (command === 'handoff') {
+      return await runSymphonyHandoff({
+        args: rest,
+        stdout
       });
     }
 
@@ -1720,6 +1733,25 @@ async function runSymphonyDiagnose({ args, stdout, runner, env }) {
   return EXIT_CODES.ok;
 }
 
+async function runSymphonyHandoff({ args, stdout }) {
+  const options = parseHandoffArgs(args);
+
+  if (options.help) {
+    stdout.write(handoffHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  const handoff = await loadGuidedGoalHandoffFixture();
+
+  if (options.format === 'json') {
+    writeJson(stdout, buildGuidedGoalHandoffJson(handoff));
+    return EXIT_CODES.ok;
+  }
+
+  stdout.write(`${renderGuidedGoalHandoffMarkdown(handoff)}\n`);
+  return EXIT_CODES.ok;
+}
+
 async function runSymphonyStage({ args, stdout }) {
   const options = parseStageArgs(args);
   let summary;
@@ -3114,6 +3146,74 @@ function parseDiagnoseArgs(args) {
   }
 
   return options;
+}
+
+function parseHandoffArgs(args) {
+  const options = {
+    format: 'markdown',
+    formatExplicit: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      setHandoffFormat(options, 'json');
+      continue;
+    }
+
+    if (value === '--markdown') {
+      setHandoffFormat(options, 'markdown');
+      continue;
+    }
+
+    if (value === '--format') {
+      setHandoffFormat(options, readRequiredValue(args, index, '--format'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('handoff does not write files; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown handoff option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected handoff argument: ${value}`);
+  }
+
+  return options;
+}
+
+function setHandoffFormat(options, format) {
+  if (format !== 'json' && format !== 'markdown') {
+    throw new UsageError('handoff format must be json or markdown');
+  }
+
+  if (options.formatExplicit && options.format !== format) {
+    throw new UsageError('handoff accepts only one output format');
+  }
+
+  options.format = format;
+  options.formatExplicit = true;
+}
+
+function handoffHelpText() {
+  return [
+    'Usage: symphony handoff [--json|--markdown|--format json|markdown]',
+    '',
+    'Prints the bundled v16 guided-goal handoff contract.',
+    'The command is copy-only: it does not execute commands, call models, write files, create branches, commit, push, or merge.',
+    ''
+  ].join('\n');
 }
 
 function parseStageArgs(args) {
