@@ -1,0 +1,233 @@
+:root {
+  color: #172026;
+  background: #f7f4ee;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(180deg, rgba(247, 244, 238, 0.96), rgba(232, 238, 236, 0.98)),
+    #f7f4ee;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.workbench-shell {
+  min-height: 100vh;
+}
+
+.hero-band,
+.content-band {
+  width: 100%;
+}
+
+.hero-band {
+  min-height: 38vh;
+  padding: 56px 24px 42px;
+  color: #f9fbfa;
+  background:
+    linear-gradient(135deg, rgba(16, 38, 48, 0.92), rgba(36, 71, 68, 0.88)),
+    url("data:image/svg+xml,%3Csvg width='960' height='360' viewBox='0 0 960 360' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='960' height='360' fill='%2312252e'/%3E%3Cg fill='none' stroke='%23d6aa68' stroke-opacity='0.26'%3E%3Cpath d='M0 310C180 250 260 328 430 270s260-110 530-42'/%3E%3Cpath d='M0 205c150-44 252-26 370-72 132-51 250-98 590-36'/%3E%3Cpath d='M80 65h760M130 112h640M190 158h560'/%3E%3C/g%3E%3Cg fill='%23ffffff' fill-opacity='0.14'%3E%3Crect x='92' y='70' width='56' height='14' rx='3'/%3E%3Crect x='92' y='102' width='210' height='10' rx='3'/%3E%3Crect x='92' y='124' width='168' height='10' rx='3'/%3E%3Crect x='650' y='210' width='190' height='18' rx='4'/%3E%3Crect x='650' y='244' width='126' height='12' rx='3'/%3E%3C/g%3E%3C/svg%3E")
+      center / cover;
+}
+
+.hero-content,
+.content-band > * {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+}
+
+.eyebrow,
+.section-kicker {
+  margin: 0 0 10px;
+  color: #b56b2a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.hero-content .eyebrow {
+  color: #f0c879;
+}
+
+h1,
+h2,
+h3,
+p {
+  overflow-wrap: anywhere;
+}
+
+h1 {
+  max-width: 760px;
+  margin: 0;
+  font-size: clamp(2.4rem, 7vw, 5.25rem);
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin: 0;
+  color: #15242a;
+  font-size: clamp(1.45rem, 3vw, 2.2rem);
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+h3 {
+  margin: 0 0 10px;
+  color: #1b3338;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.hero-copy {
+  max-width: 720px;
+  margin: 20px 0 0;
+  color: #e7efed;
+  font-size: 1rem;
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.status-strip span {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: 0.9rem;
+}
+
+.content-band {
+  padding: 42px 24px;
+}
+
+.muted-band {
+  background: #e6edea;
+}
+
+.section-heading {
+  margin-bottom: 22px;
+}
+
+.boundary-grid,
+.placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.placeholder-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.boundary-grid article,
+.placeholder-card {
+  min-height: 148px;
+  border: 1px solid #d7d0c3;
+  border-radius: 8px;
+  padding: 18px;
+  background: #fffdfa;
+  box-shadow: 0 1px 0 rgba(23, 32, 38, 0.05);
+}
+
+.boundary-grid p,
+.placeholder-card p,
+.contract-row dd,
+.gap-list {
+  margin: 0;
+  color: #435357;
+  font-size: 0.94rem;
+}
+
+.contract-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.contract-row {
+  display: grid;
+  grid-template-columns: minmax(210px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  border-bottom: 1px solid rgba(21, 36, 42, 0.12);
+  padding: 12px 0;
+}
+
+.contract-row dt {
+  color: #263b41;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.contract-row dd {
+  overflow-wrap: anywhere;
+}
+
+.gap-list {
+  display: grid;
+  gap: 10px;
+  padding-left: 20px;
+}
+
+.gap-list li::marker {
+  color: #b56b2a;
+}
+
+@media (max-width: 920px) {
+  .boundary-grid,
+  .placeholder-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .hero-band {
+    min-height: 42vh;
+    padding: 40px 18px 30px;
+  }
+
+  .content-band {
+    padding: 32px 18px;
+  }
+
+  .boundary-grid,
+  .placeholder-grid,
+  .contract-row {
+    grid-template-columns: 1fr;
+  }
+
+  .boundary-grid article,
+  .placeholder-card {
+    min-height: 0;
+  }
+}
