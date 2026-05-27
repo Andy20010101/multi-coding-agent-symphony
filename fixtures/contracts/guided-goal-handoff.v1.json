@@ -1,0 +1,697 @@
+{
+  "contractName": "guided-goal-handoff.v1",
+  "contractVersion": "1",
+  "goalId": "v16-guided-goal-handoff-safe-artifact-preview",
+  "title": "Guided Goal Handoff + Safe Artifact Preview Contract",
+  "titleZh": "目标执行手册与安全产物预览层",
+  "baseline": {
+    "releaseTag": "v15",
+    "releaseTagCommit": "2c1b9b9",
+    "planningCommit": "14c9c93",
+    "approvalCommit": "3410509",
+    "previousEvidence": [
+      "docs/plans/v15-final-closure-evidence-2026-05-27.md",
+      "docs/plans/v15-tag-release-evidence-2026-05-27.md",
+      "docs/plans/v16-task1-plan-approval-evidence-2026-05-27.md"
+    ]
+  },
+  "scope": [
+    "Freeze a reusable guided handoff contract for v16 goal execution.",
+    "Represent phase, role, task, command, review, verifier, release, stop, and deferred-contract state as data.",
+    "Keep all next commands copy-only and user-mediated."
+  ],
+  "nonGoals": [
+    "No Autopilot.",
+    "No browser execution surface.",
+    "No Workbench adopt, apply, retry, rollback, audit, model invocation, install, mutation, or arbitrary local file read.",
+    "No replacement of Stage Charter HTML or JSON.",
+    "No dependency or lockfile change."
+  ],
+  "safetyBoundaries": [
+    "Workbench remains read-only, display-only, and copy-only.",
+    "Review approval is required before commit, push, or merge.",
+    "Worker self-check is evidence for the worker only and is not final acceptance.",
+    "Routes introduced in later tasks must be GET-only and registered-ref-only.",
+    "Artifact safety fields must come from backend contract data, not frontend inference."
+  ],
+  "roles": [
+    {
+      "id": "planner",
+      "description": "Defines scope, task split, safety boundaries, stop conditions, and release gates.",
+      "inputs": [
+        "v16 plan",
+        "v15 closure evidence",
+        "repository baseline"
+      ],
+      "outputs": [
+        "approved task plan",
+        "baseline evidence"
+      ],
+      "prohibited": [
+        "feature implementation",
+        "dependency changes"
+      ]
+    },
+    {
+      "id": "worker",
+      "description": "Completes only the current approved task and records self-check evidence.",
+      "inputs": [
+        "current task scope",
+        "approved plan",
+        "repository facts"
+      ],
+      "outputs": [
+        "task diff",
+        "task evidence",
+        "local validation results"
+      ],
+      "prohibited": [
+        "next task implementation",
+        "unapproved execution surfaces",
+        "unapproved dependencies"
+      ]
+    },
+    {
+      "id": "reviewer",
+      "description": "Uses isolated context to review diff, tests, docs, and evidence before commit.",
+      "inputs": [
+        "current branch diff",
+        "task plan",
+        "repository files"
+      ],
+      "outputs": [
+        "APPROVED",
+        "NEEDS_REVISION"
+      ],
+      "prohibited": [
+        "relying on worker summary alone",
+        "editing files during review"
+      ]
+    },
+    {
+      "id": "verifier",
+      "description": "Runs post-merge validation from main after a task is merged.",
+      "inputs": [
+        "main branch",
+        "merged task commit",
+        "verification commands"
+      ],
+      "outputs": [
+        "main validation result",
+        "release-gate evidence"
+      ],
+      "prohibited": [
+        "feature edits during verification",
+        "claiming release readiness from worker self-check"
+      ]
+    },
+    {
+      "id": "release-evidence",
+      "description": "Collects final task index, review results, verification results, unsupported capabilities, and backlog.",
+      "inputs": [
+        "task evidence",
+        "review evidence",
+        "main verification output"
+      ],
+      "outputs": [
+        "final closure evidence",
+        "tag review readiness"
+      ],
+      "prohibited": [
+        "new feature work",
+        "tag creation without explicit release step"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-1",
+      "name": "plan approval and baseline freeze",
+      "titleZh": "计划批准与基线冻结",
+      "role": "planner",
+      "dependsOn": [],
+      "scope": [
+        "Freeze v16 plan, task list, safety boundaries, and review model."
+      ],
+      "risks": [
+        "Unclear task boundary can expand later work."
+      ],
+      "acceptance": [
+        "Chinese approval evidence exists.",
+        "v15 tag baseline is recorded.",
+        "No code or dependency files changed."
+      ],
+      "prohibited": [
+        "Feature implementation",
+        "Source or test edits",
+        "Dependency changes"
+      ],
+      "verification": [
+        "git status -sb",
+        "git log --oneline --decorate -8",
+        "git diff --check",
+        "git diff -- package.json pnpm-lock.yaml"
+      ],
+      "evidencePath": "docs/plans/v16-task1-plan-approval-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must approve before commit and merge."
+    },
+    {
+      "id": "task-2",
+      "name": "handoff contract fixtures",
+      "titleZh": "Handoff contract fixture",
+      "role": "worker",
+      "dependsOn": [
+        "task-1"
+      ],
+      "scope": [
+        "Add fixture-backed guided handoff contract samples and tests."
+      ],
+      "risks": [
+        "UI or CLI integration before the contract shape is frozen."
+      ],
+      "acceptance": [
+        "Fixtures cover goal, baseline, scope, nonGoals, safetyBoundaries, tasks, roles, commands, reviewModel, releaseGates, and stopConditions.",
+        "Focused contract tests pass.",
+        "No Workbench or API route is added."
+      ],
+      "prohibited": [
+        "Workbench integration",
+        "API route creation",
+        "Execution endpoint creation",
+        "Dependency changes"
+      ],
+      "verification": [
+        "node --test tests/guided-goal-handoff-contract.test.js",
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ],
+      "evidencePath": "docs/plans/v16-task2-handoff-contract-fixtures-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm there is no execution entry point."
+    },
+    {
+      "id": "task-3",
+      "name": "CLI handoff generation",
+      "titleZh": "CLI handoff 生成",
+      "role": "worker",
+      "dependsOn": [
+        "task-2"
+      ],
+      "scope": [
+        "Generate stable guided handoff JSON and Markdown with copy-only commands."
+      ],
+      "risks": [
+        "CLI output may be mistaken for automatic execution."
+      ],
+      "acceptance": [
+        "CLI writes only controlled handoff artifacts.",
+        "CLI does not execute commands or call models."
+      ],
+      "prohibited": [
+        "Model invocation",
+        "Branch creation",
+        "Commit or push automation"
+      ],
+      "verification": [
+        "focused CLI tests",
+        "fixture snapshot tests",
+        "no write-boundary expansion scan"
+      ],
+      "evidencePath": "docs/plans/v16-task3-cli-handoff-generation-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm commands remain copy-only."
+    },
+    {
+      "id": "task-4",
+      "name": "read-only API exposure",
+      "titleZh": "只读 handoff API",
+      "role": "worker",
+      "dependsOn": [
+        "task-3"
+      ],
+      "scope": [
+        "Expose registered handoff refs through GET-only routes."
+      ],
+      "risks": [
+        "A route can become an execution or arbitrary path entry point."
+      ],
+      "acceptance": [
+        "GET route returns registered handoff refs only.",
+        "Non-GET methods return 405.",
+        "Arbitrary path parameters are rejected."
+      ],
+      "prohibited": [
+        "POST, PUT, PATCH, or DELETE routes",
+        "Arbitrary path reads",
+        "Execution handlers"
+      ],
+      "verification": [
+        "focused API tests",
+        "route smoke tests",
+        "security scans"
+      ],
+      "evidencePath": "docs/plans/v16-task4-readonly-handoff-api-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm read-only route boundaries."
+    },
+    {
+      "id": "task-5",
+      "name": "Workbench handoff panel",
+      "titleZh": "Workbench handoff 只读面板",
+      "role": "worker",
+      "dependsOn": [
+        "task-4"
+      ],
+      "scope": [
+        "Render phases, roles, task status, and copy-only commands in Workbench."
+      ],
+      "risks": [
+        "UI controls may imply browser execution."
+      ],
+      "acceptance": [
+        "Commands are text for copying only.",
+        "No browser handler executes commands.",
+        "Missing fields are displayed as missing contract data."
+      ],
+      "prohibited": [
+        "Buttons that execute commands",
+        "Model calls",
+        "Safety inference in frontend"
+      ],
+      "verification": [
+        "pnpm workbench:build",
+        "frontend focused tests",
+        "handler grep"
+      ],
+      "evidencePath": "docs/plans/v16-task5-workbench-handoff-panel-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm display-only behavior."
+    },
+    {
+      "id": "task-6",
+      "name": "safe artifact preview contract fixtures",
+      "titleZh": "安全产物预览 contract fixture",
+      "role": "worker",
+      "dependsOn": [
+        "task-5"
+      ],
+      "scope": [
+        "Freeze safe-artifact-preview.v1 fixtures and tests."
+      ],
+      "risks": [
+        "Incomplete safety fields can allow unsafe render decisions."
+      ],
+      "acceptance": [
+        "Fixtures cover safe text, unsafe binary, oversize, missing safety fields, and unknown MIME.",
+        "No frontend preview implementation is included."
+      ],
+      "prohibited": [
+        "Frontend preview implementation",
+        "Path-derived safety",
+        "Download capability"
+      ],
+      "verification": [
+        "contract tests",
+        "fixture tests"
+      ],
+      "evidencePath": "docs/plans/v16-task6-safe-preview-contract-fixtures-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm safety fields are explicit contract data."
+    },
+    {
+      "id": "task-7",
+      "name": "safe artifact preview implementation",
+      "titleZh": "安全产物预览后端实现",
+      "role": "worker",
+      "dependsOn": [
+        "task-6"
+      ],
+      "scope": [
+        "Generate bounded previews for registered artifacts only."
+      ],
+      "risks": [
+        "Path traversal, oversized reads, or unsafe inline content."
+      ],
+      "acceptance": [
+        "Path traversal is blocked.",
+        "HTML and script content is not rendered inline.",
+        "Oversize content is truncated."
+      ],
+      "prohibited": [
+        "Arbitrary path reads",
+        "Write capability",
+        "Download capability"
+      ],
+      "verification": [
+        "focused preview tests",
+        "route smoke tests",
+        "security scans"
+      ],
+      "evidencePath": "docs/plans/v16-task7-safe-preview-implementation-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm registered-ref-only behavior."
+    },
+    {
+      "id": "task-8",
+      "name": "Workbench preview consumption",
+      "titleZh": "Workbench 安全预览消费",
+      "role": "worker",
+      "dependsOn": [
+        "task-7"
+      ],
+      "scope": [
+        "Display safe text preview, unavailable states, and truncation from backend fields."
+      ],
+      "risks": [
+        "Frontend may infer safety or render raw HTML."
+      ],
+      "acceptance": [
+        "Frontend uses backend safety fields only.",
+        "Raw HTML is not rendered.",
+        "No download or arbitrary open controls are added."
+      ],
+      "prohibited": [
+        "Safety inference in frontend",
+        "Raw HTML render",
+        "Adopt, apply, retry, or rollback controls"
+      ],
+      "verification": [
+        "pnpm workbench:build",
+        "frontend tests",
+        "grep safety scans"
+      ],
+      "evidencePath": "docs/plans/v16-task8-workbench-preview-consumption-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm contract-only rendering."
+    },
+    {
+      "id": "task-9",
+      "name": "route smoke and security coverage",
+      "titleZh": "Route smoke 与安全覆盖",
+      "role": "worker",
+      "dependsOn": [
+        "task-8"
+      ],
+      "scope": [
+        "Add console server smoke and security tests for handoff and preview routes."
+      ],
+      "risks": [
+        "Routes may allow path traversal or write state."
+      ],
+      "acceptance": [
+        "GET parity is covered.",
+        "Non-GET is blocked.",
+        "Path traversal is blocked.",
+        "State is not written."
+      ],
+      "prohibited": [
+        "New product features",
+        "Dependency changes"
+      ],
+      "verification": [
+        "focused route smoke",
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ],
+      "evidencePath": "docs/plans/v16-task9-route-smoke-security-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm route safety probes."
+    },
+    {
+      "id": "task-10",
+      "name": "docs and operator guide",
+      "titleZh": "文档与操作说明",
+      "role": "worker",
+      "dependsOn": [
+        "task-9"
+      ],
+      "scope": [
+        "Update README, operator guide, and v16 docs to match implemented behavior."
+      ],
+      "risks": [
+        "Documentation may imply unsupported execution capabilities."
+      ],
+      "acceptance": [
+        "Docs describe read-only and copy-only boundaries.",
+        "Docs do not mention unimplemented commands as available."
+      ],
+      "prohibited": [
+        "New functionality",
+        "Release status changes without release task"
+      ],
+      "verification": [
+        "documentation review",
+        "git diff --check"
+      ],
+      "evidencePath": "docs/plans/v16-task10-docs-operator-guide-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm docs match implementation."
+    },
+    {
+      "id": "task-11",
+      "name": "release verification",
+      "titleZh": "发布级验证",
+      "role": "verifier",
+      "dependsOn": [
+        "task-10"
+      ],
+      "scope": [
+        "Run release-level verification from main and record evidence."
+      ],
+      "risks": [
+        "Release gate may rely only on worker self-check."
+      ],
+      "acceptance": [
+        "Verification commands are recorded truthfully.",
+        "Failures are not reported as passes.",
+        "Safety boundaries are rechecked."
+      ],
+      "prohibited": [
+        "Feature work",
+        "Audit fixes without separate approval"
+      ],
+      "verification": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "focused v16 tests",
+        "pnpm audit --audit-level high",
+        "safety scan"
+      ],
+      "evidencePath": "docs/plans/v16-task11-release-verification-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm release evidence is main-branch evidence."
+    },
+    {
+      "id": "task-12",
+      "name": "closure",
+      "titleZh": "v16 收尾",
+      "role": "release-evidence",
+      "dependsOn": [
+        "task-11"
+      ],
+      "scope": [
+        "Summarize v16 final closure, task index, supported capabilities, unsupported capabilities, and backlog."
+      ],
+      "risks": [
+        "Deferred contract gaps may be mistaken for completed work."
+      ],
+      "acceptance": [
+        "Closure evidence is accurate.",
+        "Historical evidence is preserved.",
+        "Ready-for-tag-review status is explicit."
+      ],
+      "prohibited": [
+        "New feature work",
+        "Tag creation",
+        "Push outside approved flow"
+      ],
+      "verification": [
+        "git log --oneline -12",
+        "git diff --check",
+        "dependency diff is empty unless approved"
+      ],
+      "evidencePath": "docs/plans/v16-final-closure-evidence-2026-05-27.md",
+      "reviewGate": "Independent reviewer must confirm closure does not claim unsupported work."
+    }
+  ],
+  "commands": {
+    "copyOnly": true,
+    "blocks": [
+      {
+        "id": "preflight",
+        "title": "Preflight",
+        "copyOnly": true,
+        "commands": [
+          "git checkout main",
+          "git pull",
+          "git status -sb",
+          "git log --oneline --decorate -8",
+          "pnpm check",
+          "pnpm test",
+          "pnpm workbench:build",
+          "git diff --check",
+          "git diff -- package.json pnpm-lock.yaml"
+        ]
+      },
+      {
+        "id": "task-branch",
+        "title": "Task branch",
+        "copyOnly": true,
+        "commands": [
+          "git switch -c <v16-task-branch>"
+        ]
+      },
+      {
+        "id": "local-validation",
+        "title": "Local validation",
+        "copyOnly": true,
+        "commands": [
+          "git status -sb",
+          "git diff --name-only",
+          "git diff --stat",
+          "git diff -- package.json pnpm-lock.yaml",
+          "pnpm check",
+          "pnpm test",
+          "pnpm workbench:build",
+          "git diff --check"
+        ]
+      },
+      {
+        "id": "independent-review",
+        "title": "Independent review",
+        "copyOnly": true,
+        "commands": [
+          "/goal Start the v16 task independent reviewer with isolated context and read-only review instructions."
+        ]
+      },
+      {
+        "id": "commit-push-merge",
+        "title": "Commit, push, and merge after APPROVED",
+        "copyOnly": true,
+        "commands": [
+          "git add <task files>",
+          "git status --short",
+          "git diff --cached --name-only",
+          "git commit -m \"<task commit message>\"",
+          "git push -u origin <v16-task-branch>",
+          "git checkout main",
+          "git pull",
+          "git merge --ff-only <v16-task-branch>"
+        ]
+      },
+      {
+        "id": "main-post-merge-validation",
+        "title": "Main post-merge validation",
+        "copyOnly": true,
+        "commands": [
+          "pnpm check",
+          "pnpm test",
+          "pnpm workbench:build",
+          "git diff --check",
+          "git push origin main"
+        ]
+      }
+    ]
+  },
+  "reviewModel": {
+    "contextIsolation": true,
+    "workerSelfCheckIsFinal": false,
+    "allowedStatuses": [
+      "APPROVED",
+      "NEEDS_REVISION"
+    ],
+    "requirements": [
+      "Reviewer reads the current branch diff and repository files directly.",
+      "Reviewer does not rely on worker summary alone.",
+      "Reviewer confirms task scope, dependency diff, safety boundaries, and evidence path.",
+      "Reviewer returns APPROVED or NEEDS_REVISION before commit."
+    ]
+  },
+  "releaseGates": [
+    {
+      "id": "task-evidence",
+      "requirement": "Task 1 through Task 12 each have Chinese evidence.",
+      "evidence": "docs/plans/v16-task*-evidence files and docs/plans/v16-final-closure-evidence-2026-05-27.md"
+    },
+    {
+      "id": "review-gates",
+      "requirement": "Each task has an independent APPROVED or NEEDS_REVISION record.",
+      "evidence": "Task evidence and reviewer outputs"
+    },
+    {
+      "id": "main-check",
+      "requirement": "pnpm check passes on main.",
+      "evidence": "Task 11 release verification evidence"
+    },
+    {
+      "id": "main-test",
+      "requirement": "pnpm test passes on main.",
+      "evidence": "Task 11 release verification evidence"
+    },
+    {
+      "id": "main-workbench-build",
+      "requirement": "pnpm workbench:build passes on main.",
+      "evidence": "Task 11 release verification evidence"
+    },
+    {
+      "id": "dependency-diff",
+      "requirement": "package.json and pnpm-lock.yaml remain unchanged unless a dependency plan is approved.",
+      "evidence": "git diff -- package.json pnpm-lock.yaml"
+    },
+    {
+      "id": "route-security",
+      "requirement": "Handoff and preview routes reject non-GET, mutation, arbitrary path, and traversal probes.",
+      "evidence": "focused route smoke and security tests"
+    },
+    {
+      "id": "safety-boundaries",
+      "requirement": "v12 adoption, v14 Stage, and v15 Workbench read-only boundaries are not expanded.",
+      "evidence": "Task 11 safety boundary scan"
+    }
+  ],
+  "stopConditions": [
+    {
+      "id": "scope-creep",
+      "condition": "A task changes source, tests, frontend, server, kernel, or dependencies outside its approved scope."
+    },
+    {
+      "id": "unapproved-dependency",
+      "condition": "package.json or pnpm-lock.yaml changes without an approved dependency plan."
+    },
+    {
+      "id": "browser-execution",
+      "condition": "Workbench adds write, execution, model, audit, mutation, install, adopt, apply, retry, or rollback controls."
+    },
+    {
+      "id": "arbitrary-path",
+      "condition": "A backend route accepts arbitrary paths or exposes local files outside registered refs."
+    },
+    {
+      "id": "frontend-safety-inference",
+      "condition": "Frontend code infers artifact safety fields instead of using backend contract data."
+    },
+    {
+      "id": "review-needs-revision",
+      "condition": "Independent reviewer returns NEEDS_REVISION."
+    },
+    {
+      "id": "unclassified-validation-failure",
+      "condition": "Validation fails and the worker cannot determine whether it is environment-only or a real blocker."
+    },
+    {
+      "id": "missing-evidence",
+      "condition": "Task evidence is missing, mostly English, or deletes historical evidence."
+    }
+  ],
+  "deferredContracts": [
+    {
+      "contractName": "diagnostics.v1",
+      "status": "backlog",
+      "reason": "Dedicated read-only diagnostics contract is not part of v16 Task 2."
+    },
+    {
+      "contractName": "capabilities.v1",
+      "status": "backlog",
+      "reason": "Shared top-level capabilities object requires a separate approved task."
+    },
+    {
+      "contractName": "error-envelope.v1",
+      "status": "backlog",
+      "reason": "Shared route error envelope requires a separate approved task."
+    }
+  ]
+}
