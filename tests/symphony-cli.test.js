@@ -1,9 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 
@@ -14,6 +15,7 @@ import {
 } from '../scripts/symphony.js';
 import { runMcasCli } from '../scripts/mcas.js';
 import {
+  buildConsoleReadiness,
   buildConsoleSnapshot,
   createSymphonyConsoleServer
 } from '../src/symphony/console.js';
@@ -26,6 +28,11 @@ import {
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
 const FAKE_BEARER_TOKEN = ['abcdefghijkl', 'mnopqrstuvwx'].join('');
+const V15_CONSOLE_CONTRACT_GENERATED_AT = '2026-05-27T00:00:00.000Z';
+const V15_CONSOLE_CONTRACT_STAGE_ID = 'v14-stage-kernel-refactor';
+const V15_CONSOLE_CONTRACT_MISSING_STAGE_ID = 'v15-missing-charter-fixture';
+const V15_CONSOLE_CONTRACT_RUN_ID = 'v15-contract-run';
+const V15_CONSOLE_CONTRACT_ADOPTION_ID = 'adopt-v15-contract';
 const execFileAsync = promisify(execFile);
 
 describe('v5 symphony CLI identity', () => {
@@ -3279,6 +3286,933 @@ describe('v8 prompt-driven symphony CLI', () => {
     }
   });
 
+  describe('v15 Workbench console API fixture contracts', () => {
+    it('freezes empty state, no-run summary, and readiness attention contracts', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'symphony-v15-console-empty-'));
+      let server;
+
+      try {
+        const stateDir = join(root, '.symphony');
+        const normalize = createV15ConsoleFixtureNormalizer({ root, stateDir });
+        const directSummary = await buildConsoleSnapshot({
+          stateDir,
+          generatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+        });
+        const directReadiness = await buildConsoleReadiness({
+          stateDir,
+          cwd: root,
+          env: {},
+          runner: new MissingReadinessRunner(),
+          generatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+        });
+
+        server = createSymphonyConsoleServer({
+          stateDir,
+          cwd: root,
+          runner: new MissingReadinessRunner(),
+          env: {}
+        });
+
+        const baseUrl = await listenOnRandomPort(server);
+        const routeSummary = await (await fetch(`${baseUrl}/api/summary`)).json();
+        const routeReadiness = await (await fetch(`${baseUrl}/api/readiness`)).json();
+        const health = await (await fetch(`${baseUrl}/api/health`)).json();
+
+        routeSummary.generatedAt = V15_CONSOLE_CONTRACT_GENERATED_AT;
+        routeReadiness.generatedAt = V15_CONSOLE_CONTRACT_GENERATED_AT;
+
+        const expectedSummary = {
+          keys: [
+            'action',
+            'adoptionJournals',
+            'adoptionPlans',
+            'adoptionSummary',
+            'commandGroups',
+            'contract',
+            'contractName',
+            'contractVersion',
+            'generatedAt',
+            'latestContext',
+            'latestRun',
+            'overview',
+            'recommendedCommands',
+            'riskSummary',
+            'runStats',
+            'runs',
+            'stageSummary',
+            'stateDir',
+            'status'
+          ],
+          contractName: 'symphony.console-snapshot',
+          contractVersion: '1',
+          contract: {
+            name: 'symphony.console-snapshot',
+            version: '1',
+            stability: 'stable',
+            minimumCli: 'v8.2'
+          },
+          generatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT,
+          stateDir: '<STATE_DIR>',
+          status: 'no-runs',
+          hasCapabilities: false,
+          overview: {
+            keys: [
+              'adoptionStatus',
+              'headline',
+              'latestRun',
+              'nextAction',
+              'runCount',
+              'status',
+              'topRisks'
+            ],
+            status: 'no-runs',
+            headline: 'No Symphony runs found yet.',
+            latestRunId: null,
+            latestRun: null,
+            runCount: 0,
+            topRiskCategories: [],
+            stage: null,
+            nextAction: 'symphony scan',
+            adoptionStatus: 'clear'
+          },
+          stage: {
+            status: 'available',
+            stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+            active: false,
+            activeStageId: null,
+            stageIdFromStage: V15_CONSOLE_CONTRACT_STAGE_ID,
+            topRiskIds: [
+              'adoption-regression',
+              'charter-drift',
+              'workbench-write-controls'
+            ],
+            blocker: null,
+            blockedSnapshot: null,
+            blockedSnapshotRef: null,
+            repairArtifactRef: null,
+            gateEventStatuses: [],
+            consistency: {
+              status: 'passed',
+              stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+              errorCodes: []
+            },
+            nextAction: 'symphony stage activate v14-stage-kernel-refactor'
+          },
+          adoptionSummary: {
+            status: 'clear',
+            pendingCount: 0,
+            applyingCount: 0,
+            postApplyFailedCount: 0,
+            staleCount: 0,
+            unsupportedCount: 0,
+            completedCount: 0,
+            dirtyBlocked: false
+          },
+          latestContext: null,
+          latestRun: null,
+          runs: [],
+          adoptionPlans: [],
+          adoptionJournals: [],
+          runStats: {
+            total: 0,
+            recentRunIds: [],
+            failedCount: 0,
+            verifier: {
+              total: 0,
+              passed: 0,
+              failed: 0,
+              passRate: null
+            },
+            artifacts: {
+              status: 'empty',
+              registered: 0,
+              missing: 0,
+              runsWithMissing: 0
+            },
+            filters: [
+              ['all', 0],
+              ['passed', 0],
+              ['failed', 0],
+              ['dry-run', 0],
+              ['real', 0],
+              ['scan', 0],
+              ['verify', 0],
+              ['adoption', 0]
+            ]
+          },
+          riskSummary: {
+            status: 'ok',
+            total: 0,
+            counts: {
+              high: 0,
+              medium: 0,
+              low: 0
+            },
+            categories: [],
+            ids: []
+          },
+          recommendedCommands: [
+            ['scan', 'symphony scan', 'Inspect', 'copy-only'],
+            ['doctor', 'symphony doctor', 'Inspect', 'copy-only'],
+            ['console', 'symphony console', 'Inspect', 'copy-only']
+          ],
+          commandGroups: [
+            ['Inspect', ['scan', 'doctor', 'console']]
+          ],
+          action: {
+            next: 'symphony scan'
+          }
+        };
+        const expectedReadiness = {
+          keys: [
+            'checks',
+            'commandGroups',
+            'contract',
+            'contractName',
+            'contractVersion',
+            'cwd',
+            'generatedAt',
+            'modelInvocation',
+            'readOnly',
+            'recommendedCommands',
+            'riskSummary',
+            'stateDir',
+            'status',
+            'tools'
+          ],
+          contractName: 'symphony.console-readiness',
+          contractVersion: '1',
+          contract: {
+            name: 'symphony.console-readiness',
+            version: '1',
+            stability: 'stable',
+            minimumCli: 'v8.2'
+          },
+          generatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT,
+          stateDir: '<STATE_DIR>',
+          cwd: '<ROOT>',
+          status: 'attention',
+          readOnly: true,
+          modelInvocation: false,
+          hasCapabilities: false,
+          tools: {
+            node: {
+              status: 'available',
+              version: '<NODE_VERSION>',
+              executable: '<NODE_EXECUTABLE>'
+            },
+            packageManager: {
+              name: 'pnpm',
+              status: 'unavailable',
+              command: 'pnpm --version',
+              message: 'spawn pnpm ENOENT'
+            },
+            git: {
+              status: 'unavailable',
+              message: 'spawn git ENOENT'
+            },
+            github: {
+              status: 'unavailable',
+              authStatus: 'failed',
+              message: 'spawn /usr/local/bin/gh ENOENT',
+              ci: {
+                status: 'skipped',
+                reason: 'GitHub auth is not available'
+              }
+            },
+            realCli: {
+              status: 'unavailable',
+              adapters: [
+                ['codex', 'unavailable', 'not-enabled', false],
+                ['claude-code', 'unavailable', 'not-enabled', false],
+                ['kiro-cli', 'unavailable', 'not-enabled', false]
+              ]
+            }
+          },
+          checks: [
+            ['node', 'ok'],
+            ['pnpm', 'attention'],
+            ['git', 'attention'],
+            ['github', 'optional'],
+            ['real-cli', 'optional']
+          ],
+          riskSummary: {
+            status: 'attention',
+            total: 6,
+            counts: {
+              high: 2,
+              medium: 0,
+              low: 4
+            },
+            categories: ['missing_tools'],
+            ids: [
+              'missing_tool:pnpm',
+              'missing_tool:git',
+              'github_auth',
+              'missing_tool:codex',
+              'missing_tool:claude-code',
+              'missing_tool:kiro-cli'
+            ]
+          },
+          recommendedCommandIds: [
+            'doctor',
+            'enable-pnpm',
+            'check-pnpm',
+            'check-git-worktree',
+            'gh-auth-status',
+            'gh-auth-login',
+            'check',
+            'test',
+            'check-codex',
+            'check-claude-code',
+            'check-kiro-cli',
+            'real-codex',
+            'real-claude',
+            'real-kiro'
+          ],
+          commandGroups: [
+            ['Inspect', [
+              'doctor',
+              'enable-pnpm',
+              'check-pnpm',
+              'check-git-worktree',
+              'gh-auth-status',
+              'gh-auth-login'
+            ]],
+            ['Verify', ['check', 'test']],
+            ['Real-agent gates', [
+              'check-codex',
+              'check-claude-code',
+              'check-kiro-cli',
+              'real-codex',
+              'real-claude',
+              'real-kiro'
+            ]]
+          ]
+        };
+
+        assert.deepEqual(consoleSnapshotContractProjection(directSummary, normalize), expectedSummary);
+        assert.deepEqual(consoleSnapshotContractProjection(routeSummary, normalize), expectedSummary);
+        assert.deepEqual(consoleReadinessContractProjection(directReadiness, normalize), expectedReadiness);
+        assert.deepEqual(consoleReadinessContractProjection(routeReadiness, normalize), expectedReadiness);
+        assert.deepEqual(health, {
+          status: 'ok',
+          readOnly: true
+        });
+      } finally {
+        if (server !== undefined) {
+          await closeServer(server);
+        }
+
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it('freezes active, blocked, and charter-inconsistent Stage summary scenarios', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'symphony-v15-console-stage-'));
+
+      try {
+        const activeStateDir = join(root, 'active-state');
+        const blockedStateDir = join(root, 'blocked-state');
+        const mismatchStateDir = join(root, 'mismatch-state');
+
+        await writeV15ConsoleStageState({
+          stateDir: activeStateDir,
+          status: 'active'
+        });
+        await writeV15ConsoleStageState({
+          stateDir: blockedStateDir,
+          status: 'blocked'
+        });
+        await writeV15ConsoleStageState({
+          stateDir: mismatchStateDir,
+          stageId: V15_CONSOLE_CONTRACT_MISSING_STAGE_ID,
+          status: 'attention'
+        });
+
+        const activeSummary = await buildConsoleSnapshot({
+          stateDir: activeStateDir,
+          generatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+        });
+        const blockedSummary = await buildConsoleSnapshot({
+          stateDir: blockedStateDir,
+          generatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+        });
+        const mismatchSummary = await buildConsoleSnapshot({
+          stateDir: mismatchStateDir,
+          generatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+        });
+
+        assert.deepEqual(stageScenarioContractProjection(activeSummary), {
+          snapshotStatus: 'no-runs',
+          overviewStatus: 'ready',
+          overviewTopRiskCategories: [],
+          overviewStage: {
+            stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+            status: 'active',
+            active: true,
+            blockerReason: null
+          },
+          stageStatus: 'active',
+          active: true,
+          activeStageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+          stageIdFromStage: V15_CONSOLE_CONTRACT_STAGE_ID,
+          blocker: null,
+          gateEventStatuses: [],
+          consistency: {
+            status: 'passed',
+            stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+            errorCodes: []
+          },
+          nextAction: 'symphony do --dry-run "inspect README"'
+        });
+        assert.deepEqual(stageScenarioContractProjection(blockedSummary), {
+          snapshotStatus: 'no-runs',
+          overviewStatus: 'blocked',
+          overviewTopRiskCategories: ['stage_blocker'],
+          overviewStage: {
+            stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+            status: 'blocked',
+            active: true,
+            blockerReason: 'stage-charter-inconsistent'
+          },
+          stageStatus: 'blocked',
+          active: true,
+          activeStageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+          stageIdFromStage: V15_CONSOLE_CONTRACT_STAGE_ID,
+          blocker: {
+            status: 'blocked',
+            reason: 'stage-charter-inconsistent',
+            actionKind: 'do',
+            highRisk: false,
+            repairArtifactKind: 'charter-repair-plan',
+            blockedSnapshotKind: 'blocked-snapshot'
+          },
+          gateEventStatuses: ['blocked'],
+          consistency: {
+            status: 'passed',
+            stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+            errorCodes: []
+          },
+          nextAction: 'symphony stage render v14-stage-kernel-refactor --write'
+        });
+        assert.deepEqual(stageScenarioContractProjection(mismatchSummary), {
+          snapshotStatus: 'no-runs',
+          overviewStatus: 'ready',
+          overviewTopRiskCategories: ['stage_charter_inconsistent'],
+          overviewStage: {
+            stageId: V15_CONSOLE_CONTRACT_MISSING_STAGE_ID,
+            status: 'attention',
+            active: true,
+            blockerReason: null
+          },
+          stageStatus: 'attention',
+          active: true,
+          activeStageId: null,
+          stageIdFromStage: null,
+          blocker: null,
+          gateEventStatuses: [],
+          consistency: {
+            status: 'failed',
+            stageId: V15_CONSOLE_CONTRACT_MISSING_STAGE_ID,
+            errorCodes: [
+              'stage-charter-invalid',
+              'stage-charter-html-missing'
+            ]
+          },
+          nextAction: 'symphony stage render v15-missing-charter-fixture --write'
+        });
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it('freezes run list, latest run, timeline, and artifact preview route contracts', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'symphony-v15-console-routes-'));
+      let server;
+
+      try {
+        const stateDir = join(root, '.symphony');
+        const fixture = await writeV15ConsoleRunFixture({ root, stateDir });
+        const normalize = createV15ConsoleFixtureNormalizer({ root, stateDir });
+
+        server = createSymphonyConsoleServer({ stateDir });
+        const baseUrl = await listenOnRandomPort(server);
+        const summary = await (await fetch(`${baseUrl}/api/summary`)).json();
+        const runs = await (await fetch(`${baseUrl}/api/runs`)).json();
+        const latest = await (await fetch(`${baseUrl}/api/runs/latest`)).json();
+        const timeline = await (await fetch(`${baseUrl}/api/runs/${V15_CONSOLE_CONTRACT_RUN_ID}/timeline`)).json();
+        const filePreview = await (await fetch(`${baseUrl}/api/runs/${V15_CONSOLE_CONTRACT_RUN_ID}/artifacts/summary`)).json();
+        const directoryPreview = await (await fetch(`${baseUrl}/api/runs/${V15_CONSOLE_CONTRACT_RUN_ID}/artifacts/evidence`)).json();
+        const missingPreviewResponse = await fetch(`${baseUrl}/api/runs/${V15_CONSOLE_CONTRACT_RUN_ID}/artifacts/context`);
+        const missingKindResponse = await fetch(`${baseUrl}/api/runs/${V15_CONSOLE_CONTRACT_RUN_ID}/artifacts/proof`);
+        const missingPreview = await missingPreviewResponse.json();
+        const missingKind = await missingKindResponse.json();
+
+        summary.generatedAt = V15_CONSOLE_CONTRACT_GENERATED_AT;
+
+        assert.equal(summary.status, 'ready');
+        assert.equal(summary.stageSummary.active, false);
+        assert.equal(summary.overview.latestRunId, V15_CONSOLE_CONTRACT_RUN_ID);
+        assert.equal(summary.latestRun.runId, V15_CONSOLE_CONTRACT_RUN_ID);
+        assert.equal(summary.latestRun.modelInvocation, false);
+        assert.equal(summary.latestRun.artifactRefs.map((artifact) => artifact.kind).join(','), 'context,summary,evidence,harness');
+        assert.equal(summary.latestRun.artifactStatus.status, 'missing');
+        assert.equal(summary.riskSummary.items.some((risk) => risk.category === 'missing_artifacts'), true);
+        assert.deepEqual(consoleRunsRouteProjection(runs, normalize), {
+          keys: [
+            'availableFilters',
+            'contractName',
+            'contractVersion',
+            'filter',
+            'runs'
+          ],
+          contractVersion: '1',
+          contractName: 'symphony.console-runs',
+          filter: 'all',
+          availableFilters: [
+            'all',
+            'passed',
+            'failed',
+            'dry-run',
+            'real',
+            'scan',
+            'verify',
+            'adoption'
+          ],
+          runs: [{
+            keys: [
+              'artifactHealth',
+              'artifactRefs',
+              'artifactStatus',
+              'changedFiles',
+              'command',
+              'commandGroups',
+              'createdAt',
+              'destructiveWrites',
+              'executionMode',
+              'externalCalls',
+              'intent',
+              'modelInvocation',
+              'nextAction',
+              'pipeline',
+              'projectWrites',
+              'recommendedCommands',
+              'riskSummary',
+              'routeDecision',
+              'runId',
+              'runtimeWrites',
+              'safetyMode',
+              'semanticCommand',
+              'status',
+              'timeline',
+              'updatedAt',
+              'verifierStatus'
+            ],
+            runId: V15_CONSOLE_CONTRACT_RUN_ID,
+            command: 'symphony do',
+            semanticCommand: 'do',
+            status: 'passed',
+            verifierStatus: 'passed',
+            safetyMode: 'dry-run',
+            executionMode: 'dry-run',
+            modelInvocation: false,
+            hasCapabilities: false,
+            artifactRefs: [
+              ['context', '<ROOT>/artifacts/missing-context.json'],
+              ['summary', '<ROOT>/artifacts/summary.json'],
+              ['evidence', '<ROOT>/artifacts/evidence-dir'],
+              ['harness', '<ROOT>/artifacts/harness.txt']
+            ],
+            artifactHealth: {
+              status: 'registered',
+              total: 4,
+              kinds: ['context', 'summary', 'evidence', 'harness']
+            },
+            artifactStatus: {
+              status: 'missing',
+              total: 4,
+              available: 3,
+              missing: 1,
+              unknown: 0,
+              missingKinds: ['context'],
+              missingRefs: [
+                ['context', '<ROOT>/artifacts/missing-context.json', 'missing']
+              ]
+            },
+            timeline: [
+              ['created', 'done'],
+              ['route', 'done'],
+              ['safety', 'done'],
+              ['execution', 'done'],
+              ['verification', 'done'],
+              ['artifacts', 'done']
+            ],
+            riskSummary: {
+              status: 'attention',
+              total: 2,
+              counts: {
+                high: 1,
+                medium: 0,
+                low: 1
+              },
+              categories: ['runtime_writes', 'missing_artifacts'],
+              ids: [
+                'v15-contract-run:runtime_writes',
+                'v15-contract-run:missing_artifacts'
+              ]
+            },
+            recommendedCommands: [
+              ['next', 'symphony artifacts v15-contract-run', 'Artifacts', 'copy-only'],
+              ['status', 'symphony status', 'Inspect', 'copy-only']
+            ],
+            commandGroups: [
+              ['Inspect', ['status']],
+              ['Artifacts', ['next']]
+            ],
+            nextAction: 'symphony artifacts v15-contract-run',
+            createdAt: '2026-05-27T00:00:00.000Z',
+            updatedAt: '2026-05-27T00:00:00.000Z'
+          }]
+        });
+        assert.deepEqual(consoleRunRouteProjection(latest, normalize), {
+          keys: [
+            'contractName',
+            'contractVersion',
+            'rawRunState',
+            'run'
+          ],
+          contractVersion: '1',
+          contractName: 'symphony.console-run',
+          run: consoleRunProjection(runs.runs[0], normalize),
+          rawRunState: {
+            contractName: 'symphony.run-state',
+            contractVersion: '1',
+            runId: V15_CONSOLE_CONTRACT_RUN_ID,
+            status: 'passed',
+            modelInvocation: false,
+            artifactPathFields: [
+              ['contextArtifactPath', '<ROOT>/artifacts/missing-context.json'],
+              ['summaryArtifactPath', '<ROOT>/artifacts/summary.json'],
+              ['evidenceArtifactPath', '<ROOT>/artifacts/evidence-dir'],
+              ['harnessOutputPath', '<ROOT>/artifacts/harness.txt']
+            ]
+          }
+        });
+        assert.deepEqual(consoleTimelineRouteProjection(timeline), {
+          keys: [
+            'contractName',
+            'contractVersion',
+            'recommendedCommands',
+            'runId',
+            'timeline'
+          ],
+          contractVersion: '1',
+          contractName: 'symphony.console-run-timeline',
+          runId: V15_CONSOLE_CONTRACT_RUN_ID,
+          timeline: [
+            ['created', 'done'],
+            ['route', 'done'],
+            ['safety', 'done'],
+            ['execution', 'done'],
+            ['verification', 'done'],
+            ['artifacts', 'done']
+          ],
+          recommendedCommandIds: ['next', 'status']
+        });
+        assert.deepEqual(artifactPreviewContractProjection(filePreview, normalize), {
+          httpStatus: 200,
+          keys: ['artifact', 'contractName', 'contractVersion', 'runId'],
+          contractVersion: '1',
+          contractName: 'symphony.console-artifact',
+          runId: V15_CONSOLE_CONTRACT_RUN_ID,
+          artifact: {
+            keys: [
+              'content',
+              'format',
+              'json',
+              'kind',
+              'path',
+              'previewLimitBytes',
+              'size',
+              'truncated',
+              'type'
+            ],
+            kind: 'summary',
+            path: '<ROOT>/artifacts/summary.json',
+            type: 'file',
+            format: 'json',
+            truncated: false,
+            size: fixture.summaryContent.length,
+            previewLimitBytes: 200 * 1024,
+            content: fixture.summaryContent,
+            json: {
+              kind: 'v15-console-summary',
+              runId: V15_CONSOLE_CONTRACT_RUN_ID,
+              stable: true
+            },
+            contractGapFieldsPresent: []
+          }
+        });
+        assert.deepEqual(artifactPreviewContractProjection(directoryPreview, normalize), {
+          httpStatus: 200,
+          keys: ['artifact', 'contractName', 'contractVersion', 'runId'],
+          contractVersion: '1',
+          contractName: 'symphony.console-artifact',
+          runId: V15_CONSOLE_CONTRACT_RUN_ID,
+          artifact: {
+            keys: [
+              'entries',
+              'entryCount',
+              'kind',
+              'limit',
+              'path',
+              'truncated',
+              'type'
+            ],
+            kind: 'evidence',
+            path: '<ROOT>/artifacts/evidence-dir',
+            type: 'directory',
+            entries: [
+              ['alpha.txt', 'file'],
+              ['nested', 'directory']
+            ],
+            entryCount: 2,
+            limit: 100,
+            truncated: false,
+            contractGapFieldsPresent: []
+          }
+        });
+        assert.equal(missingPreviewResponse.status, 404);
+        assert.deepEqual(artifactPreviewContractProjection(missingPreview, normalize), {
+          httpStatus: 404,
+          keys: [
+            'artifact',
+            'contractName',
+            'contractVersion',
+            'runId',
+            'status'
+          ],
+          contractVersion: '1',
+          contractName: 'symphony.console-artifact',
+          runId: V15_CONSOLE_CONTRACT_RUN_ID,
+          status: 'missing-artifact',
+          artifact: {
+            keys: ['kind', 'message', 'path', 'type'],
+            kind: 'context',
+            path: '<ROOT>/artifacts/missing-context.json',
+            type: 'missing',
+            message: 'artifact file is missing',
+            contractGapFieldsPresent: []
+          }
+        });
+        assert.equal(missingKindResponse.status, 404);
+        assert.deepEqual(artifactPreviewContractProjection(missingKind, normalize), {
+          httpStatus: 404,
+          keys: [
+            'artifactKind',
+            'contractName',
+            'contractVersion',
+            'runId',
+            'status'
+          ],
+          contractVersion: '1',
+          contractName: 'symphony.console-artifact',
+          runId: V15_CONSOLE_CONTRACT_RUN_ID,
+          status: 'missing',
+          artifactKind: 'proof'
+        });
+      } finally {
+        if (server !== undefined) {
+          await closeServer(server);
+        }
+
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it('freezes pending and dirty adoption inspection contracts', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'symphony-v15-console-adoption-'));
+      let server;
+
+      try {
+        const stateDir = join(root, '.symphony');
+        const fixture = await writeV15ConsoleAdoptionFixture({ root, stateDir });
+        const normalize = createV15ConsoleFixtureNormalizer({ root, stateDir });
+
+        server = createSymphonyConsoleServer({
+          stateDir,
+          cwd: root,
+          runner: new DirtyGitReadinessRunner(),
+          env: {
+            MCAS_RUN_REAL_CODEX: '1'
+          }
+        });
+        const baseUrl = await listenOnRandomPort(server);
+        const summary = await (await fetch(`${baseUrl}/api/summary`)).json();
+        const readiness = await (await fetch(`${baseUrl}/api/readiness`)).json();
+        const inspect = await (await fetch(`${baseUrl}/api/adoptions/${V15_CONSOLE_CONTRACT_ADOPTION_ID}/inspect`)).json();
+
+        readiness.generatedAt = V15_CONSOLE_CONTRACT_GENERATED_AT;
+
+        assert.equal(summary.adoptionSummary.status, 'pending');
+        assert.equal(summary.adoptionSummary.pendingCount, 1);
+        assert.equal(summary.latestRun.adoptionPlanId, V15_CONSOLE_CONTRACT_ADOPTION_ID);
+        assert.equal(summary.latestRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-plan'), true);
+        assert.equal(summary.latestRun.artifactRefs.some((artifact) => artifact.kind === 'adoption-patch'), true);
+        assert.equal(summary.overview.topRisks.some((risk) => risk.category === 'pending_adoption'), true);
+        assert.equal(readiness.tools.git.dirty, true);
+        assert.equal(readiness.tools.git.dirtyFilesCount, 2);
+        assert.deepEqual(readiness.tools.git.dirtyPaths, ['README.md', 'src/fixture.js']);
+        assert.equal(readiness.riskSummary.items.some((risk) => risk.category === 'dirty_git'), true);
+        assert.equal(readiness.readOnly, true);
+        assert.equal(readiness.modelInvocation, false);
+        assert.equal(Object.hasOwn(readiness, 'capabilities'), false);
+        assert.deepEqual(adoptionInspectContractProjection(inspect, normalize), {
+          keys: [
+            'adoptionPlanArtifactPath',
+            'adoptionPlanId',
+            'adoptionPlanRefs',
+            'changedFiles',
+            'command',
+            'contractName',
+            'contractVersion',
+            'currentWorktreeMatchesAfterHash',
+            'currentWorktreeMatchesAfterHashDetails',
+            'currentWorktreeMatchesJournalBeforeFiles',
+            'currentWorktreeMatchesJournalBeforeFilesDetails',
+            'destructiveWrites',
+            'executionPlanArtifactPath',
+            'executionPlanId',
+            'exitCode',
+            'externalCalls',
+            'fileOperations',
+            'intent',
+            'journal',
+            'journalRef',
+            'latestConfirmationRun',
+            'mainWorktreeWrites',
+            'nextAction',
+            'patchArtifactPath',
+            'patchHash',
+            'pipeline',
+            'projectWrites',
+            'recommendedCommands',
+            'runtimeWrites',
+            'safetyMode',
+            'semanticCommand',
+            'sourceRun',
+            'sourceRunArtifactPath',
+            'sourceRunId',
+            'stageAdoptionSummary',
+            'stageBinding',
+            'status',
+            'verifierStatus',
+            'version',
+            'workspaceWrites'
+          ],
+          contractVersion: '1',
+          contractName: 'symphony.console-adoption-inspect',
+          status: 'inspected',
+          safety: {
+            safetyMode: 'read-only',
+            projectWrites: false,
+            mainWorktreeWrites: false,
+            workspaceWrites: false,
+            runtimeWrites: false,
+            externalCalls: false,
+            destructiveWrites: false,
+            verifierStatus: 'not-run'
+          },
+          adoptionPlanId: V15_CONSOLE_CONTRACT_ADOPTION_ID,
+          adoptionPlanArtifactPath: '<STATE_DIR>/adoptions/adopt-v15-contract.json',
+          adoptionJournalArtifactPath: null,
+          adoptionPlanRefs: {
+            adoptionPlanArtifactPath: '<STATE_DIR>/adoptions/adopt-v15-contract.json',
+            executionPlanArtifactPath: '<ROOT>/artifacts/execution-plan.json',
+            patchArtifactPath: '<ROOT>/artifacts/adopt.patch',
+            sourceRunArtifactPath: '<STATE_DIR>/runs/source-v15-contract-run.json'
+          },
+          journalRef: null,
+          sourceRun: {
+            runId: 'source-v15-contract-run',
+            artifactPath: '<STATE_DIR>/runs/source-v15-contract-run.json',
+            verifierStatus: 'passed',
+            workspacePath: '<ROOT>/workspace',
+            workspaceManifestPath: '<ROOT>/workspace/workspace-manifest.json'
+          },
+          executionPlanId: 'plan-v15-contract',
+          executionPlanArtifactPath: '<ROOT>/artifacts/execution-plan.json',
+          patchArtifactPath: '<ROOT>/artifacts/adopt.patch',
+          patchHash: 'sha256:v15patchfixture',
+          changedFiles: ['README.md'],
+          fileOperations: [{
+            path: 'README.md',
+            operation: 'modify',
+            afterHash: fixture.afterHash,
+            size: fixture.afterContent.length,
+            textEncoding: 'utf8'
+          }],
+          stageBinding: {
+            stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+            bindingSource: 'active-stage',
+            boundaryCheckStatus: 'passed'
+          },
+          stageAdoptionSummary: {
+            behavior: 'summary-only',
+            v12ApplyLogicChanged: false,
+            stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+            adoptionPlanId: V15_CONSOLE_CONTRACT_ADOPTION_ID
+          },
+          journal: null,
+          latestConfirmationRun: null,
+          currentWorktreeMatchesAfterHash: true,
+          currentWorktreeMatchesJournalBeforeFiles: null,
+          currentWorktreeMatchesAfterHashDetails: {
+            matches: true,
+            files: [{
+              path: 'README.md',
+              matches: true,
+              expected: {
+                exists: true,
+                hash: fixture.afterHash,
+                size: fixture.afterContent.length,
+                textEncoding: 'utf8'
+              },
+              actual: {
+                path: 'README.md',
+                exists: true,
+                hash: fixture.afterHash,
+                size: fixture.afterContent.length,
+                textEncoding: 'utf8'
+              }
+            }]
+          },
+          currentWorktreeMatchesJournalBeforeFilesDetails: {
+            matches: null,
+            reason: 'adoption journal not found',
+            files: []
+          },
+          recommendedCommands: [
+            ['inspect-adoption', "symphony adopt --inspect adopt-v15-contract --state-dir '<STATE_DIR>' --json", 'copy-only'],
+            ['confirm-adoption', 'symphony adopt --confirm adopt-v15-contract --state-dir <STATE_DIR>', 'copy-only'],
+            ['status', 'symphony status', 'copy-only'],
+            ['diagnose', "symphony diagnose --state-dir '<STATE_DIR>' --json", 'copy-only']
+          ],
+          nextAction: 'symphony adopt --confirm adopt-v15-contract --state-dir <STATE_DIR>',
+          hasCapabilities: false,
+          hasModelInvocation: false
+        });
+      } finally {
+        if (server !== undefined) {
+          await closeServer(server);
+        }
+
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('previews new projects without creating the target directory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v8-new-'));
 
@@ -3577,6 +4511,708 @@ describe('v5 symphony native agent passthrough', () => {
   });
 });
 
+function createV15ConsoleFixtureNormalizer({ root, stateDir }) {
+  const replacements = [
+    [stateDir, '<STATE_DIR>'],
+    [root, '<ROOT>'],
+    [process.execPath, '<NODE_EXECUTABLE>']
+  ].filter(([value]) => typeof value === 'string' && value !== '')
+    .sort(([left], [right]) => right.length - left.length);
+
+  function normalize(value) {
+    if (typeof value === 'string') {
+      let normalized = value;
+
+      for (const [actual, marker] of replacements) {
+        normalized = normalized.replaceAll(actual, marker);
+      }
+
+      return normalized;
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((entry) => normalize(entry));
+    }
+
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entryValue]) => [key, normalize(entryValue)])
+      );
+    }
+
+    return value;
+  }
+
+  return normalize;
+}
+
+function consoleSnapshotContractProjection(snapshot, normalize) {
+  return {
+    keys: sortedKeys(snapshot),
+    contractName: snapshot.contractName,
+    contractVersion: snapshot.contractVersion,
+    contract: snapshot.contract,
+    generatedAt: snapshot.generatedAt,
+    stateDir: normalize(snapshot.stateDir),
+    status: snapshot.status,
+    hasCapabilities: Object.hasOwn(snapshot, 'capabilities'),
+    overview: {
+      keys: sortedKeys(snapshot.overview),
+      status: snapshot.overview.status,
+      headline: snapshot.overview.headline,
+      latestRunId: snapshot.overview.latestRunId ?? null,
+      latestRun: snapshot.overview.latestRun ?? null,
+      runCount: snapshot.overview.runCount,
+      topRiskCategories: snapshot.overview.topRisks.map((risk) => risk.category),
+      stage: snapshot.overview.stage === undefined
+        ? null
+        : {
+            stageId: snapshot.overview.stage.stageId,
+            status: snapshot.overview.stage.status,
+            active: snapshot.overview.stage.active,
+            blockerReason: snapshot.overview.stage.blocker?.reason ?? null
+          },
+      nextAction: snapshot.overview.nextAction,
+      adoptionStatus: snapshot.overview.adoptionStatus
+    },
+    stage: stageSummaryContractProjection(snapshot.stageSummary),
+    adoptionSummary: snapshot.adoptionSummary,
+    latestContext: snapshot.latestContext,
+    latestRun: snapshot.latestRun === null ? null : consoleRunProjection(snapshot.latestRun, normalize),
+    runs: snapshot.runs.map((run) => consoleRunProjection(run, normalize)),
+    adoptionPlans: normalize(snapshot.adoptionPlans),
+    adoptionJournals: normalize(snapshot.adoptionJournals),
+    runStats: {
+      total: snapshot.runStats.total,
+      recentRunIds: snapshot.runStats.recentRuns.map((run) => run.runId),
+      failedCount: snapshot.runStats.failedCount,
+      verifier: snapshot.runStats.verifier,
+      artifacts: snapshot.runStats.artifacts,
+      filters: snapshot.runStats.filters.map((filter) => [filter.id, filter.count])
+    },
+    riskSummary: riskSummaryProjection(snapshot.riskSummary),
+    recommendedCommands: commandTupleProjection(snapshot.recommendedCommands, normalize),
+    commandGroups: commandGroupProjection(snapshot.commandGroups),
+    action: snapshot.action
+  };
+}
+
+function stageSummaryContractProjection(stageSummary) {
+  return {
+    status: stageSummary.status,
+    stageId: stageSummary.stageId,
+    active: stageSummary.active,
+    activeStageId: stageSummary.activeStage?.stageId ?? null,
+    stageIdFromStage: stageSummary.stage?.stageId ?? null,
+    topRiskIds: stageSummary.topRisks.map((risk) => risk.id),
+    blocker: stageSummary.blocker === null
+      ? null
+      : {
+          status: stageSummary.blocker.status,
+          reason: stageSummary.blocker.reason,
+          actionKind: stageSummary.blocker.action?.kind ?? null,
+          highRisk: stageSummary.blocker.highRisk,
+          repairArtifactKind: stageSummary.blocker.repairArtifactRef?.kind,
+          blockedSnapshotKind: stageSummary.blocker.blockedSnapshotRef?.kind
+        },
+    blockedSnapshot: stageSummary.blockedSnapshot === null
+      ? null
+      : {
+          kind: stageSummary.blockedSnapshot.kind,
+          stageId: stageSummary.blockedSnapshot.stageId,
+          blockedReason: stageSummary.blockedSnapshot.blockedReason
+        },
+    blockedSnapshotRef: stageSummary.blockedSnapshotRef === null
+      ? null
+      : {
+          kind: stageSummary.blockedSnapshotRef.kind,
+          uri: stageSummary.blockedSnapshotRef.uri
+        },
+    repairArtifactRef: stageSummary.repairArtifactRef === null
+      ? null
+      : {
+          kind: stageSummary.repairArtifactRef.kind,
+          uri: stageSummary.repairArtifactRef.uri
+        },
+    gateEventStatuses: stageSummary.gateEvents.map((event) => event.status),
+    consistency: {
+      status: stageSummary.consistency.status,
+      stageId: stageSummary.consistency.stageId,
+      errorCodes: stageSummary.consistency.errors.map((error) => error.code)
+    },
+    nextAction: stageSummary.nextAction
+  };
+}
+
+function stageScenarioContractProjection(snapshot) {
+  return {
+    snapshotStatus: snapshot.status,
+    overviewStatus: snapshot.overview.status,
+    overviewTopRiskCategories: snapshot.overview.topRisks.map((risk) => risk.category),
+    overviewStage: snapshot.overview.stage === undefined
+      ? null
+      : {
+          stageId: snapshot.overview.stage.stageId,
+          status: snapshot.overview.stage.status,
+          active: snapshot.overview.stage.active,
+          blockerReason: snapshot.overview.stage.blocker?.reason ?? null
+        },
+    stageStatus: snapshot.stageSummary.status,
+    active: snapshot.stageSummary.active,
+    activeStageId: snapshot.stageSummary.activeStage?.stageId ?? null,
+    stageIdFromStage: snapshot.stageSummary.stage?.stageId ?? null,
+    blocker: stageSummaryContractProjection(snapshot.stageSummary).blocker,
+    gateEventStatuses: snapshot.stageSummary.gateEvents.map((event) => event.status),
+    consistency: {
+      status: snapshot.stageSummary.consistency.status,
+      stageId: snapshot.stageSummary.consistency.stageId,
+      errorCodes: snapshot.stageSummary.consistency.errors.map((error) => error.code)
+    },
+    nextAction: snapshot.stageSummary.nextAction
+  };
+}
+
+function consoleReadinessContractProjection(readiness, normalize) {
+  return {
+    keys: sortedKeys(readiness),
+    contractName: readiness.contractName,
+    contractVersion: readiness.contractVersion,
+    contract: readiness.contract,
+    generatedAt: readiness.generatedAt,
+    stateDir: normalize(readiness.stateDir),
+    cwd: normalize(readiness.cwd),
+    status: readiness.status,
+    readOnly: readiness.readOnly,
+    modelInvocation: readiness.modelInvocation,
+    hasCapabilities: Object.hasOwn(readiness, 'capabilities'),
+    tools: {
+      node: {
+        status: readiness.tools.node.status,
+        version: '<NODE_VERSION>',
+        executable: normalize(readiness.tools.node.executable)
+      },
+      packageManager: normalize(readiness.tools.packageManager),
+      git: normalize(readiness.tools.git),
+      github: normalize(readiness.tools.github),
+      realCli: {
+        status: readiness.tools.realCli.status,
+        adapters: readiness.tools.realCli.adapters.map((adapter) => [
+          adapter.adapterId,
+          adapter.status,
+          adapter.gate.status,
+          adapter.modelInvocation
+        ])
+      }
+    },
+    checks: readiness.checks.map((check) => [check.id, check.status]),
+    riskSummary: riskSummaryProjection(readiness.riskSummary),
+    recommendedCommandIds: readiness.recommendedCommands.map((command) => command.id),
+    commandGroups: commandGroupProjection(readiness.commandGroups)
+  };
+}
+
+function consoleRunsRouteProjection(runsResponse, normalize) {
+  return {
+    keys: sortedKeys(runsResponse),
+    contractVersion: runsResponse.contractVersion,
+    contractName: runsResponse.contractName,
+    filter: runsResponse.filter,
+    availableFilters: runsResponse.availableFilters,
+    runs: runsResponse.runs.map((run) => consoleRunProjection(run, normalize))
+  };
+}
+
+function consoleRunRouteProjection(runResponse, normalize) {
+  return {
+    keys: sortedKeys(runResponse),
+    contractVersion: runResponse.contractVersion,
+    contractName: runResponse.contractName,
+    run: consoleRunProjection(runResponse.run, normalize),
+    rawRunState: {
+      contractName: runResponse.rawRunState.contractName,
+      contractVersion: runResponse.rawRunState.contractVersion,
+      runId: runResponse.rawRunState.runId,
+      status: runResponse.rawRunState.status,
+      modelInvocation: runResponse.rawRunState.modelInvocation,
+      artifactPathFields: [
+        ['contextArtifactPath', normalize(runResponse.rawRunState.contextArtifactPath)],
+        ['summaryArtifactPath', normalize(runResponse.rawRunState.summaryArtifactPath)],
+        ['evidenceArtifactPath', normalize(runResponse.rawRunState.evidenceArtifactPath)],
+        ['harnessOutputPath', normalize(runResponse.rawRunState.harnessOutputPath)]
+      ]
+    }
+  };
+}
+
+function consoleRunProjection(run, normalize) {
+  return {
+    keys: sortedKeys(run),
+    runId: run.runId,
+    command: run.command,
+    semanticCommand: run.semanticCommand,
+    status: run.status,
+    verifierStatus: run.verifierStatus,
+    safetyMode: run.safetyMode,
+    executionMode: run.executionMode,
+    modelInvocation: run.modelInvocation,
+    hasCapabilities: Object.hasOwn(run, 'capabilities'),
+    artifactRefs: run.artifactRefs.map((artifact) => [artifact.kind, normalize(artifact.path)]),
+    artifactHealth: run.artifactHealth,
+    artifactStatus: {
+      ...run.artifactStatus,
+      missingRefs: (run.artifactStatus.missingRefs ?? []).map((artifact) => [
+        artifact.kind,
+        normalize(artifact.path),
+        artifact.status
+      ])
+    },
+    timeline: run.timeline.map((event) => [event.id, event.status]),
+    riskSummary: riskSummaryProjection(run.riskSummary),
+    recommendedCommands: commandTupleProjection(run.recommendedCommands, normalize),
+    commandGroups: commandGroupProjection(run.commandGroups),
+    nextAction: run.nextAction,
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt
+  };
+}
+
+function consoleTimelineRouteProjection(timelineResponse) {
+  return {
+    keys: sortedKeys(timelineResponse),
+    contractVersion: timelineResponse.contractVersion,
+    contractName: timelineResponse.contractName,
+    runId: timelineResponse.runId,
+    timeline: timelineResponse.timeline.map((event) => [event.id, event.status]),
+    recommendedCommandIds: timelineResponse.recommendedCommands.map((command) => command.id)
+  };
+}
+
+function artifactPreviewContractProjection(preview, normalize) {
+  const base = {
+    httpStatus: preview.status === 'missing' || preview.status === 'missing-artifact' ? 404 : 200,
+    keys: sortedKeys(preview),
+    contractVersion: preview.contractVersion,
+    contractName: preview.contractName,
+    runId: preview.runId
+  };
+
+  if (preview.artifactKind !== undefined) {
+    return {
+      ...base,
+      status: preview.status,
+      artifactKind: preview.artifactKind
+    };
+  }
+
+  const artifact = preview.artifact;
+
+  return {
+    ...base,
+    ...(preview.status ? { status: preview.status } : {}),
+    artifact: {
+      keys: sortedKeys(artifact),
+      kind: artifact.kind,
+      path: normalize(artifact.path),
+      type: artifact.type,
+      ...(artifact.format ? { format: artifact.format } : {}),
+      ...(typeof artifact.truncated === 'boolean' ? { truncated: artifact.truncated } : {}),
+      ...(typeof artifact.size === 'number' ? { size: artifact.size } : {}),
+      ...(typeof artifact.previewLimitBytes === 'number' ? { previewLimitBytes: artifact.previewLimitBytes } : {}),
+      ...(artifact.content !== undefined ? { content: artifact.content } : {}),
+      ...(artifact.json !== undefined ? { json: artifact.json } : {}),
+      ...(artifact.entries !== undefined
+        ? { entries: artifact.entries.map((entry) => [entry.name, entry.type]) }
+        : {}),
+      ...(typeof artifact.entryCount === 'number' ? { entryCount: artifact.entryCount } : {}),
+      ...(typeof artifact.limit === 'number' ? { limit: artifact.limit } : {}),
+      ...(artifact.message ? { message: artifact.message } : {}),
+      contractGapFieldsPresent: artifactContractGapFields().filter((field) => Object.hasOwn(artifact, field))
+    }
+  };
+}
+
+function adoptionInspectContractProjection(inspect, normalize) {
+  return {
+    keys: sortedKeys(inspect),
+    contractVersion: inspect.contractVersion,
+    contractName: inspect.contractName,
+    status: inspect.status,
+    safety: {
+      safetyMode: inspect.safetyMode,
+      projectWrites: inspect.projectWrites,
+      mainWorktreeWrites: inspect.mainWorktreeWrites,
+      workspaceWrites: inspect.workspaceWrites,
+      runtimeWrites: inspect.runtimeWrites,
+      externalCalls: inspect.externalCalls,
+      destructiveWrites: inspect.destructiveWrites,
+      verifierStatus: inspect.verifierStatus
+    },
+    adoptionPlanId: inspect.adoptionPlanId,
+    adoptionPlanArtifactPath: normalize(inspect.adoptionPlanArtifactPath),
+    adoptionJournalArtifactPath: normalize(inspect.adoptionJournalArtifactPath ?? null),
+    adoptionPlanRefs: normalize(inspect.adoptionPlanRefs),
+    journalRef: normalize(inspect.journalRef),
+    sourceRun: normalize(inspect.sourceRun),
+    executionPlanId: inspect.executionPlanId,
+    executionPlanArtifactPath: normalize(inspect.executionPlanArtifactPath),
+    patchArtifactPath: normalize(inspect.patchArtifactPath),
+    patchHash: inspect.patchHash,
+    changedFiles: inspect.changedFiles,
+    fileOperations: inspect.fileOperations,
+    stageBinding: {
+      stageId: inspect.stageBinding.stageId,
+      bindingSource: inspect.stageBinding.bindingSource,
+      boundaryCheckStatus: inspect.stageBinding.boundaryCheck.status
+    },
+    stageAdoptionSummary: {
+      behavior: inspect.stageAdoptionSummary.behavior,
+      v12ApplyLogicChanged: inspect.stageAdoptionSummary.v12ApplyLogicChanged,
+      stageId: inspect.stageAdoptionSummary.stageId,
+      adoptionPlanId: inspect.stageAdoptionSummary.adoptionPlanId
+    },
+    journal: inspect.journal,
+    latestConfirmationRun: inspect.latestConfirmationRun,
+    currentWorktreeMatchesAfterHash: inspect.currentWorktreeMatchesAfterHash,
+    currentWorktreeMatchesJournalBeforeFiles: inspect.currentWorktreeMatchesJournalBeforeFiles,
+    currentWorktreeMatchesAfterHashDetails: inspect.currentWorktreeMatchesAfterHashDetails,
+    currentWorktreeMatchesJournalBeforeFilesDetails: inspect.currentWorktreeMatchesJournalBeforeFilesDetails,
+    recommendedCommands: inspect.recommendedCommands.map((command) => [
+      command.id,
+      normalize(command.command),
+      command.mode
+    ]),
+    nextAction: normalize(inspect.nextAction),
+    hasCapabilities: Object.hasOwn(inspect, 'capabilities'),
+    hasModelInvocation: Object.hasOwn(inspect, 'modelInvocation')
+  };
+}
+
+function riskSummaryProjection(riskSummary) {
+  return {
+    status: riskSummary.status,
+    total: riskSummary.total,
+    counts: riskSummary.counts,
+    categories: [...new Set(riskSummary.items.map((risk) => risk.category))],
+    ids: riskSummary.items.map((risk) => risk.id)
+  };
+}
+
+function commandTupleProjection(commands, normalize) {
+  return commands.map((command) => [
+    command.id,
+    normalize(command.command),
+    command.group,
+    command.mode
+  ]);
+}
+
+function commandGroupProjection(commandGroups) {
+  return commandGroups.map((group) => [
+    group.group,
+    group.commands.map((command) => command.id)
+  ]);
+}
+
+function sortedKeys(value) {
+  return Object.keys(value).sort();
+}
+
+function artifactContractGapFields() {
+  return [
+    'uri',
+    'ref',
+    'mime',
+    'title',
+    'displayTitle',
+    'safeToRenderInline',
+    'sourceRunId',
+    'artifactKind',
+    'previewAvailable',
+    'sizeBytes'
+  ];
+}
+
+async function writeV15ConsoleStageState({
+  stateDir,
+  stageId = V15_CONSOLE_CONTRACT_STAGE_ID,
+  status
+}) {
+  const now = V15_CONSOLE_CONTRACT_GENERATED_AT;
+  const blocked = status === 'blocked';
+  const gateEventId = 'stage-gate-v15-contract';
+  const repairArtifactRef = {
+    kind: 'charter-repair-plan',
+    taskId: `stage-${stageId}`,
+    artifactId: `${gateEventId}-charter-repair-plan`,
+    uri: `artifact://stage-${stageId}/${gateEventId}-charter-repair-plan`,
+    path: join(stateDir, 'artifacts', `stage-${stageId}`, `${gateEventId}-charter-repair-plan.json`)
+  };
+  const blockedSnapshotRef = {
+    kind: 'blocked-snapshot',
+    taskId: `stage-${stageId}`,
+    artifactId: `${gateEventId}-blocked-snapshot`,
+    uri: `artifact://stage-${stageId}/${gateEventId}-blocked-snapshot`,
+    path: join(stateDir, 'artifacts', `stage-${stageId}`, `${gateEventId}-blocked-snapshot.json`)
+  };
+  const gateEvent = {
+    version: '1',
+    kind: 'symphony.stage-gate-event',
+    contractName: 'symphony.stage-gate-event',
+    contractVersion: '1',
+    gateEventId,
+    stageId,
+    action: {
+      kind: 'do',
+      command: 'symphony do --dry-run "inspect README"',
+      semanticCommand: 'do'
+    },
+    attemptedCommand: 'symphony do --dry-run "inspect README"',
+    highRisk: false,
+    status: 'blocked',
+    reason: 'stage-charter-inconsistent',
+    normalRunCreated: false,
+    blockedSnapshotRef,
+    repairArtifactRef,
+    createdAt: now
+  };
+  const blocker = {
+    status: 'blocked',
+    reason: 'stage-charter-inconsistent',
+    action: gateEvent.action,
+    attemptedCommand: gateEvent.attemptedCommand,
+    highRisk: false,
+    gateEventId,
+    gateEventPath: join(stateDir, 'stages', `${stageId}-${gateEventId}.json`),
+    repairArtifactRef,
+    blockedSnapshotRef,
+    repairArtifactPath: repairArtifactRef.path,
+    blockedSnapshotPath: blockedSnapshotRef.path,
+    createdAt: now
+  };
+  const stageState = {
+    version: '1',
+    kind: 'symphony-stage-state',
+    stageId,
+    status,
+    active: true,
+    charterPath: `docs/stages/${stageId}.stage.json`,
+    htmlPath: `docs/stages/${stageId}.html`,
+    charterHash: 'sha256:v15fixturecharter',
+    htmlHash: 'sha256:v15fixturehtml',
+    consistency: {
+      status: blocked ? 'failed' : 'passed',
+      stageId,
+      errors: []
+    },
+    blocker: blocked ? blocker : null,
+    gateEvents: blocked ? [gateEvent] : [],
+    blockedSnapshot: blocked
+      ? {
+          version: '1',
+          kind: 'symphony.stage-blocked-snapshot-summary',
+          gateId: gateEventId,
+          stageId,
+          blockedReason: 'stage-charter-consistency-mismatch',
+          highRisk: false,
+          createdAt: now
+        }
+      : null,
+    blockedSnapshotRef: blocked ? blockedSnapshotRef : null,
+    repairArtifactRef: blocked ? repairArtifactRef : null,
+    repairArtifactPath: blocked ? repairArtifactRef.path : null,
+    activatedAt: now,
+    updatedAt: now
+  };
+
+  await writeFixtureJson(join(stateDir, 'stages', `${stageId}.json`), stageState);
+  await writeFixtureJson(join(stateDir, 'stages', 'latest.json'), stageState);
+}
+
+async function writeV15ConsoleRunFixture({ root, stateDir }) {
+  const artifactDir = join(root, 'artifacts');
+  const summaryPath = join(artifactDir, 'summary.json');
+  const missingContextPath = join(artifactDir, 'missing-context.json');
+  const evidencePath = join(artifactDir, 'evidence-dir');
+  const harnessPath = join(artifactDir, 'harness.txt');
+  const summaryContent = `${JSON.stringify({
+    kind: 'v15-console-summary',
+    runId: V15_CONSOLE_CONTRACT_RUN_ID,
+    stable: true
+  })}\n`;
+  const runState = diagnosticRunState({
+    runId: V15_CONSOLE_CONTRACT_RUN_ID,
+    command: 'symphony do',
+    semanticCommand: 'do',
+    intent: 'work',
+    pipeline: ['do'],
+    status: 'passed',
+    verifierStatus: 'passed',
+    safetyMode: 'dry-run',
+    executionMode: 'dry-run',
+    modelInvocation: false,
+    contextArtifactPath: missingContextPath,
+    summaryArtifactPath: summaryPath,
+    evidenceArtifactPath: evidencePath,
+    harnessOutputPath: harnessPath,
+    routeDecision: {
+      intent: 'work',
+      safetyMode: 'dry-run'
+    },
+    changedFiles: [],
+    nextAction: `symphony artifacts ${V15_CONSOLE_CONTRACT_RUN_ID}`,
+    updatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+  });
+
+  await mkdir(evidencePath, { recursive: true });
+  await writeFile(summaryPath, summaryContent, 'utf8');
+  await writeFile(harnessPath, 'v15 bounded text artifact\n', 'utf8');
+  await writeFile(join(evidencePath, 'alpha.txt'), 'alpha\n', 'utf8');
+  await mkdir(join(evidencePath, 'nested'), { recursive: true });
+  await writeFixtureJson(join(stateDir, 'runs', `${V15_CONSOLE_CONTRACT_RUN_ID}.json`), runState);
+  await writeFixtureJson(join(stateDir, 'runs', 'latest.json'), runState);
+
+  return {
+    summaryContent
+  };
+}
+
+async function writeV15ConsoleAdoptionFixture({ root, stateDir }) {
+  const afterContent = '# Fixture\n\nAdopted v15 fixture.\n';
+  const afterHash = sha256Utf8(afterContent);
+  const artifactDir = join(root, 'artifacts');
+  const executionPlanPath = join(artifactDir, 'execution-plan.json');
+  const patchPath = join(artifactDir, 'adopt.patch');
+  const workspacePath = join(root, 'workspace');
+  const workspaceManifestPath = join(workspacePath, 'workspace-manifest.json');
+  const sourceRunArtifactPath = join(stateDir, 'runs', 'source-v15-contract-run.json');
+  const adoptionPlanArtifactPath = join(stateDir, 'adoptions', `${V15_CONSOLE_CONTRACT_ADOPTION_ID}.json`);
+  const fileOperations = [{
+    path: 'README.md',
+    operation: 'modify',
+    afterHash,
+    size: afterContent.length,
+    textEncoding: 'utf8'
+  }];
+  const stageBinding = {
+    stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+    bindingSource: 'active-stage',
+    boundaryCheck: {
+      status: 'passed',
+      riskLevel: 'low',
+      goalRelation: 'serves-current-stage',
+      nonGoalViolations: [],
+      boundaryViolations: []
+    }
+  };
+  const stageAdoptionSummary = {
+    version: '1',
+    kind: 'symphony.stage-adoption-summary',
+    behavior: 'summary-only',
+    v12ApplyLogicChanged: false,
+    stageId: V15_CONSOLE_CONTRACT_STAGE_ID,
+    bindingSource: 'active-stage',
+    sourceRunId: 'source-v15-contract-run',
+    adoptionPlanId: V15_CONSOLE_CONTRACT_ADOPTION_ID,
+    note: 'Stage metadata wraps the adoption summary without changing frozen v12 adoption apply behavior.'
+  };
+  const plan = {
+    kind: 'symphony.adoption-plan',
+    contractName: 'symphony.adoption-plan',
+    contractVersion: '1',
+    adoptionId: V15_CONSOLE_CONTRACT_ADOPTION_ID,
+    projectRoot: root,
+    sourceRunId: 'source-v15-contract-run',
+    sourceRunArtifactPath,
+    sourceWorkspacePath: workspacePath,
+    sourceWorkspaceManifestPath: workspaceManifestPath,
+    sourceWorkspaceFingerprint: 'sha256:v15workspacefixture',
+    sourceVerifierStatus: 'passed',
+    executionPlanId: 'plan-v15-contract',
+    executionPlanArtifactPath: executionPlanPath,
+    patchArtifactPath: patchPath,
+    patchHash: 'sha256:v15patchfixture',
+    changedFiles: ['README.md'],
+    fileOperations,
+    stageBinding,
+    stageAdoptionSummary,
+    confirmationCommand: `symphony adopt --confirm ${V15_CONSOLE_CONTRACT_ADOPTION_ID} --state-dir ${stateDir}`,
+    createdAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+  };
+  const adoptionRun = diagnosticRunState({
+    runId: 'adoption-plan-v15-contract',
+    command: 'symphony adopt',
+    semanticCommand: 'adopt',
+    intent: 'adopt',
+    pipeline: ['adopt'],
+    status: 'adoption-planned',
+    verifierStatus: 'not-run',
+    safetyMode: 'read-only',
+    executionMode: 'dry-run',
+    modelInvocation: false,
+    adoptionPlanId: V15_CONSOLE_CONTRACT_ADOPTION_ID,
+    adoptionPlanArtifactPath,
+    sourceRunId: 'source-v15-contract-run',
+    sourceRunArtifactPath,
+    sourceVerifierStatus: 'passed',
+    executionPlanId: 'plan-v15-contract',
+    executionPlanArtifactPath: executionPlanPath,
+    patchArtifactPath: patchPath,
+    patchHash: 'sha256:v15patchfixture',
+    changedFiles: ['README.md'],
+    fileOperations,
+    stageBinding,
+    stageAdoptionSummary,
+    confirmationCommand: plan.confirmationCommand,
+    nextAction: plan.confirmationCommand,
+    updatedAt: V15_CONSOLE_CONTRACT_GENERATED_AT
+  });
+  const sourceRun = diagnosticRunState({
+    runId: 'source-v15-contract-run',
+    command: 'symphony do',
+    semanticCommand: 'do',
+    intent: 'work',
+    status: 'passed',
+    verifierStatus: 'passed',
+    safetyMode: 'dry-run',
+    executionMode: 'dry-run',
+    modelInvocation: false,
+    sourceWorkspacePath: workspacePath,
+    sourceWorkspaceManifestPath: workspaceManifestPath,
+    updatedAt: '2026-05-26T23:59:00.000Z'
+  });
+
+  await writeFile(join(root, 'README.md'), afterContent, 'utf8');
+  await mkdir(workspacePath, { recursive: true });
+  await writeFixtureJson(workspaceManifestPath, {
+    version: '1',
+    workspaceId: 'workspace-v15-contract',
+    path: workspacePath
+  });
+  await writeFixtureJson(executionPlanPath, {
+    version: '1',
+    planId: 'plan-v15-contract'
+  });
+  await writeFile(patchPath, 'diff --git a/README.md b/README.md\n+Adopted v15 fixture.\n', 'utf8');
+  await writeFixtureJson(sourceRunArtifactPath, sourceRun);
+  await writeFixtureJson(join(stateDir, 'runs', 'adoption-plan-v15-contract.json'), adoptionRun);
+  await writeFixtureJson(join(stateDir, 'runs', 'latest.json'), adoptionRun);
+  await writeFixtureJson(adoptionPlanArtifactPath, plan);
+
+  return {
+    afterContent,
+    afterHash
+  };
+}
+
+async function writeFixtureJson(path, value) {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+function sha256Utf8(content) {
+  return `sha256:${createHash('sha256').update(content).digest('hex')}`;
+}
+
 function createOutput() {
   const stdout = [];
   const stderr = [];
@@ -3793,6 +5429,38 @@ class DiagnosticReadinessRunner {
 
 class MissingReadinessRunner {
   async run({ executable }) {
+    const error = new Error(`spawn ${executable} ENOENT`);
+    error.code = 'ENOENT';
+    throw error;
+  }
+}
+
+class DirtyGitReadinessRunner {
+  async run({ executable, args }) {
+    if (executable === 'pnpm' && args[0] === '--version') {
+      return commandResult({ stdout: '10.30.3\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --is-inside-work-tree') {
+      return commandResult({ stdout: 'true\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'branch --show-current') {
+      return commandResult({ stdout: 'v15-contract\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short HEAD') {
+      return commandResult({ stdout: 'v15abc1\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'status --porcelain') {
+      return commandResult({ stdout: ' M README.md\n?? src/fixture.js\n' });
+    }
+
+    if (executable === 'codex' && args.join(' ') === '--version') {
+      return commandResult({ stdout: 'codex 1.0.0\n' });
+    }
+
     const error = new Error(`spawn ${executable} ENOENT`);
     error.code = 'ENOENT';
     throw error;
