@@ -9881,6 +9881,346 @@ var require_client = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_dom_client_production();
 }));
 //#endregion
+//#region frontend/workbench/src/api/contracts.js
+var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
+var import_client = require_client();
+var MISSING_TEXT = "未暴露";
+var UNAVAILABLE_TEXT = "不可用";
+var READONLY_API_ROUTES = Object.freeze([
+	Object.freeze({
+		id: "summary",
+		label: "Summary",
+		path: "/api/summary",
+		method: "GET",
+		contractName: "symphony.console-snapshot"
+	}),
+	Object.freeze({
+		id: "readiness",
+		label: "Readiness",
+		path: "/api/readiness",
+		method: "GET",
+		contractName: "symphony.console-readiness"
+	}),
+	Object.freeze({
+		id: "runs",
+		label: "Runs",
+		path: "/api/runs",
+		method: "GET",
+		contractName: "symphony.console-runs"
+	}),
+	Object.freeze({
+		id: "latestRun",
+		label: "Latest Run",
+		path: "/api/runs/latest",
+		method: "GET",
+		contractName: "symphony.console-run"
+	})
+]);
+Object.freeze(READONLY_API_ROUTES.map((route) => route.id));
+var DEFERRED_CONTRACT_GAPS = Object.freeze([
+	"artifact preview 缺 uri/ref",
+	"artifact preview 缺 mime",
+	"artifact preview 缺 title/displayTitle",
+	"artifact preview 缺 safeToRenderInline",
+	"artifact preview 缺 sourceRunId",
+	"artifact preview 缺 artifactKind",
+	"artifact preview 缺 previewAvailable",
+	"artifact preview 缺 sizeBytes",
+	"没有 shared top-level capabilities object",
+	"error envelopes 仍是 route-local",
+	"dirty adoption 当前仍由 pending adoption 与 Git readiness 分别暴露"
+]);
+var ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
+	Object.freeze({
+		label: "uri/ref",
+		fields: Object.freeze(["uri", "ref"])
+	}),
+	Object.freeze({
+		label: "mime",
+		fields: Object.freeze(["mime"])
+	}),
+	Object.freeze({
+		label: "title/displayTitle",
+		fields: Object.freeze(["title", "displayTitle"])
+	}),
+	Object.freeze({
+		label: "safeToRenderInline",
+		fields: Object.freeze(["safeToRenderInline"])
+	}),
+	Object.freeze({
+		label: "sourceRunId",
+		fields: Object.freeze(["sourceRunId"])
+	}),
+	Object.freeze({
+		label: "artifactKind",
+		fields: Object.freeze(["artifactKind"])
+	}),
+	Object.freeze({
+		label: "previewAvailable",
+		fields: Object.freeze(["previewAvailable"])
+	}),
+	Object.freeze({
+		label: "sizeBytes",
+		fields: Object.freeze(["sizeBytes"])
+	})
+]);
+function projectWorkbenchContracts(results) {
+	const summaryData = dataFrom(results.summary);
+	const readinessData = dataFrom(results.readiness);
+	const runsData = dataFrom(results.runs);
+	const latestRun = dataFrom(results.latestRun)?.run ?? summaryData?.latestRun ?? null;
+	const routeStates = READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id]));
+	const failedRequiredRoutes = routeStates.filter((route) => route.state === "failed" && route.id !== "latestRun");
+	const hasNoRuns = summaryData?.latestRun === null || summaryData?.status === "no-runs";
+	return {
+		state: failedRequiredRoutes.length > 0 ? "partial" : "ready",
+		routeStates,
+		summary: projectSummary(summaryData),
+		readiness: projectReadiness(readinessData),
+		runs: projectRuns(runsData, summaryData),
+		latestRun: projectLatestRun({
+			result: results.latestRun,
+			run: latestRun,
+			hasNoRuns
+		}),
+		adoption: projectAdoption({
+			summary: summaryData,
+			readiness: readinessData
+		}),
+		artifactRefs: projectArtifactRefs(latestRun?.artifactRefs),
+		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
+			label: gap,
+			status: MISSING_TEXT
+		}))
+	};
+}
+function projectArtifactRefs(artifactRefs) {
+	if (!Array.isArray(artifactRefs)) return {
+		state: "missing",
+		count: null,
+		label: MISSING_TEXT,
+		items: [],
+		missingPreviewFields: ARTIFACT_PREVIEW_FIELD_GROUPS.map((group) => group.label)
+	};
+	const items = artifactRefs.map((artifact) => {
+		const previewFields = ARTIFACT_PREVIEW_FIELD_GROUPS.map((group) => {
+			const exposed = group.fields.some((field) => hasOwn(artifact, field));
+			return {
+				label: group.label,
+				status: exposed ? "exposed" : "missing",
+				text: exposed ? "已暴露" : MISSING_TEXT
+			};
+		});
+		return {
+			kind: valueState(artifact.kind),
+			path: valueState(artifact.path),
+			previewFields
+		};
+	});
+	return {
+		state: "available",
+		count: artifactRefs.length,
+		label: `${artifactRefs.length}`,
+		items,
+		missingPreviewFields: unique(items.flatMap((item) => item.previewFields.filter((field) => field.status === "missing").map((field) => field.label)))
+	};
+}
+function projectRouteState(route, result) {
+	if (result?.ok === true) return {
+		id: route.id,
+		label: route.label,
+		path: route.path,
+		method: route.method,
+		state: "ready",
+		contractName: valueState(result.data?.contractName),
+		contractVersion: valueState(result.data?.contractVersion)
+	};
+	return {
+		id: route.id,
+		label: route.label,
+		path: route.path,
+		method: route.method,
+		state: "failed",
+		contractName: valueState(route.contractName),
+		contractVersion: valueState(void 0),
+		error: result?.message ?? "读取失败 / contract 未暴露 / 不可用",
+		httpStatus: result?.httpStatus ?? null
+	};
+}
+function projectSummary(summary) {
+	return {
+		contractName: valueState(summary?.contractName),
+		contractVersion: valueState(summary?.contractVersion),
+		status: valueState(summary?.status),
+		overviewStatus: valueState(summary?.overview?.status),
+		headline: valueState(summary?.overview?.headline),
+		stageId: valueState(summary?.stageSummary?.stageId ?? summary?.overview?.stage?.stageId),
+		stageStatus: valueState(summary?.stageSummary?.status ?? summary?.overview?.stage?.status),
+		nextAction: valueState(summary?.overview?.nextAction ?? summary?.action?.next),
+		runCount: valueState(summary?.runStats?.total),
+		latestRunId: valueState(summary?.latestRun?.runId ?? summary?.overview?.latestRunId),
+		capabilities: objectState(summary?.capabilities),
+		raw: summary ?? null
+	};
+}
+function projectReadiness(readiness) {
+	return {
+		contractName: valueState(readiness?.contractName),
+		contractVersion: valueState(readiness?.contractVersion),
+		status: valueState(readiness?.status),
+		attention: readiness?.status === void 0 ? null : readiness.status !== "ready",
+		readOnly: valueState(readiness?.readOnly),
+		modelInvocation: valueState(readiness?.modelInvocation),
+		capabilities: objectState(readiness?.capabilities),
+		gitDirty: valueState(readiness?.tools?.git?.dirty),
+		dirtyFilesCount: valueState(readiness?.tools?.git?.dirtyFilesCount),
+		packageManagerStatus: valueState(readiness?.tools?.packageManager?.status),
+		raw: readiness ?? null
+	};
+}
+function projectRuns(runs, summary) {
+	const routeRuns = Array.isArray(runs?.runs) ? runs.runs : null;
+	return {
+		contractName: valueState(runs?.contractName),
+		contractVersion: valueState(runs?.contractVersion),
+		count: valueState(routeRuns === null ? void 0 : routeRuns.length),
+		summaryCount: valueState(summary?.runStats?.total),
+		filter: valueState(runs?.filter),
+		availableFilters: Array.isArray(runs?.availableFilters) ? [...runs.availableFilters] : [],
+		raw: runs ?? null
+	};
+}
+function projectLatestRun({ result, run, hasNoRuns }) {
+	if (hasNoRuns || result?.httpStatus === 404) return {
+		state: "empty",
+		runId: valueState(void 0),
+		status: valueState("无运行记录"),
+		verifierStatus: valueState(void 0),
+		modelInvocation: valueState(void 0),
+		artifactRefsCount: valueState(0),
+		raw: null
+	};
+	return {
+		state: run === null || run === void 0 ? "missing" : "available",
+		runId: valueState(run?.runId),
+		status: valueState(run?.status),
+		verifierStatus: valueState(run?.verifierStatus),
+		modelInvocation: valueState(run?.modelInvocation),
+		artifactRefsCount: valueState(Array.isArray(run?.artifactRefs) ? run.artifactRefs.length : void 0),
+		raw: run ?? null
+	};
+}
+function projectAdoption({ summary, readiness }) {
+	const adoptionSummary = summary?.adoptionSummary;
+	return {
+		status: valueState(adoptionSummary?.status),
+		pendingCount: valueState(adoptionSummary?.pendingCount),
+		dirtyBlocked: valueState(adoptionSummary?.dirtyBlocked),
+		gitDirtyReadiness: valueState(readiness?.tools?.git?.dirty),
+		note: "dirty adoption 不由 React 端合成，只展示 API 已暴露的 adoption summary 与 Git readiness 字段。"
+	};
+}
+function dataFrom(result) {
+	return result?.ok === true ? result.data : null;
+}
+function objectState(value) {
+	if (value === void 0 || value === null || typeof value !== "object" || Array.isArray(value)) return {
+		state: "missing",
+		text: MISSING_TEXT,
+		value: null
+	};
+	return {
+		state: "available",
+		text: "已暴露",
+		value
+	};
+}
+function valueState(value) {
+	if (value === void 0 || value === null || value === "") return {
+		state: "missing",
+		text: MISSING_TEXT,
+		value: null
+	};
+	return {
+		state: "available",
+		text: String(value),
+		value
+	};
+}
+function hasOwn(value, key) {
+	return value !== null && typeof value === "object" && Object.hasOwn(value, key);
+}
+function unique(values) {
+	return [...new Set(values)];
+}
+Object.freeze({
+	missing: MISSING_TEXT,
+	unavailable: UNAVAILABLE_TEXT
+});
+//#endregion
+//#region frontend/workbench/src/api/client.js
+var READONLY_ERROR_MESSAGE = "读取失败 / contract 未暴露 / 不可用";
+async function fetchReadonlyRoute(route, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return readonlyError({
+		route,
+		message: READONLY_ERROR_MESSAGE
+	});
+	let response;
+	try {
+		response = await fetchImpl(route.path, {
+			method: "GET",
+			cache: "no-store",
+			headers: { Accept: "application/json" }
+		});
+	} catch {
+		return readonlyError({
+			route,
+			message: READONLY_ERROR_MESSAGE
+		});
+	}
+	if (!response.ok) return readonlyError({
+		route,
+		httpStatus: response.status,
+		message: READONLY_ERROR_MESSAGE
+	});
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return readonlyError({
+			route,
+			httpStatus: response.status,
+			message: READONLY_ERROR_MESSAGE
+		});
+	}
+	if (route.contractName && data?.contractName !== route.contractName) return readonlyError({
+		route,
+		httpStatus: response.status,
+		message: READONLY_ERROR_MESSAGE
+	});
+	return {
+		ok: true,
+		route: route.path,
+		method: route.method,
+		httpStatus: response.status,
+		data
+	};
+}
+async function fetchWorkbenchContracts(options = {}) {
+	const entries = await Promise.all(READONLY_API_ROUTES.map(async (route) => [route.id, await fetchReadonlyRoute(route, options)]));
+	return projectWorkbenchContracts(Object.fromEntries(entries));
+}
+function readonlyError({ route, httpStatus = null, message }) {
+	return {
+		ok: false,
+		route: route.path,
+		method: route.method,
+		httpStatus,
+		message,
+		readonly: true
+	};
+}
+//#endregion
 //#region node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react-jsx-runtime.production.js
 /**
 * @license React
@@ -9914,79 +10254,34 @@ var require_react_jsx_runtime_production = /* @__PURE__ */ __commonJSMin(((expor
 	exports.jsxs = jsxProd;
 }));
 //#endregion
-//#region node_modules/.pnpm/react@19.2.6/node_modules/react/jsx-runtime.js
-var require_jsx_runtime = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	module.exports = require_react_jsx_runtime_production();
-}));
-//#endregion
 //#region frontend/workbench/src/App.jsx
-var import_react = /* @__PURE__ */ __toESM(require_react(), 1);
-var import_client = require_client();
-var import_jsx_runtime = require_jsx_runtime();
-var contractRoutes = [
-	{
-		name: "/api/health",
-		note: "只读健康检查"
-	},
-	{
-		name: "/api/summary",
-		note: "Workbench 总览 contract"
-	},
-	{
-		name: "/api/readiness",
-		note: "本地环境 readiness contract"
-	},
-	{
-		name: "/api/runs?filter=<filter>",
-		note: "后续运行列表 contract"
-	},
-	{
-		name: "/api/runs/latest",
-		note: "后续最新运行摘要 contract"
-	},
-	{
-		name: "/api/runs/<run-id>/timeline",
-		note: "后续时间线 contract"
-	},
-	{
-		name: "/api/runs/<run-id>/artifacts/<kind>",
-		note: "后续产物 contract，缺失字段等待 API 补充"
-	},
-	{
-		name: "/api/adoptions/<adoption-id>/inspect",
-		note: "后续采纳检查 contract"
-	}
-];
-var placeholders = [
-	{
-		title: "Summary",
-		body: "当前仅展示壳层状态；Stage、风险和下一步动作等待后续只读 API 绑定。"
-	},
-	{
-		title: "Readiness",
-		body: "本区域只预留环境状态位置，不读取本地文件，不触发后端动作。"
-	},
-	{
-		title: "Runs",
-		body: "运行历史暂未接入；筛选、详情和时间线留给后续 contract 层实现。"
-	},
-	{
-		title: "Artifacts",
-		body: "产物预览暂未实现；uri/ref、mime、safeToRenderInline 等字段等待 API contract 补充。"
-	},
-	{
-		title: "Adoption",
-		body: "采纳检查 UI 暂未实现；dirty adoption 仍由 pending adoption 与 Git readiness 派生。"
-	}
-];
-var deferredGaps = [
-	"artifact preview 缺 uri/ref、mime、title/displayTitle、safeToRenderInline",
-	"artifact preview 缺 sourceRunId、artifactKind、previewAvailable、sizeBytes",
-	"暂无 shared top-level capabilities object",
-	"error envelopes 仍是 route-local",
-	"dirty adoption 仍由 pending adoption + dirty Git readiness 派生"
-];
+var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = require_react_jsx_runtime_production();
+})))();
+var initialState = {
+	phase: "loading",
+	model: null
+};
 function App() {
+	const [viewState, setViewState] = (0, import_react.useState)(initialState);
+	(0, import_react.useEffect)(() => {
+		let cancelled = false;
+		fetchWorkbenchContracts().then((model) => {
+			if (!cancelled) setViewState({
+				phase: "ready",
+				model
+			});
+		}).catch(() => {
+			if (!cancelled) setViewState({
+				phase: "failed",
+				model: null
+			});
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	const model = viewState.model;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "workbench-shell",
 		"aria-labelledby": "workbench-title",
@@ -9998,7 +10293,7 @@ function App() {
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "eyebrow",
-							children: "v15 React/Vite Workbench Shell"
+							children: "v15 React/Vite Workbench"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 							id: "workbench-title",
@@ -10006,7 +10301,7 @@ function App() {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "hero-copy",
-							children: "当前是只读、低密度、copy-only 的最小壳层，用于验证 React/Vite 构建链路。 本页面不接入写入能力，不改变后端 kernel，也不替代 Stage Charter HTML。"
+							children: "当前绑定 Task 1 冻结的只读 API contract，只展示低密度状态。 本页面不提供浏览器动作入口，不改变后端 kernel，也不替代 Stage Charter HTML。"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 							className: "status-strip",
@@ -10014,7 +10309,7 @@ function App() {
 							children: [
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "只读展示" }),
 								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "无浏览器执行控件" }),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "静态 shell" })
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: viewState.phase === "loading" ? "读取中" : "GET API 绑定" })
 							]
 						})
 					]
@@ -10022,24 +10317,22 @@ function App() {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 				className: "content-band",
-				"aria-labelledby": "scope-title",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "section-heading",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "section-kicker",
-						children: "Task 4 边界"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-						id: "scope-title",
-						children: "当前只证明壳层成立"
-					})]
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "boundary-grid",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "已包含" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "React entry、Vite build config、静态 Workbench 外壳和后续 API contract 列表。" })] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "未包含" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "完整 Workbench UI、artifact preview、adoption inspect、真实 Stage overview 数据绑定。" })] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "安全提示" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "禁止能力只作为纯文本边界说明存在；页面没有按钮、链接、表单、菜单或浏览器动作入口。" })] })
-					]
-				})]
+				"aria-labelledby": "status-title",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "section-heading",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "section-kicker",
+							children: "Task 5 状态"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+							id: "status-title",
+							children: "只读 API 读取结果"
+						})]
+					}),
+					viewState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoadingState, {}) : null,
+					viewState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReadFailure, {}) : null,
+					model === null ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusCards, { model })
+				]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 				className: "content-band muted-band",
@@ -10048,18 +10341,15 @@ function App() {
 					className: "section-heading",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "section-kicker",
-						children: "后续只读 API"
+						children: "只读 routes"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
 						id: "contracts-title",
-						children: "等待绑定的 contract"
+						children: "已绑定的 API contract"
 					})]
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dl", {
-					className: "contract-list",
-					children: contractRoutes.map((route) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "contract-row",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: route.name }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: route.note })]
-					}, route.name))
-				})]
+				}), model === null ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "empty-copy",
+					children: "等待 API contract 暴露。"
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RouteList, { routes: model.routeStates })]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 				className: "content-band",
@@ -10068,18 +10358,15 @@ function App() {
 					className: "section-heading",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "section-kicker",
-						children: "静态占位"
+						children: "Projection"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
 						id: "placeholder-title",
-						children: "后续视图入口"
+						children: "contract binding 摘要"
 					})]
-				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "placeholder-grid",
-					children: placeholders.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
-						className: "placeholder-card",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: item.title }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: item.body })]
-					}, item.title))
-				})]
+				}), model === null ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "empty-copy",
+					children: "读取成功后展示 summary、readiness、runs 与 latest run 投影。"
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProjectionSummary, { model })]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 				className: "content-band muted-band",
@@ -10095,9 +10382,107 @@ function App() {
 					})]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 					className: "gap-list",
-					children: deferredGaps.map((gap) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: gap }, gap))
+					children: (model?.deferredGaps ?? []).map((gap) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+						gap.label,
+						"：",
+						gap.status
+					] }, gap.label))
 				})]
 			})
+		]
+	});
+}
+function LoadingState() {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-copy",
+		children: "正在读取只读 API contract。"
+	});
+}
+function ReadFailure() {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-copy",
+		children: "读取失败 / contract 未暴露 / 不可用。"
+	});
+}
+function StatusCards({ model }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "status-grid",
+		children: [
+			{
+				title: "Summary",
+				value: model.summary.overviewStatus.text,
+				detail: model.summary.headline.text
+			},
+			{
+				title: "Readiness",
+				value: model.readiness.status.text,
+				detail: `readOnly=${model.readiness.readOnly.text} / modelInvocation=${model.readiness.modelInvocation.text}`
+			},
+			{
+				title: "Latest Run",
+				value: model.latestRun.status.text,
+				detail: model.latestRun.state === "empty" ? "无运行记录" : `runId=${model.latestRun.runId.text} / verifier=${model.latestRun.verifierStatus.text}`
+			},
+			{
+				title: "Runs Count",
+				value: model.runs.summaryCount.text,
+				detail: `route count=${model.runs.count.text}`
+			}
+		].map((card) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+			className: "status-card",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: card.title }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "metric-value",
+					children: card.value
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: card.detail })
+			]
+		}, card.title))
+	});
+}
+function RouteList({ routes }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dl", {
+		className: "contract-list",
+		children: routes.map((route) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "contract-row",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("dt", { children: [
+				route.method,
+				" ",
+				route.path
+			] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("dd", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `state-pill ${route.state}`,
+					children: route.state === "ready" ? "已读取" : "不可用"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: route.contractName.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["version ", route.contractVersion.text] })
+			] })]
+		}, route.id))
+	});
+}
+function ProjectionSummary({ model }) {
+	const artifactKinds = model.artifactRefs.items.map((artifact) => artifact.kind.text).slice(0, 4).join("、");
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "projection-grid",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "只读能力" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: ["summary capabilities：", model.summary.capabilities.text] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: ["readiness capabilities：", model.readiness.capabilities.text] })
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "采纳状态" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: ["pending：", model.adoption.pendingCount.text] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: ["dirtyBlocked：", model.adoption.dirtyBlocked.text] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: ["Git dirty：", model.adoption.gitDirtyReadiness.text] })
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "产物引用" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: ["artifactRefs：", model.artifactRefs.label] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: artifactKinds || "未暴露" }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: ["preview 字段缺口：", model.artifactRefs.missingPreviewFields.join("、") || "无"] })
+			] })
 		]
 	});
 }

@@ -7,6 +7,8 @@ const frontendFiles = [
   'frontend/workbench/vite.config.js',
   'frontend/workbench/src/main.jsx',
   'frontend/workbench/src/App.jsx',
+  'frontend/workbench/src/api/client.js',
+  'frontend/workbench/src/api/contracts.js',
   'frontend/workbench/src/styles/workbench.css'
 ];
 
@@ -18,7 +20,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.equal(pkg.scripts['workbench:dev'], 'vite --host 127.0.0.1 --config frontend/workbench/vite.config.js');
   });
 
-  it('keeps the shell static without browser action controls or API calls', async () => {
+  it('keeps the shell without browser action controls or write API calls', async () => {
     const sources = await Promise.all(
       frontendFiles.map((file) => readFile(file, 'utf8'))
     );
@@ -26,8 +28,9 @@ describe('v15 Workbench React/Vite shell', () => {
 
     assert.doesNotMatch(source, /<button\b|<a\b|<form\b|<input\b|<select\b|<textarea\b/i);
     assert.doesNotMatch(source, /\bonClick\b|\bonSubmit\b|addEventListener\s*\(/);
-    assert.doesNotMatch(source, /\bfetch\s*\(|XMLHttpRequest|navigator\.clipboard/);
+    assert.doesNotMatch(source, /XMLHttpRequest|navigator\.clipboard/);
     assert.doesNotMatch(source, /\bmethod\s*:\s*['"`](POST|PUT|PATCH|DELETE)['"`]/i);
+    assert.doesNotMatch(source, /\bhandle(Execute|Retry|Apply|Adopt|Rollback|Delete|Install|Mutate|Audit)\b/);
   });
 
   it('builds to the approved static Workbench output directory', async () => {
