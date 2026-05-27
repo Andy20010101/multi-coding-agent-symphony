@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
-import { open, readFile, readdir, stat } from 'node:fs/promises';
-import { extname, resolve, sep } from 'node:path';
+import { lstat, open, readFile, realpath, stat } from 'node:fs/promises';
+import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { NodeProcessRunner } from '../process-runner.js';
@@ -29,19 +29,84 @@ import {
   loadGuidedGoalHandoffFixture
 } from './guided-goal-handoff-output.js';
 import {
+  SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME,
+  SAFE_ARTIFACT_PREVIEW_CONTRACT_VERSION,
+  assertSafeArtifactPreviewContract
+} from './safe-artifact-preview.js';
+import {
   buildStageCommandSummary
 } from './stage.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
 const MAX_ARTIFACT_PREVIEW_BYTES = 200 * 1024;
-const DIRECTORY_PREVIEW_ENTRY_LIMIT = 100;
 const DEFAULT_READINESS_TIMEOUT_MS = 3000;
 const WORKBENCH_STATIC_ROOT = fileURLToPath(new URL('./workbench-static/', import.meta.url));
 const WORKBENCH_ROUTE_PREFIX = '/workbench';
 const RUN_FILTERS = Object.freeze(['all', 'passed', 'failed', 'dry-run', 'real', 'scan', 'verify', 'adoption']);
 const COMMAND_GROUP_ORDER = Object.freeze(['Inspect', 'Adoptions', 'Verify', 'Artifacts', 'Real-agent gates']);
 const RISK_SEVERITY_RANK = Object.freeze({ high: 3, medium: 2, low: 1 });
+const SAFE_ARTIFACT_TRUNCATION_REASON = 'size-exceeds-max-preview-bytes';
+const BLOCKED_ARTIFACT_PREVIEW_STATUS = 'blocked-artifact-path';
+const BLOCKED_ARTIFACT_PREVIEW_MESSAGE = 'artifact path is outside the safe preview boundary';
+const BLOCKED_ARTIFACT_PREVIEW_BASENAMES = Object.freeze([
+  'package.json',
+  'package-lock.json',
+  'pnpm-lock.yaml',
+  'yarn.lock'
+]);
+const BLOCKED_ARTIFACT_PREVIEW_SEGMENTS = Object.freeze([
+  'docs',
+  'src'
+]);
+const SAFE_PREVIEW_TEXT_MIME_TYPES = Object.freeze([
+  'application/json',
+  'text/csv',
+  'text/markdown',
+  'text/plain',
+  'text/x-diff',
+  'text/x-patch'
+]);
+const SAFE_PREVIEW_ARTIFACT_KIND_BY_REGISTERED_KIND = Object.freeze({
+  context: 'project-context',
+  summary: 'intake-summary',
+  evidence: 'evidence',
+  harness: 'evidence',
+  'task-packet': 'evidence',
+  proof: 'evidence',
+  'scaffold-plan': 'patch-plan',
+  'scaffold-manifest': 'evidence',
+  'execution-plan': 'patch-plan',
+  'adoption-plan': 'patch-plan',
+  'adoption-patch': 'patch-plan',
+  'adoption-journal': 'evidence',
+  'workspace-manifest': 'evidence',
+  'stage-charter': 'patch-plan',
+  'stage-charter-html': 'evidence',
+  'stage-gate-event': 'evidence',
+  'charter-repair-plan': 'patch-plan',
+  'blocked-snapshot': 'evidence'
+});
+const ARTIFACT_DISPLAY_TITLES = Object.freeze({
+  context: 'Project context artifact',
+  summary: 'Intake summary artifact',
+  evidence: 'Evidence artifact',
+  harness: 'Harness output artifact',
+  'task-packet': 'Task packet artifact',
+  proof: 'Proof artifact',
+  'scaffold-plan': 'Scaffold plan artifact',
+  'scaffold-manifest': 'Scaffold manifest artifact',
+  'execution-plan': 'Execution plan artifact',
+  'adoption-plan': 'Adoption plan artifact',
+  'adoption-patch': 'Adoption patch artifact',
+  'adoption-journal': 'Adoption journal artifact',
+  'workspace-manifest': 'Workspace manifest artifact',
+  'stage-charter': 'Stage charter artifact',
+  'stage-charter-html': 'Stage charter HTML artifact',
+  'stage-gate-event': 'Stage gate event artifact',
+  'charter-repair-plan': 'Charter repair plan artifact',
+  'blocked-snapshot': 'Blocked snapshot artifact'
+});
 
 export async function buildConsoleSnapshot({
   stateDir = '.symphony',
@@ -56,11 +121,11 @@ export async function buildConsoleSnapshot({
     buildStageCommandSummary({ stateDir })
   ]);
 
-  const compactRuns = await decorateConsoleRuns(runs.map((run) => compactRunState(run)));
+  const compactRuns = await decorateConsoleRuns(runs.map((run) => compactRunState(run)), { stateDir });
   const compactLatestRun = latestRun === null
     ? null
     : compactRuns.find((run) => run.runId === latestRun.runId)
-      ?? await decorateConsoleRunWithDiagnostics(compactRunState(latestRun));
+      ?? await decorateConsoleRunWithDiagnostics(compactRunState(latestRun), { stateDir });
   const recommendedCommands = buildSnapshotRecommendedCommands({
     latestRun: compactLatestRun
   });
@@ -730,7 +795,8 @@ export function createSymphonyConsoleServer({
 
       if (url.pathname === '/api/runs') {
         const runs = await decorateConsoleRuns(
-          (await listRunStates({ stateDir })).map((run) => compactRunState(run))
+          (await listRunStates({ stateDir })).map((run) => compactRunState(run)),
+          { stateDir }
         );
         const filter = normalizeRunFilter(url.searchParams.get('filter'));
         writeJsonResponse(response, 200, {
@@ -759,14 +825,25 @@ export function createSymphonyConsoleServer({
         return;
       }
 
-      const artifactRequest = parseArtifactRequestPath(url.pathname);
+      const artifactRequest = parseArtifactRequestPath(url.pathname, url.searchParams);
 
       if (artifactRequest !== null) {
+        if (artifactRequest.kind === 'invalid') {
+          writeJsonResponse(response, 400, {
+            contractVersion: PRODUCT_JSON_CONTRACT.version,
+            contractName: 'symphony.console-artifact',
+            status: 'invalid-ref',
+            ref: artifactRequest.ref
+          });
+          return;
+        }
+
         await writeArtifactResponse({
           response,
           stateDir,
           runId: artifactRequest.runId,
-          artifactKind: artifactRequest.artifactKind
+          artifactKind: artifactRequest.artifactKind,
+          safePreview: artifactRequest.safePreview
         });
         return;
       }
@@ -845,7 +922,7 @@ async function writeRunResponse({ response, stateDir, runId }) {
   writeJsonResponse(response, 200, {
     contractVersion: PRODUCT_JSON_CONTRACT.version,
     contractName: 'symphony.console-run',
-    run: await decorateConsoleRunWithDiagnostics(compactRunState(runState)),
+    run: await decorateConsoleRunWithDiagnostics(compactRunState(runState), { stateDir }),
     rawRunState: runState
   });
 }
@@ -861,7 +938,7 @@ async function writeTimelineResponse({ response, stateDir, runId }) {
     return;
   }
 
-  const run = await decorateConsoleRunWithDiagnostics(compactRunState(runState));
+  const run = await decorateConsoleRunWithDiagnostics(compactRunState(runState), { stateDir });
 
   writeJsonResponse(response, 200, {
     contractVersion: PRODUCT_JSON_CONTRACT.version,
@@ -872,7 +949,7 @@ async function writeTimelineResponse({ response, stateDir, runId }) {
   });
 }
 
-async function writeArtifactResponse({ response, stateDir, runId, artifactKind }) {
+async function writeArtifactResponse({ response, stateDir, runId, artifactKind, safePreview = false }) {
   const runState = await readRunState({ stateDir, runId });
 
   if (runState === null) {
@@ -897,34 +974,31 @@ async function writeArtifactResponse({ response, stateDir, runId, artifactKind }
     return;
   }
 
-  let artifact;
+  const preview = await previewArtifact({
+    runId: compact.runId,
+    artifactRef,
+    stateDir
+  });
+  const statusCode = preview.status === 'missing-artifact'
+    ? 404
+    : preview.status === BLOCKED_ARTIFACT_PREVIEW_STATUS
+      ? 403
+      : 200;
 
-  try {
-    artifact = await previewArtifact(artifactRef);
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      writeJsonResponse(response, 404, {
-        contractVersion: PRODUCT_JSON_CONTRACT.version,
-        contractName: 'symphony.console-artifact',
-        status: 'missing-artifact',
-        runId: compact.runId,
-        artifact: {
-          ...artifactRef,
-          type: 'missing',
-          message: 'artifact file is missing'
-        }
-      });
-      return;
-    }
-
-    throw error;
+  if (safePreview) {
+    writeJsonResponse(response, statusCode, preview);
+    return;
   }
 
-  writeJsonResponse(response, 200, {
+  writeJsonResponse(response, statusCode, {
     contractVersion: PRODUCT_JSON_CONTRACT.version,
     contractName: 'symphony.console-artifact',
     runId: compact.runId,
-    artifact
+    ...(preview.status ? { status: preview.status } : {}),
+    artifact: buildLegacyConsoleArtifactPreview({
+      artifactRef,
+      preview
+    })
   });
 }
 
@@ -980,78 +1054,371 @@ async function writeHandoffResponse({ response, request }) {
   writeJsonResponse(response, 200, buildGuidedGoalHandoffJson(handoff));
 }
 
-async function previewArtifact(artifactRef) {
-  const metadata = await stat(artifactRef.path);
+async function previewArtifact({ runId, artifactRef, stateDir }) {
+  let metadata;
 
-  if (metadata.isDirectory()) {
-    const entries = await readdir(artifactRef.path, { withFileTypes: true });
-
-    return {
-      ...artifactRef,
-      type: 'directory',
-      entries: entries.slice(0, DIRECTORY_PREVIEW_ENTRY_LIMIT).map((entry) => ({
-        name: entry.name,
-        type: entry.isDirectory() ? 'directory' : 'file'
-      })),
-      entryCount: entries.length,
-      limit: DIRECTORY_PREVIEW_ENTRY_LIMIT,
-      truncated: entries.length > DIRECTORY_PREVIEW_ENTRY_LIMIT
-    };
+  if (await isBlockedArtifactPreviewTarget(artifactRef.path, { stateDir })) {
+    return assertSafeArtifactPreviewContract({
+      ...safeArtifactPreviewBase({ runId, artifactRef }),
+      mime: detectArtifactMime(artifactRef.path),
+      sizeBytes: 0,
+      previewAvailable: false,
+      safeToRenderInline: false,
+      truncated: false,
+      truncationReason: null,
+      status: BLOCKED_ARTIFACT_PREVIEW_STATUS,
+      message: BLOCKED_ARTIFACT_PREVIEW_MESSAGE
+    });
   }
 
-  const size = metadata.size;
+  try {
+    metadata = await stat(artifactRef.path);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return assertSafeArtifactPreviewContract({
+        ...safeArtifactPreviewBase({ runId, artifactRef }),
+        mime: detectArtifactMime(artifactRef.path),
+        sizeBytes: 0,
+        previewAvailable: false,
+        safeToRenderInline: false,
+        truncated: false,
+        truncationReason: null,
+        status: 'missing-artifact',
+        message: 'artifact file is missing'
+      });
+    }
+
+    throw error;
+  }
+
+  const mime = metadata.isDirectory() ? 'application/x-directory' : detectArtifactMime(artifactRef.path);
+  const safeToRenderInline = !metadata.isDirectory()
+    && metadata.isFile()
+    && metadata.size > 0
+    && isSafePreviewTextMime(mime);
+  const truncated = metadata.size > MAX_ARTIFACT_PREVIEW_BYTES;
+  const base = {
+    ...safeArtifactPreviewBase({ runId, artifactRef }),
+    mime,
+    sizeBytes: metadata.size,
+    previewAvailable: safeToRenderInline,
+    safeToRenderInline,
+    truncated,
+    truncationReason: truncated ? SAFE_ARTIFACT_TRUNCATION_REASON : null
+  };
+
+  if (!safeToRenderInline) {
+    return assertSafeArtifactPreviewContract(base);
+  }
+
+  const contentText = await readBoundedArtifactText(artifactRef.path, metadata.size);
+
+  return assertSafeArtifactPreviewContract({
+    ...base,
+    contentText
+  });
+}
+
+async function readBoundedArtifactText(path, size) {
   const length = Math.min(size, MAX_ARTIFACT_PREVIEW_BYTES);
-  const handle = await open(artifactRef.path, 'r');
+  const handle = await open(path, 'r');
 
   try {
     const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, 0);
-    const content = buffer.toString('utf8');
-    const truncated = size > MAX_ARTIFACT_PREVIEW_BYTES;
-    const jsonPreview = parseJsonPreviewWithError(content);
-    const json = jsonPreview.value;
-    const looksJson = isJsonArtifact({ artifactRef, content });
-    const malformedJson = !truncated && json === null && looksJson;
-    const truncatedJson = truncated && json === null && looksJson;
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
 
-    return {
-      ...artifactRef,
-      type: 'file',
-      size,
-      truncated,
-      previewLimitBytes: MAX_ARTIFACT_PREVIEW_BYTES,
-      format: malformedJson ? 'malformed-json' : truncatedJson ? 'truncated-json' : json === null ? 'text' : 'json',
-      content,
-      ...(malformedJson ? { parseError: jsonPreview.error ?? 'invalid JSON artifact preview' } : {}),
-      ...(truncated ? { message: `preview truncated to ${MAX_ARTIFACT_PREVIEW_BYTES} bytes` } : {}),
-      ...(json === null ? {} : { json })
-    };
+    return buffer.toString('utf8', 0, bytesRead);
   } finally {
     await handle.close();
   }
+}
+
+function buildLegacyConsoleArtifactPreview({ artifactRef, preview }) {
+  const content = preview.contentText ?? preview.previewText;
+  const type = preview.status === 'missing-artifact'
+    ? 'missing'
+    : preview.mime === 'application/x-directory'
+      ? 'directory'
+      : 'file';
+  const legacyContentPreview = buildLegacyContentPreview({
+    preview,
+    content
+  });
+
+  return stripUndefined({
+    ...artifactRef,
+    type,
+    status: preview.status,
+    message: preview.message,
+    ref: preview.ref,
+    uri: preview.uri,
+    mime: preview.mime,
+    title: preview.displayTitle,
+    displayTitle: preview.displayTitle,
+    artifactKind: preview.artifactKind,
+    sourceRunId: preview.sourceRunId,
+    size: type === 'file' ? preview.sizeBytes : undefined,
+    sizeBytes: preview.sizeBytes,
+    previewAvailable: preview.previewAvailable,
+    safeToRenderInline: preview.safeToRenderInline,
+    truncated: preview.truncated,
+    truncationReason: preview.truncationReason,
+    previewLimitBytes: type === 'file' ? preview.maxPreviewBytes : undefined,
+    maxPreviewBytes: preview.maxPreviewBytes,
+    downloadAvailable: preview.downloadAvailable,
+    ...legacyContentPreview,
+    safePreview: preview
+  });
+}
+
+function buildLegacyContentPreview({ preview, content }) {
+  if (!preview.safeToRenderInline || content === undefined) {
+    return {
+      format: 'not-previewable'
+    };
+  }
+
+  const jsonPreview = parseJsonPreviewWithError(content);
+  const json = jsonPreview.value;
+  const looksJson = isJsonPreviewContent({ preview, content });
+  const malformedJson = !preview.truncated && json === null && looksJson;
+  const truncatedJson = preview.truncated && json === null && looksJson;
+
+  return stripUndefined({
+    format: malformedJson ? 'malformed-json' : truncatedJson ? 'truncated-json' : json === null ? 'text' : 'json',
+    content,
+    ...(malformedJson ? { parseError: jsonPreview.error ?? 'invalid JSON artifact preview' } : {}),
+    ...(preview.truncated ? { message: `preview truncated to ${preview.maxPreviewBytes} bytes` } : {}),
+    ...(json === null ? {} : { json })
+  });
+}
+
+function isJsonPreviewContent({ preview, content }) {
+  const mediaType = String(preview.mime).split(';')[0].trim().toLowerCase();
+  const trimmed = content.trimStart();
+
+  return mediaType === 'application/json' || trimmed.startsWith('{') || trimmed.startsWith('[');
+}
+
+function safeArtifactPreviewBase({ runId, artifactRef }) {
+  return {
+    contractName: SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME,
+    contractVersion: SAFE_ARTIFACT_PREVIEW_CONTRACT_VERSION,
+    ref: buildSafeArtifactRef({ runId, artifactKind: artifactRef.kind }),
+    uri: buildSafeArtifactPreviewUri({ runId, artifactKind: artifactRef.kind }),
+    displayTitle: ARTIFACT_DISPLAY_TITLES[artifactRef.kind] ?? `${artifactRef.kind} artifact`,
+    artifactKind: SAFE_PREVIEW_ARTIFACT_KIND_BY_REGISTERED_KIND[artifactRef.kind] ?? 'evidence',
+    sourceRunId: runId,
+    maxPreviewBytes: MAX_ARTIFACT_PREVIEW_BYTES,
+    downloadAvailable: false,
+    registeredKind: artifactRef.kind
+  };
+}
+
+function buildSafeArtifactRef({ runId, artifactKind }) {
+  return `artifact:${safeOpaqueRefToken(runId)}:${safeOpaqueRefToken(artifactKind)}`;
+}
+
+function safeOpaqueRefToken(value) {
+  const token = String(value ?? 'unknown');
+
+  if (/^[A-Za-z0-9._:-]+$/u.test(token) && !token.includes('..') && !token.includes('\\') && !token.includes('/')) {
+    return token;
+  }
+
+  return `b64.${Buffer.from(token, 'utf8').toString('base64url')}`;
+}
+
+function buildSafeArtifactPreviewUri({ runId, artifactKind }) {
+  return `/api/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactKind)}/preview`;
+}
+
+function detectArtifactMime(path) {
+  switch (extname(path).toLowerCase()) {
+    case '.json':
+      return 'application/json';
+    case '.txt':
+    case '.log':
+      return 'text/plain; charset=utf-8';
+    case '.md':
+    case '.markdown':
+      return 'text/markdown; charset=utf-8';
+    case '.csv':
+      return 'text/csv; charset=utf-8';
+    case '.diff':
+      return 'text/x-diff; charset=utf-8';
+    case '.patch':
+      return 'text/x-patch; charset=utf-8';
+    case '.html':
+    case '.htm':
+      return 'text/html; charset=utf-8';
+    case '.js':
+    case '.mjs':
+    case '.cjs':
+      return 'application/javascript';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.gif':
+      return 'image/gif';
+    case '.pdf':
+      return 'application/pdf';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
+function isSafePreviewTextMime(mime) {
+  const mediaType = String(mime).split(';')[0].trim().toLowerCase();
+
+  return SAFE_PREVIEW_TEXT_MIME_TYPES.includes(mediaType);
+}
+
+async function isBlockedArtifactPreviewTarget(path, { stateDir }) {
+  if (
+    isBlockedArtifactPreviewPath(path) ||
+    !isAllowedArtifactPreviewPath(path, { stateDir })
+  ) {
+    return true;
+  }
+
+  let metadata;
+
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+
+  if (metadata.isSymbolicLink()) {
+    return true;
+  }
+
+  if (metadata.isFile() && metadata.nlink > 1) {
+    return true;
+  }
+
+  const resolvedPath = await realpath(path);
+
+  return isBlockedArtifactPreviewPath(resolvedPath) ||
+    !isPathInsideArtifactPreviewRoots(resolvedPath, await allowedArtifactPreviewRealRoots({ stateDir }));
+}
+
+function isAllowedArtifactPreviewPath(path, { stateDir }) {
+  return isPathInsideArtifactPreviewRoots(resolve(path), allowedArtifactPreviewRoots({ stateDir }));
+}
+
+function isPathInsideArtifactPreviewRoots(path, roots) {
+  return roots.some((root) => path === root || path.startsWith(`${root}${sep}`));
+}
+
+function allowedArtifactPreviewRoots({ stateDir }) {
+  const stateRoot = resolve(stateDir);
+  const stateParent = dirname(stateRoot);
+
+  return [
+    stateRoot,
+    resolve(stateParent, 'artifacts')
+  ];
+}
+
+async function allowedArtifactPreviewRealRoots({ stateDir }) {
+  return await Promise.all(allowedArtifactPreviewRoots({ stateDir }).map(async (root) => {
+    try {
+      return await realpath(root);
+    } catch (error) {
+      if (isMissingFileError(error)) {
+        return root;
+      }
+
+      throw error;
+    }
+  }));
+}
+
+function isBlockedArtifactPreviewPath(path) {
+  const parts = String(path ?? '')
+    .replaceAll('\\', '/')
+    .split('/')
+    .filter((part) => part !== '')
+    .map((part) => part.toLowerCase());
+  const basename = parts.at(-1) ?? '';
+
+  return BLOCKED_ARTIFACT_PREVIEW_BASENAMES.includes(basename) ||
+    parts.some((part) => BLOCKED_ARTIFACT_PREVIEW_SEGMENTS.includes(part));
 }
 
 function isMissingFileError(error) {
   return error?.code === 'ENOENT' || error?.code === 'ENOTDIR';
 }
 
-function isJsonArtifact({ artifactRef, content }) {
-  const trimmed = content.trimStart();
+function parseArtifactRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const previewMatch = /^\/api\/runs\/([^/]+)\/artifacts\/([^/]+)\/preview$/u.exec(pathname);
 
-  return artifactRef.path.endsWith('.json') || trimmed.startsWith('{') || trimmed.startsWith('[');
-}
+  if (previewMatch !== null) {
+    return parseArtifactRequestMatch({
+      match: previewMatch,
+      safePreview: true,
+      searchParams,
+      ref: pathname
+    });
+  }
 
-function parseArtifactRequestPath(pathname) {
   const match = /^\/api\/runs\/([^/]+)\/artifacts\/([^/]+)$/u.exec(pathname);
 
   if (match === null) {
     return null;
   }
 
+  return parseArtifactRequestMatch({
+    match,
+    safePreview: false,
+    searchParams,
+    ref: pathname
+  });
+}
+
+function parseArtifactRequestMatch({ match, safePreview, searchParams, ref }) {
+  if (hasSearchParams(searchParams)) {
+    return {
+      kind: 'invalid',
+      ref
+    };
+  }
+
+  const decodedRunId = safeDecodePathSegment(match[1]);
+  const decodedArtifactKind = safeDecodePathSegment(match[2]);
+
+  if (
+    decodedRunId.ok === false ||
+    decodedArtifactKind.ok === false ||
+    isUnsafeArtifactRouteSegment(decodedRunId.value) ||
+    isUnsafeArtifactRouteSegment(decodedArtifactKind.value)
+  ) {
+    return {
+      kind: 'invalid',
+      ref
+    };
+  }
+
   return {
-    runId: decodeURIComponent(match[1]),
-    artifactKind: decodeURIComponent(match[2])
+    kind: 'artifact',
+    runId: decodedRunId.value,
+    artifactKind: decodedArtifactKind.value,
+    safePreview
   };
+}
+
+function isUnsafeArtifactRouteSegment(value) {
+  return value === '' || value.includes('/') || value.includes('\\') || value.includes('..');
 }
 
 function parseHandoffRequestPath(pathname, searchParams = new URLSearchParams()) {
@@ -1642,25 +2009,27 @@ function decorateConsoleRun(run) {
   });
 }
 
-async function decorateConsoleRuns(runs) {
+async function decorateConsoleRuns(runs, { stateDir = '.symphony' } = {}) {
   return await Promise.all(
     runs
       .filter((run) => run !== null)
-      .map((run) => decorateConsoleRunWithDiagnostics(run))
+      .map((run) => decorateConsoleRunWithDiagnostics(run, { stateDir }))
   );
 }
 
-async function decorateConsoleRunWithDiagnostics(run) {
+async function decorateConsoleRunWithDiagnostics(run, { stateDir = '.symphony' } = {}) {
   if (run === null) {
     return null;
   }
 
   const decorated = decorateConsoleRun(run);
   const artifactStatus = await buildArtifactStatus(decorated);
-  const riskSummary = buildRunRiskSummary([{ ...decorated, artifactStatus }]);
+  const artifactRefs = await buildSafeArtifactPreviewRefs(decorated, { stateDir });
+  const riskSummary = buildRunRiskSummary([{ ...decorated, artifactRefs, artifactStatus }]);
 
   return stripUndefined({
     ...decorated,
+    artifactRefs,
     artifactStatus,
     riskSummary
   });
@@ -1725,6 +2094,83 @@ async function buildArtifactStatus(run) {
     missingKinds: missingRefs.map((artifact) => artifact.kind),
     missingRefs
   });
+}
+
+async function buildSafeArtifactPreviewRefs(run, { stateDir = '.symphony' } = {}) {
+  const artifactRefs = Array.isArray(run.artifactRefs) ? run.artifactRefs : [];
+
+  return await Promise.all(artifactRefs.map(async (artifactRef) => {
+    const descriptor = await buildSafeArtifactPreviewDescriptor({
+      runId: run.runId,
+      artifactRef,
+      stateDir
+    });
+
+    return stripUndefined({
+      ...artifactRef,
+      ...descriptor
+    });
+  }));
+}
+
+async function buildSafeArtifactPreviewDescriptor({ runId, artifactRef, stateDir }) {
+  let metadata;
+
+  if (await isBlockedArtifactPreviewTarget(artifactRef.path, { stateDir })) {
+    return {
+      ...safeArtifactPreviewBase({ runId, artifactRef }),
+      mime: detectArtifactMime(artifactRef.path),
+      sizeBytes: 0,
+      previewAvailable: false,
+      safeToRenderInline: false,
+      truncated: false,
+      truncationReason: null,
+      previewStatus: BLOCKED_ARTIFACT_PREVIEW_STATUS,
+      previewMessage: BLOCKED_ARTIFACT_PREVIEW_MESSAGE
+    };
+  }
+
+  try {
+    metadata = await stat(artifactRef.path);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return {
+        ...safeArtifactPreviewBase({ runId, artifactRef }),
+        mime: detectArtifactMime(artifactRef.path),
+        sizeBytes: 0,
+        previewAvailable: false,
+        safeToRenderInline: false,
+        truncated: false,
+        truncationReason: null
+      };
+    }
+
+    return {
+      ...safeArtifactPreviewBase({ runId, artifactRef }),
+      mime: detectArtifactMime(artifactRef.path),
+      sizeBytes: 0,
+      previewAvailable: false,
+      safeToRenderInline: false,
+      truncated: false,
+      truncationReason: null,
+      previewStatus: 'unknown',
+      previewMessage: error.message
+    };
+  }
+
+  const mime = metadata.isDirectory() ? 'application/x-directory' : detectArtifactMime(artifactRef.path);
+  const previewAvailable = metadata.isFile() && metadata.size > 0 && isSafePreviewTextMime(mime);
+  const truncated = metadata.size > MAX_ARTIFACT_PREVIEW_BYTES;
+
+  return {
+    ...safeArtifactPreviewBase({ runId, artifactRef }),
+    mime,
+    sizeBytes: metadata.size,
+    previewAvailable,
+    safeToRenderInline: previewAvailable,
+    truncated,
+    truncationReason: truncated ? SAFE_ARTIFACT_TRUNCATION_REASON : null
+  };
 }
 
 function buildRunStats(runs) {

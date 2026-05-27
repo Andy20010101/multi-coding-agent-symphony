@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
@@ -24,6 +24,10 @@ import {
   defaultStageCharter,
   renderStageCharterHtml
 } from '../src/symphony/stage.js';
+import {
+  SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME,
+  validateSafeArtifactPreviewContract
+} from '../src/symphony/safe-artifact-preview.js';
 
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
@@ -2762,16 +2766,19 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(timeline.runId, snapshot.latestRun.runId);
       assert.equal(timeline.timeline.some((event) => event.id === 'safety'), true);
       assert.equal(timeline.recommendedCommands.every((command) => command.mode === 'copy-only'), true);
-      assert.equal(contextPreviewResponse.status, 200);
+      assert.equal(contextPreviewResponse.status, 403);
 
       const contextPreview = await contextPreviewResponse.json();
 
       assert.equal(contextPreview.contractName, 'symphony.console-artifact');
+      assert.equal(contextPreview.status, 'blocked-artifact-path');
       assert.equal(contextPreview.artifact.kind, 'context');
       assert.equal(contextPreview.artifact.type, 'file');
-      assert.equal(contextPreview.artifact.format, 'json');
+      assert.equal(contextPreview.artifact.format, 'not-previewable');
+      assert.equal(contextPreview.artifact.previewAvailable, false);
+      assert.equal(contextPreview.artifact.safeToRenderInline, false);
       assert.equal(contextPreview.artifact.truncated, false);
-      assert.equal(contextPreview.artifact.json.kind, 'project-context');
+      assert.equal(Object.hasOwn(contextPreview.artifact, 'content'), false);
       assert.equal(writeResponse.status, 405);
       assert.match((await writeResponse.json()).message, /read-only/u);
     } finally {
@@ -3263,10 +3270,10 @@ describe('v8 prompt-driven symphony CLI', () => {
       const directoryPreview = await directoryResponse.json();
 
       assert.equal(directoryPreview.artifact.type, 'directory');
-      assert.equal(directoryPreview.artifact.entries.length, 100);
-      assert.equal(directoryPreview.artifact.entryCount, 105);
-      assert.equal(directoryPreview.artifact.limit, 100);
-      assert.equal(directoryPreview.artifact.truncated, true);
+      assert.equal(directoryPreview.artifact.previewAvailable, false);
+      assert.equal(directoryPreview.artifact.safeToRenderInline, false);
+      assert.equal(directoryPreview.artifact.format, 'not-previewable');
+      assert.equal(Object.hasOwn(directoryPreview.artifact, 'entries'), false);
       assert.equal(largeResponse.status, 200);
 
       const largePreview = await largeResponse.json();
@@ -3275,8 +3282,190 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(largePreview.artifact.previewLimitBytes, 200 * 1024);
       assert.equal(largePreview.artifact.message, `preview truncated to ${200 * 1024} bytes`);
       assert.equal(largePreview.artifact.content.length, 200 * 1024);
-      assert.equal(unregisteredResponse.status, 404);
-      assert.equal((await unregisteredResponse.json()).status, 'missing');
+      assert.equal(unregisteredResponse.status, 400);
+      assert.equal((await unregisteredResponse.json()).status, 'invalid-ref');
+    } finally {
+      if (server !== undefined) {
+        await closeServer(server);
+      }
+
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('serves v16 safe artifact preview contracts for registered artifacts only', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v16-safe-preview-route-'));
+    let server;
+
+    try {
+      const stateDir = join(root, '.symphony');
+      const runsDir = join(stateDir, 'runs');
+      const artifactDir = join(root, 'artifacts');
+      const runId = 'v16-safe-preview-run';
+      const summaryArtifactPath = join(artifactDir, 'summary.json');
+      const htmlArtifactPath = join(artifactDir, 'unsafe.html');
+      const binaryArtifactPath = join(artifactDir, 'proof.bin');
+      const largeArtifactPath = join(artifactDir, 'large.txt');
+      const blockedPackagePath = join(process.cwd(), 'package.json');
+      const blockedReadmePath = join(process.cwd(), 'README.md');
+      const blockedOutsidePath = join(root, 'outside-local.json');
+      const symlinkToBlockedPackagePath = join(artifactDir, 'linked-summary.json');
+      const hardlinkToBlockedOutsidePath = join(artifactDir, 'hardlink-summary.json');
+      const now = '2026-05-27T00:00:00.000Z';
+      const runState = {
+        version: '1',
+        kind: 'symphony-run-state',
+        contractVersion: '1',
+        contractName: 'symphony.run-state',
+        runId,
+        command: 'symphony verify',
+        intent: 'verify',
+        semanticCommand: 'verify',
+        pipeline: ['verify'],
+        safetyMode: 'read-only',
+        executionMode: 'dry-run',
+        projectWrites: false,
+        runtimeWrites: true,
+        externalCalls: false,
+        destructiveWrites: false,
+        modelInvocation: false,
+        verifierStatus: 'passed',
+        status: 'passed',
+        contextArtifactPath: blockedPackagePath,
+        summaryArtifactPath,
+        harnessOutputPath: htmlArtifactPath,
+        proofArtifactPath: binaryArtifactPath,
+        evidenceArtifactPath: largeArtifactPath,
+        scaffoldPlanArtifactPath: symlinkToBlockedPackagePath,
+        adoptionPlanArtifactPath: hardlinkToBlockedOutsidePath,
+        adoptionJournalArtifactPath: blockedReadmePath,
+        createdAt: now,
+        updatedAt: now,
+        nextAction: 'symphony status'
+      };
+
+      await mkdir(runsDir, { recursive: true });
+      await mkdir(artifactDir, { recursive: true });
+      await writeFile(summaryArtifactPath, '{"ok":true}\n', 'utf8');
+      await writeFile(htmlArtifactPath, '<script>alert("unsafe")</script>\n', 'utf8');
+      await writeFile(binaryArtifactPath, Buffer.from([0, 1, 2, 3, 255]));
+      await writeFile(largeArtifactPath, Buffer.alloc((200 * 1024) + 9, 'b'));
+      await writeFile(blockedOutsidePath, '{"outsideLocalSecret":true}\n', 'utf8');
+      await symlink(blockedPackagePath, symlinkToBlockedPackagePath);
+      await link(blockedOutsidePath, hardlinkToBlockedOutsidePath);
+      await writeFile(join(runsDir, `${runId}.json`), JSON.stringify(runState, null, 2), 'utf8');
+      await writeFile(join(runsDir, 'latest.json'), JSON.stringify(runState, null, 2), 'utf8');
+
+      server = createSymphonyConsoleServer({ stateDir });
+      const baseUrl = await listenOnRandomPort(server);
+      const summaryPreview = await (await fetch(`${baseUrl}/api/runs/${runId}/artifacts/summary/preview`)).json();
+
+      assertValidSafePreview(summaryPreview);
+      assert.equal(summaryPreview.contractName, SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME);
+      assert.equal(summaryPreview.sourceRunId, runId);
+      assert.equal(summaryPreview.mime, 'application/json');
+      assert.equal(summaryPreview.previewAvailable, true);
+      assert.equal(summaryPreview.safeToRenderInline, true);
+      assert.equal(summaryPreview.contentText, '{"ok":true}\n');
+      assert.equal(summaryPreview.downloadAvailable, false);
+      assert.equal(Object.hasOwn(summaryPreview, 'path'), false);
+
+      const htmlResponse = await fetch(`${baseUrl}/api/runs/${runId}/artifacts/harness/preview`);
+      const htmlBody = await htmlResponse.text();
+      const htmlPreview = JSON.parse(htmlBody);
+
+      assert.equal(htmlResponse.status, 200);
+      assertValidSafePreview(htmlPreview);
+      assert.equal(htmlPreview.mime, 'text/html; charset=utf-8');
+      assert.equal(htmlPreview.previewAvailable, false);
+      assert.equal(htmlPreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(htmlPreview, 'contentText'), false);
+      assert.doesNotMatch(htmlBody, /<script|alert/u);
+
+      const binaryPreview = await (await fetch(`${baseUrl}/api/runs/${runId}/artifacts/proof/preview`)).json();
+
+      assertValidSafePreview(binaryPreview);
+      assert.equal(binaryPreview.mime, 'application/octet-stream');
+      assert.equal(binaryPreview.previewAvailable, false);
+      assert.equal(binaryPreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(binaryPreview, 'contentText'), false);
+
+      const largePreview = await (await fetch(`${baseUrl}/api/runs/${runId}/artifacts/evidence/preview`)).json();
+
+      assertValidSafePreview(largePreview);
+      assert.equal(largePreview.previewAvailable, true);
+      assert.equal(largePreview.safeToRenderInline, true);
+      assert.equal(largePreview.truncated, true);
+      assert.equal(largePreview.truncationReason, 'size-exceeds-max-preview-bytes');
+      assert.equal(largePreview.contentText.length, 200 * 1024);
+
+      const blockedPackageResponse = await fetch(`${baseUrl}/api/runs/${runId}/artifacts/context/preview`);
+      const blockedPackageBody = await blockedPackageResponse.text();
+      const blockedPackagePreview = JSON.parse(blockedPackageBody);
+
+      assert.equal(blockedPackageResponse.status, 403);
+      assertValidSafePreview(blockedPackagePreview);
+      assert.equal(blockedPackagePreview.status, 'blocked-artifact-path');
+      assert.equal(blockedPackagePreview.previewAvailable, false);
+      assert.equal(blockedPackagePreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(blockedPackagePreview, 'contentText'), false);
+      assert.doesNotMatch(blockedPackageBody, /multi-coding-agent-symphony|lockfileVersion/u);
+
+      const blockedSymlinkResponse = await fetch(`${baseUrl}/api/runs/${runId}/artifacts/scaffold-plan/preview`);
+      const blockedSymlinkBody = await blockedSymlinkResponse.text();
+      const blockedSymlinkPreview = JSON.parse(blockedSymlinkBody);
+
+      assert.equal(blockedSymlinkResponse.status, 403);
+      assertValidSafePreview(blockedSymlinkPreview);
+      assert.equal(blockedSymlinkPreview.status, 'blocked-artifact-path');
+      assert.equal(blockedSymlinkPreview.previewAvailable, false);
+      assert.equal(blockedSymlinkPreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(blockedSymlinkPreview, 'contentText'), false);
+      assert.doesNotMatch(blockedSymlinkBody, /multi-coding-agent-symphony|lockfileVersion/u);
+
+      const blockedHardlinkResponse = await fetch(`${baseUrl}/api/runs/${runId}/artifacts/adoption-plan/preview`);
+      const blockedHardlinkBody = await blockedHardlinkResponse.text();
+      const blockedHardlinkPreview = JSON.parse(blockedHardlinkBody);
+
+      assert.equal(blockedHardlinkResponse.status, 403);
+      assertValidSafePreview(blockedHardlinkPreview);
+      assert.equal(blockedHardlinkPreview.status, 'blocked-artifact-path');
+      assert.equal(blockedHardlinkPreview.previewAvailable, false);
+      assert.equal(blockedHardlinkPreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(blockedHardlinkPreview, 'contentText'), false);
+      assert.doesNotMatch(blockedHardlinkBody, /outsideLocalSecret/u);
+
+      const blockedReadmeResponse = await fetch(`${baseUrl}/api/runs/${runId}/artifacts/adoption-journal/preview`);
+      const blockedReadmeBody = await blockedReadmeResponse.text();
+      const blockedReadmePreview = JSON.parse(blockedReadmeBody);
+
+      assert.equal(blockedReadmeResponse.status, 403);
+      assertValidSafePreview(blockedReadmePreview);
+      assert.equal(blockedReadmePreview.status, 'blocked-artifact-path');
+      assert.equal(blockedReadmePreview.previewAvailable, false);
+      assert.equal(blockedReadmePreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(blockedReadmePreview, 'contentText'), false);
+      assert.doesNotMatch(blockedReadmeBody, /#|multi-coding-agent-symphony|Symphony/u);
+
+      const postResponse = await fetch(`${baseUrl}/api/runs/${runId}/artifacts/summary/preview`, { method: 'POST' });
+
+      assert.equal(postResponse.status, 405);
+
+      const probes = [
+        [`/api/runs/${runId}/artifacts/summary/preview?path=${encodeURIComponent('package.json')}`, 400],
+        [`/api/runs/${runId}/artifacts/%2e%2e%2fpackage.json/preview`, 400],
+        [`/api/runs/%2e%2e%2fpackage.json/artifacts/summary/preview`, 400],
+        [`/api/runs/${runId}/artifacts/package.json/preview`, 404],
+        [`/api/runs/${runId}/artifacts/task-packet/preview`, 404]
+      ];
+
+      for (const [path, status] of probes) {
+        const response = await fetch(`${baseUrl}${path}`);
+        const body = await response.text();
+
+        assert.equal(response.status, status, path);
+        assert.doesNotMatch(body, /multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer/u, path);
+      }
     } finally {
       if (server !== undefined) {
         await closeServer(server);
@@ -3928,15 +4117,29 @@ describe('v8 prompt-driven symphony CLI', () => {
           runId: V15_CONSOLE_CONTRACT_RUN_ID,
           artifact: {
             keys: [
+              'artifactKind',
               'content',
+              'displayTitle',
+              'downloadAvailable',
               'format',
               'json',
               'kind',
+              'maxPreviewBytes',
+              'mime',
               'path',
+              'previewAvailable',
               'previewLimitBytes',
+              'ref',
+              'safePreview',
+              'safeToRenderInline',
               'size',
+              'sizeBytes',
+              'sourceRunId',
+              'title',
               'truncated',
-              'type'
+              'truncationReason',
+              'type',
+              'uri'
             ],
             kind: 'summary',
             path: '<ROOT>/artifacts/summary.json',
@@ -3951,7 +4154,7 @@ describe('v8 prompt-driven symphony CLI', () => {
               runId: V15_CONSOLE_CONTRACT_RUN_ID,
               stable: true
             },
-            contractGapFieldsPresent: []
+            contractGapFieldsPresent: artifactContractGapFields()
           }
         });
         assert.deepEqual(artifactPreviewContractProjection(directoryPreview, normalize), {
@@ -3962,25 +4165,32 @@ describe('v8 prompt-driven symphony CLI', () => {
           runId: V15_CONSOLE_CONTRACT_RUN_ID,
           artifact: {
             keys: [
-              'entries',
-              'entryCount',
+              'artifactKind',
+              'displayTitle',
+              'downloadAvailable',
+              'format',
               'kind',
-              'limit',
+              'maxPreviewBytes',
+              'mime',
               'path',
+              'previewAvailable',
+              'ref',
+              'safePreview',
+              'safeToRenderInline',
+              'sizeBytes',
+              'sourceRunId',
+              'title',
               'truncated',
-              'type'
+              'truncationReason',
+              'type',
+              'uri'
             ],
             kind: 'evidence',
             path: '<ROOT>/artifacts/evidence-dir',
             type: 'directory',
-            entries: [
-              ['alpha.txt', 'file'],
-              ['nested', 'directory']
-            ],
-            entryCount: 2,
-            limit: 100,
+            format: 'not-previewable',
             truncated: false,
-            contractGapFieldsPresent: []
+            contractGapFieldsPresent: artifactContractGapFields()
           }
         });
         assert.equal(missingPreviewResponse.status, 404);
@@ -3998,12 +4208,36 @@ describe('v8 prompt-driven symphony CLI', () => {
           runId: V15_CONSOLE_CONTRACT_RUN_ID,
           status: 'missing-artifact',
           artifact: {
-            keys: ['kind', 'message', 'path', 'type'],
+            keys: [
+              'artifactKind',
+              'displayTitle',
+              'downloadAvailable',
+              'format',
+              'kind',
+              'maxPreviewBytes',
+              'message',
+              'mime',
+              'path',
+              'previewAvailable',
+              'ref',
+              'safePreview',
+              'safeToRenderInline',
+              'sizeBytes',
+              'sourceRunId',
+              'status',
+              'title',
+              'truncated',
+              'truncationReason',
+              'type',
+              'uri'
+            ],
             kind: 'context',
             path: '<ROOT>/artifacts/missing-context.json',
             type: 'missing',
+            format: 'not-previewable',
+            truncated: false,
             message: 'artifact file is missing',
-            contractGapFieldsPresent: []
+            contractGapFieldsPresent: artifactContractGapFields()
           }
         });
         assert.equal(missingKindResponse.status, 404);
@@ -4930,6 +5164,13 @@ function artifactContractGapFields() {
     'previewAvailable',
     'sizeBytes'
   ];
+}
+
+function assertValidSafePreview(preview) {
+  assert.deepEqual(validateSafeArtifactPreviewContract(preview), {
+    ok: true,
+    errors: []
+  });
 }
 
 async function writeV15ConsoleStageState({
