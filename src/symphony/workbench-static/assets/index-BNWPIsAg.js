@@ -9887,6 +9887,8 @@ var import_client = require_client();
 var MISSING_TEXT = "未暴露";
 var UNAVAILABLE_TEXT = "不可用";
 var NOT_APPLICABLE_TEXT = "不适用";
+var HANDOFF_API_BASE = "/api/handoff";
+var GUIDED_GOAL_HANDOFF_CONTRACT_NAME = "guided-goal-handoff.v1";
 var READONLY_API_ROUTES = Object.freeze([
 	Object.freeze({
 		id: "summary",
@@ -9903,6 +9905,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: "symphony.console-readiness"
 	}),
 	Object.freeze({
+		id: "handoffRefs",
+		label: "Handoff Refs",
+		path: HANDOFF_API_BASE,
+		method: "GET",
+		contractName: "symphony.handoff-refs"
+	}),
+	Object.freeze({
 		id: "runs",
 		label: "Runs",
 		path: "/api/runs",
@@ -9917,6 +9926,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: "symphony.console-run"
 	})
 ]);
+var GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE = Object.freeze({
+	id: "guidedGoalHandoff",
+	label: "Guided Goal Handoff",
+	path: "/api/handoff/<ref>",
+	method: "GET",
+	contractName: GUIDED_GOAL_HANDOFF_CONTRACT_NAME
+});
 var RUN_TIMELINE_ROUTE_TEMPLATE = Object.freeze({
 	id: "latestRunTimeline",
 	label: "Latest Run Timeline",
@@ -9924,7 +9940,11 @@ var RUN_TIMELINE_ROUTE_TEMPLATE = Object.freeze({
 	method: "GET",
 	contractName: "symphony.console-run-timeline"
 });
-var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([...READONLY_API_ROUTES, RUN_TIMELINE_ROUTE_TEMPLATE]);
+var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
+	...READONLY_API_ROUTES,
+	GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+	RUN_TIMELINE_ROUTE_TEMPLATE
+]);
 Object.freeze(READONLY_API_ROUTE_ALLOWLIST.map((route) => route.id));
 var RUN_API_BASE = [
 	"",
@@ -9982,9 +10002,15 @@ var ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
 function projectWorkbenchContracts(results) {
 	const summaryData = dataFrom(results.summary);
 	const readinessData = dataFrom(results.readiness);
+	const handoffRefsData = dataFrom(results.handoffRefs);
+	const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
 	const runsData = dataFrom(results.runs);
 	const latestRun = dataFrom(results.latestRun)?.run ?? null;
-	const routeStates = [...READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id])), projectRouteState(results.latestRunTimeline?.routeDescriptor ?? RUN_TIMELINE_ROUTE_TEMPLATE, results.latestRunTimeline)];
+	const routeStates = [
+		...READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id])),
+		projectRouteState(results.guidedGoalHandoff?.routeDescriptor ?? GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE, results.guidedGoalHandoff),
+		projectRouteState(results.latestRunTimeline?.routeDescriptor ?? RUN_TIMELINE_ROUTE_TEMPLATE, results.latestRunTimeline)
+	];
 	const failedRequiredRoutes = routeStates.filter((route) => route.state === "failed" && route.id !== "latestRun" && route.id !== "latestRunTimeline");
 	const hasNoRuns = summaryData?.latestRun === null || summaryData?.status === "no-runs";
 	const projectedLatestRun = projectLatestRun({
@@ -10003,6 +10029,12 @@ function projectWorkbenchContracts(results) {
 			result: results.latestRunTimeline,
 			latestRun: projectedLatestRun
 		}),
+		handoff: projectGuidedGoalHandoff({
+			indexResult: results.handoffRefs,
+			handoffResult: results.guidedGoalHandoff,
+			handoffIndex: handoffRefsData,
+			handoff: guidedGoalHandoffData
+		}),
 		adoption: projectAdoption({
 			summary: summaryData,
 			readiness: readinessData
@@ -10013,6 +10045,17 @@ function projectWorkbenchContracts(results) {
 			status: MISSING_TEXT
 		}))
 	};
+}
+function createGuidedGoalHandoffRoute(handoffIndex) {
+	const registeredRef = (Array.isArray(handoffIndex?.refs) ? handoffIndex.refs : []).find((candidate) => candidate?.contractName === GUIDED_GOAL_HANDOFF_CONTRACT_NAME);
+	const ref = registeredRef?.ref;
+	if (!isNonEmptyString(ref)) return null;
+	return Object.freeze({
+		...GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+		path: `${HANDOFF_API_BASE}/${encodeURIComponent(ref)}`,
+		ref,
+		contractName: isNonEmptyString(registeredRef.contractName) ? registeredRef.contractName : GUIDED_GOAL_HANDOFF_CONTRACT_NAME
+	});
 }
 function createRunTimelineRoute(runId) {
 	if (!isNonEmptyString(runId)) return null;
@@ -10285,6 +10328,102 @@ function projectAdoption({ summary, readiness }) {
 		note: "dirty adoption 不由 React 端合成，只展示 API 已暴露的 adoption summary 与 Git readiness 字段。"
 	};
 }
+function projectGuidedGoalHandoff({ indexResult, handoffResult, handoffIndex, handoff }) {
+	const roles = Array.isArray(handoff?.roles) ? handoff.roles : null;
+	const tasks = Array.isArray(handoff?.tasks) ? handoff.tasks : null;
+	const commandBlocks = projectHandoffCommandBlocks(handoff?.commands);
+	return {
+		state: projectHandoffState({
+			indexResult,
+			handoffResult,
+			handoff
+		}),
+		refs: projectHandoffRefs(handoffIndex),
+		contractName: valueState(handoff?.contractName),
+		contractVersion: valueState(handoff?.contractVersion),
+		goalId: valueState(handoff?.goalId),
+		title: valueState(handoff?.title),
+		titleZh: valueState(handoff?.titleZh),
+		baselineReleaseTag: valueState(handoff?.baseline?.releaseTag),
+		baselineApprovalCommit: valueState(handoff?.baseline?.approvalCommit),
+		taskCount: valueState(tasks === null ? void 0 : tasks.length),
+		roleCount: valueState(roles === null ? void 0 : roles.length),
+		commandBlockCount: valueState(commandBlocks.count),
+		reviewContextIsolation: valueState(handoff?.reviewModel?.contextIsolation),
+		workerSelfCheckIsFinal: valueState(handoff?.reviewModel?.workerSelfCheckIsFinal),
+		roles: roles === null ? {
+			state: "missing",
+			items: []
+		} : {
+			state: roles.length === 0 ? "empty" : "available",
+			items: roles.map((role) => ({
+				id: valueState(role?.id),
+				description: valueState(role?.description),
+				inputs: arrayTextState(role?.inputs),
+				outputs: arrayTextState(role?.outputs),
+				prohibited: arrayTextState(role?.prohibited)
+			}))
+		},
+		tasks: tasks === null ? {
+			state: "missing",
+			items: []
+		} : {
+			state: tasks.length === 0 ? "empty" : "available",
+			items: tasks.map((task) => ({
+				id: valueState(task?.id),
+				name: valueState(task?.name),
+				titleZh: valueState(task?.titleZh),
+				phase: valueState(task?.phase),
+				status: valueState(task?.status),
+				role: valueState(task?.role),
+				dependsOn: arrayTextState(task?.dependsOn),
+				evidencePath: valueState(task?.evidencePath),
+				reviewGate: valueState(task?.reviewGate)
+			}))
+		},
+		commandBlocks,
+		note: "Handoff panel 只展示 /api/handoff 注册 ref 与 guided-goal-handoff.v1 contract 字段；task phase/status 缺失时保持未暴露，不由浏览器端推断。",
+		error: handoffResult?.ok === true ? null : handoffResult?.message ?? null
+	};
+}
+function projectHandoffState({ indexResult, handoffResult, handoff }) {
+	if (indexResult?.ok !== true) return "unavailable";
+	if (handoffResult?.skipped === true) return "missing";
+	if (handoffResult?.ok !== true) return "unavailable";
+	if (handoff === null || handoff === void 0) return "missing";
+	return "available";
+}
+function projectHandoffRefs(handoffIndex) {
+	const refs = Array.isArray(handoffIndex?.refs) ? handoffIndex.refs : null;
+	return {
+		state: refs === null ? "missing" : refs.length === 0 ? "empty" : "available",
+		contractName: valueState(handoffIndex?.contractName),
+		contractVersion: valueState(handoffIndex?.contractVersion),
+		readOnly: valueState(handoffIndex?.readOnly),
+		arbitraryPathReads: valueState(handoffIndex?.arbitraryPathReads),
+		count: valueState(refs === null ? void 0 : refs.length),
+		items: refs === null ? [] : refs.map((ref) => ({
+			ref: valueState(ref?.ref),
+			contractName: valueState(ref?.contractName),
+			contractVersion: valueState(ref?.contractVersion),
+			href: valueState(ref?.href)
+		}))
+	};
+}
+function projectHandoffCommandBlocks(commands) {
+	const blocks = Array.isArray(commands?.blocks) ? commands.blocks : null;
+	return {
+		state: blocks === null ? "missing" : blocks.length === 0 ? "empty" : "available",
+		copyOnly: valueState(commands?.copyOnly),
+		count: blocks === null ? null : blocks.length,
+		items: blocks === null ? [] : blocks.map((block) => ({
+			id: valueState(block?.id),
+			title: valueState(block?.title),
+			copyOnly: valueState(block?.copyOnly),
+			commands: Array.isArray(block?.commands) ? block.commands.map((command) => valueState(command)) : []
+		}))
+	};
+}
 function projectRunListItem(run, latestRunId) {
 	return {
 		runId: valueState(run?.runId),
@@ -10429,6 +10568,10 @@ function textState(text) {
 		value: text
 	};
 }
+function arrayTextState(values, emptyText = "无") {
+	if (!Array.isArray(values)) return textState(MISSING_TEXT);
+	return textState(values.length > 0 ? values.join("、") : emptyText);
+}
 function isNonEmptyString(value) {
 	return typeof value === "string" && value.trim().length > 0;
 }
@@ -10496,7 +10639,12 @@ async function fetchReadonlyRoute(route, { fetchImpl = globalThis.fetch } = {}) 
 async function fetchWorkbenchContracts(options = {}) {
 	const entries = await Promise.all(READONLY_API_ROUTES.map(async (route) => [route.id, await fetchReadonlyRoute(route, options)]));
 	const results = Object.fromEntries(entries);
+	const guidedGoalHandoffRoute = createGuidedGoalHandoffRoute(results.handoffRefs?.data);
 	const timelineRoute = createRunTimelineRoute(latestRunIdFromResults(results));
+	results.guidedGoalHandoff = guidedGoalHandoffRoute === null ? readonlySkipped({
+		route: GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+		message: "guided handoff ref 未暴露 / 不可用"
+	}) : await fetchReadonlyRoute(guidedGoalHandoffRoute, options);
 	results.latestRunTimeline = timelineRoute === null ? readonlySkipped({
 		route: RUN_TIMELINE_ROUTE_TEMPLATE,
 		message: "暂无 timeline / 未暴露 / 不可用"
@@ -10613,7 +10761,7 @@ function App() {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: "基于 Task 5 / Task 6 的只读 API binding 展示 summary、readiness、runs、latest run、 timeline、artifact refs 与 adoption summary。浏览器端只读取受控 GET routes， 不提供写入、终端动作或 artifact inline preview。"
+							children: "基于 Task 5 / Task 6 的只读 API binding 展示 summary、readiness、runs、latest run、 timeline、artifact refs、adoption summary 与 v16 handoff。浏览器端只读取受控 GET routes， 不提供写入、终端动作或 artifact inline preview。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -10673,6 +10821,15 @@ function App() {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArtifactListPanel, { artifactRefs: model.artifactRefs }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionSummaryPanel, { adoption: model.adoption })
 					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "handoff-grid",
+					"aria-label": "v16 handoff 只读 panel",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HandoffPanel, {
+						handoff: model.handoff,
+						indexRoute: findRoute(model.routeStates, "handoffRefs"),
+						route: findRoute(model.routeStates, "guidedGoalHandoff")
+					})
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "support-grid",
@@ -10906,6 +11063,63 @@ function AdoptionSummaryPanel({ adoption }) {
 		})]
 	});
 }
+function HandoffPanel({ handoff, indexRoute, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "handoff-panel",
+		kicker: "v16 handoff panel",
+		title: "Guided Goal Handoff",
+		state: handoffStateText(handoff, route),
+		route,
+		children: [
+			indexRoute?.state === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: [
+					"错误摘要：",
+					indexRoute.error,
+					"。handoff refs route 未暴露或不可用。"
+				]
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["refs.contractName", handoff.refs.contractName],
+				["refs.readOnly", handoff.refs.readOnly],
+				["refs.arbitraryPathReads", handoff.refs.arbitraryPathReads],
+				["refs.count", handoff.refs.count],
+				["contractName", handoff.contractName],
+				["contractVersion", handoff.contractVersion],
+				["goalId", handoff.goalId],
+				["titleZh", handoff.titleZh],
+				["baseline.releaseTag", handoff.baselineReleaseTag],
+				["baseline.approvalCommit", handoff.baselineApprovalCommit],
+				["role count", handoff.roleCount],
+				["task count", handoff.taskCount],
+				["command block count", handoff.commandBlockCount],
+				["commands.copyOnly", handoff.commandBlocks.copyOnly],
+				["reviewModel.contextIsolation", handoff.reviewContextIsolation],
+				["reviewModel.workerSelfCheckIsFinal", handoff.workerSelfCheckIsFinal]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "registered refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HandoffRefList, { refs: handoff.refs })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "phase / copy-only commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBlockList, { commandBlocks: handoff.commandBlocks })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "roles",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HandoffRoleList, { roles: handoff.roles })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "tasks / evidence / review gate",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HandoffTaskList, { tasks: handoff.tasks })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: handoff.note
+			})
+		]
+	});
+}
 function RoutePanel({ routes }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "routes-panel",
@@ -10931,7 +11145,7 @@ function RoutePanel({ routes }) {
 			}, route.id))
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "panel-note",
-			children: "API client 只绑定 /api/summary、/api/readiness、/api/runs、/api/runs/latest 与 latest run id 派生的 timeline GET route。"
+			children: "API client 只绑定 /api/summary、/api/readiness、/api/handoff、/api/runs、/api/runs/latest、注册 handoff ref 与 latest run id 派生的 timeline GET route。"
 		})]
 	});
 }
@@ -11080,6 +11294,67 @@ function ArtifactRefList({ artifactRefs }) {
 		] }) }, `${artifact.kind.text}-${index}`))
 	});
 }
+function HandoffRefList({ refs }) {
+	if (refs.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "handoff refs 未暴露或不可用。" });
+	if (refs.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "handoff refs 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: refs.items.map((ref, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["ref", ref.ref],
+			["contractName", ref.contractName],
+			["contractVersion", ref.contractVersion],
+			["href", ref.href]
+		] }) }, `${ref.ref.text}-${index}`))
+	});
+}
+function CommandBlockList({ commandBlocks }) {
+	if (commandBlocks.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "copy-only command blocks 未暴露。" });
+	if (commandBlocks.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "copy-only command blocks 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "command-block-list",
+		children: commandBlocks.items.map((block, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["phase id", block.id],
+			["title", block.title],
+			["copyOnly", block.copyOnly]
+		] }), block.commands.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "commands 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "command-text-list",
+			"aria-label": `${block.title.text} command text`,
+			children: block.commands.map((command, commandIndex) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: command.text }) }, `${block.id.text}-${commandIndex}`))
+		})] }, `${block.id.text}-${index}`))
+	});
+}
+function HandoffRoleList({ roles }) {
+	if (roles.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "roles 未暴露。" });
+	if (roles.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "roles 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "handoff-role-list",
+		children: roles.items.map((role, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["role id", role.id],
+			["description", role.description],
+			["inputs", role.inputs],
+			["outputs", role.outputs],
+			["prohibited", role.prohibited]
+		] }) }, `${role.id.text}-${index}`))
+	});
+}
+function HandoffTaskList({ tasks }) {
+	if (tasks.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "tasks 未暴露。" });
+	if (tasks.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "tasks 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "handoff-task-list",
+		children: tasks.items.map((task, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["task id", task.id],
+			["titleZh", task.titleZh],
+			["name", task.name],
+			["phase", task.phase],
+			["status", task.status],
+			["role", task.role],
+			["dependsOn", task.dependsOn],
+			["evidencePath", task.evidencePath],
+			["reviewGate", task.reviewGate]
+		] }) }, `${task.id.text}-${index}`))
+	});
+}
 function ShellState({ title, copy }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "shell-state",
@@ -11117,6 +11392,11 @@ function timelineStateText(timeline, route) {
 	if (timeline.state === "empty") return "暂无 timeline";
 	if (timeline.state === "missing") return "未暴露";
 	if (timeline.state === "unavailable") return "不可用";
+	return routeStateText(route);
+}
+function handoffStateText(handoff, route) {
+	if (handoff.state === "missing") return "未暴露";
+	if (handoff.state === "unavailable") return "不可用";
 	return routeStateText(route);
 }
 function phaseText(phase) {

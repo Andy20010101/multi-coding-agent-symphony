@@ -30,6 +30,7 @@ body {
 .workbench-header,
 .panel-grid,
 .detail-grid,
+.handoff-grid,
 .support-grid,
 .shell-state {
   width: min(1180px, calc(100% - 40px));
@@ -114,6 +115,7 @@ h3 {
 
 .panel-grid,
 .detail-grid,
+.handoff-grid,
 .support-grid {
   display: grid;
   gap: 16px;
@@ -130,6 +132,11 @@ h3 {
 
 .detail-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.handoff-grid {
+  grid-template-columns: 1fr;
   margin-top: 16px;
 }
 
@@ -278,6 +285,10 @@ h3 {
 .artifact-list,
 .gap-list,
 .timeline-list,
+.command-block-list,
+.command-text-list,
+.handoff-role-list,
+.handoff-task-list,
 .run-list {
   display: grid;
   gap: 10px;
@@ -289,6 +300,9 @@ h3 {
 .artifact-list li,
 .gap-list li,
 .timeline-list li,
+.command-block-list > li,
+.handoff-role-list > li,
+.handoff-task-list > li,
 .run-row {
   border: 1px solid #d8e0e2;
   border-radius: 8px;
@@ -311,6 +325,30 @@ h3 {
   color: #52636a;
 }
 
+.command-text-list {
+  margin-top: 10px;
+}
+
+.command-text-list li {
+  overflow-x: auto;
+}
+
+.command-text-list code {
+  display: block;
+  min-width: 0;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f3f6f6;
+  color: #18232a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .run-list {
   margin-top: 14px;
 }
@@ -328,6 +366,7 @@ h3 {
   .workbench-header,
   .panel-grid,
   .detail-grid,
+  .handoff-grid,
   .support-grid {
     grid-template-columns: 1fr;
   }
@@ -342,6 +381,7 @@ h3 {
   .workbench-header,
   .panel-grid,
   .detail-grid,
+  .handoff-grid,
   .support-grid,
   .shell-state {
     width: min(100% - 28px, 1180px);

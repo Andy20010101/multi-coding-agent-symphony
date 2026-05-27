@@ -45,7 +45,7 @@ export default function App() {
           <h1 id="workbench-title">v15 Workbench</h1>
           <p className="header-summary">
             基于 Task 5 / Task 6 的只读 API binding 展示 summary、readiness、runs、latest run、
-            timeline、artifact refs 与 adoption summary。浏览器端只读取受控 GET routes，
+            timeline、artifact refs、adoption summary 与 v16 handoff。浏览器端只读取受控 GET routes，
             不提供写入、终端动作或 artifact inline preview。
           </p>
         </div>
@@ -72,6 +72,14 @@ export default function App() {
             <TimelinePanel timeline={model.latestRunTimeline} route={findRoute(model.routeStates, 'latestRunTimeline')} />
             <ArtifactListPanel artifactRefs={model.artifactRefs} />
             <AdoptionSummaryPanel adoption={model.adoption} />
+          </section>
+
+          <section className="handoff-grid" aria-label="v16 handoff 只读 panel">
+            <HandoffPanel
+              handoff={model.handoff}
+              indexRoute={findRoute(model.routeStates, 'handoffRefs')}
+              route={findRoute(model.routeStates, 'guidedGoalHandoff')}
+            />
           </section>
 
           <section className="support-grid" aria-label="只读 contract 支撑信息">
@@ -309,6 +317,59 @@ function AdoptionSummaryPanel({ adoption }) {
   );
 }
 
+function HandoffPanel({ handoff, indexRoute, route }) {
+  return (
+    <DataPanel
+      id="handoff-panel"
+      kicker="v16 handoff panel"
+      title="Guided Goal Handoff"
+      state={handoffStateText(handoff, route)}
+      route={route}
+    >
+      {indexRoute?.state === 'failed' ? (
+        <p className="error-copy">错误摘要：{indexRoute.error}。handoff refs route 未暴露或不可用。</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['refs.contractName', handoff.refs.contractName],
+        ['refs.readOnly', handoff.refs.readOnly],
+        ['refs.arbitraryPathReads', handoff.refs.arbitraryPathReads],
+        ['refs.count', handoff.refs.count],
+        ['contractName', handoff.contractName],
+        ['contractVersion', handoff.contractVersion],
+        ['goalId', handoff.goalId],
+        ['titleZh', handoff.titleZh],
+        ['baseline.releaseTag', handoff.baselineReleaseTag],
+        ['baseline.approvalCommit', handoff.baselineApprovalCommit],
+        ['role count', handoff.roleCount],
+        ['task count', handoff.taskCount],
+        ['command block count', handoff.commandBlockCount],
+        ['commands.copyOnly', handoff.commandBlocks.copyOnly],
+        ['reviewModel.contextIsolation', handoff.reviewContextIsolation],
+        ['reviewModel.workerSelfCheckIsFinal', handoff.workerSelfCheckIsFinal]
+      ]} />
+
+      <Subsection title="registered refs">
+        <HandoffRefList refs={handoff.refs} />
+      </Subsection>
+
+      <Subsection title="phase / copy-only commands">
+        <CommandBlockList commandBlocks={handoff.commandBlocks} />
+      </Subsection>
+
+      <Subsection title="roles">
+        <HandoffRoleList roles={handoff.roles} />
+      </Subsection>
+
+      <Subsection title="tasks / evidence / review gate">
+        <HandoffTaskList tasks={handoff.tasks} />
+      </Subsection>
+
+      <p className="panel-note">{handoff.note}</p>
+    </DataPanel>
+  );
+}
+
 function RoutePanel({ routes }) {
   return (
     <DataPanel
@@ -329,7 +390,7 @@ function RoutePanel({ routes }) {
           </div>
         ))}
       </dl>
-      <p className="panel-note">API client 只绑定 /api/summary、/api/readiness、/api/runs、/api/runs/latest 与 latest run id 派生的 timeline GET route。</p>
+      <p className="panel-note">API client 只绑定 /api/summary、/api/readiness、/api/handoff、/api/runs、/api/runs/latest、注册 handoff ref 与 latest run id 派生的 timeline GET route。</p>
     </DataPanel>
   );
 }
@@ -524,6 +585,122 @@ function ArtifactRefList({ artifactRefs }) {
   );
 }
 
+function HandoffRefList({ refs }) {
+  if (refs.state === 'missing') {
+    return <EmptyBlock copy="handoff refs 未暴露或不可用。" />;
+  }
+
+  if (refs.items.length === 0) {
+    return <EmptyBlock copy="handoff refs 为空。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {refs.items.map((ref, index) => (
+        <li key={`${ref.ref.text}-${index}`}>
+          <FieldList rows={[
+            ['ref', ref.ref],
+            ['contractName', ref.contractName],
+            ['contractVersion', ref.contractVersion],
+            ['href', ref.href]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CommandBlockList({ commandBlocks }) {
+  if (commandBlocks.state === 'missing') {
+    return <EmptyBlock copy="copy-only command blocks 未暴露。" />;
+  }
+
+  if (commandBlocks.items.length === 0) {
+    return <EmptyBlock copy="copy-only command blocks 为空。" />;
+  }
+
+  return (
+    <ul className="command-block-list">
+      {commandBlocks.items.map((block, index) => (
+        <li key={`${block.id.text}-${index}`}>
+          <FieldList rows={[
+            ['phase id', block.id],
+            ['title', block.title],
+            ['copyOnly', block.copyOnly]
+          ]} />
+          {block.commands.length === 0 ? (
+            <EmptyBlock copy="commands 未暴露。" />
+          ) : (
+            <ul className="command-text-list" aria-label={`${block.title.text} command text`}>
+              {block.commands.map((command, commandIndex) => (
+                <li key={`${block.id.text}-${commandIndex}`}>
+                  <code>{command.text}</code>
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function HandoffRoleList({ roles }) {
+  if (roles.state === 'missing') {
+    return <EmptyBlock copy="roles 未暴露。" />;
+  }
+
+  if (roles.items.length === 0) {
+    return <EmptyBlock copy="roles 为空。" />;
+  }
+
+  return (
+    <ul className="handoff-role-list">
+      {roles.items.map((role, index) => (
+        <li key={`${role.id.text}-${index}`}>
+          <FieldList rows={[
+            ['role id', role.id],
+            ['description', role.description],
+            ['inputs', role.inputs],
+            ['outputs', role.outputs],
+            ['prohibited', role.prohibited]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function HandoffTaskList({ tasks }) {
+  if (tasks.state === 'missing') {
+    return <EmptyBlock copy="tasks 未暴露。" />;
+  }
+
+  if (tasks.items.length === 0) {
+    return <EmptyBlock copy="tasks 为空。" />;
+  }
+
+  return (
+    <ul className="handoff-task-list">
+      {tasks.items.map((task, index) => (
+        <li key={`${task.id.text}-${index}`}>
+          <FieldList rows={[
+            ['task id', task.id],
+            ['titleZh', task.titleZh],
+            ['name', task.name],
+            ['phase', task.phase],
+            ['status', task.status],
+            ['role', task.role],
+            ['dependsOn', task.dependsOn],
+            ['evidencePath', task.evidencePath],
+            ['reviewGate', task.reviewGate]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ShellState({ title, copy }) {
   return (
     <section className="shell-state" aria-label={title}>
@@ -586,6 +763,18 @@ function timelineStateText(timeline, route) {
   }
 
   if (timeline.state === 'unavailable') {
+    return '不可用';
+  }
+
+  return routeStateText(route);
+}
+
+function handoffStateText(handoff, route) {
+  if (handoff.state === 'missing') {
+    return '未暴露';
+  }
+
+  if (handoff.state === 'unavailable') {
     return '不可用';
   }
 

@@ -1,6 +1,8 @@
 const MISSING_TEXT = '未暴露';
 const UNAVAILABLE_TEXT = '不可用';
 const NOT_APPLICABLE_TEXT = '不适用';
+const HANDOFF_API_BASE = '/api/handoff';
+const GUIDED_GOAL_HANDOFF_CONTRACT_NAME = 'guided-goal-handoff.v1';
 
 export const READONLY_API_ROUTES = Object.freeze([
   Object.freeze({
@@ -18,6 +20,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: 'symphony.console-readiness'
   }),
   Object.freeze({
+    id: 'handoffRefs',
+    label: 'Handoff Refs',
+    path: HANDOFF_API_BASE,
+    method: 'GET',
+    contractName: 'symphony.handoff-refs'
+  }),
+  Object.freeze({
     id: 'runs',
     label: 'Runs',
     path: '/api/runs',
@@ -33,6 +42,14 @@ export const READONLY_API_ROUTES = Object.freeze([
   })
 ]);
 
+export const GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE = Object.freeze({
+  id: 'guidedGoalHandoff',
+  label: 'Guided Goal Handoff',
+  path: '/api/handoff/<ref>',
+  method: 'GET',
+  contractName: GUIDED_GOAL_HANDOFF_CONTRACT_NAME
+});
+
 export const RUN_TIMELINE_ROUTE_TEMPLATE = Object.freeze({
   id: 'latestRunTimeline',
   label: 'Latest Run Timeline',
@@ -43,6 +60,7 @@ export const RUN_TIMELINE_ROUTE_TEMPLATE = Object.freeze({
 
 export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   ...READONLY_API_ROUTES,
+  GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   RUN_TIMELINE_ROUTE_TEMPLATE
 ]);
 
@@ -105,11 +123,17 @@ const ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
 export function projectWorkbenchContracts(results) {
   const summaryData = dataFrom(results.summary);
   const readinessData = dataFrom(results.readiness);
+  const handoffRefsData = dataFrom(results.handoffRefs);
+  const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
   const runsData = dataFrom(results.runs);
   const latestRunData = dataFrom(results.latestRun);
   const latestRun = latestRunData?.run ?? null;
   const routeStates = [
     ...READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id])),
+    projectRouteState(
+      results.guidedGoalHandoff?.routeDescriptor ?? GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+      results.guidedGoalHandoff
+    ),
     projectRouteState(
       results.latestRunTimeline?.routeDescriptor ?? RUN_TIMELINE_ROUTE_TEMPLATE,
       results.latestRunTimeline
@@ -136,6 +160,12 @@ export function projectWorkbenchContracts(results) {
       result: results.latestRunTimeline,
       latestRun: projectedLatestRun
     }),
+    handoff: projectGuidedGoalHandoff({
+      indexResult: results.handoffRefs,
+      handoffResult: results.guidedGoalHandoff,
+      handoffIndex: handoffRefsData,
+      handoff: guidedGoalHandoffData
+    }),
     adoption: projectAdoption({
       summary: summaryData,
       readiness: readinessData
@@ -146,6 +176,27 @@ export function projectWorkbenchContracts(results) {
       status: MISSING_TEXT
     }))
   };
+}
+
+export function createGuidedGoalHandoffRoute(handoffIndex) {
+  const refs = Array.isArray(handoffIndex?.refs) ? handoffIndex.refs : [];
+  const registeredRef = refs.find((candidate) => (
+    candidate?.contractName === GUIDED_GOAL_HANDOFF_CONTRACT_NAME
+  ));
+  const ref = registeredRef?.ref;
+
+  if (!isNonEmptyString(ref)) {
+    return null;
+  }
+
+  return Object.freeze({
+    ...GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+    path: `${HANDOFF_API_BASE}/${encodeURIComponent(ref)}`,
+    ref,
+    contractName: isNonEmptyString(registeredRef.contractName)
+      ? registeredRef.contractName
+      : GUIDED_GOAL_HANDOFF_CONTRACT_NAME
+  });
 }
 
 export function createRunTimelineRoute(runId) {
@@ -472,6 +523,119 @@ function projectAdoption({ summary, readiness }) {
   };
 }
 
+function projectGuidedGoalHandoff({ indexResult, handoffResult, handoffIndex, handoff }) {
+  const roles = Array.isArray(handoff?.roles) ? handoff.roles : null;
+  const tasks = Array.isArray(handoff?.tasks) ? handoff.tasks : null;
+  const commandBlocks = projectHandoffCommandBlocks(handoff?.commands);
+
+  return {
+    state: projectHandoffState({ indexResult, handoffResult, handoff }),
+    refs: projectHandoffRefs(handoffIndex),
+    contractName: valueState(handoff?.contractName),
+    contractVersion: valueState(handoff?.contractVersion),
+    goalId: valueState(handoff?.goalId),
+    title: valueState(handoff?.title),
+    titleZh: valueState(handoff?.titleZh),
+    baselineReleaseTag: valueState(handoff?.baseline?.releaseTag),
+    baselineApprovalCommit: valueState(handoff?.baseline?.approvalCommit),
+    taskCount: valueState(tasks === null ? undefined : tasks.length),
+    roleCount: valueState(roles === null ? undefined : roles.length),
+    commandBlockCount: valueState(commandBlocks.count),
+    reviewContextIsolation: valueState(handoff?.reviewModel?.contextIsolation),
+    workerSelfCheckIsFinal: valueState(handoff?.reviewModel?.workerSelfCheckIsFinal),
+    roles: roles === null ? {
+      state: 'missing',
+      items: []
+    } : {
+      state: roles.length === 0 ? 'empty' : 'available',
+      items: roles.map((role) => ({
+        id: valueState(role?.id),
+        description: valueState(role?.description),
+        inputs: arrayTextState(role?.inputs),
+        outputs: arrayTextState(role?.outputs),
+        prohibited: arrayTextState(role?.prohibited)
+      }))
+    },
+    tasks: tasks === null ? {
+      state: 'missing',
+      items: []
+    } : {
+      state: tasks.length === 0 ? 'empty' : 'available',
+      items: tasks.map((task) => ({
+        id: valueState(task?.id),
+        name: valueState(task?.name),
+        titleZh: valueState(task?.titleZh),
+        phase: valueState(task?.phase),
+        status: valueState(task?.status),
+        role: valueState(task?.role),
+        dependsOn: arrayTextState(task?.dependsOn),
+        evidencePath: valueState(task?.evidencePath),
+        reviewGate: valueState(task?.reviewGate)
+      }))
+    },
+    commandBlocks,
+    note: 'Handoff panel 只展示 /api/handoff 注册 ref 与 guided-goal-handoff.v1 contract 字段；task phase/status 缺失时保持未暴露，不由浏览器端推断。',
+    error: handoffResult?.ok === true ? null : handoffResult?.message ?? null
+  };
+}
+
+function projectHandoffState({ indexResult, handoffResult, handoff }) {
+  if (indexResult?.ok !== true) {
+    return 'unavailable';
+  }
+
+  if (handoffResult?.skipped === true) {
+    return 'missing';
+  }
+
+  if (handoffResult?.ok !== true) {
+    return 'unavailable';
+  }
+
+  if (handoff === null || handoff === undefined) {
+    return 'missing';
+  }
+
+  return 'available';
+}
+
+function projectHandoffRefs(handoffIndex) {
+  const refs = Array.isArray(handoffIndex?.refs) ? handoffIndex.refs : null;
+
+  return {
+    state: refs === null ? 'missing' : refs.length === 0 ? 'empty' : 'available',
+    contractName: valueState(handoffIndex?.contractName),
+    contractVersion: valueState(handoffIndex?.contractVersion),
+    readOnly: valueState(handoffIndex?.readOnly),
+    arbitraryPathReads: valueState(handoffIndex?.arbitraryPathReads),
+    count: valueState(refs === null ? undefined : refs.length),
+    items: refs === null ? [] : refs.map((ref) => ({
+      ref: valueState(ref?.ref),
+      contractName: valueState(ref?.contractName),
+      contractVersion: valueState(ref?.contractVersion),
+      href: valueState(ref?.href)
+    }))
+  };
+}
+
+function projectHandoffCommandBlocks(commands) {
+  const blocks = Array.isArray(commands?.blocks) ? commands.blocks : null;
+
+  return {
+    state: blocks === null ? 'missing' : blocks.length === 0 ? 'empty' : 'available',
+    copyOnly: valueState(commands?.copyOnly),
+    count: blocks === null ? null : blocks.length,
+    items: blocks === null ? [] : blocks.map((block) => ({
+      id: valueState(block?.id),
+      title: valueState(block?.title),
+      copyOnly: valueState(block?.copyOnly),
+      commands: Array.isArray(block?.commands)
+        ? block.commands.map((command) => valueState(command))
+        : []
+    }))
+  };
+}
+
 function projectRunListItem(run, latestRunId) {
   return {
     runId: valueState(run?.runId),
@@ -666,6 +830,14 @@ function textState(text) {
     text,
     value: text
   };
+}
+
+function arrayTextState(values, emptyText = '无') {
+  if (!Array.isArray(values)) {
+    return textState(MISSING_TEXT);
+  }
+
+  return textState(values.length > 0 ? values.join('、') : emptyText);
 }
 
 function isNonEmptyString(value) {

@@ -13,6 +13,8 @@ import {
   projectArtifactRefs
 } from '../frontend/workbench/src/api/contracts.js';
 
+const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
+
 describe('v15 Workbench read-only API client', () => {
   it('exposes only the approved read-only route list', () => {
     assert.deepEqual(
@@ -20,6 +22,7 @@ describe('v15 Workbench read-only API client', () => {
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
+        ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
         ['GET', '/api/runs/latest', 'symphony.console-run']
       ]
@@ -29,8 +32,10 @@ describe('v15 Workbench read-only API client', () => {
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
+        ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
         ['GET', '/api/runs/latest', 'symphony.console-run'],
+        ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline']
       ]
     );
@@ -131,6 +136,8 @@ describe('v15 Workbench read-only API client', () => {
         readOnly: true,
         modelInvocation: false
       }],
+      ['/api/handoff', createHandoffRefsPayload()],
+      [GUIDED_HANDOFF_PATH, createGuidedHandoffPayload()],
       ['/api/runs', {
         contractName: 'symphony.console-runs',
         contractVersion: '1',
@@ -170,6 +177,8 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.latestRunTimeline.state, 'empty');
     assert.equal(model.latestRunTimeline.note, '暂无 timeline；当前没有 latest run。');
     assert.equal(model.artifactRefs.state, 'missing');
+    assert.equal(model.handoff.state, 'available');
+    assert.equal(model.handoff.commandBlocks.copyOnly.value, true);
     assert.equal(model.routeStates.find((route) => route.id === 'latestRunTimeline').state, 'skipped');
   });
 
@@ -296,6 +305,8 @@ describe('v15 Workbench read-only API client', () => {
           }]
         }
       }],
+      ['/api/handoff', createHandoffRefsPayload()],
+      [GUIDED_HANDOFF_PATH, createGuidedHandoffPayload()],
       ['/api/runs', {
         contractName: 'symphony.console-runs',
         contractVersion: '1',
@@ -421,5 +432,78 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.artifactRefs.status.status.value, 'missing');
     assert.equal(model.artifactRefs.items[0].status.value, 'missing');
     assert.equal(model.artifactRefs.missingPreviewFields.includes('mime'), true);
+    assert.equal(model.handoff.refs.readOnly.value, true);
+    assert.equal(model.handoff.refs.arbitraryPathReads.value, false);
+    assert.equal(model.handoff.taskCount.value, 2);
+    assert.equal(model.handoff.tasks.items[0].status.text, CONTRACT_TEXT.missing);
+    assert.equal(model.handoff.tasks.items[0].evidencePath.value, 'docs/plans/v16-task1-plan-approval-evidence-2026-05-27.md');
+    assert.equal(model.handoff.commandBlocks.items[0].title.value, 'Preflight');
+    assert.equal(model.handoff.commandBlocks.items[0].commands[0].value, 'git checkout main');
   });
 });
+
+function createHandoffRefsPayload() {
+  return {
+    contractName: 'symphony.handoff-refs',
+    contractVersion: '1',
+    readOnly: true,
+    arbitraryPathReads: false,
+    refs: [{
+      ref: 'guided-goal-handoff.v1',
+      contractName: 'guided-goal-handoff.v1',
+      contractVersion: '1',
+      href: GUIDED_HANDOFF_PATH
+    }]
+  };
+}
+
+function createGuidedHandoffPayload() {
+  return {
+    contractName: 'guided-goal-handoff.v1',
+    contractVersion: '1',
+    goalId: 'v16-guided-goal-handoff-safe-artifact-preview',
+    title: 'Guided Goal Handoff + Safe Artifact Preview Contract',
+    titleZh: '目标执行手册与安全产物预览层',
+    baseline: {
+      releaseTag: 'v15',
+      approvalCommit: '3410509'
+    },
+    roles: [{
+      id: 'planner',
+      description: 'Defines scope and task split.',
+      inputs: ['v16 plan'],
+      outputs: ['approved task plan'],
+      prohibited: ['feature implementation']
+    }],
+    tasks: [{
+      id: 'task-1',
+      name: 'plan approval and baseline freeze',
+      titleZh: '计划批准与基线冻结',
+      role: 'planner',
+      dependsOn: [],
+      evidencePath: 'docs/plans/v16-task1-plan-approval-evidence-2026-05-27.md',
+      reviewGate: 'Independent reviewer must approve before commit and merge.'
+    }, {
+      id: 'task-5',
+      name: 'Workbench handoff panel',
+      titleZh: 'Workbench handoff 只读面板',
+      role: 'worker',
+      dependsOn: ['task-4'],
+      evidencePath: 'docs/plans/v16-task5-workbench-handoff-panel-evidence-2026-05-27.md',
+      reviewGate: 'Independent reviewer must confirm display-only behavior.'
+    }],
+    commands: {
+      copyOnly: true,
+      blocks: [{
+        id: 'preflight',
+        title: 'Preflight',
+        copyOnly: true,
+        commands: ['git checkout main', 'git pull']
+      }]
+    },
+    reviewModel: {
+      contextIsolation: true,
+      workerSelfCheckIsFinal: false
+    }
+  };
+}

@@ -1,6 +1,8 @@
 import {
+  GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   READONLY_API_ROUTES,
   RUN_TIMELINE_ROUTE_TEMPLATE,
+  createGuidedGoalHandoffRoute,
   createRunTimelineRoute,
   projectWorkbenchContracts
 } from './contracts.js';
@@ -81,8 +83,16 @@ export async function fetchWorkbenchContracts(options = {}) {
   );
 
   const results = Object.fromEntries(entries);
+  const guidedGoalHandoffRoute = createGuidedGoalHandoffRoute(results.handoffRefs?.data);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
+
+  results.guidedGoalHandoff = guidedGoalHandoffRoute === null
+    ? readonlySkipped({
+        route: GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+        message: 'guided handoff ref 未暴露 / 不可用'
+      })
+    : await fetchReadonlyRoute(guidedGoalHandoffRoute, options);
 
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({

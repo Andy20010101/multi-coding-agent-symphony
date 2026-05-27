@@ -47,7 +47,10 @@ describe('v15 Workbench React/Vite shell', () => {
       'LatestRunPanel',
       'TimelinePanel',
       'ArtifactListPanel',
-      'AdoptionSummaryPanel'
+      'AdoptionSummaryPanel',
+      'HandoffPanel',
+      'CommandBlockList',
+      'HandoffTaskList'
     ]) {
       assert.match(app, new RegExp(`function ${componentName}\\b`, 'u'));
     }
@@ -57,6 +60,9 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /读取失败/u);
     assert.match(app, /artifactRefs 只读列表/u);
     assert.match(app, /Adoption summary 只读状态/u);
+    assert.match(app, /Guided Goal Handoff/u);
+    assert.match(app, /phase \/ copy-only commands/u);
+    assert.match(app, /tasks \/ evidence \/ review gate/u);
     assert.match(app, /刷新页面后会重新读取只读 API/u);
     assert.doesNotMatch(app, /\bfetch\s*\(/u);
     assert.doesNotMatch(app, /rawRunState/u);
@@ -72,6 +78,8 @@ describe('v15 Workbench React/Vite shell', () => {
       .sort();
 
     assert.deepEqual(apiPaths, [
+      '/api/handoff',
+      '/api/handoff/<ref>',
       '/api/readiness',
       '/api/runs',
       '/api/runs/<run-id>/timeline',
