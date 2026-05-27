@@ -23,6 +23,12 @@ import {
   buildConsoleAdoptionInspectContract
 } from './adoption-inspect.js';
 import {
+  GUIDED_GOAL_HANDOFF_REGISTERED_REF,
+  buildGuidedGoalHandoffJson,
+  buildGuidedGoalHandoffRefIndex,
+  loadGuidedGoalHandoffFixture
+} from './guided-goal-handoff-output.js';
+import {
   buildStageCommandSummary
 } from './stage.js';
 
@@ -701,6 +707,16 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      const handoffRequest = parseHandoffRequestPath(url.pathname, url.searchParams);
+
+      if (handoffRequest !== null) {
+        await writeHandoffResponse({
+          response,
+          request: handoffRequest
+        });
+        return;
+      }
+
       const adoptionInspectRequest = parseAdoptionInspectRequestPath(url.pathname);
 
       if (adoptionInspectRequest !== null) {
@@ -935,6 +951,35 @@ async function writeAdoptionInspectResponse({ response, stateDir, adoptionId }) 
   writeJsonResponse(response, 200, buildConsoleAdoptionInspectContract(summary));
 }
 
+async function writeHandoffResponse({ response, request }) {
+  if (request.kind === 'index') {
+    writeJsonResponse(response, 200, buildGuidedGoalHandoffRefIndex());
+    return;
+  }
+
+  if (request.kind === 'invalid') {
+    writeJsonResponse(response, 400, {
+      ...buildGuidedGoalHandoffRefIndex(),
+      status: 'invalid-ref',
+      ref: request.ref
+    });
+    return;
+  }
+
+  if (request.kind === 'missing') {
+    writeJsonResponse(response, 404, {
+      ...buildGuidedGoalHandoffRefIndex(),
+      status: 'missing',
+      ref: request.ref
+    });
+    return;
+  }
+
+  const handoff = await loadGuidedGoalHandoffFixture();
+
+  writeJsonResponse(response, 200, buildGuidedGoalHandoffJson(handoff));
+}
+
 async function previewArtifact(artifactRef) {
   const metadata = await stat(artifactRef.path);
 
@@ -1009,6 +1054,53 @@ function parseArtifactRequestPath(pathname) {
   };
 }
 
+function parseHandoffRequestPath(pathname, searchParams = new URLSearchParams()) {
+  if (pathname === '/api/handoff' || pathname === '/api/handoff/') {
+    if (hasSearchParams(searchParams)) {
+      return {
+        kind: 'invalid',
+        ref: pathname
+      };
+    }
+
+    return {
+      kind: 'index'
+    };
+  }
+
+  if (!pathname.startsWith('/api/handoff/')) {
+    return null;
+  }
+
+  if (hasSearchParams(searchParams)) {
+    return {
+      kind: 'invalid',
+      ref: pathname
+    };
+  }
+
+  const decoded = safeDecodePathSegment(pathname.slice('/api/handoff/'.length));
+
+  if (decoded.ok === false || isUnsafeHandoffRef(decoded.value)) {
+    return {
+      kind: 'invalid',
+      ref: decoded.value
+    };
+  }
+
+  if (decoded.value !== GUIDED_GOAL_HANDOFF_REGISTERED_REF) {
+    return {
+      kind: 'missing',
+      ref: decoded.value
+    };
+  }
+
+  return {
+    kind: 'contract',
+    ref: decoded.value
+  };
+}
+
 function parseAdoptionInspectRequestPath(pathname) {
   const match = /^\/api\/adoptions\/([^/]+)\/inspect$/u.exec(pathname);
 
@@ -1019,6 +1111,28 @@ function parseAdoptionInspectRequestPath(pathname) {
   return {
     adoptionId: decodeURIComponent(match[1])
   };
+}
+
+function safeDecodePathSegment(value) {
+  try {
+    return {
+      ok: true,
+      value: decodeURIComponent(value)
+    };
+  } catch {
+    return {
+      ok: false,
+      value
+    };
+  }
+}
+
+function isUnsafeHandoffRef(ref) {
+  return ref === '' || ref.includes('/') || ref.includes('\\') || ref.includes('..');
+}
+
+function hasSearchParams(searchParams) {
+  return Array.from(searchParams.keys()).length > 0;
 }
 
 function parseRunTimelineRequestPath(pathname) {

@@ -1,8 +1,13 @@
 import { readFile } from 'node:fs/promises';
 
 import {
+  GUIDED_GOAL_HANDOFF_CONTRACT_NAME,
+  GUIDED_GOAL_HANDOFF_CONTRACT_VERSION,
   assertGuidedGoalHandoffContract
 } from './guided-goal-handoff.js';
+
+export const GUIDED_GOAL_HANDOFF_REGISTERED_REF = GUIDED_GOAL_HANDOFF_CONTRACT_NAME;
+export const GUIDED_GOAL_HANDOFF_API_PATH = `/api/handoff/${GUIDED_GOAL_HANDOFF_REGISTERED_REF}`;
 
 const BUNDLED_HANDOFF_FIXTURE_URL = new URL(
   '../../fixtures/contracts/guided-goal-handoff.v1.json',
@@ -16,6 +21,23 @@ export async function loadGuidedGoalHandoffFixture() {
 
 export function buildGuidedGoalHandoffJson(handoff) {
   return structuredClone(assertGuidedGoalHandoffContract(handoff));
+}
+
+export function buildGuidedGoalHandoffRefIndex() {
+  return {
+    contractName: 'symphony.handoff-refs',
+    contractVersion: '1',
+    readOnly: true,
+    arbitraryPathReads: false,
+    refs: [
+      {
+        ref: GUIDED_GOAL_HANDOFF_REGISTERED_REF,
+        contractName: GUIDED_GOAL_HANDOFF_CONTRACT_NAME,
+        contractVersion: GUIDED_GOAL_HANDOFF_CONTRACT_VERSION,
+        href: GUIDED_GOAL_HANDOFF_API_PATH
+      }
+    ]
+  };
 }
 
 export function renderGuidedGoalHandoffMarkdown(handoff) {

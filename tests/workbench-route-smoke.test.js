@@ -5,6 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 
 import { createSymphonyConsoleServer } from '../src/symphony/console.js';
+import {
+  GUIDED_GOAL_HANDOFF_CONTRACT_NAME,
+  validateGuidedGoalHandoffContract
+} from '../src/symphony/guided-goal-handoff.js';
 
 const ROUTE_SMOKE_RUN_ID = 'task9-route-smoke-run';
 const FIXED_TIME = '2026-05-27T00:00:00.000Z';
@@ -91,6 +95,7 @@ describe('v15 Workbench route smoke and server parity', () => {
     const context = await startConsoleServer();
 
     try {
+      const before = await collectTextFileSnapshot(context.stateDir);
       const expectations = [
         {
           path: '/api/summary',
@@ -108,6 +113,34 @@ describe('v15 Workbench route smoke and server parity', () => {
             assert.equal(payload.modelInvocation, false);
             assert.equal(payload.tools.packageManager.status, 'available');
             assert.equal(payload.tools.git.status, 'available');
+          }
+        },
+        {
+          path: '/api/handoff',
+          contractName: 'symphony.handoff-refs',
+          assertPayload(payload) {
+            assert.equal(payload.readOnly, true);
+            assert.equal(payload.arbitraryPathReads, false);
+            assert.deepEqual(payload.refs, [
+              {
+                ref: GUIDED_GOAL_HANDOFF_CONTRACT_NAME,
+                contractName: GUIDED_GOAL_HANDOFF_CONTRACT_NAME,
+                contractVersion: '1',
+                href: `/api/handoff/${GUIDED_GOAL_HANDOFF_CONTRACT_NAME}`
+              }
+            ]);
+          }
+        },
+        {
+          path: `/api/handoff/${GUIDED_GOAL_HANDOFF_CONTRACT_NAME}`,
+          contractName: GUIDED_GOAL_HANDOFF_CONTRACT_NAME,
+          assertPayload(payload) {
+            assert.deepEqual(validateGuidedGoalHandoffContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.commands.copyOnly, true);
+            assert.equal(payload.tasks.find((task) => task.id === 'task-4').evidencePath, 'docs/plans/v16-task4-readonly-handoff-api-evidence-2026-05-27.md');
           }
         },
         {
@@ -139,6 +172,10 @@ describe('v15 Workbench route smoke and server parity', () => {
         assert.equal(payload.contractVersion, '1');
         expectation.assertPayload(payload);
       }
+
+      const after = await collectTextFileSnapshot(context.stateDir);
+
+      assert.deepEqual(after, before);
     } finally {
       await cleanupConsoleServer(context);
     }
@@ -153,6 +190,8 @@ describe('v15 Workbench route smoke and server parity', () => {
         '/workbench/',
         '/api/summary',
         '/api/readiness',
+        '/api/handoff',
+        `/api/handoff/${GUIDED_GOAL_HANDOFF_CONTRACT_NAME}`,
         '/api/runs',
         '/api/runs/latest'
       ];
@@ -169,6 +208,63 @@ describe('v15 Workbench route smoke and server parity', () => {
             assert.doesNotMatch(await response.text(), /<div id="root"><\/div>/u);
           }
         }
+      }
+
+      const after = await collectTextFileSnapshot(context.stateDir);
+
+      assert.deepEqual(after, before);
+    } finally {
+      await cleanupConsoleServer(context);
+    }
+  });
+
+  it('rejects unregistered handoff refs and traversal probes', async () => {
+    const context = await startConsoleServer();
+
+    try {
+      const before = await collectTextFileSnapshot(context.stateDir);
+      const probes = [
+        {
+          path: '/api/handoff/package.json',
+          status: 404
+        },
+        {
+          path: '/api/handoff/guided-goal-handoff.v2',
+          status: 404
+        },
+        {
+          path: `/api/handoff/${GUIDED_GOAL_HANDOFF_CONTRACT_NAME}?path=package.json`,
+          status: 400
+        },
+        {
+          path: '/api/handoff/%2e%2e%2fpackage.json',
+          status: 400
+        },
+        {
+          path: '/api/handoff/%5c..%5cpackage.json',
+          status: 400
+        },
+        {
+          path: `/api/handoff/${GUIDED_GOAL_HANDOFF_CONTRACT_NAME}/extra`,
+          status: 400
+        },
+        {
+          path: '/api/handoff/..%2fpnpm-lock.yaml',
+          status: 400
+        }
+      ];
+
+      for (const probe of probes) {
+        const response = await fetch(`${context.baseUrl}${probe.path}`);
+        const body = await response.text();
+
+        assert.equal(response.status, probe.status, probe.path);
+        assert.match(response.headers.get('content-type') ?? '', /^application\/json; charset=utf-8/iu);
+        assert.doesNotMatch(
+          body,
+          /multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer/u,
+          probe.path
+        );
       }
 
       const after = await collectTextFileSnapshot(context.stateDir);
