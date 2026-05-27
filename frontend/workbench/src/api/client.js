@@ -1,5 +1,7 @@
 import {
   READONLY_API_ROUTES,
+  RUN_TIMELINE_ROUTE_TEMPLATE,
+  createRunTimelineRoute,
   projectWorkbenchContracts
 } from './contracts.js';
 
@@ -64,6 +66,7 @@ export async function fetchReadonlyRoute(route, {
     ok: true,
     route: route.path,
     method: route.method,
+    routeDescriptor: route,
     httpStatus: response.status,
     data
   };
@@ -77,7 +80,18 @@ export async function fetchWorkbenchContracts(options = {}) {
     ])
   );
 
-  return projectWorkbenchContracts(Object.fromEntries(entries));
+  const results = Object.fromEntries(entries);
+  const latestRunId = latestRunIdFromResults(results);
+  const timelineRoute = createRunTimelineRoute(latestRunId);
+
+  results.latestRunTimeline = timelineRoute === null
+    ? readonlySkipped({
+        route: RUN_TIMELINE_ROUTE_TEMPLATE,
+        message: '暂无 timeline / 未暴露 / 不可用'
+      })
+    : await fetchReadonlyRoute(timelineRoute, options);
+
+  return projectWorkbenchContracts(results);
 }
 
 function readonlyError({ route, httpStatus = null, message }) {
@@ -85,10 +99,32 @@ function readonlyError({ route, httpStatus = null, message }) {
     ok: false,
     route: route.path,
     method: route.method,
+    routeDescriptor: route,
     httpStatus,
     message,
     readonly: true
   };
+}
+
+function readonlySkipped({ route, message }) {
+  return {
+    ok: false,
+    skipped: true,
+    route: route.path,
+    method: route.method,
+    routeDescriptor: route,
+    httpStatus: null,
+    message,
+    readonly: true
+  };
+}
+
+function latestRunIdFromResults(results) {
+  const runId = results.latestRun?.ok === true
+    ? results.latestRun.data?.run?.runId
+    : null;
+
+  return typeof runId === 'string' && runId.trim().length > 0 ? runId : null;
 }
 
 export { READONLY_API_ROUTES };

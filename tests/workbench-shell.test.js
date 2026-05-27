@@ -33,14 +33,26 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(source, /\bhandle(Execute|Retry|Apply|Adopt|Rollback|Delete|Install|Mutate|Audit)\b/);
   });
 
-  it('renders the Task 6 panels as read-only source components', async () => {
+  it('renders the Task 6 and Task 7 panels as read-only source components', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
 
-    for (const componentName of ['SummaryPanel', 'ReadinessPanel', 'RunsPanel', 'LatestRunPanel']) {
+    for (const componentName of [
+      'SummaryPanel',
+      'ReadinessPanel',
+      'RunsPanel',
+      'LatestRunPanel',
+      'TimelinePanel',
+      'ArtifactListPanel',
+      'AdoptionSummaryPanel'
+    ]) {
       assert.match(app, new RegExp(`function ${componentName}\\b`, 'u'));
     }
 
+    assert.match(app, /暂无 timeline/u);
+    assert.match(app, /读取中/u);
+    assert.match(app, /读取失败/u);
     assert.match(app, /artifactRefs 只读列表/u);
+    assert.match(app, /Adoption summary 只读状态/u);
     assert.match(app, /刷新页面后会重新读取只读 API/u);
     assert.doesNotMatch(app, /\bfetch\s*\(/u);
     assert.doesNotMatch(app, /rawRunState/u);
@@ -58,6 +70,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.deepEqual(apiPaths, [
       '/api/readiness',
       '/api/runs',
+      '/api/runs/<run-id>/timeline',
       '/api/runs/latest',
       '/api/summary'
     ]);
@@ -73,6 +86,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(source, /previewAvailable\s*:\s*true/u);
     assert.doesNotMatch(source, /mime\s*:\s*['"`]text\/html/u);
     assert.doesNotMatch(source, /artifactKind\s*:\s*artifact\.kind/u);
+    assert.doesNotMatch(source, /\/artifacts\/\$\{|\/artifacts\/'\s*\+/u);
   });
 
   it('builds to the approved static Workbench output directory', async () => {

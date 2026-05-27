@@ -8,6 +8,8 @@ import {
 } from '../frontend/workbench/src/api/client.js';
 import {
   CONTRACT_TEXT,
+  READONLY_API_ROUTE_ALLOWLIST,
+  createRunTimelineRoute,
   projectArtifactRefs
 } from '../frontend/workbench/src/api/contracts.js';
 
@@ -20,6 +22,16 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/runs', 'symphony.console-runs'],
         ['GET', '/api/runs/latest', 'symphony.console-run']
+      ]
+    );
+    assert.deepEqual(
+      READONLY_API_ROUTE_ALLOWLIST.map((route) => [route.method, route.path, route.contractName]),
+      [
+        ['GET', '/api/summary', 'symphony.console-snapshot'],
+        ['GET', '/api/readiness', 'symphony.console-readiness'],
+        ['GET', '/api/runs', 'symphony.console-runs'],
+        ['GET', '/api/runs/latest', 'symphony.console-run'],
+        ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline']
       ]
     );
   });
@@ -49,9 +61,35 @@ describe('v15 Workbench read-only API client', () => {
       assert.equal(result.ok, true);
     }
 
+    const timelineRoute = createRunTimelineRoute('run 1/slash');
+    const timelineResult = await fetchReadonlyRoute(timelineRoute, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'symphony.console-run-timeline',
+              contractVersion: '1',
+              runId: 'run 1/slash',
+              timeline: []
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(timelineResult.ok, true);
+    assert.equal(timelineRoute.path, '/api/runs/run%201%2Fslash/timeline');
+
     assert.deepEqual(
       calls.map(([path, init]) => [path, init.method, init.cache, init.headers.Accept, Object.hasOwn(init, 'body')]),
-      READONLY_API_ROUTES.map((route) => [route.path, 'GET', 'no-store', 'application/json', false])
+      [
+        ...READONLY_API_ROUTES.map((route) => [route.path, 'GET', 'no-store', 'application/json', false]),
+        ['/api/runs/run%201%2Fslash/timeline', 'GET', 'no-store', 'application/json', false]
+      ]
     );
   });
 
@@ -74,15 +112,85 @@ describe('v15 Workbench read-only API client', () => {
     assert.match(result.message, /读取失败/u);
   });
 
+  it('projects no-runs empty state without fetching timeline', async () => {
+    const calls = [];
+    const payloadByPath = new Map([
+      ['/api/summary', {
+        contractName: 'symphony.console-snapshot',
+        contractVersion: '1',
+        status: 'no-runs',
+        latestRun: null,
+        runStats: {
+          total: 0
+        }
+      }],
+      ['/api/readiness', {
+        contractName: 'symphony.console-readiness',
+        contractVersion: '1',
+        status: 'ready',
+        readOnly: true,
+        modelInvocation: false
+      }],
+      ['/api/runs', {
+        contractName: 'symphony.console-runs',
+        contractVersion: '1',
+        filter: 'all',
+        availableFilters: ['all'],
+        runs: []
+      }]
+    ]);
+
+    const model = await fetchWorkbenchContracts({
+      fetchImpl: async (path) => {
+        calls.push(path);
+
+        if (path === '/api/runs/latest') {
+          return {
+            ok: false,
+            status: 404,
+            async json() {
+              return {};
+            }
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return payloadByPath.get(path);
+          }
+        };
+      }
+    });
+
+    assert.equal(calls.includes('/api/runs/<run-id>/timeline'), false);
+    assert.equal(calls.some((path) => path.endsWith('/timeline')), false);
+    assert.equal(model.latestRun.state, 'empty');
+    assert.equal(model.latestRunTimeline.state, 'empty');
+    assert.equal(model.latestRunTimeline.note, '暂无 timeline；当前没有 latest run。');
+    assert.equal(model.artifactRefs.state, 'missing');
+    assert.equal(model.routeStates.find((route) => route.id === 'latestRunTimeline').state, 'skipped');
+  });
+
   it('projects missing artifact preview fields as contract gaps instead of inferred values', async () => {
     const artifactRefs = projectArtifactRefs([{
       kind: 'summary',
       path: '/tmp/example/summary.json'
-    }]);
+    }], {
+      status: 'ok',
+      total: 1,
+      available: 1,
+      missing: 0,
+      unknown: 0,
+      missingKinds: []
+    });
 
     assert.equal(artifactRefs.count, 1);
     assert.equal(artifactRefs.items[0].kind.text, 'summary');
+    assert.equal(artifactRefs.items[0].status.text, 'available');
     assert.equal(artifactRefs.items[0].path.text, '/tmp/example/summary.json');
+    assert.equal(artifactRefs.items[0].ref.text, CONTRACT_TEXT.missing);
     assert.deepEqual(
       artifactRefs.items[0].previewFields.map((field) => [field.label, field.text]),
       [
@@ -97,7 +205,7 @@ describe('v15 Workbench read-only API client', () => {
       ]
     );
 
-    for (const field of ['uri', 'ref', 'mime', 'title', 'displayTitle', 'safeToRenderInline', 'sourceRunId', 'artifactKind', 'previewAvailable', 'sizeBytes']) {
+    for (const field of ['uri', 'mime', 'title', 'displayTitle', 'safeToRenderInline', 'sourceRunId', 'artifactKind', 'previewAvailable', 'sizeBytes']) {
       assert.equal(Object.hasOwn(artifactRefs.items[0], field), false);
     }
   });
@@ -138,7 +246,20 @@ describe('v15 Workbench read-only API client', () => {
           artifactRefs: [{
             kind: 'adoption-plan',
             path: '/tmp/example/adoption.json'
-          }]
+          }],
+          artifactStatus: {
+            status: 'missing',
+            total: 1,
+            available: 0,
+            missing: 1,
+            unknown: 0,
+            missingKinds: ['adoption-plan'],
+            missingRefs: [{
+              kind: 'adoption-plan',
+              path: '/tmp/example/adoption.json',
+              status: 'missing'
+            }]
+          }
         }
       }],
       ['/api/readiness', {
@@ -196,7 +317,20 @@ describe('v15 Workbench read-only API client', () => {
           artifactRefs: [{
             kind: 'adoption-plan',
             path: '/tmp/example/adoption.json'
-          }]
+          }],
+          artifactStatus: {
+            status: 'missing',
+            total: 1,
+            available: 0,
+            missing: 1,
+            unknown: 0,
+            missingKinds: ['adoption-plan'],
+            missingRefs: [{
+              kind: 'adoption-plan',
+              path: '/tmp/example/adoption.json',
+              status: 'missing'
+            }]
+          }
         }]
       }],
       ['/api/runs/latest', {
@@ -218,8 +352,38 @@ describe('v15 Workbench read-only API client', () => {
           artifactRefs: [{
             kind: 'adoption-plan',
             path: '/tmp/example/adoption.json'
-          }]
+          }],
+          artifactStatus: {
+            status: 'missing',
+            total: 1,
+            available: 0,
+            missing: 1,
+            unknown: 0,
+            missingKinds: ['adoption-plan'],
+            missingRefs: [{
+              kind: 'adoption-plan',
+              path: '/tmp/example/adoption.json',
+              status: 'missing'
+            }]
+          }
         }
+      }],
+      ['/api/runs/run-1/timeline', {
+        contractName: 'symphony.console-run-timeline',
+        contractVersion: '1',
+        runId: 'run-1',
+        timeline: [{
+          id: 'created',
+          label: 'Run created',
+          status: 'done',
+          detail: 'run-1',
+          at: '2026-05-27T00:00:00.000Z'
+        }, {
+          id: 'artifacts',
+          label: 'Artifacts',
+          status: 'done',
+          detail: '1 registered'
+        }]
       }]
     ]);
 
@@ -244,6 +408,9 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.latestRun.executionPlanId.value, 'plan-1');
     assert.equal(model.latestRun.adoptionPlanId.value, 'adoption-1');
     assert.equal(model.latestRun.timeline.text, '1 个事件');
+    assert.equal(model.latestRunTimeline.count.value, 2);
+    assert.equal(model.latestRunTimeline.items[0].id.value, 'created');
+    assert.equal(model.latestRunTimeline.items[1].status.value, 'done');
     assert.equal(model.adoption.pendingCount.value, 1);
     assert.equal(model.adoption.dirtyBlocked.value, false);
     assert.equal(model.adoption.gitDirtyReadiness.value, true);
@@ -251,6 +418,8 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.runs.items[0].isLatest.value, true);
     assert.equal(model.runs.items[0].routeKey.text, CONTRACT_TEXT.missing);
     assert.equal(model.runs.items[0].artifactRefs.count, 1);
+    assert.equal(model.artifactRefs.status.status.value, 'missing');
+    assert.equal(model.artifactRefs.items[0].status.value, 'missing');
     assert.equal(model.artifactRefs.missingPreviewFields.includes('mime'), true);
   });
 });

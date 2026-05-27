@@ -33,9 +33,25 @@ export const READONLY_API_ROUTES = Object.freeze([
   })
 ]);
 
+export const RUN_TIMELINE_ROUTE_TEMPLATE = Object.freeze({
+  id: 'latestRunTimeline',
+  label: 'Latest Run Timeline',
+  path: '/api/runs/<run-id>/timeline',
+  method: 'GET',
+  contractName: 'symphony.console-run-timeline'
+});
+
+export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
+  ...READONLY_API_ROUTES,
+  RUN_TIMELINE_ROUTE_TEMPLATE
+]);
+
 export const READONLY_API_ROUTE_IDS = Object.freeze(
-  READONLY_API_ROUTES.map((route) => route.id)
+  READONLY_API_ROUTE_ALLOWLIST.map((route) => route.id)
 );
+
+const RUN_API_BASE = ['', 'api', 'runs'].join('/');
+const TIMELINE_SEGMENT = 'timeline';
 
 export const DEFERRED_CONTRACT_GAPS = Object.freeze([
   'artifact preview 缺 uri/ref',
@@ -92,9 +108,22 @@ export function projectWorkbenchContracts(results) {
   const runsData = dataFrom(results.runs);
   const latestRunData = dataFrom(results.latestRun);
   const latestRun = latestRunData?.run ?? null;
-  const routeStates = READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id]));
-  const failedRequiredRoutes = routeStates.filter((route) => route.state === 'failed' && route.id !== 'latestRun');
+  const routeStates = [
+    ...READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id])),
+    projectRouteState(
+      results.latestRunTimeline?.routeDescriptor ?? RUN_TIMELINE_ROUTE_TEMPLATE,
+      results.latestRunTimeline
+    )
+  ];
+  const failedRequiredRoutes = routeStates.filter((route) => (
+    route.state === 'failed' && route.id !== 'latestRun' && route.id !== 'latestRunTimeline'
+  ));
   const hasNoRuns = summaryData?.latestRun === null || summaryData?.status === 'no-runs';
+  const projectedLatestRun = projectLatestRun({
+    result: results.latestRun,
+    run: latestRun,
+    hasNoRuns
+  });
 
   return {
     state: failedRequiredRoutes.length > 0 ? 'partial' : 'ready',
@@ -102,16 +131,16 @@ export function projectWorkbenchContracts(results) {
     summary: projectSummary(summaryData),
     readiness: projectReadiness(readinessData, summaryData),
     runs: projectRuns(runsData, summaryData),
-    latestRun: projectLatestRun({
-      result: results.latestRun,
-      run: latestRun,
-      hasNoRuns
+    latestRun: projectedLatestRun,
+    latestRunTimeline: projectLatestRunTimeline({
+      result: results.latestRunTimeline,
+      latestRun: projectedLatestRun
     }),
     adoption: projectAdoption({
       summary: summaryData,
       readiness: readinessData
     }),
-    artifactRefs: projectArtifactRefs(latestRun?.artifactRefs),
+    artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus),
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
       status: MISSING_TEXT
@@ -119,13 +148,29 @@ export function projectWorkbenchContracts(results) {
   };
 }
 
-export function projectArtifactRefs(artifactRefs) {
+export function createRunTimelineRoute(runId) {
+  if (!isNonEmptyString(runId)) {
+    return null;
+  }
+
+  return Object.freeze({
+    ...RUN_TIMELINE_ROUTE_TEMPLATE,
+    path: `${RUN_API_BASE}/${encodeURIComponent(runId)}/${TIMELINE_SEGMENT}`,
+    runId
+  });
+}
+
+export function projectArtifactRefs(artifactRefs, artifactStatus) {
+  const status = projectArtifactStatus(artifactStatus);
+
   if (!Array.isArray(artifactRefs)) {
     return {
       state: 'missing',
       count: null,
       label: MISSING_TEXT,
+      status,
       items: [],
+      unregistered: textState('未读取 / 不适用'),
       missingPreviewFields: ARTIFACT_PREVIEW_FIELD_GROUPS.map((group) => group.label)
     };
   }
@@ -143,7 +188,12 @@ export function projectArtifactRefs(artifactRefs) {
 
     return {
       kind: valueState(artifact.kind),
+      status: valueState(projectArtifactRefStatus({
+        artifact,
+        artifactStatus
+      })),
       path: valueState(artifact.path),
+      ref: valueState(artifact.ref),
       previewFields
     };
   });
@@ -152,7 +202,9 @@ export function projectArtifactRefs(artifactRefs) {
     state: 'available',
     count: artifactRefs.length,
     label: `${artifactRefs.length}`,
+    status,
     items,
+    unregistered: textState('未读取 / 等待 API contract 补充'),
     missingPreviewFields: unique(
       items.flatMap((item) => item.previewFields
         .filter((field) => field.status === 'missing')
@@ -162,6 +214,20 @@ export function projectArtifactRefs(artifactRefs) {
 }
 
 function projectRouteState(route, result) {
+  if (result?.skipped === true) {
+    return {
+      id: route.id,
+      label: route.label,
+      path: route.path,
+      method: route.method,
+      state: 'skipped',
+      contractName: valueState(route.contractName),
+      contractVersion: valueState(undefined),
+      error: result.message ?? '暂无 timeline / 未暴露 / 不可用',
+      httpStatus: null
+    };
+  }
+
   if (result?.ok === true) {
     return {
       id: route.id,
@@ -281,7 +347,8 @@ function projectLatestRun({ result, run, hasNoRuns }) {
         count: 0
       },
       artifactRefsCount: valueState(0),
-      artifactRefs: projectArtifactRefs([]),
+      artifactStatus: projectArtifactStatus(undefined),
+      artifactRefs: projectArtifactRefs([], undefined),
       raw: null
     };
   }
@@ -299,7 +366,8 @@ function projectLatestRun({ result, run, hasNoRuns }) {
       updatedAt: valueState(undefined),
       timeline: projectTimelineAvailability(undefined),
       artifactRefsCount: valueState(undefined),
-      artifactRefs: projectArtifactRefs(undefined),
+      artifactStatus: projectArtifactStatus(undefined),
+      artifactRefs: projectArtifactRefs(undefined, undefined),
       error: result?.message ?? UNAVAILABLE_TEXT,
       raw: null
     };
@@ -317,8 +385,78 @@ function projectLatestRun({ result, run, hasNoRuns }) {
     updatedAt: valueState(run?.updatedAt),
     timeline: projectTimelineAvailability(run?.timeline),
     artifactRefsCount: valueState(Array.isArray(run?.artifactRefs) ? run.artifactRefs.length : undefined),
-    artifactRefs: projectArtifactRefs(run?.artifactRefs),
+    artifactStatus: projectArtifactStatus(run?.artifactStatus),
+    artifactRefs: projectArtifactRefs(run?.artifactRefs, run?.artifactStatus),
     raw: run ?? null
+  };
+}
+
+function projectLatestRunTimeline({ result, latestRun }) {
+  if (latestRun.state === 'empty') {
+    return {
+      state: 'empty',
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      runId: valueState(undefined),
+      count: valueState(0),
+      items: [],
+      note: '暂无 timeline；当前没有 latest run。'
+    };
+  }
+
+  if (result?.skipped === true) {
+    return {
+      state: 'empty',
+      contractName: valueState(RUN_TIMELINE_ROUTE_TEMPLATE.contractName),
+      contractVersion: valueState(undefined),
+      runId: latestRun.runId,
+      count: valueState(0),
+      items: [],
+      note: '暂无 timeline / 未暴露 / 不可用。'
+    };
+  }
+
+  if (result?.ok !== true) {
+    return {
+      state: 'unavailable',
+      contractName: valueState(RUN_TIMELINE_ROUTE_TEMPLATE.contractName),
+      contractVersion: valueState(undefined),
+      runId: latestRun.runId,
+      count: valueState(undefined),
+      items: [],
+      error: result?.message ?? UNAVAILABLE_TEXT,
+      note: 'timeline route 未暴露或不可用；前端不从其他字段伪造 timeline。'
+    };
+  }
+
+  const timeline = Array.isArray(result.data?.timeline) ? result.data.timeline : null;
+
+  if (timeline === null) {
+    return {
+      state: 'missing',
+      contractName: valueState(result.data?.contractName),
+      contractVersion: valueState(result.data?.contractVersion),
+      runId: valueState(result.data?.runId),
+      count: valueState(undefined),
+      items: [],
+      note: 'timeline 字段未暴露。'
+    };
+  }
+
+  return {
+    state: timeline.length === 0 ? 'empty' : 'available',
+    contractName: valueState(result.data?.contractName),
+    contractVersion: valueState(result.data?.contractVersion),
+    runId: valueState(result.data?.runId),
+    count: valueState(timeline.length),
+    items: timeline.map((event) => ({
+      id: valueState(event?.id),
+      label: valueState(event?.label),
+      status: valueState(event?.status),
+      detail: valueState(event?.detail),
+      at: valueState(event?.at)
+    })),
+    note: 'Timeline panel 只展示 /api/runs/<run-id>/timeline 已暴露的只读事件字段。'
   };
 }
 
@@ -347,9 +485,64 @@ function projectRunListItem(run, latestRunId) {
     routeDecisionReason: valueState(run?.routeDecision?.reason),
     createdAt: valueState(run?.createdAt),
     updatedAt: valueState(run?.updatedAt),
-    artifactRefs: projectArtifactRefs(run?.artifactRefs),
+    artifactRefs: projectArtifactRefs(run?.artifactRefs, run?.artifactStatus),
     isLatest: valueState(Boolean(latestRunId && run?.runId === latestRunId))
   };
+}
+
+function projectArtifactStatus(artifactStatus) {
+  if (artifactStatus === undefined || artifactStatus === null || typeof artifactStatus !== 'object') {
+    return {
+      state: 'missing',
+      status: valueState(undefined),
+      total: valueState(undefined),
+      available: valueState(undefined),
+      missing: valueState(undefined),
+      unknown: valueState(undefined),
+      missingKinds: textState(MISSING_TEXT)
+    };
+  }
+
+  return {
+    state: 'available',
+    status: valueState(artifactStatus.status),
+    total: valueState(artifactStatus.total),
+    available: valueState(artifactStatus.available),
+    missing: valueState(artifactStatus.missing),
+    unknown: valueState(artifactStatus.unknown),
+    missingKinds: textState(Array.isArray(artifactStatus.missingKinds) && artifactStatus.missingKinds.length > 0
+      ? artifactStatus.missingKinds.join('、')
+      : '无')
+  };
+}
+
+function projectArtifactRefStatus({ artifact, artifactStatus }) {
+  if (hasOwn(artifact, 'status')) {
+    return artifact.status;
+  }
+
+  const missingRefs = Array.isArray(artifactStatus?.missingRefs) ? artifactStatus.missingRefs : [];
+  const isMissing = missingRefs.some((missingRef) => (
+    missingRef?.kind === artifact?.kind && missingRef?.path === artifact?.path
+  ));
+
+  if (isMissing) {
+    return 'missing';
+  }
+
+  if (artifactStatus?.status === 'ok') {
+    return 'available';
+  }
+
+  if (artifactStatus?.status === 'missing' && missingRefs.length > 0 && Number(artifactStatus?.unknown ?? 0) === 0) {
+    return 'available';
+  }
+
+  if (artifactStatus?.status === 'unknown') {
+    return UNAVAILABLE_TEXT;
+  }
+
+  return MISSING_TEXT;
 }
 
 function projectChecks(checks) {
@@ -465,6 +658,18 @@ function valueState(value) {
     text: String(value),
     value
   };
+}
+
+function textState(text) {
+  return {
+    state: text === MISSING_TEXT ? 'missing' : 'available',
+    text,
+    value: text
+  };
+}
+
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function hasOwn(value, key) {

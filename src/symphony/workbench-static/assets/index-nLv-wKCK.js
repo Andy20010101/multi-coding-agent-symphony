@@ -9917,7 +9917,21 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: "symphony.console-run"
 	})
 ]);
-Object.freeze(READONLY_API_ROUTES.map((route) => route.id));
+var RUN_TIMELINE_ROUTE_TEMPLATE = Object.freeze({
+	id: "latestRunTimeline",
+	label: "Latest Run Timeline",
+	path: "/api/runs/<run-id>/timeline",
+	method: "GET",
+	contractName: "symphony.console-run-timeline"
+});
+var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([...READONLY_API_ROUTES, RUN_TIMELINE_ROUTE_TEMPLATE]);
+Object.freeze(READONLY_API_ROUTE_ALLOWLIST.map((route) => route.id));
+var RUN_API_BASE = [
+	"",
+	"api",
+	"runs"
+].join("/");
+var TIMELINE_SEGMENT = "timeline";
 var DEFERRED_CONTRACT_GAPS = Object.freeze([
 	"artifact preview 缺 uri/ref",
 	"artifact preview 缺 mime",
@@ -9970,37 +9984,53 @@ function projectWorkbenchContracts(results) {
 	const readinessData = dataFrom(results.readiness);
 	const runsData = dataFrom(results.runs);
 	const latestRun = dataFrom(results.latestRun)?.run ?? null;
-	const routeStates = READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id]));
-	const failedRequiredRoutes = routeStates.filter((route) => route.state === "failed" && route.id !== "latestRun");
+	const routeStates = [...READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id])), projectRouteState(results.latestRunTimeline?.routeDescriptor ?? RUN_TIMELINE_ROUTE_TEMPLATE, results.latestRunTimeline)];
+	const failedRequiredRoutes = routeStates.filter((route) => route.state === "failed" && route.id !== "latestRun" && route.id !== "latestRunTimeline");
 	const hasNoRuns = summaryData?.latestRun === null || summaryData?.status === "no-runs";
+	const projectedLatestRun = projectLatestRun({
+		result: results.latestRun,
+		run: latestRun,
+		hasNoRuns
+	});
 	return {
 		state: failedRequiredRoutes.length > 0 ? "partial" : "ready",
 		routeStates,
 		summary: projectSummary(summaryData),
 		readiness: projectReadiness(readinessData, summaryData),
 		runs: projectRuns(runsData, summaryData),
-		latestRun: projectLatestRun({
-			result: results.latestRun,
-			run: latestRun,
-			hasNoRuns
+		latestRun: projectedLatestRun,
+		latestRunTimeline: projectLatestRunTimeline({
+			result: results.latestRunTimeline,
+			latestRun: projectedLatestRun
 		}),
 		adoption: projectAdoption({
 			summary: summaryData,
 			readiness: readinessData
 		}),
-		artifactRefs: projectArtifactRefs(latestRun?.artifactRefs),
+		artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus),
 		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
 			label: gap,
 			status: MISSING_TEXT
 		}))
 	};
 }
-function projectArtifactRefs(artifactRefs) {
+function createRunTimelineRoute(runId) {
+	if (!isNonEmptyString(runId)) return null;
+	return Object.freeze({
+		...RUN_TIMELINE_ROUTE_TEMPLATE,
+		path: `${RUN_API_BASE}/${encodeURIComponent(runId)}/${TIMELINE_SEGMENT}`,
+		runId
+	});
+}
+function projectArtifactRefs(artifactRefs, artifactStatus) {
+	const status = projectArtifactStatus(artifactStatus);
 	if (!Array.isArray(artifactRefs)) return {
 		state: "missing",
 		count: null,
 		label: MISSING_TEXT,
+		status,
 		items: [],
+		unregistered: textState("未读取 / 不适用"),
 		missingPreviewFields: ARTIFACT_PREVIEW_FIELD_GROUPS.map((group) => group.label)
 	};
 	const items = artifactRefs.map((artifact) => {
@@ -10014,7 +10044,12 @@ function projectArtifactRefs(artifactRefs) {
 		});
 		return {
 			kind: valueState(artifact.kind),
+			status: valueState(projectArtifactRefStatus({
+				artifact,
+				artifactStatus
+			})),
 			path: valueState(artifact.path),
+			ref: valueState(artifact.ref),
 			previewFields
 		};
 	});
@@ -10022,11 +10057,24 @@ function projectArtifactRefs(artifactRefs) {
 		state: "available",
 		count: artifactRefs.length,
 		label: `${artifactRefs.length}`,
+		status,
 		items,
+		unregistered: textState("未读取 / 等待 API contract 补充"),
 		missingPreviewFields: unique(items.flatMap((item) => item.previewFields.filter((field) => field.status === "missing").map((field) => field.label)))
 	};
 }
 function projectRouteState(route, result) {
+	if (result?.skipped === true) return {
+		id: route.id,
+		label: route.label,
+		path: route.path,
+		method: route.method,
+		state: "skipped",
+		contractName: valueState(route.contractName),
+		contractVersion: valueState(void 0),
+		error: result.message ?? "暂无 timeline / 未暴露 / 不可用",
+		httpStatus: null
+	};
 	if (result?.ok === true) return {
 		id: route.id,
 		label: route.label,
@@ -10134,7 +10182,8 @@ function projectLatestRun({ result, run, hasNoRuns }) {
 			count: 0
 		},
 		artifactRefsCount: valueState(0),
-		artifactRefs: projectArtifactRefs([]),
+		artifactStatus: projectArtifactStatus(void 0),
+		artifactRefs: projectArtifactRefs([], void 0),
 		raw: null
 	};
 	if (result?.ok !== true) return {
@@ -10149,7 +10198,8 @@ function projectLatestRun({ result, run, hasNoRuns }) {
 		updatedAt: valueState(void 0),
 		timeline: projectTimelineAvailability(void 0),
 		artifactRefsCount: valueState(void 0),
-		artifactRefs: projectArtifactRefs(void 0),
+		artifactStatus: projectArtifactStatus(void 0),
+		artifactRefs: projectArtifactRefs(void 0, void 0),
 		error: result?.message ?? UNAVAILABLE_TEXT,
 		raw: null
 	};
@@ -10165,8 +10215,64 @@ function projectLatestRun({ result, run, hasNoRuns }) {
 		updatedAt: valueState(run?.updatedAt),
 		timeline: projectTimelineAvailability(run?.timeline),
 		artifactRefsCount: valueState(Array.isArray(run?.artifactRefs) ? run.artifactRefs.length : void 0),
-		artifactRefs: projectArtifactRefs(run?.artifactRefs),
+		artifactStatus: projectArtifactStatus(run?.artifactStatus),
+		artifactRefs: projectArtifactRefs(run?.artifactRefs, run?.artifactStatus),
 		raw: run ?? null
+	};
+}
+function projectLatestRunTimeline({ result, latestRun }) {
+	if (latestRun.state === "empty") return {
+		state: "empty",
+		contractName: valueState(void 0),
+		contractVersion: valueState(void 0),
+		runId: valueState(void 0),
+		count: valueState(0),
+		items: [],
+		note: "暂无 timeline；当前没有 latest run。"
+	};
+	if (result?.skipped === true) return {
+		state: "empty",
+		contractName: valueState(RUN_TIMELINE_ROUTE_TEMPLATE.contractName),
+		contractVersion: valueState(void 0),
+		runId: latestRun.runId,
+		count: valueState(0),
+		items: [],
+		note: "暂无 timeline / 未暴露 / 不可用。"
+	};
+	if (result?.ok !== true) return {
+		state: "unavailable",
+		contractName: valueState(RUN_TIMELINE_ROUTE_TEMPLATE.contractName),
+		contractVersion: valueState(void 0),
+		runId: latestRun.runId,
+		count: valueState(void 0),
+		items: [],
+		error: result?.message ?? UNAVAILABLE_TEXT,
+		note: "timeline route 未暴露或不可用；前端不从其他字段伪造 timeline。"
+	};
+	const timeline = Array.isArray(result.data?.timeline) ? result.data.timeline : null;
+	if (timeline === null) return {
+		state: "missing",
+		contractName: valueState(result.data?.contractName),
+		contractVersion: valueState(result.data?.contractVersion),
+		runId: valueState(result.data?.runId),
+		count: valueState(void 0),
+		items: [],
+		note: "timeline 字段未暴露。"
+	};
+	return {
+		state: timeline.length === 0 ? "empty" : "available",
+		contractName: valueState(result.data?.contractName),
+		contractVersion: valueState(result.data?.contractVersion),
+		runId: valueState(result.data?.runId),
+		count: valueState(timeline.length),
+		items: timeline.map((event) => ({
+			id: valueState(event?.id),
+			label: valueState(event?.label),
+			status: valueState(event?.status),
+			detail: valueState(event?.detail),
+			at: valueState(event?.at)
+		})),
+		note: "Timeline panel 只展示 /api/runs/<run-id>/timeline 已暴露的只读事件字段。"
 	};
 }
 function projectAdoption({ summary, readiness }) {
@@ -10192,9 +10298,38 @@ function projectRunListItem(run, latestRunId) {
 		routeDecisionReason: valueState(run?.routeDecision?.reason),
 		createdAt: valueState(run?.createdAt),
 		updatedAt: valueState(run?.updatedAt),
-		artifactRefs: projectArtifactRefs(run?.artifactRefs),
+		artifactRefs: projectArtifactRefs(run?.artifactRefs, run?.artifactStatus),
 		isLatest: valueState(Boolean(latestRunId && run?.runId === latestRunId))
 	};
+}
+function projectArtifactStatus(artifactStatus) {
+	if (artifactStatus === void 0 || artifactStatus === null || typeof artifactStatus !== "object") return {
+		state: "missing",
+		status: valueState(void 0),
+		total: valueState(void 0),
+		available: valueState(void 0),
+		missing: valueState(void 0),
+		unknown: valueState(void 0),
+		missingKinds: textState(MISSING_TEXT)
+	};
+	return {
+		state: "available",
+		status: valueState(artifactStatus.status),
+		total: valueState(artifactStatus.total),
+		available: valueState(artifactStatus.available),
+		missing: valueState(artifactStatus.missing),
+		unknown: valueState(artifactStatus.unknown),
+		missingKinds: textState(Array.isArray(artifactStatus.missingKinds) && artifactStatus.missingKinds.length > 0 ? artifactStatus.missingKinds.join("、") : "无")
+	};
+}
+function projectArtifactRefStatus({ artifact, artifactStatus }) {
+	if (hasOwn(artifact, "status")) return artifact.status;
+	const missingRefs = Array.isArray(artifactStatus?.missingRefs) ? artifactStatus.missingRefs : [];
+	if (missingRefs.some((missingRef) => missingRef?.kind === artifact?.kind && missingRef?.path === artifact?.path)) return "missing";
+	if (artifactStatus?.status === "ok") return "available";
+	if (artifactStatus?.status === "missing" && missingRefs.length > 0 && Number(artifactStatus?.unknown ?? 0) === 0) return "available";
+	if (artifactStatus?.status === "unknown") return UNAVAILABLE_TEXT;
+	return MISSING_TEXT;
 }
 function projectChecks(checks) {
 	if (!Array.isArray(checks)) return {
@@ -10287,6 +10422,16 @@ function valueState(value) {
 		value
 	};
 }
+function textState(text) {
+	return {
+		state: text === MISSING_TEXT ? "missing" : "available",
+		text,
+		value: text
+	};
+}
+function isNonEmptyString(value) {
+	return typeof value === "string" && value.trim().length > 0;
+}
 function hasOwn(value, key) {
 	return value !== null && typeof value === "object" && Object.hasOwn(value, key);
 }
@@ -10343,23 +10488,47 @@ async function fetchReadonlyRoute(route, { fetchImpl = globalThis.fetch } = {}) 
 		ok: true,
 		route: route.path,
 		method: route.method,
+		routeDescriptor: route,
 		httpStatus: response.status,
 		data
 	};
 }
 async function fetchWorkbenchContracts(options = {}) {
 	const entries = await Promise.all(READONLY_API_ROUTES.map(async (route) => [route.id, await fetchReadonlyRoute(route, options)]));
-	return projectWorkbenchContracts(Object.fromEntries(entries));
+	const results = Object.fromEntries(entries);
+	const timelineRoute = createRunTimelineRoute(latestRunIdFromResults(results));
+	results.latestRunTimeline = timelineRoute === null ? readonlySkipped({
+		route: RUN_TIMELINE_ROUTE_TEMPLATE,
+		message: "暂无 timeline / 未暴露 / 不可用"
+	}) : await fetchReadonlyRoute(timelineRoute, options);
+	return projectWorkbenchContracts(results);
 }
 function readonlyError({ route, httpStatus = null, message }) {
 	return {
 		ok: false,
 		route: route.path,
 		method: route.method,
+		routeDescriptor: route,
 		httpStatus,
 		message,
 		readonly: true
 	};
+}
+function readonlySkipped({ route, message }) {
+	return {
+		ok: false,
+		skipped: true,
+		route: route.path,
+		method: route.method,
+		routeDescriptor: route,
+		httpStatus: null,
+		message,
+		readonly: true
+	};
+}
+function latestRunIdFromResults(results) {
+	const runId = results.latestRun?.ok === true ? results.latestRun.data?.run?.runId : null;
+	return typeof runId === "string" && runId.trim().length > 0 ? runId : null;
 }
 //#endregion
 //#region node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react-jsx-runtime.production.js
@@ -10444,7 +10613,7 @@ function App() {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: "基于 Task 5 的只读 API binding 展示 summary、readiness、runs 与 latest run。 浏览器端只读取固定 GET routes，不提供写入、终端动作或 artifact inline preview。"
+							children: "基于 Task 5 / Task 6 的只读 API binding 展示 summary、readiness、runs、latest run、 timeline、artifact refs 与 adoption summary。浏览器端只读取受控 GET routes， 不提供写入、终端动作或 artifact inline preview。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -10470,32 +10639,47 @@ function App() {
 				title: "读取失败",
 				copy: "错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。"
 			}) : null,
-			model === null ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-				className: "panel-grid",
-				"aria-label": "Workbench 只读 panels",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SummaryPanel, {
-						summary: model.summary,
-						route: findRoute(model.routeStates, "summary")
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReadinessPanel, {
-						readiness: model.readiness,
-						route: findRoute(model.routeStates, "readiness")
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RunsPanel, {
-						runs: model.runs,
-						route: findRoute(model.routeStates, "runs")
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(LatestRunPanel, {
-						latestRun: model.latestRun,
-						route: findRoute(model.routeStates, "latestRun")
-					})
-				]
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-				className: "support-grid",
-				"aria-label": "只读 contract 支撑信息",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RoutePanel, { routes: model.routeStates }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContractGapPanel, { gaps: model.deferredGaps })]
-			})] })
+			model === null ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "panel-grid",
+					"aria-label": "Workbench 只读 panels",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SummaryPanel, {
+							summary: model.summary,
+							route: findRoute(model.routeStates, "summary")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReadinessPanel, {
+							readiness: model.readiness,
+							route: findRoute(model.routeStates, "readiness")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RunsPanel, {
+							runs: model.runs,
+							route: findRoute(model.routeStates, "runs")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(LatestRunPanel, {
+							latestRun: model.latestRun,
+							route: findRoute(model.routeStates, "latestRun")
+						})
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "detail-grid",
+					"aria-label": "Task 7 只读扩展 panels",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TimelinePanel, {
+							timeline: model.latestRunTimeline,
+							route: findRoute(model.routeStates, "latestRunTimeline")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArtifactListPanel, { artifactRefs: model.artifactRefs }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionSummaryPanel, { adoption: model.adoption })
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "support-grid",
+					"aria-label": "只读 contract 支撑信息",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RoutePanel, { routes: model.routeStates }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContractGapPanel, { gaps: model.deferredGaps })]
+				})
+			] })
 		]
 	});
 }
@@ -10652,6 +10836,76 @@ function LatestRunPanel({ latestRun, route }) {
 		]
 	});
 }
+function TimelinePanel({ timeline, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "timeline-panel",
+		kicker: "Timeline panel",
+		title: "Latest run timeline",
+		state: timelineStateText(timeline, route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", timeline.contractName],
+				["contractVersion", timeline.contractVersion],
+				["runId", timeline.runId],
+				["event count", timeline.count]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "timeline entries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TimelineList, { timeline })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: timeline.note
+			})
+		]
+	});
+}
+function ArtifactListPanel({ artifactRefs }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "artifact-list-panel",
+		kicker: "Artifact refs/list panel",
+		title: "Artifact refs 只读列表",
+		state: artifactRefs.state === "missing" ? "未暴露" : "只读",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["registered refs", textValue(artifactRefs.label)],
+				["artifactStatus.status", artifactRefs.status.status],
+				["artifactStatus.total", artifactRefs.status.total],
+				["artifactStatus.available", artifactRefs.status.available],
+				["artifactStatus.missing", artifactRefs.status.missing],
+				["artifactStatus.unknown", artifactRefs.status.unknown],
+				["missingKinds", artifactRefs.status.missingKinds],
+				["unregistered kind route", artifactRefs.unregistered]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "artifact refs/list",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ArtifactRefList, { artifactRefs })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: "Artifact panel 只展示 latest run 已暴露 refs 与状态；不读取本地文件，不拼接 /@fs/ URL，不调用 artifact preview route。"
+			})
+		]
+	});
+}
+function AdoptionSummaryPanel({ adoption }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "adoption-summary-panel",
+		kicker: "Adoption summary panel",
+		title: "Adoption summary 只读状态",
+		state: "只读",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["status", adoption.status],
+			["pendingCount", adoption.pendingCount],
+			["dirtyBlocked", adoption.dirtyBlocked],
+			["Git dirty readiness", adoption.gitDirtyReadiness]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "panel-note",
+			children: adoption.note
+		})]
+	});
+}
 function RoutePanel({ routes }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "routes-panel",
@@ -10677,7 +10931,7 @@ function RoutePanel({ routes }) {
 			}, route.id))
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "panel-note",
-			children: "API client 只绑定 /api/summary、/api/readiness、/api/runs、/api/runs/latest。"
+			children: "API client 只绑定 /api/summary、/api/readiness、/api/runs、/api/runs/latest 与 latest run id 派生的 timeline GET route。"
 		})]
 	});
 }
@@ -10770,6 +11024,21 @@ function RiskList({ riskSummary }) {
 		] }, `${risk.id.text}-${risk.title.text}`))
 	});
 }
+function TimelineList({ timeline }) {
+	if (timeline.state === "unavailable") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: `timeline 不可用：${timeline.error}` });
+	if (timeline.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "timeline 未暴露。" });
+	if (timeline.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "暂无 timeline。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "timeline-list",
+		children: timeline.items.map((event, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["id", event.id],
+			["label", event.label],
+			["status", event.status],
+			["detail", event.detail],
+			["at", event.at]
+		] }) }, `${event.id.text}-${index}`))
+	});
+}
 function RunList({ runs }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "run-list",
@@ -10798,13 +11067,15 @@ function RunList({ runs }) {
 	});
 }
 function ArtifactRefList({ artifactRefs }) {
-	if (artifactRefs.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "artifactRefs 未暴露。" });
+	if (artifactRefs.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "artifactRefs 未暴露或不可用。" });
 	if (artifactRefs.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "artifactRefs 为空。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "artifact-list",
 		children: artifactRefs.items.map((artifact, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 			["kind", artifact.kind],
+			["status", artifact.status],
 			["path", artifact.path],
+			["ref", artifact.ref],
 			["preview fields", textValue(artifact.previewFields.map((field) => `${field.label}:${field.text}`).join(" / "))]
 		] }) }, `${artifact.kind.text}-${index}`))
 	});
@@ -10833,11 +11104,19 @@ function routeStateCounts(routes) {
 }
 function routeStateText(route) {
 	if (route === null || route === void 0) return "等待读取";
-	return route.state === "ready" ? "已读取" : "不可用";
+	if (route.state === "ready") return "已读取";
+	if (route.state === "skipped") return "不适用";
+	return "不可用";
 }
 function latestRunStateText(latestRun, route) {
 	if (latestRun.state === "empty") return "无运行记录";
 	if (latestRun.state === "unavailable") return "不可用";
+	return routeStateText(route);
+}
+function timelineStateText(timeline, route) {
+	if (timeline.state === "empty") return "暂无 timeline";
+	if (timeline.state === "missing") return "未暴露";
+	if (timeline.state === "unavailable") return "不可用";
 	return routeStateText(route);
 }
 function phaseText(phase) {

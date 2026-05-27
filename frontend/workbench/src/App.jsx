@@ -44,8 +44,9 @@ export default function App() {
           <p className="eyebrow">v15 React/Vite Workbench</p>
           <h1 id="workbench-title">v15 Workbench</h1>
           <p className="header-summary">
-            基于 Task 5 的只读 API binding 展示 summary、readiness、runs 与 latest run。
-            浏览器端只读取固定 GET routes，不提供写入、终端动作或 artifact inline preview。
+            基于 Task 5 / Task 6 的只读 API binding 展示 summary、readiness、runs、latest run、
+            timeline、artifact refs 与 adoption summary。浏览器端只读取受控 GET routes，
+            不提供写入、终端动作或 artifact inline preview。
           </p>
         </div>
         <div className="status-strip" aria-label="当前只读状态">
@@ -65,6 +66,12 @@ export default function App() {
             <ReadinessPanel readiness={model.readiness} route={findRoute(model.routeStates, 'readiness')} />
             <RunsPanel runs={model.runs} route={findRoute(model.routeStates, 'runs')} />
             <LatestRunPanel latestRun={model.latestRun} route={findRoute(model.routeStates, 'latestRun')} />
+          </section>
+
+          <section className="detail-grid" aria-label="Task 7 只读扩展 panels">
+            <TimelinePanel timeline={model.latestRunTimeline} route={findRoute(model.routeStates, 'latestRunTimeline')} />
+            <ArtifactListPanel artifactRefs={model.artifactRefs} />
+            <AdoptionSummaryPanel adoption={model.adoption} />
           </section>
 
           <section className="support-grid" aria-label="只读 contract 支撑信息">
@@ -229,6 +236,79 @@ function LatestRunPanel({ latestRun, route }) {
   );
 }
 
+function TimelinePanel({ timeline, route }) {
+  return (
+    <DataPanel
+      id="timeline-panel"
+      kicker="Timeline panel"
+      title="Latest run timeline"
+      state={timelineStateText(timeline, route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', timeline.contractName],
+        ['contractVersion', timeline.contractVersion],
+        ['runId', timeline.runId],
+        ['event count', timeline.count]
+      ]} />
+
+      <Subsection title="timeline entries">
+        <TimelineList timeline={timeline} />
+      </Subsection>
+
+      <p className="panel-note">{timeline.note}</p>
+    </DataPanel>
+  );
+}
+
+function ArtifactListPanel({ artifactRefs }) {
+  return (
+    <DataPanel
+      id="artifact-list-panel"
+      kicker="Artifact refs/list panel"
+      title="Artifact refs 只读列表"
+      state={artifactRefs.state === 'missing' ? '未暴露' : '只读'}
+    >
+      <FieldList rows={[
+        ['registered refs', textValue(artifactRefs.label)],
+        ['artifactStatus.status', artifactRefs.status.status],
+        ['artifactStatus.total', artifactRefs.status.total],
+        ['artifactStatus.available', artifactRefs.status.available],
+        ['artifactStatus.missing', artifactRefs.status.missing],
+        ['artifactStatus.unknown', artifactRefs.status.unknown],
+        ['missingKinds', artifactRefs.status.missingKinds],
+        ['unregistered kind route', artifactRefs.unregistered]
+      ]} />
+
+      <Subsection title="artifact refs/list">
+        <ArtifactRefList artifactRefs={artifactRefs} />
+      </Subsection>
+
+      <p className="panel-note">Artifact panel 只展示 latest run 已暴露 refs 与状态；不读取本地文件，不拼接 /@fs/ URL，不调用 artifact preview route。</p>
+    </DataPanel>
+  );
+}
+
+function AdoptionSummaryPanel({ adoption }) {
+  return (
+    <DataPanel
+      id="adoption-summary-panel"
+      kicker="Adoption summary panel"
+      title="Adoption summary 只读状态"
+      state="只读"
+    >
+      <FieldList rows={[
+        ['status', adoption.status],
+        ['pendingCount', adoption.pendingCount],
+        ['dirtyBlocked', adoption.dirtyBlocked],
+        ['Git dirty readiness', adoption.gitDirtyReadiness]
+      ]} />
+
+      <p className="panel-note">{adoption.note}</p>
+    </DataPanel>
+  );
+}
+
 function RoutePanel({ routes }) {
   return (
     <DataPanel
@@ -249,7 +329,7 @@ function RoutePanel({ routes }) {
           </div>
         ))}
       </dl>
-      <p className="panel-note">API client 只绑定 /api/summary、/api/readiness、/api/runs、/api/runs/latest。</p>
+      <p className="panel-note">API client 只绑定 /api/summary、/api/readiness、/api/runs、/api/runs/latest 与 latest run id 派生的 timeline GET route。</p>
     </DataPanel>
   );
 }
@@ -360,6 +440,36 @@ function RiskList({ riskSummary }) {
   );
 }
 
+function TimelineList({ timeline }) {
+  if (timeline.state === 'unavailable') {
+    return <EmptyBlock copy={`timeline 不可用：${timeline.error}`} />;
+  }
+
+  if (timeline.state === 'missing') {
+    return <EmptyBlock copy="timeline 未暴露。" />;
+  }
+
+  if (timeline.items.length === 0) {
+    return <EmptyBlock copy="暂无 timeline。" />;
+  }
+
+  return (
+    <ul className="timeline-list">
+      {timeline.items.map((event, index) => (
+        <li key={`${event.id.text}-${index}`}>
+          <FieldList rows={[
+            ['id', event.id],
+            ['label', event.label],
+            ['status', event.status],
+            ['detail', event.detail],
+            ['at', event.at]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function RunList({ runs }) {
   return (
     <div className="run-list">
@@ -390,7 +500,7 @@ function RunList({ runs }) {
 
 function ArtifactRefList({ artifactRefs }) {
   if (artifactRefs.state === 'missing') {
-    return <EmptyBlock copy="artifactRefs 未暴露。" />;
+    return <EmptyBlock copy="artifactRefs 未暴露或不可用。" />;
   }
 
   if (artifactRefs.items.length === 0) {
@@ -403,7 +513,9 @@ function ArtifactRefList({ artifactRefs }) {
         <li key={`${artifact.kind.text}-${index}`}>
           <FieldList rows={[
             ['kind', artifact.kind],
+            ['status', artifact.status],
             ['path', artifact.path],
+            ['ref', artifact.ref],
             ['preview fields', textValue(artifact.previewFields.map((field) => `${field.label}:${field.text}`).join(' / '))]
           ]} />
         </li>
@@ -441,7 +553,15 @@ function routeStateText(route) {
     return '等待读取';
   }
 
-  return route.state === 'ready' ? '已读取' : '不可用';
+  if (route.state === 'ready') {
+    return '已读取';
+  }
+
+  if (route.state === 'skipped') {
+    return '不适用';
+  }
+
+  return '不可用';
 }
 
 function latestRunStateText(latestRun, route) {
@@ -450,6 +570,22 @@ function latestRunStateText(latestRun, route) {
   }
 
   if (latestRun.state === 'unavailable') {
+    return '不可用';
+  }
+
+  return routeStateText(route);
+}
+
+function timelineStateText(timeline, route) {
+  if (timeline.state === 'empty') {
+    return '暂无 timeline';
+  }
+
+  if (timeline.state === 'missing') {
+    return '未暴露';
+  }
+
+  if (timeline.state === 'unavailable') {
     return '不可用';
   }
 

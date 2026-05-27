@@ -29,6 +29,7 @@ body {
 
 .workbench-header,
 .panel-grid,
+.detail-grid,
 .support-grid,
 .shell-state {
   width: min(1180px, calc(100% - 40px));
@@ -112,6 +113,7 @@ h3 {
 }
 
 .panel-grid,
+.detail-grid,
 .support-grid {
   display: grid;
   gap: 16px;
@@ -123,6 +125,11 @@ h3 {
 
 .support-grid {
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  margin-top: 16px;
+}
+
+.detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 16px;
 }
 
@@ -170,6 +177,13 @@ h3 {
   border-color: #edc9c0;
   background: #fff0ec;
   color: #9b3726;
+}
+
+.state-pill.skipped,
+.route-row .skipped {
+  border-color: #e4d5a8;
+  background: #fff8e4;
+  color: #7a5614;
 }
 
 .field-list,
@@ -263,6 +277,7 @@ h3 {
 .compact-list,
 .artifact-list,
 .gap-list,
+.timeline-list,
 .run-list {
   display: grid;
   gap: 10px;
@@ -273,6 +288,7 @@ h3 {
 .compact-list li,
 .artifact-list li,
 .gap-list li,
+.timeline-list li,
 .run-row {
   border: 1px solid #d8e0e2;
   border-radius: 8px;
@@ -311,6 +327,7 @@ h3 {
 @media (max-width: 920px) {
   .workbench-header,
   .panel-grid,
+  .detail-grid,
   .support-grid {
     grid-template-columns: 1fr;
   }
@@ -324,6 +341,7 @@ h3 {
 @media (max-width: 640px) {
   .workbench-header,
   .panel-grid,
+  .detail-grid,
   .support-grid,
   .shell-state {
     width: min(100% - 28px, 1180px);
