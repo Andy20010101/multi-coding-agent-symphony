@@ -82,23 +82,30 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/handoff/<ref>',
       '/api/readiness',
       '/api/runs',
+      '/api/runs/<run-id>/artifacts/<artifact-kind>/preview',
       '/api/runs/<run-id>/timeline',
       '/api/runs/latest',
       '/api/summary'
     ]);
   });
 
-  it('keeps artifact preview gaps as labels instead of browser preview logic', async () => {
+  it('consumes backend safe artifact previews without browser-side safety inference', async () => {
     const source = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
 
-    assert.match(source, /DEFERRED_CONTRACT_GAPS/u);
+    assert.match(source, /SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE/u);
+    assert.match(source, /createSafeArtifactPreviewRoutes/u);
     assert.match(source, /safeToRenderInline/u);
     assert.match(source, /previewAvailable/u);
+    assert.match(source, /contentText/u);
+    assert.match(app, /safe-preview-text/u);
     assert.doesNotMatch(source, /safeToRenderInline\s*:\s*true/u);
     assert.doesNotMatch(source, /previewAvailable\s*:\s*true/u);
     assert.doesNotMatch(source, /mime\s*:\s*['"`]text\/html/u);
     assert.doesNotMatch(source, /artifactKind\s*:\s*artifact\.kind/u);
     assert.doesNotMatch(source, /\/artifacts\/\$\{|\/artifacts\/'\s*\+/u);
+    assert.doesNotMatch(source, /extname|artifact\.path[\s\S]{0,80}\.endsWith|\.endsWith\s*\(\s*['"`]\.(html|json|txt)|\.includes\s*\(\s*['"`]\.html/u);
+    assert.doesNotMatch(app, /dangerouslySetInnerHTML/u);
   });
 
   it('builds to the approved static Workbench output directory', async () => {

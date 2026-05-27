@@ -3,6 +3,7 @@ const UNAVAILABLE_TEXT = '不可用';
 const NOT_APPLICABLE_TEXT = '不适用';
 const HANDOFF_API_BASE = '/api/handoff';
 const GUIDED_GOAL_HANDOFF_CONTRACT_NAME = 'guided-goal-handoff.v1';
+const SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME = 'safe-artifact-preview.v1';
 
 export const READONLY_API_ROUTES = Object.freeze([
   Object.freeze({
@@ -58,10 +59,20 @@ export const RUN_TIMELINE_ROUTE_TEMPLATE = Object.freeze({
   contractName: 'symphony.console-run-timeline'
 });
 
+export const SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
+  id: 'safeArtifactPreview',
+  label: 'Safe Artifact Preview',
+  path: '/api/runs/<run-id>/artifacts/<artifact-kind>/preview',
+  method: 'GET',
+  contractName: SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
 export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   ...READONLY_API_ROUTES,
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
-  RUN_TIMELINE_ROUTE_TEMPLATE
+  RUN_TIMELINE_ROUTE_TEMPLATE,
+  SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
 ]);
 
 export const READONLY_API_ROUTE_IDS = Object.freeze(
@@ -72,14 +83,6 @@ const RUN_API_BASE = ['', 'api', 'runs'].join('/');
 const TIMELINE_SEGMENT = 'timeline';
 
 export const DEFERRED_CONTRACT_GAPS = Object.freeze([
-  'artifact preview 缺 uri/ref',
-  'artifact preview 缺 mime',
-  'artifact preview 缺 title/displayTitle',
-  'artifact preview 缺 safeToRenderInline',
-  'artifact preview 缺 sourceRunId',
-  'artifact preview 缺 artifactKind',
-  'artifact preview 缺 previewAvailable',
-  'artifact preview 缺 sizeBytes',
   '没有 shared top-level capabilities object',
   'error envelopes 仍是 route-local',
   'dirty adoption 当前仍由 pending adoption 与 Git readiness 分别暴露'
@@ -128,6 +131,9 @@ export function projectWorkbenchContracts(results) {
   const runsData = dataFrom(results.runs);
   const latestRunData = dataFrom(results.latestRun);
   const latestRun = latestRunData?.run ?? null;
+  const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews)
+    ? results.safeArtifactPreviews
+    : [];
   const routeStates = [
     ...READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id])),
     projectRouteState(
@@ -137,7 +143,11 @@ export function projectWorkbenchContracts(results) {
     projectRouteState(
       results.latestRunTimeline?.routeDescriptor ?? RUN_TIMELINE_ROUTE_TEMPLATE,
       results.latestRunTimeline
-    )
+    ),
+    ...safeArtifactPreviewResults.map((result) => projectRouteState(
+      result?.routeDescriptor ?? SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE,
+      result
+    ))
   ];
   const failedRequiredRoutes = routeStates.filter((route) => (
     route.state === 'failed' && route.id !== 'latestRun' && route.id !== 'latestRunTimeline'
@@ -146,7 +156,8 @@ export function projectWorkbenchContracts(results) {
   const projectedLatestRun = projectLatestRun({
     result: results.latestRun,
     run: latestRun,
-    hasNoRuns
+    hasNoRuns,
+    safeArtifactPreviewResults
   });
 
   return {
@@ -170,7 +181,7 @@ export function projectWorkbenchContracts(results) {
       summary: summaryData,
       readiness: readinessData
     }),
-    artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus),
+    artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus, safeArtifactPreviewResults),
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
       status: MISSING_TEXT
@@ -211,7 +222,32 @@ export function createRunTimelineRoute(runId) {
   });
 }
 
-export function projectArtifactRefs(artifactRefs, artifactStatus) {
+export function createSafeArtifactPreviewRoutes(artifactRefs) {
+  if (!Array.isArray(artifactRefs)) {
+    return [];
+  }
+
+  return artifactRefs
+    .map((artifact, index) => {
+      if (!isSafeArtifactPreviewRoutePath(artifact?.uri)) {
+        return null;
+      }
+
+      const kind = isNonEmptyString(artifact?.kind) ? artifact.kind : `artifact-${index + 1}`;
+
+      return Object.freeze({
+        ...SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE,
+        id: `safeArtifactPreview:${index}`,
+        label: `Safe Artifact Preview ${kind}`,
+        path: artifact.uri,
+        artifactRef: artifact?.ref ?? null,
+        registeredKind: artifact?.kind ?? null
+      });
+    })
+    .filter((route) => route !== null);
+}
+
+export function projectArtifactRefs(artifactRefs, artifactStatus, safeArtifactPreviewResults = []) {
   const status = projectArtifactStatus(artifactStatus);
 
   if (!Array.isArray(artifactRefs)) {
@@ -222,6 +258,11 @@ export function projectArtifactRefs(artifactRefs, artifactStatus) {
       status,
       items: [],
       unregistered: textState('未读取 / 不适用'),
+      previewRoutes: {
+        state: 'missing',
+        count: 0,
+        label: MISSING_TEXT
+      },
       missingPreviewFields: ARTIFACT_PREVIEW_FIELD_GROUPS.map((group) => group.label)
     };
   }
@@ -245,7 +286,15 @@ export function projectArtifactRefs(artifactRefs, artifactStatus) {
       })),
       path: valueState(artifact.path),
       ref: valueState(artifact.ref),
-      previewFields
+      uri: valueState(artifact.uri),
+      previewFields,
+      preview: projectSafeArtifactPreview({
+        artifact,
+        result: findSafeArtifactPreviewResult({
+          artifact,
+          results: safeArtifactPreviewResults
+        })
+      })
     };
   });
 
@@ -255,12 +304,113 @@ export function projectArtifactRefs(artifactRefs, artifactStatus) {
     label: `${artifactRefs.length}`,
     status,
     items,
-    unregistered: textState('未读取 / 等待 API contract 补充'),
+    unregistered: textState('未读取 / 不适用'),
+    previewRoutes: {
+      state: safeArtifactPreviewResults.length === 0 ? 'empty' : 'available',
+      count: safeArtifactPreviewResults.length,
+      label: `${safeArtifactPreviewResults.length}`
+    },
     missingPreviewFields: unique(
       items.flatMap((item) => item.previewFields
         .filter((field) => field.status === 'missing')
         .map((field) => field.label))
     )
+  };
+}
+
+function projectSafeArtifactPreview({ artifact, result }) {
+  if (!isSafeArtifactPreviewRoutePath(artifact?.uri)) {
+    return {
+      state: 'missing',
+      route: valueState(artifact?.uri),
+      httpStatus: valueState(undefined),
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      status: valueState(undefined),
+      mime: valueState(undefined),
+      displayTitle: valueState(undefined),
+      artifactKind: valueState(undefined),
+      sourceRunId: valueState(undefined),
+      sizeBytes: valueState(undefined),
+      maxPreviewBytes: valueState(undefined),
+      previewAvailable: valueState(undefined),
+      safeToRenderInline: valueState(undefined),
+      truncated: valueState(undefined),
+      truncationReason: valueState(undefined),
+      downloadAvailable: valueState(undefined),
+      inline: {
+        state: 'missing',
+        text: '',
+        reason: 'preview uri 未暴露或不在受控 safe preview route 内'
+      }
+    };
+  }
+
+  if (result?.ok !== true) {
+    return {
+      state: 'unavailable',
+      route: valueState(artifact.uri),
+      httpStatus: valueState(result?.httpStatus),
+      contractName: valueState(SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME),
+      contractVersion: valueState(undefined),
+      status: valueState(undefined),
+      mime: valueState(undefined),
+      displayTitle: valueState(undefined),
+      artifactKind: valueState(undefined),
+      sourceRunId: valueState(undefined),
+      sizeBytes: valueState(undefined),
+      maxPreviewBytes: valueState(undefined),
+      previewAvailable: valueState(undefined),
+      safeToRenderInline: valueState(undefined),
+      truncated: valueState(undefined),
+      truncationReason: valueState(undefined),
+      downloadAvailable: valueState(undefined),
+      inline: {
+        state: 'unavailable',
+        text: '',
+        reason: result?.message ?? UNAVAILABLE_TEXT
+      }
+    };
+  }
+
+  const preview = result.data;
+  const inlineText = preview?.safeToRenderInline === true && typeof preview?.contentText === 'string'
+    ? preview.contentText
+    : preview?.safeToRenderInline === true && typeof preview?.previewText === 'string'
+      ? preview.previewText
+      : null;
+
+  return {
+    state: 'available',
+    route: valueState(result.route),
+    httpStatus: valueState(result.httpStatus),
+    contractName: valueState(preview?.contractName),
+    contractVersion: valueState(preview?.contractVersion),
+    status: valueState(preview?.status ?? (preview?.previewAvailable === true ? 'preview-available' : 'not-previewable')),
+    mime: valueState(preview?.mime),
+    displayTitle: valueState(preview?.displayTitle),
+    artifactKind: valueState(preview?.artifactKind),
+    sourceRunId: valueState(preview?.sourceRunId),
+    sizeBytes: valueState(preview?.sizeBytes),
+    maxPreviewBytes: valueState(preview?.maxPreviewBytes),
+    previewAvailable: valueState(preview?.previewAvailable),
+    safeToRenderInline: valueState(preview?.safeToRenderInline),
+    truncated: valueState(preview?.truncated),
+    truncationReason: valueState(preview?.truncationReason),
+    downloadAvailable: valueState(preview?.downloadAvailable),
+    inline: inlineText === null
+      ? {
+          state: 'hidden',
+          text: '',
+          reason: preview?.safeToRenderInline === true
+            ? '后端未提供 safe inline text'
+            : '后端标记为不可 inline'
+        }
+      : {
+          state: 'available',
+          text: inlineText,
+          reason: preview?.truncated === true ? '后端已截断 safe inline text' : '后端提供 safe inline text'
+        }
   };
 }
 
@@ -380,7 +530,7 @@ function projectRuns(runs, summary) {
   };
 }
 
-function projectLatestRun({ result, run, hasNoRuns }) {
+function projectLatestRun({ result, run, hasNoRuns, safeArtifactPreviewResults = [] }) {
   if (hasNoRuns || result?.httpStatus === 404) {
     return {
       state: 'empty',
@@ -437,7 +587,7 @@ function projectLatestRun({ result, run, hasNoRuns }) {
     timeline: projectTimelineAvailability(run?.timeline),
     artifactRefsCount: valueState(Array.isArray(run?.artifactRefs) ? run.artifactRefs.length : undefined),
     artifactStatus: projectArtifactStatus(run?.artifactStatus),
-    artifactRefs: projectArtifactRefs(run?.artifactRefs, run?.artifactStatus),
+    artifactRefs: projectArtifactRefs(run?.artifactRefs, run?.artifactStatus, safeArtifactPreviewResults),
     raw: run ?? null
   };
 }
@@ -790,6 +940,27 @@ function projectTimelineAvailability(timeline) {
 
 function dataFrom(result) {
   return result?.ok === true ? result.data : null;
+}
+
+function findSafeArtifactPreviewResult({ artifact, results }) {
+  const uri = artifact?.uri;
+
+  if (!isNonEmptyString(uri)) {
+    return null;
+  }
+
+  return results.find((result) => result?.route === uri || result?.routeDescriptor?.path === uri) ?? null;
+}
+
+function isSafeArtifactPreviewRoutePath(value) {
+  return isNonEmptyString(value) &&
+    value.startsWith(`${RUN_API_BASE}/`) &&
+    value.includes('/artifacts/') &&
+    value.endsWith('/preview') &&
+    !value.includes('?') &&
+    !value.includes('#') &&
+    !value.includes('\\') &&
+    !value.includes('..');
 }
 
 function objectState(value) {

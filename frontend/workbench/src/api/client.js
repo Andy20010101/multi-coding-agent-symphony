@@ -4,6 +4,7 @@ import {
   RUN_TIMELINE_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
   createRunTimelineRoute,
+  createSafeArtifactPreviewRoutes,
   projectWorkbenchContracts
 } from './contracts.js';
 
@@ -36,7 +37,11 @@ export async function fetchReadonlyRoute(route, {
     });
   }
 
-  if (!response.ok) {
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
     return readonlyError({
       route,
       httpStatus: response.status,
@@ -44,11 +49,7 @@ export async function fetchReadonlyRoute(route, {
     });
   }
 
-  let data;
-
-  try {
-    data = await response.json();
-  } catch {
+  if (!response.ok && !acceptsReadonlyErrorContract({ route, data })) {
     return readonlyError({
       route,
       httpStatus: response.status,
@@ -101,6 +102,12 @@ export async function fetchWorkbenchContracts(options = {}) {
       })
     : await fetchReadonlyRoute(timelineRoute, options);
 
+  const safeArtifactPreviewRoutes = createSafeArtifactPreviewRoutes(results.latestRun?.data?.run?.artifactRefs);
+
+  results.safeArtifactPreviews = await Promise.all(
+    safeArtifactPreviewRoutes.map((route) => fetchReadonlyRoute(route, options))
+  );
+
   return projectWorkbenchContracts(results);
 }
 
@@ -135,6 +142,12 @@ function latestRunIdFromResults(results) {
     : null;
 
   return typeof runId === 'string' && runId.trim().length > 0 ? runId : null;
+}
+
+function acceptsReadonlyErrorContract({ route, data }) {
+  return route.acceptErrorContract === true &&
+    route.contractName !== undefined &&
+    data?.contractName === route.contractName;
 }
 
 export { READONLY_API_ROUTES };

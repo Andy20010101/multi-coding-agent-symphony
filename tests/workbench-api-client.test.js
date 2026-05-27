@@ -9,6 +9,7 @@ import {
 import {
   CONTRACT_TEXT,
   READONLY_API_ROUTE_ALLOWLIST,
+  createSafeArtifactPreviewRoutes,
   createRunTimelineRoute,
   projectArtifactRefs
 } from '../frontend/workbench/src/api/contracts.js';
@@ -36,7 +37,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/runs', 'symphony.console-runs'],
         ['GET', '/api/runs/latest', 'symphony.console-run'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
-        ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline']
+        ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
+        ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
       ]
     );
   });
@@ -89,11 +91,39 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(timelineResult.ok, true);
     assert.equal(timelineRoute.path, '/api/runs/run%201%2Fslash/timeline');
 
+    const [previewRoute] = createSafeArtifactPreviewRoutes([{
+      kind: 'summary',
+      ref: 'artifact:run-1:summary',
+      uri: '/api/runs/run-1/artifacts/summary/preview'
+    }]);
+    const previewResult = await fetchReadonlyRoute(previewRoute, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'safe-artifact-preview.v1',
+              contractVersion: '1',
+              previewAvailable: true,
+              safeToRenderInline: true
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(previewResult.ok, true);
+    assert.equal(previewRoute.path, '/api/runs/run-1/artifacts/summary/preview');
+
     assert.deepEqual(
       calls.map(([path, init]) => [path, init.method, init.cache, init.headers.Accept, Object.hasOwn(init, 'body')]),
       [
         ...READONLY_API_ROUTES.map((route) => [route.path, 'GET', 'no-store', 'application/json', false]),
-        ['/api/runs/run%201%2Fslash/timeline', 'GET', 'no-store', 'application/json', false]
+        ['/api/runs/run%201%2Fslash/timeline', 'GET', 'no-store', 'application/json', false],
+        ['/api/runs/run-1/artifacts/summary/preview', 'GET', 'no-store', 'application/json', false]
       ]
     );
   });
@@ -200,6 +230,8 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(artifactRefs.items[0].status.text, 'available');
     assert.equal(artifactRefs.items[0].path.text, '/tmp/example/summary.json');
     assert.equal(artifactRefs.items[0].ref.text, CONTRACT_TEXT.missing);
+    assert.equal(artifactRefs.items[0].preview.state, 'missing');
+    assert.equal(artifactRefs.items[0].preview.inline.state, 'missing');
     assert.deepEqual(
       artifactRefs.items[0].previewFields.map((field) => [field.label, field.text]),
       [
@@ -214,9 +246,187 @@ describe('v15 Workbench read-only API client', () => {
       ]
     );
 
-    for (const field of ['uri', 'mime', 'title', 'displayTitle', 'safeToRenderInline', 'sourceRunId', 'artifactKind', 'previewAvailable', 'sizeBytes']) {
+    for (const field of ['mime', 'title', 'displayTitle', 'safeToRenderInline', 'sourceRunId', 'artifactKind', 'previewAvailable', 'sizeBytes']) {
       assert.equal(Object.hasOwn(artifactRefs.items[0], field), false);
     }
+  });
+
+  it('fetches and projects backend safe artifact preview contracts without inferring safety', async () => {
+    const calls = [];
+    const summaryPreviewPath = '/api/runs/run-1/artifacts/summary/preview';
+    const htmlPreviewPath = '/api/runs/run-1/artifacts/harness/preview';
+    const blockedPreviewPath = '/api/runs/run-1/artifacts/context/preview';
+    const payloadByPath = new Map([
+      ['/api/summary', {
+        contractName: 'symphony.console-snapshot',
+        contractVersion: '1',
+        status: 'ready',
+        latestRun: {
+          runId: 'run-1'
+        },
+        runStats: {
+          total: 1
+        }
+      }],
+      ['/api/readiness', {
+        contractName: 'symphony.console-readiness',
+        contractVersion: '1',
+        status: 'ready',
+        readOnly: true,
+        modelInvocation: false
+      }],
+      ['/api/handoff', createHandoffRefsPayload()],
+      [GUIDED_HANDOFF_PATH, createGuidedHandoffPayload()],
+      ['/api/runs', {
+        contractName: 'symphony.console-runs',
+        contractVersion: '1',
+        filter: 'all',
+        availableFilters: ['all'],
+        runs: []
+      }],
+      ['/api/runs/latest', {
+        contractName: 'symphony.console-run',
+        contractVersion: '1',
+        run: {
+          runId: 'run-1',
+          status: 'passed',
+          verifierStatus: 'passed',
+          modelInvocation: false,
+          artifactRefs: [{
+            kind: 'summary',
+            path: '/tmp/example/summary.json',
+            ref: 'artifact:run-1:summary',
+            uri: summaryPreviewPath,
+            mime: 'application/json',
+            previewAvailable: true,
+            safeToRenderInline: true,
+            sizeBytes: 12
+          }, {
+            kind: 'harness',
+            path: '/tmp/example/unsafe.html',
+            ref: 'artifact:run-1:harness',
+            uri: htmlPreviewPath,
+            mime: 'text/html; charset=utf-8',
+            previewAvailable: false,
+            safeToRenderInline: false,
+            sizeBytes: 31
+          }, {
+            kind: 'context',
+            path: '/tmp/example/package.json',
+            ref: 'artifact:run-1:context',
+            uri: blockedPreviewPath,
+            mime: 'application/json',
+            previewAvailable: false,
+            safeToRenderInline: false,
+            sizeBytes: 0
+          }],
+          artifactStatus: {
+            status: 'ok',
+            total: 3,
+            available: 3,
+            missing: 0,
+            unknown: 0,
+            missingKinds: []
+          }
+        }
+      }],
+      ['/api/runs/run-1/timeline', {
+        contractName: 'symphony.console-run-timeline',
+        contractVersion: '1',
+        runId: 'run-1',
+        timeline: []
+      }],
+      [summaryPreviewPath, {
+        contractName: 'safe-artifact-preview.v1',
+        contractVersion: '1',
+        ref: 'artifact:run-1:summary',
+        uri: summaryPreviewPath,
+        displayTitle: 'Summary artifact',
+        artifactKind: 'intake-summary',
+        sourceRunId: 'run-1',
+        mime: 'application/json',
+        sizeBytes: 12,
+        maxPreviewBytes: 204800,
+        previewAvailable: true,
+        safeToRenderInline: true,
+        truncated: false,
+        truncationReason: null,
+        downloadAvailable: false,
+        contentText: '{"ok":true}\n'
+      }],
+      [htmlPreviewPath, {
+        contractName: 'safe-artifact-preview.v1',
+        contractVersion: '1',
+        ref: 'artifact:run-1:harness',
+        uri: htmlPreviewPath,
+        displayTitle: 'Harness artifact',
+        artifactKind: 'evidence',
+        sourceRunId: 'run-1',
+        mime: 'text/html; charset=utf-8',
+        sizeBytes: 31,
+        maxPreviewBytes: 204800,
+        previewAvailable: false,
+        safeToRenderInline: false,
+        truncated: false,
+        truncationReason: null,
+        downloadAvailable: false,
+        contentText: '<script>alert("unsafe")</script>'
+      }],
+      [blockedPreviewPath, {
+        contractName: 'safe-artifact-preview.v1',
+        contractVersion: '1',
+        status: 'blocked-artifact-path',
+        ref: 'artifact:run-1:context',
+        uri: blockedPreviewPath,
+        displayTitle: 'Context artifact',
+        artifactKind: 'project-context',
+        sourceRunId: 'run-1',
+        mime: 'application/json',
+        sizeBytes: 0,
+        maxPreviewBytes: 204800,
+        previewAvailable: false,
+        safeToRenderInline: false,
+        truncated: false,
+        truncationReason: null,
+        downloadAvailable: false
+      }]
+    ]);
+
+    const model = await fetchWorkbenchContracts({
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: path !== blockedPreviewPath,
+          status: path === blockedPreviewPath ? 403 : 200,
+          async json() {
+            return payloadByPath.get(path);
+          }
+        };
+      }
+    });
+
+    assert.equal(model.artifactRefs.previewRoutes.count, 3);
+    assert.equal(model.artifactRefs.items[0].preview.mime.value, 'application/json');
+    assert.equal(model.artifactRefs.items[0].preview.inline.state, 'available');
+    assert.equal(model.artifactRefs.items[0].preview.inline.text, '{"ok":true}\n');
+    assert.equal(model.artifactRefs.items[1].preview.mime.value, 'text/html; charset=utf-8');
+    assert.equal(model.artifactRefs.items[1].preview.safeToRenderInline.value, false);
+    assert.equal(model.artifactRefs.items[1].preview.inline.state, 'hidden');
+    assert.equal(model.artifactRefs.items[1].preview.inline.text, '');
+    assert.equal(model.artifactRefs.items[2].preview.status.value, 'blocked-artifact-path');
+    assert.equal(model.artifactRefs.items[2].preview.httpStatus.value, 403);
+    assert.equal(model.artifactRefs.items[2].preview.downloadAvailable.value, false);
+    assert.deepEqual(
+      calls
+        .filter(([path]) => path.includes('/artifacts/'))
+        .map(([path, init]) => [path, init.method, Object.hasOwn(init, 'body')]),
+      [
+        [summaryPreviewPath, 'GET', false],
+        [htmlPreviewPath, 'GET', false],
+        [blockedPreviewPath, 'GET', false]
+      ]
+    );
   });
 
   it('binds summary, readiness, runs, and latest run without creating shared capabilities', async () => {

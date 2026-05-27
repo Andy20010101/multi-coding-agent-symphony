@@ -46,7 +46,7 @@ export default function App() {
           <p className="header-summary">
             基于 Task 5 / Task 6 的只读 API binding 展示 summary、readiness、runs、latest run、
             timeline、artifact refs、adoption summary 与 v16 handoff。浏览器端只读取受控 GET routes，
-            不提供写入、终端动作或 artifact inline preview。
+            artifact preview 只消费后端 safe-artifact-preview contract，不提供写入或终端动作。
           </p>
         </div>
         <div className="status-strip" aria-label="当前只读状态">
@@ -239,7 +239,7 @@ function LatestRunPanel({ latestRun, route }) {
         <ArtifactRefList artifactRefs={latestRun.artifactRefs} />
       </Subsection>
 
-      <p className="panel-note">Latest run panel 不读取 artifact 文件内容，也不根据 kind、路径、扩展名或内容决定 inline preview。</p>
+      <p className="panel-note">Latest run panel 只展示后端已暴露 artifact refs 与 safe preview 字段；React 端不根据 kind、路径、扩展名或内容决定 inline preview。</p>
     </DataPanel>
   );
 }
@@ -285,6 +285,7 @@ function ArtifactListPanel({ artifactRefs }) {
         ['artifactStatus.missing', artifactRefs.status.missing],
         ['artifactStatus.unknown', artifactRefs.status.unknown],
         ['missingKinds', artifactRefs.status.missingKinds],
+        ['safe preview routes', textValue(artifactRefs.previewRoutes.label)],
         ['unregistered kind route', artifactRefs.unregistered]
       ]} />
 
@@ -292,7 +293,7 @@ function ArtifactListPanel({ artifactRefs }) {
         <ArtifactRefList artifactRefs={artifactRefs} />
       </Subsection>
 
-      <p className="panel-note">Artifact panel 只展示 latest run 已暴露 refs 与状态；不读取本地文件，不拼接 /@fs/ URL，不调用 artifact preview route。</p>
+      <p className="panel-note">Artifact panel 只使用 latest run 已暴露 uri 调用后端 safe preview route；不读取本地文件，不拼接 /@fs/ URL，不根据文件类型推断安全性。</p>
     </DataPanel>
   );
 }
@@ -390,7 +391,7 @@ function RoutePanel({ routes }) {
           </div>
         ))}
       </dl>
-      <p className="panel-note">API client 只绑定 /api/summary、/api/readiness、/api/handoff、/api/runs、/api/runs/latest、注册 handoff ref 与 latest run id 派生的 timeline GET route。</p>
+      <p className="panel-note">API client 只绑定 /api/summary、/api/readiness、/api/handoff、/api/runs、/api/runs/latest、注册 handoff ref、latest run id 派生的 timeline GET route，以及后端 artifact uri 暴露的 safe preview GET route。</p>
     </DataPanel>
   );
 }
@@ -577,11 +578,52 @@ function ArtifactRefList({ artifactRefs }) {
             ['status', artifact.status],
             ['path', artifact.path],
             ['ref', artifact.ref],
+            ['uri', artifact.uri],
             ['preview fields', textValue(artifact.previewFields.map((field) => `${field.label}:${field.text}`).join(' / '))]
           ]} />
+          <SafePreviewBlock preview={artifact.preview} />
         </li>
       ))}
     </ul>
+  );
+}
+
+function SafePreviewBlock({ preview }) {
+  if (preview.state === 'missing') {
+    return <EmptyBlock copy={`safe preview 未读取：${preview.inline.reason}`} />;
+  }
+
+  if (preview.state === 'unavailable') {
+    return <p className="error-copy">safe preview route 不可用：{preview.inline.reason}</p>;
+  }
+
+  return (
+    <section className="safe-preview-block" aria-label="safe artifact preview">
+      <FieldList rows={[
+        ['preview.route', preview.route],
+        ['preview.httpStatus', preview.httpStatus],
+        ['preview.contractName', preview.contractName],
+        ['preview.contractVersion', preview.contractVersion],
+        ['preview.status', preview.status],
+        ['preview.mime', preview.mime],
+        ['preview.displayTitle', preview.displayTitle],
+        ['preview.artifactKind', preview.artifactKind],
+        ['preview.sourceRunId', preview.sourceRunId],
+        ['preview.sizeBytes', preview.sizeBytes],
+        ['preview.maxPreviewBytes', preview.maxPreviewBytes],
+        ['preview.previewAvailable', preview.previewAvailable],
+        ['preview.safeToRenderInline', preview.safeToRenderInline],
+        ['preview.truncated', preview.truncated],
+        ['preview.truncationReason', preview.truncationReason],
+        ['preview.downloadAvailable', preview.downloadAvailable]
+      ]} />
+
+      {preview.inline.state === 'available' ? (
+        <pre className="safe-preview-text"><code>{preview.inline.text}</code></pre>
+      ) : (
+        <EmptyBlock copy={`未展示 inline preview：${preview.inline.reason}`} />
+      )}
+    </section>
   );
 }
 
