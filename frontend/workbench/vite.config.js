@@ -8,6 +8,7 @@ const staticOutDir = fileURLToPath(new URL('../../src/symphony/workbench-static'
 
 export default defineConfig({
   root: workbenchRoot,
+  base: '/workbench/',
   plugins: [react()],
   server: {
     fs: {

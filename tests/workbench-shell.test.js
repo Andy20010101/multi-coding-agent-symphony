@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 
 const frontendFiles = [
   'frontend/workbench/index.html',
@@ -93,6 +97,7 @@ describe('v15 Workbench React/Vite shell', () => {
     const config = await readFile('frontend/workbench/vite.config.js', 'utf8');
 
     assert.match(config, /src\/symphony\/workbench-static/);
+    assert.match(config, /base:\s*['"`]\/workbench\/['"`]/);
     assert.doesNotMatch(config, /proxy\s*:/);
   });
 
@@ -110,3 +115,159 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(config, /proxy\s*:/);
   });
 });
+
+describe('v15 Workbench static serving', () => {
+  it('serves the Workbench app, assets, and app-route fallback under /workbench only', async () => {
+    const { root, server, baseUrl } = await startConsoleServer();
+
+    try {
+      const rootResponse = await fetch(`${baseUrl}/workbench/`);
+
+      assert.equal(rootResponse.status, 200);
+      assert.match(rootResponse.headers.get('content-type') ?? '', /^text\/html; charset=utf-8/iu);
+      assert.equal(rootResponse.headers.get('x-content-type-options'), 'nosniff');
+
+      const html = await rootResponse.text();
+      const noSlashResponse = await fetch(`${baseUrl}/workbench`);
+      const assetPaths = extractWorkbenchAssetPaths(html);
+
+      assert.match(html, /<div id="root"><\/div>/u);
+      assert.equal(noSlashResponse.status, 200);
+      assert.match(await noSlashResponse.text(), /<div id="root"><\/div>/u);
+      assert.match(assetPaths.script, /^\/workbench\/assets\/index-.+\.js$/u);
+      assert.match(assetPaths.style, /^\/workbench\/assets\/index-.+\.css$/u);
+
+      const jsResponse = await fetch(`${baseUrl}${assetPaths.script}`);
+      const cssResponse = await fetch(`${baseUrl}${assetPaths.style}`);
+      const fallbackResponse = await fetch(`${baseUrl}/workbench/runs/example-run`);
+      const summaryResponse = await fetch(`${baseUrl}/api/summary`);
+      const rootAssetResponse = await fetch(`${baseUrl}${assetPaths.script.replace('/workbench', '')}`);
+      const stageHtmlResponse = await fetch(`${baseUrl}/docs/stages/v15-workbench-react-vite-migration.html`);
+      const stageJsonResponse = await fetch(`${baseUrl}/docs/stages/v15-workbench-react-vite-migration.stage.json`);
+
+      assert.equal(jsResponse.status, 200);
+      assert.match(jsResponse.headers.get('content-type') ?? '', /javascript/iu);
+      assert.equal((await jsResponse.text()).length > 1000, true);
+      assert.equal(cssResponse.status, 200);
+      assert.match(cssResponse.headers.get('content-type') ?? '', /^text\/css; charset=utf-8/iu);
+      assert.equal(fallbackResponse.status, 200);
+      assert.match(await fallbackResponse.text(), /<div id="root"><\/div>/u);
+      assert.equal(summaryResponse.status, 200);
+      assert.equal((await summaryResponse.json()).contractName, 'symphony.console-snapshot');
+      assert.equal(rootAssetResponse.status, 404);
+      assert.equal(stageHtmlResponse.status, 404);
+      assert.doesNotMatch(await stageHtmlResponse.text(), /v15 Workbench|symphony.stage-charter/u);
+      assert.equal(stageJsonResponse.status, 404);
+      assert.doesNotMatch(await stageJsonResponse.text(), /v15 Workbench|symphony.stage-charter/u);
+    } finally {
+      await closeServer(server);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 404/403 for missing assets, traversal, local file probes, and write methods', async () => {
+    const { root, server, baseUrl } = await startConsoleServer();
+    const assetName = (await readdir('src/symphony/workbench-static/assets'))
+      .find((entry) => entry.endsWith('.js'));
+
+    assert.equal(typeof assetName, 'string');
+
+    try {
+      const missingAssetResponse = await fetch(`${baseUrl}/workbench/assets/missing.js`);
+      const postResponse = await fetch(`${baseUrl}/workbench/`, { method: 'POST' });
+
+      assert.equal(missingAssetResponse.status, 404);
+      assert.equal(postResponse.status, 405);
+      assert.doesNotMatch(await postResponse.text(), /<div id="root"><\/div>/u);
+
+      for (const path of [
+        '/workbench/%2e%2e/package.json',
+        '/workbench/..%2fpackage.json',
+        '/workbench/%2e%2e%2fsrc%2fsymphony%2fconsole.js',
+        '/workbench/%5c..%5cpackage.json'
+      ]) {
+        const response = await fetch(`${baseUrl}${path}`);
+        const body = await response.text();
+
+        assert.equal([403, 404].includes(response.status), true);
+        assert.doesNotMatch(body, /multi-coding-agent-symphony|createSymphonyConsoleServer/u);
+      }
+
+      for (const path of [
+        '/workbench/package.json',
+        '/workbench/pnpm-lock.yaml',
+        '/workbench/src/symphony/console.js',
+        '/workbench/docs/plans/v15-task1-api-fixtures-evidence-2026-05-27.md',
+        `/workbench/assets/${assetName}/nested`
+      ]) {
+        const response = await fetch(`${baseUrl}${path}`);
+        const body = await response.text();
+
+        assert.equal(response.status, 404);
+        assert.doesNotMatch(body, /multi-coding-agent-symphony|createSymphonyConsoleServer|Task 1/u);
+      }
+    } finally {
+      await closeServer(server);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+async function startConsoleServer() {
+  const root = await mkdtemp(join(tmpdir(), 'symphony-workbench-static-'));
+  const server = createSymphonyConsoleServer({
+    stateDir: join(root, '.symphony'),
+    cwd: root,
+    env: {}
+  });
+  const baseUrl = await listenOnRandomPort(server);
+
+  return {
+    root,
+    server,
+    baseUrl
+  };
+}
+
+async function listenOnRandomPort(server) {
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+
+  assert.equal(typeof address, 'object');
+  assert.notEqual(address, null);
+
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function closeServer(server) {
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+function extractWorkbenchAssetPaths(html) {
+  const script = /<script[^>]+src="([^"]+\.js)"/u.exec(html)?.[1];
+  const style = /<link[^>]+href="([^"]+\.css)"/u.exec(html)?.[1];
+
+  assert.equal(typeof script, 'string');
+  assert.equal(typeof style, 'string');
+
+  return {
+    script,
+    style
+  };
+}
