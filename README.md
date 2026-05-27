@@ -47,6 +47,9 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [v13.1 Release Evidence](docs/plans/v13.1-release-evidence-2026-05-25.md)
 - [v13 Execution Prompt](docs/plans/v13-execution-prompt-2026-05-25.md)
 - [v14 Release Evidence](docs/plans/v14-release-evidence-2026-05-26.md)
+- [v15 Task 11 Release Verification Evidence](docs/plans/v15-task11-release-verification-evidence-2026-05-27.md)
+- [v15 Final Closure Evidence](docs/plans/v15-final-closure-evidence-2026-05-27.md)
+- [v15 Release Bookkeeping Evidence](docs/plans/v15-release-bookkeeping-evidence-2026-05-27.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
 - [V1 to V2 Evolution Plan](docs/plans/v1-to-v2-evolution-plan-2026-05-14.md)
@@ -80,7 +83,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Current released repository tag: `v14`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, and v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery. The `v7` tag remains available for historical installs.
+Latest completed mainline milestone: `v15`. Current released repository tag remains `v14` until the `v15` tag is cut. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, and v15 completes the React/Vite read-only Workbench migration on mainline. The `v7` tag remains available for historical installs.
 
 ## Design Center
 
@@ -142,7 +145,7 @@ curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-sym
 symphony doctor
 ```
 
-The installer clones or updates the `v8` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The `v8` tag remains the stable installer baseline; set `MCAS_INSTALL_REF=v14` when you intentionally want the latest released build. Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI; `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults.
+The installer clones or updates the `v8` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The `v8` tag remains the stable installer baseline; set `MCAS_INSTALL_REF=v14` when you intentionally want the latest tagged release. v15 mainline closure is complete, but `MCAS_INSTALL_REF=v15` should only be used after the `v15` tag is created. Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI; `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults.
 
 Development fallback from a checkout:
 
