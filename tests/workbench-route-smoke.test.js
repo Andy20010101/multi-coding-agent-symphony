@@ -9,11 +9,15 @@ import {
   GUIDED_GOAL_HANDOFF_CONTRACT_NAME,
   validateGuidedGoalHandoffContract
 } from '../src/symphony/guided-goal-handoff.js';
+import {
+  SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME,
+  validateSafeArtifactPreviewContract
+} from '../src/symphony/safe-artifact-preview.js';
 
 const ROUTE_SMOKE_RUN_ID = 'task9-route-smoke-run';
 const FIXED_TIME = '2026-05-27T00:00:00.000Z';
 
-describe('v15 Workbench route smoke and server parity', () => {
+describe('v16 Workbench route smoke and server parity', () => {
   it('serves the Workbench browser entry, static assets, and Task 8 fallback/404 behavior', async () => {
     const context = await startConsoleServer();
 
@@ -156,6 +160,7 @@ describe('v15 Workbench route smoke and server parity', () => {
           assertPayload(payload) {
             assert.equal(payload.run.runId, ROUTE_SMOKE_RUN_ID);
             assert.equal(payload.run.modelInvocation, false);
+            assert.equal(payload.run.artifactRefs.some((artifact) => artifact.kind === 'summary'), true);
           }
         }
       ];
@@ -181,6 +186,57 @@ describe('v15 Workbench route smoke and server parity', () => {
     }
   });
 
+  it('serves safe preview contracts for registered artifact refs only', async () => {
+    const context = await startConsoleServer();
+
+    try {
+      const before = await collectTextFileSnapshot(context.stateDir);
+      const summaryResponse = await fetch(`${context.baseUrl}/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`);
+      const summaryPreview = await summaryResponse.json();
+
+      assert.equal(summaryResponse.status, 200);
+      assertValidSafePreview(summaryPreview);
+      assert.equal(summaryPreview.contractName, SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME);
+      assert.equal(summaryPreview.sourceRunId, ROUTE_SMOKE_RUN_ID);
+      assert.equal(summaryPreview.mime, 'application/json');
+      assert.equal(summaryPreview.previewAvailable, true);
+      assert.equal(summaryPreview.safeToRenderInline, true);
+      assert.equal(summaryPreview.contentText, '{"routeSmoke":true}\n');
+      assert.equal(summaryPreview.downloadAvailable, false);
+      assert.equal(Object.hasOwn(summaryPreview, 'path'), false);
+
+      const htmlResponse = await fetch(`${context.baseUrl}/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/harness/preview`);
+      const htmlBody = await htmlResponse.text();
+      const htmlPreview = JSON.parse(htmlBody);
+
+      assert.equal(htmlResponse.status, 200);
+      assertValidSafePreview(htmlPreview);
+      assert.equal(htmlPreview.mime, 'text/html; charset=utf-8');
+      assert.equal(htmlPreview.previewAvailable, false);
+      assert.equal(htmlPreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(htmlPreview, 'contentText'), false);
+      assert.doesNotMatch(htmlBody, /<script|alert/u);
+
+      const blockedResponse = await fetch(`${context.baseUrl}/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/context/preview`);
+      const blockedBody = await blockedResponse.text();
+      const blockedPreview = JSON.parse(blockedBody);
+
+      assert.equal(blockedResponse.status, 403);
+      assertValidSafePreview(blockedPreview);
+      assert.equal(blockedPreview.status, 'blocked-artifact-path');
+      assert.equal(blockedPreview.previewAvailable, false);
+      assert.equal(blockedPreview.safeToRenderInline, false);
+      assert.equal(Object.hasOwn(blockedPreview, 'contentText'), false);
+      assert.doesNotMatch(blockedBody, /multi-coding-agent-symphony|lockfileVersion/u);
+
+      const after = await collectTextFileSnapshot(context.stateDir);
+
+      assert.deepEqual(after, before);
+    } finally {
+      await cleanupConsoleServer(context);
+    }
+  });
+
   it('blocks non-GET Workbench and API requests without writing state', async () => {
     const context = await startConsoleServer();
 
@@ -193,7 +249,8 @@ describe('v15 Workbench route smoke and server parity', () => {
         '/api/handoff',
         `/api/handoff/${GUIDED_GOAL_HANDOFF_CONTRACT_NAME}`,
         '/api/runs',
-        '/api/runs/latest'
+        '/api/runs/latest',
+        `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
       ];
       const methods = ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
 
@@ -208,6 +265,55 @@ describe('v15 Workbench route smoke and server parity', () => {
             assert.doesNotMatch(await response.text(), /<div id="root"><\/div>/u);
           }
         }
+      }
+
+      const after = await collectTextFileSnapshot(context.stateDir);
+
+      assert.deepEqual(after, before);
+    } finally {
+      await cleanupConsoleServer(context);
+    }
+  });
+
+  it('rejects safe preview traversal and arbitrary path probes', async () => {
+    const context = await startConsoleServer();
+
+    try {
+      const before = await collectTextFileSnapshot(context.stateDir);
+      const probes = [
+        {
+          path: `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview?path=package.json`,
+          status: 400
+        },
+        {
+          path: `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/%2e%2e%2fpackage.json/preview`,
+          status: 400
+        },
+        {
+          path: '/api/runs/%2e%2e%2fpackage.json/artifacts/summary/preview',
+          status: 400
+        },
+        {
+          path: `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/package.json/preview`,
+          status: 404
+        },
+        {
+          path: `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/task-packet/preview`,
+          status: 404
+        }
+      ];
+
+      for (const probe of probes) {
+        const response = await fetch(`${context.baseUrl}${probe.path}`);
+        const body = await response.text();
+
+        assert.equal(response.status, probe.status, probe.path);
+        assert.match(response.headers.get('content-type') ?? '', /^application\/json; charset=utf-8/iu);
+        assert.doesNotMatch(
+          body,
+          /multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer/u,
+          probe.path
+        );
       }
 
       const after = await collectTextFileSnapshot(context.stateDir);
@@ -282,12 +388,23 @@ describe('v15 Workbench route smoke and server parity', () => {
       '/workbench/pnpm-lock.yaml',
       '/workbench/src/symphony/console.js',
       '/workbench/docs/plans/v15-task8-workbench-static-serving-evidence-2026-05-27.md',
+      '/workbench/docs/plans/v16-task8-workbench-preview-consumption-evidence-2026-05-27.md',
       '/workbench/%2e%2e/package.json',
       '/workbench/..%2fpackage.json',
       '/workbench/%2e%2e%2fpnpm-lock.yaml',
       '/workbench/%2e%2e%2fsrc%2fsymphony%2fconsole.js',
       '/workbench/%2e%2e%2fdocs%2fplans%2fv15-task8-workbench-static-serving-evidence-2026-05-27.md',
       '/workbench/%5c..%5cpackage.json'
+    ];
+    const apiLikePaths = [
+      '/workbench/api/summary',
+      '/workbench/api/handoff',
+      '/workbench/api/runs/latest',
+      `/workbench/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
+    ];
+    const stageLikePaths = [
+      '/workbench/docs/stages/v15-workbench-react-vite-migration.html',
+      '/workbench/docs/stages/v15-workbench-react-vite-migration.stage.json'
     ];
 
     try {
@@ -299,6 +416,32 @@ describe('v15 Workbench route smoke and server parity', () => {
         assert.doesNotMatch(
           body,
           /multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer|Task 8 Workbench/u,
+          path
+        );
+      }
+
+      for (const path of apiLikePaths) {
+        const response = await fetch(`${context.baseUrl}${path}`);
+        const body = await response.text();
+
+        assert.equal(response.status, 200, path);
+        assert.match(response.headers.get('content-type') ?? '', /^text\/html; charset=utf-8/iu);
+        assert.match(body, /<div id="root"><\/div>/u, path);
+        assert.doesNotMatch(
+          body,
+          /symphony\.console-|guided-goal-handoff|safe-artifact-preview|routeSmoke|blocked-artifact-path/u,
+          path
+        );
+      }
+
+      for (const path of stageLikePaths) {
+        const response = await fetch(`${context.baseUrl}${path}`);
+        const body = await response.text();
+
+        assert.equal([403, 404].includes(response.status), true, path);
+        assert.doesNotMatch(
+          body,
+          /<div id="root"><\/div>|symphony\.stage-charter|Stage Charter|v15-workbench-react-vite-migration/u,
           path
         );
       }
@@ -331,6 +474,10 @@ async function startConsoleServer() {
 }
 
 async function writeRouteSmokeRunFixture({ root, stateDir }) {
+  const artifactDir = join(root, 'artifacts');
+  const summaryArtifactPath = join(artifactDir, 'summary.json');
+  const harnessOutputPath = join(artifactDir, 'unsafe.html');
+  const contextArtifactPath = join(process.cwd(), 'package.json');
   const runState = {
     version: '1',
     kind: 'symphony-run-state',
@@ -351,11 +498,17 @@ async function writeRouteSmokeRunFixture({ root, stateDir }) {
     verifierStatus: 'passed',
     status: 'passed',
     projectRoot: root,
+    contextArtifactPath,
+    summaryArtifactPath,
+    harnessOutputPath,
     nextAction: 'symphony status',
     createdAt: FIXED_TIME,
     updatedAt: FIXED_TIME
   };
 
+  await mkdir(artifactDir, { recursive: true });
+  await writeFile(summaryArtifactPath, '{"routeSmoke":true}\n', 'utf8');
+  await writeFile(harnessOutputPath, '<script>alert("unsafe")</script>\n', 'utf8');
   await writeFixtureJson(join(stateDir, 'runs', `${ROUTE_SMOKE_RUN_ID}.json`), runState);
   await writeFixtureJson(join(stateDir, 'runs', 'latest.json'), runState);
 }
@@ -448,7 +601,7 @@ class RouteSmokeReadinessRunner {
     }
 
     if (executable === 'git' && args.join(' ') === 'branch --show-current') {
-      return commandResult({ exitCode: 0, stdout: 'v15-task9-workbench-route-smoke\n' });
+      return commandResult({ exitCode: 0, stdout: 'v16-task9-route-smoke-security\n' });
     }
 
     if (executable === 'git' && args.join(' ') === 'rev-parse --short HEAD') {
@@ -465,6 +618,13 @@ class RouteSmokeReadinessRunner {
 
     return commandResult({ exitCode: 1, stderr: `${executable} unavailable\n` });
   }
+}
+
+function assertValidSafePreview(preview) {
+  assert.deepEqual(validateSafeArtifactPreviewContract(preview), {
+    ok: true,
+    errors: []
+  });
 }
 
 function commandResult({ exitCode, stdout = '', stderr = '' }) {
