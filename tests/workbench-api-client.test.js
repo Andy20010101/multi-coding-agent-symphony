@@ -131,6 +131,10 @@ describe('v15 Workbench read-only API client', () => {
           status: 'adoption-planned',
           verifierStatus: 'passed',
           modelInvocation: false,
+          executionPlanId: 'plan-1',
+          adoptionPlanId: 'adoption-1',
+          createdAt: '2026-05-27T00:00:00.000Z',
+          updatedAt: '2026-05-27T00:01:00.000Z',
           artifactRefs: [{
             kind: 'adoption-plan',
             path: '/tmp/example/adoption.json'
@@ -146,11 +150,29 @@ describe('v15 Workbench read-only API client', () => {
         tools: {
           git: {
             dirty: true,
-            dirtyFilesCount: 2
+            dirtyFilesCount: 2,
+            dirtyPaths: ['README.md', 'src/example.js']
           },
           packageManager: {
             status: 'available'
           }
+        },
+        checks: [{
+          id: 'git',
+          label: 'Git worktree',
+          status: 'attention',
+          detail: '2 dirty'
+        }],
+        riskSummary: {
+          status: 'attention',
+          total: 1,
+          items: [{
+            id: 'dirty_git',
+            category: 'dirty_git',
+            severity: 'medium',
+            title: 'Dirty git worktree',
+            detail: '2 dirty file(s)'
+          }]
         }
       }],
       ['/api/runs', {
@@ -159,7 +181,22 @@ describe('v15 Workbench read-only API client', () => {
         filter: 'all',
         availableFilters: ['all'],
         runs: [{
-          runId: 'run-1'
+          runId: 'run-1',
+          status: 'adoption-planned',
+          verifierStatus: 'passed',
+          intent: 'adopt',
+          command: 'symphony adopt',
+          semanticCommand: 'adopt',
+          routeDecision: {
+            intent: 'adopt',
+            safetyMode: 'dry-run'
+          },
+          createdAt: '2026-05-27T00:00:00.000Z',
+          updatedAt: '2026-05-27T00:01:00.000Z',
+          artifactRefs: [{
+            kind: 'adoption-plan',
+            path: '/tmp/example/adoption.json'
+          }]
         }]
       }],
       ['/api/runs/latest', {
@@ -170,6 +207,14 @@ describe('v15 Workbench read-only API client', () => {
           status: 'adoption-planned',
           verifierStatus: 'passed',
           modelInvocation: false,
+          executionPlanId: 'plan-1',
+          adoptionPlanId: 'adoption-1',
+          createdAt: '2026-05-27T00:00:00.000Z',
+          updatedAt: '2026-05-27T00:01:00.000Z',
+          timeline: [{
+            id: 'created',
+            status: 'done'
+          }],
           artifactRefs: [{
             kind: 'adoption-plan',
             path: '/tmp/example/adoption.json'
@@ -192,10 +237,20 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.readiness.capabilities.text, CONTRACT_TEXT.missing);
     assert.equal(model.readiness.readOnly.value, true);
     assert.equal(model.readiness.modelInvocation.value, false);
+    assert.equal(model.readiness.checks.count, 1);
+    assert.equal(model.readiness.checks.items[0].status.value, 'attention');
+    assert.equal(model.readiness.diagnostics.items[0].category.value, 'dirty_git');
     assert.equal(model.latestRun.modelInvocation.value, false);
+    assert.equal(model.latestRun.executionPlanId.value, 'plan-1');
+    assert.equal(model.latestRun.adoptionPlanId.value, 'adoption-1');
+    assert.equal(model.latestRun.timeline.text, '1 个事件');
     assert.equal(model.adoption.pendingCount.value, 1);
     assert.equal(model.adoption.dirtyBlocked.value, false);
     assert.equal(model.adoption.gitDirtyReadiness.value, true);
+    assert.equal(model.runs.items.length, 1);
+    assert.equal(model.runs.items[0].isLatest.value, true);
+    assert.equal(model.runs.items[0].routeKey.text, CONTRACT_TEXT.missing);
+    assert.equal(model.runs.items[0].artifactRefs.count, 1);
     assert.equal(model.artifactRefs.missingPreviewFields.includes('mime'), true);
   });
 });

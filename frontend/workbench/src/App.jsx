@@ -35,155 +35,451 @@ export default function App() {
   }, []);
 
   const model = viewState.model;
+  const routeCounts = routeStateCounts(model?.routeStates ?? []);
 
   return (
     <main className="workbench-shell" aria-labelledby="workbench-title">
-      <section className="hero-band">
-        <div className="hero-content">
+      <header className="workbench-header">
+        <div className="header-copy">
           <p className="eyebrow">v15 React/Vite Workbench</p>
           <h1 id="workbench-title">v15 Workbench</h1>
-          <p className="hero-copy">
-            当前绑定 Task 1 冻结的只读 API contract，只展示低密度状态。
-            本页面不提供浏览器动作入口，不改变后端 kernel，也不替代 Stage Charter HTML。
+          <p className="header-summary">
+            基于 Task 5 的只读 API binding 展示 summary、readiness、runs 与 latest run。
+            浏览器端只读取固定 GET routes，不提供写入、终端动作或 artifact inline preview。
           </p>
-          <div className="status-strip" aria-label="当前边界">
-            <span>只读展示</span>
-            <span>无浏览器执行控件</span>
-            <span>{viewState.phase === 'loading' ? '读取中' : 'GET API 绑定'}</span>
-          </div>
         </div>
-      </section>
+        <div className="status-strip" aria-label="当前只读状态">
+          <span>{phaseText(viewState.phase)}</span>
+          <span>{routeCounts.ready}/{routeCounts.total} routes 已读取</span>
+          <span>刷新页面后会重新读取只读 API</span>
+        </div>
+      </header>
 
-      <section className="content-band" aria-labelledby="status-title">
-        <div className="section-heading">
-          <p className="section-kicker">Task 5 状态</p>
-          <h2 id="status-title">只读 API 读取结果</h2>
-        </div>
-        {viewState.phase === 'loading' ? <LoadingState /> : null}
-        {viewState.phase === 'failed' ? <ReadFailure /> : null}
-        {model === null ? null : <StatusCards model={model} />}
-      </section>
+      {viewState.phase === 'loading' ? <ShellState title="读取中" copy="正在读取 summary、readiness、runs 与 latest run 只读 contract。" /> : null}
+      {viewState.phase === 'failed' ? <ShellState title="读取失败" copy="错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。" /> : null}
 
-      <section className="content-band muted-band" aria-labelledby="contracts-title">
-        <div className="section-heading">
-          <p className="section-kicker">只读 routes</p>
-          <h2 id="contracts-title">已绑定的 API contract</h2>
-        </div>
-        {model === null ? <p className="empty-copy">等待 API contract 暴露。</p> : <RouteList routes={model.routeStates} />}
-      </section>
+      {model === null ? null : (
+        <>
+          <section className="panel-grid" aria-label="Workbench 只读 panels">
+            <SummaryPanel summary={model.summary} route={findRoute(model.routeStates, 'summary')} />
+            <ReadinessPanel readiness={model.readiness} route={findRoute(model.routeStates, 'readiness')} />
+            <RunsPanel runs={model.runs} route={findRoute(model.routeStates, 'runs')} />
+            <LatestRunPanel latestRun={model.latestRun} route={findRoute(model.routeStates, 'latestRun')} />
+          </section>
 
-      <section className="content-band" aria-labelledby="placeholder-title">
-        <div className="section-heading">
-          <p className="section-kicker">Projection</p>
-          <h2 id="placeholder-title">contract binding 摘要</h2>
-        </div>
-        {model === null ? <p className="empty-copy">读取成功后展示 summary、readiness、runs 与 latest run 投影。</p> : <ProjectionSummary model={model} />}
-      </section>
-
-      <section className="content-band muted-band" aria-labelledby="gaps-title">
-        <div className="section-heading">
-          <p className="section-kicker">Contract gaps</p>
-          <h2 id="gaps-title">不由 React 端推断</h2>
-        </div>
-        <ul className="gap-list">
-          {(model?.deferredGaps ?? []).map((gap) => (
-            <li key={gap.label}>{gap.label}：{gap.status}</li>
-          ))}
-        </ul>
-      </section>
+          <section className="support-grid" aria-label="只读 contract 支撑信息">
+            <RoutePanel routes={model.routeStates} />
+            <ContractGapPanel gaps={model.deferredGaps} />
+          </section>
+        </>
+      )}
     </main>
   );
 }
 
-function LoadingState() {
-  return <p className="empty-copy">正在读取只读 API contract。</p>;
-}
-
-function ReadFailure() {
-  return <p className="empty-copy">读取失败 / contract 未暴露 / 不可用。</p>;
-}
-
-function StatusCards({ model }) {
-  const cards = [
-    {
-      title: 'Summary',
-      value: model.summary.overviewStatus.text,
-      detail: model.summary.headline.text
-    },
-    {
-      title: 'Readiness',
-      value: model.readiness.status.text,
-      detail: `readOnly=${model.readiness.readOnly.text} / modelInvocation=${model.readiness.modelInvocation.text}`
-    },
-    {
-      title: 'Latest Run',
-      value: model.latestRun.status.text,
-      detail: model.latestRun.state === 'empty'
-        ? '无运行记录'
-        : `runId=${model.latestRun.runId.text} / verifier=${model.latestRun.verifierStatus.text}`
-    },
-    {
-      title: 'Runs Count',
-      value: model.runs.summaryCount.text,
-      detail: `route count=${model.runs.count.text}`
-    }
-  ];
-
+function SummaryPanel({ summary, route }) {
   return (
-    <div className="status-grid">
-      {cards.map((card) => (
-        <article className="status-card" key={card.title}>
-          <h3>{card.title}</h3>
-          <p className="metric-value">{card.value}</p>
-          <p>{card.detail}</p>
-        </article>
-      ))}
-    </div>
+    <DataPanel
+      id="summary-panel"
+      kicker="Summary panel"
+      title="Summary 只读摘要"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', summary.contractName],
+        ['contractVersion', summary.contractVersion],
+        ['status', summary.status],
+        ['generatedAt', summary.generatedAt],
+        ['readOnly', summary.readOnly],
+        ['modelInvocation', summary.modelInvocation],
+        ['capabilities', summary.capabilities],
+        ['overview.status', summary.overviewStatus],
+        ['stageSummary.stageId', summary.stageId],
+        ['stageSummary.status', summary.stageStatus],
+        ['runStats.total', summary.runCount]
+      ]} />
+
+      <Subsection title="latestRun 简要信息">
+        <FieldList rows={[
+          ['runId', summary.latestRun.runId],
+          ['status', summary.latestRun.status],
+          ['verifierStatus', summary.latestRun.verifierStatus],
+          ['updatedAt', summary.latestRun.updatedAt]
+        ]} />
+      </Subsection>
+
+      <Subsection title="adoptionSummary">
+        <FieldList rows={[
+          ['status', summary.adoptionSummary.status],
+          ['pendingCount', summary.adoptionSummary.pendingCount],
+          ['dirtyBlocked', summary.adoptionSummary.dirtyBlocked]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{summary.readonlyNote}</p>
+    </DataPanel>
   );
 }
 
-function RouteList({ routes }) {
+function ReadinessPanel({ readiness, route }) {
   return (
-    <dl className="contract-list">
-      {routes.map((route) => (
-        <div className="contract-row" key={route.id}>
-          <dt>{route.method} {route.path}</dt>
-          <dd>
-            <span className={`state-pill ${route.state}`}>{route.state === 'ready' ? '已读取' : '不可用'}</span>
-            <span>{route.contractName.text}</span>
-            <span>version {route.contractVersion.text}</span>
-          </dd>
+    <DataPanel
+      id="readiness-panel"
+      kicker="Readiness panel"
+      title="Readiness 只读诊断"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', readiness.contractName],
+        ['contractVersion', readiness.contractVersion],
+        ['status', readiness.status],
+        ['readOnly', readiness.readOnly],
+        ['modelInvocation', readiness.modelInvocation],
+        ['capabilities', readiness.capabilities],
+        ['tools.git.dirty', readiness.gitDirty],
+        ['tools.git.dirtyFilesCount', readiness.dirtyFilesCount],
+        ['tools.packageManager.status', readiness.packageManagerStatus]
+      ]} />
+
+      <Subsection title="checks">
+        <CheckList checks={readiness.checks} />
+      </Subsection>
+
+      <Subsection title="diagnostics / attention items">
+        <RiskList riskSummary={readiness.diagnostics} />
+      </Subsection>
+
+      <Subsection title="Stage 与 artifact 状态">
+        <FieldList rows={[
+          ['stage status', readiness.signals.stageStatus],
+          ['blocked Stage', readiness.signals.stageBlockerStatus],
+          ['blocker title', readiness.signals.stageBlockerTitle],
+          ['Charter consistency', readiness.signals.charterConsistencyStatus],
+          ['artifact status', readiness.signals.artifactStatus],
+          ['missing artifact count', readiness.signals.missingArtifactCount]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{readiness.signals.note}</p>
+      <p className="panel-note">{readiness.readonlyNote}</p>
+    </DataPanel>
+  );
+}
+
+function RunsPanel({ runs, route }) {
+  return (
+    <DataPanel
+      id="runs-panel"
+      kicker="Runs panel"
+      title="Runs 只读列表"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', runs.contractName],
+        ['contractVersion', runs.contractVersion],
+        ['filter', runs.filter],
+        ['route count', runs.count],
+        ['summary count', runs.summaryCount],
+        ['availableFilters', textValue(runs.availableFilters.join('、') || '未暴露')]
+      ]} />
+
+      {runs.state === 'missing' ? <EmptyBlock copy="runs list 未暴露或不可用。" /> : null}
+      {runs.state === 'empty' ? <EmptyBlock copy="当前没有运行记录。" /> : null}
+      {runs.state === 'available' ? <RunList runs={runs.items} /> : null}
+
+      <p className="panel-note">Runs panel 只展示本地只读列表；latest 标识来自 summary/latestRun 已暴露 id，对浏览器端没有写入含义。</p>
+    </DataPanel>
+  );
+}
+
+function LatestRunPanel({ latestRun, route }) {
+  return (
+    <DataPanel
+      id="latest-run-panel"
+      kicker="Latest run panel"
+      title="Latest run 只读详情"
+      state={latestRunStateText(latestRun, route)}
+      route={route}
+    >
+      {latestRun.state === 'unavailable' ? <EmptyBlock copy={`错误摘要：${latestRun.error}`} /> : null}
+      {latestRun.state === 'empty' ? <EmptyBlock copy="当前没有 latest run；artifactRefs 与 timeline 不适用。" /> : null}
+
+      <FieldList rows={[
+        ['runId', latestRun.runId],
+        ['status', latestRun.status],
+        ['verifierStatus', latestRun.verifierStatus],
+        ['modelInvocation', latestRun.modelInvocation],
+        ['executionPlanId', latestRun.executionPlanId],
+        ['adoptionPlanId', latestRun.adoptionPlanId],
+        ['createdAt', latestRun.createdAt],
+        ['updatedAt', latestRun.updatedAt],
+        ['artifactRefs count', latestRun.artifactRefsCount],
+        ['timeline', textValue(latestRun.timeline.text)]
+      ]} />
+
+      <Subsection title="artifactRefs 只读列表">
+        <ArtifactRefList artifactRefs={latestRun.artifactRefs} />
+      </Subsection>
+
+      <p className="panel-note">Latest run panel 不读取 artifact 文件内容，也不根据 kind、路径、扩展名或内容决定 inline preview。</p>
+    </DataPanel>
+  );
+}
+
+function RoutePanel({ routes }) {
+  return (
+    <DataPanel
+      id="routes-panel"
+      kicker="API contract 使用范围"
+      title="固定 GET routes"
+      state="只读"
+    >
+      <dl className="route-list">
+        {routes.map((route) => (
+          <div className="route-row" key={route.id}>
+            <dt>{route.method} {route.path}</dt>
+            <dd>
+              <span className={`state-pill ${route.state}`}>{routeStateText(route)}</span>
+              <span>{route.contractName.text}</span>
+              <span>version {route.contractVersion.text}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="panel-note">API client 只绑定 /api/summary、/api/readiness、/api/runs、/api/runs/latest。</p>
+    </DataPanel>
+  );
+}
+
+function ContractGapPanel({ gaps }) {
+  return (
+    <DataPanel
+      id="contract-gap-panel"
+      kicker="Contract gaps"
+      title="等待 API contract 补充"
+      state="不由前端推断"
+    >
+      <ul className="gap-list">
+        {gaps.map((gap) => (
+          <li key={gap.label}>
+            <span>{gap.label}</span>
+            <strong>{gap.status}</strong>
+          </li>
+        ))}
+      </ul>
+      <p className="panel-note">这些 gap 继续作为 API contract 问题处理；React 端不会伪造字段。</p>
+    </DataPanel>
+  );
+}
+
+function DataPanel({ id, kicker, title, state, route, children }) {
+  return (
+    <article className="data-panel" aria-labelledby={`${id}-title`}>
+      <header className="panel-header">
+        <div>
+          <p className="section-kicker">{kicker}</p>
+          <h2 id={`${id}-title`}>{title}</h2>
+        </div>
+        <span className="panel-state">{state}</span>
+      </header>
+      {route?.state === 'failed' ? (
+        <p className="error-copy">错误摘要：{route.error}。刷新页面后会重新读取只读 API。</p>
+      ) : null}
+      {children}
+    </article>
+  );
+}
+
+function Subsection({ title, children }) {
+  return (
+    <section className="panel-subsection" aria-label={title}>
+      <h3>{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function FieldList({ rows }) {
+  return (
+    <dl className="field-list">
+      {rows.map(([label, state]) => (
+        <div className="field-row" key={label}>
+          <dt>{label}</dt>
+          <dd className={state?.state === 'missing' ? 'missing-value' : ''}>{formatState(state)}</dd>
         </div>
       ))}
     </dl>
   );
 }
 
-function ProjectionSummary({ model }) {
-  const artifactKinds = model.artifactRefs.items
-    .map((artifact) => artifact.kind.text)
-    .slice(0, 4)
-    .join('、');
+function CheckList({ checks }) {
+  if (checks.state === 'missing') {
+    return <EmptyBlock copy="checks 未暴露。" />;
+  }
+
+  if (checks.items.length === 0) {
+    return <EmptyBlock copy="checks 为空。" />;
+  }
 
   return (
-    <div className="projection-grid">
-      <article>
-        <h3>只读能力</h3>
-        <p>summary capabilities：{model.summary.capabilities.text}</p>
-        <p>readiness capabilities：{model.readiness.capabilities.text}</p>
-      </article>
-      <article>
-        <h3>采纳状态</h3>
-        <p>pending：{model.adoption.pendingCount.text}</p>
-        <p>dirtyBlocked：{model.adoption.dirtyBlocked.text}</p>
-        <p>Git dirty：{model.adoption.gitDirtyReadiness.text}</p>
-      </article>
-      <article>
-        <h3>产物引用</h3>
-        <p>artifactRefs：{model.artifactRefs.label}</p>
-        <p>{artifactKinds || '未暴露'}</p>
-        <p>preview 字段缺口：{model.artifactRefs.missingPreviewFields.join('、') || '无'}</p>
-      </article>
+    <ul className="compact-list">
+      {checks.items.map((check) => (
+        <li key={check.id.text}>
+          <strong>{check.label.text}</strong>
+          <span>{check.status.text}</span>
+          <span>{check.detail.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RiskList({ riskSummary }) {
+  if (riskSummary.state === 'missing') {
+    return <EmptyBlock copy="riskSummary 未暴露。" />;
+  }
+
+  if (riskSummary.items.length === 0) {
+    return <EmptyBlock copy="没有已暴露的 attention items。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {riskSummary.items.map((risk) => (
+        <li key={`${risk.id.text}-${risk.title.text}`}>
+          <strong>{risk.title.text}</strong>
+          <span>{risk.severity.text}</span>
+          <span>{risk.category.text}</span>
+          <span>{risk.detail.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RunList({ runs }) {
+  return (
+    <div className="run-list">
+      {runs.map((run) => (
+        <article className="run-row" key={run.runId.text}>
+          <div className="run-row-header">
+            <h3>{run.runId.text}</h3>
+            <span className="state-pill">{run.isLatest.value === true ? 'latest' : 'history'}</span>
+          </div>
+          <FieldList rows={[
+            ['status', run.status],
+            ['verifierStatus', run.verifierStatus],
+            ['intent', run.intent],
+            ['command', run.command],
+            ['semanticCommand', run.semanticCommand],
+            ['route key', run.routeKey],
+            ['route intent', run.routeDecisionIntent],
+            ['route reason', run.routeDecisionReason],
+            ['createdAt', run.createdAt],
+            ['updatedAt', run.updatedAt],
+            ['artifactRefs', textValue(run.artifactRefs.label)]
+          ]} />
+        </article>
+      ))}
     </div>
   );
+}
+
+function ArtifactRefList({ artifactRefs }) {
+  if (artifactRefs.state === 'missing') {
+    return <EmptyBlock copy="artifactRefs 未暴露。" />;
+  }
+
+  if (artifactRefs.items.length === 0) {
+    return <EmptyBlock copy="artifactRefs 为空。" />;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {artifactRefs.items.map((artifact, index) => (
+        <li key={`${artifact.kind.text}-${index}`}>
+          <FieldList rows={[
+            ['kind', artifact.kind],
+            ['path', artifact.path],
+            ['preview fields', textValue(artifact.previewFields.map((field) => `${field.label}:${field.text}`).join(' / '))]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ShellState({ title, copy }) {
+  return (
+    <section className="shell-state" aria-label={title}>
+      <h2>{title}</h2>
+      <p>{copy}</p>
+    </section>
+  );
+}
+
+function EmptyBlock({ copy }) {
+  return <p className="empty-copy">{copy}</p>;
+}
+
+function findRoute(routes, id) {
+  return routes.find((route) => route.id === id) ?? null;
+}
+
+function routeStateCounts(routes) {
+  return {
+    total: routes.length,
+    ready: routes.filter((route) => route.state === 'ready').length
+  };
+}
+
+function routeStateText(route) {
+  if (route === null || route === undefined) {
+    return '等待读取';
+  }
+
+  return route.state === 'ready' ? '已读取' : '不可用';
+}
+
+function latestRunStateText(latestRun, route) {
+  if (latestRun.state === 'empty') {
+    return '无运行记录';
+  }
+
+  if (latestRun.state === 'unavailable') {
+    return '不可用';
+  }
+
+  return routeStateText(route);
+}
+
+function phaseText(phase) {
+  if (phase === 'loading') {
+    return '读取中';
+  }
+
+  if (phase === 'failed') {
+    return '读取失败';
+  }
+
+  return '只读展示';
+}
+
+function textValue(text) {
+  return {
+    state: text === '未暴露' || text === '' ? 'missing' : 'available',
+    text,
+    value: text
+  };
+}
+
+function formatState(state) {
+  if (state === null || state === undefined) {
+    return '未暴露';
+  }
+
+  return state.text ?? String(state.value ?? '未暴露');
 }

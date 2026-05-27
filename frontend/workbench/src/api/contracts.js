@@ -1,5 +1,6 @@
 const MISSING_TEXT = '未暴露';
 const UNAVAILABLE_TEXT = '不可用';
+const NOT_APPLICABLE_TEXT = '不适用';
 
 export const READONLY_API_ROUTES = Object.freeze([
   Object.freeze({
@@ -90,7 +91,7 @@ export function projectWorkbenchContracts(results) {
   const readinessData = dataFrom(results.readiness);
   const runsData = dataFrom(results.runs);
   const latestRunData = dataFrom(results.latestRun);
-  const latestRun = latestRunData?.run ?? summaryData?.latestRun ?? null;
+  const latestRun = latestRunData?.run ?? null;
   const routeStates = READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id]));
   const failedRequiredRoutes = routeStates.filter((route) => route.state === 'failed' && route.id !== 'latestRun');
   const hasNoRuns = summaryData?.latestRun === null || summaryData?.status === 'no-runs';
@@ -99,7 +100,7 @@ export function projectWorkbenchContracts(results) {
     state: failedRequiredRoutes.length > 0 ? 'partial' : 'ready',
     routeStates,
     summary: projectSummary(summaryData),
-    readiness: projectReadiness(readinessData),
+    readiness: projectReadiness(readinessData, summaryData),
     runs: projectRuns(runsData, summaryData),
     latestRun: projectLatestRun({
       result: results.latestRun,
@@ -187,23 +188,42 @@ function projectRouteState(route, result) {
 }
 
 function projectSummary(summary) {
+  const latestRun = summary?.latestRun ?? summary?.overview?.latestRun ?? null;
+  const adoptionSummary = summary?.adoptionSummary;
+
   return {
     contractName: valueState(summary?.contractName),
     contractVersion: valueState(summary?.contractVersion),
     status: valueState(summary?.status),
+    generatedAt: valueState(summary?.generatedAt),
+    readOnly: valueState(summary?.readOnly),
+    modelInvocation: valueState(summary?.modelInvocation),
     overviewStatus: valueState(summary?.overview?.status),
     headline: valueState(summary?.overview?.headline),
     stageId: valueState(summary?.stageSummary?.stageId ?? summary?.overview?.stage?.stageId),
     stageStatus: valueState(summary?.stageSummary?.status ?? summary?.overview?.stage?.status),
     nextAction: valueState(summary?.overview?.nextAction ?? summary?.action?.next),
     runCount: valueState(summary?.runStats?.total),
-    latestRunId: valueState(summary?.latestRun?.runId ?? summary?.overview?.latestRunId),
+    latestRunId: valueState(latestRun?.runId ?? summary?.overview?.latestRunId),
+    latestRun: {
+      runId: valueState(latestRun?.runId ?? summary?.overview?.latestRunId),
+      status: valueState(latestRun?.status),
+      verifierStatus: valueState(latestRun?.verifierStatus),
+      updatedAt: valueState(latestRun?.updatedAt)
+    },
+    adoptionSummary: {
+      status: valueState(adoptionSummary?.status),
+      pendingCount: valueState(adoptionSummary?.pendingCount),
+      dirtyBlocked: valueState(adoptionSummary?.dirtyBlocked)
+    },
     capabilities: objectState(summary?.capabilities),
+    riskSummary: projectRiskSummary(summary?.riskSummary),
+    readonlyNote: 'Summary panel 只展示 /api/summary 已暴露字段；readOnly、modelInvocation 与 capabilities 缺失时不由 React 端补值。',
     raw: summary ?? null
   };
 }
 
-function projectReadiness(readiness) {
+function projectReadiness(readiness, summary) {
   return {
     contractName: valueState(readiness?.contractName),
     contractVersion: valueState(readiness?.contractVersion),
@@ -214,21 +234,31 @@ function projectReadiness(readiness) {
     capabilities: objectState(readiness?.capabilities),
     gitDirty: valueState(readiness?.tools?.git?.dirty),
     dirtyFilesCount: valueState(readiness?.tools?.git?.dirtyFilesCount),
+    dirtyPaths: Array.isArray(readiness?.tools?.git?.dirtyPaths)
+      ? readiness.tools.git.dirtyPaths.map((path) => valueState(path))
+      : [],
     packageManagerStatus: valueState(readiness?.tools?.packageManager?.status),
+    checks: projectChecks(readiness?.checks),
+    diagnostics: projectRiskSummary(readiness?.riskSummary),
+    signals: projectReadonlySignals(summary),
+    readonlyNote: 'Readiness panel 只展示 checks、riskSummary 与 Git readiness 字段；attention 不会转换成浏览器操作入口。',
     raw: readiness ?? null
   };
 }
 
 function projectRuns(runs, summary) {
   const routeRuns = Array.isArray(runs?.runs) ? runs.runs : null;
+  const latestRunId = summary?.latestRun?.runId ?? summary?.overview?.latestRunId;
 
   return {
+    state: routeRuns === null ? 'missing' : routeRuns.length === 0 ? 'empty' : 'available',
     contractName: valueState(runs?.contractName),
     contractVersion: valueState(runs?.contractVersion),
     count: valueState(routeRuns === null ? undefined : routeRuns.length),
     summaryCount: valueState(summary?.runStats?.total),
     filter: valueState(runs?.filter),
     availableFilters: Array.isArray(runs?.availableFilters) ? [...runs.availableFilters] : [],
+    items: routeRuns === null ? [] : routeRuns.map((run) => projectRunListItem(run, latestRunId)),
     raw: runs ?? null
   };
 }
@@ -241,7 +271,36 @@ function projectLatestRun({ result, run, hasNoRuns }) {
       status: valueState('无运行记录'),
       verifierStatus: valueState(undefined),
       modelInvocation: valueState(undefined),
+      executionPlanId: valueState(undefined),
+      adoptionPlanId: valueState(undefined),
+      createdAt: valueState(undefined),
+      updatedAt: valueState(undefined),
+      timeline: {
+        state: 'empty',
+        text: NOT_APPLICABLE_TEXT,
+        count: 0
+      },
       artifactRefsCount: valueState(0),
+      artifactRefs: projectArtifactRefs([]),
+      raw: null
+    };
+  }
+
+  if (result?.ok !== true) {
+    return {
+      state: 'unavailable',
+      runId: valueState(undefined),
+      status: valueState(undefined),
+      verifierStatus: valueState(undefined),
+      modelInvocation: valueState(undefined),
+      executionPlanId: valueState(undefined),
+      adoptionPlanId: valueState(undefined),
+      createdAt: valueState(undefined),
+      updatedAt: valueState(undefined),
+      timeline: projectTimelineAvailability(undefined),
+      artifactRefsCount: valueState(undefined),
+      artifactRefs: projectArtifactRefs(undefined),
+      error: result?.message ?? UNAVAILABLE_TEXT,
       raw: null
     };
   }
@@ -252,7 +311,13 @@ function projectLatestRun({ result, run, hasNoRuns }) {
     status: valueState(run?.status),
     verifierStatus: valueState(run?.verifierStatus),
     modelInvocation: valueState(run?.modelInvocation),
+    executionPlanId: valueState(run?.executionPlanId),
+    adoptionPlanId: valueState(run?.adoptionPlanId),
+    createdAt: valueState(run?.createdAt),
+    updatedAt: valueState(run?.updatedAt),
+    timeline: projectTimelineAvailability(run?.timeline),
     artifactRefsCount: valueState(Array.isArray(run?.artifactRefs) ? run.artifactRefs.length : undefined),
+    artifactRefs: projectArtifactRefs(run?.artifactRefs),
     raw: run ?? null
   };
 }
@@ -266,6 +331,103 @@ function projectAdoption({ summary, readiness }) {
     dirtyBlocked: valueState(adoptionSummary?.dirtyBlocked),
     gitDirtyReadiness: valueState(readiness?.tools?.git?.dirty),
     note: 'dirty adoption 不由 React 端合成，只展示 API 已暴露的 adoption summary 与 Git readiness 字段。'
+  };
+}
+
+function projectRunListItem(run, latestRunId) {
+  return {
+    runId: valueState(run?.runId),
+    status: valueState(run?.status),
+    verifierStatus: valueState(run?.verifierStatus),
+    intent: valueState(run?.intent),
+    command: valueState(run?.command),
+    semanticCommand: valueState(run?.semanticCommand),
+    routeKey: valueState(run?.routeDecision?.routeKey),
+    routeDecisionIntent: valueState(run?.routeDecision?.intent),
+    routeDecisionReason: valueState(run?.routeDecision?.reason),
+    createdAt: valueState(run?.createdAt),
+    updatedAt: valueState(run?.updatedAt),
+    artifactRefs: projectArtifactRefs(run?.artifactRefs),
+    isLatest: valueState(Boolean(latestRunId && run?.runId === latestRunId))
+  };
+}
+
+function projectChecks(checks) {
+  if (!Array.isArray(checks)) {
+    return {
+      state: 'missing',
+      count: null,
+      items: []
+    };
+  }
+
+  return {
+    state: checks.length === 0 ? 'empty' : 'available',
+    count: checks.length,
+    items: checks.map((check) => ({
+      id: valueState(check?.id),
+      label: valueState(check?.label),
+      status: valueState(check?.status),
+      detail: valueState(check?.detail)
+    }))
+  };
+}
+
+function projectRiskSummary(riskSummary) {
+  if (riskSummary === undefined || riskSummary === null) {
+    return {
+      state: 'missing',
+      status: valueState(undefined),
+      total: valueState(undefined),
+      items: []
+    };
+  }
+
+  const items = Array.isArray(riskSummary.items) ? riskSummary.items : [];
+
+  return {
+    state: items.length === 0 ? 'empty' : 'available',
+    status: valueState(riskSummary.status),
+    total: valueState(riskSummary.total),
+    items: items.map((item) => ({
+      id: valueState(item?.id),
+      category: valueState(item?.category),
+      severity: valueState(item?.severity),
+      title: valueState(item?.title),
+      detail: valueState(item?.detail),
+      runId: valueState(item?.runId)
+    }))
+  };
+}
+
+function projectReadonlySignals(summary) {
+  const stageSummary = summary?.stageSummary;
+  const artifactStats = summary?.runStats?.artifacts;
+
+  return {
+    stageStatus: valueState(stageSummary?.status),
+    stageBlockerStatus: valueState(stageSummary?.blocker?.status ?? stageSummary?.blocker?.kind),
+    stageBlockerTitle: valueState(stageSummary?.blocker?.title ?? stageSummary?.blocker?.message),
+    charterConsistencyStatus: valueState(stageSummary?.consistency?.status),
+    artifactStatus: valueState(artifactStats?.status),
+    missingArtifactCount: valueState(artifactStats?.missing),
+    note: 'Missing artifact、blocked Stage 与 Charter mismatch 只按 summary contract 已暴露字段呈现；React 端不推断原因或修复动作。'
+  };
+}
+
+function projectTimelineAvailability(timeline) {
+  if (!Array.isArray(timeline)) {
+    return {
+      state: 'missing',
+      text: MISSING_TEXT,
+      count: null
+    };
+  }
+
+  return {
+    state: timeline.length === 0 ? 'empty' : 'available',
+    text: timeline.length === 0 ? '空 timeline' : `${timeline.length} 个事件`,
+    count: timeline.length
   };
 }
 
@@ -315,5 +477,6 @@ function unique(values) {
 
 export const CONTRACT_TEXT = Object.freeze({
   missing: MISSING_TEXT,
-  unavailable: UNAVAILABLE_TEXT
+  unavailable: UNAVAILABLE_TEXT,
+  notApplicable: NOT_APPLICABLE_TEXT
 });
