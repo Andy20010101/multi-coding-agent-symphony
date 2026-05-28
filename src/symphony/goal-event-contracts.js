@@ -331,7 +331,7 @@ export function isUnsafeEvidenceRef(ref) {
     ref.includes('../') ||
     ref.includes('..\\') ||
     ref.includes('\\') ||
-    /^[A-Za-z]:\\/u.test(ref);
+    /^[A-Za-z]:[\\/]/u.test(ref);
 }
 
 export function isSafeGoalEventToken(value) {

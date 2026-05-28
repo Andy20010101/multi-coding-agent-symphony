@@ -180,13 +180,27 @@ describe('v18 goal-event-log.v1 and goal-update-plan.v1 contract baseline', () =
     }
   });
 
-  it('rejects dangerous evidence refs in goal-update-plan proposed events', async () => {
+  it('rejects dangerous evidence refs in event logs and goal-update-plan proposed events', async () => {
+    const eventLog = await loadFixture('../fixtures/contracts/goal-event-log.valid-scenarios.v1.json');
     const updatePlan = await loadFixture('../fixtures/contracts/goal-update-plan.dry-run.v1.json');
 
-    for (const ref of ['/Users/example/secret.md', 'file:///tmp/evidence.md', '../secret.md', '~/secret.md']) {
+    for (const ref of ['/Users/example/secret.md', 'file:///tmp/evidence.md', '../secret.md', '~/secret.md', 'C:/Users/example/secret.md']) {
+      const unsafeLog = structuredClone(eventLog);
+      unsafeLog.events[0].evidenceRefs = [{
+        kind: 'artifact-ref',
+        ref,
+        label: 'Unsafe evidence'
+      }];
+
+      assert.equal(
+        validateGoalEventLogContract(unsafeLog).errors.some((error) => error.includes('controlled evidence reference')),
+        true,
+        ref
+      );
+
       const unsafe = structuredClone(updatePlan);
       unsafe.proposedEvents[0].evidenceRefs = [{
-        kind: 'repo-doc',
+        kind: 'artifact-ref',
         ref,
         label: 'Unsafe evidence'
       }];

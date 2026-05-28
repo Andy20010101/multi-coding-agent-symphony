@@ -294,6 +294,13 @@ describe('v18 append-only event journal writer', () => {
         })
       },
       {
+        name: 'windows drive forward-slash evidence ref',
+        event: buildEvent({
+          eventId: 'evt_20260528_task2_invalid_windows_drive_ref',
+          evidenceRefs: [{ kind: 'artifact-ref', ref: 'C:/Users/example/secret.md', label: 'Unsafe evidence' }]
+        })
+      },
+      {
         name: 'invalid event type',
         event: buildEvent({
           eventId: 'evt_20260528_task2_invalid_event_type',
