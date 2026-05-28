@@ -62,6 +62,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [v17 Read-only Goal Progress Console Contract Hardening Plan](docs/plans/v17-readonly-goal-progress-console-contract-hardening-plan-2026-05-28.md)
 - [v17 Execution Prompts](docs/plans/v17-execution-prompts-2026-05-28.md)
 - [v17 Release Evidence](docs/plans/v17-release-evidence-2026-05-28.md)
+- [v17 Tag Release Evidence](docs/plans/v17-tag-release-evidence-2026-05-28.md)
 - [v16 Goal Execution Plan](tmp/codex-prompts/v16_goal_execution_plan.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
@@ -98,7 +99,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Latest completed mainline implementation in this checkout: `v17`. Current released repository tag: `v16` until a v17 tag is explicitly created. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite read-only Workbench migration on mainline, v16 adds guided handoff and safe artifact preview contracts across the read-only API and Workbench, and v17 adds the read-only goal progress ledger plus console capability, diagnostics, and error-envelope contracts. The `v7` tag remains available for historical installs.
+Latest completed mainline release: `v17`. Current released repository tag: `v17`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite read-only Workbench migration on mainline, v16 adds guided handoff and safe artifact preview contracts across the read-only API and Workbench, and v17 adds the read-only goal progress ledger plus console capability, diagnostics, and error-envelope contracts. The `v7` tag remains available for historical installs.
 
 ## Design Center
 
@@ -163,7 +164,7 @@ curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-sym
 symphony doctor
 ```
 
-The installer clones or updates the `v8` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The `v8` tag remains the stable installer baseline; set `MCAS_INSTALL_REF=v16` when you intentionally want the latest tagged release. Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI; `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults.
+The installer clones or updates the `v8` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The `v8` tag remains the stable installer baseline; set `MCAS_INSTALL_REF=v17` when you intentionally want the latest tagged release. Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI; `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults.
 
 Development fallback from a checkout:
 
