@@ -56,6 +56,7 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [v16 Task 11 Release Verification Evidence](docs/plans/v16-task11-release-verification-evidence-2026-05-27.md)
 - [v16 Final Closure Evidence](docs/plans/v16-final-closure-evidence-2026-05-27.md)
 - [v16 Final Release Review Evidence](docs/plans/v16-final-release-review-evidence-2026-05-28.md)
+- [v16 Tag Release Planning Evidence](docs/plans/v16-tag-release-planning-evidence-2026-05-28.md)
 - [v16 Goal Execution Plan](tmp/codex-prompts/v16_goal_execution_plan.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
