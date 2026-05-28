@@ -50,11 +50,16 @@ describe('v15 Workbench React/Vite shell', () => {
       'AdoptionSummaryPanel',
       'HandoffPanel',
       'GoalProgressPanel',
+      'GoalEventsTimelinePanel',
+      'EvidenceMatrixPanel',
       'CapabilitiesPanel',
       'DiagnosticsV1Panel',
       'CommandBlockList',
       'HandoffTaskList',
-      'GoalTaskList'
+      'GoalTaskList',
+      'GoalEventTimelineList',
+      'EvidenceMatrixTaskList',
+      'ReleaseGateMatrixList'
     ]) {
       assert.match(app, new RegExp(`function ${componentName}\\b`, 'u'));
     }
@@ -66,6 +71,8 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /Adoption summary 只读状态/u);
     assert.match(app, /Guided Goal Handoff/u);
     assert.match(app, /Goal Progress Ledger/u);
+    assert.match(app, /Goal Events Timeline/u);
+    assert.match(app, /Evidence Matrix/u);
     assert.match(app, /Capabilities Contract/u);
     assert.match(app, /Diagnostics Contract/u);
     assert.match(app, /phase \/ copy-only commands/u);
@@ -88,7 +95,9 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/capabilities',
       '/api/diagnostics',
       '/api/goals',
+      '/api/goals/<goal-id>/events',
       '/api/goals/<goal-id>/progress',
+      '/api/goals/latest/events',
       '/api/goals/latest/progress',
       '/api/handoff',
       '/api/handoff/<ref>',

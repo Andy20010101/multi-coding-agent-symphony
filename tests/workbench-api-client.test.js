@@ -11,7 +11,8 @@ import {
   READONLY_API_ROUTE_ALLOWLIST,
   createSafeArtifactPreviewRoutes,
   createRunTimelineRoute,
-  projectArtifactRefs
+  projectArtifactRefs,
+  projectWorkbenchContracts
 } from '../frontend/workbench/src/api/contracts.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
@@ -28,6 +29,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/runs/latest', 'symphony.console-run'],
         ['GET', '/api/goals', 'symphony.goals-index'],
         ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
+        ['GET', '/api/goals/latest/events', 'goal-event-log.v1'],
         ['GET', '/api/capabilities', 'capabilities.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1']
       ]
@@ -42,8 +44,10 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/runs/latest', 'symphony.console-run'],
         ['GET', '/api/goals', 'symphony.goals-index'],
         ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
+        ['GET', '/api/goals/latest/events', 'goal-event-log.v1'],
         ['GET', '/api/capabilities', 'capabilities.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
+        ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
         ['GET', '/api/goals/<goal-id>/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
@@ -259,6 +263,132 @@ describe('v15 Workbench read-only API client', () => {
     for (const field of ['mime', 'title', 'displayTitle', 'safeToRenderInline', 'sourceRunId', 'artifactKind', 'previewAvailable', 'sizeBytes']) {
       assert.equal(Object.hasOwn(artifactRefs.items[0], field), false);
     }
+  });
+
+  it('projects goal events timeline and evidence matrix without reading evidence refs', async () => {
+    const calls = [];
+    const payloadByPath = new Map([
+      ['/api/summary', {
+        contractName: 'symphony.console-snapshot',
+        contractVersion: '1',
+        status: 'no-runs',
+        latestRun: null,
+        runStats: {
+          total: 0
+        }
+      }],
+      ['/api/readiness', {
+        contractName: 'symphony.console-readiness',
+        contractVersion: '1',
+        status: 'ready',
+        readOnly: true,
+        modelInvocation: false
+      }],
+      ['/api/handoff', createHandoffRefsPayload()],
+      [GUIDED_HANDOFF_PATH, createGuidedHandoffPayload()],
+      ['/api/runs', {
+        contractName: 'symphony.console-runs',
+        contractVersion: '1',
+        filter: 'all',
+        availableFilters: ['all'],
+        runs: []
+      }],
+      ...createV17ReadonlyPayloadEntries(),
+      ['/api/goals/latest/events', createGoalEventsPayload()]
+    ]);
+
+    const model = await fetchWorkbenchContracts({
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        if (path === '/api/runs/latest') {
+          return {
+            ok: false,
+            status: 404,
+            async json() {
+              return {};
+            }
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return payloadByPath.get(path);
+          }
+        };
+      }
+    });
+
+    assert.equal(model.goalEvents.contractName.value, 'goal-event-log.v1');
+    assert.equal(model.goalEvents.timeline.count.value, 5);
+    assert.equal(model.goalEvents.timeline.items[0].sequence.value, 1);
+    assert.equal(model.goalEvents.timeline.items[0].eventType.value, 'worker.self-check-passed');
+    assert.equal(model.goalEvents.timeline.items[0].hashChainStatus.value, 'genesis');
+    assert.equal(model.goalEvents.timeline.items[1].reviewVerdict.value, 'APPROVED');
+    assert.equal(model.goalEvents.timeline.items[3].gateStatus.value, 'passed');
+    assert.equal(model.goalEvents.timeline.items[3].evidenceRefs.items[0].ref.value, 'docs/plans/v18-release-evidence-2026-05-28.md');
+    assert.equal(model.goalEvents.timeline.items[4].gateStatus.value, 'declared');
+
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].workerEvidence.value, 'docs/plans/v18-task8-worker-evidence-2026-05-28.md');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].reviewVerdict.value, 'APPROVED');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].reviewEvidence.value, 'docs/plans/v18-task8-review-evidence-2026-05-28.md');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].mainVerification.value, 'docs/plans/v18-task8-main-verification-evidence-2026-05-28.md');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].blocker.value, 'missing');
+    assert.equal(model.goalEvents.evidenceMatrix.releaseGates.items[0].gate.value, 'release.pnpm-check');
+    assert.equal(model.goalEvents.evidenceMatrix.releaseGates.items[0].status.value, 'passed');
+    assert.equal(model.goalEvents.evidenceMatrix.releaseReady.status.value, 'declared');
+
+    assert.deepEqual(
+      calls.map(([path, init]) => [path, init.method, Object.hasOwn(init, 'body')]),
+      [
+        ...READONLY_API_ROUTES.map((route) => [route.path, 'GET', false]),
+        [GUIDED_HANDOFF_PATH, 'GET', false]
+      ]
+    );
+    assert.equal(calls.some(([path]) => path.includes('docs/plans/')), false);
+  });
+
+  it('keeps event-backed verdicts unknown when the ledger has status but events are empty', async () => {
+    const payloadByPath = new Map([
+      ...createV17ReadonlyPayloadEntries({
+        taskOverrides: {
+          status: 'approved',
+          reviewVerdict: 'APPROVED',
+          reviewEvidenceRef: 'docs/plans/v18-task8-review-evidence-2026-05-28.md',
+          mainVerificationRef: 'docs/plans/v18-task8-main-verification-evidence-2026-05-28.md'
+        },
+        releaseReady: true
+      }),
+      ['/api/goals/latest/events', createGoalEventsPayload({ events: [] })]
+    ]);
+
+    const model = projectWorkbenchContracts({
+      goalProgress: {
+        ok: true,
+        route: '/api/goals/latest/progress',
+        method: 'GET',
+        routeDescriptor: READONLY_API_ROUTES.find((route) => route.id === 'goalProgress'),
+        httpStatus: 200,
+        data: payloadByPath.get('/api/goals/latest/progress')
+      },
+      goalEvents: {
+        ok: true,
+        route: '/api/goals/latest/events',
+        method: 'GET',
+        routeDescriptor: READONLY_API_ROUTES.find((route) => route.id === 'goalEvents'),
+        httpStatus: 200,
+        data: payloadByPath.get('/api/goals/latest/events')
+      }
+    });
+
+    assert.equal(model.goalEvents.timeline.state, 'empty');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].ledgerStatus.value, 'approved');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].reviewVerdict.value, 'unknown');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].reviewEvidence.value, 'missing');
+    assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].mainVerification.value, 'unknown');
+    assert.equal(model.goalEvents.evidenceMatrix.releaseReady.status.value, 'unknown');
   });
 
   it('fetches and projects backend safe artifact preview contracts without inferring safety', async () => {
@@ -723,7 +853,10 @@ function createGuidedHandoffPayload() {
   };
 }
 
-function createV17ReadonlyPayloadEntries() {
+function createV17ReadonlyPayloadEntries({
+  taskOverrides = {},
+  releaseReady = false
+} = {}) {
   return [
     ['/api/goals', {
       contractName: 'symphony.goals-index',
@@ -755,7 +888,7 @@ function createV17ReadonlyPayloadEntries() {
         blockedTasks: 0,
         needsReviewTasks: 0,
         needsRevisionTasks: 0,
-        releaseReady: false
+        releaseReady
       },
       tasks: [{
         taskId: 'task-1',
@@ -769,7 +902,8 @@ function createV17ReadonlyPayloadEntries() {
         reviewVerdict: null,
         mainVerificationRef: null,
         blockers: [],
-        nextCopyOnlyCommand: 'git checkout -b v17-task1'
+        nextCopyOnlyCommand: 'git checkout -b v17-task1',
+        ...taskOverrides
       }],
       releaseGates: {
         pnpmCheck: 'unknown',
@@ -837,6 +971,159 @@ function createV17ReadonlyPayloadEntries() {
       }
     }]
   ];
+}
+
+function createGoalEventsPayload({ events } = {}) {
+  const resolvedEvents = events ?? [{
+    eventId: 'evt_20260528_task8_worker_self_checked',
+    sequence: 1,
+    goalId: 'v18-goal-event-journal-evidence-recorder',
+    taskId: 'task-1',
+    eventType: 'worker.self-check-passed',
+    phase: 'implement',
+    actor: {
+      role: 'worker',
+      id: 'codex-worker-task-8'
+    },
+    occurredAt: '2026-05-28T10:00:00.000Z',
+    recordedAt: '2026-05-28T10:02:00.000Z',
+    branch: 'codex/v18-task8-workbench-events-matrix',
+    commit: null,
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/plans/v18-task8-worker-evidence-2026-05-28.md',
+      label: 'Task 8 worker evidence'
+    }],
+    statement: 'Task 8 worker self-check passed.',
+    previousEventHash: null,
+    eventHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111'
+  }, {
+    eventId: 'evt_20260528_task8_review_approved',
+    sequence: 2,
+    goalId: 'v18-goal-event-journal-evidence-recorder',
+    taskId: 'task-1',
+    eventType: 'reviewer.approved',
+    phase: 'review',
+    actor: {
+      role: 'reviewer',
+      id: 'codex-reviewer-task-8'
+    },
+    occurredAt: '2026-05-28T10:10:00.000Z',
+    recordedAt: '2026-05-28T10:12:00.000Z',
+    branch: 'codex/v18-task8-workbench-events-matrix',
+    commit: null,
+    review: {
+      verdict: 'APPROVED',
+      scope: 'Task 8 diff and Workbench tests'
+    },
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/plans/v18-task8-review-evidence-2026-05-28.md',
+      label: 'Task 8 review evidence'
+    }],
+    statement: 'Independent reviewer approved Task 8.',
+    previousEventHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+    eventHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222'
+  }, {
+    eventId: 'evt_20260528_task8_main_verification_passed',
+    sequence: 3,
+    goalId: 'v18-goal-event-journal-evidence-recorder',
+    taskId: 'task-1',
+    eventType: 'main.verification-passed',
+    phase: 'main-verification',
+    actor: {
+      role: 'main-verifier',
+      id: 'codex-main-verifier'
+    },
+    occurredAt: '2026-05-28T10:20:00.000Z',
+    recordedAt: '2026-05-28T10:22:00.000Z',
+    branch: 'main',
+    commit: null,
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/plans/v18-task8-main-verification-evidence-2026-05-28.md',
+      label: 'Task 8 main verification evidence'
+    }],
+    statement: 'Main verification passed for Task 8.',
+    previousEventHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+    eventHash: 'sha256:3333333333333333333333333333333333333333333333333333333333333333'
+  }, {
+    eventId: 'evt_20260528_release_gate_pnpm_check_passed',
+    sequence: 4,
+    goalId: 'v18-goal-event-journal-evidence-recorder',
+    taskId: 'release',
+    eventType: 'release.gate-passed',
+    phase: 'release-gate',
+    actor: {
+      role: 'release-verifier',
+      id: 'codex-release-verifier'
+    },
+    occurredAt: '2026-05-28T10:30:00.000Z',
+    recordedAt: '2026-05-28T10:32:00.000Z',
+    branch: 'main',
+    commit: null,
+    gate: {
+      id: 'release.pnpm-check',
+      status: 'passed'
+    },
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/plans/v18-release-evidence-2026-05-28.md',
+      label: 'v18 release evidence'
+    }],
+    statement: 'Release gate pnpm check passed.',
+    previousEventHash: 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+    eventHash: 'sha256:4444444444444444444444444444444444444444444444444444444444444444'
+  }, {
+    eventId: 'evt_20260528_release_ready_declared',
+    sequence: 5,
+    goalId: 'v18-goal-event-journal-evidence-recorder',
+    taskId: 'release',
+    eventType: 'release.ready-declared',
+    phase: 'release-prep',
+    actor: {
+      role: 'release-manager',
+      id: 'codex-release-manager'
+    },
+    occurredAt: '2026-05-28T10:40:00.000Z',
+    recordedAt: '2026-05-28T10:42:00.000Z',
+    branch: 'main',
+    commit: null,
+    gate: {
+      id: 'release.ready',
+      status: 'declared'
+    },
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/plans/v18-release-evidence-2026-05-28.md',
+      label: 'v18 release evidence'
+    }],
+    statement: 'Release readiness explicitly declared.',
+    previousEventHash: 'sha256:4444444444444444444444444444444444444444444444444444444444444444',
+    eventHash: 'sha256:5555555555555555555555555555555555555555555555555555555555555555'
+  }];
+
+  return {
+    contractName: 'goal-event-log.v1',
+    contractVersion: 1,
+    goalId: 'v18-goal-event-journal-evidence-recorder',
+    goalTitle: 'Goal Event Journal + Evidence Recorder',
+    baseline: {
+      tag: 'v17',
+      commit: null,
+      evidenceRef: null
+    },
+    log: {
+      appendOnly: true,
+      storage: 'managed-goal-event-journal',
+      eventCount: resolvedEvents.length,
+      firstSequence: resolvedEvents.length === 0 ? null : resolvedEvents[0].sequence,
+      lastSequence: resolvedEvents.length === 0 ? null : resolvedEvents.at(-1).sequence,
+      lastEventId: resolvedEvents.length === 0 ? null : resolvedEvents.at(-1).eventId,
+      lastEventHash: resolvedEvents.length === 0 ? null : resolvedEvents.at(-1).eventHash
+    },
+    events: resolvedEvents
+  };
 }
 
 function createErrorEnvelope({ code, message, status, route, method }) {

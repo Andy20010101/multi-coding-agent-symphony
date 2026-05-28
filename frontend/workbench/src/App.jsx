@@ -41,11 +41,11 @@ export default function App() {
     <main className="workbench-shell" aria-labelledby="workbench-title">
       <header className="workbench-header">
         <div className="header-copy">
-          <p className="eyebrow">v17 React/Vite Workbench</p>
-          <h1 id="workbench-title">v17 Workbench</h1>
+          <p className="eyebrow">v18 React/Vite Workbench</p>
+          <h1 id="workbench-title">v18 Workbench</h1>
           <p className="header-summary">
             展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff，
-            以及 v17 goal progress、capabilities、diagnostics 与安全 error envelope。浏览器端只读取受控 GET routes，
+            以及 goal progress、goal events、capabilities、diagnostics 与安全 error envelope。浏览器端只读取受控 GET routes，
             artifact preview 只消费后端 contract，不提供写入、下载、终端或执行动作。
           </p>
         </div>
@@ -86,6 +86,11 @@ export default function App() {
             <GoalProgressPanel progress={model.goalProgress} route={findRoute(model.routeStates, 'goalProgress')} />
             <CapabilitiesPanel capabilities={model.capabilities} route={findRoute(model.routeStates, 'capabilities')} />
             <DiagnosticsV1Panel diagnostics={model.diagnosticsV1} route={findRoute(model.routeStates, 'diagnostics')} />
+          </section>
+
+          <section className="event-grid" aria-label="v18 goal events 只读 panels">
+            <GoalEventsTimelinePanel events={model.goalEvents} route={findRoute(model.routeStates, 'goalEvents')} />
+            <EvidenceMatrixPanel matrix={model.goalEvents.evidenceMatrix} route={findRoute(model.routeStates, 'goalEvents')} />
           </section>
 
           <section className="support-grid" aria-label="只读 contract 支撑信息">
@@ -153,6 +158,78 @@ function GoalProgressPanel({ progress, route }) {
       </Subsection>
 
       <p className="panel-note">{progress.note}</p>
+    </DataPanel>
+  );
+}
+
+function GoalEventsTimelinePanel({ events, route }) {
+  return (
+    <DataPanel
+      id="goal-events-timeline-panel"
+      kicker="v18 goal events"
+      title="Goal Events Timeline"
+      state={goalEventsStateText(events, route)}
+      route={route}
+    >
+      {events.state === 'unavailable' && events.errorEnvelope.state === 'available' ? (
+        <p className="error-copy">错误摘要：{events.errorEnvelope.code.text} / {events.errorEnvelope.message.text}</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['contractName', events.contractName],
+        ['contractVersion', events.contractVersion],
+        ['goalId', events.goalId],
+        ['goalTitle', events.goalTitle],
+        ['baseline.tag', events.baselineTag],
+        ['baseline.commit', events.baselineCommit],
+        ['baseline.evidenceRef', events.baselineEvidenceRef],
+        ['log.appendOnly', events.log.appendOnly],
+        ['log.storage', events.log.storage],
+        ['log.eventCount', events.log.eventCount],
+        ['log.firstSequence', events.log.firstSequence],
+        ['log.lastSequence', events.log.lastSequence],
+        ['log.lastEventId', events.log.lastEventId],
+        ['log.lastEventHash', events.log.lastEventHash]
+      ]} />
+
+      <Subsection title="timeline / hash chain">
+        <GoalEventTimelineList timeline={events.timeline} />
+      </Subsection>
+
+      <p className="panel-note">{events.note}</p>
+    </DataPanel>
+  );
+}
+
+function EvidenceMatrixPanel({ matrix, route }) {
+  return (
+    <DataPanel
+      id="evidence-matrix-panel"
+      kicker="v18 evidence"
+      title="Evidence Matrix"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['task count', matrix.tasks.count],
+        ['release gate count', matrix.releaseGates.count],
+        ['release-ready status', matrix.releaseReady.status],
+        ['release-ready eventId', matrix.releaseReady.eventId]
+      ]} />
+
+      <Subsection title="tasks">
+        <EvidenceMatrixTaskList tasks={matrix.tasks} />
+      </Subsection>
+
+      <Subsection title="release gates">
+        <ReleaseGateMatrixList releaseGates={matrix.releaseGates} />
+      </Subsection>
+
+      <Subsection title="release-ready evidence">
+        <EvidenceRefList evidenceRefs={matrix.releaseReady.evidenceRefs} />
+      </Subsection>
+
+      <p className="panel-note">Evidence Matrix 只使用 reviewer/main/release 的显式 event；approved、main-verified 和 release-ready 不由 ledger status、分支、文件名或命令文本推断。</p>
     </DataPanel>
   );
 }
@@ -906,6 +983,111 @@ function GoalTaskList({ tasks }) {
   );
 }
 
+function GoalEventTimelineList({ timeline }) {
+  if (timeline.state === 'missing') {
+    return <EmptyBlock copy="events 未暴露。" />;
+  }
+
+  if (timeline.state === 'empty') {
+    return <EmptyBlock copy="未登记事件；timeline empty。" />;
+  }
+
+  return (
+    <ul className="goal-event-timeline-list">
+      {timeline.items.map((event, index) => (
+        <li key={`${event.eventId.text}-${index}`}>
+          <FieldList rows={[
+            ['sequence', event.sequence],
+            ['eventId', event.eventId],
+            ['eventType', event.eventType],
+            ['phase', event.phase],
+            ['taskId', event.taskId],
+            ['actor', event.actor],
+            ['recordedAt', event.recordedAt],
+            ['review verdict', event.reviewVerdict],
+            ['gate status', event.gateStatus],
+            ['previousEventHash', event.previousEventHash],
+            ['eventHash', event.eventHash],
+            ['hash chain status', event.hashChainStatus]
+          ]} />
+          <EvidenceRefList evidenceRefs={event.evidenceRefs} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EvidenceRefList({ evidenceRefs }) {
+  if (evidenceRefs.state === 'missing') {
+    return <EmptyBlock copy="evidence refs missing。" />;
+  }
+
+  if (evidenceRefs.items.length === 0) {
+    return <EmptyBlock copy="evidence refs empty。" />;
+  }
+
+  return (
+    <ul className="evidence-ref-list">
+      {evidenceRefs.items.map((ref, index) => (
+        <li key={`${ref.ref.text}-${index}`}>
+          <FieldList rows={[
+            ['kind', ref.kind],
+            ['label', ref.label],
+            ['ref', ref.ref]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function EvidenceMatrixTaskList({ tasks }) {
+  if (tasks.state === 'empty') {
+    return <EmptyBlock copy="task evidence matrix empty。" />;
+  }
+
+  return (
+    <ul className="evidence-matrix-task-list">
+      {tasks.items.map((task, index) => (
+        <li key={`${task.taskId.text}-${index}`}>
+          <FieldList rows={[
+            ['taskId', task.taskId],
+            ['title', task.title],
+            ['ledgerStatus', task.ledgerStatus],
+            ['worker evidence', task.workerEvidence],
+            ['review verdict', task.reviewVerdict],
+            ['review evidence', task.reviewEvidence],
+            ['main verification', task.mainVerification],
+            ['blocker', task.blocker],
+            ['release gate coverage', task.releaseGateCoverage]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReleaseGateMatrixList({ releaseGates }) {
+  if (releaseGates.state === 'empty') {
+    return <EmptyBlock copy="release gate coverage unknown。" />;
+  }
+
+  return (
+    <ul className="release-gate-matrix-list">
+      {releaseGates.items.map((gate, index) => (
+        <li key={`${gate.gate.text}-${index}`}>
+          <FieldList rows={[
+            ['gate', gate.gate],
+            ['status', gate.status],
+            ['eventType', gate.eventType]
+          ]} />
+          <EvidenceRefList evidenceRefs={gate.evidenceRefs} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function KeyValueList({ rows, nameKey, valueKey, emptyCopy }) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return <EmptyBlock copy={emptyCopy} />;
@@ -1070,6 +1252,22 @@ function goalProgressStateText(progress, route) {
 
   if (progress.state === 'unavailable') {
     return '不可用';
+  }
+
+  return routeStateText(route);
+}
+
+function goalEventsStateText(events, route) {
+  if (events.state === 'missing') {
+    return '未暴露';
+  }
+
+  if (events.state === 'unavailable') {
+    return '不可用';
+  }
+
+  if (events.timeline.state === 'empty') {
+    return '未登记事件';
   }
 
   return routeStateText(route);

@@ -32,6 +32,7 @@ body {
 .detail-grid,
 .handoff-grid,
 .goal-grid,
+.event-grid,
 .support-grid,
 .shell-state {
   width: min(1180px, calc(100% - 40px));
@@ -118,6 +119,7 @@ h3 {
 .detail-grid,
 .handoff-grid,
 .goal-grid,
+.event-grid,
 .support-grid {
   display: grid;
   gap: 16px;
@@ -144,6 +146,11 @@ h3 {
 
 .goal-grid {
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+  margin-top: 16px;
+}
+
+.event-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
   margin-top: 16px;
 }
 
@@ -292,6 +299,10 @@ h3 {
 .artifact-list,
 .gap-list,
 .timeline-list,
+.goal-event-timeline-list,
+.evidence-ref-list,
+.evidence-matrix-task-list,
+.release-gate-matrix-list,
 .command-block-list,
 .command-text-list,
 .handoff-role-list,
@@ -308,6 +319,10 @@ h3 {
 .artifact-list li,
 .gap-list li,
 .timeline-list li,
+.goal-event-timeline-list li,
+.evidence-ref-list li,
+.evidence-matrix-task-list li,
+.release-gate-matrix-list li,
 .command-block-list > li,
 .handoff-role-list > li,
 .handoff-task-list > li,
@@ -399,6 +414,7 @@ h3 {
   .detail-grid,
   .handoff-grid,
   .goal-grid,
+  .event-grid,
   .support-grid {
     grid-template-columns: 1fr;
   }
@@ -415,6 +431,7 @@ h3 {
   .detail-grid,
   .handoff-grid,
   .goal-grid,
+  .event-grid,
   .support-grid,
   .shell-state {
     width: min(100% - 28px, 1180px);

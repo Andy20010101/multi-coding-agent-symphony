@@ -5,9 +5,12 @@ const HANDOFF_API_BASE = '/api/handoff';
 const GUIDED_GOAL_HANDOFF_CONTRACT_NAME = 'guided-goal-handoff.v1';
 const SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME = 'safe-artifact-preview.v1';
 const GOAL_PROGRESS_LEDGER_CONTRACT_NAME = 'goal-progress-ledger.v1';
+const GOAL_EVENT_LOG_CONTRACT_NAME = 'goal-event-log.v1';
 const CAPABILITIES_CONTRACT_NAME = 'capabilities.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
+const MATRIX_MISSING_TEXT = 'missing';
+const MATRIX_UNKNOWN_TEXT = 'unknown';
 
 export const READONLY_API_ROUTES = Object.freeze([
   Object.freeze({
@@ -60,6 +63,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME
   }),
   Object.freeze({
+    id: 'goalEvents',
+    label: 'Goal Events',
+    path: '/api/goals/latest/events',
+    method: 'GET',
+    contractName: GOAL_EVENT_LOG_CONTRACT_NAME
+  }),
+  Object.freeze({
     id: 'capabilities',
     label: 'Capabilities',
     path: '/api/capabilities',
@@ -109,8 +119,18 @@ export const GOAL_PROGRESS_ROUTE_TEMPLATE = Object.freeze({
   acceptErrorContract: true
 });
 
+export const GOAL_EVENTS_ROUTE_TEMPLATE = Object.freeze({
+  id: 'goalEventsById',
+  label: 'Goal Events By Id',
+  path: '/api/goals/<goal-id>/events',
+  method: 'GET',
+  contractName: GOAL_EVENT_LOG_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
 export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   ...READONLY_API_ROUTES,
+  GOAL_EVENTS_ROUTE_TEMPLATE,
   GOAL_PROGRESS_ROUTE_TEMPLATE,
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   RUN_TIMELINE_ROUTE_TEMPLATE,
@@ -172,6 +192,7 @@ export function projectWorkbenchContracts(results) {
   const latestRunData = dataFrom(results.latestRun);
   const goalsData = dataFrom(results.goals);
   const goalProgressData = dataFrom(results.goalProgress);
+  const goalEventsData = dataFrom(results.goalEvents);
   const capabilitiesData = dataFrom(results.capabilities);
   const diagnosticsData = dataFrom(results.diagnostics);
   const latestRun = latestRunData?.run ?? null;
@@ -229,6 +250,11 @@ export function projectWorkbenchContracts(results) {
     goals: projectGoals(goalsData),
     goalProgress: projectGoalProgress({
       result: results.goalProgress,
+      ledger: goalProgressData
+    }),
+    goalEvents: projectGoalEvents({
+      result: results.goalEvents,
+      eventLog: goalEventsData,
       ledger: goalProgressData
     }),
     capabilities: projectCapabilities(capabilitiesData),
@@ -572,6 +598,426 @@ function projectGoalProgressSafety(safety) {
     copyOnly: valueState(safety?.copyOnly),
     browserExecutionAvailable: valueState(safety?.browserExecutionAvailable),
     modelInvocationAvailable: valueState(safety?.modelInvocationAvailable)
+  };
+}
+
+function projectGoalEvents({ result, eventLog, ledger }) {
+  if (result?.ok !== true) {
+    return {
+      state: 'unavailable',
+      contractName: valueState(GOAL_EVENT_LOG_CONTRACT_NAME),
+      contractVersion: valueState(undefined),
+      goalId: valueState(undefined),
+      goalTitle: valueState(undefined),
+      baselineTag: valueState(undefined),
+      baselineCommit: valueState(undefined),
+      baselineEvidenceRef: valueState(undefined),
+      log: projectGoalEventLogSummary(undefined),
+      timeline: projectGoalEventTimeline(undefined),
+      evidenceMatrix: projectGoalEvidenceMatrix({
+        events: [],
+        ledger
+      }),
+      errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
+      note: 'Goal Events panels 只展示后端 goal-event-log.v1 与 goal-progress-ledger.v1 字段；不可用时不从 ledger 推断 event-backed 状态。'
+    };
+  }
+
+  const events = Array.isArray(eventLog?.events) ? eventLog.events : null;
+
+  return {
+    state: eventLog === null || eventLog === undefined ? 'missing' : 'available',
+    contractName: valueState(eventLog?.contractName),
+    contractVersion: valueState(eventLog?.contractVersion),
+    goalId: valueState(eventLog?.goalId),
+    goalTitle: valueState(eventLog?.goalTitle),
+    baselineTag: valueState(eventLog?.baseline?.tag),
+    baselineCommit: valueState(eventLog?.baseline?.commit),
+    baselineEvidenceRef: valueState(eventLog?.baseline?.evidenceRef),
+    log: projectGoalEventLogSummary(eventLog?.log),
+    timeline: projectGoalEventTimeline(events),
+    evidenceMatrix: projectGoalEvidenceMatrix({
+      events: events ?? [],
+      ledger
+    }),
+    errorEnvelope: projectErrorEnvelope(null),
+    note: 'Goal Events Timeline 与 Evidence Matrix 只展示 events API 和 ledger API 已暴露字段；evidence refs 不会触发正文读取、下载或本地打开。'
+  };
+}
+
+function projectGoalEventLogSummary(log) {
+  return {
+    appendOnly: valueState(log?.appendOnly),
+    storage: valueState(log?.storage),
+    eventCount: valueState(log?.eventCount),
+    firstSequence: valueState(log?.firstSequence),
+    lastSequence: valueState(log?.lastSequence),
+    lastEventId: valueState(log?.lastEventId),
+    lastEventHash: valueState(log?.lastEventHash)
+  };
+}
+
+function projectGoalEventTimeline(events) {
+  if (!Array.isArray(events)) {
+    return {
+      state: 'missing',
+      count: valueState(undefined),
+      items: []
+    };
+  }
+
+  return {
+    state: events.length === 0 ? 'empty' : 'available',
+    count: valueState(events.length),
+    items: events.map((event, index) => projectGoalEventTimelineItem({
+      event,
+      previousEvent: index > 0 ? events[index - 1] : null
+    }))
+  };
+}
+
+function projectGoalEventTimelineItem({ event, previousEvent }) {
+  return {
+    sequence: valueState(event?.sequence),
+    eventId: valueState(event?.eventId),
+    eventType: valueState(event?.eventType),
+    phase: valueState(event?.phase),
+    taskId: valueState(event?.taskId),
+    actor: valueState(goalEventActorText(event?.actor)),
+    actorRole: valueState(event?.actor?.role),
+    actorId: valueState(event?.actor?.id),
+    recordedAt: valueState(event?.recordedAt),
+    reviewVerdict: explicitReviewVerdictState(event),
+    gateStatus: explicitGateStatusState(event),
+    evidenceRefs: projectGoalEvidenceRefs(event?.evidenceRefs),
+    previousEventHash: valueState(event?.previousEventHash),
+    eventHash: valueState(event?.eventHash),
+    hashChainStatus: matrixValueState(goalEventHashChainStatus({ event, previousEvent }))
+  };
+}
+
+function projectGoalEvidenceMatrix({ events, ledger }) {
+  const taskIds = goalEventMatrixTaskIds({ events, ledger });
+  const releaseGateItems = projectGoalReleaseGateMatrix(events);
+  const releaseReady = projectReleaseReadyState(events);
+
+  return {
+    state: taskIds.length === 0 && releaseGateItems.length === 0 && releaseReady.status.value === MATRIX_UNKNOWN_TEXT
+      ? 'empty'
+      : 'available',
+    tasks: {
+      state: taskIds.length === 0 ? 'empty' : 'available',
+      count: valueState(taskIds.length),
+      items: taskIds.map((taskId) => projectGoalEvidenceMatrixTask({
+        taskId,
+        events,
+        ledgerTask: findLedgerTask(ledger, taskId),
+        releaseGateCount: releaseGateItems.length
+      }))
+    },
+    releaseGates: {
+      state: releaseGateItems.length === 0 ? 'empty' : 'available',
+      count: valueState(releaseGateItems.length),
+      items: releaseGateItems
+    },
+    releaseReady
+  };
+}
+
+function goalEventMatrixTaskIds({ events, ledger }) {
+  const ids = [];
+
+  if (Array.isArray(ledger?.tasks)) {
+    for (const task of ledger.tasks) {
+      if (isMatrixTaskId(task?.taskId) && !ids.includes(task.taskId)) {
+        ids.push(task.taskId);
+      }
+    }
+  }
+
+  for (const event of events) {
+    if (isMatrixTaskId(event?.taskId) && !ids.includes(event.taskId)) {
+      ids.push(event.taskId);
+    }
+  }
+
+  return ids;
+}
+
+function projectGoalEvidenceMatrixTask({
+  taskId,
+  events,
+  ledgerTask,
+  releaseGateCount
+}) {
+  const taskEvents = events.filter((event) => event?.taskId === taskId);
+  const workerEvent = latestEventOfTypes(taskEvents, [
+    'worker.evidence-recorded',
+    'worker.self-check-passed',
+    'worker.self-check-failed'
+  ]);
+  const reviewEvent = latestEventOfTypes(taskEvents, [
+    'reviewer.approved',
+    'reviewer.needs-revision'
+  ]);
+  const mainVerificationEvent = latestEventOfTypes(taskEvents, [
+    'main.verification-passed',
+    'main.verification-failed'
+  ]);
+  const blocker = latestOpenBlocker(taskEvents);
+
+  return {
+    taskId: valueState(taskId),
+    title: valueState(ledgerTask?.title ?? taskId),
+    ledgerStatus: valueState(ledgerTask?.status),
+    workerEvidence: firstEvidenceRefDisplayState(workerEvent),
+    reviewVerdict: reviewEvent === null ? matrixUnknownState() : explicitReviewVerdictState(reviewEvent),
+    reviewEvidence: firstEvidenceRefDisplayState(reviewEvent),
+    mainVerification: mainVerificationEvent === null
+      ? matrixUnknownState()
+      : mainVerificationDisplayState(mainVerificationEvent),
+    blocker: blocker === null ? matrixMissingState() : matrixValueState(blocker),
+    releaseGateCoverage: releaseGateCount > 0
+      ? matrixValueState(`${releaseGateCount} explicit gate event${releaseGateCount === 1 ? '' : 's'}`)
+      : matrixUnknownState()
+  };
+}
+
+function projectGoalReleaseGateMatrix(events) {
+  return events
+    .filter((event) => event?.eventType === 'release.gate-passed' || event?.eventType === 'release.gate-failed')
+    .map((event) => ({
+      gate: valueState(goalGateId(event)),
+      status: explicitGateStatusState(event),
+      eventType: valueState(event?.eventType),
+      evidenceRefs: projectGoalEvidenceRefs(event?.evidenceRefs)
+    }));
+}
+
+function projectReleaseReadyState(events) {
+  const readyEvent = latestEventOfTypes(events, ['release.ready-declared']);
+
+  if (readyEvent === null) {
+    return {
+      status: matrixUnknownState(),
+      eventId: matrixMissingState(),
+      evidenceRefs: projectGoalEvidenceRefs(undefined)
+    };
+  }
+
+  return {
+    status: explicitGateStatusState(readyEvent),
+    eventId: valueState(readyEvent?.eventId),
+    evidenceRefs: projectGoalEvidenceRefs(readyEvent?.evidenceRefs)
+  };
+}
+
+function projectGoalEvidenceRefs(evidenceRefs) {
+  if (!Array.isArray(evidenceRefs)) {
+    return {
+      state: 'missing',
+      count: valueState(undefined),
+      items: []
+    };
+  }
+
+  return {
+    state: evidenceRefs.length === 0 ? 'empty' : 'available',
+    count: valueState(evidenceRefs.length),
+    items: evidenceRefs.map((ref) => ({
+      kind: valueState(ref?.kind),
+      ref: valueState(ref?.ref),
+      label: valueState(ref?.label)
+    }))
+  };
+}
+
+function firstEvidenceRefDisplayState(event) {
+  if (event === null || event === undefined) {
+    return matrixMissingState();
+  }
+
+  const ref = firstGoalEvidenceRef(event);
+
+  return ref === null ? matrixMissingState() : valueState(ref);
+}
+
+function mainVerificationDisplayState(event) {
+  const ref = firstGoalEvidenceRef(event);
+
+  if (ref !== null) {
+    return valueState(ref);
+  }
+
+  if (event?.eventType === 'main.verification-passed') {
+    return matrixValueState('passed');
+  }
+
+  if (event?.eventType === 'main.verification-failed') {
+    return matrixValueState('failed');
+  }
+
+  return matrixUnknownState();
+}
+
+function explicitReviewVerdictState(event) {
+  if (event?.review?.verdict === 'APPROVED' || event?.review?.verdict === 'NEEDS_REVISION') {
+    return valueState(event.review.verdict);
+  }
+
+  if (event?.eventType === 'reviewer.approved') {
+    return matrixValueState('APPROVED');
+  }
+
+  if (event?.eventType === 'reviewer.needs-revision') {
+    return matrixValueState('NEEDS_REVISION');
+  }
+
+  return matrixUnknownState();
+}
+
+function explicitGateStatusState(event) {
+  if (event?.gate?.status === 'passed' || event?.gate?.status === 'failed' || event?.gate?.status === 'declared') {
+    return valueState(event.gate.status);
+  }
+
+  if (event?.eventType === 'release.gate-passed') {
+    return matrixValueState('passed');
+  }
+
+  if (event?.eventType === 'release.gate-failed') {
+    return matrixValueState('failed');
+  }
+
+  if (event?.eventType === 'release.ready-declared') {
+    return matrixValueState('declared');
+  }
+
+  return matrixUnknownState();
+}
+
+function latestOpenBlocker(events) {
+  const openBlockers = new Map();
+
+  for (const event of events) {
+    if (event?.eventType !== 'blocker.opened' && event?.eventType !== 'reviewer.blocked' && event?.eventType !== 'blocker.resolved') {
+      continue;
+    }
+
+    const id = goalBlockerId(event);
+
+    if (event.eventType === 'blocker.resolved') {
+      openBlockers.delete(id);
+      continue;
+    }
+
+    openBlockers.set(id, goalBlockerText(event));
+  }
+
+  return [...openBlockers.values()].at(-1) ?? null;
+}
+
+function goalBlockerId(event) {
+  return isNonEmptyString(event?.blocker?.id) ? event.blocker.id : event?.eventId ?? 'unknown-blocker';
+}
+
+function goalBlockerText(event) {
+  if (isNonEmptyString(event?.blocker?.reason)) {
+    return event.blocker.reason;
+  }
+
+  if (isNonEmptyString(event?.statement)) {
+    return event.statement;
+  }
+
+  return MATRIX_UNKNOWN_TEXT;
+}
+
+function latestEventOfTypes(events, eventTypes) {
+  if (!Array.isArray(events)) {
+    return null;
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (eventTypes.includes(events[index]?.eventType)) {
+      return events[index];
+    }
+  }
+
+  return null;
+}
+
+function findLedgerTask(ledger, taskId) {
+  if (!Array.isArray(ledger?.tasks)) {
+    return null;
+  }
+
+  return ledger.tasks.find((task) => task?.taskId === taskId) ?? null;
+}
+
+function firstGoalEvidenceRef(event) {
+  if (!Array.isArray(event?.evidenceRefs)) {
+    return null;
+  }
+
+  const evidenceRef = event.evidenceRefs.find((entry) => isNonEmptyString(entry?.ref));
+
+  return evidenceRef?.ref ?? null;
+}
+
+function goalEventActorText(actor) {
+  if (!isNonEmptyString(actor?.role) && !isNonEmptyString(actor?.id)) {
+    return null;
+  }
+
+  return `${actor?.role ?? MATRIX_UNKNOWN_TEXT}:${actor?.id ?? MATRIX_UNKNOWN_TEXT}`;
+}
+
+function goalGateId(event) {
+  return event?.gate?.id ?? event?.gate?.name ?? MATRIX_UNKNOWN_TEXT;
+}
+
+function goalEventHashChainStatus({ event, previousEvent }) {
+  if (!isNonEmptyString(event?.eventHash)) {
+    return MATRIX_UNKNOWN_TEXT;
+  }
+
+  if (previousEvent === null) {
+    return event?.previousEventHash === null ? 'genesis' : MATRIX_UNKNOWN_TEXT;
+  }
+
+  return event?.previousEventHash === previousEvent?.eventHash ? 'linked' : MATRIX_UNKNOWN_TEXT;
+}
+
+function isMatrixTaskId(value) {
+  return isNonEmptyString(value) && value !== 'release';
+}
+
+function matrixMissingState() {
+  return {
+    state: 'missing',
+    text: MATRIX_MISSING_TEXT,
+    value: MATRIX_MISSING_TEXT
+  };
+}
+
+function matrixUnknownState() {
+  return {
+    state: 'unknown',
+    text: MATRIX_UNKNOWN_TEXT,
+    value: MATRIX_UNKNOWN_TEXT
+  };
+}
+
+function matrixValueState(value) {
+  if (value === undefined || value === null || value === '') {
+    return matrixMissingState();
+  }
+
+  return {
+    state: 'available',
+    text: String(value),
+    value
   };
 }
 
