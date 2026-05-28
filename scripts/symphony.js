@@ -52,6 +52,11 @@ import {
   buildGoalUpdatePlan,
   confirmGoalUpdate
 } from '../src/symphony/goal-update.js';
+import {
+  GoalReviewError,
+  buildGoalReviewPlan,
+  confirmGoalReview
+} from '../src/symphony/goal-review.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -3282,8 +3287,33 @@ async function runSymphonyGoal({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
-  if (subcommand !== 'update') {
+  if (subcommand !== 'update' && subcommand !== 'review') {
     throw new UsageError(`unknown goal subcommand: ${subcommand}`);
+  }
+
+  if (subcommand === 'review') {
+    const options = parseGoalReviewArgs(rest);
+
+    if (options.help) {
+      stdout.write(goalReviewHelpText());
+      return EXIT_CODES.ok;
+    }
+
+    try {
+      if (options.confirm) {
+        writeJson(stdout, await confirmGoalReview(options));
+        return EXIT_CODES.ok;
+      }
+
+      writeJson(stdout, await buildGoalReviewPlan(options));
+      return EXIT_CODES.ok;
+    } catch (error) {
+      if (error instanceof GoalReviewError) {
+        throw new UsageError(error.message);
+      }
+
+      throw error;
+    }
   }
 
   const options = parseGoalUpdateArgs(rest);
@@ -3452,10 +3482,10 @@ function parseGoalUpdateArgs(args) {
 
 function goalHelpText() {
   return [
-    'Usage: symphony goal update [options]',
+    'Usage: symphony goal <update|review> [options]',
     '',
     'Records v18 goal events through a dry-run / confirm flow.',
-    'Currently implemented: symphony goal update.',
+    'Currently implemented: symphony goal update and symphony goal review.',
     ''
   ].join('\n');
 }
@@ -3467,6 +3497,157 @@ function goalUpdateHelpText() {
     '',
     'Dry-run is the default and prints goal-update-plan.v1 without writing.',
     'Confirm appends one worker/task-level event only after the current input matches --plan-hash.',
+    ''
+  ].join('\n');
+}
+
+function parseGoalReviewArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: null,
+    taskId: null,
+    reviewerId: null,
+    verdict: null,
+    evidenceRefs: [],
+    statement: undefined,
+    branch: undefined,
+    commit: undefined,
+    confirm: false,
+    dryRun: false,
+    planHash: undefined,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      continue;
+    }
+
+    if (value === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+
+    if (value === '--confirm') {
+      options.confirm = true;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--reviewer') {
+      options.reviewerId = readRequiredValue(args, index, '--reviewer');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--verdict') {
+      options.verdict = readRequiredValue(args, index, '--verdict');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--evidence-ref') {
+      options.evidenceRefs.push(readRequiredValue(args, index, '--evidence-ref'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--statement') {
+      options.statement = readRequiredValue(args, index, '--statement');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--branch') {
+      options.branch = readRequiredValue(args, index, '--branch');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--commit') {
+      options.commit = readRequiredValue(args, index, '--commit');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--plan-hash') {
+      options.planHash = readRequiredValue(args, index, '--plan-hash');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--plan-file') {
+      throw new UsageError('goal review does not read plan files; repeat the dry-run flags with --confirm --plan-hash');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal review writes only through confirm append; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal review option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal review argument: ${value}`);
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.confirm && options.dryRun) {
+    throw new UsageError('goal review accepts only one of --dry-run or --confirm');
+  }
+
+  if (!options.confirm && options.planHash !== undefined) {
+    throw new UsageError('--plan-hash requires --confirm');
+  }
+
+  for (const [key, flag] of [
+    ['goalId', '--goal'],
+    ['taskId', '--task'],
+    ['reviewerId', '--reviewer'],
+    ['verdict', '--verdict']
+  ]) {
+    if (options[key] === null) {
+      throw new UsageError(`goal review requires ${flag}`);
+    }
+  }
+
+  return options;
+}
+
+function goalReviewHelpText() {
+  return [
+    'Usage: symphony goal review --goal <goal-id> --task <task-id> --reviewer <reviewer-id> --verdict <approved|needs-revision> --evidence-ref <ref> [--dry-run]',
+    '       symphony goal review --goal <goal-id> --task <task-id> --reviewer <reviewer-id> --verdict <approved|needs-revision> --evidence-ref <ref> --confirm --plan-hash <hash>',
+    '',
+    'Dry-run is the default and prints goal-update-plan.v1 without writing.',
+    'Confirm appends one reviewer verdict event only after the current input matches --plan-hash.',
     ''
   ].join('\n');
 }
