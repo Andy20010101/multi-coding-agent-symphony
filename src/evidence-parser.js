@@ -101,6 +101,16 @@ function stripNullOptionalEvidenceFields(evidence) {
       }
 
       if (normalizedCheck.output === undefined &&
+        isPlainObject(normalizedCheck.evidence)) {
+        normalizedCheck.output = 'Structured check evidence provided.';
+      }
+
+      if (normalizedCheck.output === undefined &&
+        isPlainObject(normalizedCheck.details)) {
+        normalizedCheck.output = 'Structured check details provided.';
+      }
+
+      if (normalizedCheck.output === undefined &&
         normalizedCheck.artifactId === undefined &&
         typeof normalizedCheck.command === 'string' &&
         Number.isInteger(normalizedCheck.exitCode)) {
@@ -208,6 +218,59 @@ function jsonTextCandidates(text) {
 
   if (objectStart >= 0 && objectEnd > objectStart) {
     candidates.push(text.slice(objectStart, objectEnd + 1));
+  }
+
+  candidates.push(...balancedJsonObjectCandidates(text).reverse());
+
+  return candidates;
+}
+
+function balancedJsonObjectCandidates(text) {
+  const candidates = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === '{') {
+      if (depth === 0) {
+        start = index;
+      }
+
+      depth += 1;
+      continue;
+    }
+
+    if (char !== '}' || depth === 0) {
+      continue;
+    }
+
+    depth -= 1;
+
+    if (depth === 0 && start >= 0) {
+      candidates.push(text.slice(start, index + 1));
+      start = -1;
+    }
   }
 
   return candidates;

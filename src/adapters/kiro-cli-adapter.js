@@ -7,6 +7,8 @@ import {
   hasDeniedShell
 } from './policy-permissions.js';
 
+const KIRO_DEFAULT_MODEL_PROFILE = 'claude-kiro-default';
+
 export class KiroCliAdapter extends BaseAdapter {
   constructor({
     cliVersion = 'unknown',
@@ -19,7 +21,7 @@ export class KiroCliAdapter extends BaseAdapter {
       cliName: 'kiro-cli',
       cliVersion,
       executable,
-      modelProfiles: ['claude-kiro-default'],
+      modelProfiles: [KIRO_DEFAULT_MODEL_PROFILE, 'claude-opus-4.7'],
       workspaceIsolation: 'external-workspace',
       logStrategy: 'stdout'
     });
@@ -36,6 +38,10 @@ export class KiroCliAdapter extends BaseAdapter {
       '--no-interactive',
       `--trust-tools=${trustTools.join(',')}`
     ];
+
+    if (isExplicitKiroModel(input.modelProfile)) {
+      args.push('--model', input.modelProfile);
+    }
 
     if (input.requireMcpStartup) {
       args.push('--require-mcp-startup');
@@ -171,6 +177,12 @@ export class KiroCliAdapter extends BaseAdapter {
       version: '1'
     };
   }
+}
+
+function isExplicitKiroModel(modelProfile) {
+  return typeof modelProfile === 'string'
+    && modelProfile.trim() !== ''
+    && modelProfile !== KIRO_DEFAULT_MODEL_PROFILE;
 }
 
 function trustToolsFor(allowedTools, policyDecisions = []) {

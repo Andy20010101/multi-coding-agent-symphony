@@ -37,7 +37,7 @@ Real model profile precedence is:
 MCAS_*_MODEL env -> config/real-cli-release.json models[adapterId] -> adapter default
 ```
 
-`config/real-cli-release.json` pins the release Claude Code profile to `deepseek-v4-pro` and the Claude auth-provider preflight value to `firstParty` for this repo. `MCAS_CLAUDE_MODEL=<provider-model>` and `MCAS_CLAUDE_PROVIDER=<auth-provider>` still take priority. If Claude Code would fall back to the adapter default `deepseek-claude-code`, or if `claude auth status` reports a provider different from the configured provider, `doctor --real-cli` fails fast.
+`config/real-cli-release.json` pins the release Claude Code profile to `deepseek-v4-pro` and the Claude provider preflight value to `deepseek` for this repo. Set `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` and `ANTHROPIC_API_KEY=<DeepSeek API key>` before running the Claude real lane. `MCAS_CLAUDE_MODEL=<provider-model>` and `MCAS_CLAUDE_PROVIDER=<auth-provider>` still take priority. If Claude Code would fall back to the adapter default `deepseek-claude-code`, or if the effective Claude provider differs from the configured provider, `doctor --real-cli` fails fast.
 
 Set `MCAS_REAL_CLI_PROOF_DIR=<dir>` when running real smokes. Codex, Claude, Kiro, writer smoke, and Harness Codex real smoke write JSON proof artifacts containing run id, model profile, provider, verifier status, evidence path, resource profile when recorded, and structured evidence. Claude Code proof artifacts also retain `requestedModelProfile`, `observedModelProfile`, `modelProfileStatus`, and `modelProfileMismatch` when the CLI stream reports the model it actually started.
 
@@ -166,7 +166,7 @@ Guarded real model smoke check:
 MCAS_RUN_REAL_KIRO=1 pnpm smoke:kiro:real
 ```
 
-This invokes the configured Kiro CLI model in read-only mode with trusted read tools only, parses stdout for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_KIRO_MODEL=<model>` to override `config/real-cli-release.json` or the default `claude-kiro-default` profile.
+This invokes the configured Kiro CLI model in read-only mode with trusted read tools only, parses stdout for `EvidencePackage`, and requires verifier status `passed`. Set `MCAS_KIRO_MODEL=<model>` to override `config/real-cli-release.json` or the default `claude-kiro-default` profile. The default profile leaves model selection to Kiro CLI; concrete profiles such as `MCAS_KIRO_MODEL=claude-opus-4.7` are passed as `kiro-cli chat --model <model>`.
 
 ## Remaining CLI Work
 

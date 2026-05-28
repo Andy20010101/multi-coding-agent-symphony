@@ -125,12 +125,14 @@ async function preflightAdapter({
     runner,
     executable: definition.executable,
     args: definition.versionArgs,
+    env,
     timeoutMs
   });
   const helpCheck = await runCliCheck({
     runner,
     executable: definition.executable,
     args: definition.helpArgs,
+    env,
     timeoutMs
   });
   const gateEnabled = env[definition.gateEnv] === '1';
@@ -149,6 +151,7 @@ async function preflightAdapter({
       definition,
       runner,
       provider,
+      env,
       timeoutMs
     })
     : {
@@ -192,22 +195,30 @@ async function runAuthCheck({
   definition,
   runner,
   provider,
+  env,
   timeoutMs
 }) {
   const authCheck = await runCliCheck({
     runner,
     executable: definition.executable,
     args: definition.authArgs,
+    env,
     timeoutMs
   });
   const parsed = parseOptionalJson(authCheck.stdout);
+  const effectiveApiProvider = effectiveAuthProvider({
+    adapterId: definition.adapterId,
+    apiProvider: parsed?.apiProvider,
+    env
+  });
   const auth = {
     status: authCheck.status === 'passed' ? 'checked' : 'failed',
     check: authCheck,
     proofCommand: realSmokeCommandFor(definition.adapterId),
     ...(parsed?.loggedIn !== undefined ? { loggedIn: parsed.loggedIn } : {}),
     ...(parsed?.authMethod ? { authMethod: parsed.authMethod } : {}),
-    ...(parsed?.apiProvider ? { apiProvider: parsed.apiProvider } : {})
+    ...(parsed?.apiProvider ? { apiProvider: parsed.apiProvider } : {}),
+    ...(effectiveApiProvider ? { effectiveApiProvider } : {})
   };
 
   if (auth.status === 'failed') {
@@ -215,11 +226,13 @@ async function runAuthCheck({
     return auth;
   }
 
-  if (provider.name !== 'unknown' && auth.apiProvider && provider.name !== auth.apiProvider) {
+  const comparableApiProvider = auth.effectiveApiProvider ?? auth.apiProvider;
+
+  if (provider.name !== 'unknown' && comparableApiProvider && provider.name !== comparableApiProvider) {
     return {
       ...auth,
       status: 'failed',
-      recommendation: `Release config provider is ${provider.name}, but ${definition.executable} auth status reports ${auth.apiProvider}. Align ${provider.envName} or the CLI auth provider before real smoke.`
+      recommendation: `Release config provider is ${provider.name}, but ${definition.executable} auth status reports ${comparableApiProvider}. Align ${provider.envName} or the CLI auth provider before real smoke.`
     };
   }
 
@@ -251,12 +264,14 @@ async function runCliCheck({
   runner,
   executable,
   args,
+  env,
   timeoutMs
 }) {
   try {
     const result = await runner.run({
       executable,
       args,
+      env,
       timeoutMs
     });
 
@@ -304,6 +319,40 @@ function parseOptionalJson(value) {
   } catch {
     return null;
   }
+}
+
+function effectiveAuthProvider({ adapterId, apiProvider, env = process.env }) {
+  if (adapterId !== 'claude-code') {
+    return null;
+  }
+
+  const baseUrl = nonEmptyString(env.ANTHROPIC_BASE_URL);
+
+  if (!baseUrl) {
+    return null;
+  }
+
+  let hostname;
+
+  try {
+    hostname = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+
+  if (hostname === 'api.deepseek.com' || hostname.endsWith('.deepseek.com')) {
+    return 'deepseek';
+  }
+
+  return apiProvider ?? null;
+}
+
+function nonEmptyString(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return undefined;
+  }
+
+  return value.trim();
 }
 
 function realSmokeCommandFor(adapterId) {

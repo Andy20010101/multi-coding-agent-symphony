@@ -4,6 +4,6 @@
     "claude-code": "deepseek-v4-pro"
   },
   "providers": {
-    "claude-code": "firstParty"
+    "claude-code": "deepseek"
   }
 }

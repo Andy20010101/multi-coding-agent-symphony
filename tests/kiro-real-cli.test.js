@@ -199,6 +199,98 @@ describe('Kiro CLI real integration', () => {
     assert.equal(verifyEvidence({ commandSpec: smokeCommandSpec, evidence }).status, 'passed');
   });
 
+  it('extracts Kiro evidence JSON after earlier tool output JSON objects', async () => {
+    const runner = new StaticProcessRunner({
+      stdout: [
+        'Batch fs_read operation with 2 operations',
+        '{"name":"multi-coding-agent-symphony","version":"0.1.0"}',
+        '\u001b[m> \u001b[0mBoth files were read successfully.',
+        '\u001b[1mjson',
+        '\u001b[0m{',
+        '  "command": "qa",',
+        '  "taskId": "task-kiro",',
+        '  "workspaceId": "local",',
+        '  "changedFiles": [],',
+        '  "checks": [',
+        '    {',
+        '      "name": "kiro-real-smoke",',
+        '      "status": "passed",',
+        '      "evidence": {',
+        '        "schema": "kiro-smoke-evidence.v1",',
+        '        "realModelCalled": true',
+        '      }',
+        '    }',
+        '  ],',
+        '  "knownRisks": [],',
+        '  "agentSummary": "Read-only Kiro CLI smoke test completed.",',
+        '  "version": "kiro-smoke-evidence.v1"',
+        '}',
+        '\u001b[0m'
+      ].join('\n')
+    });
+    const adapter = new KiroCliAdapter({
+      cliVersion: '2.4.2',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec: smokeCommandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-opus-4.7',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.equal(evidence.version, 'kiro-smoke-evidence.v1');
+    assert.equal(evidence.workspaceId, '/work/repo');
+    assert.equal(evidence.checks[0].name, 'kiro-real-smoke');
+    assert.equal(verifyEvidence({ commandSpec: smokeCommandSpec, evidence }).status, 'passed');
+  });
+
+  it('normalizes Kiro check details objects into verifier-readable output', async () => {
+    const runner = new StaticProcessRunner({
+      stdout: [
+        'Both files are readable. Returning the structured EvidencePackage:',
+        '{',
+        '  "command": "qa",',
+        '  "taskId": "task-kiro",',
+        '  "workspaceId": "local",',
+        '  "changedFiles": [],',
+        '  "checks": [',
+        '    {',
+        '      "name": "kiro-real-smoke",',
+        '      "status": "passed",',
+        '      "details": {',
+        '        "packageJsonReadable": true,',
+        '        "readmeReadable": true',
+        '      }',
+        '    }',
+        '  ],',
+        '  "knownRisks": [],',
+        '  "agentSummary": "Read-only Kiro CLI smoke test completed.",',
+        '  "version": "kiro-smoke-evidence.v1"',
+        '}'
+      ].join('\n')
+    });
+    const adapter = new KiroCliAdapter({
+      cliVersion: '2.4.2',
+      processRunner: runner
+    });
+    const handle = await adapter.start({
+      commandSpec: smokeCommandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-opus-4.7',
+      executionMode: 'real'
+    });
+
+    const evidence = await adapter.collectEvidence(handle);
+
+    assert.equal(evidence.checks[0].output, 'Structured check details provided.');
+    assert.equal(verifyEvidence({ commandSpec: smokeCommandSpec, evidence }).status, 'passed');
+  });
+
   it('renders intake constraints into the shared Kiro prompt', async () => {
     const adapter = new KiroCliAdapter({
       cliVersion: '2.2.2'
@@ -226,6 +318,44 @@ describe('Kiro CLI real integration', () => {
     assert.match(prepared.prompt, /Required verification commands:/);
     assert.match(prepared.prompt, /pnpm test/);
     assert.match(prepared.prompt, /checks\[\]\.command exactly equals/);
+  });
+
+  it('passes explicit Kiro model profiles to the CLI model flag', async () => {
+    const adapter = new KiroCliAdapter({
+      cliVersion: '2.4.2'
+    });
+
+    const prepared = await adapter.prepare({
+      commandSpec: smokeCommandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-opus-4.7',
+      executionMode: 'real'
+    });
+
+    assert.deepEqual(prepared.args.slice(0, 5), [
+      'chat',
+      '--no-interactive',
+      '--trust-tools=read,grep',
+      '--model',
+      'claude-opus-4.7'
+    ]);
+  });
+
+  it('keeps the default Kiro model profile on CLI defaults', async () => {
+    const adapter = new KiroCliAdapter({
+      cliVersion: '2.4.2'
+    });
+
+    const prepared = await adapter.prepare({
+      commandSpec: smokeCommandSpec,
+      contextPack,
+      workspace: '/work/repo',
+      modelProfile: 'claude-kiro-default',
+      executionMode: 'real'
+    });
+
+    assert.equal(prepared.args.includes('--model'), false);
   });
 });
 

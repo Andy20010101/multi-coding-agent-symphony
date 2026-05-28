@@ -328,6 +328,70 @@ describe('Phase 8 user-facing CLI', () => {
     }
   });
 
+  it('accepts Claude Code routed to DeepSeek through the Anthropic base URL', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mcas-real-cli-doctor-deepseek-'));
+
+    try {
+      const configFile = join(root, 'real-cli-release.json');
+
+      await writeFile(configFile, JSON.stringify({
+        version: '1',
+        models: {
+          'claude-code': 'deepseek-v4-pro'
+        },
+        providers: {
+          'claude-code': 'deepseek'
+        }
+      }));
+
+      const runner = new QueueRunner([
+        { exitCode: 0, stdout: 'claude 2.1.153\n', stderr: '' },
+        { exitCode: 0, stdout: 'claude help\n', stderr: '' },
+        {
+          exitCode: 0,
+          stdout: '{"loggedIn":true,"authMethod":"api_key","apiProvider":"firstParty","apiKeySource":"ANTHROPIC_API_KEY"}',
+          stderr: ''
+        }
+      ]);
+      const output = createOutput();
+
+      const exitCode = await runMcasCli({
+        argv: [
+          'doctor',
+          '--real-cli',
+          '--adapter',
+          'claude',
+          '--real-cli-config',
+          configFile,
+          '--require-gates'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr,
+        runner,
+        env: {
+          MCAS_RUN_REAL_CLAUDE: '1',
+          ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+          ANTHROPIC_API_KEY: 'test-redacted'
+        }
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const doctor = JSON.parse(output.stdoutText());
+      const [claude] = doctor.realCli.adapters;
+
+      assert.equal(doctor.realCli.status, 'ok');
+      assert.equal(claude.provider.name, 'deepseek');
+      assert.equal(claude.auth.status, 'checked');
+      assert.equal(claude.auth.apiProvider, 'firstParty');
+      assert.equal(claude.auth.effectiveApiProvider, 'deepseek');
+      assert.equal(runner.calls[2].env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('fails fast when Claude auth provider does not match the release config provider', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-real-cli-doctor-auth-'));
 
