@@ -151,7 +151,15 @@ Task 1 evidence 写入后已执行 post-task self-check：
 - evidence 记录补充后再次执行 `git diff --check`：通过，无输出。
 - 通用安全扫描已执行；命中项来自既有 legacy console、构建后的 React bundle、只读展示字段和测试里的安全断言。本任务 diff 只包含本 evidence 文件，没有新增浏览器控件、写入 route、模型调用、依赖安装、任意路径读取或 artifact safety 推断。
 
-## 待独立 reviewer 核对
+## 独立 reviewer gate
+
+补录复审日期：2026-05-28
+
+独立 reviewer：`019e69c1-c54a-7fc0-8bff-57bcbd1c1b22`
+
+复审结果：`APPROVED`
+
+复审范围：
 
 独立 reviewer 需要确认：
 
@@ -161,6 +169,14 @@ Task 1 evidence 写入后已执行 post-task self-check：
 - 本任务没有功能、依赖、源码、测试、前端、server 或 kernel 改动。
 - evidence 为中文优先，路径正确，没有删除历史 evidence。
 
+复审核对：
+
+- `docs/plans/v16-task1-plan-approval-evidence-2026-05-27.md` 准确记录 Task 1 plan approval and baseline freeze 范围。
+- Task 1 基线记录与 `v15` tag commit `2c1b9b9`、v16 planning commit `14c9c93`、Task 1 commit `3410509` 一致。
+- 非目标、安全边界、12 task 拆分、review model、release gates 和 stop conditions 与 v16 plan 和 execution prompt 一致。
+- Task 1 原始变更只包含本 evidence 文件。
+- 未发现功能、依赖、源码、测试、前端、server、kernel、`package.json` 或 `pnpm-lock.yaml` 改动。
+
 ## 结论
 
-v16 Task 1 worker 部分已完成计划批准与基线冻结记录。下一步应按 `tmp/codex-prompts/v16_goal_execution_plan.md` 的 Task 1 review gate 启动独立 reviewer；只有 reviewer 输出 `APPROVED` 后，才允许 commit、push、merge 回 `main`。
+v16 Task 1 已完成计划批准与基线冻结记录。独立 reviewer 已在 2026-05-28 补录复审并返回 `APPROVED`。
