@@ -331,6 +331,14 @@ export function listRegisteredGoals() {
   }];
 }
 
+export function getGoalProgressTemplate(goalId) {
+  if (!Object.hasOwn(GOAL_PROGRESS_TEMPLATES, goalId)) {
+    return null;
+  }
+
+  return structuredClone(GOAL_PROGRESS_TEMPLATES[goalId]);
+}
+
 export function renderGoalProgressText(ledger) {
   const lines = [
     `Goal: ${ledger.goalTitle}`,

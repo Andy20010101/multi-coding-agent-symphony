@@ -43,8 +43,13 @@ import {
   buildErrorEnvelope
 } from './error-envelope.js';
 import {
+  readGoalEventJournal
+} from './goal-event-journal.js';
+import {
   buildGoalProgressLedger,
-  listRegisteredGoals
+  getGoalProgressTemplate,
+  listRegisteredGoals,
+  V18_GOAL_EVENT_JOURNAL_GOAL_ID
 } from './goal-progress-ledger.js';
 import {
   buildStageCommandSummary
@@ -823,6 +828,19 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      const goalEventsRequest = parseGoalEventsRequestPath(url.pathname, url.searchParams);
+
+      if (goalEventsRequest !== null) {
+        await writeGoalEventsResponse({
+          response,
+          stateDir,
+          request: goalEventsRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
       if (url.pathname === '/api/capabilities') {
         if (hasSearchParams(url.searchParams)) {
           writeApiErrorResponse(response, {
@@ -1037,6 +1055,44 @@ async function writeGoalProgressResponse({ response, stateDir, request, route, m
   }
 
   writeJsonResponse(response, 200, ledger);
+}
+
+async function writeGoalEventsResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-goal-ref',
+      message: 'Goal events ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: 'invalid-route-segment'
+      }
+    });
+    return;
+  }
+
+  const goal = resolveGoalEventsGoal(request.goalId);
+
+  if (goal === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal event log was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  const eventLog = await readGoalEventJournal({
+    stateDir,
+    goalId: goal.goalId,
+    goalTitle: goal.goalTitle,
+    baseline: goal.baseline
+  });
+
+  writeJsonResponse(response, 200, eventLog);
 }
 
 async function writeRunResponse({ response, stateDir, runId }) {
@@ -1634,6 +1690,63 @@ function parseGoalProgressRequestPath(pathname, searchParams = new URLSearchPara
   return {
     kind: 'goal-progress',
     goalId: decoded.value
+  };
+}
+
+function parseGoalEventsRequestPath(pathname, searchParams = new URLSearchParams()) {
+  if (hasSearchParams(searchParams)) {
+    if (pathname === '/api/goals/latest/events' || /^\/api\/goals\/[^/]+\/events$/u.test(pathname)) {
+      return {
+        kind: 'invalid',
+        goalId: null
+      };
+    }
+
+    return null;
+  }
+
+  if (pathname === '/api/goals/latest/events') {
+    return {
+      kind: 'goal-events',
+      goalId: 'latest'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/events$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null
+    };
+  }
+
+  return {
+    kind: 'goal-events',
+    goalId: decoded.value
+  };
+}
+
+function resolveGoalEventsGoal(goalId) {
+  const resolvedGoalId = goalId === undefined || goalId === null || goalId === 'latest'
+    ? V18_GOAL_EVENT_JOURNAL_GOAL_ID
+    : goalId;
+  const template = getGoalProgressTemplate(resolvedGoalId);
+
+  if (template === null) {
+    return null;
+  }
+
+  return {
+    goalId: template.goalId,
+    goalTitle: template.goalTitle,
+    baseline: template.baseline
   };
 }
 
