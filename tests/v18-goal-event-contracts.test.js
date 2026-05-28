@@ -96,6 +96,16 @@ describe('v18 goal-event-log.v1 and goal-update-plan.v1 contract baseline', () =
     );
   });
 
+  it('rejects event logs with events from another goal id', async () => {
+    const eventLog = await loadFixture('../fixtures/contracts/goal-event-log.valid-scenarios.v1.json');
+    eventLog.events[0].goalId = 'other-goal';
+
+    assert.equal(
+      validateGoalEventLogContract(eventLog).errors.includes('events[0].goalId must match goalId'),
+      true
+    );
+  });
+
   it('rejects update plans without planHash or with dry-run writes', async () => {
     const updatePlan = await loadFixture('../fixtures/contracts/goal-update-plan.dry-run.v1.json');
 
@@ -123,6 +133,51 @@ describe('v18 goal-event-log.v1 and goal-update-plan.v1 contract baseline', () =
       validateGoalUpdatePlanContract(writesInDryRun).errors.includes('safety.dryRunWrites must be false'),
       true
     );
+  });
+
+  it('rejects critical status events and proposed events without explicit evidence refs', async () => {
+    const eventLog = await loadFixture('../fixtures/contracts/goal-event-log.valid-scenarios.v1.json');
+    const updatePlan = await loadFixture('../fixtures/contracts/goal-update-plan.dry-run.v1.json');
+    const criticalEventTypes = [
+      'worker.self-check-passed',
+      'reviewer.approved',
+      'reviewer.needs-revision',
+      'main.verification-passed',
+      'release.gate-passed',
+      'release.gate-failed',
+      'release.ready-declared'
+    ];
+
+    for (const eventType of criticalEventTypes) {
+      const missingEventEvidence = structuredClone(eventLog);
+      const event = missingEventEvidence.events.find((candidate) => candidate.eventType === eventType);
+      event.evidenceRefs = [];
+
+      assert.equal(
+        validateGoalEventLogContract(missingEventEvidence).errors.some((error) => (
+          error.includes(`must contain explicit evidence for ${eventType}`)
+        )),
+        true,
+        eventType
+      );
+
+      const missingPlanEvidence = structuredClone(updatePlan);
+      missingPlanEvidence.proposedEvents[0] = {
+        eventType,
+        taskId: event.taskId,
+        phase: event.phase,
+        requiresEvidence: true,
+        evidenceRefs: []
+      };
+
+      assert.equal(
+        validateGoalUpdatePlanContract(missingPlanEvidence).errors.some((error) => (
+          error.includes(`must contain explicit evidence for ${eventType}`)
+        )),
+        true,
+        eventType
+      );
+    }
   });
 
   it('rejects dangerous evidence refs in goal-update-plan proposed events', async () => {

@@ -324,6 +324,51 @@ describe('v18 append-only event journal writer', () => {
           taskId: null,
           gate: { id: 'release.pnpm-check', status: 'green' }
         })
+      },
+      {
+        name: 'reviewer approval without evidence',
+        event: buildEvent({
+          eventId: 'evt_20260528_task2_approved_without_evidence',
+          eventType: 'reviewer.approved',
+          phase: 'review',
+          actor: { role: 'reviewer', id: 'codex-reviewer-task-2' },
+          review: { verdict: 'APPROVED', scope: 'Task 2 journal writer' },
+          evidenceRefs: []
+        })
+      },
+      {
+        name: 'main verification without evidence',
+        event: buildEvent({
+          eventId: 'evt_20260528_task2_main_without_evidence',
+          eventType: 'main.verification-passed',
+          phase: 'main-verification',
+          actor: { role: 'main-verifier', id: 'codex-main-verifier' },
+          evidenceRefs: []
+        })
+      },
+      {
+        name: 'release gate without evidence',
+        event: buildEvent({
+          eventId: 'evt_20260528_task2_gate_without_evidence',
+          eventType: 'release.gate-passed',
+          phase: 'release-gate',
+          actor: { role: 'release-verifier', id: 'codex-release-verifier' },
+          taskId: 'release',
+          gate: { id: 'release.pnpm-check', status: 'passed' },
+          evidenceRefs: []
+        })
+      },
+      {
+        name: 'release ready without evidence',
+        event: buildEvent({
+          eventId: 'evt_20260528_task2_ready_without_evidence',
+          eventType: 'release.ready-declared',
+          phase: 'release-prep',
+          actor: { role: 'release-manager', id: 'codex-release-manager' },
+          taskId: 'release',
+          gate: { id: 'release.ready', status: 'declared' },
+          evidenceRefs: []
+        })
       }
     ];
 

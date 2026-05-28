@@ -65,6 +65,20 @@ const EVIDENCE_REF_KINDS = Object.freeze([
   'command-evidence',
   'external-note'
 ]);
+const EVENT_TYPES_REQUIRING_EVIDENCE = Object.freeze([
+  'worker.evidence-recorded',
+  'worker.self-check-passed',
+  'worker.self-check-failed',
+  'reviewer.approved',
+  'reviewer.needs-revision',
+  'reviewer.blocked',
+  'main.verification-passed',
+  'main.verification-failed',
+  'release.gate-passed',
+  'release.gate-failed',
+  'release.evidence-recorded',
+  'release.ready-declared'
+]);
 const HASH_PREFIX_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 
 export function validateGoalEventLogContract(log) {
@@ -102,7 +116,13 @@ export function validateGoalEventLogContract(log) {
     errors.push('events must be an array');
   } else {
     log.events.forEach((event, index) => {
+      const path = `events[${index}]`;
+
       errors.push(...validateGoalEventRecord(event, `events[${index}]`).errors);
+
+      if (isPlainObject(event) && event.goalId !== log.goalId) {
+        errors.push(`${path}.goalId must match goalId`);
+      }
     });
     errors.push(...validateGoalEventChain(log.events).errors);
   }
@@ -213,6 +233,7 @@ export function validateGoalEventRecord(event, path = 'event') {
   requireNullableString(errors, event.branch, `${path}.branch`);
   requireNullableString(errors, event.commit, `${path}.commit`);
   validateEvidenceRefs(errors, event.evidenceRefs, `${path}.evidenceRefs`);
+  requireEventEvidence(errors, event.eventType, event.evidenceRefs, `${path}.evidenceRefs`);
   requireNonEmptyString(errors, event.statement, `${path}.statement`);
   validateOptionalReview(errors, event.review, `${path}.review`);
   validateOptionalGate(errors, event.gate, `${path}.gate`);
@@ -461,7 +482,18 @@ function validateProposedEvents(errors, proposedEvents) {
     requireEnum(errors, event.phase, `${path}.phase`, GOAL_EVENT_PHASES);
     requireBoolean(errors, event.requiresEvidence, `${path}.requiresEvidence`);
     validateEvidenceRefs(errors, event.evidenceRefs, `${path}.evidenceRefs`);
+    requireEventEvidence(errors, event.eventType, event.evidenceRefs, `${path}.evidenceRefs`);
   });
+}
+
+function requireEventEvidence(errors, eventType, evidenceRefs, path) {
+  if (!EVENT_TYPES_REQUIRING_EVIDENCE.includes(eventType)) {
+    return;
+  }
+
+  if (!Array.isArray(evidenceRefs) || evidenceRefs.length === 0) {
+    errors.push(`${path} must contain explicit evidence for ${eventType}`);
+  }
 }
 
 function validatePlanValidation(errors, validation) {
