@@ -24,8 +24,12 @@ import {
 } from '../src/symphony/diagnostics.js';
 import {
   DEFAULT_GOAL_PROGRESS_GOAL_ID,
+  V18_GOAL_EVENT_JOURNAL_GOAL_ID,
   validateGoalProgressLedgerContract
 } from '../src/symphony/goal-progress-ledger.js';
+import {
+  validateGoalEventLogContract
+} from '../src/symphony/goal-event-contracts.js';
 
 const ROUTE_SMOKE_RUN_ID = 'task9-route-smoke-run';
 const FIXED_TIME = '2026-05-27T00:00:00.000Z';
@@ -197,6 +201,41 @@ describe('v16 Workbench route smoke and server parity', () => {
           }
         },
         {
+          path: `/api/goals/${DEFAULT_GOAL_PROGRESS_GOAL_ID}/progress`,
+          contractName: 'goal-progress-ledger.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalProgressLedgerContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, DEFAULT_GOAL_PROGRESS_GOAL_ID);
+          }
+        },
+        {
+          path: '/api/goals/latest/events',
+          contractName: 'goal-event-log.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalEventLogContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V18_GOAL_EVENT_JOURNAL_GOAL_ID);
+            assert.equal(payload.log.eventCount, 0);
+            assert.deepEqual(payload.events, []);
+          }
+        },
+        {
+          path: `/api/goals/${V18_GOAL_EVENT_JOURNAL_GOAL_ID}/events`,
+          contractName: 'goal-event-log.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalEventLogContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V18_GOAL_EVENT_JOURNAL_GOAL_ID);
+          }
+        },
+        {
           path: '/api/capabilities',
           contractName: 'capabilities.v1',
           assertPayload(payload) {
@@ -310,6 +349,8 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/goals',
         '/api/goals/latest/progress',
         `/api/goals/${DEFAULT_GOAL_PROGRESS_GOAL_ID}/progress`,
+        '/api/goals/latest/events',
+        `/api/goals/${V18_GOAL_EVENT_JOURNAL_GOAL_ID}/events`,
         '/api/capabilities',
         '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
@@ -443,6 +484,49 @@ describe('v16 Workbench route smoke and server parity', () => {
     }
   });
 
+  it('rejects v18 events traversal and arbitrary path probes without writing state', async () => {
+    const context = await startConsoleServer();
+
+    try {
+      const before = await collectTextFileSnapshot(context.stateDir);
+      const probes = [
+        '/api/goals/latest/events?path=package.json',
+        '/api/goals/latest/events?path=%2FUsers%2Fandy%2Fpackage.json',
+        '/api/goals/latest/events?path=file%3A%2F%2Fpackage.json',
+        '/api/goals/latest/events?path=~%2Fpackage.json',
+        '/api/goals/%2e%2e%2fpackage.json/events',
+        '/api/goals/%2FUsers%2Fandy%2Fpackage.json/events',
+        '/api/goals/file%3A%2F%2Fpackage.json/events',
+        '/api/goals/~%2Fpackage.json/events'
+      ];
+
+      for (const path of probes) {
+        const response = await fetch(`${context.baseUrl}${path}`);
+        const body = await response.text();
+        const envelope = JSON.parse(body);
+
+        assert.equal(response.status, 400, path);
+        assert.equal(envelope.contractName, 'error-envelope.v1');
+        assert.equal(envelope.error.code, 'invalid-goal-ref');
+        assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+          ok: true,
+          errors: []
+        });
+        assert.doesNotMatch(
+          body,
+          /\/Users\/|multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer/u,
+          path
+        );
+      }
+
+      const after = await collectTextFileSnapshot(context.stateDir);
+
+      assert.deepEqual(after, before);
+    } finally {
+      await cleanupConsoleServer(context);
+    }
+  });
+
   it('does not expose repository files or traversal probes through /workbench', async () => {
     const context = await startConsoleServer();
     const blockedPaths = [
@@ -510,6 +594,66 @@ describe('v16 Workbench route smoke and server parity', () => {
     } finally {
       await cleanupConsoleServer(context);
     }
+  });
+
+  it('statically keeps the Workbench source free of execution, write, download, local-open, and model entry points', async () => {
+    const sourceRoot = join(process.cwd(), 'frontend', 'workbench', 'src');
+    const entryHtmlPath = join(process.cwd(), 'frontend', 'workbench', 'index.html');
+    const files = [
+      ...await collectTextFileSnapshot(sourceRoot),
+      ['index.html', await readFile(entryHtmlPath, 'utf8')]
+    ];
+    const forbiddenEntrypoints = [
+      {
+        label: 'mutation controls',
+        pattern: /<(?:button|form)\b|<a\b[^>]*(?:href|download)\s*=/iu
+      },
+      {
+        label: 'mutation event handlers',
+        pattern: /\bon(?:Click|Submit)\s*=/u
+      },
+      {
+        label: 'raw HTML rendering',
+        pattern: /\bdangerouslySetInnerHTML\b/u
+      },
+      {
+        label: 'browser execution channels',
+        pattern: /\b(?:eval\s*\(|new Function\b|XMLHttpRequest\b|WebSocket\b|EventSource\b|navigator\.sendBeacon\b)/u
+      },
+      {
+        label: 'browser write storage',
+        pattern: /\b(?:localStorage|sessionStorage|indexedDB|document\.cookie)\b/u
+      },
+      {
+        label: 'download or local file open APIs',
+        pattern: /\b(?:URL\.createObjectURL|Blob\s*\(|window\.open|globalThis\.open|showOpenFilePicker|showSaveFilePicker|launchQueue)\b/u
+      },
+      {
+        label: 'model API endpoints',
+        pattern: /\/v1\/(?:responses|chat\/completions|completions|models)|\/api\/(?:chat|models|completions)|\b(?:openai|anthropic)\b/iu
+      },
+      {
+        label: 'shell process APIs',
+        pattern: /\b(?:child_process|spawn\s*\(|execFile\s*\(|exec\s*\()\b/u
+      }
+    ];
+
+    for (const [relativePath, source] of files) {
+      for (const forbidden of forbiddenEntrypoints) {
+        assert.doesNotMatch(source, forbidden.pattern, `${relativePath} exposes ${forbidden.label}`);
+      }
+      assert.doesNotMatch(source, /\bfetch\s*\(/u, `${relativePath} should use the read-only fetch wrapper only`);
+      assert.doesNotMatch(source, /\bbody\s*:/u, `${relativePath} should not attach request bodies`);
+      assert.doesNotMatch(
+        source,
+        /\bmethod\s*:\s*['"`](?:POST|PUT|PATCH|DELETE|HEAD)['"`]/u,
+        `${relativePath} should not declare non-GET Workbench requests`
+      );
+    }
+
+    const clientSource = files.find(([relativePath]) => relativePath === 'api/client.js')?.[1] ?? '';
+
+    assert.match(clientSource, /fetchImpl\(route\.path,\s*\{\s*method:\s*'GET'/su);
   });
 });
 
