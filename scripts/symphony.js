@@ -47,6 +47,11 @@ import {
   renderGoalProgressMarkdown,
   renderGoalProgressText
 } from '../src/symphony/goal-progress-ledger.js';
+import {
+  GoalUpdateError,
+  buildGoalUpdatePlan,
+  confirmGoalUpdate
+} from '../src/symphony/goal-update.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -104,6 +109,7 @@ const KNOWN_COMMANDS = new Set([
   'console',
   'diagnose',
   'handoff',
+  'goal',
   'goal-status',
   'progress',
   'adopt',
@@ -280,6 +286,13 @@ export async function runSymphonyCli({
 
     if (command === 'handoff') {
       return await runSymphonyHandoff({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'goal') {
+      return await runSymphonyGoal({
         args: rest,
         stdout
       });
@@ -3257,6 +3270,203 @@ function handoffHelpText() {
     '',
     'Prints the bundled v16 guided-goal handoff contract.',
     'The command is copy-only: it does not execute commands, call models, write files, create branches, commit, push, or merge.',
+    ''
+  ].join('\n');
+}
+
+async function runSymphonyGoal({ args, stdout }) {
+  const [subcommand, ...rest] = args;
+
+  if (subcommand === undefined || subcommand === '--help') {
+    stdout.write(goalHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  if (subcommand !== 'update') {
+    throw new UsageError(`unknown goal subcommand: ${subcommand}`);
+  }
+
+  const options = parseGoalUpdateArgs(rest);
+
+  if (options.help) {
+    stdout.write(goalUpdateHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  try {
+    if (options.confirm) {
+      writeJson(stdout, await confirmGoalUpdate(options));
+      return EXIT_CODES.ok;
+    }
+
+    writeJson(stdout, buildGoalUpdatePlan(options));
+    return EXIT_CODES.ok;
+  } catch (error) {
+    if (error instanceof GoalUpdateError) {
+      throw new UsageError(error.message);
+    }
+
+    throw error;
+  }
+}
+
+function parseGoalUpdateArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: null,
+    taskId: null,
+    eventType: null,
+    actorId: null,
+    evidenceRefs: [],
+    statement: undefined,
+    branch: undefined,
+    commit: undefined,
+    confirm: false,
+    dryRun: false,
+    planHash: undefined,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      continue;
+    }
+
+    if (value === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+
+    if (value === '--confirm') {
+      options.confirm = true;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--event') {
+      options.eventType = readRequiredValue(args, index, '--event');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--actor') {
+      options.actorId = readRequiredValue(args, index, '--actor');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--evidence-ref') {
+      options.evidenceRefs.push(readRequiredValue(args, index, '--evidence-ref'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--statement') {
+      options.statement = readRequiredValue(args, index, '--statement');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--branch') {
+      options.branch = readRequiredValue(args, index, '--branch');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--commit') {
+      options.commit = readRequiredValue(args, index, '--commit');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--plan-hash') {
+      options.planHash = readRequiredValue(args, index, '--plan-hash');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--plan-file') {
+      throw new UsageError('goal update does not read plan files; repeat the dry-run flags with --confirm --plan-hash');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal update writes only through confirm append; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal update option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal update argument: ${value}`);
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.confirm && options.dryRun) {
+    throw new UsageError('goal update accepts only one of --dry-run or --confirm');
+  }
+
+  if (!options.confirm && options.planHash !== undefined) {
+    throw new UsageError('--plan-hash requires --confirm');
+  }
+
+  for (const [key, flag] of [
+    ['goalId', '--goal'],
+    ['taskId', '--task'],
+    ['eventType', '--event'],
+    ['actorId', '--actor']
+  ]) {
+    if (options[key] === null) {
+      throw new UsageError(`goal update requires ${flag}`);
+    }
+  }
+
+  return options;
+}
+
+function goalHelpText() {
+  return [
+    'Usage: symphony goal update [options]',
+    '',
+    'Records v18 goal events through a dry-run / confirm flow.',
+    'Currently implemented: symphony goal update.',
+    ''
+  ].join('\n');
+}
+
+function goalUpdateHelpText() {
+  return [
+    'Usage: symphony goal update --goal <goal-id> --task <task-id> --event <event-type> --actor <actor-id> [--evidence-ref <ref>] [--dry-run]',
+    '       symphony goal update --goal <goal-id> --task <task-id> --event <event-type> --actor <actor-id> [--evidence-ref <ref>] --confirm --plan-hash <hash>',
+    '',
+    'Dry-run is the default and prints goal-update-plan.v1 without writing.',
+    'Confirm appends one worker/task-level event only after the current input matches --plan-hash.',
     ''
   ].join('\n');
 }
