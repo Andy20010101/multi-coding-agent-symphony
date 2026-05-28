@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -28,6 +28,99 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v17 `capabilities.v1` declares unsupported browser capabilities as explicit `false` values. The Workbench displays those fields but does not turn them into write, execution, download, or model invocation controls.
 - v17 `diagnostics.v1` is read-only. It does not run shell commands, tests, audit, mutation, package installs, or model calls.
 - v17 `error-envelope.v1` is used for relevant Console API error responses. Error bodies must not contain stack traces, absolute local paths, secrets, or repository file contents.
+- v18 `goal-event-log.v1` is the append-only source for worker evidence, independent review evidence, main verification evidence, release gate evidence, and release ready declaration.
+- v18 `goal-update-plan.v1` is the dry-run contract used by `symphony goal update`, `symphony goal review`, and `symphony goal gate` before confirm appends to the managed journal.
+- v18 keeps the `goal-progress-ledger.v1` contract name. The resolver reads `goal-event-log.v1`; with no events it returns the v17 planned/unknown template.
+- v18 Workbench display uses `GET /api/goals/latest/events`, `GET /api/goals/<goal-id>/events`, Goal Events Timeline, and Evidence Matrix. It reads only backend contract fields.
+- v18 does not include Autopilot, Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation, automatic merge, or automatic tag.
+
+## `goal-event-log.v1`
+
+`goal-event-log.v1` records explicit goal events for one registered goal. It is not a release summary and it is not editable Workbench state. The managed writer appends events, assigns sequence numbers, and links events with `previousEventHash` / `eventHash`.
+
+```json
+{
+  "contractName": "goal-event-log.v1",
+  "contractVersion": 1,
+  "goalId": "v18-goal-event-journal-evidence-recorder",
+  "goalTitle": "v18 Goal Event Journal + Evidence Recorder",
+  "baseline": {
+    "tag": "v17",
+    "commit": null,
+    "evidenceRef": "docs/plans/v17-release-evidence-2026-05-28.md"
+  },
+  "log": {
+    "appendOnly": true,
+    "storage": "managed-goal-event-journal",
+    "eventCount": 0,
+    "firstSequence": null,
+    "lastSequence": null,
+    "lastEventId": null,
+    "lastEventHash": null
+  },
+  "events": []
+}
+```
+
+Supported event families include worker events, reviewer verdicts, main verification events, release gate events, blockers, and `release.ready-declared`. `approved`, `main-verified`, and `release-ready` must come from explicit events, not from branch names, filenames, command text, task titles, or paths.
+
+Routes:
+
+```text
+GET /api/goals/latest/events
+GET /api/goals/<goal-id>/events
+```
+
+These routes accept only `GET`. Unknown goals and unsafe path segments return `error-envelope.v1`. Query path, absolute paths, `file://`, `~/`, and encoded traversal do not trigger filesystem reads. Evidence refs are identifiers only; the API, resolver, and Workbench do not read evidence document bodies.
+
+## `goal-update-plan.v1`
+
+`goal-update-plan.v1` is the dry-run output for controlled goal event registration. It lets an operator inspect the event that would be appended, the evidence refs, the safety flags, and the copy-only confirm command.
+
+```json
+{
+  "contractName": "goal-update-plan.v1",
+  "contractVersion": 1,
+  "planId": "plan_v18_task1_worker_started",
+  "planHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "goalId": "v18-goal-event-journal-evidence-recorder",
+  "mode": "dry-run",
+  "command": {
+    "name": "symphony goal update",
+    "intent": "record-worker-task-event",
+    "confirmRequired": true
+  },
+  "wouldAppend": {
+    "appendOnly": true,
+    "eventCount": 1,
+    "target": "managed-goal-event-journal",
+    "writesInDryRun": false
+  },
+  "confirm": {
+    "available": true,
+    "requiredFlags": ["--confirm", "--plan-hash"],
+    "copyOnlyCommand": "symphony goal update --goal v18-goal-event-journal-evidence-recorder --task task-1 --event worker.started --actor codex-worker-task-1 --confirm --plan-hash sha256:..."
+  },
+  "safety": {
+    "dryRunWrites": false,
+    "confirmWritesAppendOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryPathReadAvailable": false
+  }
+}
+```
+
+CLI entry points:
+
+```sh
+symphony goal update --goal v18-goal-event-journal-evidence-recorder --task task-1 --event worker.started --actor codex-worker-task-1 --dry-run
+symphony goal review --goal v18-goal-event-journal-evidence-recorder --task task-1 --reviewer codex-reviewer-task-1 --verdict approved --evidence-ref docs/plans/v18-task1-review-evidence-2026-05-28.md --dry-run
+symphony goal gate --goal v18-goal-event-journal-evidence-recorder --gate release.pnpm-check --status passed --verifier codex-release-verifier --evidence-ref docs/plans/v18-release-evidence-2026-05-28.md --dry-run
+```
+
+Confirm recalculates the plan hash from the current CLI input and refuses mismatches. Confirm does not run tests, audit, mutation, doctor, package installs, shell commands, model calls, merge, or tag operations. It only appends the explicit event to the managed goal event journal.
 
 ## `goal-progress-ledger.v1`
 

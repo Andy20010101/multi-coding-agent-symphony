@@ -1,8 +1,8 @@
-# v17 Workbench 中文操作指南
+# v18 Workbench 中文操作指南
 
 ## 当前定位
 
-Workbench 是 `symphony console` 提供的本地浏览器展示面。它消费 console server 暴露的本地 `GET` API，用于查看 `.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、capabilities 和 diagnostics。
+Workbench 是 `symphony console` 提供的本地浏览器展示面。它消费 console server 暴露的本地 `GET` API，用于查看 `.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
 
 Workbench 是 read-only / display-only / copy-only：
 
@@ -10,6 +10,8 @@ Workbench 是 read-only / display-only / copy-only：
 - 浏览器不执行命令，不写文件，不触发模型，不触发 agent。
 - 浏览器不下载 artifact，不打开本地文件，不接受任意路径输入。
 - 浏览器不是 canonical state；`.symphony` 只保存 summary、ref、pointer，完整 evidence 继续由 ArtifactStore 承担。
+
+v18 增加 `goal-event-log.v1` 和 `goal-update-plan.v1`，但 Workbench 仍然只读。`symphony goal update`、`symphony goal review`、`symphony goal gate` 的 dry-run / confirm 流程只在终端 CLI 中运行；Workbench 只展示后端已经写入的 event log 和 resolver 生成的 ledger。
 
 ## 构建 Workbench
 
@@ -94,6 +96,8 @@ GET /api/adoptions/<adoption-id>/inspect
 GET /api/goals
 GET /api/goals/latest/progress
 GET /api/goals/<goal-id>/progress
+GET /api/goals/latest/events
+GET /api/goals/<goal-id>/events
 GET /api/capabilities
 GET /api/diagnostics
 ```
@@ -117,7 +121,7 @@ Workbench 的 handoff panel 只读取：
 
 Workbench 的 Goal Progress panel 只读取 `GET /api/goals/latest/progress`。该 route 返回 `goal-progress-ledger.v1`，展示 goal id、baseline、task status、statusSource、worker evidence、review evidence、review verdict、main verification、blockers、release gates 和 next copy-only commands。
 
-状态只能来自后端 ledger 字段。前端不能根据 task id、标题、branch、commit、命令文本、文件名、路径或历史 run 文案判断任务是否完成。缺少 evidence 时，后端应返回 `unknown`、`missing` 或 `blocked`；前端只按字段展示。
+状态只能来自后端 ledger 字段。前端不能根据 task id、标题、branch、commit、命令文本、文件名、路径或历史 run 文案判断任务是否完成。缺少 evidence 时，后端应返回 `unknown`、`missing` 或 `blocked`；前端只按字段展示。v18 没有 events 时继续返回 v17 planned/unknown 模板，不把计划、分支或文件名当成完成证据。
 
 终端可用的只读命令：
 
@@ -126,9 +130,26 @@ pnpm symphony goal-status
 pnpm symphony goal-status --json
 pnpm symphony goal-status --markdown
 pnpm symphony goal-status --goal v17-readonly-goal-progress-console-contracts --json
+pnpm symphony goal-status --goal v18-goal-event-journal-evidence-recorder --json
 ```
 
 这些命令只读取注册 goal state 和 evidence refs，不写 `.symphony`，不创建 evidence，不运行测试、audit、mutation，不调用模型。
+
+## Goal Events Timeline 和 Evidence Matrix
+
+Workbench 的 Goal Events Timeline 读取 `GET /api/goals/latest/events`，必要时也可以读取 `GET /api/goals/<goal-id>/events`。该 route 返回 `goal-event-log.v1`，用于展示 event sequence、event type、phase、task id、actor、recordedAt、verdict、gate status、evidence refs 和 hash chain 状态。
+
+Workbench 的 Evidence Matrix 使用 events API 和 `goal-progress-ledger.v1` 字段展示每个 task 的 worker evidence、review verdict、independent review evidence、main verification evidence、blocker 状态和 release gate coverage。Evidence Matrix 不读取 evidence 文档正文，不下载 artifact，不打开本地文件，不把 ref 变成预览路径。
+
+`goal-update-plan.v1` 只来自终端 CLI 的 dry-run 输出。示例命令是 copy-only text：
+
+```sh
+symphony goal update --goal v18-goal-event-journal-evidence-recorder --task task-1 --event worker.started --actor codex-worker-task-1 --dry-run
+symphony goal review --goal v18-goal-event-journal-evidence-recorder --task task-1 --reviewer codex-reviewer-task-1 --verdict approved --evidence-ref docs/plans/v18-task1-review-evidence-2026-05-28.md --dry-run
+symphony goal gate --goal v18-goal-event-journal-evidence-recorder --gate release.pnpm-check --status passed --verifier codex-release-verifier --evidence-ref docs/plans/v18-release-evidence-2026-05-28.md --dry-run
+```
+
+Confirm 阶段必须带 dry-run 生成的 `--plan-hash`，只向受控 managed-goal-event-journal append event。Workbench 不提供 confirm 按钮，也不会触发 shell、模型、review、gate、merge 或 tag。
 
 ## Capabilities 和 Diagnostics
 
@@ -220,6 +241,9 @@ React/Vite Workbench 不替换、不编辑、不解析 Stage Charter HTML / JSON
 
 Workbench 不提供也不应暗示以下能力：
 
+- Autopilot
+- Workbench execution
+- browser terminal
 - write
 - execute
 - retry
@@ -232,8 +256,12 @@ Workbench 不提供也不应暗示以下能力：
 - audit
 - model invocation
 - arbitrary path read
+- arbitrary path preview
+- artifact download
 - download artifact
 - open local file
+- automatic merge
+- automatic tag
 
 这些词如果出现在 Workbench 数据里，只能是只读状态、字段名、历史 run 信息、copy-only command 文本或文档说明。浏览器端不能把它们接成按钮、表单、链接、handler、HTTP mutation、terminal action、模型调用、真实 agent 调用、package installer、文件下载或本地文件打开。
 
