@@ -57,6 +57,11 @@ import {
   buildGoalReviewPlan,
   confirmGoalReview
 } from '../src/symphony/goal-review.js';
+import {
+  GoalGateError,
+  buildGoalGatePlan,
+  confirmGoalGate
+} from '../src/symphony/goal-gate.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -3287,8 +3292,33 @@ async function runSymphonyGoal({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
-  if (subcommand !== 'update' && subcommand !== 'review') {
+  if (subcommand !== 'update' && subcommand !== 'review' && subcommand !== 'gate') {
     throw new UsageError(`unknown goal subcommand: ${subcommand}`);
+  }
+
+  if (subcommand === 'gate') {
+    const options = parseGoalGateArgs(rest);
+
+    if (options.help) {
+      stdout.write(goalGateHelpText());
+      return EXIT_CODES.ok;
+    }
+
+    try {
+      if (options.confirm) {
+        writeJson(stdout, await confirmGoalGate(options));
+        return EXIT_CODES.ok;
+      }
+
+      writeJson(stdout, buildGoalGatePlan(options));
+      return EXIT_CODES.ok;
+    } catch (error) {
+      if (error instanceof GoalGateError) {
+        throw new UsageError(error.message);
+      }
+
+      throw error;
+    }
   }
 
   if (subcommand === 'review') {
@@ -3482,10 +3512,10 @@ function parseGoalUpdateArgs(args) {
 
 function goalHelpText() {
   return [
-    'Usage: symphony goal <update|review> [options]',
+    'Usage: symphony goal <update|review|gate> [options]',
     '',
     'Records v18 goal events through a dry-run / confirm flow.',
-    'Currently implemented: symphony goal update and symphony goal review.',
+    'Currently implemented: symphony goal update, symphony goal review, and symphony goal gate.',
     ''
   ].join('\n');
 }
@@ -3648,6 +3678,164 @@ function goalReviewHelpText() {
     '',
     'Dry-run is the default and prints goal-update-plan.v1 without writing.',
     'Confirm appends one reviewer verdict event only after the current input matches --plan-hash.',
+    ''
+  ].join('\n');
+}
+
+function parseGoalGateArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: null,
+    gateName: null,
+    taskId: null,
+    status: null,
+    verifierId: null,
+    evidenceRefs: [],
+    statement: undefined,
+    branch: undefined,
+    commit: undefined,
+    confirm: false,
+    dryRun: false,
+    planHash: undefined,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      continue;
+    }
+
+    if (value === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+
+    if (value === '--confirm') {
+      options.confirm = true;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--gate') {
+      options.gateName = readRequiredValue(args, index, '--gate');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--status') {
+      options.status = readRequiredValue(args, index, '--status');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--verifier') {
+      options.verifierId = readRequiredValue(args, index, '--verifier');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--evidence-ref') {
+      options.evidenceRefs.push(readRequiredValue(args, index, '--evidence-ref'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--statement') {
+      options.statement = readRequiredValue(args, index, '--statement');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--branch') {
+      options.branch = readRequiredValue(args, index, '--branch');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--commit') {
+      options.commit = readRequiredValue(args, index, '--commit');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--plan-hash') {
+      options.planHash = readRequiredValue(args, index, '--plan-hash');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--plan-file') {
+      throw new UsageError('goal gate does not read plan files; repeat the dry-run flags with --confirm --plan-hash');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal gate writes only through confirm append; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal gate option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal gate argument: ${value}`);
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.confirm && options.dryRun) {
+    throw new UsageError('goal gate accepts only one of --dry-run or --confirm');
+  }
+
+  if (!options.confirm && options.planHash !== undefined) {
+    throw new UsageError('--plan-hash requires --confirm');
+  }
+
+  for (const [key, flag] of [
+    ['goalId', '--goal'],
+    ['gateName', '--gate'],
+    ['status', '--status'],
+    ['verifierId', '--verifier']
+  ]) {
+    if (options[key] === null) {
+      throw new UsageError(`goal gate requires ${flag}`);
+    }
+  }
+
+  return options;
+}
+
+function goalGateHelpText() {
+  return [
+    'Usage: symphony goal gate --goal <goal-id> --gate <main-verification|release.gate|release.ready> --status <passed|failed|declared> --verifier <verifier-id> --evidence-ref <ref> [--task <task-id>] [--dry-run]',
+    '       symphony goal gate --goal <goal-id> --gate <main-verification|release.gate|release.ready> --status <passed|failed|declared> --verifier <verifier-id> --evidence-ref <ref> [--task <task-id>] --confirm --plan-hash <hash>',
+    '',
+    'Dry-run is the default and prints goal-update-plan.v1 without writing.',
+    'Confirm appends one main verification, release gate, or release readiness event only after the current input matches --plan-hash.',
     ''
   ].join('\n');
 }
