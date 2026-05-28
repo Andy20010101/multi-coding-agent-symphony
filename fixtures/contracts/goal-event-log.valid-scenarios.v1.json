@@ -1,0 +1,224 @@
+{
+  "contractName": "goal-event-log.v1",
+  "contractVersion": 1,
+  "goalId": "v18-goal-event-journal-evidence-recorder",
+  "goalTitle": "Goal Event Journal + Evidence Recorder",
+  "baseline": {
+    "tag": "v17",
+    "commit": null,
+    "evidenceRef": null
+  },
+  "log": {
+    "appendOnly": true,
+    "storage": "managed-goal-event-journal",
+    "eventCount": 7,
+    "firstSequence": 1,
+    "lastSequence": 7,
+    "lastEventId": "evt_20260528_release_ready_declared",
+    "lastEventHash": "sha256:8c84ead2a7248779cdeb687b8ceb8477a8b852bcf06bb0391b33d3fcef70e5f0"
+  },
+  "events": [
+    {
+      "goalId": "v18-goal-event-journal-evidence-recorder",
+      "occurredAt": "2026-05-28T10:00:00.000Z",
+      "recordedAt": "2026-05-28T10:02:00.000Z",
+      "branch": "codex/v18-task2-event-journal-writer",
+      "commit": null,
+      "eventId": "evt_20260528_task2_worker_self_checked",
+      "taskId": "task-2",
+      "eventType": "worker.self-check-passed",
+      "phase": "implement",
+      "actor": {
+        "role": "worker",
+        "id": "codex-worker-task-2"
+      },
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v18-task2-worker-evidence-2026-05-28.md",
+          "label": "Task 2 worker evidence"
+        }
+      ],
+      "statement": "Worker self-check completed for append-only event journal writer.",
+      "sequence": 1,
+      "previousEventHash": null,
+      "eventHash": "sha256:6b4d9ef80d8f4c23d49bc62319c119e8f18dd81db86ddd030868f82c41ce3c62"
+    },
+    {
+      "goalId": "v18-goal-event-journal-evidence-recorder",
+      "occurredAt": "2026-05-28T10:00:00.000Z",
+      "recordedAt": "2026-05-28T10:12:00.000Z",
+      "branch": "codex/v18-task2-event-journal-writer",
+      "commit": null,
+      "eventId": "evt_20260528_task2_review_approved",
+      "taskId": "task-2",
+      "eventType": "reviewer.approved",
+      "phase": "review",
+      "actor": {
+        "role": "reviewer",
+        "id": "codex-reviewer-task-2"
+      },
+      "review": {
+        "verdict": "APPROVED",
+        "scope": "Task 2 diff and journal tests"
+      },
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v18-task2-review-evidence-2026-05-28.md",
+          "label": "Task 2 review evidence"
+        }
+      ],
+      "statement": "Independent reviewer approved Task 2.",
+      "sequence": 2,
+      "previousEventHash": "sha256:6b4d9ef80d8f4c23d49bc62319c119e8f18dd81db86ddd030868f82c41ce3c62",
+      "eventHash": "sha256:5d06a825d824e411105ec6870f0d03c4558540ba61d8576ba7c3450e31b4f56c"
+    },
+    {
+      "goalId": "v18-goal-event-journal-evidence-recorder",
+      "occurredAt": "2026-05-28T10:00:00.000Z",
+      "recordedAt": "2026-05-28T10:22:00.000Z",
+      "branch": "codex/v18-task2-event-journal-writer",
+      "commit": null,
+      "eventId": "evt_20260528_task2_review_needs_revision",
+      "taskId": "task-2",
+      "eventType": "reviewer.needs-revision",
+      "phase": "review",
+      "actor": {
+        "role": "reviewer",
+        "id": "codex-reviewer-task-2"
+      },
+      "review": {
+        "verdict": "NEEDS_REVISION",
+        "scope": "Task 2 diff and journal tests"
+      },
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v18-task2-review-evidence-2026-05-28.md",
+          "label": "Task 2 review evidence"
+        }
+      ],
+      "statement": "Independent reviewer requested revisions for Task 2.",
+      "sequence": 3,
+      "previousEventHash": "sha256:5d06a825d824e411105ec6870f0d03c4558540ba61d8576ba7c3450e31b4f56c",
+      "eventHash": "sha256:7b46a5ea1898c50b92eb900c1103d4dd6c62bedeaf572419a94211c69a9a630f"
+    },
+    {
+      "goalId": "v18-goal-event-journal-evidence-recorder",
+      "occurredAt": "2026-05-28T10:00:00.000Z",
+      "recordedAt": "2026-05-28T10:32:00.000Z",
+      "branch": "codex/v18-task2-event-journal-writer",
+      "commit": null,
+      "eventId": "evt_20260528_task2_main_verification_passed",
+      "taskId": "task-2",
+      "eventType": "main.verification-passed",
+      "phase": "main-verification",
+      "actor": {
+        "role": "main-verifier",
+        "id": "codex-main-verifier"
+      },
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v18-task2-main-verification-evidence-2026-05-28.md",
+          "label": "Task 2 main verification evidence"
+        }
+      ],
+      "statement": "Main verification passed for Task 2.",
+      "sequence": 4,
+      "previousEventHash": "sha256:7b46a5ea1898c50b92eb900c1103d4dd6c62bedeaf572419a94211c69a9a630f",
+      "eventHash": "sha256:c32af4985c4188f5e13113f596d8b61a149d5e7ad43d9810f02b1ed96b1292c1"
+    },
+    {
+      "goalId": "v18-goal-event-journal-evidence-recorder",
+      "occurredAt": "2026-05-28T10:00:00.000Z",
+      "recordedAt": "2026-05-28T10:42:00.000Z",
+      "branch": "codex/v18-task2-event-journal-writer",
+      "commit": null,
+      "eventId": "evt_20260528_release_gate_pnpm_check_passed",
+      "taskId": "release",
+      "eventType": "release.gate-passed",
+      "phase": "release-gate",
+      "actor": {
+        "role": "release-verifier",
+        "id": "codex-release-verifier"
+      },
+      "gate": {
+        "id": "release.pnpm-check",
+        "status": "passed"
+      },
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v18-release-evidence-2026-05-28.md",
+          "label": "v18 release evidence"
+        }
+      ],
+      "statement": "Release gate pnpm check passed.",
+      "sequence": 5,
+      "previousEventHash": "sha256:c32af4985c4188f5e13113f596d8b61a149d5e7ad43d9810f02b1ed96b1292c1",
+      "eventHash": "sha256:b5324e8ebfd0a4464509b8455523fedfc5362d9cb69a1ae1ad06e1709653a90e"
+    },
+    {
+      "goalId": "v18-goal-event-journal-evidence-recorder",
+      "occurredAt": "2026-05-28T10:00:00.000Z",
+      "recordedAt": "2026-05-28T10:52:00.000Z",
+      "branch": "codex/v18-task2-event-journal-writer",
+      "commit": null,
+      "eventId": "evt_20260528_release_gate_audit_failed",
+      "taskId": "release",
+      "eventType": "release.gate-failed",
+      "phase": "release-gate",
+      "actor": {
+        "role": "release-verifier",
+        "id": "codex-release-verifier"
+      },
+      "gate": {
+        "id": "release.audit-high",
+        "status": "failed"
+      },
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v18-release-evidence-2026-05-28.md",
+          "label": "v18 release evidence"
+        }
+      ],
+      "statement": "Release gate audit high failed.",
+      "sequence": 6,
+      "previousEventHash": "sha256:b5324e8ebfd0a4464509b8455523fedfc5362d9cb69a1ae1ad06e1709653a90e",
+      "eventHash": "sha256:1c961044a19f87bce81505f1b42634b9552a8a1d07aa7b1cf40386d8cbb4d8f2"
+    },
+    {
+      "goalId": "v18-goal-event-journal-evidence-recorder",
+      "occurredAt": "2026-05-28T10:00:00.000Z",
+      "recordedAt": "2026-05-28T11:02:00.000Z",
+      "branch": "codex/v18-task2-event-journal-writer",
+      "commit": null,
+      "eventId": "evt_20260528_release_ready_declared",
+      "taskId": "release",
+      "eventType": "release.ready-declared",
+      "phase": "release-prep",
+      "actor": {
+        "role": "release-manager",
+        "id": "codex-release-manager"
+      },
+      "gate": {
+        "id": "release.ready",
+        "status": "declared"
+      },
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v18-release-evidence-2026-05-28.md",
+          "label": "v18 release evidence"
+        }
+      ],
+      "statement": "Release readiness was explicitly declared.",
+      "sequence": 7,
+      "previousEventHash": "sha256:1c961044a19f87bce81505f1b42634b9552a8a1d07aa7b1cf40386d8cbb4d8f2",
+      "eventHash": "sha256:8c84ead2a7248779cdeb687b8ceb8477a8b852bcf06bb0391b33d3fcef70e5f0"
+    }
+  ]
+}

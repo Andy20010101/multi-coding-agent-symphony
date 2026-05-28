@@ -1,0 +1,53 @@
+{
+  "contractName": "goal-update-plan.v1",
+  "contractVersion": 1,
+  "planId": "plan_20260528_task2_worker_started",
+  "planHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "goalId": "v18-goal-event-journal-evidence-recorder",
+  "mode": "dry-run",
+  "command": {
+    "name": "symphony goal update",
+    "intent": "record-worker-event",
+    "confirmRequired": true
+  },
+  "actor": {
+    "role": "worker",
+    "id": "codex-worker-task-2"
+  },
+  "proposedEvents": [
+    {
+      "eventType": "worker.started",
+      "taskId": "task-2",
+      "phase": "implement",
+      "requiresEvidence": false,
+      "evidenceRefs": []
+    }
+  ],
+  "validation": {
+    "status": "ok",
+    "errors": [],
+    "warnings": []
+  },
+  "wouldAppend": {
+    "appendOnly": true,
+    "eventCount": 1,
+    "target": "managed-goal-event-journal",
+    "writesInDryRun": false
+  },
+  "confirm": {
+    "available": true,
+    "requiredFlags": [
+      "--confirm",
+      "--plan-hash"
+    ],
+    "copyOnlyCommand": "symphony goal update --goal v18-goal-event-journal-evidence-recorder --task task-2 --event worker.started --actor codex-worker-task-2 --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "safety": {
+    "dryRunWrites": false,
+    "confirmWritesAppendOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryPathReadAvailable": false
+  }
+}

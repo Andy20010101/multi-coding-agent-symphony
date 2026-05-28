@@ -1,0 +1,21 @@
+{
+  "contractName": "goal-event-log.v1",
+  "contractVersion": 1,
+  "goalId": "v18-goal-event-journal-evidence-recorder",
+  "goalTitle": "Goal Event Journal + Evidence Recorder",
+  "baseline": {
+    "tag": "v17",
+    "commit": null,
+    "evidenceRef": null
+  },
+  "log": {
+    "appendOnly": true,
+    "storage": "managed-goal-event-journal",
+    "eventCount": 0,
+    "firstSequence": null,
+    "lastSequence": null,
+    "lastEventId": null,
+    "lastEventHash": null
+  },
+  "events": []
+}
