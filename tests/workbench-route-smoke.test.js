@@ -13,6 +13,19 @@ import {
   SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME,
   validateSafeArtifactPreviewContract
 } from '../src/symphony/safe-artifact-preview.js';
+import {
+  validateErrorEnvelopeContract
+} from '../src/symphony/error-envelope.js';
+import {
+  validateCapabilitiesContract
+} from '../src/symphony/capabilities.js';
+import {
+  validateDiagnosticsContract
+} from '../src/symphony/diagnostics.js';
+import {
+  DEFAULT_GOAL_PROGRESS_GOAL_ID,
+  validateGoalProgressLedgerContract
+} from '../src/symphony/goal-progress-ledger.js';
 
 const ROUTE_SMOKE_RUN_ID = 'task9-route-smoke-run';
 const FIXED_TIME = '2026-05-27T00:00:00.000Z';
@@ -162,6 +175,48 @@ describe('v16 Workbench route smoke and server parity', () => {
             assert.equal(payload.run.modelInvocation, false);
             assert.equal(payload.run.artifactRefs.some((artifact) => artifact.kind === 'summary'), true);
           }
+        },
+        {
+          path: '/api/goals',
+          contractName: 'symphony.goals-index',
+          assertPayload(payload) {
+            assert.equal(payload.readOnly, true);
+            assert.deepEqual(payload.goals.map((goal) => goal.goalId), [DEFAULT_GOAL_PROGRESS_GOAL_ID]);
+          }
+        },
+        {
+          path: '/api/goals/latest/progress',
+          contractName: 'goal-progress-ledger.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalProgressLedgerContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.summary.totalTasks, 10);
+            assert.equal(payload.tasks[0].status, 'planned');
+          }
+        },
+        {
+          path: '/api/capabilities',
+          contractName: 'capabilities.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateCapabilitiesContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.browserExecutionAvailable, false);
+          }
+        },
+        {
+          path: '/api/diagnostics',
+          contractName: 'diagnostics.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateDiagnosticsContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.boundaries.readOnlyApi, true);
+          }
         }
       ];
 
@@ -174,7 +229,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         const payload = await response.json();
 
         assert.equal(payload.contractName, expectation.contractName);
-        assert.equal(payload.contractVersion, '1');
+        assert.equal(String(payload.contractVersion), '1');
         expectation.assertPayload(payload);
       }
 
@@ -222,10 +277,12 @@ describe('v16 Workbench route smoke and server parity', () => {
       const blockedPreview = JSON.parse(blockedBody);
 
       assert.equal(blockedResponse.status, 403);
-      assertValidSafePreview(blockedPreview);
-      assert.equal(blockedPreview.status, 'blocked-artifact-path');
-      assert.equal(blockedPreview.previewAvailable, false);
-      assert.equal(blockedPreview.safeToRenderInline, false);
+      assert.deepEqual(validateErrorEnvelopeContract(blockedPreview), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(blockedPreview.contractName, 'error-envelope.v1');
+      assert.equal(blockedPreview.error.code, 'blocked-artifact-path');
       assert.equal(Object.hasOwn(blockedPreview, 'contentText'), false);
       assert.doesNotMatch(blockedBody, /multi-coding-agent-symphony|lockfileVersion/u);
 
@@ -250,6 +307,11 @@ describe('v16 Workbench route smoke and server parity', () => {
         `/api/handoff/${GUIDED_GOAL_HANDOFF_CONTRACT_NAME}`,
         '/api/runs',
         '/api/runs/latest',
+        '/api/goals',
+        '/api/goals/latest/progress',
+        `/api/goals/${DEFAULT_GOAL_PROGRESS_GOAL_ID}/progress`,
+        '/api/capabilities',
+        '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
       ];
       const methods = ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];

@@ -4,6 +4,10 @@ const NOT_APPLICABLE_TEXT = '不适用';
 const HANDOFF_API_BASE = '/api/handoff';
 const GUIDED_GOAL_HANDOFF_CONTRACT_NAME = 'guided-goal-handoff.v1';
 const SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME = 'safe-artifact-preview.v1';
+const GOAL_PROGRESS_LEDGER_CONTRACT_NAME = 'goal-progress-ledger.v1';
+const CAPABILITIES_CONTRACT_NAME = 'capabilities.v1';
+const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
+const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 
 export const READONLY_API_ROUTES = Object.freeze([
   Object.freeze({
@@ -40,6 +44,34 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/runs/latest',
     method: 'GET',
     contractName: 'symphony.console-run'
+  }),
+  Object.freeze({
+    id: 'goals',
+    label: 'Goals',
+    path: '/api/goals',
+    method: 'GET',
+    contractName: 'symphony.goals-index'
+  }),
+  Object.freeze({
+    id: 'goalProgress',
+    label: 'Goal Progress',
+    path: '/api/goals/latest/progress',
+    method: 'GET',
+    contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'capabilities',
+    label: 'Capabilities',
+    path: '/api/capabilities',
+    method: 'GET',
+    contractName: CAPABILITIES_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'diagnostics',
+    label: 'Diagnostics',
+    path: '/api/diagnostics',
+    method: 'GET',
+    contractName: DIAGNOSTICS_CONTRACT_NAME
   })
 ]);
 
@@ -68,8 +100,18 @@ export const SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
   acceptErrorContract: true
 });
 
+export const GOAL_PROGRESS_ROUTE_TEMPLATE = Object.freeze({
+  id: 'goalProgressById',
+  label: 'Goal Progress By Id',
+  path: '/api/goals/<goal-id>/progress',
+  method: 'GET',
+  contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
 export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   ...READONLY_API_ROUTES,
+  GOAL_PROGRESS_ROUTE_TEMPLATE,
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
@@ -83,8 +125,6 @@ const RUN_API_BASE = ['', 'api', 'runs'].join('/');
 const TIMELINE_SEGMENT = 'timeline';
 
 export const DEFERRED_CONTRACT_GAPS = Object.freeze([
-  '没有 shared top-level capabilities object',
-  'error envelopes 仍是 route-local',
   'dirty adoption 当前仍由 pending adoption 与 Git readiness 分别暴露'
 ]);
 
@@ -130,6 +170,10 @@ export function projectWorkbenchContracts(results) {
   const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
   const runsData = dataFrom(results.runs);
   const latestRunData = dataFrom(results.latestRun);
+  const goalsData = dataFrom(results.goals);
+  const goalProgressData = dataFrom(results.goalProgress);
+  const capabilitiesData = dataFrom(results.capabilities);
+  const diagnosticsData = dataFrom(results.diagnostics);
   const latestRun = latestRunData?.run ?? null;
   const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews)
     ? results.safeArtifactPreviews
@@ -182,6 +226,13 @@ export function projectWorkbenchContracts(results) {
       readiness: readinessData
     }),
     artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus, safeArtifactPreviewResults),
+    goals: projectGoals(goalsData),
+    goalProgress: projectGoalProgress({
+      result: results.goalProgress,
+      ledger: goalProgressData
+    }),
+    capabilities: projectCapabilities(capabilitiesData),
+    diagnosticsV1: projectDiagnostics(diagnosticsData),
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
       status: MISSING_TEXT
@@ -347,13 +398,15 @@ function projectSafeArtifactPreview({ artifact, result }) {
   }
 
   if (result?.ok !== true) {
+    const envelope = projectErrorEnvelope(result?.errorEnvelope);
+
     return {
       state: 'unavailable',
       route: valueState(artifact.uri),
       httpStatus: valueState(result?.httpStatus),
-      contractName: valueState(SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME),
-      contractVersion: valueState(undefined),
-      status: valueState(undefined),
+      contractName: valueState(envelope.contractName.value ?? SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME),
+      contractVersion: valueState(envelope.contractVersion.value),
+      status: valueState(envelope.code.value),
       mime: valueState(undefined),
       displayTitle: valueState(undefined),
       artifactKind: valueState(undefined),
@@ -368,8 +421,9 @@ function projectSafeArtifactPreview({ artifact, result }) {
       inline: {
         state: 'unavailable',
         text: '',
-        reason: result?.message ?? UNAVAILABLE_TEXT
-      }
+        reason: envelope.message.value ?? result?.message ?? UNAVAILABLE_TEXT
+      },
+      errorEnvelope: envelope
     };
   }
 
@@ -411,6 +465,217 @@ function projectSafeArtifactPreview({ artifact, result }) {
           text: inlineText,
           reason: preview?.truncated === true ? '后端已截断 safe inline text' : '后端提供 safe inline text'
         }
+  };
+}
+
+function projectGoals(goals) {
+  const items = Array.isArray(goals?.goals) ? goals.goals : null;
+
+  return {
+    state: items === null ? 'missing' : items.length === 0 ? 'empty' : 'available',
+    contractName: valueState(goals?.contractName),
+    contractVersion: valueState(goals?.contractVersion),
+    readOnly: valueState(goals?.readOnly),
+    count: valueState(items === null ? undefined : items.length),
+    items: items === null ? [] : items.map((goal) => ({
+      goalId: valueState(goal?.goalId),
+      goalTitle: valueState(goal?.goalTitle),
+      baselineTag: valueState(goal?.baseline?.tag),
+      taskCount: valueState(goal?.taskCount),
+      readOnly: valueState(goal?.readOnly)
+    }))
+  };
+}
+
+function projectGoalProgress({ result, ledger }) {
+  if (result?.ok !== true) {
+    return {
+      state: 'unavailable',
+      contractName: valueState(GOAL_PROGRESS_LEDGER_CONTRACT_NAME),
+      contractVersion: valueState(undefined),
+      goalId: valueState(undefined),
+      goalTitle: valueState(undefined),
+      baselineTag: valueState(undefined),
+      releaseReady: valueState(undefined),
+      summary: projectGoalProgressSummary(undefined),
+      tasks: {
+        state: 'missing',
+        count: valueState(undefined),
+        items: []
+      },
+      releaseGates: [],
+      blockers: [],
+      nextActions: [],
+      safety: projectGoalProgressSafety(undefined),
+      errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
+      note: 'Goal Progress panel 只展示后端 goal-progress-ledger.v1 字段；不可用时只显示 error-envelope.v1 的安全摘要。'
+    };
+  }
+
+  const tasks = Array.isArray(ledger?.tasks) ? ledger.tasks : null;
+
+  return {
+    state: ledger === null || ledger === undefined ? 'missing' : 'available',
+    contractName: valueState(ledger?.contractName),
+    contractVersion: valueState(ledger?.contractVersion),
+    goalId: valueState(ledger?.goalId),
+    goalTitle: valueState(ledger?.goalTitle),
+    baselineTag: valueState(ledger?.baseline?.tag),
+    baselineCommit: valueState(ledger?.baseline?.commit),
+    baselineEvidenceRef: valueState(ledger?.baseline?.evidenceRef),
+    releaseReady: valueState(ledger?.summary?.releaseReady),
+    summary: projectGoalProgressSummary(ledger?.summary),
+    tasks: {
+      state: tasks === null ? 'missing' : tasks.length === 0 ? 'empty' : 'available',
+      count: valueState(tasks === null ? undefined : tasks.length),
+      items: tasks === null ? [] : tasks.map((task) => ({
+        taskId: valueState(task?.taskId),
+        title: valueState(task?.title),
+        status: valueState(task?.status),
+        statusSource: valueState(task?.statusSource),
+        branch: valueState(task?.branch),
+        commit: valueState(task?.commit),
+        workerEvidenceRef: valueState(task?.workerEvidenceRef),
+        reviewEvidenceRef: valueState(task?.reviewEvidenceRef),
+        reviewVerdict: valueState(task?.reviewVerdict),
+        mainVerificationRef: valueState(task?.mainVerificationRef),
+        blockers: projectBlockers(task?.blockers),
+        nextCopyOnlyCommand: valueState(task?.nextCopyOnlyCommand)
+      }))
+    },
+    releaseGates: Object.entries(ledger?.releaseGates ?? {}).map(([gate, status]) => ({
+      gate: valueState(gate),
+      status: valueState(status)
+    })),
+    blockers: projectBlockers(ledger?.blockers),
+    nextActions: projectNextActions(ledger?.nextActions),
+    safety: projectGoalProgressSafety(ledger?.safety),
+    errorEnvelope: projectErrorEnvelope(null),
+    note: 'Goal Progress panel 不根据 task id、branch、command 或文件名判断完成度；只展示后端 ledger status/statusSource/evidence refs。'
+  };
+}
+
+function projectGoalProgressSummary(summary) {
+  return {
+    totalTasks: valueState(summary?.totalTasks),
+    completedTasks: valueState(summary?.completedTasks),
+    blockedTasks: valueState(summary?.blockedTasks),
+    needsReviewTasks: valueState(summary?.needsReviewTasks),
+    needsRevisionTasks: valueState(summary?.needsRevisionTasks),
+    releaseReady: valueState(summary?.releaseReady)
+  };
+}
+
+function projectGoalProgressSafety(safety) {
+  return {
+    readOnly: valueState(safety?.readOnly),
+    copyOnly: valueState(safety?.copyOnly),
+    browserExecutionAvailable: valueState(safety?.browserExecutionAvailable),
+    modelInvocationAvailable: valueState(safety?.modelInvocationAvailable)
+  };
+}
+
+function projectCapabilities(capabilities) {
+  return {
+    state: capabilities === null || capabilities === undefined ? 'missing' : 'available',
+    contractName: valueState(capabilities?.contractName),
+    contractVersion: valueState(capabilities?.contractVersion),
+    readOnly: valueState(capabilities?.readOnly),
+    displayOnly: valueState(capabilities?.displayOnly),
+    copyOnly: valueState(capabilities?.copyOnly),
+    mutationAvailable: valueState(capabilities?.mutationAvailable),
+    browserExecutionAvailable: valueState(capabilities?.browserExecutionAvailable),
+    modelInvocationAvailable: valueState(capabilities?.modelInvocationAvailable),
+    artifactDownloadAvailable: valueState(capabilities?.artifactDownloadAvailable),
+    safePreview: {
+      available: valueState(capabilities?.safePreview?.available),
+      inlineModes: arrayTextState(capabilities?.safePreview?.inlineModes),
+      rawHtmlInlineAvailable: valueState(capabilities?.safePreview?.rawHtmlInlineAvailable),
+      svgInlineAvailable: valueState(capabilities?.safePreview?.svgInlineAvailable),
+      javascriptInlineAvailable: valueState(capabilities?.safePreview?.javascriptInlineAvailable),
+      binaryInlineAvailable: valueState(capabilities?.safePreview?.binaryInlineAvailable)
+    },
+    routes: Object.entries(capabilities?.routes ?? {}).map(([route, available]) => ({
+      route: valueState(route),
+      available: valueState(available)
+    })),
+    note: 'Capabilities panel 只展示后端 capabilities.v1，不把 capability 字段转换成写入、执行或下载入口。'
+  };
+}
+
+function projectDiagnostics(diagnostics) {
+  return {
+    state: diagnostics === null || diagnostics === undefined ? 'missing' : 'available',
+    contractName: valueState(diagnostics?.contractName),
+    contractVersion: valueState(diagnostics?.contractVersion),
+    status: valueState(diagnostics?.status),
+    checks: projectDiagnosticChecks(diagnostics?.checks),
+    boundaries: Object.entries(diagnostics?.boundaries ?? {}).map(([boundary, available]) => ({
+      boundary: valueState(boundary),
+      available: valueState(available)
+    })),
+    note: 'Diagnostics panel 只展示 diagnostics.v1 的安全健康字段；浏览器端不会运行 shell、测试、audit、mutation 或模型调用。'
+  };
+}
+
+function projectDiagnosticChecks(checks) {
+  if (!Array.isArray(checks)) {
+    return {
+      state: 'missing',
+      count: valueState(undefined),
+      items: []
+    };
+  }
+
+  return {
+    state: checks.length === 0 ? 'empty' : 'available',
+    count: valueState(checks.length),
+    items: checks.map((check) => ({
+      id: valueState(check?.id),
+      label: valueState(check?.label),
+      status: valueState(check?.status),
+      severity: valueState(check?.severity)
+    }))
+  };
+}
+
+function projectBlockers(blockers) {
+  if (!Array.isArray(blockers)) {
+    return [];
+  }
+
+  return blockers.map((blocker) => ({
+    id: valueState(blocker?.id),
+    taskId: valueState(blocker?.taskId),
+    reason: valueState(blocker?.reason),
+    severity: valueState(blocker?.severity)
+  }));
+}
+
+function projectNextActions(nextActions) {
+  if (!Array.isArray(nextActions)) {
+    return [];
+  }
+
+  return nextActions.map((action) => ({
+    kind: valueState(action?.kind),
+    label: valueState(action?.label),
+    command: valueState(action?.command)
+  }));
+}
+
+function projectErrorEnvelope(envelope) {
+  const error = envelope?.error;
+
+  return {
+    state: envelope?.contractName === ERROR_ENVELOPE_CONTRACT_NAME ? 'available' : 'missing',
+    contractName: valueState(envelope?.contractName),
+    contractVersion: valueState(envelope?.contractVersion),
+    code: valueState(error?.code),
+    message: valueState(error?.message),
+    status: valueState(error?.status),
+    route: valueState(error?.route),
+    method: valueState(error?.method)
   };
 }
 

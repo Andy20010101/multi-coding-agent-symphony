@@ -49,8 +49,12 @@ describe('v15 Workbench React/Vite shell', () => {
       'ArtifactListPanel',
       'AdoptionSummaryPanel',
       'HandoffPanel',
+      'GoalProgressPanel',
+      'CapabilitiesPanel',
+      'DiagnosticsV1Panel',
       'CommandBlockList',
-      'HandoffTaskList'
+      'HandoffTaskList',
+      'GoalTaskList'
     ]) {
       assert.match(app, new RegExp(`function ${componentName}\\b`, 'u'));
     }
@@ -61,6 +65,9 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /artifactRefs 只读列表/u);
     assert.match(app, /Adoption summary 只读状态/u);
     assert.match(app, /Guided Goal Handoff/u);
+    assert.match(app, /Goal Progress Ledger/u);
+    assert.match(app, /Capabilities Contract/u);
+    assert.match(app, /Diagnostics Contract/u);
     assert.match(app, /phase \/ copy-only commands/u);
     assert.match(app, /tasks \/ evidence \/ review gate/u);
     assert.match(app, /刷新页面后会重新读取只读 API/u);
@@ -78,6 +85,11 @@ describe('v15 Workbench React/Vite shell', () => {
       .sort();
 
     assert.deepEqual(apiPaths, [
+      '/api/capabilities',
+      '/api/diagnostics',
+      '/api/goals',
+      '/api/goals/<goal-id>/progress',
+      '/api/goals/latest/progress',
       '/api/handoff',
       '/api/handoff/<ref>',
       '/api/readiness',

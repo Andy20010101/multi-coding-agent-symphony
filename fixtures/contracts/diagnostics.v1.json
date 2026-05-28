@@ -1,0 +1,31 @@
+{
+  "contractName": "diagnostics.v1",
+  "contractVersion": 1,
+  "status": "ok",
+  "checks": [
+    {
+      "id": "state-dir-readable",
+      "label": "State directory readable",
+      "status": "ok",
+      "severity": "info"
+    },
+    {
+      "id": "handoff-ref-registered",
+      "label": "Guided handoff ref registered",
+      "status": "ok",
+      "severity": "info"
+    },
+    {
+      "id": "safe-preview-route-available",
+      "label": "Safe preview route available",
+      "status": "ok",
+      "severity": "info"
+    }
+  ],
+  "boundaries": {
+    "readOnlyApi": true,
+    "nonGetBlocked": true,
+    "workbenchFallbackProtected": true,
+    "arbitraryPathPreviewBlocked": true
+  }
+}

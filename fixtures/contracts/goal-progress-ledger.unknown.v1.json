@@ -1,0 +1,53 @@
+{
+  "contractName": "goal-progress-ledger.v1",
+  "contractVersion": 1,
+  "goalId": "v17-readonly-goal-progress-console-contracts",
+  "goalTitle": "v17 Read-only Goal Progress Ledger and Console Contract Hardening",
+  "baseline": {
+    "tag": "v16",
+    "commit": null,
+    "evidenceRef": null
+  },
+  "summary": {
+    "totalTasks": 1,
+    "completedTasks": 0,
+    "blockedTasks": 0,
+    "needsReviewTasks": 0,
+    "needsRevisionTasks": 0,
+    "releaseReady": false
+  },
+  "tasks": [
+    {
+      "taskId": "task-2",
+      "title": "Add read-only goal progress resolver",
+      "status": "unknown",
+      "statusSource": "missing-evidence",
+      "branch": "v17-task2-goal-progress-resolver",
+      "commit": null,
+      "workerEvidenceRef": null,
+      "reviewEvidenceRef": null,
+      "reviewVerdict": null,
+      "mainVerificationRef": null,
+      "blockers": [],
+      "nextCopyOnlyCommand": "git checkout v17-task2-goal-progress-resolver"
+    }
+  ],
+  "releaseGates": {
+    "pnpmCheck": "unknown",
+    "pnpmTest": "unknown",
+    "workbenchBuild": "unknown",
+    "mutationGate": "unknown",
+    "auditHigh": "unknown",
+    "diffCheck": "unknown",
+    "docsUpdated": "unknown",
+    "tagEvidence": "unknown"
+  },
+  "blockers": [],
+  "nextActions": [],
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}

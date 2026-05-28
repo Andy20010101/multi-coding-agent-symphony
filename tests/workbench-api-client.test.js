@@ -25,7 +25,11 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
-        ['GET', '/api/runs/latest', 'symphony.console-run']
+        ['GET', '/api/runs/latest', 'symphony.console-run'],
+        ['GET', '/api/goals', 'symphony.goals-index'],
+        ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
+        ['GET', '/api/capabilities', 'capabilities.v1'],
+        ['GET', '/api/diagnostics', 'diagnostics.v1']
       ]
     );
     assert.deepEqual(
@@ -36,6 +40,11 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
         ['GET', '/api/runs/latest', 'symphony.console-run'],
+        ['GET', '/api/goals', 'symphony.goals-index'],
+        ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
+        ['GET', '/api/capabilities', 'capabilities.v1'],
+        ['GET', '/api/diagnostics', 'diagnostics.v1'],
+        ['GET', '/api/goals/<goal-id>/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
         ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
@@ -174,7 +183,8 @@ describe('v15 Workbench read-only API client', () => {
         filter: 'all',
         availableFilters: ['all'],
         runs: []
-      }]
+      }],
+      ...createV17ReadonlyPayloadEntries()
     ]);
 
     const model = await fetchWorkbenchContracts({
@@ -372,24 +382,14 @@ describe('v15 Workbench read-only API client', () => {
         downloadAvailable: false,
         contentText: '<script>alert("unsafe")</script>'
       }],
-      [blockedPreviewPath, {
-        contractName: 'safe-artifact-preview.v1',
-        contractVersion: '1',
-        status: 'blocked-artifact-path',
-        ref: 'artifact:run-1:context',
-        uri: blockedPreviewPath,
-        displayTitle: 'Context artifact',
-        artifactKind: 'project-context',
-        sourceRunId: 'run-1',
-        mime: 'application/json',
-        sizeBytes: 0,
-        maxPreviewBytes: 204800,
-        previewAvailable: false,
-        safeToRenderInline: false,
-        truncated: false,
-        truncationReason: null,
-        downloadAvailable: false
-      }]
+      [blockedPreviewPath, createErrorEnvelope({
+        code: 'blocked-artifact-path',
+        message: 'Artifact preview is blocked by safety policy.',
+        status: 403,
+        route: blockedPreviewPath,
+        method: 'GET'
+      })],
+      ...createV17ReadonlyPayloadEntries()
     ]);
 
     const model = await fetchWorkbenchContracts({
@@ -416,7 +416,8 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.artifactRefs.items[1].preview.inline.text, '');
     assert.equal(model.artifactRefs.items[2].preview.status.value, 'blocked-artifact-path');
     assert.equal(model.artifactRefs.items[2].preview.httpStatus.value, 403);
-    assert.equal(model.artifactRefs.items[2].preview.downloadAvailable.value, false);
+    assert.equal(model.artifactRefs.items[2].preview.errorEnvelope.code.value, 'blocked-artifact-path');
+    assert.equal(model.artifactRefs.items[2].preview.inline.reason, 'Artifact preview is blocked by safety policy.');
     assert.deepEqual(
       calls
         .filter(([path]) => path.includes('/artifacts/'))
@@ -605,7 +606,8 @@ describe('v15 Workbench read-only API client', () => {
           status: 'done',
           detail: '1 registered'
         }]
-      }]
+      }],
+      ...createV17ReadonlyPayloadEntries()
     ]);
 
     const model = await fetchWorkbenchContracts({
@@ -649,6 +651,9 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.handoff.tasks.items[0].evidencePath.value, 'docs/plans/v16-task1-plan-approval-evidence-2026-05-27.md');
     assert.equal(model.handoff.commandBlocks.items[0].title.value, 'Preflight');
     assert.equal(model.handoff.commandBlocks.items[0].commands[0].value, 'git checkout main');
+    assert.equal(model.goalProgress.contractName.value, 'goal-progress-ledger.v1');
+    assert.equal(model.capabilities.browserExecutionAvailable.value, false);
+    assert.equal(model.diagnosticsV1.status.value, 'ok');
   });
 });
 
@@ -714,6 +719,137 @@ function createGuidedHandoffPayload() {
     reviewModel: {
       contextIsolation: true,
       workerSelfCheckIsFinal: false
+    }
+  };
+}
+
+function createV17ReadonlyPayloadEntries() {
+  return [
+    ['/api/goals', {
+      contractName: 'symphony.goals-index',
+      contractVersion: 1,
+      readOnly: true,
+      goals: [{
+        goalId: 'v17-readonly-goal-progress-console-contracts',
+        goalTitle: 'v17 Read-only Goal Progress Ledger and Console Contract Hardening',
+        baseline: {
+          tag: 'v16'
+        },
+        taskCount: 10,
+        readOnly: true
+      }]
+    }],
+    ['/api/goals/latest/progress', {
+      contractName: 'goal-progress-ledger.v1',
+      contractVersion: 1,
+      goalId: 'v17-readonly-goal-progress-console-contracts',
+      goalTitle: 'v17 Read-only Goal Progress Ledger and Console Contract Hardening',
+      baseline: {
+        tag: 'v16',
+        commit: null,
+        evidenceRef: 'docs/plans/v16-tag-release-evidence-2026-05-28.md'
+      },
+      summary: {
+        totalTasks: 1,
+        completedTasks: 0,
+        blockedTasks: 0,
+        needsReviewTasks: 0,
+        needsRevisionTasks: 0,
+        releaseReady: false
+      },
+      tasks: [{
+        taskId: 'task-1',
+        title: 'Contract fixtures',
+        status: 'planned',
+        statusSource: 'test',
+        branch: 'v17-task1',
+        commit: null,
+        workerEvidenceRef: null,
+        reviewEvidenceRef: null,
+        reviewVerdict: null,
+        mainVerificationRef: null,
+        blockers: [],
+        nextCopyOnlyCommand: 'git checkout -b v17-task1'
+      }],
+      releaseGates: {
+        pnpmCheck: 'unknown',
+        pnpmTest: 'unknown',
+        workbenchBuild: 'unknown',
+        mutationGate: 'unknown',
+        auditHigh: 'unknown',
+        diffCheck: 'unknown',
+        docsUpdated: 'unknown',
+        tagEvidence: 'unknown'
+      },
+      blockers: [],
+      nextActions: [{
+        kind: 'copy-only-command',
+        label: 'Start task',
+        command: 'git checkout -b v17-task1'
+      }],
+      safety: {
+        readOnly: true,
+        copyOnly: true,
+        browserExecutionAvailable: false,
+        modelInvocationAvailable: false
+      }
+    }],
+    ['/api/capabilities', {
+      contractName: 'capabilities.v1',
+      contractVersion: 1,
+      readOnly: true,
+      displayOnly: true,
+      copyOnly: true,
+      mutationAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      artifactDownloadAvailable: false,
+      safePreview: {
+        available: true,
+        inlineModes: ['bounded-text'],
+        rawHtmlInlineAvailable: false,
+        svgInlineAvailable: false,
+        javascriptInlineAvailable: false,
+        binaryInlineAvailable: false
+      },
+      routes: {
+        handoff: true,
+        safePreview: true,
+        goalProgress: true,
+        diagnostics: true
+      }
+    }],
+    ['/api/diagnostics', {
+      contractName: 'diagnostics.v1',
+      contractVersion: 1,
+      status: 'ok',
+      checks: [{
+        id: 'state-dir-readable',
+        label: 'State directory readable',
+        status: 'ok',
+        severity: 'info'
+      }],
+      boundaries: {
+        readOnlyApi: true,
+        nonGetBlocked: true,
+        workbenchFallbackProtected: true,
+        arbitraryPathPreviewBlocked: true
+      }
+    }]
+  ];
+}
+
+function createErrorEnvelope({ code, message, status, route, method }) {
+  return {
+    contractName: 'error-envelope.v1',
+    contractVersion: 1,
+    ok: false,
+    error: {
+      code,
+      message,
+      status,
+      route,
+      method
     }
   };
 }

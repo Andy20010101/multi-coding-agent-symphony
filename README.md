@@ -10,6 +10,7 @@ symphony scan
 symphony do "inspect README"
 symphony "修复失败的测试"
 symphony status
+symphony goal-status
 symphony diagnose
 ```
 
@@ -58,6 +59,9 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [v16 Final Release Review Evidence](docs/plans/v16-final-release-review-evidence-2026-05-28.md)
 - [v16 Tag Release Planning Evidence](docs/plans/v16-tag-release-planning-evidence-2026-05-28.md)
 - [v16 Tag Release Evidence](docs/plans/v16-tag-release-evidence-2026-05-28.md)
+- [v17 Read-only Goal Progress Console Contract Hardening Plan](docs/plans/v17-readonly-goal-progress-console-contract-hardening-plan-2026-05-28.md)
+- [v17 Execution Prompts](docs/plans/v17-execution-prompts-2026-05-28.md)
+- [v17 Release Evidence](docs/plans/v17-release-evidence-2026-05-28.md)
 - [v16 Goal Execution Plan](tmp/codex-prompts/v16_goal_execution_plan.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
@@ -79,6 +83,8 @@ Implemented:
 - Stable product JSON contract fields for automation: `contractVersion`, `contractName`, `contract`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`.
 - Read-only local `symphony console` workbench for browsing latest runs, verifier status, readiness checks, copy-only next commands, guided handoff details, timelines, risk summaries, run filters, recent-run diagnostics, artifact pointers, and safe artifact preview contracts from `.symphony` state.
 - Controlled diagnostics CLI `symphony diagnose` for terminal summaries, stable JSON reports, and redirectable static HTML reports without starting a browser server.
+- v17 read-only goal progress ledger: `symphony goal-status`, `goal-progress-ledger.v1`, `/api/goals`, `/api/goals/latest/progress`, `/api/goals/<goal-id>/progress`, and Workbench Goal Progress display for task status, evidence refs, blockers, release gates, and next copy-only commands.
+- v17 console contract hardening: `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` are exposed through read-only API routes and Workbench panels without adding browser execution, Workbench writes, artifact download, arbitrary path preview, or frontend safety inference.
 - v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan with the exact confirm command, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
 - v12 verified adoption: `symphony adopt --run <run-id>` freezes verifier-passing isolated workspace changes as a text-only patch plan, and `symphony adopt --confirm <adoption-id>` applies only that frozen patch after fingerprint and `git apply --check` validation.
 - v12 adoption recovery visibility: confirmation writes a registered journal before `git apply`, and `symphony adopt --inspect <adoption-id> --json` reports plan refs, journal refs, latest confirmation state, and current worktree hash matches without writing files.
@@ -92,7 +98,7 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Latest completed mainline milestone: `v16`. Current released repository tag: `v16`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite read-only Workbench migration on mainline, and v16 adds guided handoff and safe artifact preview contracts across the read-only API and Workbench. The `v7` tag remains available for historical installs.
+Latest completed mainline implementation in this checkout: `v17`. Current released repository tag: `v16` until a v17 tag is explicitly created. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite read-only Workbench migration on mainline, v16 adds guided handoff and safe artifact preview contracts across the read-only API and Workbench, and v17 adds the read-only goal progress ledger plus console capability, diagnostics, and error-envelope contracts. The `v7` tag remains available for historical installs.
 
 ## Design Center
 
@@ -139,6 +145,9 @@ pnpm symphony verify --dry-run "inspect README"
 pnpm symphony "扫描这个仓库"
 pnpm symphony "审查当前改动"
 pnpm symphony status
+pnpm symphony goal-status
+pnpm symphony goal-status --json
+pnpm symphony goal-status --markdown
 pnpm symphony console --snapshot --json
 pnpm --silent symphony diagnose --json
 pnpm --silent symphony diagnose --html > tmp/symphony-diagnostics.html
@@ -179,6 +188,7 @@ symphony "扫描这个仓库"
 symphony "审查当前改动"
 symphony "修复失败的测试"
 symphony status
+symphony goal-status
 symphony artifacts
 symphony console
 symphony console --snapshot --json

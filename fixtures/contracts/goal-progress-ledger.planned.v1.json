@@ -1,0 +1,59 @@
+{
+  "contractName": "goal-progress-ledger.v1",
+  "contractVersion": 1,
+  "goalId": "v17-readonly-goal-progress-console-contracts",
+  "goalTitle": "v17 Read-only Goal Progress Ledger and Console Contract Hardening",
+  "baseline": {
+    "tag": "v16",
+    "commit": null,
+    "evidenceRef": "docs/plans/v16-tag-release-evidence-2026-05-28.md"
+  },
+  "summary": {
+    "totalTasks": 1,
+    "completedTasks": 0,
+    "blockedTasks": 0,
+    "needsReviewTasks": 0,
+    "needsRevisionTasks": 0,
+    "releaseReady": false
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Add goal-progress-ledger.v1 contract fixtures and validator",
+      "status": "planned",
+      "statusSource": "contract-fixture",
+      "branch": "v17-task1-goal-progress-contract",
+      "commit": null,
+      "workerEvidenceRef": null,
+      "reviewEvidenceRef": null,
+      "reviewVerdict": null,
+      "mainVerificationRef": null,
+      "blockers": [],
+      "nextCopyOnlyCommand": "git checkout main && git pull --ff-only && git checkout -b v17-task1-goal-progress-contract"
+    }
+  ],
+  "releaseGates": {
+    "pnpmCheck": "unknown",
+    "pnpmTest": "unknown",
+    "workbenchBuild": "unknown",
+    "mutationGate": "unknown",
+    "auditHigh": "unknown",
+    "diffCheck": "unknown",
+    "docsUpdated": "unknown",
+    "tagEvidence": "unknown"
+  },
+  "blockers": [],
+  "nextActions": [
+    {
+      "kind": "copy-only-command",
+      "label": "Start task 1 branch",
+      "command": "git checkout main && git pull --ff-only && git checkout -b v17-task1-goal-progress-contract"
+    }
+  ],
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}

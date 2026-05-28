@@ -1,13 +1,14 @@
-# v16 Workbench 中文操作指南
+# v17 Workbench 中文操作指南
 
 ## 当前定位
 
-Workbench 是 `symphony console` 提供的本地浏览器展示面。它消费 console server 暴露的本地 `GET` API，用于查看 `.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary 和 Stage summary。
+Workbench 是 `symphony console` 提供的本地浏览器展示面。它消费 console server 暴露的本地 `GET` API，用于查看 `.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、capabilities 和 diagnostics。
 
 Workbench 是 read-only / display-only / copy-only：
 
 - 浏览器只展示状态、contract 字段和可复制的命令文本。
 - 浏览器不执行命令，不写文件，不触发模型，不触发 agent。
+- 浏览器不下载 artifact，不打开本地文件，不接受任意路径输入。
 - 浏览器不是 canonical state；`.symphony` 只保存 summary、ref、pointer，完整 evidence 继续由 ArtifactStore 承担。
 
 ## 构建 Workbench
@@ -90,9 +91,14 @@ GET /api/runs/<run-id>/timeline
 GET /api/runs/<run-id>/artifacts/<kind>
 GET /api/runs/<run-id>/artifacts/<kind>/preview
 GET /api/adoptions/<adoption-id>/inspect
+GET /api/goals
+GET /api/goals/latest/progress
+GET /api/goals/<goal-id>/progress
+GET /api/capabilities
+GET /api/diagnostics
 ```
 
-所有非 `GET` 请求都必须返回 `405`，响应语义是 console read-only。`/api/handoff` 只暴露 registered handoff ref，当前为 `guided-goal-handoff.v1`。safe preview route 只接受 run state 已登记的 artifact kind，不接受 `path` query、encoded traversal 或任意本地路径。
+所有非 `GET` 请求都必须返回 `405`，并使用 `error-envelope.v1`。`/api/handoff` 只暴露 registered handoff ref，当前为 `guided-goal-handoff.v1`。safe preview route 只接受 run state 已登记的 artifact kind，不接受 `path` query、encoded traversal 或任意本地路径。
 
 `/workbench` 的静态资源服务只允许读取 `src/symphony/workbench-static/` 中的构建产物。`/workbench/api/*` 只会落到 Workbench HTML fallback，不返回 API JSON contract；`/workbench/docs/stages/*.html`、`/workbench/docs/stages/*.stage.json`、`/workbench/src/*`、`/workbench/package.json` 和 lockfile 路径不能暴露仓库文件内容。
 
@@ -106,6 +112,61 @@ Workbench 的 handoff panel 只读取：
 面板展示 contract 中已暴露的目标、角色、任务、review gate、release gate、停止条件和 copy-only commands。命令只作为文本出现；浏览器没有执行按钮、terminal action、模型调用、agent 调用、branch 操作、commit 操作或 push 操作。
 
 如果 handoff contract 缺少某个字段，Workbench 应显示缺失或不可用状态，不从 task id、标题、命令文本或历史 evidence 推断状态。`/api/handoff?path=...`、`/api/handoff/<unknown-ref>`、encoded traversal 和非 GET 请求都应保持被拒绝。
+
+## Goal Progress
+
+Workbench 的 Goal Progress panel 只读取 `GET /api/goals/latest/progress`。该 route 返回 `goal-progress-ledger.v1`，展示 goal id、baseline、task status、statusSource、worker evidence、review evidence、review verdict、main verification、blockers、release gates 和 next copy-only commands。
+
+状态只能来自后端 ledger 字段。前端不能根据 task id、标题、branch、commit、命令文本、文件名、路径或历史 run 文案判断任务是否完成。缺少 evidence 时，后端应返回 `unknown`、`missing` 或 `blocked`；前端只按字段展示。
+
+终端可用的只读命令：
+
+```sh
+pnpm symphony goal-status
+pnpm symphony goal-status --json
+pnpm symphony goal-status --markdown
+pnpm symphony goal-status --goal v17-readonly-goal-progress-console-contracts --json
+```
+
+这些命令只读取注册 goal state 和 evidence refs，不写 `.symphony`，不创建 evidence，不运行测试、audit、mutation，不调用模型。
+
+## Capabilities 和 Diagnostics
+
+Workbench 的 Capabilities panel 读取 `GET /api/capabilities`，展示 `capabilities.v1`：
+
+- `readOnly: true`
+- `displayOnly: true`
+- `copyOnly: true`
+- `mutationAvailable: false`
+- `browserExecutionAvailable: false`
+- `modelInvocationAvailable: false`
+- `artifactDownloadAvailable: false`
+- safe preview inline mode 只允许 `bounded-text`
+
+这些字段只用于展示可用性和不可用性，不能被前端用来打开写入、执行、下载或模型调用入口。
+
+Diagnostics panel 读取 `GET /api/diagnostics`，展示 `diagnostics.v1` 的状态、checks 和 boundaries。该 route 只做安全的本地状态读取，不运行 shell、测试、audit、mutation、package install 或模型调用，也不接受 query path 或 body path。
+
+## Error Envelope
+
+Console API 的相关错误路径使用 `error-envelope.v1`：
+
+```json
+{
+  "contractName": "error-envelope.v1",
+  "contractVersion": 1,
+  "ok": false,
+  "error": {
+    "code": "blocked-artifact-path",
+    "message": "Artifact preview is blocked by safety policy.",
+    "status": 403,
+    "route": "/api/runs/<run-id>/artifacts/<artifact-kind>/preview",
+    "method": "GET"
+  }
+}
+```
+
+错误响应不能包含 stack trace、绝对本地路径、secret、仓库源码内容或原始异常文本。Workbench 只展示 envelope 中的安全 code、message、status、route 和 method。
 
 ## Safe Artifact Preview
 
@@ -204,7 +265,7 @@ HTML artifact 没有显示正文：
 
 Preview 返回 `blocked-artifact-path`：
 
-这是安全边界，不是 Workbench 故障。常见原因包括 artifact ref 指向仓库 `package.json`、lockfile、`src/`、`docs/`、symlink、hardlink 或 safe root 外路径。
+这是安全边界，不是 Workbench 故障。v17 safe preview route 会通过 `error-envelope.v1` 返回这个 code。常见原因包括 artifact ref 指向仓库 `package.json`、lockfile、`src/`、`docs/`、symlink、hardlink 或 safe root 外路径。
 
 在 `pnpm workbench:dev` 页面看到 API 读取失败：
 
@@ -223,6 +284,7 @@ Stage Charter HTML / JSON 没有在 Workbench 中打开：
 - React/Vite Workbench 当前是只读展示层，不是执行面。
 - 当前 React frontend 只消费受控 `GET` contract；不直接读取 `.symphony` 私有结构、ArtifactStore 内部结构或 Stage Charter HTML。
 - Handoff commands 只作为文本显示，不提供浏览器执行、复制按钮或队列入口。
+- Goal Progress 只展示后端 ledger 状态，不从前端推断任务完成度或 release readiness。
 - Artifact inline preview 只支持后端明确标记为 safe 的 bounded text。
 - 没有 artifact 下载、打开本地路径、任意路径输入或任意 artifact 预览。
 - 没有 browser write、execute、retry、adopt、apply、rollback、delete、install、mutation、audit、model invocation。

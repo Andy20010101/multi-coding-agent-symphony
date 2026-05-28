@@ -49,11 +49,12 @@ export async function fetchReadonlyRoute(route, {
     });
   }
 
-  if (!response.ok && !acceptsReadonlyErrorContract({ route, data })) {
+  if (!response.ok) {
     return readonlyError({
       route,
       httpStatus: response.status,
-      message: READONLY_ERROR_MESSAGE
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
     });
   }
 
@@ -111,7 +112,7 @@ export async function fetchWorkbenchContracts(options = {}) {
   return projectWorkbenchContracts(results);
 }
 
-function readonlyError({ route, httpStatus = null, message }) {
+function readonlyError({ route, httpStatus = null, message, errorEnvelope = null }) {
   return {
     ok: false,
     route: route.path,
@@ -119,6 +120,7 @@ function readonlyError({ route, httpStatus = null, message }) {
     routeDescriptor: route,
     httpStatus,
     message,
+    errorEnvelope,
     readonly: true
   };
 }
@@ -144,10 +146,18 @@ function latestRunIdFromResults(results) {
   return typeof runId === 'string' && runId.trim().length > 0 ? runId : null;
 }
 
-function acceptsReadonlyErrorContract({ route, data }) {
-  return route.acceptErrorContract === true &&
-    route.contractName !== undefined &&
-    data?.contractName === route.contractName;
+function errorMessageFromEnvelope(data) {
+  if (isErrorEnvelope(data)) {
+    return data.error.message;
+  }
+
+  return READONLY_ERROR_MESSAGE;
+}
+
+function isErrorEnvelope(data) {
+  return data?.contractName === 'error-envelope.v1' &&
+    data?.ok === false &&
+    typeof data?.error?.message === 'string';
 }
 
 export { READONLY_API_ROUTES };

@@ -28,6 +28,9 @@ import {
   SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME,
   validateSafeArtifactPreviewContract
 } from '../src/symphony/safe-artifact-preview.js';
+import {
+  validateErrorEnvelopeContract
+} from '../src/symphony/error-envelope.js';
 
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
@@ -2780,7 +2783,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(contextPreview.artifact.truncated, false);
       assert.equal(Object.hasOwn(contextPreview.artifact, 'content'), false);
       assert.equal(writeResponse.status, 405);
-      assert.match((await writeResponse.json()).message, /read-only/u);
+      assert.match((await writeResponse.json()).error.message, /read-only/u);
     } finally {
       if (server !== undefined) {
         await closeServer(server);
@@ -3283,7 +3286,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(largePreview.artifact.message, `preview truncated to ${200 * 1024} bytes`);
       assert.equal(largePreview.artifact.content.length, 200 * 1024);
       assert.equal(unregisteredResponse.status, 400);
-      assert.equal((await unregisteredResponse.json()).status, 'invalid-ref');
+      assertValidErrorEnvelope(await unregisteredResponse.json(), 'invalid-artifact-ref');
     } finally {
       if (server !== undefined) {
         await closeServer(server);
@@ -3404,10 +3407,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       const blockedPackagePreview = JSON.parse(blockedPackageBody);
 
       assert.equal(blockedPackageResponse.status, 403);
-      assertValidSafePreview(blockedPackagePreview);
-      assert.equal(blockedPackagePreview.status, 'blocked-artifact-path');
-      assert.equal(blockedPackagePreview.previewAvailable, false);
-      assert.equal(blockedPackagePreview.safeToRenderInline, false);
+      assertValidErrorEnvelope(blockedPackagePreview, 'blocked-artifact-path');
       assert.equal(Object.hasOwn(blockedPackagePreview, 'contentText'), false);
       assert.doesNotMatch(blockedPackageBody, /multi-coding-agent-symphony|lockfileVersion/u);
 
@@ -3416,10 +3416,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       const blockedSymlinkPreview = JSON.parse(blockedSymlinkBody);
 
       assert.equal(blockedSymlinkResponse.status, 403);
-      assertValidSafePreview(blockedSymlinkPreview);
-      assert.equal(blockedSymlinkPreview.status, 'blocked-artifact-path');
-      assert.equal(blockedSymlinkPreview.previewAvailable, false);
-      assert.equal(blockedSymlinkPreview.safeToRenderInline, false);
+      assertValidErrorEnvelope(blockedSymlinkPreview, 'blocked-artifact-path');
       assert.equal(Object.hasOwn(blockedSymlinkPreview, 'contentText'), false);
       assert.doesNotMatch(blockedSymlinkBody, /multi-coding-agent-symphony|lockfileVersion/u);
 
@@ -3428,10 +3425,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       const blockedHardlinkPreview = JSON.parse(blockedHardlinkBody);
 
       assert.equal(blockedHardlinkResponse.status, 403);
-      assertValidSafePreview(blockedHardlinkPreview);
-      assert.equal(blockedHardlinkPreview.status, 'blocked-artifact-path');
-      assert.equal(blockedHardlinkPreview.previewAvailable, false);
-      assert.equal(blockedHardlinkPreview.safeToRenderInline, false);
+      assertValidErrorEnvelope(blockedHardlinkPreview, 'blocked-artifact-path');
       assert.equal(Object.hasOwn(blockedHardlinkPreview, 'contentText'), false);
       assert.doesNotMatch(blockedHardlinkBody, /outsideLocalSecret/u);
 
@@ -3440,10 +3434,7 @@ describe('v8 prompt-driven symphony CLI', () => {
       const blockedReadmePreview = JSON.parse(blockedReadmeBody);
 
       assert.equal(blockedReadmeResponse.status, 403);
-      assertValidSafePreview(blockedReadmePreview);
-      assert.equal(blockedReadmePreview.status, 'blocked-artifact-path');
-      assert.equal(blockedReadmePreview.previewAvailable, false);
-      assert.equal(blockedReadmePreview.safeToRenderInline, false);
+      assertValidErrorEnvelope(blockedReadmePreview, 'blocked-artifact-path');
       assert.equal(Object.hasOwn(blockedReadmePreview, 'contentText'), false);
       assert.doesNotMatch(blockedReadmeBody, /#|multi-coding-agent-symphony|Symphony/u);
 
@@ -5171,6 +5162,15 @@ function assertValidSafePreview(preview) {
     ok: true,
     errors: []
   });
+}
+
+function assertValidErrorEnvelope(envelope, code) {
+  assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+    ok: true,
+    errors: []
+  });
+  assert.equal(envelope.contractName, 'error-envelope.v1');
+  assert.equal(envelope.error.code, code);
 }
 
 async function writeV15ConsoleStageState({

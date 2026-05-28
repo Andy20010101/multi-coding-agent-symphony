@@ -41,12 +41,12 @@ export default function App() {
     <main className="workbench-shell" aria-labelledby="workbench-title">
       <header className="workbench-header">
         <div className="header-copy">
-          <p className="eyebrow">v15 React/Vite Workbench</p>
-          <h1 id="workbench-title">v15 Workbench</h1>
+          <p className="eyebrow">v17 React/Vite Workbench</p>
+          <h1 id="workbench-title">v17 Workbench</h1>
           <p className="header-summary">
-            基于 Task 5 / Task 6 的只读 API binding 展示 summary、readiness、runs、latest run、
-            timeline、artifact refs、adoption summary 与 v16 handoff。浏览器端只读取受控 GET routes，
-            artifact preview 只消费后端 safe-artifact-preview contract，不提供写入或终端动作。
+            展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff，
+            以及 v17 goal progress、capabilities、diagnostics 与安全 error envelope。浏览器端只读取受控 GET routes，
+            artifact preview 只消费后端 contract，不提供写入、下载、终端或执行动作。
           </p>
         </div>
         <div className="status-strip" aria-label="当前只读状态">
@@ -82,6 +82,12 @@ export default function App() {
             />
           </section>
 
+          <section className="goal-grid" aria-label="v17 goal progress 与 console contract panels">
+            <GoalProgressPanel progress={model.goalProgress} route={findRoute(model.routeStates, 'goalProgress')} />
+            <CapabilitiesPanel capabilities={model.capabilities} route={findRoute(model.routeStates, 'capabilities')} />
+            <DiagnosticsV1Panel diagnostics={model.diagnosticsV1} route={findRoute(model.routeStates, 'diagnostics')} />
+          </section>
+
           <section className="support-grid" aria-label="只读 contract 支撑信息">
             <RoutePanel routes={model.routeStates} />
             <ContractGapPanel gaps={model.deferredGaps} />
@@ -89,6 +95,130 @@ export default function App() {
         </>
       )}
     </main>
+  );
+}
+
+function GoalProgressPanel({ progress, route }) {
+  return (
+    <DataPanel
+      id="goal-progress-panel"
+      kicker="v17 goal progress"
+      title="Goal Progress Ledger"
+      state={goalProgressStateText(progress, route)}
+      route={route}
+    >
+      {progress.state === 'unavailable' && progress.errorEnvelope.state === 'available' ? (
+        <p className="error-copy">错误摘要：{progress.errorEnvelope.code.text} / {progress.errorEnvelope.message.text}</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['contractName', progress.contractName],
+        ['contractVersion', progress.contractVersion],
+        ['goalId', progress.goalId],
+        ['goalTitle', progress.goalTitle],
+        ['baseline.tag', progress.baselineTag],
+        ['baseline.commit', progress.baselineCommit],
+        ['baseline.evidenceRef', progress.baselineEvidenceRef],
+        ['summary.totalTasks', progress.summary.totalTasks],
+        ['summary.completedTasks', progress.summary.completedTasks],
+        ['summary.blockedTasks', progress.summary.blockedTasks],
+        ['summary.needsReviewTasks', progress.summary.needsReviewTasks],
+        ['summary.needsRevisionTasks', progress.summary.needsRevisionTasks],
+        ['summary.releaseReady', progress.summary.releaseReady]
+      ]} />
+
+      <Subsection title="tasks / evidence">
+        <GoalTaskList tasks={progress.tasks} />
+      </Subsection>
+
+      <Subsection title="release gates">
+        <KeyValueList rows={progress.releaseGates} nameKey="gate" valueKey="status" emptyCopy="releaseGates 未暴露。" />
+      </Subsection>
+
+      <Subsection title="blockers">
+        <BlockerList blockers={progress.blockers} />
+      </Subsection>
+
+      <Subsection title="next copy-only commands">
+        <NextActionList actions={progress.nextActions} />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', progress.safety.readOnly],
+          ['copyOnly', progress.safety.copyOnly],
+          ['browserExecutionAvailable', progress.safety.browserExecutionAvailable],
+          ['modelInvocationAvailable', progress.safety.modelInvocationAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{progress.note}</p>
+    </DataPanel>
+  );
+}
+
+function CapabilitiesPanel({ capabilities, route }) {
+  return (
+    <DataPanel
+      id="capabilities-panel"
+      kicker="v17 capabilities"
+      title="Capabilities Contract"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', capabilities.contractName],
+        ['contractVersion', capabilities.contractVersion],
+        ['readOnly', capabilities.readOnly],
+        ['displayOnly', capabilities.displayOnly],
+        ['copyOnly', capabilities.copyOnly],
+        ['mutationAvailable', capabilities.mutationAvailable],
+        ['browserExecutionAvailable', capabilities.browserExecutionAvailable],
+        ['modelInvocationAvailable', capabilities.modelInvocationAvailable],
+        ['artifactDownloadAvailable', capabilities.artifactDownloadAvailable],
+        ['safePreview.available', capabilities.safePreview.available],
+        ['safePreview.inlineModes', capabilities.safePreview.inlineModes],
+        ['rawHtmlInlineAvailable', capabilities.safePreview.rawHtmlInlineAvailable],
+        ['svgInlineAvailable', capabilities.safePreview.svgInlineAvailable],
+        ['javascriptInlineAvailable', capabilities.safePreview.javascriptInlineAvailable],
+        ['binaryInlineAvailable', capabilities.safePreview.binaryInlineAvailable]
+      ]} />
+
+      <Subsection title="routes">
+        <KeyValueList rows={capabilities.routes} nameKey="route" valueKey="available" emptyCopy="routes 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{capabilities.note}</p>
+    </DataPanel>
+  );
+}
+
+function DiagnosticsV1Panel({ diagnostics, route }) {
+  return (
+    <DataPanel
+      id="diagnostics-v1-panel"
+      kicker="v17 diagnostics"
+      title="Diagnostics Contract"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', diagnostics.contractName],
+        ['contractVersion', diagnostics.contractVersion],
+        ['status', diagnostics.status],
+        ['check count', diagnostics.checks.count]
+      ]} />
+
+      <Subsection title="checks">
+        <DiagnosticsCheckList checks={diagnostics.checks} />
+      </Subsection>
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={diagnostics.boundaries} nameKey="boundary" valueKey="available" emptyCopy="boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{diagnostics.note}</p>
+    </DataPanel>
   );
 }
 
@@ -743,6 +873,116 @@ function HandoffTaskList({ tasks }) {
   );
 }
 
+function GoalTaskList({ tasks }) {
+  if (tasks.state === 'missing') {
+    return <EmptyBlock copy="tasks 未暴露。" />;
+  }
+
+  if (tasks.items.length === 0) {
+    return <EmptyBlock copy="tasks 为空。" />;
+  }
+
+  return (
+    <ul className="goal-task-list">
+      {tasks.items.map((task, index) => (
+        <li key={`${task.taskId.text}-${index}`}>
+          <FieldList rows={[
+            ['taskId', task.taskId],
+            ['title', task.title],
+            ['status', task.status],
+            ['statusSource', task.statusSource],
+            ['branch', task.branch],
+            ['commit', task.commit],
+            ['workerEvidenceRef', task.workerEvidenceRef],
+            ['reviewEvidenceRef', task.reviewEvidenceRef],
+            ['reviewVerdict', task.reviewVerdict],
+            ['mainVerificationRef', task.mainVerificationRef],
+            ['nextCopyOnlyCommand', task.nextCopyOnlyCommand]
+          ]} />
+          <BlockerList blockers={task.blockers} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function KeyValueList({ rows, nameKey, valueKey, emptyCopy }) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return <EmptyBlock copy={emptyCopy} />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {rows.map((row, index) => (
+        <li key={`${row[nameKey].text}-${index}`}>
+          <strong>{row[nameKey].text}</strong>
+          <span>{row[valueKey].text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BlockerList({ blockers }) {
+  if (!Array.isArray(blockers) || blockers.length === 0) {
+    return <EmptyBlock copy="无已暴露 blocker。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {blockers.map((blocker, index) => (
+        <li key={`${blocker.id.text}-${index}`}>
+          <strong>{blocker.reason.text}</strong>
+          <span>{blocker.taskId.text}</span>
+          <span>{blocker.severity.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NextActionList({ actions }) {
+  if (!Array.isArray(actions) || actions.length === 0) {
+    return <EmptyBlock copy="nextActions 未暴露。" />;
+  }
+
+  return (
+    <ul className="command-text-list" aria-label="next copy-only command text">
+      {actions.map((action, index) => (
+        <li key={`${action.label.text}-${index}`}>
+          <FieldList rows={[
+            ['kind', action.kind],
+            ['label', action.label]
+          ]} />
+          <code>{action.command.text}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function DiagnosticsCheckList({ checks }) {
+  if (checks.state === 'missing') {
+    return <EmptyBlock copy="checks 未暴露。" />;
+  }
+
+  if (checks.items.length === 0) {
+    return <EmptyBlock copy="checks 为空。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {checks.items.map((check) => (
+        <li key={check.id.text}>
+          <strong>{check.label.text}</strong>
+          <span>{check.status.text}</span>
+          <span>{check.severity.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ShellState({ title, copy }) {
   return (
     <section className="shell-state" aria-label={title}>
@@ -817,6 +1057,18 @@ function handoffStateText(handoff, route) {
   }
 
   if (handoff.state === 'unavailable') {
+    return '不可用';
+  }
+
+  return routeStateText(route);
+}
+
+function goalProgressStateText(progress, route) {
+  if (progress.state === 'missing') {
+    return '未暴露';
+  }
+
+  if (progress.state === 'unavailable') {
     return '不可用';
   }
 

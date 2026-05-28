@@ -31,6 +31,7 @@ body {
 .panel-grid,
 .detail-grid,
 .handoff-grid,
+.goal-grid,
 .support-grid,
 .shell-state {
   width: min(1180px, calc(100% - 40px));
@@ -116,6 +117,7 @@ h3 {
 .panel-grid,
 .detail-grid,
 .handoff-grid,
+.goal-grid,
 .support-grid {
   display: grid;
   gap: 16px;
@@ -137,6 +139,11 @@ h3 {
 
 .handoff-grid {
   grid-template-columns: 1fr;
+  margin-top: 16px;
+}
+
+.goal-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
   margin-top: 16px;
 }
 
@@ -289,6 +296,7 @@ h3 {
 .command-text-list,
 .handoff-role-list,
 .handoff-task-list,
+.goal-task-list,
 .run-list {
   display: grid;
   gap: 10px;
@@ -303,6 +311,7 @@ h3 {
 .command-block-list > li,
 .handoff-role-list > li,
 .handoff-task-list > li,
+.goal-task-list > li,
 .run-row {
   border: 1px solid #d8e0e2;
   border-radius: 8px;
@@ -389,6 +398,7 @@ h3 {
   .panel-grid,
   .detail-grid,
   .handoff-grid,
+  .goal-grid,
   .support-grid {
     grid-template-columns: 1fr;
   }
@@ -404,6 +414,7 @@ h3 {
   .panel-grid,
   .detail-grid,
   .handoff-grid,
+  .goal-grid,
   .support-grid,
   .shell-state {
     width: min(100% - 28px, 1180px);

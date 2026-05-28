@@ -42,6 +42,11 @@ import {
   loadGuidedGoalHandoffFixture,
   renderGuidedGoalHandoffMarkdown
 } from '../src/symphony/guided-goal-handoff-output.js';
+import {
+  buildGoalProgressLedger,
+  renderGoalProgressMarkdown,
+  renderGoalProgressText
+} from '../src/symphony/goal-progress-ledger.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -99,6 +104,8 @@ const KNOWN_COMMANDS = new Set([
   'console',
   'diagnose',
   'handoff',
+  'goal-status',
+  'progress',
   'adopt',
   'new',
   'stage',
@@ -273,6 +280,13 @@ export async function runSymphonyCli({
 
     if (command === 'handoff') {
       return await runSymphonyHandoff({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'goal-status' || command === 'progress') {
+      return await runSymphonyGoalStatus({
         args: rest,
         stdout
       });
@@ -1752,6 +1766,37 @@ async function runSymphonyHandoff({ args, stdout }) {
   return EXIT_CODES.ok;
 }
 
+async function runSymphonyGoalStatus({ args, stdout }) {
+  const options = parseGoalStatusArgs(args);
+
+  if (options.help) {
+    stdout.write(goalStatusHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  const ledger = await buildGoalProgressLedger({
+    stateDir: options.stateDir,
+    goalId: options.goalId
+  });
+
+  if (ledger === null) {
+    throw new UsageError('goal not found');
+  }
+
+  if (options.format === 'json') {
+    writeJson(stdout, ledger);
+    return EXIT_CODES.ok;
+  }
+
+  if (options.format === 'markdown') {
+    stdout.write(renderGoalProgressMarkdown(ledger));
+    return EXIT_CODES.ok;
+  }
+
+  stdout.write(renderGoalProgressText(ledger));
+  return EXIT_CODES.ok;
+}
+
 async function runSymphonyStage({ args, stdout }) {
   const options = parseStageArgs(args);
   let summary;
@@ -3212,6 +3257,88 @@ function handoffHelpText() {
     '',
     'Prints the bundled v16 guided-goal handoff contract.',
     'The command is copy-only: it does not execute commands, call models, write files, create branches, commit, push, or merge.',
+    ''
+  ].join('\n');
+}
+
+function parseGoalStatusArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: 'latest',
+    format: 'human',
+    formatExplicit: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      setGoalStatusFormat(options, 'json');
+      continue;
+    }
+
+    if (value === '--markdown') {
+      setGoalStatusFormat(options, 'markdown');
+      continue;
+    }
+
+    if (value === '--format') {
+      setGoalStatusFormat(options, readRequiredValue(args, index, '--format'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal-status does not write files; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal-status option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal-status argument: ${value}`);
+  }
+
+  return options;
+}
+
+function setGoalStatusFormat(options, format) {
+  if (!['human', 'json', 'markdown'].includes(format)) {
+    throw new UsageError('goal-status format must be human, json, or markdown');
+  }
+
+  if (options.formatExplicit && options.format !== format) {
+    throw new UsageError('goal-status accepts only one output format');
+  }
+
+  options.format = format;
+  options.formatExplicit = true;
+}
+
+function goalStatusHelpText() {
+  return [
+    'Usage: symphony goal-status [--json|--markdown|--format human|json|markdown] [--goal <goal-id>]',
+    '',
+    'Prints the read-only v17 goal-progress-ledger.v1 contract.',
+    'The command reads registered goal state only; it does not write files, run checks, call models, or execute goal tasks.',
     ''
   ].join('\n');
 }

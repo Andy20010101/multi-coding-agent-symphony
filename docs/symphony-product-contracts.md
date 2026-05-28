@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. Contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -24,6 +24,163 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v12 adoption does not invoke adapters, models, package installers, generated execution plans, or external services.
 - v13 Workbench `overview` and `adoptionSummary` are derived summaries, not canonical storage. They can be recomputed from run states, adoption plans, adoption journals, readiness, and diagnostics.
 - v13 `GET /api/adoptions/<adoption-id>/inspect` reuses the CLI adoption inspection builder. It is read-only, writes no state files, executes no recommended commands, and returns only copy-only command recommendations.
+- v17 goal progress is evidence-based. `approved`, `needs-revision`, `main-verified`, and `release-ready` require explicit evidence refs or release gate evidence; task names, branch names, commands, filenames, and paths are not proof.
+- v17 `capabilities.v1` declares unsupported browser capabilities as explicit `false` values. The Workbench displays those fields but does not turn them into write, execution, download, or model invocation controls.
+- v17 `diagnostics.v1` is read-only. It does not run shell commands, tests, audit, mutation, package installs, or model calls.
+- v17 `error-envelope.v1` is used for relevant Console API error responses. Error bodies must not contain stack traces, absolute local paths, secrets, or repository file contents.
+
+## `goal-progress-ledger.v1`
+
+`goal-progress-ledger.v1` summarizes one registered goal across tasks, evidence, review state, blockers, release gates, and next copy-only commands.
+
+```json
+{
+  "contractName": "goal-progress-ledger.v1",
+  "contractVersion": 1,
+  "goalId": "v17-readonly-goal-progress-console-contracts",
+  "goalTitle": "v17 Read-only Goal Progress Ledger and Console Contract Hardening",
+  "baseline": {
+    "tag": "v16",
+    "commit": null,
+    "evidenceRef": "docs/plans/v16-tag-release-evidence-2026-05-28.md"
+  },
+  "summary": {
+    "totalTasks": 10,
+    "completedTasks": 0,
+    "blockedTasks": 0,
+    "needsReviewTasks": 0,
+    "needsRevisionTasks": 0,
+    "releaseReady": false
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Add goal-progress-ledger.v1 contract fixtures and validator",
+      "status": "planned",
+      "statusSource": "registered-goal-template",
+      "workerEvidenceRef": null,
+      "reviewEvidenceRef": null,
+      "reviewVerdict": null,
+      "mainVerificationRef": null,
+      "blockers": [],
+      "nextCopyOnlyCommand": "git checkout main && git pull --ff-only && git checkout -b v17-task1-goal-progress-contract"
+    }
+  ]
+}
+```
+
+Supported task statuses are `not-started`, `planned`, `in-progress`, `self-checked`, `needs-review`, `needs-revision`, `approved`, `merged-to-main`, `main-verified`, `release-ready`, `blocked`, and `unknown`. Release gate statuses are `unknown`, `missing`, `pending`, `passed`, `failed`, and `blocked`.
+
+Console routes:
+
+```text
+GET /api/goals
+GET /api/goals/latest/progress
+GET /api/goals/<goal-id>/progress
+```
+
+CLI:
+
+```sh
+symphony goal-status
+symphony goal-status --json
+symphony goal-status --markdown
+symphony goal-status --goal v17-readonly-goal-progress-console-contracts --json
+```
+
+## `capabilities.v1`
+
+`capabilities.v1` declares what the console and Workbench can display and what remains unavailable.
+
+```json
+{
+  "contractName": "capabilities.v1",
+  "contractVersion": 1,
+  "readOnly": true,
+  "displayOnly": true,
+  "copyOnly": true,
+  "mutationAvailable": false,
+  "browserExecutionAvailable": false,
+  "modelInvocationAvailable": false,
+  "artifactDownloadAvailable": false,
+  "safePreview": {
+    "available": true,
+    "inlineModes": ["bounded-text"],
+    "rawHtmlInlineAvailable": false,
+    "svgInlineAvailable": false,
+    "javascriptInlineAvailable": false,
+    "binaryInlineAvailable": false
+  },
+  "routes": {
+    "handoff": true,
+    "safePreview": true,
+    "goalProgress": true,
+    "diagnostics": true
+  }
+}
+```
+
+Route:
+
+```text
+GET /api/capabilities
+```
+
+## `diagnostics.v1`
+
+`diagnostics.v1` exposes safe health fields for the local console and Workbench.
+
+```json
+{
+  "contractName": "diagnostics.v1",
+  "contractVersion": 1,
+  "status": "ok",
+  "checks": [
+    {
+      "id": "state-dir-readable",
+      "label": "State directory readable",
+      "status": "ok",
+      "severity": "info"
+    }
+  ],
+  "boundaries": {
+    "readOnlyApi": true,
+    "nonGetBlocked": true,
+    "workbenchFallbackProtected": true,
+    "arbitraryPathPreviewBlocked": true
+  }
+}
+```
+
+Route:
+
+```text
+GET /api/diagnostics
+```
+
+## `error-envelope.v1`
+
+`error-envelope.v1` is the safe error body for relevant Console API failures.
+
+```json
+{
+  "contractName": "error-envelope.v1",
+  "contractVersion": 1,
+  "ok": false,
+  "error": {
+    "code": "blocked-artifact-path",
+    "message": "Artifact preview is blocked by safety policy.",
+    "status": 403,
+    "route": "/api/runs/<run-id>/artifacts/<artifact-kind>/preview",
+    "method": "GET",
+    "safeDetails": {
+      "reason": "repo-source-path-blocked"
+    }
+  }
+}
+```
+
+The envelope is for errors only. Successful handoff, preview, goal progress, capabilities, and diagnostics responses keep their own contract names.
 
 ## `symphony.product-json`
 

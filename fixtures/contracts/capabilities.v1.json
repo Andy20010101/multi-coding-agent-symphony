@@ -1,0 +1,25 @@
+{
+  "contractName": "capabilities.v1",
+  "contractVersion": 1,
+  "readOnly": true,
+  "displayOnly": true,
+  "copyOnly": true,
+  "mutationAvailable": false,
+  "browserExecutionAvailable": false,
+  "modelInvocationAvailable": false,
+  "artifactDownloadAvailable": false,
+  "safePreview": {
+    "available": true,
+    "inlineModes": ["bounded-text"],
+    "rawHtmlInlineAvailable": false,
+    "svgInlineAvailable": false,
+    "javascriptInlineAvailable": false,
+    "binaryInlineAvailable": false
+  },
+  "routes": {
+    "handoff": true,
+    "safePreview": true,
+    "goalProgress": true,
+    "diagnostics": true
+  }
+}

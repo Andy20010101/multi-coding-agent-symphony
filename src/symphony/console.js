@@ -34,6 +34,19 @@ import {
   assertSafeArtifactPreviewContract
 } from './safe-artifact-preview.js';
 import {
+  buildCapabilitiesContract
+} from './capabilities.js';
+import {
+  buildDiagnosticsContract
+} from './diagnostics.js';
+import {
+  buildErrorEnvelope
+} from './error-envelope.js';
+import {
+  buildGoalProgressLedger,
+  listRegisteredGoals
+} from './goal-progress-ledger.js';
+import {
   buildStageCommandSummary
 } from './stage.js';
 
@@ -732,16 +745,20 @@ export function createSymphonyConsoleServer({
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS
 } = {}) {
   return createServer(async (request, response) => {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    const method = request.method ?? 'UNKNOWN';
+
     try {
-      if (request.method !== 'GET') {
-        writeJsonResponse(response, 405, {
-          status: 'error',
-          message: 'console is read-only'
+      if (method !== 'GET') {
+        writeApiErrorResponse(response, {
+          status: 405,
+          code: 'method-not-allowed',
+          message: 'Console API is read-only.',
+          route: url.pathname,
+          method
         });
         return;
       }
-
-      const url = new URL(request.url ?? '/', 'http://localhost');
 
       if (url.pathname === '/') {
         writeHtmlResponse(response, renderConsoleHtml());
@@ -772,12 +789,80 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      if (url.pathname === '/api/goals') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-goal-request',
+            message: 'Goal index does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, {
+          contractName: 'symphony.goals-index',
+          contractVersion: 1,
+          readOnly: true,
+          goals: listRegisteredGoals()
+        });
+        return;
+      }
+
+      const goalProgressRequest = parseGoalProgressRequestPath(url.pathname, url.searchParams);
+
+      if (goalProgressRequest !== null) {
+        await writeGoalProgressResponse({
+          response,
+          stateDir,
+          request: goalProgressRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      if (url.pathname === '/api/capabilities') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-capabilities-request',
+            message: 'Capabilities route does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildCapabilitiesContract());
+        return;
+      }
+
+      if (url.pathname === '/api/diagnostics') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-diagnostics-request',
+            message: 'Diagnostics route does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildDiagnosticsContract({ stateDir }));
+        return;
+      }
+
       const handoffRequest = parseHandoffRequestPath(url.pathname, url.searchParams);
 
       if (handoffRequest !== null) {
         await writeHandoffResponse({
           response,
-          request: handoffRequest
+          request: handoffRequest,
+          route: url.pathname,
+          method
         });
         return;
       }
@@ -829,11 +914,15 @@ export function createSymphonyConsoleServer({
 
       if (artifactRequest !== null) {
         if (artifactRequest.kind === 'invalid') {
-          writeJsonResponse(response, 400, {
-            contractVersion: PRODUCT_JSON_CONTRACT.version,
-            contractName: 'symphony.console-artifact',
-            status: 'invalid-ref',
-            ref: artifactRequest.ref
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-artifact-ref',
+            message: 'Artifact preview ref is invalid.',
+            route: url.pathname,
+            method,
+            safeDetails: {
+              reason: 'invalid-route-segment'
+            }
           });
           return;
         }
@@ -843,7 +932,9 @@ export function createSymphonyConsoleServer({
           stateDir,
           runId: artifactRequest.runId,
           artifactKind: artifactRequest.artifactKind,
-          safePreview: artifactRequest.safePreview
+          safePreview: artifactRequest.safePreview,
+          route: url.pathname,
+          method
         });
         return;
       }
@@ -859,14 +950,20 @@ export function createSymphonyConsoleServer({
         return;
       }
 
-      writeJsonResponse(response, 404, {
-        status: 'error',
-        message: 'not found'
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: 'not-found',
+        message: 'Route not found.',
+        route: url.pathname,
+        method
       });
     } catch (error) {
-      writeJsonResponse(response, error instanceof TypeError ? 400 : 500, {
-        status: 'error',
-        message: error.message
+      writeApiErrorResponse(response, {
+        status: error instanceof TypeError ? 400 : 500,
+        code: error instanceof TypeError ? 'bad-request' : 'internal-error',
+        message: error instanceof TypeError ? 'Request is invalid.' : 'Console request failed safely.',
+        route: url.pathname,
+        method
       });
     }
   });
@@ -906,6 +1003,40 @@ export async function startSymphonyConsoleServer({
     port: actualPort,
     url: `http://${host}:${actualPort}/`
   };
+}
+
+async function writeGoalProgressResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-goal-ref',
+      message: 'Goal progress ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: 'invalid-route-segment'
+      }
+    });
+    return;
+  }
+
+  const ledger = await buildGoalProgressLedger({
+    stateDir,
+    goalId: request.goalId
+  });
+
+  if (ledger === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal progress ledger was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  writeJsonResponse(response, 200, ledger);
 }
 
 async function writeRunResponse({ response, stateDir, runId }) {
@@ -949,10 +1080,21 @@ async function writeTimelineResponse({ response, stateDir, runId }) {
   });
 }
 
-async function writeArtifactResponse({ response, stateDir, runId, artifactKind, safePreview = false }) {
+async function writeArtifactResponse({ response, stateDir, runId, artifactKind, safePreview = false, route, method }) {
   const runState = await readRunState({ stateDir, runId });
 
   if (runState === null) {
+    if (safePreview) {
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: 'run-not-found',
+        message: 'Run was not found.',
+        route,
+        method
+      });
+      return;
+    }
+
     writeJsonResponse(response, 404, {
       status: 'missing',
       runId
@@ -964,6 +1106,17 @@ async function writeArtifactResponse({ response, stateDir, runId, artifactKind, 
   const artifactRef = compact.artifactRefs.find((artifact) => artifact.kind === artifactKind);
 
   if (artifactRef === undefined) {
+    if (safePreview) {
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: 'artifact-ref-not-found',
+        message: 'Registered artifact ref was not found.',
+        route,
+        method
+      });
+      return;
+    }
+
     writeJsonResponse(response, 404, {
       contractVersion: PRODUCT_JSON_CONTRACT.version,
       contractName: 'symphony.console-artifact',
@@ -986,6 +1139,22 @@ async function writeArtifactResponse({ response, stateDir, runId, artifactKind, 
       : 200;
 
   if (safePreview) {
+    if (statusCode >= 400) {
+      writeApiErrorResponse(response, {
+        status: statusCode,
+        code: preview.status ?? 'artifact-preview-unavailable',
+        message: preview.status === BLOCKED_ARTIFACT_PREVIEW_STATUS
+          ? 'Artifact preview is blocked by safety policy.'
+          : 'Artifact preview is unavailable.',
+        route,
+        method,
+        safeDetails: {
+          reason: preview.status ?? 'preview-unavailable'
+        }
+      });
+      return;
+    }
+
     writeJsonResponse(response, statusCode, preview);
     return;
   }
@@ -1025,26 +1194,33 @@ async function writeAdoptionInspectResponse({ response, stateDir, adoptionId }) 
   writeJsonResponse(response, 200, buildConsoleAdoptionInspectContract(summary));
 }
 
-async function writeHandoffResponse({ response, request }) {
+async function writeHandoffResponse({ response, request, route, method }) {
   if (request.kind === 'index') {
     writeJsonResponse(response, 200, buildGuidedGoalHandoffRefIndex());
     return;
   }
 
   if (request.kind === 'invalid') {
-    writeJsonResponse(response, 400, {
-      ...buildGuidedGoalHandoffRefIndex(),
-      status: 'invalid-ref',
-      ref: request.ref
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-handoff-ref',
+      message: 'Handoff ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: 'invalid-route-segment'
+      }
     });
     return;
   }
 
   if (request.kind === 'missing') {
-    writeJsonResponse(response, 404, {
-      ...buildGuidedGoalHandoffRefIndex(),
-      status: 'missing',
-      ref: request.ref
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'handoff-ref-not-found',
+      message: 'Handoff ref was not found.',
+      route,
+      method
     });
     return;
   }
@@ -1418,6 +1594,50 @@ function parseArtifactRequestMatch({ match, safePreview, searchParams, ref }) {
 }
 
 function isUnsafeArtifactRouteSegment(value) {
+  return value === '' || value.includes('/') || value.includes('\\') || value.includes('..');
+}
+
+function parseGoalProgressRequestPath(pathname, searchParams = new URLSearchParams()) {
+  if (hasSearchParams(searchParams)) {
+    if (pathname === '/api/goals/latest/progress' || /^\/api\/goals\/[^/]+\/progress$/u.test(pathname)) {
+      return {
+        kind: 'invalid',
+        goalId: null
+      };
+    }
+
+    return null;
+  }
+
+  if (pathname === '/api/goals/latest/progress') {
+    return {
+      kind: 'goal-progress',
+      goalId: 'latest'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/progress$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null
+    };
+  }
+
+  return {
+    kind: 'goal-progress',
+    goalId: decoded.value
+  };
+}
+
+function isUnsafeGoalRouteSegment(value) {
   return value === '' || value.includes('/') || value.includes('\\') || value.includes('..');
 }
 
@@ -3510,6 +3730,24 @@ function writeJsonResponse(response, statusCode, value) {
     'cache-control': 'no-store'
   });
   response.end(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function writeApiErrorResponse(response, {
+  status,
+  code,
+  message,
+  route,
+  method,
+  safeDetails
+}) {
+  writeJsonResponse(response, status, buildErrorEnvelope({
+    code,
+    message,
+    status,
+    route,
+    method,
+    safeDetails
+  }));
 }
 
 function stripUndefined(value) {

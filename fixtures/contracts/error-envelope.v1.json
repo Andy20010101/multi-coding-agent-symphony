@@ -1,0 +1,15 @@
+{
+  "contractName": "error-envelope.v1",
+  "contractVersion": 1,
+  "ok": false,
+  "error": {
+    "code": "blocked-artifact-path",
+    "message": "Artifact preview is blocked by safety policy.",
+    "status": 403,
+    "route": "/api/runs/<run-id>/artifacts/<artifact-kind>/preview",
+    "method": "GET",
+    "safeDetails": {
+      "reason": "repo-source-path-blocked"
+    }
+  }
+}

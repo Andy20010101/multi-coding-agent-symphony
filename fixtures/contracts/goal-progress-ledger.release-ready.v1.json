@@ -1,0 +1,59 @@
+{
+  "contractName": "goal-progress-ledger.v1",
+  "contractVersion": 1,
+  "goalId": "v17-readonly-goal-progress-console-contracts",
+  "goalTitle": "v17 Read-only Goal Progress Ledger and Console Contract Hardening",
+  "baseline": {
+    "tag": "v16",
+    "commit": "4d9bda6",
+    "evidenceRef": "docs/plans/v16-tag-release-evidence-2026-05-28.md"
+  },
+  "summary": {
+    "totalTasks": 1,
+    "completedTasks": 1,
+    "blockedTasks": 0,
+    "needsReviewTasks": 0,
+    "needsRevisionTasks": 0,
+    "releaseReady": true
+  },
+  "tasks": [
+    {
+      "taskId": "task-10",
+      "title": "Update documentation, release evidence, and tag prep",
+      "status": "release-ready",
+      "statusSource": "release-gate-evidence",
+      "branch": "v17-task10-docs-release-evidence",
+      "commit": "789abcd",
+      "workerEvidenceRef": "docs/plans/v17-task10-worker-evidence-2026-05-28.md",
+      "reviewEvidenceRef": "docs/plans/v17-task10-reviewer-approval-2026-05-28.md",
+      "reviewVerdict": "APPROVED",
+      "mainVerificationRef": "docs/plans/v17-final-release-review-evidence-2026-05-28.md",
+      "blockers": [],
+      "nextCopyOnlyCommand": "git tag -a v17 -m \"v17 Read-only Goal Progress Ledger + Console Contract Hardening\""
+    }
+  ],
+  "releaseGates": {
+    "pnpmCheck": "passed",
+    "pnpmTest": "passed",
+    "workbenchBuild": "passed",
+    "mutationGate": "passed",
+    "auditHigh": "passed",
+    "diffCheck": "passed",
+    "docsUpdated": "passed",
+    "tagEvidence": "passed"
+  },
+  "blockers": [],
+  "nextActions": [
+    {
+      "kind": "copy-only-command",
+      "label": "Tag v17 after review",
+      "command": "git tag -a v17 -m \"v17 Read-only Goal Progress Ledger + Console Contract Hardening\""
+    }
+  ],
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}
