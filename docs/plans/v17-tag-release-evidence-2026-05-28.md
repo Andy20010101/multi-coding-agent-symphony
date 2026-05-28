@@ -75,7 +75,7 @@ git diff --check
 
 ## Tag 操作
 
-验证通过后执行：
+验证通过后已执行：
 
 ```bash
 git push origin main
@@ -83,16 +83,36 @@ git tag -a v17 -m "v17 read-only goal progress console contracts release"
 git push origin v17
 ```
 
+结果：
+
+- `git push origin main`：成功，`11bf41b..04a86f5  main -> main`。
+- `git tag -a v17 -m "v17 read-only goal progress console contracts release"`：成功。
+- `git push origin v17`：成功，远端新增 `v17` tag。
+
 ## Tag 后验证
 
-tag 创建并推送后执行：
+tag 创建并推送后已执行：
 
 ```bash
-git show v17 --no-patch
-git ls-remote --tags origin refs/tags/v17
+git show v17 --no-patch --decorate
+git ls-remote --tags origin refs/tags/v17 refs/tags/v17^{}
 git status -sb
 ```
 
+结果：
+
+- `git show v17 --no-patch --decorate` 显示 annotated tag `v17`，tag message 为 `v17 read-only goal progress console contracts release`。
+- `v17` 指向 commit `04a86f58af4f0e09c7b19364d22fcfa6ebbeb2c3`。
+- 远端 tag 对象：`12fd279cb25c729c28f0eec912006d2356d76c8d refs/tags/v17`。
+- 远端 peeled commit：`04a86f58af4f0e09c7b19364d22fcfa6ebbeb2c3 refs/tags/v17^{}`。
+- `git status -sb`：`## main...origin/main`，tag 后工作区干净。
+
+## Post-tag evidence 收尾
+
+本节是在 `v17` tag 已创建并推送后补录的 release bookkeeping。它只更新本 evidence 文件，记录 tag 操作和 tag 后验证结果。
+
+本次收尾不移动已推送的 `v17` tag。`v17` 继续指向 `04a86f58af4f0e09c7b19364d22fcfa6ebbeb2c3`。如果后续要求 tag 自身包含这次 post-tag evidence 收尾，需要单独决定是否重打 tag。
+
 ## 当前结论
 
-README 和 tag evidence 已准备，pre-tag 验证已通过。下一步是提交并推送 release bookkeeping、创建并推送 annotated `v17` tag。
+`v17` annotated tag 已创建并推送到远端。README 已更新为当前 released repository tag：`v17`。Pre-tag 验证、tag 操作和 tag 后验证均已记录。
