@@ -1,9 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { readGoalEventJournal } from './goal-event-journal.js';
+
 export const GOAL_PROGRESS_LEDGER_CONTRACT_NAME = 'goal-progress-ledger.v1';
 export const GOAL_PROGRESS_LEDGER_CONTRACT_VERSION = 1;
 export const DEFAULT_GOAL_PROGRESS_GOAL_ID = 'v17-readonly-goal-progress-console-contracts';
+export const V18_GOAL_EVENT_JOURNAL_GOAL_ID = 'v18-goal-event-journal-evidence-recorder';
 
 export const GOAL_PROGRESS_TASK_STATUSES = Object.freeze([
   'not-started',
@@ -51,6 +54,11 @@ const DEFAULT_BASELINE = Object.freeze({
   tag: 'v16',
   commit: null,
   evidenceRef: 'docs/plans/v16-tag-release-evidence-2026-05-28.md'
+});
+const V18_BASELINE = Object.freeze({
+  tag: 'v17',
+  commit: null,
+  evidenceRef: 'docs/plans/v17-release-evidence-2026-05-28.md'
 });
 
 const DEFAULT_TASKS = Object.freeze([
@@ -115,10 +123,96 @@ const DEFAULT_TASKS = Object.freeze([
     nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v17-task10-docs-release-evidence'
   })
 ]);
+const V18_TASKS = Object.freeze([
+  Object.freeze({
+    taskId: 'task-1',
+    title: 'Add goal-event-log.v1 and goal-update-plan.v1 contracts',
+    branch: 'v18-task1-goal-event-contracts',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task1-goal-event-contracts'
+  }),
+  Object.freeze({
+    taskId: 'task-2',
+    title: 'Add append-only event journal writer',
+    branch: 'v18-task2-event-journal-writer',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task2-event-journal-writer'
+  }),
+  Object.freeze({
+    taskId: 'task-3',
+    title: 'Add symphony goal update CLI',
+    branch: 'v18-task3-goal-update-cli',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task3-goal-update-cli'
+  }),
+  Object.freeze({
+    taskId: 'task-4',
+    title: 'Add symphony goal review CLI',
+    branch: 'v18-task4-goal-review-cli',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task4-goal-review-cli'
+  }),
+  Object.freeze({
+    taskId: 'task-5',
+    title: 'Add symphony goal gate CLI',
+    branch: 'v18-task5-goal-gate-cli',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task5-goal-gate-cli'
+  }),
+  Object.freeze({
+    taskId: 'task-6',
+    title: 'Add event resolver to goal-progress-ledger.v1',
+    branch: 'v18-task6-event-ledger-resolver',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task6-event-ledger-resolver'
+  }),
+  Object.freeze({
+    taskId: 'task-7',
+    title: 'Add read-only goal events API',
+    branch: 'v18-task7-events-api',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task7-events-api'
+  }),
+  Object.freeze({
+    taskId: 'task-8',
+    title: 'Add Workbench Goal Events Timeline and Evidence Matrix',
+    branch: 'v18-task8-workbench-events',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task8-workbench-events'
+  }),
+  Object.freeze({
+    taskId: 'task-9',
+    title: 'Expand route smoke and safety boundary regression',
+    branch: 'v18-task9-route-smoke-security',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task9-route-smoke-security'
+  }),
+  Object.freeze({
+    taskId: 'task-10',
+    title: 'Update docs, operator guide, and release evidence',
+    branch: 'v18-task10-docs-release-evidence',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task10-docs-release-evidence'
+  })
+]);
+const GOAL_PROGRESS_TEMPLATES = Object.freeze({
+  [DEFAULT_GOAL_PROGRESS_GOAL_ID]: Object.freeze({
+    goalId: DEFAULT_GOAL_PROGRESS_GOAL_ID,
+    goalTitle: 'v17 Read-only Goal Progress Ledger and Console Contract Hardening',
+    baseline: DEFAULT_BASELINE,
+    tasks: DEFAULT_TASKS
+  }),
+  [V18_GOAL_EVENT_JOURNAL_GOAL_ID]: Object.freeze({
+    goalId: V18_GOAL_EVENT_JOURNAL_GOAL_ID,
+    goalTitle: 'v18 Goal Event Journal + Evidence Recorder',
+    baseline: V18_BASELINE,
+    tasks: V18_TASKS
+  })
+});
 
 const DEFAULT_RELEASE_GATES = Object.freeze(Object.fromEntries(
   GOAL_PROGRESS_RELEASE_GATE_IDS.map((gateId) => [gateId, 'unknown'])
 ));
+const RELEASE_GATE_EVENT_IDS = Object.freeze({
+  'release.pnpm-check': 'pnpmCheck',
+  'release.pnpm-test': 'pnpmTest',
+  'release.workbench-build': 'workbenchBuild',
+  'release.mutation-gate': 'mutationGate',
+  'release.audit-high': 'auditHigh',
+  'release.diff-check': 'diffCheck',
+  'release.docs-updated': 'docsUpdated',
+  'release.tag-evidence': 'tagEvidence'
+});
 
 export function validateGoalProgressLedgerContract(ledger) {
   const errors = [];
@@ -160,11 +254,13 @@ export function validateGoalProgressLedgerContract(ledger) {
   validateNextActions(errors, ledger.nextActions);
   validateSafety(errors, ledger.safety);
 
-  if (ledger.summary?.releaseReady === true && !allReleaseGatesPassed(ledger.releaseGates)) {
+  const explicitReleaseReadySource = hasExplicitReleaseReadyEventSource(ledger);
+
+  if (ledger.summary?.releaseReady === true && !allReleaseGatesPassed(ledger.releaseGates) && !explicitReleaseReadySource) {
     errors.push('summary.releaseReady requires all release gates to be passed');
   }
 
-  if (Array.isArray(ledger.tasks) && ledger.tasks.some((task) => task?.status === 'release-ready') && !allReleaseGatesPassed(ledger.releaseGates)) {
+  if (Array.isArray(ledger.tasks) && ledger.tasks.some((task) => task?.status === 'release-ready') && !allReleaseGatesPassed(ledger.releaseGates) && !explicitReleaseReadySource) {
     errors.push('tasks with release-ready status require all release gates to be passed');
   }
 
@@ -195,11 +291,30 @@ export async function buildGoalProgressLedger({
     return null;
   }
 
+  const goalTemplate = getGoalTemplate(resolvedGoalId);
   const state = await readGoalProgressState({ stateDir, goalId: resolvedGoalId });
-  const ledger = buildLedgerFromState({
-    state,
-    generatedAt
+  const eventLog = await readGoalEventJournal({
+    stateDir,
+    goalId: resolvedGoalId,
+    goalTitle: goalTemplate.goalTitle,
+    baseline: goalTemplate.baseline
   });
+  const ledger = eventLog.events.length > 0
+    ? buildLedgerFromEventLog({
+      state,
+      eventLog,
+      goalTemplate,
+      generatedAt
+    })
+    : buildLedgerFromState({
+      state: noEventStateForGoal({
+        state,
+        goalId: resolvedGoalId
+      }),
+      goalTemplate,
+      generatedAt,
+      templateStatusSource: 'v17-template-no-events'
+    });
 
   return assertGoalProgressLedgerContract(ledger);
 }
@@ -210,7 +325,7 @@ export function listRegisteredGoals() {
     goalTitle: 'v17 Read-only Goal Progress Ledger and Console Contract Hardening',
     contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
     contractVersion: GOAL_PROGRESS_LEDGER_CONTRACT_VERSION,
-    baseline: structuredClone(DEFAULT_BASELINE),
+    baseline: structuredClone(getGoalTemplate(DEFAULT_GOAL_PROGRESS_GOAL_ID).baseline),
     taskCount: DEFAULT_TASKS.length,
     readOnly: true
   }];
@@ -315,11 +430,27 @@ function resolveGoalId(goalId) {
     return null;
   }
 
-  if (resolved !== DEFAULT_GOAL_PROGRESS_GOAL_ID) {
+  if (!Object.hasOwn(GOAL_PROGRESS_TEMPLATES, resolved)) {
     return null;
   }
 
   return resolved;
+}
+
+function getGoalTemplate(goalId) {
+  return GOAL_PROGRESS_TEMPLATES[goalId] ?? GOAL_PROGRESS_TEMPLATES[DEFAULT_GOAL_PROGRESS_GOAL_ID];
+}
+
+function noEventStateForGoal({ state, goalId }) {
+  if (goalId !== V18_GOAL_EVENT_JOURNAL_GOAL_ID || !isPlainObject(state)) {
+    return state;
+  }
+
+  return {
+    ...(Object.hasOwn(state, 'goalTitle') ? { goalTitle: state.goalTitle } : {}),
+    ...(Object.hasOwn(state, 'baseline') ? { baseline: state.baseline } : {}),
+    ...(Object.hasOwn(state, 'nextActions') ? { nextActions: state.nextActions } : {})
+  };
 }
 
 async function readGoalProgressState({ stateDir, goalId }) {
@@ -335,15 +466,21 @@ async function readGoalProgressState({ stateDir, goalId }) {
   }
 }
 
-function buildLedgerFromState({ state, generatedAt }) {
+function buildLedgerFromState({
+  state,
+  goalTemplate = getGoalTemplate(DEFAULT_GOAL_PROGRESS_GOAL_ID),
+  generatedAt,
+  templateStatusSource = 'registered-goal-template'
+}) {
   const stateTasks = new Map(
     (Array.isArray(state?.tasks) ? state.tasks : [])
       .filter((task) => isPlainObject(task) && isNonEmptyString(task.taskId))
       .map((task) => [task.taskId, task])
   );
-  const tasks = DEFAULT_TASKS.map((template) => buildTaskProgress({
+  const tasks = goalTemplate.tasks.map((template) => buildTaskProgress({
     template,
-    stateTask: stateTasks.get(template.taskId)
+    stateTask: stateTasks.get(template.taskId),
+    templateStatusSource
   }));
   const releaseGates = {
     ...DEFAULT_RELEASE_GATES,
@@ -368,11 +505,11 @@ function buildLedgerFromState({ state, generatedAt }) {
   return {
     contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
     contractVersion: GOAL_PROGRESS_LEDGER_CONTRACT_VERSION,
-    goalId: DEFAULT_GOAL_PROGRESS_GOAL_ID,
-    goalTitle: state?.goalTitle ?? 'v17 Read-only Goal Progress Ledger and Console Contract Hardening',
+    goalId: goalTemplate.goalId,
+    goalTitle: state?.goalTitle ?? goalTemplate.goalTitle,
     generatedAt,
     baseline: {
-      ...structuredClone(DEFAULT_BASELINE),
+      ...structuredClone(goalTemplate.baseline),
       ...(isPlainObject(state?.baseline) ? compactBaseline(state.baseline) : {})
     },
     summary: {
@@ -396,7 +533,351 @@ function buildLedgerFromState({ state, generatedAt }) {
   };
 }
 
-function buildTaskProgress({ template, stateTask }) {
+function buildLedgerFromEventLog({
+  state,
+  eventLog,
+  goalTemplate,
+  generatedAt
+}) {
+  const stateTasks = new Map(
+    (Array.isArray(state?.tasks) ? state.tasks : [])
+      .filter((task) => isPlainObject(task) && isNonEmptyString(task.taskId))
+      .map((task) => [task.taskId, task])
+  );
+  const taskTemplates = buildEventTaskTemplates({
+    goalTemplate,
+    stateTasks,
+    events: eventLog.events
+  });
+  const taskStates = new Map(
+    taskTemplates.map((template) => [
+      template.taskId,
+      initializeEventTaskState({
+        template,
+        stateTask: stateTasks.get(template.taskId)
+      })
+    ])
+  );
+  const releaseState = {
+    releaseGates: structuredClone(DEFAULT_RELEASE_GATES),
+    readyDeclared: false,
+    readySource: null
+  };
+
+  for (const event of eventLog.events) {
+    applyReleaseEvent({
+      event,
+      releaseState
+    });
+    applyTaskEvent({
+      event,
+      taskStates,
+      taskTemplates
+    });
+  }
+
+  const releaseReady = releaseState.readyDeclared;
+  const releaseReadySource = releaseState.readySource ?? 'goal-event-log.v1';
+  const tasks = taskTemplates.map((template) => {
+    const taskProgress = buildTaskProgressFromEventState({
+      template,
+      stateTask: stateTasks.get(template.taskId),
+      taskState: taskStates.get(template.taskId)
+    });
+
+    if (releaseReady && taskProgress.status === 'main-verified') {
+      return {
+        ...taskProgress,
+        status: 'release-ready',
+        statusSource: releaseReadySource
+      };
+    }
+
+    return taskProgress;
+  });
+  const blockers = collectTaskBlockers(tasks);
+  const completedTasks = tasks.filter((task) => [
+    'approved',
+    'merged-to-main',
+    'main-verified',
+    'release-ready'
+  ].includes(task.status)).length;
+  const nextActions = normalizeNextActions(state?.nextActions);
+
+  return {
+    contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+    contractVersion: GOAL_PROGRESS_LEDGER_CONTRACT_VERSION,
+    goalId: goalTemplate.goalId,
+    goalTitle: state?.goalTitle ?? eventLog.goalTitle ?? goalTemplate.goalTitle,
+    generatedAt,
+    baseline: {
+      ...structuredClone(goalTemplate.baseline),
+      ...(isPlainObject(eventLog.baseline) ? compactBaseline(eventLog.baseline) : {}),
+      ...(isPlainObject(state?.baseline) ? compactBaseline(state.baseline) : {})
+    },
+    summary: {
+      totalTasks: tasks.length,
+      completedTasks,
+      blockedTasks: tasks.filter((task) => task.status === 'blocked').length,
+      needsReviewTasks: tasks.filter((task) => task.status === 'needs-review').length,
+      needsRevisionTasks: tasks.filter((task) => task.status === 'needs-revision').length,
+      releaseReady,
+      releaseReadySource: releaseReady ? releaseReadySource : null
+    },
+    tasks,
+    releaseGates: releaseState.releaseGates,
+    blockers,
+    nextActions: nextActions.length > 0 ? nextActions : defaultNextActions(tasks),
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false
+    }
+  };
+}
+
+function buildEventTaskTemplates({ goalTemplate, stateTasks, events }) {
+  const templates = new Map(goalTemplate.tasks.map((template) => [template.taskId, template]));
+
+  for (const event of events) {
+    if (!isTaskEventId(event.taskId) || templates.has(event.taskId)) {
+      continue;
+    }
+
+    const stateTask = stateTasks.get(event.taskId);
+
+    templates.set(event.taskId, {
+      taskId: event.taskId,
+      title: stateTask?.title ?? event.taskId,
+      branch: stateTask?.branch ?? event.branch ?? null,
+      nextCopyOnlyCommand: stateTask?.nextCopyOnlyCommand ?? `symphony goal-status --goal ${goalTemplate.goalId}`
+    });
+  }
+
+  return [...templates.values()];
+}
+
+function initializeEventTaskState({ template, stateTask }) {
+  return {
+    status: 'planned',
+    statusSource: 'v17-template-no-events',
+    branch: stateTask?.branch ?? template.branch ?? null,
+    commit: stringOrNull(stateTask?.commit),
+    workerEvidenceRef: null,
+    reviewEvidenceRef: null,
+    reviewVerdict: null,
+    mainVerificationRef: null,
+    blockers: new Map()
+  };
+}
+
+function applyTaskEvent({ event, taskStates, taskTemplates }) {
+  if (!isTaskEventId(event.taskId)) {
+    return;
+  }
+
+  if (!taskStates.has(event.taskId)) {
+    const template = {
+      taskId: event.taskId,
+      title: event.taskId,
+      branch: event.branch ?? null,
+      nextCopyOnlyCommand: 'symphony goal-status'
+    };
+
+    taskTemplates.push(template);
+    taskStates.set(event.taskId, initializeEventTaskState({ template }));
+  }
+
+  const taskState = taskStates.get(event.taskId);
+  const evidenceRef = firstEvidenceRef(event);
+
+  rememberEventLocation(taskState, event);
+
+  switch (event.eventType) {
+    case 'task.planned':
+      setEventTaskStatus(taskState, 'planned', event);
+      break;
+    case 'worker.started':
+      setEventTaskStatus(taskState, 'in-progress', event);
+      break;
+    case 'worker.evidence-recorded':
+      taskState.workerEvidenceRef = evidenceRef;
+      if (taskState.status === 'planned') {
+        setEventTaskStatus(taskState, 'in-progress', event);
+      }
+      break;
+    case 'worker.self-check-passed':
+      taskState.workerEvidenceRef = evidenceRef;
+      setEventTaskStatus(taskState, evidenceRef === null ? 'unknown' : 'self-checked', event);
+      break;
+    case 'worker.self-check-failed':
+      taskState.workerEvidenceRef = evidenceRef;
+      setEventTaskStatus(taskState, 'unknown', event);
+      break;
+    case 'reviewer.review-requested':
+      setEventTaskStatus(taskState, 'needs-review', event);
+      break;
+    case 'reviewer.approved':
+      taskState.reviewEvidenceRef = evidenceRef;
+      taskState.reviewVerdict = evidenceRef === null ? null : 'APPROVED';
+      setEventTaskStatus(taskState, evidenceRef === null ? 'unknown' : 'approved', event);
+      break;
+    case 'reviewer.needs-revision':
+      taskState.reviewEvidenceRef = evidenceRef;
+      taskState.reviewVerdict = evidenceRef === null ? null : 'NEEDS_REVISION';
+      setEventTaskStatus(taskState, evidenceRef === null ? 'unknown' : 'needs-revision', event);
+      break;
+    case 'reviewer.blocked':
+      taskState.reviewEvidenceRef = evidenceRef;
+      openEventBlocker(taskState, event);
+      break;
+    case 'main.merged':
+      setEventTaskStatus(taskState, 'merged-to-main', event);
+      break;
+    case 'main.verification-passed':
+      taskState.mainVerificationRef = evidenceRef;
+      setEventTaskStatus(taskState, evidenceRef === null ? 'unknown' : 'main-verified', event);
+      break;
+    case 'main.verification-failed':
+      taskState.mainVerificationRef = evidenceRef;
+      setEventTaskStatus(taskState, 'unknown', event);
+      break;
+    case 'blocker.opened':
+      openEventBlocker(taskState, event);
+      break;
+    case 'blocker.resolved':
+      resolveEventBlocker(taskState, event);
+      break;
+    default:
+      break;
+  }
+}
+
+function applyReleaseEvent({ event, releaseState }) {
+  if (event.eventType === 'release.gate-passed' || event.eventType === 'release.gate-failed') {
+    const gateId = resolveReleaseGateId(event.gate);
+
+    if (gateId !== null) {
+      releaseState.releaseGates[gateId] = event.eventType === 'release.gate-passed' ? 'passed' : 'failed';
+    }
+
+    return;
+  }
+
+  if (event.eventType === 'release.ready-declared') {
+    releaseState.readyDeclared = true;
+    releaseState.readySource = goalEventStatusSource(event);
+  }
+}
+
+function buildTaskProgressFromEventState({ template, stateTask, taskState }) {
+  const rawBlockers = [...taskState.blockers.values()];
+  const blockers = rawBlockers.map(({ statusSource, ...blocker }) => blocker);
+  const latestBlockerSource = rawBlockers.at(-1)?.statusSource ?? taskState.statusSource;
+
+  return {
+    taskId: template.taskId,
+    title: stateTask?.title ?? template.title,
+    status: blockers.length > 0 ? 'blocked' : taskState.status,
+    statusSource: blockers.length > 0 ? latestBlockerSource : taskState.statusSource,
+    branch: taskState.branch ?? template.branch,
+    commit: taskState.commit,
+    workerEvidenceRef: taskState.workerEvidenceRef,
+    reviewEvidenceRef: taskState.reviewEvidenceRef,
+    reviewVerdict: taskState.reviewVerdict,
+    mainVerificationRef: taskState.mainVerificationRef,
+    blockers,
+    nextCopyOnlyCommand: stateTask?.nextCopyOnlyCommand ?? template.nextCopyOnlyCommand
+  };
+}
+
+function setEventTaskStatus(taskState, status, event) {
+  taskState.status = status;
+  taskState.statusSource = goalEventStatusSource(event);
+}
+
+function rememberEventLocation(taskState, event) {
+  if (isNonEmptyString(event.branch)) {
+    taskState.branch = event.branch;
+  }
+
+  if (isNonEmptyString(event.commit)) {
+    taskState.commit = event.commit;
+  }
+}
+
+function openEventBlocker(taskState, event) {
+  const blocker = normalizeEventBlocker(event);
+
+  taskState.blockers.set(blocker.id, blocker);
+}
+
+function resolveEventBlocker(taskState, event) {
+  const blockerId = eventBlockerId(event);
+
+  if (blockerId !== null) {
+    taskState.blockers.delete(blockerId);
+  }
+}
+
+function normalizeEventBlocker(event) {
+  const blocker = isPlainObject(event.blocker) ? event.blocker : {};
+  const id = eventBlockerId(event) ?? `event.${event.eventId}`;
+  const reason = isNonEmptyString(blocker.reason) ? blocker.reason : event.statement;
+  const severity = ['info', 'warning', 'error'].includes(blocker.severity) ? blocker.severity : 'warning';
+
+  return {
+    id,
+    reason,
+    severity,
+    statusSource: goalEventStatusSource(event)
+  };
+}
+
+function eventBlockerId(event) {
+  return isPlainObject(event.blocker) && isNonEmptyString(event.blocker.id)
+    ? event.blocker.id
+    : null;
+}
+
+function firstEvidenceRef(event) {
+  if (!Array.isArray(event.evidenceRefs)) {
+    return null;
+  }
+
+  const evidenceRef = event.evidenceRefs.find((entry) => isPlainObject(entry) && isNonEmptyString(entry.ref));
+
+  return evidenceRef?.ref ?? null;
+}
+
+function resolveReleaseGateId(gate) {
+  if (!isPlainObject(gate)) {
+    return null;
+  }
+
+  const rawGateId = gate.id ?? gate.name;
+
+  if (!isNonEmptyString(rawGateId)) {
+    return null;
+  }
+
+  if (GOAL_PROGRESS_RELEASE_GATE_IDS.includes(rawGateId)) {
+    return rawGateId;
+  }
+
+  return RELEASE_GATE_EVENT_IDS[rawGateId] ?? null;
+}
+
+function goalEventStatusSource(event) {
+  return `goal-event-log.v1:${event.eventId}`;
+}
+
+function isTaskEventId(taskId) {
+  return isNonEmptyString(taskId) && taskId !== 'release';
+}
+
+function buildTaskProgress({ template, stateTask, templateStatusSource = 'registered-goal-template' }) {
   const workerEvidenceRef = stringOrNull(stateTask?.workerEvidenceRef);
   const reviewEvidenceRef = stringOrNull(stateTask?.reviewEvidenceRef);
   const mainVerificationRef = stringOrNull(stateTask?.mainVerificationRef);
@@ -421,7 +902,7 @@ function buildTaskProgress({ template, stateTask }) {
     taskId: template.taskId,
     title: stateTask?.title ?? template.title,
     status,
-    statusSource: stateTask?.statusSource ?? (stateTask ? 'registered-goal-state' : 'registered-goal-template'),
+    statusSource: stateTask?.statusSource ?? (stateTask ? 'registered-goal-state' : templateStatusSource),
     branch: stateTask?.branch ?? template.branch,
     commit: stringOrNull(stateTask?.commit),
     workerEvidenceRef,
@@ -496,6 +977,20 @@ function filterReleaseGateStatuses(releaseGates) {
 
 function allReleaseGatesPassed(releaseGates) {
   return GOAL_PROGRESS_RELEASE_GATE_IDS.every((gateId) => releaseGates[gateId] === 'passed');
+}
+
+function hasExplicitReleaseReadyEventSource(ledger) {
+  if (isGoalEventStatusSource(ledger.summary?.releaseReadySource)) {
+    return true;
+  }
+
+  return Array.isArray(ledger.tasks) && ledger.tasks.some((task) => (
+    task?.status === 'release-ready' && isGoalEventStatusSource(task.statusSource)
+  ));
+}
+
+function isGoalEventStatusSource(value) {
+  return typeof value === 'string' && value.startsWith('goal-event-log.v1:');
 }
 
 function collectTaskBlockers(tasks) {
