@@ -41,16 +41,23 @@ eventHash: sha256:c041dc4c606803737cbac2e8ffffc4b6c972e81291294846970110f563d2fc
 
 Do not re-register the planning event unless the event log was reset intentionally.
 
+Correction note for this revision:
+- Use `symphony goal update` only for worker/task-level events.
+- Use `symphony goal review` for reviewer verdicts.
+- Use `symphony goal gate --gate main-verification --status passed|failed` for `main.verification-*` events.
+- Use `symphony goal gate --gate release.ready --status declared` for release-ready.
+
 Before every task, run:
 
 ```bash
 git checkout main
 git pull --ff-only
 git status -sb
-pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json
 ```
 
 The worktree should be clean before starting a new task branch.
+
+Do not require `goal-status` until the v19 goal progress template has been registered. In v18, `goal update` can append an event for a goal id, but `goal-status --goal <goal-id>` only resolves goals known to the progress template/registry. If `pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json` returns `goal not found`, run the bootstrap section below first and do not re-register the planning event.
 
 ## 2. Global execution rules
 
@@ -70,11 +77,173 @@ Every task should follow this sequence:
 9. If approved, merge task branch into main.
 10. Run main verification.
 11. Write main verification evidence doc.
-12. Register main.verification-passed via dry-run then confirm.
+12. Register main verification via `symphony goal gate --gate main-verification --status passed` dry-run then confirm.
 13. Push main.
 ```
 
 Status must come from explicit events, not from branch names, commit messages, filenames, task titles, command text, or Workbench frontend inference.
+
+## 2.1 Bootstrap: register v19 goal progress template if goal-status says goal not found
+
+This bootstrap is only needed if this command fails with `goal not found`:
+
+```bash
+pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json
+```
+
+The planning event is already appended to `goal-event-log.v1`, so do not write it again. The failure means the goal-status resolver cannot find a registered progress template for `v19-goal-runbook-next-action`. Treat this as a tiny execution-bootstrap patch before Task 1.
+
+### Bootstrap branch
+
+```bash
+git checkout main
+git pull --ff-only
+git checkout -b v19-bootstrap-goal-status-template
+```
+
+### Bootstrap worker prompt
+
+```text
+/goal
+执行 v19 bootstrap：注册 v19-goal-runbook-next-action 的 goal progress template，使 `pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json` 能解析已写入的 v19 planning event，而不是返回 goal not found。
+
+背景：
+- v19 planning event 已经成功 append：evt_79a5cb787d2dc1b7。
+- 不要重新登记 planning event。
+- 当前问题不是 event log 写入失败，而是 goal-status 只识别已注册的 goal progress template/registry。
+
+分支：
+- 使用当前分支：v19-bootstrap-goal-status-template
+- 如果当前不在这个分支，先停止并说明当前分支，不要继续实现。
+
+先读：
+- docs/plans/v19-goal-runbook-next-action-plan-2026-05-29.md
+- docs/plans/v19-execution-prompts-2026-05-29.md
+- src/symphony/goal-progress-ledger.js
+- src/symphony/goal-update.js
+- src/symphony/goal-review.js
+- src/symphony/goal-gate.js
+- tests/v18-goal-event-ledger-resolver.test.js
+- tests/v18-goal-update-cli.test.js
+
+实现范围：
+- 找到现有 goal-status / goal-progress-ledger 的 goal template/registry 入口。
+- 新增 v19 goal template：goal id `v19-goal-runbook-next-action`。
+- Baseline 应指向 v18 released tag。
+- Template 至少包含 v19 Task 1 到 Task 8 的 planned task ids 和标题：
+  - task-1: Contracts, fixtures, validators
+  - task-2: Goal runbook registry and goal init
+  - task-3: Next action resolver
+  - task-4: Prompt pack generator
+  - task-5: Goal next/prompt/closeout CLI
+  - task-6: Read-only API and Workbench Active Goal Control Center
+  - task-7: Docs, operator guide, and contract index
+  - task-8: Release verification, final closure, and tag evidence
+- Goal-status should read the already appended planning event without requiring it to be re-written.
+- If no task events exist yet, tasks should remain planned/unknown; releaseReady must remain false.
+
+禁止：
+- 不实现 v19 product features。
+- 不实现 goal-runbook.v1 / goal-next-action.v1 contracts。
+- 不实现 CLI/API/Workbench。
+- 不写新的 goal event。
+- 不把 planning event 当作 task complete。
+- 不把 releaseReady 推断为 true。
+- 不修改 v18 goal template 语义。
+
+验收命令：
+- pnpm check
+- pnpm test
+- git diff --check
+- pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json
+
+完成后必须返回：
+- Summary
+- Files changed
+- Tests run with exact results
+- Exact `goal-status` result summary
+- Boundary notes
+- Reviewer handoff
+```
+
+### Bootstrap worker evidence prompt
+
+```text
+/goal
+为 v19 bootstrap 写 worker evidence 文档。
+
+Evidence 文件：
+- docs/plans/v19-bootstrap-goal-status-template-evidence-2026-05-29.md
+
+必须记录：
+- Goal id: v19-goal-runbook-next-action
+- Branch: v19-bootstrap-goal-status-template
+- Planning event 已存在：evt_79a5cb787d2dc1b7
+- 问题：goal update 已 append event，但 goal-status 返回 goal not found
+- 修改内容：注册 v19 goal progress template/registry
+- 验证结果：
+  - pnpm check
+  - pnpm test
+  - git diff --check
+  - pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json
+- Boundary：没有实现 v19 product features，没有写新 event，没有推断 releaseReady。
+```
+
+### Bootstrap review prompt
+
+```text
+/goal
+执行 v19 bootstrap independent reviewer review。
+
+目标：
+- 审查 v19-bootstrap-goal-status-template 相对 main 的 diff。
+- 判断它是否只注册 v19 goal-status template/registry，解决 `goal not found`，没有扩展到 v19 product implementation。
+
+必须检查：
+- v19 goal id 是否为 `v19-goal-runbook-next-action`。
+- 是否包含 task-1 到 task-8 的 planned task definitions。
+- `pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json` 是否不再返回 goal not found。
+- 没有把 planning event 解释为 task complete。
+- 没有把 releaseReady 推断为 true。
+- 没有重新写入 planning event。
+- 没有改变 v18 goal-status 语义。
+
+必须运行：
+- pnpm check
+- pnpm test
+- git diff --check
+- pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json
+
+返回：
+- Verdict: APPROVED 或 NEEDS_REVISION
+- Reviewed files
+- Commands run with exact results
+- Blockers, if any
+- Evidence file path: docs/plans/v19-bootstrap-goal-status-template-review-evidence-2026-05-29.md
+```
+
+### Bootstrap merge and main verification
+
+If approved:
+
+```bash
+git checkout main
+git pull --ff-only
+git merge --ff-only v19-bootstrap-goal-status-template
+pnpm check
+pnpm test
+git diff --check
+pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json
+git push origin main
+```
+
+Write main verification evidence:
+
+```text
+docs/plans/v19-bootstrap-goal-status-template-main-verification-evidence-2026-05-29.md
+```
+
+After this bootstrap is merged, continue with Task 1.
 
 ## 3. Common event registration commands
 
@@ -151,28 +320,38 @@ pnpm --silent symphony goal review \
 
 ### Main verification event
 
+`main.verification-passed` is not accepted by `symphony goal update`. Register main verification through `symphony goal gate` using `--gate main-verification` and `--status passed`.
+
 ```bash
-pnpm --silent symphony goal update \
+pnpm --silent symphony goal gate \
   --goal v19-goal-runbook-next-action \
+  --gate main-verification \
   --task <task-id> \
-  --event main.verification-passed \
-  --actor codex-v19-main-verifier \
+  --status passed \
+  --verifier codex-v19-main-verifier \
   --evidence-ref docs/plans/v19-<task-id>-main-verification-evidence-2026-05-29.md \
   --dry-run --json
 ```
 
 ```bash
-pnpm --silent symphony goal update \
+pnpm --silent symphony goal gate \
   --goal v19-goal-runbook-next-action \
+  --gate main-verification \
   --task <task-id> \
-  --event main.verification-passed \
-  --actor codex-v19-main-verifier \
+  --status passed \
+  --verifier codex-v19-main-verifier \
   --evidence-ref docs/plans/v19-<task-id>-main-verification-evidence-2026-05-29.md \
   --confirm \
   --plan-hash sha256:<PLAN_HASH>
 ```
 
-If the actual v18 CLI flag names differ, run `pnpm symphony goal update --help`, `pnpm symphony goal review --help`, and `pnpm symphony goal gate --help`, then adapt the command while preserving dry-run first, plan hash confirm second.
+Failure form to avoid:
+
+```bash
+symphony goal update --event main.verification-passed
+```
+
+`goal update` is worker/task-event only. `goal gate --gate main-verification --status passed` maps to the same event type internally after validation. If flag names ever drift, run `pnpm symphony goal gate --help`, then preserve dry-run first, plan-hash confirm second.
 
 ---
 
@@ -359,7 +538,7 @@ Evidence 文档必须记录：
 - 下一步应登记 main.verification-passed event
 ```
 
-Register `main.verification-passed` for `task-1`, then push main.
+Register main verification for `task-1` through `symphony goal gate --gate main-verification --status passed`, then push main.
 
 ---
 
@@ -532,10 +711,10 @@ Register reviewer verdict for `task-2`.
 - 运行 git diff --check。
 - 写入 docs/plans/v19-task2-main-verification-evidence-2026-05-29.md。
 
-完成后返回 Summary、main commit、命令结果、evidence file path，并提示登记 main.verification-passed。
+完成后返回 Summary、main commit、命令结果、evidence file path，并提示通过 `symphony goal gate --gate main-verification --status passed` 登记 main verification。
 ```
 
-Register `main.verification-passed` for `task-2`, then push main.
+Register main verification for `task-2` through `symphony goal gate --gate main-verification --status passed`, then push main.
 
 ---
 
@@ -579,7 +758,7 @@ git checkout -b v19-task3-next-action-resolver
 - reviewer.needs-revision 是最新 verdict -> worker revision。
 - reviewer.approved + main verification missing -> main-verifier。
 - all tasks main-verified + release gate missing -> release-manager。
-- release.ready-declared + tagEvidence passed -> complete。
+- `release.ready` declared + tagEvidence passed -> complete。
 - invalid event chain -> blocked，不能继续推荐执行。
 - 输出 reason、afterCompletion allowed events、copy-only command hints。
 
@@ -663,7 +842,7 @@ Register `worker.evidence-recorded` for `task-3`.
 - reviewer.needs-revision 是否回到 worker revision。
 - reviewer.approved 是否推进到 main-verifier。
 - all tasks main-verified 是否推进到 release-manager gate。
-- release.ready-declared + tagEvidence passed 是否 complete。
+- `release.ready` declared + tagEvidence passed 是否 complete。
 - invalid event chain 是否 blocked。
 - resolver 是否没有运行测试、shell、model、audit、mutation 的副作用。
 - resolver 是否没有从分支名、文件名、commit message、命令文本推断状态。
@@ -701,10 +880,10 @@ Register reviewer verdict for `task-3`.
 - 运行 git diff --check。
 - 写入 docs/plans/v19-task3-main-verification-evidence-2026-05-29.md。
 
-完成后返回 Summary、main commit、命令结果、evidence file path，并提示登记 main.verification-passed。
+完成后返回 Summary、main commit、命令结果、evidence file path，并提示通过 `symphony goal gate --gate main-verification --status passed` 登记 main verification。
 ```
 
-Register `main.verification-passed` for `task-3`, then push main.
+Register main verification for `task-3` through `symphony goal gate --gate main-verification --status passed`, then push main.
 
 ---
 
@@ -872,10 +1051,10 @@ Register reviewer verdict for `task-4`.
 - 运行 git diff --check。
 - 写入 docs/plans/v19-task4-main-verification-evidence-2026-05-29.md。
 
-完成后返回 Summary、main commit、命令结果、evidence file path，并提示登记 main.verification-passed。
+完成后返回 Summary、main commit、命令结果、evidence file path，并提示通过 `symphony goal gate --gate main-verification --status passed` 登记 main verification。
 ```
 
-Register `main.verification-passed` for `task-4`, then push main.
+Register main verification for `task-4` through `symphony goal gate --gate main-verification --status passed`, then push main.
 
 ---
 
@@ -1047,10 +1226,10 @@ Register reviewer verdict for `task-5`.
 - 运行 git diff --check。
 - 写入 docs/plans/v19-task5-main-verification-evidence-2026-05-29.md。
 
-完成后返回 Summary、main commit、命令结果、evidence file path，并提示登记 main.verification-passed。
+完成后返回 Summary、main commit、命令结果、evidence file path，并提示通过 `symphony goal gate --gate main-verification --status passed` 登记 main verification。
 ```
 
-Register `main.verification-passed` for `task-5`, then push main.
+Register main verification for `task-5` through `symphony goal gate --gate main-verification --status passed`, then push main.
 
 ---
 
@@ -1219,10 +1398,10 @@ Register reviewer verdict for `task-6`.
 - 运行 git diff --check。
 - 写入 docs/plans/v19-task6-main-verification-evidence-2026-05-29.md。
 
-完成后返回 Summary、main commit、命令结果、evidence file path，并提示登记 main.verification-passed。
+完成后返回 Summary、main commit、命令结果、evidence file path，并提示通过 `symphony goal gate --gate main-verification --status passed` 登记 main verification。
 ```
 
-Register `main.verification-passed` for `task-6`, then push main.
+Register main verification for `task-6` through `symphony goal gate --gate main-verification --status passed`, then push main.
 
 ---
 
@@ -1267,7 +1446,7 @@ git checkout -b v19-task7-docs-operator-guide
 - docs/workbench-operator-guide.md 增加 v19 操作方式和 Active Goal Control Center 只读边界。
 - 新增 docs/plans/v19-task-evidence-index-2026-05-29.md。
 - 新增 docs/plans/v19-release-evidence-2026-05-29.md 初稿。
-- 文档应说明 release-ready 仍需 explicit release.ready-declared event。
+- 文档应说明 release-ready 仍需 explicit `release.ready` gate with status `declared`。
 
 禁止：
 - 不宣称 v19 released。
@@ -1391,10 +1570,10 @@ Register reviewer verdict for `task-7`.
 - 运行 git diff --check。
 - 写入 docs/plans/v19-task7-main-verification-evidence-2026-05-29.md。
 
-完成后返回 Summary、main commit、命令结果、evidence file path，并提示登记 main.verification-passed。
+完成后返回 Summary、main commit、命令结果、evidence file path，并提示通过 `symphony goal gate --gate main-verification --status passed` 登记 main verification。
 ```
 
-Register `main.verification-passed` for `task-7`, then push main.
+Register main verification for `task-7` through `symphony goal gate --gate main-verification --status passed`, then push main.
 
 ---
 
@@ -1451,7 +1630,7 @@ If any task lacks worker evidence, reviewer approval, or main verification, stop
 - 运行完整 release gates。
 - 更新 docs/plans/v19-release-evidence-2026-05-29.md，记录真实命令结果。
 - 新增 docs/plans/v19-final-closure-evidence-2026-05-29.md。
-- 如果所有 task worker/reviewer/main verification 完整，且 release gates 通过，可准备 release.ready-declared event。
+- 如果所有 task worker/reviewer/main verification 完整，且 release gates 通过，可准备 `release.ready` gate with status `declared`。
 - README latest completed mainline release 只有在 release closure 已准备好后才能更新为 v19；不要提前宣称 tag 已存在。
 
 Release gates 必须运行并记录精确结果：
@@ -1476,7 +1655,7 @@ Release gates 必须运行并记录精确结果：
 - Gate command results with exact output summary
 - Files changed
 - Evidence file paths
-- Whether release.ready-declared is justified
+- Whether `release.ready` declaration is justified
 - Remaining blockers, if any
 ```
 
@@ -1588,8 +1767,8 @@ Register reviewer verdict for `task-8`.
 - Main commit
 - Commands and exact results
 - Evidence file path
-- 是否可以登记 main.verification-passed
-- 是否可以登记 release.ready-declared
+- 是否可以通过 `symphony goal gate --gate main-verification --status passed` 登记 main verification
+- 是否可以登记 `release.ready` declared gate
 ```
 
 Register `main.verification-passed` for `task-8`.
@@ -1677,8 +1856,8 @@ Only after task-1 through task-8 have worker evidence, reviewer approval, main v
 ```bash
 pnpm --silent symphony goal gate \
   --goal v19-goal-runbook-next-action \
-  --gate release.ready-declared \
-  --status passed \
+  --gate release.ready \
+  --status declared \
   --verifier codex-v19-release-manager \
   --evidence-ref docs/plans/v19-final-closure-evidence-2026-05-29.md \
   --dry-run --json
@@ -1708,7 +1887,7 @@ releaseGates.tagEvidence: unknown or missing
 执行 v19 tag release evidence preparation。
 
 目标：
-- 检查 v19 release-ready 已通过 explicit event。
+- 检查 v19 release-ready 已通过 `release.ready` declared gate 产生的 explicit event。
 - 准备 annotated v19 tag 和 GitHub release 的人工执行命令。
 - 创建 tag 前先检查本地/远程是否已有 v19 tag。
 - tag 创建和 GitHub release 发布必须由人工明确执行；不要在 prompt 中自动执行，除非操作者明确授权。
@@ -1820,7 +1999,7 @@ Expected release-complete requirements:
 ```text
 all tasks complete
 release gates passed
-release.ready-declared explicit event
+`release.ready` gate declared explicit event
 release.tag-evidence passed after actual tag and GitHub release
 ```
 
