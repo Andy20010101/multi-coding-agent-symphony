@@ -154,8 +154,8 @@ export function validateGoalNextActionContract(nextAction) {
   validateNextActionNext(errors, nextAction.next, nextAction.status);
   validateEvidenceState(errors, nextAction.evidenceState);
   validateCopyOnlyPrompt(errors, nextAction.copyOnlyPrompt, 'copyOnlyPrompt');
-  validateCopyOnlyCommands(errors, nextAction.copyOnlyCommands, 'copyOnlyCommands');
-  validateAfterCompletion(errors, nextAction.afterCompletion);
+  validateNextActionCopyOnlyCommands(errors, nextAction.copyOnlyCommands, nextAction.status);
+  validateAfterCompletion(errors, nextAction.afterCompletion, nextAction.status);
   validateDisplaySafety(errors, nextAction.safety, 'safety');
 
   return {
@@ -404,7 +404,7 @@ function validateRolePolicy(errors, rolePolicy) {
 }
 
 function validateNextActionNext(errors, next, status) {
-  if (next === null && ['complete', 'missing-runbook'].includes(status)) {
+  if (next === null && ['blocked', 'complete', 'missing-runbook'].includes(status)) {
     return;
   }
 
@@ -426,6 +426,19 @@ function validateNextActionNext(errors, next, status) {
   if (status === 'action-required' && next.blocked !== false) {
     errors.push('next.blocked must be false when status is action-required');
   }
+}
+
+function validateNextActionCopyOnlyCommands(errors, commands, status) {
+  if (!Array.isArray(commands)) {
+    errors.push('copyOnlyCommands must be an array');
+    return;
+  }
+
+  if (commands.length === 0 && status !== 'action-required') {
+    return;
+  }
+
+  validateCopyOnlyCommands(errors, commands, 'copyOnlyCommands');
 }
 
 function validateEvidenceState(errors, evidenceState) {
@@ -467,7 +480,7 @@ function validateCopyOnlyPrompt(errors, prompt, path) {
   }
 }
 
-function validateAfterCompletion(errors, afterCompletion) {
+function validateAfterCompletion(errors, afterCompletion, status = 'action-required') {
   if (!isPlainObject(afterCompletion)) {
     errors.push('afterCompletion must be a plain object');
     return;
@@ -475,8 +488,13 @@ function validateAfterCompletion(errors, afterCompletion) {
 
   requireNonEmptyString(errors, afterCompletion.registerWith, 'afterCompletion.registerWith');
 
-  if (!Array.isArray(afterCompletion.allowedEvents) || afterCompletion.allowedEvents.length === 0) {
-    errors.push('afterCompletion.allowedEvents must be a non-empty array');
+  if (!Array.isArray(afterCompletion.allowedEvents)) {
+    errors.push('afterCompletion.allowedEvents must be an array');
+    return;
+  }
+
+  if (afterCompletion.allowedEvents.length === 0 && status === 'action-required') {
+    errors.push('afterCompletion.allowedEvents must be a non-empty array when status is action-required');
     return;
   }
 
