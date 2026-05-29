@@ -30,9 +30,20 @@ import {
 import {
   validateGoalEventLogContract
 } from '../src/symphony/goal-event-contracts.js';
+import {
+  validateGoalCloseoutReportContract,
+  validateGoalNextActionContract,
+  validateGoalPromptPackContract,
+  validateGoalRunbookContract
+} from '../src/symphony/goal-runbook-contracts.js';
+import {
+  buildGoalRunbookInitPlan,
+  confirmGoalRunbookInit
+} from '../src/symphony/goal-runbook-registry.js';
 
 const ROUTE_SMOKE_RUN_ID = 'task9-route-smoke-run';
 const FIXED_TIME = '2026-05-27T00:00:00.000Z';
+const V19_GOAL_ID = 'v19-goal-runbook-next-action';
 
 describe('v16 Workbench route smoke and server parity', () => {
   it('serves the Workbench browser entry, static assets, and Task 8 fallback/404 behavior', async () => {
@@ -236,6 +247,98 @@ describe('v16 Workbench route smoke and server parity', () => {
           }
         },
         {
+          path: '/api/goals/latest/runbook',
+          contractName: 'goal-runbook.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalRunbookContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.tasks[0].taskId, 'task-1');
+          }
+        },
+        {
+          path: `/api/goals/${V19_GOAL_ID}/runbook`,
+          contractName: 'goal-runbook.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalRunbookContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+          }
+        },
+        {
+          path: '/api/goals/latest/next',
+          contractName: 'goal-next-action.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalNextActionContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.next.role, 'worker');
+          }
+        },
+        {
+          path: `/api/goals/${V19_GOAL_ID}/next`,
+          contractName: 'goal-next-action.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalNextActionContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+          }
+        },
+        {
+          path: '/api/goals/latest/prompt',
+          contractName: 'goal-prompt-pack.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalPromptPackContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.prompts[0].copyOnly, true);
+          }
+        },
+        {
+          path: `/api/goals/${V19_GOAL_ID}/prompt`,
+          contractName: 'goal-prompt-pack.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalPromptPackContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+          }
+        },
+        {
+          path: '/api/goals/latest/closeout',
+          contractName: 'goal-closeout-report.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalCloseoutReportContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.summary.releaseReady, false);
+          }
+        },
+        {
+          path: `/api/goals/${V19_GOAL_ID}/closeout`,
+          contractName: 'goal-closeout-report.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalCloseoutReportContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V19_GOAL_ID);
+          }
+        },
+        {
           path: '/api/capabilities',
           contractName: 'capabilities.v1',
           assertPayload(payload) {
@@ -351,6 +454,14 @@ describe('v16 Workbench route smoke and server parity', () => {
         `/api/goals/${DEFAULT_GOAL_PROGRESS_GOAL_ID}/progress`,
         '/api/goals/latest/events',
         `/api/goals/${V18_GOAL_EVENT_JOURNAL_GOAL_ID}/events`,
+        '/api/goals/latest/runbook',
+        `/api/goals/${V19_GOAL_ID}/runbook`,
+        '/api/goals/latest/next',
+        `/api/goals/${V19_GOAL_ID}/next`,
+        '/api/goals/latest/prompt',
+        `/api/goals/${V19_GOAL_ID}/prompt`,
+        '/api/goals/latest/closeout',
+        `/api/goals/${V19_GOAL_ID}/closeout`,
         '/api/capabilities',
         '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
@@ -499,6 +610,47 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/goals/file%3A%2F%2Fpackage.json/events',
         '/api/goals/~%2Fpackage.json/events'
       ];
+
+      for (const path of probes) {
+        const response = await fetch(`${context.baseUrl}${path}`);
+        const body = await response.text();
+        const envelope = JSON.parse(body);
+
+        assert.equal(response.status, 400, path);
+        assert.equal(envelope.contractName, 'error-envelope.v1');
+        assert.equal(envelope.error.code, 'invalid-goal-ref');
+        assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+          ok: true,
+          errors: []
+        });
+        assert.doesNotMatch(
+          body,
+          /\/Users\/|multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer/u,
+          path
+        );
+      }
+
+      const after = await collectTextFileSnapshot(context.stateDir);
+
+      assert.deepEqual(after, before);
+    } finally {
+      await cleanupConsoleServer(context);
+    }
+  });
+
+  it('rejects v19 active goal control traversal and query probes without writing state', async () => {
+    const context = await startConsoleServer();
+
+    try {
+      const before = await collectTextFileSnapshot(context.stateDir);
+      const suffixes = ['runbook', 'next', 'prompt', 'closeout'];
+      const probes = suffixes.flatMap((suffix) => [
+        `/api/goals/latest/${suffix}?path=package.json`,
+        `/api/goals/%2e%2e%2fpackage.json/${suffix}`,
+        `/api/goals/%2FUsers%2Fandy%2Fpackage.json/${suffix}`,
+        `/api/goals/file%3A%2F%2Fpackage.json/${suffix}`,
+        `/api/goals/~%2Fpackage.json/${suffix}`
+      ]);
 
       for (const path of probes) {
         const response = await fetch(`${context.baseUrl}${path}`);
@@ -717,6 +869,19 @@ async function writeRouteSmokeRunFixture({ root, stateDir }) {
   await writeFile(harnessOutputPath, '<script>alert("unsafe")</script>\n', 'utf8');
   await writeFixtureJson(join(stateDir, 'runs', `${ROUTE_SMOKE_RUN_ID}.json`), runState);
   await writeFixtureJson(join(stateDir, 'runs', 'latest.json'), runState);
+
+  const initPlan = await buildGoalRunbookInitPlan({
+    stateDir,
+    goalId: V19_GOAL_ID,
+    fromJson: 'fixtures/contracts/goal-runbook.valid.v1.json'
+  });
+
+  await confirmGoalRunbookInit({
+    stateDir,
+    goalId: V19_GOAL_ID,
+    fromJson: 'fixtures/contracts/goal-runbook.valid.v1.json',
+    planHash: initPlan.planHash
+  });
 }
 
 async function writeFixtureJson(path, value) {

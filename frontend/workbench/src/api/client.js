@@ -2,7 +2,11 @@ import {
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   READONLY_API_ROUTES,
   RUN_TIMELINE_ROUTE_TEMPLATE,
+  GOAL_EVENTS_ROUTE_TEMPLATE,
+  GOAL_PROGRESS_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
+  createGoalEventsRoute,
+  createGoalProgressRoute,
   createRunTimelineRoute,
   createSafeArtifactPreviewRoutes,
   projectWorkbenchContracts
@@ -86,6 +90,9 @@ export async function fetchWorkbenchContracts(options = {}) {
 
   const results = Object.fromEntries(entries);
   const guidedGoalHandoffRoute = createGuidedGoalHandoffRoute(results.handoffRefs?.data);
+  const activeGoalId = activeGoalIdFromResults(results);
+  const activeGoalProgressRoute = createGoalProgressRoute(activeGoalId);
+  const activeGoalEventsRoute = createGoalEventsRoute(activeGoalId);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
 
@@ -95,6 +102,28 @@ export async function fetchWorkbenchContracts(options = {}) {
         message: 'guided handoff ref 未暴露 / 不可用'
       })
     : await fetchReadonlyRoute(guidedGoalHandoffRoute, options);
+
+  results.activeGoalProgress = activeGoalProgressRoute === null
+    ? readonlySkipped({
+        route: {
+          ...GOAL_PROGRESS_ROUTE_TEMPLATE,
+          id: 'activeGoalProgress',
+          label: 'Active Goal Progress'
+        },
+        message: 'active goal progress 未暴露 / 不可用'
+      })
+    : await fetchReadonlyRoute(activeGoalProgressRoute, options);
+
+  results.activeGoalEvents = activeGoalEventsRoute === null
+    ? readonlySkipped({
+        route: {
+          ...GOAL_EVENTS_ROUTE_TEMPLATE,
+          id: 'activeGoalEvents',
+          label: 'Active Goal Events'
+        },
+        message: 'active goal events 未暴露 / 不可用'
+      })
+    : await fetchReadonlyRoute(activeGoalEventsRoute, options);
 
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({
@@ -144,6 +173,18 @@ function latestRunIdFromResults(results) {
     : null;
 
   return typeof runId === 'string' && runId.trim().length > 0 ? runId : null;
+}
+
+function activeGoalIdFromResults(results) {
+  const candidates = [
+    results.goalRunbook?.ok === true ? results.goalRunbook.data?.goalId : null,
+    results.goalNextAction?.ok === true && results.goalNextAction.data?.status !== 'missing-runbook'
+      ? results.goalNextAction.data?.goalId
+      : null
+  ];
+  const goalId = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
+
+  return goalId === 'latest' ? null : goalId ?? null;
 }
 
 function errorMessageFromEnvelope(data) {

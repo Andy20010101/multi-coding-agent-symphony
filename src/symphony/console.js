@@ -46,11 +46,26 @@ import {
   readGoalEventJournal
 } from './goal-event-journal.js';
 import {
+  buildGoalNextAction
+} from './goal-next-action-resolver.js';
+import {
   buildGoalProgressLedger,
   getGoalProgressTemplate,
   listRegisteredGoals,
   V18_GOAL_EVENT_JOURNAL_GOAL_ID
 } from './goal-progress-ledger.js';
+import {
+  GoalPromptPackError,
+  buildGoalPromptPack
+} from './goal-prompt-pack.js';
+import {
+  GoalCloseoutReportError,
+  buildGoalCloseoutReport
+} from './goal-closeout-report.js';
+import {
+  GoalRunbookContextError,
+  loadGoalRunbookContext
+} from './goal-runbook-context.js';
 import {
   buildStageCommandSummary
 } from './stage.js';
@@ -841,6 +856,58 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      const goalRunbookRequest = parseGoalRunbookRequestPath(url.pathname, url.searchParams);
+
+      if (goalRunbookRequest !== null) {
+        await writeGoalRunbookResponse({
+          response,
+          stateDir,
+          request: goalRunbookRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const goalNextActionRequest = parseGoalNextActionRequestPath(url.pathname, url.searchParams);
+
+      if (goalNextActionRequest !== null) {
+        await writeGoalNextActionResponse({
+          response,
+          stateDir,
+          request: goalNextActionRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const goalPromptPackRequest = parseGoalPromptPackRequestPath(url.pathname, url.searchParams);
+
+      if (goalPromptPackRequest !== null) {
+        await writeGoalPromptPackResponse({
+          response,
+          stateDir,
+          request: goalPromptPackRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const goalCloseoutRequest = parseGoalCloseoutRequestPath(url.pathname, url.searchParams);
+
+      if (goalCloseoutRequest !== null) {
+        await writeGoalCloseoutResponse({
+          response,
+          stateDir,
+          request: goalCloseoutRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
       if (url.pathname === '/api/capabilities') {
         if (hasSearchParams(url.searchParams)) {
           writeApiErrorResponse(response, {
@@ -1093,6 +1160,131 @@ async function writeGoalEventsResponse({ response, stateDir, request, route, met
   });
 
   writeJsonResponse(response, 200, eventLog);
+}
+
+async function writeGoalRunbookResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    return;
+  }
+
+  try {
+    const context = await loadGoalRunbookContext({
+      stateDir,
+      goalId: request.goalId,
+      allowControlledFixtureFallback: true
+    });
+
+    if (context === null) {
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: 'goal-runbook-not-found',
+        message: 'Goal runbook was not found.',
+        route,
+        method
+      });
+      return;
+    }
+
+    writeJsonResponse(response, 200, context.runbook);
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeGoalNextActionResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    return;
+  }
+
+  writeJsonResponse(response, 200, await buildGoalNextAction({
+    stateDir,
+    goalId: request.goalId
+  }));
+}
+
+async function writeGoalPromptPackResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, await buildGoalPromptPack({
+      stateDir,
+      goalId: request.goalId,
+      next: true,
+      promptFormat: 'markdown'
+    }));
+  } catch (error) {
+    if (error instanceof GoalPromptPackError) {
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeGoalCloseoutResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, await buildGoalCloseoutReport({
+      stateDir,
+      goalId: request.goalId
+    }));
+  } catch (error) {
+    if (error instanceof GoalCloseoutReportError) {
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+function writeInvalidGoalRunbookControlResponse({ response, route, method }) {
+  writeApiErrorResponse(response, {
+    status: 400,
+    code: 'invalid-goal-ref',
+    message: 'Goal runbook control ref is invalid.',
+    route,
+    method,
+    safeDetails: {
+      reason: 'invalid-route-segment'
+    }
+  });
 }
 
 async function writeRunResponse({ response, stateDir, runId }) {
@@ -1729,6 +1921,81 @@ function parseGoalEventsRequestPath(pathname, searchParams = new URLSearchParams
 
   return {
     kind: 'goal-events',
+    goalId: decoded.value
+  };
+}
+
+function parseGoalRunbookRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseGoalRunbookControlRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'runbook'
+  });
+}
+
+function parseGoalNextActionRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseGoalRunbookControlRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'next'
+  });
+}
+
+function parseGoalPromptPackRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseGoalRunbookControlRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'prompt'
+  });
+}
+
+function parseGoalCloseoutRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseGoalRunbookControlRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'closeout'
+  });
+}
+
+function parseGoalRunbookControlRequestPath({ pathname, searchParams, suffix }) {
+  const latestPath = `/api/goals/latest/${suffix}`;
+  const explicitPattern = new RegExp(`^/api/goals/([^/]+)/${suffix}$`, 'u');
+
+  if (hasSearchParams(searchParams)) {
+    if (pathname === latestPath || explicitPattern.test(pathname)) {
+      return {
+        kind: 'invalid',
+        goalId: null
+      };
+    }
+
+    return null;
+  }
+
+  if (pathname === latestPath) {
+    return {
+      kind: 'goal-runbook-control',
+      goalId: 'latest'
+    };
+  }
+
+  const match = explicitPattern.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null
+    };
+  }
+
+  return {
+    kind: 'goal-runbook-control',
     goalId: decoded.value
   };
 }

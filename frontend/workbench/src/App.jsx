@@ -41,12 +41,12 @@ export default function App() {
     <main className="workbench-shell" aria-labelledby="workbench-title">
       <header className="workbench-header">
         <div className="header-copy">
-          <p className="eyebrow">v18 React/Vite Workbench</p>
-          <h1 id="workbench-title">v18 Workbench</h1>
+          <p className="eyebrow">v19 React/Vite Workbench</p>
+          <h1 id="workbench-title">Symphony Workbench</h1>
           <p className="header-summary">
             展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff，
-            以及 goal progress、goal events、capabilities、diagnostics 与安全 error envelope。浏览器端只读取受控 GET routes，
-            artifact preview 只消费后端 contract，不提供写入、下载、终端或执行动作。
+            以及 goal progress、goal events、Active Goal Control Center、capabilities、diagnostics 与安全 error envelope。
+            浏览器端只读取受控 GET routes，artifact preview 与 prompt preview 只消费后端 contract，不提供写入、下载、终端或执行动作。
           </p>
         </div>
         <div className="status-strip" aria-label="当前只读状态">
@@ -86,6 +86,18 @@ export default function App() {
             <GoalProgressPanel progress={model.goalProgress} route={findRoute(model.routeStates, 'goalProgress')} />
             <CapabilitiesPanel capabilities={model.capabilities} route={findRoute(model.routeStates, 'capabilities')} />
             <DiagnosticsV1Panel diagnostics={model.diagnosticsV1} route={findRoute(model.routeStates, 'diagnostics')} />
+          </section>
+
+          <section className="active-goal-grid" aria-label="v19 Active Goal Control Center">
+            <ActiveGoalRunbookPanel
+              runbook={model.activeGoal.runbook}
+              route={findRoute(model.routeStates, 'goalRunbook')}
+              progressRoute={findRoute(model.routeStates, 'activeGoalProgress')}
+              eventsRoute={findRoute(model.routeStates, 'activeGoalEvents')}
+            />
+            <NextActionCard nextAction={model.activeGoal.nextAction} route={findRoute(model.routeStates, 'goalNextAction')} />
+            <PromptPreviewPanel promptPreview={model.activeGoal.promptPreview} route={findRoute(model.routeStates, 'goalPromptPack')} />
+            <CloseoutGapsPanel closeoutGaps={model.activeGoal.closeoutGaps} route={findRoute(model.routeStates, 'goalCloseout')} />
           </section>
 
           <section className="event-grid" aria-label="v18 goal events 只读 panels">
@@ -129,7 +141,8 @@ function GoalProgressPanel({ progress, route }) {
         ['summary.blockedTasks', progress.summary.blockedTasks],
         ['summary.needsReviewTasks', progress.summary.needsReviewTasks],
         ['summary.needsRevisionTasks', progress.summary.needsRevisionTasks],
-        ['summary.releaseReady', progress.summary.releaseReady]
+        ['summary.releaseReady', progress.summary.releaseReady],
+        ['summary.releaseReadySource', progress.summary.releaseReadySource]
       ]} />
 
       <Subsection title="tasks / evidence">
@@ -230,6 +243,192 @@ function EvidenceMatrixPanel({ matrix, route }) {
       </Subsection>
 
       <p className="panel-note">Evidence Matrix 只使用 reviewer/main/release 的显式 event；approved、main-verified 和 release-ready 不由 ledger status、分支、文件名或命令文本推断。</p>
+    </DataPanel>
+  );
+}
+
+function ActiveGoalRunbookPanel({ runbook, route, progressRoute, eventsRoute }) {
+  return (
+    <DataPanel
+      id="active-goal-runbook-panel"
+      kicker="v19 active goal"
+      title="Active Goal Runbook"
+      state={activeGoalStateText(runbook, route)}
+      route={route}
+    >
+      {runbook.state === 'unavailable' && runbook.errorEnvelope.state === 'available' ? (
+        <p className="error-copy">错误摘要：{runbook.errorEnvelope.code.text} / {runbook.errorEnvelope.message.text}</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['contractName', runbook.contractName],
+        ['contractVersion', runbook.contractVersion],
+        ['goalId', runbook.goalId],
+        ['goalTitle', runbook.goalTitle],
+        ['baseline.tag', runbook.baselineTag],
+        ['baseline.commit', runbook.baselineCommit],
+        ['baseline.evidenceRef', runbook.baselineEvidenceRef],
+        ['task count', runbook.taskCount],
+        ['release gate count', runbook.releaseGateCount],
+        ['active progress route', textValue(routeStateText(progressRoute))],
+        ['active events route', textValue(routeStateText(eventsRoute))]
+      ]} />
+
+      <Subsection title="tasks / expected evidence">
+        <GoalRunbookTaskList tasks={runbook.tasks} />
+      </Subsection>
+
+      <Subsection title="release gates">
+        <KeyValueList rows={runbook.releaseGates} nameKey="gate" valueKey="status" emptyCopy="release gates 未暴露。" />
+      </Subsection>
+
+      <Subsection title="role policy">
+        <KeyValueList rows={runbook.rolePolicy} nameKey="policy" valueKey="enabled" emptyCopy="role policy 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{runbook.note}</p>
+    </DataPanel>
+  );
+}
+
+function NextActionCard({ nextAction, route }) {
+  return (
+    <DataPanel
+      id="next-action-card-panel"
+      kicker="v19 active goal"
+      title="Next Action Card"
+      state={activeGoalStateText(nextAction, route)}
+      route={route}
+    >
+      {nextAction.state === 'unavailable' && nextAction.errorEnvelope.state === 'available' ? (
+        <p className="error-copy">错误摘要：{nextAction.errorEnvelope.code.text} / {nextAction.errorEnvelope.message.text}</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['contractName', nextAction.contractName],
+        ['contractVersion', nextAction.contractVersion],
+        ['goalId', nextAction.goalId],
+        ['status', nextAction.status],
+        ['reason', nextAction.reason],
+        ['next.taskId', nextAction.next.taskId],
+        ['next.role', nextAction.next.role],
+        ['next.phase', nextAction.next.phase],
+        ['next.blocked', nextAction.next.blocked],
+        ['workerEvidenceRef', nextAction.evidenceState.workerEvidenceRef],
+        ['reviewEvidenceRef', nextAction.evidenceState.reviewEvidenceRef],
+        ['mainVerificationRef', nextAction.evidenceState.mainVerificationRef],
+        ['afterCompletion.registerWith', nextAction.afterCompletion.registerWith],
+        ['afterCompletion.allowedEvents', nextAction.afterCompletion.allowedEvents],
+        ['copyOnlyPrompt.available', nextAction.copyOnlyPrompt.available],
+        ['copyOnlyPrompt.format', nextAction.copyOnlyPrompt.format],
+        ['copyOnlyPrompt.textAvailable', nextAction.copyOnlyPrompt.textAvailable]
+      ]} />
+
+      <Subsection title="copy-only commands">
+        <TextItemList items={nextAction.copyOnlyCommands} emptyCopy="copyOnlyCommands 为空或未暴露。" />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', nextAction.safety.readOnly],
+          ['copyOnly', nextAction.safety.copyOnly],
+          ['workbenchWriteAvailable', nextAction.safety.workbenchWriteAvailable],
+          ['browserExecutionAvailable', nextAction.safety.browserExecutionAvailable],
+          ['modelInvocationAvailable', nextAction.safety.modelInvocationAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{nextAction.note}</p>
+    </DataPanel>
+  );
+}
+
+function PromptPreviewPanel({ promptPreview, route }) {
+  return (
+    <DataPanel
+      id="prompt-preview-panel"
+      kicker="v19 active goal"
+      title="Prompt Preview"
+      state={promptPreviewStateText(promptPreview, route)}
+      route={route}
+    >
+      {promptPreview.state === 'unavailable' && promptPreview.errorEnvelope.state === 'available' ? (
+        <p className="error-copy">错误摘要：{promptPreview.errorEnvelope.code.text} / {promptPreview.errorEnvelope.message.text}</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['contractName', promptPreview.contractName],
+        ['contractVersion', promptPreview.contractVersion],
+        ['goalId', promptPreview.goalId],
+        ['prompt count', promptPreview.promptCount],
+        ['visible copy-only prompts', promptPreview.visibleCount],
+        ['hidden non-copy-only prompts', promptPreview.hiddenCount],
+        ['readOnly', promptPreview.safety.readOnly],
+        ['copyOnly', promptPreview.safety.copyOnly],
+        ['workbenchWriteAvailable', promptPreview.safety.workbenchWriteAvailable],
+        ['browserExecutionAvailable', promptPreview.safety.browserExecutionAvailable],
+        ['modelInvocationAvailable', promptPreview.safety.modelInvocationAvailable]
+      ]} />
+
+      <Subsection title="copy-only text">
+        <PromptPreviewList prompts={promptPreview.items} />
+      </Subsection>
+
+      <p className="panel-note">{promptPreview.note}</p>
+    </DataPanel>
+  );
+}
+
+function CloseoutGapsPanel({ closeoutGaps, route }) {
+  return (
+    <DataPanel
+      id="closeout-gaps-panel"
+      kicker="v19 active goal"
+      title="Closeout Gaps"
+      state={activeGoalStateText(closeoutGaps, route)}
+      route={route}
+    >
+      {closeoutGaps.state === 'unavailable' && closeoutGaps.errorEnvelope.state === 'available' ? (
+        <p className="error-copy">错误摘要：{closeoutGaps.errorEnvelope.code.text} / {closeoutGaps.errorEnvelope.message.text}</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['contractName', closeoutGaps.contractName],
+        ['contractVersion', closeoutGaps.contractVersion],
+        ['goalId', closeoutGaps.goalId],
+        ['generatedAt', closeoutGaps.generatedAt],
+        ['summary.totalTasks', closeoutGaps.summary.totalTasks],
+        ['workerEvidenceComplete', closeoutGaps.summary.workerEvidenceComplete],
+        ['reviewEvidenceComplete', closeoutGaps.summary.reviewEvidenceComplete],
+        ['mainVerificationComplete', closeoutGaps.summary.mainVerificationComplete],
+        ['releaseReady', closeoutGaps.summary.releaseReady],
+        ['releaseReadySource', closeoutGaps.summary.releaseReadySource],
+        ['missing count', closeoutGaps.missing.count],
+        ['nextAction', closeoutGaps.nextAction]
+      ]} />
+
+      <Subsection title="missing evidence and gates">
+        <CloseoutMissingList missing={closeoutGaps.missing} />
+      </Subsection>
+
+      <Subsection title="release gates">
+        <KeyValueList rows={closeoutGaps.releaseGates} nameKey="gate" valueKey="status" emptyCopy="release gates 未暴露。" />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', closeoutGaps.safety.readOnly],
+          ['copyOnly', closeoutGaps.safety.copyOnly],
+          ['workbenchWriteAvailable', closeoutGaps.safety.workbenchWriteAvailable],
+          ['browserExecutionAvailable', closeoutGaps.safety.browserExecutionAvailable],
+          ['modelInvocationAvailable', closeoutGaps.safety.modelInvocationAvailable],
+          ['writesInDryRun', closeoutGaps.safety.writesInDryRun],
+          ['confirmRequiredForWrites', closeoutGaps.safety.confirmRequiredForWrites],
+          ['releaseReadyRequiresEvidence', closeoutGaps.safety.releaseReadyRequiresEvidence]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{closeoutGaps.note}</p>
     </DataPanel>
   );
 }
@@ -983,6 +1182,44 @@ function GoalTaskList({ tasks }) {
   );
 }
 
+function GoalRunbookTaskList({ tasks }) {
+  if (tasks.state === 'missing') {
+    return <EmptyBlock copy="runbook tasks 未暴露。" />;
+  }
+
+  if (tasks.items.length === 0) {
+    return <EmptyBlock copy="runbook tasks 为空。" />;
+  }
+
+  return (
+    <ul className="goal-runbook-task-list">
+      {tasks.items.map((task, index) => (
+        <li key={`${task.taskId.text}-${index}`}>
+          <FieldList rows={[
+            ['taskId', task.taskId],
+            ['title', task.title],
+            ['branch', task.branch],
+            ['roleOrder', task.roleOrder],
+            ['acceptance', task.acceptance],
+            ['expected worker', task.expectedWorker],
+            ['expected reviewer', task.expectedReviewer],
+            ['expected main verifier', task.expectedMainVerifier],
+            ['ledger status', task.status],
+            ['statusSource', task.statusSource],
+            ['workerEvidenceRef', task.workerEvidenceRef],
+            ['reviewEvidenceRef', task.reviewEvidenceRef],
+            ['reviewVerdict', task.reviewVerdict],
+            ['mainVerificationRef', task.mainVerificationRef],
+            ['event backed', task.eventBacked],
+            ['copyOnlyCommands', task.copyOnlyCommands]
+          ]} />
+          <BlockerList blockers={task.blockers} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function GoalEventTimelineList({ timeline }) {
   if (timeline.state === 'missing') {
     return <EmptyBlock copy="events 未暴露。" />;
@@ -1011,6 +1248,75 @@ function GoalEventTimelineList({ timeline }) {
             ['hash chain status', event.hashChainStatus]
           ]} />
           <EvidenceRefList evidenceRefs={event.evidenceRefs} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TextItemList({ items, emptyCopy }) {
+  if (items.state === 'missing') {
+    return <EmptyBlock copy={emptyCopy} />;
+  }
+
+  if (items.items.length === 0) {
+    return <EmptyBlock copy={emptyCopy} />;
+  }
+
+  return (
+    <ul className="command-text-list" aria-label="copy-only text list">
+      {items.items.map((item, index) => (
+        <li key={`${item.text}-${index}`}>
+          <code>{item.text}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PromptPreviewList({ prompts }) {
+  if (!Array.isArray(prompts) || prompts.length === 0) {
+    return <EmptyBlock copy="copy-only prompt text 未暴露或为空。" />;
+  }
+
+  return (
+    <ul className="prompt-preview-list">
+      {prompts.map((prompt, index) => (
+        <li key={`${prompt.taskId.text}-${prompt.role.text}-${index}`}>
+          <FieldList rows={[
+            ['source', prompt.sourceContract],
+            ['taskId', prompt.taskId],
+            ['role', prompt.role],
+            ['title', prompt.title],
+            ['format', prompt.format]
+          ]} />
+          <pre className="prompt-preview-text"><code>{prompt.text.text}</code></pre>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CloseoutMissingList({ missing }) {
+  if (missing.state === 'missing') {
+    return <EmptyBlock copy="missing items 未暴露。" />;
+  }
+
+  if (missing.items.length === 0) {
+    return <EmptyBlock copy="closeout gaps 为空。" />;
+  }
+
+  return (
+    <ul className="closeout-missing-list">
+      {missing.items.map((item, index) => (
+        <li key={`${item.kind.text}-${item.taskId.text}-${item.gateId.text}-${index}`}>
+          <FieldList rows={[
+            ['kind', item.kind],
+            ['taskId', item.taskId],
+            ['expectedEvent', item.expectedEvent],
+            ['gateId', item.gateId],
+            ['status', item.status]
+          ]} />
         </li>
       ))}
     </ul>
@@ -1271,6 +1577,30 @@ function goalEventsStateText(events, route) {
   }
 
   return routeStateText(route);
+}
+
+function activeGoalStateText(value, route) {
+  if (value.state === 'missing') {
+    return '未暴露';
+  }
+
+  if (value.state === 'unavailable') {
+    return '不可用';
+  }
+
+  if (value.state === 'empty') {
+    return '空';
+  }
+
+  return routeStateText(route);
+}
+
+function promptPreviewStateText(promptPreview, route) {
+  if (promptPreview.state === 'empty') {
+    return '无 copy-only 文本';
+  }
+
+  return activeGoalStateText(promptPreview, route);
 }
 
 function phaseText(phase) {

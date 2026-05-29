@@ -50,6 +50,10 @@ describe('v15 Workbench React/Vite shell', () => {
       'AdoptionSummaryPanel',
       'HandoffPanel',
       'GoalProgressPanel',
+      'ActiveGoalRunbookPanel',
+      'NextActionCard',
+      'PromptPreviewPanel',
+      'CloseoutGapsPanel',
       'GoalEventsTimelinePanel',
       'EvidenceMatrixPanel',
       'CapabilitiesPanel',
@@ -57,6 +61,9 @@ describe('v15 Workbench React/Vite shell', () => {
       'CommandBlockList',
       'HandoffTaskList',
       'GoalTaskList',
+      'GoalRunbookTaskList',
+      'PromptPreviewList',
+      'CloseoutMissingList',
       'GoalEventTimelineList',
       'EvidenceMatrixTaskList',
       'ReleaseGateMatrixList'
@@ -71,6 +78,10 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /Adoption summary 只读状态/u);
     assert.match(app, /Guided Goal Handoff/u);
     assert.match(app, /Goal Progress Ledger/u);
+    assert.match(app, /Active Goal Runbook/u);
+    assert.match(app, /Next Action Card/u);
+    assert.match(app, /Prompt Preview/u);
+    assert.match(app, /Closeout Gaps/u);
     assert.match(app, /Goal Events Timeline/u);
     assert.match(app, /Evidence Matrix/u);
     assert.match(app, /Capabilities Contract/u);
@@ -95,10 +106,18 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/capabilities',
       '/api/diagnostics',
       '/api/goals',
+      '/api/goals/<goal-id>/closeout',
       '/api/goals/<goal-id>/events',
+      '/api/goals/<goal-id>/next',
       '/api/goals/<goal-id>/progress',
+      '/api/goals/<goal-id>/prompt',
+      '/api/goals/<goal-id>/runbook',
+      '/api/goals/latest/closeout',
       '/api/goals/latest/events',
+      '/api/goals/latest/next',
       '/api/goals/latest/progress',
+      '/api/goals/latest/prompt',
+      '/api/goals/latest/runbook',
       '/api/handoff',
       '/api/handoff/<ref>',
       '/api/readiness',

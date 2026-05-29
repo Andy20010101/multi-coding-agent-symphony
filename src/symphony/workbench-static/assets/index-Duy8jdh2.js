@@ -9892,6 +9892,10 @@ var GUIDED_GOAL_HANDOFF_CONTRACT_NAME = "guided-goal-handoff.v1";
 var SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME = "safe-artifact-preview.v1";
 var GOAL_PROGRESS_LEDGER_CONTRACT_NAME = "goal-progress-ledger.v1";
 var GOAL_EVENT_LOG_CONTRACT_NAME = "goal-event-log.v1";
+var GOAL_RUNBOOK_CONTRACT_NAME = "goal-runbook.v1";
+var GOAL_NEXT_ACTION_CONTRACT_NAME = "goal-next-action.v1";
+var GOAL_PROMPT_PACK_CONTRACT_NAME = "goal-prompt-pack.v1";
+var GOAL_CLOSEOUT_REPORT_CONTRACT_NAME = "goal-closeout-report.v1";
 var CAPABILITIES_CONTRACT_NAME = "capabilities.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
@@ -9955,6 +9959,37 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: GOAL_EVENT_LOG_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "goalRunbook",
+		label: "Goal Runbook",
+		path: "/api/goals/latest/runbook",
+		method: "GET",
+		contractName: GOAL_RUNBOOK_CONTRACT_NAME,
+		acceptErrorContract: true
+	}),
+	Object.freeze({
+		id: "goalNextAction",
+		label: "Goal Next Action",
+		path: "/api/goals/latest/next",
+		method: "GET",
+		contractName: GOAL_NEXT_ACTION_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "goalPromptPack",
+		label: "Goal Prompt Pack",
+		path: "/api/goals/latest/prompt",
+		method: "GET",
+		contractName: GOAL_PROMPT_PACK_CONTRACT_NAME,
+		acceptErrorContract: true
+	}),
+	Object.freeze({
+		id: "goalCloseout",
+		label: "Goal Closeout",
+		path: "/api/goals/latest/closeout",
+		method: "GET",
+		contractName: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+		acceptErrorContract: true
+	}),
+	Object.freeze({
 		id: "capabilities",
 		label: "Capabilities",
 		path: "/api/capabilities",
@@ -10007,10 +10042,46 @@ var GOAL_EVENTS_ROUTE_TEMPLATE = Object.freeze({
 	contractName: GOAL_EVENT_LOG_CONTRACT_NAME,
 	acceptErrorContract: true
 });
+var GOAL_RUNBOOK_ROUTE_TEMPLATE = Object.freeze({
+	id: "goalRunbookById",
+	label: "Goal Runbook By Id",
+	path: "/api/goals/<goal-id>/runbook",
+	method: "GET",
+	contractName: GOAL_RUNBOOK_CONTRACT_NAME,
+	acceptErrorContract: true
+});
+var GOAL_NEXT_ACTION_ROUTE_TEMPLATE = Object.freeze({
+	id: "goalNextActionById",
+	label: "Goal Next Action By Id",
+	path: "/api/goals/<goal-id>/next",
+	method: "GET",
+	contractName: GOAL_NEXT_ACTION_CONTRACT_NAME,
+	acceptErrorContract: true
+});
+var GOAL_PROMPT_PACK_ROUTE_TEMPLATE = Object.freeze({
+	id: "goalPromptPackById",
+	label: "Goal Prompt Pack By Id",
+	path: "/api/goals/<goal-id>/prompt",
+	method: "GET",
+	contractName: GOAL_PROMPT_PACK_CONTRACT_NAME,
+	acceptErrorContract: true
+});
+var GOAL_CLOSEOUT_ROUTE_TEMPLATE = Object.freeze({
+	id: "goalCloseoutById",
+	label: "Goal Closeout By Id",
+	path: "/api/goals/<goal-id>/closeout",
+	method: "GET",
+	contractName: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+	acceptErrorContract: true
+});
 var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
 	...READONLY_API_ROUTES,
 	GOAL_EVENTS_ROUTE_TEMPLATE,
 	GOAL_PROGRESS_ROUTE_TEMPLATE,
+	GOAL_RUNBOOK_ROUTE_TEMPLATE,
+	GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
+	GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+	GOAL_CLOSEOUT_ROUTE_TEMPLATE,
 	GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
 	RUN_TIMELINE_ROUTE_TEMPLATE,
 	SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
@@ -10022,6 +10093,16 @@ var RUN_API_BASE = [
 	"runs"
 ].join("/");
 var TIMELINE_SEGMENT = "timeline";
+var OPTIONAL_ROUTE_IDS = new Set([
+	"latestRun",
+	"latestRunTimeline",
+	"goalRunbook",
+	"goalNextAction",
+	"goalPromptPack",
+	"goalCloseout",
+	"activeGoalProgress",
+	"activeGoalEvents"
+]);
 var DEFERRED_CONTRACT_GAPS = Object.freeze(["dirty adoption 当前仍由 pending adoption 与 Git readiness 分别暴露"]);
 var ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
 	Object.freeze({
@@ -10067,6 +10148,12 @@ function projectWorkbenchContracts(results) {
 	const goalsData = dataFrom(results.goals);
 	const goalProgressData = dataFrom(results.goalProgress);
 	const goalEventsData = dataFrom(results.goalEvents);
+	const goalRunbookData = dataFrom(results.goalRunbook);
+	const goalNextActionData = dataFrom(results.goalNextAction);
+	const goalPromptPackData = dataFrom(results.goalPromptPack);
+	const goalCloseoutData = dataFrom(results.goalCloseout);
+	const activeGoalProgressData = dataFrom(results.activeGoalProgress);
+	const activeGoalEventsData = dataFrom(results.activeGoalEvents);
 	const capabilitiesData = dataFrom(results.capabilities);
 	const diagnosticsData = dataFrom(results.diagnostics);
 	const latestRun = latestRunData?.run ?? null;
@@ -10075,9 +10162,11 @@ function projectWorkbenchContracts(results) {
 		...READONLY_API_ROUTES.map((route) => projectRouteState(route, results[route.id])),
 		projectRouteState(results.guidedGoalHandoff?.routeDescriptor ?? GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE, results.guidedGoalHandoff),
 		projectRouteState(results.latestRunTimeline?.routeDescriptor ?? RUN_TIMELINE_ROUTE_TEMPLATE, results.latestRunTimeline),
+		projectRouteState(results.activeGoalProgress?.routeDescriptor ?? GOAL_PROGRESS_ROUTE_TEMPLATE, results.activeGoalProgress),
+		projectRouteState(results.activeGoalEvents?.routeDescriptor ?? GOAL_EVENTS_ROUTE_TEMPLATE, results.activeGoalEvents),
 		...safeArtifactPreviewResults.map((result) => projectRouteState(result?.routeDescriptor ?? SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE, result))
 	];
-	const failedRequiredRoutes = routeStates.filter((route) => route.state === "failed" && route.id !== "latestRun" && route.id !== "latestRunTimeline");
+	const failedRequiredRoutes = routeStates.filter((route) => route.state === "failed" && !OPTIONAL_ROUTE_IDS.has(route.id));
 	const hasNoRuns = summaryData?.latestRun === null || summaryData?.status === "no-runs";
 	const projectedLatestRun = projectLatestRun({
 		result: results.latestRun,
@@ -10117,6 +10206,20 @@ function projectWorkbenchContracts(results) {
 			eventLog: goalEventsData,
 			ledger: goalProgressData
 		}),
+		activeGoal: projectActiveGoalControl({
+			runbookResult: results.goalRunbook,
+			runbook: goalRunbookData,
+			nextActionResult: results.goalNextAction,
+			nextAction: goalNextActionData,
+			promptPackResult: results.goalPromptPack,
+			promptPack: goalPromptPackData,
+			closeoutResult: results.goalCloseout,
+			closeout: goalCloseoutData,
+			activeLedgerResult: results.activeGoalProgress,
+			activeLedger: activeGoalProgressData,
+			activeEventLogResult: results.activeGoalEvents,
+			activeEventLog: activeGoalEventsData
+		}),
 		capabilities: projectCapabilities(capabilitiesData),
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
 		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
@@ -10144,6 +10247,24 @@ function createRunTimelineRoute(runId) {
 		runId
 	});
 }
+function createGoalProgressRoute(goalId) {
+	return createGoalScopedRoute({
+		template: GOAL_PROGRESS_ROUTE_TEMPLATE,
+		goalId,
+		suffix: "progress",
+		id: "activeGoalProgress",
+		label: "Active Goal Progress"
+	});
+}
+function createGoalEventsRoute(goalId) {
+	return createGoalScopedRoute({
+		template: GOAL_EVENTS_ROUTE_TEMPLATE,
+		goalId,
+		suffix: "events",
+		id: "activeGoalEvents",
+		label: "Active Goal Events"
+	});
+}
 function createSafeArtifactPreviewRoutes(artifactRefs) {
 	if (!Array.isArray(artifactRefs)) return [];
 	return artifactRefs.map((artifact, index) => {
@@ -10158,6 +10279,22 @@ function createSafeArtifactPreviewRoutes(artifactRefs) {
 			registeredKind: artifact?.kind ?? null
 		});
 	}).filter((route) => route !== null);
+}
+function createGoalScopedRoute({ template, goalId, suffix, id, label }) {
+	if (!isSafeGoalRouteSegment(goalId)) return null;
+	return Object.freeze({
+		...template,
+		id,
+		label,
+		path: [
+			"",
+			"api",
+			"goals",
+			encodeURIComponent(goalId),
+			suffix
+		].join("/"),
+		goalId
+	});
 }
 function projectArtifactRefs(artifactRefs, artifactStatus, safeArtifactPreviewResults = []) {
 	const status = projectArtifactStatus(artifactStatus);
@@ -10319,6 +10456,313 @@ function projectGoals(goals) {
 		}))
 	};
 }
+function projectActiveGoalControl({ runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog }) {
+	const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
+	return {
+		runbook: projectGoalRunbook({
+			result: runbookResult,
+			runbook,
+			ledger,
+			eventLog: activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null,
+			ledgerResult: activeLedgerResult,
+			eventLogResult: activeEventLogResult
+		}),
+		nextAction: projectGoalNextAction({
+			result: nextActionResult,
+			nextAction
+		}),
+		promptPreview: projectGoalPromptPreview({
+			result: promptPackResult,
+			promptPack,
+			nextAction
+		}),
+		closeoutGaps: projectGoalCloseoutGaps({
+			result: closeoutResult,
+			closeout,
+			ledger
+		})
+	};
+}
+function projectGoalRunbook({ result, runbook, ledger, eventLog, ledgerResult, eventLogResult }) {
+	const tasks = Array.isArray(runbook?.tasks) ? runbook.tasks : null;
+	const ledgerTasks = new Map((Array.isArray(ledger?.tasks) ? ledger.tasks : []).map((task) => [task.taskId, task]));
+	const eventTaskIds = new Set((Array.isArray(eventLog?.events) ? eventLog.events : []).map((event) => event?.taskId).filter((taskId) => isNonEmptyString(taskId)));
+	if (result?.ok !== true) return {
+		state: "unavailable",
+		contractName: valueState(GOAL_RUNBOOK_CONTRACT_NAME),
+		contractVersion: valueState(void 0),
+		goalId: valueState(void 0),
+		goalTitle: valueState(void 0),
+		baselineTag: valueState(void 0),
+		baselineCommit: valueState(void 0),
+		baselineEvidenceRef: valueState(void 0),
+		taskCount: valueState(void 0),
+		releaseGateCount: valueState(void 0),
+		ledgerRouteState: valueState(ledgerResult?.skipped === true ? "skipped" : ledgerResult?.ok === true ? "ready" : void 0),
+		eventRouteState: valueState(eventLogResult?.skipped === true ? "skipped" : eventLogResult?.ok === true ? "ready" : void 0),
+		tasks: {
+			state: "missing",
+			count: valueState(void 0),
+			items: []
+		},
+		releaseGates: [],
+		rolePolicy: [],
+		errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
+		note: "Active Goal Runbook panel 只展示 goal-runbook.v1 与 active goal ledger/events routes 已暴露字段；task status 缺失时保持未暴露。"
+	};
+	return {
+		state: runbook === null || runbook === void 0 ? "missing" : "available",
+		contractName: valueState(runbook?.contractName),
+		contractVersion: valueState(runbook?.contractVersion),
+		goalId: valueState(runbook?.goalId),
+		goalTitle: valueState(runbook?.goalTitle),
+		baselineTag: valueState(runbook?.baseline?.tag),
+		baselineCommit: valueState(runbook?.baseline?.commit),
+		baselineEvidenceRef: valueState(runbook?.baseline?.evidenceRef),
+		taskCount: valueState(tasks === null ? void 0 : tasks.length),
+		releaseGateCount: valueState(Array.isArray(runbook?.releaseGates) ? runbook.releaseGates.length : void 0),
+		ledgerRouteState: valueState(ledgerResult?.skipped === true ? "skipped" : ledgerResult?.ok === true ? "ready" : void 0),
+		eventRouteState: valueState(eventLogResult?.skipped === true ? "skipped" : eventLogResult?.ok === true ? "ready" : void 0),
+		tasks: {
+			state: tasks === null ? "missing" : tasks.length === 0 ? "empty" : "available",
+			count: valueState(tasks === null ? void 0 : tasks.length),
+			items: tasks === null ? [] : tasks.map((task) => {
+				const ledgerTask = ledgerTasks.get(task?.taskId) ?? null;
+				return {
+					taskId: valueState(task?.taskId),
+					title: valueState(task?.title),
+					branch: valueState(task?.branch),
+					roleOrder: arrayTextState(task?.roleOrder),
+					acceptance: arrayTextState(task?.acceptance),
+					expectedWorker: expectedEvidenceState(task?.expectedEvidence?.worker),
+					expectedReviewer: expectedEvidenceState(task?.expectedEvidence?.reviewer),
+					expectedMainVerifier: expectedEvidenceState(task?.expectedEvidence?.mainVerifier),
+					status: valueState(ledgerTask?.status),
+					statusSource: valueState(ledgerTask?.statusSource),
+					workerEvidenceRef: valueState(ledgerTask?.workerEvidenceRef),
+					reviewEvidenceRef: valueState(ledgerTask?.reviewEvidenceRef),
+					reviewVerdict: valueState(ledgerTask?.reviewVerdict),
+					mainVerificationRef: valueState(ledgerTask?.mainVerificationRef),
+					eventBacked: valueState(eventTaskIds.has(task?.taskId)),
+					copyOnlyCommands: arrayTextState(task?.copyOnlyCommands),
+					blockers: projectBlockers(ledgerTask?.blockers)
+				};
+			})
+		},
+		releaseGates: Array.isArray(runbook?.releaseGates) ? runbook.releaseGates.map((gate) => ({
+			gate: valueState(gate),
+			status: valueState("required")
+		})) : [],
+		rolePolicy: Object.entries(runbook?.rolePolicy ?? {}).map(([policy, enabled]) => ({
+			policy: valueState(policy),
+			enabled: valueState(enabled)
+		})),
+		errorEnvelope: projectErrorEnvelope(null),
+		note: "Task status、statusSource 和 evidence refs 来自 active goal progress/events routes；Workbench 不根据 prompt、branch、文件名或命令文本推断完成状态。"
+	};
+}
+function projectGoalNextAction({ result, nextAction }) {
+	if (result?.ok !== true) return {
+		state: "unavailable",
+		contractName: valueState(GOAL_NEXT_ACTION_CONTRACT_NAME),
+		contractVersion: valueState(void 0),
+		goalId: valueState(void 0),
+		status: valueState(void 0),
+		reason: valueState(void 0),
+		next: projectGoalNextDetails(void 0),
+		evidenceState: projectGoalNextEvidenceState(void 0),
+		copyOnlyPrompt: projectGoalNextCopyOnlyPrompt(void 0),
+		copyOnlyCommands: projectTextItems(void 0),
+		afterCompletion: projectAfterCompletion(void 0),
+		safety: projectGoalControlSafety(void 0),
+		errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
+		note: "Next Action Card 只展示 goal-next-action.v1；route 不可用时不从其他文本推断下一步。"
+	};
+	return {
+		state: nextAction === null || nextAction === void 0 ? "missing" : "available",
+		contractName: valueState(nextAction?.contractName),
+		contractVersion: valueState(nextAction?.contractVersion),
+		goalId: valueState(nextAction?.goalId),
+		status: valueState(nextAction?.status),
+		reason: valueState(nextAction?.reason ?? nextAction?.next?.reason),
+		next: projectGoalNextDetails(nextAction?.next),
+		evidenceState: projectGoalNextEvidenceState(nextAction?.evidenceState),
+		copyOnlyPrompt: projectGoalNextCopyOnlyPrompt(nextAction?.copyOnlyPrompt),
+		copyOnlyCommands: projectTextItems(nextAction?.copyOnlyCommands),
+		afterCompletion: projectAfterCompletion(nextAction?.afterCompletion),
+		safety: projectGoalControlSafety(nextAction?.safety),
+		errorEnvelope: projectErrorEnvelope(null),
+		note: "Next Action Card 使用 resolver 输出的 task、role、phase、reason 和 afterCompletion；浏览器端不运行命令、不登记事件。"
+	};
+}
+function projectGoalPromptPreview({ result, promptPack, nextAction }) {
+	const prompts = Array.isArray(promptPack?.prompts) ? promptPack.prompts : null;
+	const copyOnlyPrompts = prompts === null ? [] : prompts.filter((prompt) => prompt?.copyOnly === true && isNonEmptyString(prompt?.text));
+	const fallbackPrompt = nextAction?.copyOnlyPrompt?.available === true && isNonEmptyString(nextAction?.copyOnlyPrompt?.text) ? [{
+		taskId: nextAction?.next?.taskId,
+		role: nextAction?.next?.role,
+		title: "Copy-only prompt from goal-next-action.v1",
+		format: nextAction.copyOnlyPrompt.format,
+		text: nextAction.copyOnlyPrompt.text,
+		sourceContract: GOAL_NEXT_ACTION_CONTRACT_NAME
+	}] : [];
+	const visiblePrompts = copyOnlyPrompts.length > 0 ? copyOnlyPrompts.map((prompt) => ({
+		...prompt,
+		sourceContract: GOAL_PROMPT_PACK_CONTRACT_NAME
+	})) : fallbackPrompt;
+	if (result?.ok !== true && fallbackPrompt.length === 0) return {
+		state: "unavailable",
+		contractName: valueState(GOAL_PROMPT_PACK_CONTRACT_NAME),
+		contractVersion: valueState(void 0),
+		goalId: valueState(void 0),
+		promptCount: valueState(void 0),
+		visibleCount: valueState(0),
+		hiddenCount: valueState(void 0),
+		safety: projectGoalControlSafety(void 0),
+		items: [],
+		errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
+		note: "Prompt Preview 只展示 copyOnly=true 的 prompt text；prompt pack 不可用时不拼接、不生成、不执行 prompt。"
+	};
+	return {
+		state: visiblePrompts.length === 0 ? "empty" : "available",
+		contractName: valueState(promptPack?.contractName ?? (fallbackPrompt.length > 0 ? GOAL_NEXT_ACTION_CONTRACT_NAME : void 0)),
+		contractVersion: valueState(promptPack?.contractVersion ?? (fallbackPrompt.length > 0 ? 1 : void 0)),
+		goalId: valueState(promptPack?.goalId ?? nextAction?.goalId),
+		promptCount: valueState(prompts === null ? void 0 : prompts.length),
+		visibleCount: valueState(visiblePrompts.length),
+		hiddenCount: valueState(prompts === null ? void 0 : prompts.length - copyOnlyPrompts.length),
+		safety: projectGoalControlSafety(promptPack?.safety ?? nextAction?.safety),
+		items: visiblePrompts.map((prompt) => ({
+			taskId: valueState(prompt?.taskId),
+			role: valueState(prompt?.role),
+			title: valueState(prompt?.title),
+			format: valueState(prompt?.format),
+			sourceContract: valueState(prompt?.sourceContract),
+			text: valueState(prompt?.text)
+		})),
+		errorEnvelope: projectErrorEnvelope(null),
+		note: "Prompt Preview 只把 copy-only text 放进可选择文本块；没有执行、confirm、下载、打开文件或模型调用入口。"
+	};
+}
+function projectGoalCloseoutGaps({ result, closeout, ledger }) {
+	const missing = Array.isArray(closeout?.missing) ? closeout.missing : null;
+	if (result?.ok !== true) return {
+		state: "unavailable",
+		contractName: valueState(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+		contractVersion: valueState(void 0),
+		goalId: valueState(void 0),
+		generatedAt: valueState(void 0),
+		summary: projectCloseoutSummary(void 0, ledger),
+		missing: {
+			state: "missing",
+			count: valueState(void 0),
+			items: []
+		},
+		releaseGates: [],
+		nextAction: valueState(void 0),
+		safety: projectGoalCloseoutSafety(void 0),
+		errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
+		note: "Closeout Gaps 只展示 goal-closeout-report.v1；route 不可用时不从 prompt 或路径推断 release 状态。"
+	};
+	return {
+		state: closeout === null || closeout === void 0 ? "missing" : "available",
+		contractName: valueState(closeout?.contractName),
+		contractVersion: valueState(closeout?.contractVersion),
+		goalId: valueState(closeout?.goalId),
+		generatedAt: valueState(closeout?.generatedAt),
+		summary: projectCloseoutSummary(closeout?.summary, ledger),
+		missing: {
+			state: missing === null ? "missing" : missing.length === 0 ? "empty" : "available",
+			count: valueState(missing === null ? void 0 : missing.length),
+			items: missing === null ? [] : missing.map((item) => ({
+				kind: valueState(item?.kind),
+				taskId: valueState(item?.taskId),
+				expectedEvent: valueState(item?.expectedEvent),
+				gateId: valueState(item?.gateId),
+				status: valueState(item?.status)
+			}))
+		},
+		releaseGates: Object.entries(closeout?.releaseGates ?? {}).map(([gate, status]) => ({
+			gate: valueState(gate),
+			status: valueState(status)
+		})),
+		nextAction: valueState(closeout?.nextAction),
+		safety: projectGoalCloseoutSafety(closeout?.safety),
+		errorEnvelope: projectErrorEnvelope(null),
+		note: "Closeout Gaps 使用 closeout report 的 missing items 和 releaseGates；releaseReadySource 只来自 active ledger summary 已暴露字段。"
+	};
+}
+function projectGoalNextDetails(next) {
+	return {
+		taskId: valueState(next?.taskId),
+		role: valueState(next?.role),
+		phase: valueState(next?.phase),
+		reason: valueState(next?.reason),
+		blocked: valueState(next?.blocked)
+	};
+}
+function projectGoalNextEvidenceState(evidenceState) {
+	return {
+		workerEvidenceRef: valueState(evidenceState?.workerEvidenceRef),
+		reviewEvidenceRef: valueState(evidenceState?.reviewEvidenceRef),
+		mainVerificationRef: valueState(evidenceState?.mainVerificationRef)
+	};
+}
+function projectGoalNextCopyOnlyPrompt(copyOnlyPrompt) {
+	return {
+		available: valueState(copyOnlyPrompt?.available),
+		format: valueState(copyOnlyPrompt?.format),
+		textAvailable: valueState(isNonEmptyString(copyOnlyPrompt?.text))
+	};
+}
+function projectAfterCompletion(afterCompletion) {
+	return {
+		registerWith: valueState(afterCompletion?.registerWith),
+		allowedEvents: arrayTextState(afterCompletion?.allowedEvents)
+	};
+}
+function projectCloseoutSummary(summary, ledger) {
+	return {
+		totalTasks: valueState(summary?.totalTasks),
+		workerEvidenceComplete: valueState(summary?.workerEvidenceComplete),
+		reviewEvidenceComplete: valueState(summary?.reviewEvidenceComplete),
+		mainVerificationComplete: valueState(summary?.mainVerificationComplete),
+		releaseReady: valueState(summary?.releaseReady),
+		releaseReadySource: valueState(ledger?.summary?.releaseReadySource)
+	};
+}
+function projectGoalControlSafety(safety) {
+	return {
+		readOnly: valueState(safety?.readOnly),
+		copyOnly: valueState(safety?.copyOnly),
+		workbenchWriteAvailable: valueState(safety?.workbenchWriteAvailable),
+		browserExecutionAvailable: valueState(safety?.browserExecutionAvailable),
+		modelInvocationAvailable: valueState(safety?.modelInvocationAvailable)
+	};
+}
+function projectGoalCloseoutSafety(safety) {
+	return {
+		...projectGoalControlSafety(safety),
+		writesInDryRun: valueState(safety?.writesInDryRun),
+		confirmRequiredForWrites: valueState(safety?.confirmRequiredForWrites),
+		releaseReadyRequiresEvidence: valueState(safety?.releaseReadyRequiresEvidence)
+	};
+}
+function projectTextItems(values) {
+	if (!Array.isArray(values)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	return {
+		state: values.length === 0 ? "empty" : "available",
+		count: valueState(values.length),
+		items: values.map((value) => valueState(value))
+	};
+}
+function expectedEvidenceState(value) {
+	return Array.isArray(value) ? arrayTextState(value) : valueState(value);
+}
 function projectGoalProgress({ result, ledger }) {
 	if (result?.ok !== true) return {
 		state: "unavailable",
@@ -10389,7 +10833,8 @@ function projectGoalProgressSummary(summary) {
 		blockedTasks: valueState(summary?.blockedTasks),
 		needsReviewTasks: valueState(summary?.needsReviewTasks),
 		needsRevisionTasks: valueState(summary?.needsRevisionTasks),
-		releaseReady: valueState(summary?.releaseReady)
+		releaseReady: valueState(summary?.releaseReady),
+		releaseReadySource: valueState(summary?.releaseReadySource)
 	};
 }
 function projectGoalProgressSafety(safety) {
@@ -11204,6 +11649,9 @@ function findSafeArtifactPreviewResult({ artifact, results }) {
 function isSafeArtifactPreviewRoutePath(value) {
 	return isNonEmptyString(value) && value.startsWith(`${RUN_API_BASE}/`) && value.includes("/artifacts/") && value.endsWith("/preview") && !value.includes("?") && !value.includes("#") && !value.includes("\\") && !value.includes("..");
 }
+function isSafeGoalRouteSegment(value) {
+	return isNonEmptyString(value) && !value.includes("/") && !value.includes("\\") && !value.includes("..") && !value.includes("?") && !value.includes("#");
+}
 function objectState(value) {
 	if (value === void 0 || value === null || typeof value !== "object" || Array.isArray(value)) return {
 		state: "missing",
@@ -11308,11 +11756,30 @@ async function fetchWorkbenchContracts(options = {}) {
 	const entries = await Promise.all(READONLY_API_ROUTES.map(async (route) => [route.id, await fetchReadonlyRoute(route, options)]));
 	const results = Object.fromEntries(entries);
 	const guidedGoalHandoffRoute = createGuidedGoalHandoffRoute(results.handoffRefs?.data);
+	const activeGoalId = activeGoalIdFromResults(results);
+	const activeGoalProgressRoute = createGoalProgressRoute(activeGoalId);
+	const activeGoalEventsRoute = createGoalEventsRoute(activeGoalId);
 	const timelineRoute = createRunTimelineRoute(latestRunIdFromResults(results));
 	results.guidedGoalHandoff = guidedGoalHandoffRoute === null ? readonlySkipped({
 		route: GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
 		message: "guided handoff ref 未暴露 / 不可用"
 	}) : await fetchReadonlyRoute(guidedGoalHandoffRoute, options);
+	results.activeGoalProgress = activeGoalProgressRoute === null ? readonlySkipped({
+		route: {
+			...GOAL_PROGRESS_ROUTE_TEMPLATE,
+			id: "activeGoalProgress",
+			label: "Active Goal Progress"
+		},
+		message: "active goal progress 未暴露 / 不可用"
+	}) : await fetchReadonlyRoute(activeGoalProgressRoute, options);
+	results.activeGoalEvents = activeGoalEventsRoute === null ? readonlySkipped({
+		route: {
+			...GOAL_EVENTS_ROUTE_TEMPLATE,
+			id: "activeGoalEvents",
+			label: "Active Goal Events"
+		},
+		message: "active goal events 未暴露 / 不可用"
+	}) : await fetchReadonlyRoute(activeGoalEventsRoute, options);
 	results.latestRunTimeline = timelineRoute === null ? readonlySkipped({
 		route: RUN_TIMELINE_ROUTE_TEMPLATE,
 		message: "暂无 timeline / 未暴露 / 不可用"
@@ -11348,6 +11815,10 @@ function readonlySkipped({ route, message }) {
 function latestRunIdFromResults(results) {
 	const runId = results.latestRun?.ok === true ? results.latestRun.data?.run?.runId : null;
 	return typeof runId === "string" && runId.trim().length > 0 ? runId : null;
+}
+function activeGoalIdFromResults(results) {
+	const goalId = [results.goalRunbook?.ok === true ? results.goalRunbook.data?.goalId : null, results.goalNextAction?.ok === true && results.goalNextAction.data?.status !== "missing-runbook" ? results.goalNextAction.data?.goalId : null].find((candidate) => typeof candidate === "string" && candidate.trim().length > 0);
+	return goalId === "latest" ? null : goalId ?? null;
 }
 function errorMessageFromEnvelope(data) {
 	if (isErrorEnvelope(data)) return data.error.message;
@@ -11431,15 +11902,15 @@ function App() {
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "eyebrow",
-							children: "v18 React/Vite Workbench"
+							children: "v19 React/Vite Workbench"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 							id: "workbench-title",
-							children: "v18 Workbench"
+							children: "Symphony Workbench"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: "展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff， 以及 goal progress、goal events、capabilities、diagnostics 与安全 error envelope。浏览器端只读取受控 GET routes， artifact preview 只消费后端 contract，不提供写入、下载、终端或执行动作。"
+							children: "展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff， 以及 goal progress、goal events、Active Goal Control Center、capabilities、diagnostics 与安全 error envelope。 浏览器端只读取受控 GET routes，artifact preview 与 prompt preview 只消费后端 contract，不提供写入、下载、终端或执行动作。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -11528,6 +11999,30 @@ function App() {
 					]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "active-goal-grid",
+					"aria-label": "v19 Active Goal Control Center",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalRunbookPanel, {
+							runbook: model.activeGoal.runbook,
+							route: findRoute(model.routeStates, "goalRunbook"),
+							progressRoute: findRoute(model.routeStates, "activeGoalProgress"),
+							eventsRoute: findRoute(model.routeStates, "activeGoalEvents")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
+							nextAction: model.activeGoal.nextAction,
+							route: findRoute(model.routeStates, "goalNextAction")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptPreviewPanel, {
+							promptPreview: model.activeGoal.promptPreview,
+							route: findRoute(model.routeStates, "goalPromptPack")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseoutGapsPanel, {
+							closeoutGaps: model.activeGoal.closeoutGaps,
+							route: findRoute(model.routeStates, "goalCloseout")
+						})
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "event-grid",
 					"aria-label": "v18 goal events 只读 panels",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventsTimelinePanel, {
@@ -11577,7 +12072,8 @@ function GoalProgressPanel({ progress, route }) {
 				["summary.blockedTasks", progress.summary.blockedTasks],
 				["summary.needsReviewTasks", progress.summary.needsReviewTasks],
 				["summary.needsRevisionTasks", progress.summary.needsRevisionTasks],
-				["summary.releaseReady", progress.summary.releaseReady]
+				["summary.releaseReady", progress.summary.releaseReady],
+				["summary.releaseReadySource", progress.summary.releaseReadySource]
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "tasks / evidence",
@@ -11689,6 +12185,230 @@ function EvidenceMatrixPanel({ matrix, route }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: "Evidence Matrix 只使用 reviewer/main/release 的显式 event；approved、main-verified 和 release-ready 不由 ledger status、分支、文件名或命令文本推断。"
+			})
+		]
+	});
+}
+function ActiveGoalRunbookPanel({ runbook, route, progressRoute, eventsRoute }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "active-goal-runbook-panel",
+		kicker: "v19 active goal",
+		title: "Active Goal Runbook",
+		state: activeGoalStateText(runbook, route),
+		route,
+		children: [
+			runbook.state === "unavailable" && runbook.errorEnvelope.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: [
+					"错误摘要：",
+					runbook.errorEnvelope.code.text,
+					" / ",
+					runbook.errorEnvelope.message.text
+				]
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", runbook.contractName],
+				["contractVersion", runbook.contractVersion],
+				["goalId", runbook.goalId],
+				["goalTitle", runbook.goalTitle],
+				["baseline.tag", runbook.baselineTag],
+				["baseline.commit", runbook.baselineCommit],
+				["baseline.evidenceRef", runbook.baselineEvidenceRef],
+				["task count", runbook.taskCount],
+				["release gate count", runbook.releaseGateCount],
+				["active progress route", textValue(routeStateText(progressRoute))],
+				["active events route", textValue(routeStateText(eventsRoute))]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "tasks / expected evidence",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalRunbookTaskList, { tasks: runbook.tasks })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "release gates",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: runbook.releaseGates,
+					nameKey: "gate",
+					valueKey: "status",
+					emptyCopy: "release gates 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "role policy",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: runbook.rolePolicy,
+					nameKey: "policy",
+					valueKey: "enabled",
+					emptyCopy: "role policy 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: runbook.note
+			})
+		]
+	});
+}
+function NextActionCard({ nextAction, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "next-action-card-panel",
+		kicker: "v19 active goal",
+		title: "Next Action Card",
+		state: activeGoalStateText(nextAction, route),
+		route,
+		children: [
+			nextAction.state === "unavailable" && nextAction.errorEnvelope.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: [
+					"错误摘要：",
+					nextAction.errorEnvelope.code.text,
+					" / ",
+					nextAction.errorEnvelope.message.text
+				]
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", nextAction.contractName],
+				["contractVersion", nextAction.contractVersion],
+				["goalId", nextAction.goalId],
+				["status", nextAction.status],
+				["reason", nextAction.reason],
+				["next.taskId", nextAction.next.taskId],
+				["next.role", nextAction.next.role],
+				["next.phase", nextAction.next.phase],
+				["next.blocked", nextAction.next.blocked],
+				["workerEvidenceRef", nextAction.evidenceState.workerEvidenceRef],
+				["reviewEvidenceRef", nextAction.evidenceState.reviewEvidenceRef],
+				["mainVerificationRef", nextAction.evidenceState.mainVerificationRef],
+				["afterCompletion.registerWith", nextAction.afterCompletion.registerWith],
+				["afterCompletion.allowedEvents", nextAction.afterCompletion.allowedEvents],
+				["copyOnlyPrompt.available", nextAction.copyOnlyPrompt.available],
+				["copyOnlyPrompt.format", nextAction.copyOnlyPrompt.format],
+				["copyOnlyPrompt.textAvailable", nextAction.copyOnlyPrompt.textAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "copy-only commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: nextAction.copyOnlyCommands,
+					emptyCopy: "copyOnlyCommands 为空或未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", nextAction.safety.readOnly],
+					["copyOnly", nextAction.safety.copyOnly],
+					["workbenchWriteAvailable", nextAction.safety.workbenchWriteAvailable],
+					["browserExecutionAvailable", nextAction.safety.browserExecutionAvailable],
+					["modelInvocationAvailable", nextAction.safety.modelInvocationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: nextAction.note
+			})
+		]
+	});
+}
+function PromptPreviewPanel({ promptPreview, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "prompt-preview-panel",
+		kicker: "v19 active goal",
+		title: "Prompt Preview",
+		state: promptPreviewStateText(promptPreview, route),
+		route,
+		children: [
+			promptPreview.state === "unavailable" && promptPreview.errorEnvelope.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: [
+					"错误摘要：",
+					promptPreview.errorEnvelope.code.text,
+					" / ",
+					promptPreview.errorEnvelope.message.text
+				]
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", promptPreview.contractName],
+				["contractVersion", promptPreview.contractVersion],
+				["goalId", promptPreview.goalId],
+				["prompt count", promptPreview.promptCount],
+				["visible copy-only prompts", promptPreview.visibleCount],
+				["hidden non-copy-only prompts", promptPreview.hiddenCount],
+				["readOnly", promptPreview.safety.readOnly],
+				["copyOnly", promptPreview.safety.copyOnly],
+				["workbenchWriteAvailable", promptPreview.safety.workbenchWriteAvailable],
+				["browserExecutionAvailable", promptPreview.safety.browserExecutionAvailable],
+				["modelInvocationAvailable", promptPreview.safety.modelInvocationAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "copy-only text",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptPreviewList, { prompts: promptPreview.items })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: promptPreview.note
+			})
+		]
+	});
+}
+function CloseoutGapsPanel({ closeoutGaps, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "closeout-gaps-panel",
+		kicker: "v19 active goal",
+		title: "Closeout Gaps",
+		state: activeGoalStateText(closeoutGaps, route),
+		route,
+		children: [
+			closeoutGaps.state === "unavailable" && closeoutGaps.errorEnvelope.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: [
+					"错误摘要：",
+					closeoutGaps.errorEnvelope.code.text,
+					" / ",
+					closeoutGaps.errorEnvelope.message.text
+				]
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", closeoutGaps.contractName],
+				["contractVersion", closeoutGaps.contractVersion],
+				["goalId", closeoutGaps.goalId],
+				["generatedAt", closeoutGaps.generatedAt],
+				["summary.totalTasks", closeoutGaps.summary.totalTasks],
+				["workerEvidenceComplete", closeoutGaps.summary.workerEvidenceComplete],
+				["reviewEvidenceComplete", closeoutGaps.summary.reviewEvidenceComplete],
+				["mainVerificationComplete", closeoutGaps.summary.mainVerificationComplete],
+				["releaseReady", closeoutGaps.summary.releaseReady],
+				["releaseReadySource", closeoutGaps.summary.releaseReadySource],
+				["missing count", closeoutGaps.missing.count],
+				["nextAction", closeoutGaps.nextAction]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "missing evidence and gates",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseoutMissingList, { missing: closeoutGaps.missing })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "release gates",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: closeoutGaps.releaseGates,
+					nameKey: "gate",
+					valueKey: "status",
+					emptyCopy: "release gates 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", closeoutGaps.safety.readOnly],
+					["copyOnly", closeoutGaps.safety.copyOnly],
+					["workbenchWriteAvailable", closeoutGaps.safety.workbenchWriteAvailable],
+					["browserExecutionAvailable", closeoutGaps.safety.browserExecutionAvailable],
+					["modelInvocationAvailable", closeoutGaps.safety.modelInvocationAvailable],
+					["writesInDryRun", closeoutGaps.safety.writesInDryRun],
+					["confirmRequiredForWrites", closeoutGaps.safety.confirmRequiredForWrites],
+					["releaseReadyRequiresEvidence", closeoutGaps.safety.releaseReadyRequiresEvidence]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: closeoutGaps.note
 			})
 		]
 	});
@@ -12337,6 +13057,31 @@ function GoalTaskList({ tasks }) {
 		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BlockerList, { blockers: task.blockers })] }, `${task.taskId.text}-${index}`))
 	});
 }
+function GoalRunbookTaskList({ tasks }) {
+	if (tasks.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "runbook tasks 未暴露。" });
+	if (tasks.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "runbook tasks 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "goal-runbook-task-list",
+		children: tasks.items.map((task, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["taskId", task.taskId],
+			["title", task.title],
+			["branch", task.branch],
+			["roleOrder", task.roleOrder],
+			["acceptance", task.acceptance],
+			["expected worker", task.expectedWorker],
+			["expected reviewer", task.expectedReviewer],
+			["expected main verifier", task.expectedMainVerifier],
+			["ledger status", task.status],
+			["statusSource", task.statusSource],
+			["workerEvidenceRef", task.workerEvidenceRef],
+			["reviewEvidenceRef", task.reviewEvidenceRef],
+			["reviewVerdict", task.reviewVerdict],
+			["mainVerificationRef", task.mainVerificationRef],
+			["event backed", task.eventBacked],
+			["copyOnlyCommands", task.copyOnlyCommands]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BlockerList, { blockers: task.blockers })] }, `${task.taskId.text}-${index}`))
+	});
+}
 function GoalEventTimelineList({ timeline }) {
 	if (timeline.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "events 未暴露。" });
 	if (timeline.state === "empty") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "未登记事件；timeline empty。" });
@@ -12356,6 +13101,45 @@ function GoalEventTimelineList({ timeline }) {
 			["eventHash", event.eventHash],
 			["hash chain status", event.hashChainStatus]
 		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefList, { evidenceRefs: event.evidenceRefs })] }, `${event.eventId.text}-${index}`))
+	});
+}
+function TextItemList({ items, emptyCopy }) {
+	if (items.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
+	if (items.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "command-text-list",
+		"aria-label": "copy-only text list",
+		children: items.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.text }) }, `${item.text}-${index}`))
+	});
+}
+function PromptPreviewList({ prompts }) {
+	if (!Array.isArray(prompts) || prompts.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "copy-only prompt text 未暴露或为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "prompt-preview-list",
+		children: prompts.map((prompt, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["source", prompt.sourceContract],
+			["taskId", prompt.taskId],
+			["role", prompt.role],
+			["title", prompt.title],
+			["format", prompt.format]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+			className: "prompt-preview-text",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: prompt.text.text })
+		})] }, `${prompt.taskId.text}-${prompt.role.text}-${index}`))
+	});
+}
+function CloseoutMissingList({ missing }) {
+	if (missing.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "missing items 未暴露。" });
+	if (missing.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "closeout gaps 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "closeout-missing-list",
+		children: missing.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["kind", item.kind],
+			["taskId", item.taskId],
+			["expectedEvent", item.expectedEvent],
+			["gateId", item.gateId],
+			["status", item.status]
+		] }) }, `${item.kind.text}-${item.taskId.text}-${item.gateId.text}-${index}`))
 	});
 }
 function EvidenceRefList({ evidenceRefs }) {
@@ -12490,6 +13274,16 @@ function goalEventsStateText(events, route) {
 	if (events.state === "unavailable") return "不可用";
 	if (events.timeline.state === "empty") return "未登记事件";
 	return routeStateText(route);
+}
+function activeGoalStateText(value, route) {
+	if (value.state === "missing") return "未暴露";
+	if (value.state === "unavailable") return "不可用";
+	if (value.state === "empty") return "空";
+	return routeStateText(route);
+}
+function promptPreviewStateText(promptPreview, route) {
+	if (promptPreview.state === "empty") return "无 copy-only 文本";
+	return activeGoalStateText(promptPreview, route);
 }
 function phaseText(phase) {
 	if (phase === "loading") return "读取中";

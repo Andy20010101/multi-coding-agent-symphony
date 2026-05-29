@@ -16,6 +16,9 @@ import {
 } from '../frontend/workbench/src/api/contracts.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
+const V19_GOAL_ID = 'v19-goal-runbook-next-action';
+const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
+const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
 
 describe('v15 Workbench read-only API client', () => {
   it('exposes only the approved read-only route list', () => {
@@ -30,6 +33,10 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals', 'symphony.goals-index'],
         ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/goals/latest/events', 'goal-event-log.v1'],
+        ['GET', '/api/goals/latest/runbook', 'goal-runbook.v1'],
+        ['GET', '/api/goals/latest/next', 'goal-next-action.v1'],
+        ['GET', '/api/goals/latest/prompt', 'goal-prompt-pack.v1'],
+        ['GET', '/api/goals/latest/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/capabilities', 'capabilities.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1']
       ]
@@ -45,10 +52,18 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals', 'symphony.goals-index'],
         ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/goals/latest/events', 'goal-event-log.v1'],
+        ['GET', '/api/goals/latest/runbook', 'goal-runbook.v1'],
+        ['GET', '/api/goals/latest/next', 'goal-next-action.v1'],
+        ['GET', '/api/goals/latest/prompt', 'goal-prompt-pack.v1'],
+        ['GET', '/api/goals/latest/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/capabilities', 'capabilities.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
         ['GET', '/api/goals/<goal-id>/progress', 'goal-progress-ledger.v1'],
+        ['GET', '/api/goals/<goal-id>/runbook', 'goal-runbook.v1'],
+        ['GET', '/api/goals/<goal-id>/next', 'goal-next-action.v1'],
+        ['GET', '/api/goals/<goal-id>/prompt', 'goal-prompt-pack.v1'],
+        ['GET', '/api/goals/<goal-id>/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
         ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
@@ -344,7 +359,9 @@ describe('v15 Workbench read-only API client', () => {
       calls.map(([path, init]) => [path, init.method, Object.hasOwn(init, 'body')]),
       [
         ...READONLY_API_ROUTES.map((route) => [route.path, 'GET', false]),
-        [GUIDED_HANDOFF_PATH, 'GET', false]
+        [GUIDED_HANDOFF_PATH, 'GET', false],
+        [ACTIVE_GOAL_PROGRESS_PATH, 'GET', false],
+        [ACTIVE_GOAL_EVENTS_PATH, 'GET', false]
       ]
     );
     assert.equal(calls.some(([path]) => path.includes('docs/plans/')), false);
@@ -782,6 +799,11 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.handoff.commandBlocks.items[0].title.value, 'Preflight');
     assert.equal(model.handoff.commandBlocks.items[0].commands[0].value, 'git checkout main');
     assert.equal(model.goalProgress.contractName.value, 'goal-progress-ledger.v1');
+    assert.equal(model.activeGoal.runbook.contractName.value, 'goal-runbook.v1');
+    assert.equal(model.activeGoal.runbook.tasks.items[0].status.value, 'planned');
+    assert.equal(model.activeGoal.nextAction.next.role.value, 'worker');
+    assert.equal(model.activeGoal.promptPreview.items[0].text.value.includes('/goal'), true);
+    assert.equal(model.activeGoal.closeoutGaps.missing.items[0].kind.value, 'worker-evidence');
     assert.equal(model.capabilities.browserExecutionAvailable.value, false);
     assert.equal(model.diagnosticsV1.status.value, 'ok');
   });
@@ -928,6 +950,12 @@ function createV17ReadonlyPayloadEntries({
         modelInvocationAvailable: false
       }
     }],
+    ['/api/goals/latest/runbook', createV19RunbookPayload()],
+    ['/api/goals/latest/next', createV19NextActionPayload()],
+    ['/api/goals/latest/prompt', createV19PromptPackPayload()],
+    ['/api/goals/latest/closeout', createV19CloseoutPayload()],
+    [ACTIVE_GOAL_PROGRESS_PATH, createV19ProgressPayload()],
+    [ACTIVE_GOAL_EVENTS_PATH, createV19EventsPayload()],
     ['/api/capabilities', {
       contractName: 'capabilities.v1',
       contractVersion: 1,
@@ -971,6 +999,266 @@ function createV17ReadonlyPayloadEntries({
       }
     }]
   ];
+}
+
+function createV19RunbookPayload() {
+  return {
+    contractName: 'goal-runbook.v1',
+    contractVersion: 1,
+    goalId: V19_GOAL_ID,
+    goalTitle: 'v19 Goal Runbook + Next Action Control Center',
+    baseline: {
+      tag: 'v18',
+      commit: null,
+      evidenceRef: 'docs/plans/v18-tag-release-evidence-2026-05-29.md'
+    },
+    tasks: [{
+      taskId: 'task-6',
+      title: 'Workbench Active Goal Control Center',
+      branch: 'v19-task6-workbench-active-goal',
+      roleOrder: ['worker', 'reviewer', 'main-verifier'],
+      acceptance: [
+        'Workbench displays the active goal runbook.',
+        'Prompt preview remains copy-only text.'
+      ],
+      expectedEvidence: {
+        worker: 'worker.evidence-recorded',
+        reviewer: ['reviewer.approved', 'reviewer.needs-revision'],
+        mainVerifier: 'main.verification-passed'
+      },
+      copyOnlyCommands: [
+        'pnpm check',
+        'pnpm test',
+        'pnpm workbench:build',
+        'git diff --check'
+      ]
+    }],
+    releaseGates: [
+      'release.pnpm-check',
+      'release.pnpm-test',
+      'release.workbench-build',
+      'release.tag-evidence'
+    ],
+    rolePolicy: {
+      workerCannotApproveOwnTask: true,
+      reviewerApprovalRequiredBeforeMainVerification: true,
+      mainVerificationRequiredBeforeReleaseReady: true
+    }
+  };
+}
+
+function createV19NextActionPayload() {
+  return {
+    contractName: 'goal-next-action.v1',
+    contractVersion: 1,
+    goalId: V19_GOAL_ID,
+    status: 'action-required',
+    next: {
+      taskId: 'task-6',
+      role: 'worker',
+      phase: 'implement',
+      reason: 'No explicit worker evidence is recorded for task-6.',
+      blocked: false
+    },
+    evidenceState: {
+      workerEvidenceRef: null,
+      reviewEvidenceRef: null,
+      mainVerificationRef: null
+    },
+    copyOnlyPrompt: {
+      available: true,
+      format: 'markdown',
+      text: '/goal\n执行 v19 Task 6 worker implement：Workbench 新增 Active Goal Control Center。'
+    },
+    copyOnlyCommands: [
+      'pnpm check',
+      'pnpm test',
+      'pnpm workbench:build',
+      'git diff --check'
+    ],
+    afterCompletion: {
+      registerWith: 'symphony goal update',
+      allowedEvents: ['worker.evidence-recorded', 'worker.self-check-passed']
+    },
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      workbenchWriteAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false
+    }
+  };
+}
+
+function createV19PromptPackPayload() {
+  return {
+    contractName: 'goal-prompt-pack.v1',
+    contractVersion: 1,
+    goalId: V19_GOAL_ID,
+    generatedAt: '2026-05-29T10:00:00.000Z',
+    prompts: [{
+      taskId: 'task-6',
+      role: 'worker',
+      title: 'worker prompt for task-6: Workbench Active Goal Control Center',
+      copyOnly: true,
+      format: 'markdown',
+      text: '/goal\n执行 v19 Task 6 worker implement：Workbench 新增 Active Goal Control Center。\n禁止执行 prompt；Workbench 只展示 copy-only 文本。',
+      validationCommands: [
+        'pnpm check',
+        'pnpm test',
+        'pnpm workbench:build',
+        'git diff --check'
+      ],
+      evidenceFile: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      registration: {
+        dryRunCommand: 'symphony goal update --goal v19-goal-runbook-next-action --task task-6 --event worker.evidence-recorded --actor codex-worker-task-6 --evidence-ref docs/plans/v19-task6-worker-evidence-2026-05-29.md --dry-run',
+        confirmCommand: 'symphony goal update --goal v19-goal-runbook-next-action --task task-6 --event worker.evidence-recorded --actor codex-worker-task-6 --evidence-ref docs/plans/v19-task6-worker-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000',
+        confirmRequired: true,
+        writesInDryRun: false,
+        appendOnlyOnConfirm: true
+      }
+    }],
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      workbenchWriteAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false
+    }
+  };
+}
+
+function createV19CloseoutPayload() {
+  return {
+    contractName: 'goal-closeout-report.v1',
+    contractVersion: 1,
+    goalId: V19_GOAL_ID,
+    generatedAt: '2026-05-29T10:00:00.000Z',
+    summary: {
+      totalTasks: 1,
+      workerEvidenceComplete: false,
+      reviewEvidenceComplete: false,
+      mainVerificationComplete: false,
+      releaseReady: false
+    },
+    missing: [{
+      kind: 'worker-evidence',
+      taskId: 'task-6',
+      expectedEvent: 'worker.evidence-recorded'
+    }, {
+      kind: 'release-gate',
+      taskId: null,
+      expectedEvent: 'release.gate-passed',
+      gateId: 'release.pnpm-test',
+      status: 'unknown'
+    }],
+    releaseGates: {
+      pnpmCheck: 'unknown',
+      pnpmTest: 'unknown',
+      workbenchBuild: 'unknown',
+      mutationGate: 'unknown',
+      auditHigh: 'unknown',
+      diffCheck: 'unknown',
+      mcasDoctor: 'unknown',
+      docsUpdated: 'unknown',
+      tagEvidence: 'missing'
+    },
+    nextAction: `symphony goal next --goal ${V19_GOAL_ID}`,
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      workbenchWriteAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      writesInDryRun: false,
+      confirmRequiredForWrites: true,
+      releaseReadyRequiresEvidence: true
+    }
+  };
+}
+
+function createV19ProgressPayload() {
+  return {
+    contractName: 'goal-progress-ledger.v1',
+    contractVersion: 1,
+    goalId: V19_GOAL_ID,
+    goalTitle: 'v19 Goal Runbook + Next Action Control Center',
+    baseline: {
+      tag: 'v18',
+      commit: null,
+      evidenceRef: 'docs/plans/v18-tag-release-evidence-2026-05-29.md'
+    },
+    summary: {
+      totalTasks: 1,
+      completedTasks: 0,
+      blockedTasks: 0,
+      needsReviewTasks: 0,
+      needsRevisionTasks: 0,
+      releaseReady: false,
+      releaseReadySource: null
+    },
+    tasks: [{
+      taskId: 'task-6',
+      title: 'Workbench Active Goal Control Center',
+      status: 'planned',
+      statusSource: 'goal-runbook.v1',
+      branch: 'v19-task6-workbench-active-goal',
+      commit: null,
+      workerEvidenceRef: null,
+      reviewEvidenceRef: null,
+      reviewVerdict: null,
+      mainVerificationRef: null,
+      blockers: [],
+      nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task6-workbench-active-goal'
+    }],
+    releaseGates: {
+      pnpmCheck: 'unknown',
+      pnpmTest: 'unknown',
+      workbenchBuild: 'unknown',
+      mutationGate: 'unknown',
+      auditHigh: 'unknown',
+      diffCheck: 'unknown',
+      mcasDoctor: 'unknown',
+      docsUpdated: 'unknown',
+      tagEvidence: 'unknown'
+    },
+    blockers: [],
+    nextActions: [{
+      kind: 'copy-only-command',
+      label: 'Start task-6',
+      command: 'git checkout main && git pull --ff-only && git checkout -b v19-task6-workbench-active-goal'
+    }],
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false
+    }
+  };
+}
+
+function createV19EventsPayload() {
+  return {
+    contractName: 'goal-event-log.v1',
+    contractVersion: 1,
+    goalId: V19_GOAL_ID,
+    goalTitle: 'v19 Goal Runbook + Next Action Control Center',
+    baseline: {
+      tag: 'v18',
+      commit: null,
+      evidenceRef: 'docs/plans/v18-tag-release-evidence-2026-05-29.md'
+    },
+    log: {
+      appendOnly: true,
+      storage: 'managed-goal-event-journal',
+      eventCount: 0,
+      firstSequence: null,
+      lastSequence: null,
+      lastEventId: null,
+      lastEventHash: null
+    },
+    events: []
+  };
 }
 
 function createGoalEventsPayload({ events } = {}) {
