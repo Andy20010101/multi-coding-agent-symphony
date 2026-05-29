@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 Task 1 adds `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract fixtures and validators for Goal Runbook + Next Action Control Center work. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 adds the implemented/draft `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract family for Goal Runbook + Next Action Control Center work. v19 is not released or tagged by this document. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -36,6 +36,7 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v19 runbook contracts define the operator control surface only. They do not execute CLI commands, read evidence documents, write managed state, call models, merge, tag, or mark release readiness.
 - v19 goal status must come from explicit `goal-event-log.v1` evidence. Branch names, filenames, task titles, command text, and path strings are never approval, main verification, or release-ready proof.
 - v19 prompt and command fields are copy-only text. Dry-run and confirm fields must stay explicit and consistent; dry-run fields must not imply writes.
+- v19 release-ready requires an explicit `symphony goal gate --gate release.ready --status declared` confirm flow, which records `release.ready-declared`. Passing `pnpm check`, `pnpm test`, `pnpm workbench:build`, mutation, audit, doctor, or diff commands is command evidence only until the matching release gate events are registered.
 
 ## `goal-event-log.v1`
 
@@ -173,6 +174,12 @@ Validator boundary:
 - `baseline.evidenceRef` must be a controlled repo-doc or managed artifact ref.
 - `copyOnlyCommands` are text recommendations only.
 
+CLI and route boundary:
+
+- `symphony goal init` registers managed runbook state only through dry-run and `--confirm --plan-hash`.
+- The current implementation accepts `--from-json` for controlled `fixtures/contracts/goal-runbook.*.v1.json` refs. It rejects markdown sources, arbitrary JSON paths, output paths, absolute paths, `file://`, `~/`, traversal, encoded path markers, and backslashes.
+- The read-only API exposes `GET /api/goals/latest/runbook` and `GET /api/goals/<goal-id>/runbook`. Missing managed runbook state is reported as a safe API error; the Workbench does not create or confirm runbooks.
+
 ## `goal-next-action.v1`
 
 `goal-next-action.v1` describes the next recommended operator action after combining a runbook with explicit event evidence. It is a recommendation, not execution.
@@ -217,6 +224,12 @@ Validator boundary:
 
 Supported statuses are `action-required`, `missing-runbook`, `blocked`, and `complete`. A prompt marked available must include copy-only prompt text. Allowed completion events must be supported goal event types.
 
+CLI and route boundary:
+
+- `symphony goal next --goal <goal-id> --json|--markdown` reads managed runbook state, `goal-event-log.v1`, and `goal-progress-ledger.v1`.
+- `symphony next --goal latest` can surface the active goal next action. Without a managed runbook, it must keep the existing Stage summary behavior or return `missing-runbook` for explicit goal next calls.
+- `GET /api/goals/latest/next` and `GET /api/goals/<goal-id>/next` return `goal-next-action.v1`. A `missing-runbook` response may recommend a copy-only `symphony goal init` dry-run command, but it does not write state.
+
 ## `goal-prompt-pack.v1`
 
 `goal-prompt-pack.v1` packages copy-only `/goal` prompts for `worker`, `reviewer`, `main-verifier`, and `release-manager` roles.
@@ -231,6 +244,12 @@ Each prompt includes:
 - `registration` with separate dry-run and confirm commands.
 
 Dry-run registration commands must include `--dry-run` and must not include `--confirm`. Confirm commands must include `--confirm` and `--plan-hash`. `writesInDryRun` is always `false`; `appendOnlyOnConfirm` is always `true`.
+
+CLI and route boundary:
+
+- `symphony goal prompt --goal <goal-id> --task <task-id> --role worker|reviewer|main-verifier|release-manager --markdown|--json` renders prompts only.
+- `symphony goal prompt --goal <goal-id> --next --markdown` selects the task and role from `goal-next-action.v1`.
+- `GET /api/goals/latest/prompt` and `GET /api/goals/<goal-id>/prompt` return prompt-pack data for display. The Workbench Prompt Preview copies text only; it does not run the prompt, register an event, start an agent, or call a model.
 
 ## `goal-closeout-report.v1`
 
@@ -270,6 +289,12 @@ Dry-run registration commands must include `--dry-run` and must not include `--c
 ```
 
 Closeout reports keep `releaseReady` evidence-based. Missing items must name a supported expected event type, release gates use the existing `goal-progress-ledger.v1` gate status vocabulary, and `nextAction` is a copy-only command.
+
+CLI and route boundary:
+
+- `symphony goal closeout --goal <goal-id> --json|--markdown` reports gaps. It does not run tests, audit, mutation, doctor, or Workbench build, and it does not write release evidence files.
+- `GET /api/goals/latest/closeout` and `GET /api/goals/<goal-id>/closeout` return `goal-closeout-report.v1` when a managed runbook exists.
+- `summary.releaseReady` can be true only after task worker evidence, reviewer approval, main verification, all required release gate events, and the explicit `release.ready-declared` event are present. A passed command line by itself is not release-ready evidence.
 
 ## `goal-progress-ledger.v1`
 

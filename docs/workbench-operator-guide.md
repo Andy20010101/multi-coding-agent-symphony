@@ -1,4 +1,4 @@
-# v18 Workbench 中文操作指南
+# Workbench 中文操作指南
 
 ## 当前定位
 
@@ -12,6 +12,8 @@ Workbench 是 read-only / display-only / copy-only：
 - 浏览器不是 canonical state；`.symphony` 只保存 summary、ref、pointer，完整 evidence 继续由 ArtifactStore 承担。
 
 v18 增加 `goal-event-log.v1` 和 `goal-update-plan.v1`，但 Workbench 仍然只读。`symphony goal update`、`symphony goal review`、`symphony goal gate` 的 dry-run / confirm 流程只在终端 CLI 中运行；Workbench 只展示后端已经写入的 event log 和 resolver 生成的 ledger。
+
+v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout`、`symphony next` 和 Workbench Active Goal Control Center。v19 不是当前 released/tagged 版本；release-ready 仍需要终端中显式登记 `symphony goal gate --gate release.ready --status declared`。
 
 ## 构建 Workbench
 
@@ -98,6 +100,14 @@ GET /api/goals/latest/progress
 GET /api/goals/<goal-id>/progress
 GET /api/goals/latest/events
 GET /api/goals/<goal-id>/events
+GET /api/goals/latest/runbook
+GET /api/goals/<goal-id>/runbook
+GET /api/goals/latest/next
+GET /api/goals/<goal-id>/next
+GET /api/goals/latest/prompt
+GET /api/goals/<goal-id>/prompt
+GET /api/goals/latest/closeout
+GET /api/goals/<goal-id>/closeout
 GET /api/capabilities
 GET /api/diagnostics
 ```
@@ -150,6 +160,53 @@ symphony goal gate --goal v18-goal-event-journal-evidence-recorder --gate releas
 ```
 
 Confirm 阶段必须带 dry-run 生成的 `--plan-hash`，只向受控 managed-goal-event-journal append event。Workbench 不提供 confirm 按钮，也不会触发 shell、模型、review、gate、merge 或 tag。
+
+## v19 Active Goal Control Center
+
+Active Goal Control Center 是 v19 的只读操作面。它把 managed runbook、event-backed ledger、next action、prompt pack 和 closeout gap report 合在一个 Workbench 区域展示，但不改变状态。
+
+终端操作流程：
+
+```sh
+pnpm --silent symphony goal init --goal v19-fixture --from-json fixtures/contracts/goal-runbook.valid.v1.json --dry-run --json
+pnpm --silent symphony goal init --goal v19-fixture --from-json fixtures/contracts/goal-runbook.valid.v1.json --confirm --plan-hash sha256:<PLAN_HASH> --json
+pnpm --silent symphony goal next --goal v19-fixture --json
+pnpm --silent symphony goal prompt --goal v19-fixture --task task-1 --role worker --markdown
+pnpm --silent symphony goal prompt --goal v19-fixture --next --markdown
+pnpm --silent symphony goal closeout --goal v19-fixture --json
+pnpm --silent symphony next --goal latest --json
+```
+
+当前 `goal init` 只接受受控 fixture JSON：`fixtures/contracts/goal-runbook.*.v1.json`。它不解析 markdown plan，不读取任意 JSON 路径，不写任意 output path。dry-run 只返回 `goal-runbook-init-plan.v1`；confirm 必须带同一输入生成的 `--plan-hash`，只写 managed runbook state 和 latest active goal pointer。
+
+Workbench 面板：
+
+- Active Goal Runbook：展示 `goal-runbook.v1` 中的 goal、baseline、tasks、expected evidence、release gates 和 role policy。
+- Next Action Card：展示 `goal-next-action.v1` 中的 next task、required role、phase、reason、blocked 状态、copy-only commands 和 after-completion registration。
+- Prompt Preview：展示 `goal-prompt-pack.v1` 或 next action 中的 copy-only `/goal` 文本。这里没有执行按钮、agent 启动、模型调用、终端写入或 event confirm。
+- Closeout Gaps：展示 `goal-closeout-report.v1` 的 missing worker evidence、review evidence、main verification、release gates 和 release-ready source。
+
+Active Goal API 只接受 `GET`：
+
+```text
+GET /api/goals/latest/runbook
+GET /api/goals/<goal-id>/runbook
+GET /api/goals/latest/next
+GET /api/goals/<goal-id>/next
+GET /api/goals/latest/prompt
+GET /api/goals/<goal-id>/prompt
+GET /api/goals/latest/closeout
+GET /api/goals/<goal-id>/closeout
+```
+
+如果没有 managed runbook，`goal-next-action.v1` 可以返回 `status: missing-runbook`，并给出 copy-only `symphony goal init` dry-run 命令。Workbench 不能替操作者确认 runbook，也不能把 `missing-runbook` 修成浏览器写入流程。
+
+release-ready 边界：
+
+- `pnpm check`、`pnpm test`、`pnpm workbench:build`、mutation、audit、doctor 和 `git diff --check` 通过，只是命令证据。
+- 对应 release gate 需要用 `symphony goal gate --gate release.<gate> --status passed` dry-run / confirm 登记。
+- 最终 release-ready 需要 `symphony goal gate --gate release.ready --status declared` dry-run / confirm，产生 `release.ready-declared` event。
+- Workbench 只展示 `summary.releaseReady` 和 `releaseReadySource`，不能从命令文本、分支、文件名、prompt preview 或 closeout 文案推断 release-ready。
 
 ## Capabilities 和 Diagnostics
 

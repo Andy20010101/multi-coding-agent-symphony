@@ -69,6 +69,10 @@ The system should preserve each CLI's native harness instead of replacing it. Th
 - [v18 Release Evidence](docs/plans/v18-release-evidence-2026-05-28.md)
 - [v18 Final Closure Evidence](docs/plans/v18-final-closure-evidence-2026-05-29.md)
 - [v18 Tag Release Evidence](docs/plans/v18-tag-release-evidence-2026-05-29.md)
+- [v19 Goal Runbook + Next Action Control Center Plan](docs/plans/v19-goal-runbook-next-action-plan-2026-05-29.md)
+- [v19 Execution Prompts](docs/plans/v19-execution-prompts-2026-05-29.md)
+- [v19 Task Evidence Index](docs/plans/v19-task-evidence-index-2026-05-29.md)
+- [v19 Release Evidence Draft](docs/plans/v19-release-evidence-2026-05-29.md)
 - [v16 Goal Execution Plan](tmp/codex-prompts/v16_goal_execution_plan.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
@@ -95,6 +99,8 @@ Implemented:
 - v18 goal event journal candidate: `goal-event-log.v1`, `goal-update-plan.v1`, `symphony goal update`, `symphony goal review`, and `symphony goal gate` provide dry-run / confirm event registration. Confirm writes append-only events to the managed journal; dry-run produces a reviewable plan and writes nothing.
 - v18 event-backed goal progress: the resolver reads `goal-event-log.v1` into the existing `goal-progress-ledger.v1`. With no events, it keeps the v17 planned/unknown template instead of guessing status.
 - v18 read-only goal events API and Workbench display: `GET /api/goals/latest/events`, `GET /api/goals/<goal-id>/events`, Workbench Goal Events Timeline, and Workbench Evidence Matrix expose registered events and evidence refs without reading evidence document bodies.
+- v19 implemented/draft goal runbook workflow: `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, `goal-closeout-report.v1`, `symphony goal init`, `symphony goal next`, `symphony goal prompt`, `symphony goal closeout`, `symphony next`, and the read-only Workbench Active Goal Control Center are present for Goal Runbook + Next Action Control Center work.
+- v19 remains unreleased in this checkout. Current released repository tag is still `v18`; v19 release-ready still requires explicit `symphony goal gate --gate release.ready --status declared` evidence after the remaining task, review, main verification, and release gate evidence exists.
 - v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan with the exact confirm command, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
 - v12 verified adoption: `symphony adopt --run <run-id>` freezes verifier-passing isolated workspace changes as a text-only patch plan, and `symphony adopt --confirm <adoption-id>` applies only that frozen patch after fingerprint and `git apply --check` validation.
 - v12 adoption recovery visibility: confirmation writes a registered journal before `git apply`, and `symphony adopt --inspect <adoption-id> --json` reports plan refs, journal refs, latest confirmation state, and current worktree hash matches without writing files.
@@ -108,9 +114,9 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Latest completed mainline release: `v18`. Current released repository tag: `v18`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite read-only Workbench migration on mainline, v16 adds guided handoff and safe artifact preview contracts across the read-only API and Workbench, v17 adds the read-only goal progress ledger plus console capability, diagnostics, and error-envelope contracts, and v18 adds controlled goal event registration plus read-only event display. The `v7` tag remains available for historical installs.
+Latest completed mainline release: `v18`. Current released repository tag: `v18`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite read-only Workbench migration on mainline, v16 adds guided handoff and safe artifact preview contracts across the read-only API and Workbench, v17 adds the read-only goal progress ledger plus console capability, diagnostics, and error-envelope contracts, and v18 adds controlled goal event registration plus read-only event display. v19 is an implemented draft for Goal Runbook + Next Action Control Center and is not the latest released or tagged version. The `v7` tag remains available for historical installs.
 
-v18 does not include Autopilot, Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation, automatic merge, or automatic tag. Workbench remains read-only / display-only / copy-only, and browser views do not execute the CLI commands shown as text.
+v18 and the current v19 draft do not include Autopilot, Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation, automatic merge, or automatic tag. Workbench remains read-only / display-only / copy-only, and browser views do not execute the CLI commands shown as text.
 
 ## Design Center
 
@@ -161,6 +167,10 @@ pnpm symphony status
 pnpm symphony goal-status
 pnpm symphony goal-status --json
 pnpm symphony goal-status --markdown
+pnpm --silent symphony goal init --goal v19-fixture --from-json fixtures/contracts/goal-runbook.valid.v1.json --dry-run --json
+pnpm --silent symphony goal next --goal v19-fixture --json
+pnpm --silent symphony goal prompt --goal v19-fixture --task task-1 --role worker --markdown
+pnpm --silent symphony goal closeout --goal v19-fixture --json
 pnpm symphony console --snapshot --json
 pnpm --silent symphony diagnose --json
 pnpm --silent symphony diagnose --html > tmp/symphony-diagnostics.html
