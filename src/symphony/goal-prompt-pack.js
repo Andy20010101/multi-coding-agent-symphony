@@ -1,0 +1,672 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { isSafeGoalEventToken } from './goal-event-contracts.js';
+import { buildGoalNextAction } from './goal-next-action-resolver.js';
+import {
+  readManagedActiveGoalPointer,
+  readManagedGoalRunbookState
+} from './goal-runbook-registry.js';
+import {
+  GOAL_PROMPT_PACK_CONTRACT_NAME,
+  GOAL_PROMPT_PACK_CONTRACT_VERSION,
+  GOAL_PROMPT_PACK_ROLES,
+  assertGoalPromptPackContract,
+  assertGoalRunbookContract
+} from './goal-runbook-contracts.js';
+
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const CONTROLLED_FIXTURE_GOAL_ID = 'v19-fixture';
+const CONTROLLED_FIXTURE_REF = 'fixtures/contracts/goal-runbook.valid.v1.json';
+const PLACEHOLDER_PLAN_HASH = 'sha256:0000000000000000000000000000000000000000000000000000000000000000';
+const EVIDENCE_DATE = '2026-05-29';
+
+const ROLE_LABELS = Object.freeze({
+  worker: 'worker',
+  reviewer: 'reviewer',
+  'main-verifier': 'main verifier',
+  'release-manager': 'release manager'
+});
+const RELEASE_GATE_COMMANDS = Object.freeze({
+  'release.pnpm-check': 'pnpm check',
+  'release.pnpm-test': 'pnpm test',
+  'release.workbench-build': 'pnpm workbench:build',
+  'release.mutation-gate': 'pnpm test:mutation:gate',
+  'release.audit-high': 'pnpm audit --audit-level high',
+  'release.diff-check': 'git diff --check',
+  'release.mcas-doctor': 'pnpm --silent mcas doctor --json',
+  'release.docs-updated': 'pnpm check',
+  'release.tag-evidence': null
+});
+
+export class GoalPromptPackError extends Error {
+  constructor(code, message, safeDetails) {
+    super(message);
+    this.name = 'GoalPromptPackError';
+    this.code = code;
+
+    if (safeDetails !== undefined) {
+      this.safeDetails = safeDetails;
+    }
+  }
+}
+
+export async function buildGoalPromptPack({
+  stateDir = '.symphony',
+  goalId,
+  taskId,
+  role,
+  next = false,
+  generatedAt = new Date().toISOString()
+} = {}) {
+  const context = next
+    ? await buildNextPromptContext({ stateDir, goalId, generatedAt })
+    : await buildExplicitPromptContext({ stateDir, goalId, taskId, role });
+  const prompt = buildPrompt(context);
+  const promptPack = {
+    contractName: GOAL_PROMPT_PACK_CONTRACT_NAME,
+    contractVersion: GOAL_PROMPT_PACK_CONTRACT_VERSION,
+    goalId: context.runbook.goalId,
+    generatedAt,
+    prompts: [prompt],
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      workbenchWriteAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false
+    }
+  };
+
+  return assertGoalPromptPackContract(promptPack);
+}
+
+export function renderGoalPromptPackMarkdown(promptPack) {
+  const prompts = Array.isArray(promptPack?.prompts) ? promptPack.prompts : [];
+
+  return prompts.map((prompt) => prompt.text).join('\n\n');
+}
+
+async function buildExplicitPromptContext({ stateDir, goalId, taskId, role }) {
+  const resolvedGoalId = await normalizeGoalId({ stateDir, goalId });
+  const normalizedRole = normalizeRole(role);
+  const normalizedTaskId = normalizeTaskId(taskId, '--task');
+  const runbook = await loadRunbook({
+    stateDir,
+    goalId: resolvedGoalId,
+    allowControlledFixtureFallback: resolvedGoalId === CONTROLLED_FIXTURE_GOAL_ID
+  });
+  const runbookTask = resolveRunbookTask({
+    runbook,
+    taskId: normalizedTaskId,
+    role: normalizedRole
+  });
+
+  return {
+    runbook,
+    runbookTask,
+    taskId: normalizedTaskId,
+    role: normalizedRole,
+    phase: rolePhase(normalizedRole),
+    reason: null,
+    validationCommands: validationCommandsFor({
+      runbook,
+      runbookTask,
+      role: normalizedRole
+    })
+  };
+}
+
+async function buildNextPromptContext({ stateDir, goalId, generatedAt }) {
+  const nextAction = await buildGoalNextAction({
+    stateDir,
+    goalId: normalizeOptionalGoalId(goalId),
+    generatedAt
+  });
+
+  if (nextAction.status !== 'action-required' || nextAction.next === null) {
+    throw new GoalPromptPackError(
+      'next-prompt-unavailable',
+      'goal prompt --next requires an action-required goal-next-action.v1 result.'
+    );
+  }
+
+  const runbook = await loadRunbook({
+    stateDir,
+    goalId: nextAction.goalId,
+    allowControlledFixtureFallback: false
+  });
+  const runbookTask = resolveRunbookTask({
+    runbook,
+    taskId: nextAction.next.taskId,
+    role: nextAction.next.role
+  });
+
+  return {
+    runbook,
+    runbookTask,
+    taskId: nextAction.next.taskId,
+    role: nextAction.next.role,
+    phase: nextAction.next.phase,
+    reason: nextAction.next.reason,
+    validationCommands: validationCommandsFor({
+      runbook,
+      runbookTask,
+      role: nextAction.next.role
+    })
+  };
+}
+
+async function normalizeGoalId({ stateDir, goalId }) {
+  const normalizedGoalId = normalizeOptionalGoalId(goalId);
+
+  if (normalizedGoalId !== 'latest') {
+    return normalizedGoalId;
+  }
+
+  const pointer = await readManagedActiveGoalPointer({ stateDir });
+
+  if (!isSafeGoalEventToken(pointer?.goalId)) {
+    throw new GoalPromptPackError(
+      'missing-active-goal',
+      'goal prompt --goal latest requires an active managed goal runbook.'
+    );
+  }
+
+  return pointer.goalId;
+}
+
+function normalizeOptionalGoalId(goalId) {
+  if (goalId === undefined || goalId === null) {
+    throw new GoalPromptPackError(
+      'missing-goal-id',
+      'goal prompt requires --goal.'
+    );
+  }
+
+  if (goalId === 'latest') {
+    return goalId;
+  }
+
+  if (!isSafeGoalEventToken(goalId)) {
+    throw new GoalPromptPackError(
+      'invalid-goal-id',
+      '--goal must be latest or a safe non-empty goal id.'
+    );
+  }
+
+  return goalId;
+}
+
+function normalizeTaskId(taskId, field) {
+  if (!isSafeGoalEventToken(taskId)) {
+    throw new GoalPromptPackError(
+      'invalid-task-id',
+      `${field} must be a safe non-empty task id.`
+    );
+  }
+
+  return taskId;
+}
+
+function normalizeRole(role) {
+  if (!GOAL_PROMPT_PACK_ROLES.includes(role)) {
+    throw new GoalPromptPackError(
+      'invalid-prompt-role',
+      '--role must be worker, reviewer, main-verifier, or release-manager.'
+    );
+  }
+
+  return role;
+}
+
+async function loadRunbook({ stateDir, goalId, allowControlledFixtureFallback }) {
+  const state = await readManagedGoalRunbookState({ stateDir, goalId });
+
+  if (state !== null) {
+    try {
+      return assertGoalRunbookContract(state.runbook);
+    } catch (error) {
+      throw new GoalPromptPackError(
+        'invalid-managed-runbook',
+        'managed goal runbook state is invalid.',
+        { reason: safeErrorMessage(error) }
+      );
+    }
+  }
+
+  if (allowControlledFixtureFallback) {
+    return readControlledFixtureRunbook(goalId);
+  }
+
+  throw new GoalPromptPackError(
+    'missing-managed-runbook',
+    `No managed goal-runbook.v1 state is registered for ${goalId}.`
+  );
+}
+
+async function readControlledFixtureRunbook(goalId) {
+  const parsed = JSON.parse(await readFile(join(REPO_ROOT, CONTROLLED_FIXTURE_REF), 'utf8'));
+
+  return assertGoalRunbookContract({
+    ...parsed,
+    goalId
+  });
+}
+
+function resolveRunbookTask({ runbook, taskId, role }) {
+  if (role === 'release-manager') {
+    if (taskId !== 'release') {
+      throw new GoalPromptPackError(
+        'invalid-release-task',
+        'release-manager prompts require --task release.'
+      );
+    }
+
+    return null;
+  }
+
+  const runbookTask = runbook.tasks.find((task) => task.taskId === taskId);
+
+  if (runbookTask === undefined) {
+    throw new GoalPromptPackError(
+      'unknown-task',
+      `Task ${taskId} is not present in the managed goal runbook.`
+    );
+  }
+
+  if (!runbookTask.roleOrder.includes(role)) {
+    throw new GoalPromptPackError(
+      'role-not-in-task-order',
+      `Role ${role} is not configured for ${taskId}.`
+    );
+  }
+
+  return runbookTask;
+}
+
+function buildPrompt(context) {
+  const evidenceFile = evidenceFileFor(context);
+  const registration = registrationFor({
+    goalId: context.runbook.goalId,
+    taskId: context.taskId,
+    role: context.role,
+    evidenceFile
+  });
+
+  return {
+    taskId: context.taskId,
+    role: context.role,
+    title: promptTitle(context),
+    copyOnly: true,
+    format: 'markdown',
+    text: promptTextFor({
+      ...context,
+      evidenceFile,
+      registration
+    }),
+    validationCommands: context.validationCommands,
+    evidenceFile,
+    registration
+  };
+}
+
+function promptTitle({ role, runbookTask, taskId }) {
+  if (role === 'release-manager') {
+    return 'Prepare release closeout evidence';
+  }
+
+  return `${ROLE_LABELS[role]} prompt for ${taskId}: ${runbookTask.title}`;
+}
+
+function promptTextFor(context) {
+  if (context.role === 'worker') {
+    return workerPromptText(context);
+  }
+
+  if (context.role === 'reviewer') {
+    return reviewerPromptText(context);
+  }
+
+  if (context.role === 'main-verifier') {
+    return mainVerifierPromptText(context);
+  }
+
+  return releaseManagerPromptText(context);
+}
+
+function workerPromptText(context) {
+  return [
+    `/goal`,
+    `执行 ${context.runbook.goalId} ${context.taskId} worker implement：${context.runbookTask.title}。`,
+    '',
+    commonTaskScope(context),
+    '',
+    'Role boundary:',
+    '- 只做 worker implementation 和自测记录；不要 reviewer approval、main verification 或 release readiness。',
+    '- 禁止 self-review：worker 不能审查、批准或合并自己的 task。',
+    '- 不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。',
+    '',
+    validationSection(context.validationCommands),
+    '',
+    evidenceSection(context),
+    '',
+    registrationSection({
+      heading: 'Event registration guidance after worker evidence exists:',
+      registration: context.registration,
+      allowedEvents: ['worker.evidence-recorded', 'worker.self-check-passed', 'worker.self-check-failed']
+    }),
+    '',
+    'Return:',
+    '- Summary',
+    '- Files changed',
+    '- Tests run with exact results',
+    `- Suggested worker evidence file path: ${context.evidenceFile}`,
+    '- Reviewer handoff; do not claim reviewer approval.'
+  ].join('\n');
+}
+
+function reviewerPromptText(context) {
+  return [
+    '/goal',
+    `审查 ${context.runbook.goalId} ${context.taskId}：${context.runbookTask.title}。`,
+    '',
+    commonTaskScope(context),
+    '',
+    'Role boundary:',
+    '- 你是 independent reviewer；如果你参与过本 task 的 worker implementation，先停止并说明，不能 self-review。',
+    '- 只根据 diff、tests、contract output 和 evidence 判断，不复述 worker 总结当作结论。',
+    '- 不做 implementation、不登记 main verification、不声明 release ready。',
+    '',
+    validationSection(context.validationCommands),
+    '',
+    evidenceSection(context),
+    '',
+    registrationSection({
+      heading: 'Event registration guidance after review verdict:',
+      registration: context.registration,
+      allowedEvents: ['reviewer.approved', 'reviewer.needs-revision']
+    }),
+    '',
+    'Return:',
+    '- Findings first, ordered by severity',
+    '- Verdict: APPROVED or NEEDS_REVISION',
+    '- Tests checked with exact results',
+    `- Suggested review evidence file path: ${context.evidenceFile}`,
+    '- If approved, hand off to main-verifier; if needs revision, hand back to worker.'
+  ].join('\n');
+}
+
+function mainVerifierPromptText(context) {
+  return [
+    '/goal',
+    `执行 ${context.runbook.goalId} ${context.taskId} main verification：${context.runbookTask.title}。`,
+    '',
+    commonTaskScope(context),
+    '',
+    'Role boundary:',
+    '- 先确认 reviewer.approved evidence 明确存在；没有 reviewer approval 就停止。',
+    '- 禁止 self-review：main verification 不能替代 independent reviewer approval。',
+    '- 只登记 main verification gate；不要登记 worker 或 reviewer event。',
+    '- 不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。',
+    '',
+    validationSection(context.validationCommands),
+    '',
+    evidenceSection(context),
+    '',
+    registrationSection({
+      heading: 'Event registration guidance after main verification:',
+      registration: context.registration,
+      allowedEvents: ['main.verification-passed', 'main.verification-failed']
+    }),
+    '',
+    'Return:',
+    '- Summary',
+    '- Main commit or checked commit',
+    '- Commands run with exact results',
+    `- Suggested main verification evidence file path: ${context.evidenceFile}`,
+    '- Remaining blockers, if any.'
+  ].join('\n');
+}
+
+function releaseManagerPromptText(context) {
+  const releaseGates = context.runbook.releaseGates.map((gate) => `- ${gate}`).join('\n');
+
+  return [
+    '/goal',
+    `执行 ${context.runbook.goalId} release-manager prompt：准备 release gate 和 closeout evidence。`,
+    '',
+    'Release scope:',
+    `- Goal: ${context.runbook.goalId}`,
+    `- Title: ${context.runbook.goalTitle}`,
+    `- Baseline: ${context.runbook.baseline.tag}`,
+    '- Tasks must already have worker evidence, reviewer approval, and main verification.',
+    '- Release gates:',
+    releaseGates,
+    context.reason === null ? '' : `- Next-action reason: ${context.reason}`,
+    '',
+    'Role boundary:',
+    '- 禁止 self-review：release-manager 不能补做缺失的 worker/reviewer/main-verifier approval。',
+    '- 不执行 prompt，不调用模型，不把 prompt 文本当 evidence。',
+    '- 只根据明确 event log 和 gate evidence 判断；不从文件名、branch 或命令文本推断 release-ready。',
+    '',
+    validationSection(context.validationCommands),
+    '',
+    evidenceSection(context),
+    '',
+    registrationSection({
+      heading: 'Event registration guidance after each release gate has evidence:',
+      registration: context.registration,
+      allowedEvents: ['release.gate-passed', 'release.gate-failed', 'release.ready-declared']
+    }),
+    '',
+    'Return:',
+    '- Summary',
+    '- Release gates checked with exact results',
+    `- Suggested release evidence file path: ${context.evidenceFile}`,
+    '- Remaining blockers and the next gate to register.'
+  ].filter((line) => line !== '').join('\n');
+}
+
+function commonTaskScope({ runbook, runbookTask, reason }) {
+  return [
+    'Task scope:',
+    `- Goal: ${runbook.goalId}`,
+    `- Title: ${runbook.goalTitle}`,
+    `- Task: ${runbookTask.taskId}`,
+    `- Task title: ${runbookTask.title}`,
+    `- Branch is copy-only text, not evidence: ${runbookTask.branch}`,
+    '- Acceptance:',
+    ...runbookTask.acceptance.map((item) => `  - ${item}`),
+    '- Expected evidence:',
+    ...expectedEvidenceLines(runbookTask),
+    reason === null ? null : `- Next-action reason: ${reason}`
+  ].filter((line) => line !== null).join('\n');
+}
+
+function expectedEvidenceLines(runbookTask) {
+  return Object.entries(runbookTask.expectedEvidence)
+    .map(([key, value]) => `  - ${key}: ${Array.isArray(value) ? value.join(', ') : value}`);
+}
+
+function validationSection(commands) {
+  return [
+    'Validation commands to run and report exactly:',
+    '```bash',
+    ...commands,
+    '```'
+  ].join('\n');
+}
+
+function evidenceSection({ evidenceFile }) {
+  return [
+    'Evidence file naming:',
+    `- Suggested path: ${evidenceFile}`,
+    '- Record exact command results, relevant files changed, and any blockers.',
+    '- Do not claim reviewer approval, main verification, or release ready unless the matching event is explicitly registered.'
+  ].join('\n');
+}
+
+function registrationSection({ heading, registration, allowedEvents }) {
+  return [
+    heading,
+    `- Allowed events: ${allowedEvents.join(', ')}`,
+    '- Dry-run first; dry-run writes nothing.',
+    '- Confirm only after reviewing the dry-run plan and replacing the placeholder hash with the returned planHash.',
+    '```bash',
+    registration.dryRunCommand,
+    registration.confirmCommand,
+    '```'
+  ].join('\n');
+}
+
+function validationCommandsFor({ runbook, runbookTask, role }) {
+  if (role === 'release-manager') {
+    return uniqueNonEmptyStrings(runbook.releaseGates.map((gate) => RELEASE_GATE_COMMANDS[gate]));
+  }
+
+  return uniqueNonEmptyStrings(runbookTask.copyOnlyCommands);
+}
+
+function evidenceFileFor({ taskId, role }) {
+  if (role === 'release-manager') {
+    return `docs/plans/v19-closeout-evidence-${EVIDENCE_DATE}.md`;
+  }
+
+  const taskSegment = taskId.replaceAll('-', '');
+  const roleSegment = role === 'main-verifier'
+    ? 'main-verification'
+    : role === 'reviewer'
+      ? 'review'
+      : 'worker';
+
+  return `docs/plans/v19-${taskSegment}-${roleSegment}-evidence-${EVIDENCE_DATE}.md`;
+}
+
+function registrationFor({
+  goalId,
+  taskId,
+  role,
+  evidenceFile
+}) {
+  if (role === 'worker') {
+    return buildRegistration([
+      'symphony',
+      'goal',
+      'update',
+      '--goal',
+      goalId,
+      '--task',
+      taskId,
+      '--event',
+      'worker.evidence-recorded',
+      '--actor',
+      `codex-worker-${taskId}`,
+      '--evidence-ref',
+      evidenceFile
+    ]);
+  }
+
+  if (role === 'reviewer') {
+    return buildRegistration([
+      'symphony',
+      'goal',
+      'review',
+      '--goal',
+      goalId,
+      '--task',
+      taskId,
+      '--reviewer',
+      `codex-reviewer-${taskId}`,
+      '--verdict',
+      'approved',
+      '--evidence-ref',
+      evidenceFile
+    ]);
+  }
+
+  if (role === 'main-verifier') {
+    return buildRegistration([
+      'symphony',
+      'goal',
+      'gate',
+      '--goal',
+      goalId,
+      '--gate',
+      'main-verification',
+      '--task',
+      taskId,
+      '--status',
+      'passed',
+      '--verifier',
+      'codex-main-verifier',
+      '--evidence-ref',
+      evidenceFile
+    ]);
+  }
+
+  return buildRegistration([
+    'symphony',
+    'goal',
+    'gate',
+    '--goal',
+    goalId,
+    '--gate',
+    'release.pnpm-check',
+    '--status',
+    'passed',
+    '--verifier',
+    'codex-release-manager',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+}
+
+function buildRegistration(baseArgs) {
+  return {
+    dryRunCommand: [...baseArgs, '--dry-run'].map(shellQuote).join(' '),
+    confirmCommand: [...baseArgs, '--confirm', '--plan-hash', PLACEHOLDER_PLAN_HASH].map(shellQuote).join(' '),
+    confirmRequired: true,
+    writesInDryRun: false,
+    appendOnlyOnConfirm: true
+  };
+}
+
+function rolePhase(role) {
+  if (role === 'reviewer') {
+    return 'review';
+  }
+
+  if (role === 'main-verifier') {
+    return 'main-verification';
+  }
+
+  if (role === 'release-manager') {
+    return 'release-gate';
+  }
+
+  return 'implement';
+}
+
+function shellQuote(value) {
+  if (/^[A-Za-z0-9._:/=-]+$/u.test(value)) {
+    return value;
+  }
+
+  return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function safeErrorMessage(error) {
+  if (typeof error?.safeDetails?.reason === 'string') {
+    return error.safeDetails.reason;
+  }
+
+  return typeof error?.message === 'string' && error.message.trim() !== ''
+    ? error.message
+    : 'unknown error';
+}
+
+function uniqueNonEmptyStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === 'string' && value.trim() !== ''))];
+}

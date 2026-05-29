@@ -67,6 +67,11 @@ import {
   buildGoalRunbookInitPlan,
   confirmGoalRunbookInit
 } from '../src/symphony/goal-runbook-registry.js';
+import {
+  GoalPromptPackError,
+  buildGoalPromptPack,
+  renderGoalPromptPackMarkdown
+} from '../src/symphony/goal-prompt-pack.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -3297,8 +3302,35 @@ async function runSymphonyGoal({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
-  if (subcommand !== 'init' && subcommand !== 'update' && subcommand !== 'review' && subcommand !== 'gate') {
+  if (subcommand !== 'init' && subcommand !== 'update' && subcommand !== 'review' && subcommand !== 'gate' && subcommand !== 'prompt') {
     throw new UsageError(`unknown goal subcommand: ${subcommand}`);
+  }
+
+  if (subcommand === 'prompt') {
+    const options = parseGoalPromptArgs(rest);
+
+    if (options.help) {
+      stdout.write(goalPromptHelpText());
+      return EXIT_CODES.ok;
+    }
+
+    try {
+      const promptPack = await buildGoalPromptPack(options);
+
+      if (options.format === 'markdown') {
+        stdout.write(`${renderGoalPromptPackMarkdown(promptPack)}\n`);
+        return EXIT_CODES.ok;
+      }
+
+      writeJson(stdout, promptPack);
+      return EXIT_CODES.ok;
+    } catch (error) {
+      if (error instanceof GoalPromptPackError) {
+        throw new UsageError(error.message);
+      }
+
+      throw error;
+    }
   }
 
   if (subcommand === 'init') {
@@ -3500,6 +3532,127 @@ function parseGoalInitArgs(args) {
   return options;
 }
 
+function parseGoalPromptArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: null,
+    taskId: null,
+    role: null,
+    next: false,
+    format: 'json',
+    formatExplicit: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      setGoalPromptFormat(options, 'json');
+      continue;
+    }
+
+    if (value === '--markdown') {
+      setGoalPromptFormat(options, 'markdown');
+      continue;
+    }
+
+    if (value === '--format') {
+      setGoalPromptFormat(options, readRequiredValue(args, index, '--format'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--role') {
+      options.role = readRequiredValue(args, index, '--role');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--next') {
+      options.next = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--confirm' || value === '--dry-run' || value === '--plan-hash') {
+      throw new UsageError('goal prompt is read-only and does not accept write-flow flags');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal prompt does not write files; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal prompt option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal prompt argument: ${value}`);
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.goalId === null) {
+    throw new UsageError('goal prompt requires --goal');
+  }
+
+  if (options.next) {
+    if (options.taskId !== null || options.role !== null) {
+      throw new UsageError('goal prompt --next selects task and role from the resolver; omit --task and --role');
+    }
+
+    return options;
+  }
+
+  for (const [key, flag] of [
+    ['taskId', '--task'],
+    ['role', '--role']
+  ]) {
+    if (options[key] === null) {
+      throw new UsageError(`goal prompt requires ${flag} unless --next is used`);
+    }
+  }
+
+  return options;
+}
+
+function setGoalPromptFormat(options, format) {
+  if (!['json', 'markdown'].includes(format)) {
+    throw new UsageError('goal prompt format must be json or markdown');
+  }
+
+  if (options.formatExplicit && options.format !== format) {
+    throw new UsageError('goal prompt accepts only one output format');
+  }
+
+  options.format = format;
+  options.formatExplicit = true;
+}
+
 function parseGoalUpdateArgs(args) {
   const options = {
     stateDir: '.symphony',
@@ -3642,10 +3795,10 @@ function parseGoalUpdateArgs(args) {
 
 function goalHelpText() {
   return [
-    'Usage: symphony goal <init|update|review|gate> [options]',
+    'Usage: symphony goal <init|update|review|gate|prompt> [options]',
     '',
     'Manages goal runbooks and records goal events through dry-run / confirm flows.',
-    'Currently implemented: symphony goal init, symphony goal update, symphony goal review, and symphony goal gate.',
+    'Currently implemented: symphony goal init, symphony goal update, symphony goal review, symphony goal gate, and symphony goal prompt.',
     ''
   ].join('\n');
 }
@@ -3657,6 +3810,17 @@ function goalInitHelpText() {
     '',
     'Dry-run is the default and prints goal-runbook-init-plan.v1 without writing.',
     'Confirm writes only managed runbook registry state after the current input matches --plan-hash.',
+    ''
+  ].join('\n');
+}
+
+function goalPromptHelpText() {
+  return [
+    'Usage: symphony goal prompt --goal <goal-id> --task <task-id> --role <worker|reviewer|main-verifier|release-manager> [--json|--markdown]',
+    '       symphony goal prompt --goal latest --next [--json|--markdown]',
+    '',
+    'JSON is the default and prints goal-prompt-pack.v1.',
+    'Markdown prints only the copy-only /goal prompt text; it does not write files, register events, run commands, or call models.',
     ''
   ].join('\n');
 }
