@@ -234,6 +234,8 @@ CLI and route boundary:
 
 `goal-prompt-pack.v1` packages copy-only `/goal` prompts for `worker`, `reviewer`, `main-verifier`, and `release-manager` roles.
 
+Top-level fields are `contractName`, `contractVersion`, `goalId`, `generatedAt`, `prompts`, and `safety`. `generatedAt` is an ISO timestamp, `prompts` is the non-empty prompt list, and `safety` carries the read-only / copy-only display boundary.
+
 Each prompt includes:
 
 - `taskId`, `role`, and `title`.
@@ -260,6 +262,7 @@ CLI and route boundary:
   "contractName": "goal-closeout-report.v1",
   "contractVersion": 1,
   "goalId": "v19-goal-runbook-next-action",
+  "generatedAt": "2026-05-29T10:00:00.000Z",
   "summary": {
     "totalTasks": 2,
     "workerEvidenceComplete": true,
@@ -281,10 +284,21 @@ CLI and route boundary:
     "mutationGate": "unknown",
     "auditHigh": "unknown",
     "diffCheck": "unknown",
+    "mcasDoctor": "unknown",
     "docsUpdated": "unknown",
     "tagEvidence": "missing"
   },
-  "nextAction": "symphony goal next --goal v19-goal-runbook-next-action"
+  "nextAction": "symphony goal next --goal v19-goal-runbook-next-action",
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "writesInDryRun": false,
+    "confirmRequiredForWrites": true,
+    "releaseReadyRequiresEvidence": true
+  }
 }
 ```
 

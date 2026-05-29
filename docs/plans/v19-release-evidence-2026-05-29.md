@@ -30,7 +30,7 @@ Current finding from local `goal-status` and the v19 event log:
 - task-1 through task-3 have worker evidence, reviewer approval, and main verification events.
 - task-4 has reviewer approval and main verification events, and a worker evidence document exists, but the current event log summary used for this draft has no `worker.evidence-recorded` event for task-4.
 - task-5 and task-6 have worker evidence, reviewer approval, and main verification events.
-- task-7 is this docs/operator-guide/evidence-index task. Worker evidence should be written to `docs/plans/v19-task7-worker-evidence-2026-05-29.md` after validation; no task-7 event is registered by this draft.
+- task-7 worker evidence is registered as `goal-event-log.v1:evt_f7f1d97c224c6cdb`, with evidence ref `docs/plans/v19-task7-worker-evidence-2026-05-29.md`. The review evidence file records `NEEDS_REVISION`; no reviewer verdict event or main verification event is registered yet.
 - task-8 release verification and final closure has no registered worker, review, or main verification event yet.
 
 ## release gate event state
@@ -81,7 +81,7 @@ Required before release-ready can be declared:
 
 - Register or reconcile the managed `goal-runbook.v1` state needed by `symphony goal next`, `symphony goal prompt`, `symphony goal closeout`, and Active Goal Control Center for this goal.
 - Resolve the task-4 worker evidence event gap or record the release-manager decision that explains the existing document/event mismatch.
-- Finish task-7 worker evidence, independent review, and main verification.
+- Finish task-7 revision, independent review event registration, and main verification.
 - Finish task-8 release verification and final closure.
 - Run and register release gate events for check, test, Workbench build, mutation, audit high, diff check, mcas doctor, docs updated, and tag evidence as applicable.
 - Declare release-ready only through explicit `symphony goal gate --gate release.ready --status declared` evidence.
