@@ -70,6 +70,15 @@ const RELEASE_GATE_EVENTS = [
   'evt_110890a798ea21ab'
 ];
 
+const FINAL_CLOSEOUT_EVENTS = [
+  'evt_9285a8928ef80525',
+  'reviewer.approved',
+  'evt_6d1458b8e7c5baf5',
+  'main.verification-passed',
+  'evt_3714a444163c4583',
+  'release.ready-declared'
+];
+
 function readDoc(path) {
   return readFileSync(new URL(path, ROOT), 'utf8');
 }
@@ -93,6 +102,7 @@ describe('v18 documentation and release evidence', () => {
 
   it('records release gates and task evidence references for every v18 task', () => {
     const releaseEvidence = readDoc('docs/plans/v18-release-evidence-2026-05-28.md');
+    const finalClosureEvidence = readDoc('docs/plans/v18-final-closure-evidence-2026-05-29.md');
     const taskEvidenceIndex = readDoc('docs/plans/v18-task-evidence-index-2026-05-28.md');
     const reviewEvidence = readDoc('docs/plans/v18-task10-review-evidence-2026-05-28.md');
     const retrospectiveReviewEvidence = readDoc('docs/plans/v18-independent-review-evidence-2026-05-28.md');
@@ -100,18 +110,32 @@ describe('v18 documentation and release evidence', () => {
     assertContainsAll(releaseEvidence, REQUIRED_V18_TERMS, 'v18 release evidence');
     assertContainsAll(releaseEvidence, RELEASE_GATE_COMMANDS, 'v18 release evidence');
     assertContainsAll(releaseEvidence, RELEASE_GATE_EVENTS, 'v18 release evidence');
+    assertContainsAll(releaseEvidence, FINAL_CLOSEOUT_EVENTS, 'v18 release evidence');
     assertContainsAll(releaseEvidence, [
-      'summary.needsRevisionTasks: 1',
-      'summary.releaseReady: false',
+      'summary.completedTasks: 10',
+      'summary.needsRevisionTasks: 0',
+      'summary.releaseReady: true',
+      'releaseReadySource: goal-event-log.v1:evt_3714a444163c4583',
       'releaseGates.tagEvidence: unknown'
     ], 'v18 release evidence');
+    assertContainsAll(finalClosureEvidence, RELEASE_GATE_COMMANDS, 'v18 final closure evidence');
+    assertContainsAll(finalClosureEvidence, FINAL_CLOSEOUT_EVENTS, 'v18 final closure evidence');
+    assertContainsAll(finalClosureEvidence, [
+      'Status after event registration',
+      'READY',
+      'summary.completedTasks: 10',
+      'summary.needsRevisionTasks: 0',
+      'summary.releaseReady: true',
+      'This closeout did not create a tag'
+    ], 'v18 final closure evidence');
     assertContainsAll(taskEvidenceIndex, [
       'worker evidence',
       'independent review evidence',
       'main verification evidence',
       'release gate evidence',
       'docs/plans/v18-independent-review-evidence-2026-05-28.md',
-      'docs/plans/v18-task10-review-evidence-2026-05-28.md'
+      'docs/plans/v18-task10-review-evidence-2026-05-28.md',
+      'docs/plans/v18-final-closure-evidence-2026-05-29.md'
     ], 'v18 task evidence index');
     assertContainsAll(reviewEvidence, [
       'Reviewer verdict',
@@ -127,6 +151,7 @@ describe('v18 documentation and release evidence', () => {
     ], 'v18 independent review evidence');
 
     assertNoEvidencePlaceholders(releaseEvidence, 'v18 release evidence');
+    assertNoEvidencePlaceholders(finalClosureEvidence, 'v18 final closure evidence');
     assertNoEvidencePlaceholders(taskEvidenceIndex, 'v18 task evidence index');
     assert.doesNotMatch(
       releaseEvidence,
@@ -152,17 +177,28 @@ describe('v18 documentation and release evidence', () => {
       'Workbench Operator Guide',
       'contract index',
       'v18 release evidence',
+      'v18-final-closure-evidence',
       'tests/v18-docs-release-evidence.test.js'
     ], 'task-10 worker evidence');
     assertContainsAll(task10.independentReviewEvidence, [
+      'goal-event-log.v1:evt_9285a8928ef80525',
+      'reviewer.approved',
+      'APPROVED',
+      'docs/plans/v18-final-closure-evidence-2026-05-29.md',
       'goal-event-log.v1:evt_84c1a3303f63ef75',
       'reviewer.needs-revision',
       'docs/plans/v18-task10-review-evidence-2026-05-28.md'
     ], 'task-10 independent review evidence');
-    assert.match(
-      task10.mainVerificationEvidence,
-      /Task 10 main verification event is not registered because the current review verdict is `NEEDS_REVISION`/u
-    );
+    assertContainsAll(task10.mainVerificationEvidence, [
+      'goal-event-log.v1:evt_6d1458b8e7c5baf5',
+      'main.verification-passed',
+      'docs/plans/v18-final-closure-evidence-2026-05-29.md',
+      'branch `main`'
+    ], 'task-10 main verification evidence');
+    assertContainsAll(task10.releaseGateEvidence, [
+      'goal-event-log.v1:evt_3714a444163c4583',
+      'release.ready-declared'
+    ], 'task-10 release gate evidence');
   });
 });
 

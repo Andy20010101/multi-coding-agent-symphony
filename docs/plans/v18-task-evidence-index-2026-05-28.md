@@ -3,7 +3,7 @@
 日期：2026-05-28
 目标：`v18-goal-event-journal-evidence-recorder`
 基线：`v17`
-当前分支：`codex/v18-task10-docs-release-evidence`
+当前分支：`main`
 
 ## 记录规则
 
@@ -12,10 +12,11 @@
 当前 event log 已登记：
 
 - task-1 到 task-9：`worker.evidence-recorded`、`reviewer.approved`、审批后的 `main.verification-passed` events。
-- task-10：`worker.evidence-recorded` 和当前 `reviewer.needs-revision` events。
+- task-10：`worker.evidence-recorded`、历史 `reviewer.needs-revision`、closeout `reviewer.approved` 和 `main.verification-passed` events。
 - release command gates：`release.gate-passed` events for check, test, Workbench build, mutation, audit high, diff check, mcas doctor, and docs updated.
+- release readiness：explicit `release.ready-declared` event `evt_3714a444163c4583`。
 
-Task 10 的当前 reviewer verdict 仍是 `NEEDS_REVISION`。本索引不把 worker self-check、release gate pass、docs test pass 或 task-1 到 task-9 的回顾 review 解释成 Task 10 approval。release-ready 仍需 Task 10 独立 approval、Task 10 land/post-merge verification 和显式 `release.ready-declared` event。
+Task 10 的当前 reviewer verdict 是 `APPROVED`，来自 `docs/plans/v18-final-closure-evidence-2026-05-29.md`。本索引仍不把 worker self-check、release gate pass、docs test pass 或 task-1 到 task-9 的回顾 review 解释成 Task 10 approval。release-ready 来自显式 `release.ready-declared` event。
 
 ## task evidence
 
@@ -30,10 +31,10 @@ Task 10 的当前 reviewer verdict 仍是 `NEEDS_REVISION`。本索引不把 wor
 | task-7 | `goal-event-log.v1:evt_cd777431c916718b`, `worker.evidence-recorded`, evidence ref `docs/plans/v18-task-evidence-index-2026-05-28.md`; `dec9f13` added read-only events API routes in `src/symphony/console.js` and `tests/v18-console-events-api.test.js`. | `goal-event-log.v1:evt_12937d5ee9895c51`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v18-independent-review-evidence-2026-05-28.md`. | `goal-event-log.v1:evt_43e97cf177a77620`, `main.verification-passed`, evidence ref `docs/plans/v18-release-evidence-2026-05-28.md`, branch `main`, commit `dec9f13`. | Release gate events are recorded in `docs/plans/v18-release-evidence-2026-05-28.md`. |
 | task-8 | `goal-event-log.v1:evt_66ccb05487aba6f9`, `worker.evidence-recorded`, evidence ref `docs/plans/v18-task-evidence-index-2026-05-28.md`; `07b9e16` added Workbench Goal Events Timeline, Evidence Matrix, frontend contract parsing, static build output, and Workbench tests. | `goal-event-log.v1:evt_a7936e709bb5cb5b`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v18-independent-review-evidence-2026-05-28.md`. | `goal-event-log.v1:evt_695ed2ca280a3b20`, `main.verification-passed`, evidence ref `docs/plans/v18-release-evidence-2026-05-28.md`, branch `main`, commit `07b9e16`. | Release gate events are recorded in `docs/plans/v18-release-evidence-2026-05-28.md`. |
 | task-9 | `goal-event-log.v1:evt_83d71d69de038a74`, `worker.evidence-recorded`, evidence ref `docs/plans/v18-task-evidence-index-2026-05-28.md`; `789b8c3` added v16/v17/v18 route smoke and safety boundary regression coverage in `tests/workbench-route-smoke.test.js`. | `goal-event-log.v1:evt_3aeda4c355222b6c`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v18-independent-review-evidence-2026-05-28.md`. | `goal-event-log.v1:evt_b12818633ee56bf4`, `main.verification-passed`, evidence ref `docs/plans/v18-release-evidence-2026-05-28.md`, branch `main`, commit `789b8c3`. | Release gate events are recorded in `docs/plans/v18-release-evidence-2026-05-28.md`. |
-| task-10 | `goal-event-log.v1:evt_fcee5fd4584a009f`, `worker.evidence-recorded`, evidence ref `docs/plans/v18-task-evidence-index-2026-05-28.md`; Current branch adds README, Workbench Operator Guide, contract index, v18 release evidence, this task evidence index, `docs/plans/v18-independent-review-evidence-2026-05-28.md`, `docs/plans/v18-task10-review-evidence-2026-05-28.md`, and `tests/v18-docs-release-evidence.test.js`. | `goal-event-log.v1:evt_84c1a3303f63ef75`, `reviewer.needs-revision`, evidence ref `docs/plans/v18-task10-review-evidence-2026-05-28.md`, verdict `NEEDS_REVISION`. | Task 10 main verification event is not registered because the current review verdict is `NEEDS_REVISION` and the branch has not landed. | Release gate events are recorded in `docs/plans/v18-release-evidence-2026-05-28.md`. |
+| task-10 | `goal-event-log.v1:evt_fcee5fd4584a009f`, `worker.evidence-recorded`, evidence ref `docs/plans/v18-task-evidence-index-2026-05-28.md`; Current branch adds README, Workbench Operator Guide, contract index, v18 release evidence, this task evidence index, `docs/plans/v18-independent-review-evidence-2026-05-28.md`, `docs/plans/v18-task10-review-evidence-2026-05-28.md`, `docs/plans/v18-final-closure-evidence-2026-05-29.md`, and `tests/v18-docs-release-evidence.test.js`. | `goal-event-log.v1:evt_9285a8928ef80525`, `reviewer.approved`, evidence ref `docs/plans/v18-final-closure-evidence-2026-05-29.md`, verdict `APPROVED`; historical blocker `goal-event-log.v1:evt_84c1a3303f63ef75`, `reviewer.needs-revision`, is recorded in `docs/plans/v18-task10-review-evidence-2026-05-28.md`. | `goal-event-log.v1:evt_6d1458b8e7c5baf5`, `main.verification-passed`, evidence ref `docs/plans/v18-final-closure-evidence-2026-05-29.md`, branch `main`, commit `2aae273`. | Release gate events are recorded in `docs/plans/v18-release-evidence-2026-05-28.md`; release readiness is `goal-event-log.v1:evt_3714a444163c4583`, `release.ready-declared`. |
 
-## release blockers
+## release status
 
-- task-10 current review verdict is `NEEDS_REVISION`.
-- task-10 land/post-merge verification has to run after reviewer approval.
-- `release-ready` must still come from an explicit `release.ready-declared` event.
+- Local `goal-status` reports `summary.completedTasks: 10`, `summary.needsRevisionTasks: 0`, and `summary.releaseReady: true`.
+- `release-ready` comes from explicit `release.ready-declared` event `evt_3714a444163c4583`.
+- Tag evidence remains `unknown`; this closeout did not create a tag.
