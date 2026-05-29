@@ -7,6 +7,7 @@ export const GOAL_PROGRESS_LEDGER_CONTRACT_NAME = 'goal-progress-ledger.v1';
 export const GOAL_PROGRESS_LEDGER_CONTRACT_VERSION = 1;
 export const DEFAULT_GOAL_PROGRESS_GOAL_ID = 'v17-readonly-goal-progress-console-contracts';
 export const V18_GOAL_EVENT_JOURNAL_GOAL_ID = 'v18-goal-event-journal-evidence-recorder';
+export const V19_GOAL_RUNBOOK_GOAL_ID = 'v19-goal-runbook-next-action';
 
 export const GOAL_PROGRESS_TASK_STATUSES = Object.freeze([
   'not-started',
@@ -59,6 +60,11 @@ const V18_BASELINE = Object.freeze({
   tag: 'v17',
   commit: null,
   evidenceRef: 'docs/plans/v17-release-evidence-2026-05-28.md'
+});
+const V19_BASELINE = Object.freeze({
+  tag: 'v18',
+  commit: null,
+  evidenceRef: 'docs/plans/v18-tag-release-evidence-2026-05-29.md'
 });
 
 const DEFAULT_TASKS = Object.freeze([
@@ -185,6 +191,56 @@ const V18_TASKS = Object.freeze([
     nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v18-task10-docs-release-evidence'
   })
 ]);
+const V19_TASKS = Object.freeze([
+  Object.freeze({
+    taskId: 'task-1',
+    title: 'Contracts, fixtures, validators',
+    branch: 'v19-task1-goal-runbook-contracts',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task1-goal-runbook-contracts'
+  }),
+  Object.freeze({
+    taskId: 'task-2',
+    title: 'Managed goal runbook registry and symphony goal init',
+    branch: 'v19-task2-goal-runbook-registry',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task2-goal-runbook-registry'
+  }),
+  Object.freeze({
+    taskId: 'task-3',
+    title: 'Next-action resolver',
+    branch: 'v19-task3-next-action-resolver',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task3-next-action-resolver'
+  }),
+  Object.freeze({
+    taskId: 'task-4',
+    title: 'Goal prompt pack generator',
+    branch: 'v19-task4-goal-prompt-pack-generator',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task4-goal-prompt-pack-generator'
+  }),
+  Object.freeze({
+    taskId: 'task-5',
+    title: 'CLI integration for goal next, goal prompt, goal closeout, and symphony next',
+    branch: 'v19-task5-goal-cli-integration',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task5-goal-cli-integration'
+  }),
+  Object.freeze({
+    taskId: 'task-6',
+    title: 'Workbench Active Goal Control Center',
+    branch: 'v19-task6-workbench-active-goal-control-center',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task6-workbench-active-goal-control-center'
+  }),
+  Object.freeze({
+    taskId: 'task-7',
+    title: 'Docs, operator guide, and contract index',
+    branch: 'v19-task7-docs-operator-guide-contract-index',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task7-docs-operator-guide-contract-index'
+  }),
+  Object.freeze({
+    taskId: 'task-8',
+    title: 'Release verification, final closure, and tag evidence',
+    branch: 'v19-task8-release-verification-closure-tag-evidence',
+    nextCopyOnlyCommand: 'git checkout main && git pull --ff-only && git checkout -b v19-task8-release-verification-closure-tag-evidence'
+  })
+]);
 const GOAL_PROGRESS_TEMPLATES = Object.freeze({
   [DEFAULT_GOAL_PROGRESS_GOAL_ID]: Object.freeze({
     goalId: DEFAULT_GOAL_PROGRESS_GOAL_ID,
@@ -197,6 +253,13 @@ const GOAL_PROGRESS_TEMPLATES = Object.freeze({
     goalTitle: 'v18 Goal Event Journal + Evidence Recorder',
     baseline: V18_BASELINE,
     tasks: V18_TASKS
+  }),
+  [V19_GOAL_RUNBOOK_GOAL_ID]: Object.freeze({
+    goalId: V19_GOAL_RUNBOOK_GOAL_ID,
+    goalTitle: 'Goal Runbook + Next Action Control Center',
+    baseline: V19_BASELINE,
+    releaseTarget: 'v19',
+    tasks: V19_TASKS
   })
 });
 
@@ -882,7 +945,7 @@ function goalEventStatusSource(event) {
 }
 
 function isTaskEventId(taskId) {
-  return isNonEmptyString(taskId) && taskId !== 'release';
+  return isNonEmptyString(taskId) && taskId !== 'release' && taskId !== 'planning';
 }
 
 function buildTaskProgress({ template, stateTask, templateStatusSource = 'registered-goal-template' }) {
