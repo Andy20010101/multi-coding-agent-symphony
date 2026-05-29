@@ -1,0 +1,41 @@
+{
+  "contractName": "goal-closeout-report.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "generatedAt": "2026-05-29T10:00:00.000Z",
+  "summary": {
+    "totalTasks": 2,
+    "workerEvidenceComplete": true,
+    "reviewEvidenceComplete": false,
+    "mainVerificationComplete": false,
+    "releaseReady": false
+  },
+  "missing": [
+    {
+      "kind": "release-gate",
+      "taskId": null,
+      "expectedEvent": "release.magic-passed"
+    }
+  ],
+  "releaseGates": {
+    "pnpmCheck": "passed",
+    "pnpmTest": "unknown",
+    "workbenchBuild": "unknown",
+    "mutationGate": "unknown",
+    "auditHigh": "unknown",
+    "diffCheck": "unknown",
+    "docsUpdated": "unknown",
+    "tagEvidence": "missing"
+  },
+  "nextAction": "symphony goal next --goal v19-goal-runbook-next-action",
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "writesInDryRun": false,
+    "confirmRequiredForWrites": true,
+    "releaseReadyRequiresEvidence": true
+  }
+}

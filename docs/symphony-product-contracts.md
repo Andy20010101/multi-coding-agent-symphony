@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 Task 1 adds `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract fixtures and validators for Goal Runbook + Next Action Control Center work. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -33,6 +33,9 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v18 keeps the `goal-progress-ledger.v1` contract name. The resolver reads `goal-event-log.v1`; with no events it returns the v17 planned/unknown template.
 - v18 Workbench display uses `GET /api/goals/latest/events`, `GET /api/goals/<goal-id>/events`, Goal Events Timeline, and Evidence Matrix. It reads only backend contract fields.
 - v18 does not include Autopilot, Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation, automatic merge, or automatic tag.
+- v19 runbook contracts define the operator control surface only. They do not execute CLI commands, read evidence documents, write managed state, call models, merge, tag, or mark release readiness.
+- v19 goal status must come from explicit `goal-event-log.v1` evidence. Branch names, filenames, task titles, command text, and path strings are never approval, main verification, or release-ready proof.
+- v19 prompt and command fields are copy-only text. Dry-run and confirm fields must stay explicit and consistent; dry-run fields must not imply writes.
 
 ## `goal-event-log.v1`
 
@@ -121,6 +124,152 @@ symphony goal gate --goal v18-goal-event-journal-evidence-recorder --gate releas
 ```
 
 Confirm recalculates the plan hash from the current CLI input and refuses mismatches. Confirm does not run tests, audit, mutation, doctor, package installs, shell commands, model calls, merge, or tag operations. It only appends the explicit event to the managed goal event journal.
+
+## `goal-runbook.v1`
+
+`goal-runbook.v1` defines the executable blueprint for one goal. It is not evidence and does not store completion state.
+
+```json
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "goalTitle": "v19 Goal Runbook + Next Action Control Center",
+  "baseline": {
+    "tag": "v18",
+    "commit": null,
+    "evidenceRef": "docs/plans/v18-tag-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Add goal runbook contracts and validators",
+      "branch": "v19-task1-goal-runbook-contracts",
+      "roleOrder": ["worker", "reviewer", "main-verifier"],
+      "acceptance": ["Valid fixtures pass all v19 contract validators."],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": ["reviewer.approved", "reviewer.needs-revision"],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": ["pnpm check", "pnpm test", "git diff --check"]
+    }
+  ],
+  "releaseGates": ["release.pnpm-check", "release.pnpm-test", "release.tag-evidence"],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}
+```
+
+Validator boundary:
+
+- `goalId` and `taskId` must be safe path segments.
+- `taskId` values are unique.
+- `acceptance` is non-empty.
+- `expectedEvidence` values must be supported goal event types.
+- `baseline.evidenceRef` must be a controlled repo-doc or managed artifact ref.
+- `copyOnlyCommands` are text recommendations only.
+
+## `goal-next-action.v1`
+
+`goal-next-action.v1` describes the next recommended operator action after combining a runbook with explicit event evidence. It is a recommendation, not execution.
+
+```json
+{
+  "contractName": "goal-next-action.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "status": "action-required",
+  "next": {
+    "taskId": "task-1",
+    "role": "worker",
+    "phase": "implement",
+    "reason": "No explicit worker evidence is recorded for task-1.",
+    "blocked": false
+  },
+  "evidenceState": {
+    "workerEvidenceRef": null,
+    "reviewEvidenceRef": null,
+    "mainVerificationRef": null
+  },
+  "copyOnlyPrompt": {
+    "available": true,
+    "format": "markdown",
+    "text": "/goal\n..."
+  },
+  "copyOnlyCommands": ["pnpm check", "pnpm test", "git diff --check"],
+  "afterCompletion": {
+    "registerWith": "symphony goal update",
+    "allowedEvents": ["worker.evidence-recorded", "worker.self-check-passed"]
+  },
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}
+```
+
+Supported statuses are `action-required`, `missing-runbook`, `blocked`, and `complete`. A prompt marked available must include copy-only prompt text. Allowed completion events must be supported goal event types.
+
+## `goal-prompt-pack.v1`
+
+`goal-prompt-pack.v1` packages copy-only `/goal` prompts for `worker`, `reviewer`, `main-verifier`, and `release-manager` roles.
+
+Each prompt includes:
+
+- `taskId`, `role`, and `title`.
+- `copyOnly: true`.
+- prompt `format` and `/goal` text.
+- validation commands as copy-only strings.
+- an evidence file ref under controlled refs.
+- `registration` with separate dry-run and confirm commands.
+
+Dry-run registration commands must include `--dry-run` and must not include `--confirm`. Confirm commands must include `--confirm` and `--plan-hash`. `writesInDryRun` is always `false`; `appendOnlyOnConfirm` is always `true`.
+
+## `goal-closeout-report.v1`
+
+`goal-closeout-report.v1` reports task evidence gaps and release gate gaps before release closeout.
+
+```json
+{
+  "contractName": "goal-closeout-report.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "summary": {
+    "totalTasks": 2,
+    "workerEvidenceComplete": true,
+    "reviewEvidenceComplete": false,
+    "mainVerificationComplete": false,
+    "releaseReady": false
+  },
+  "missing": [
+    {
+      "kind": "review-evidence",
+      "taskId": "task-2",
+      "expectedEvent": "reviewer.approved"
+    }
+  ],
+  "releaseGates": {
+    "pnpmCheck": "passed",
+    "pnpmTest": "unknown",
+    "workbenchBuild": "unknown",
+    "mutationGate": "unknown",
+    "auditHigh": "unknown",
+    "diffCheck": "unknown",
+    "docsUpdated": "unknown",
+    "tagEvidence": "missing"
+  },
+  "nextAction": "symphony goal next --goal v19-goal-runbook-next-action"
+}
+```
+
+Closeout reports keep `releaseReady` evidence-based. Missing items must name a supported expected event type, release gates use the existing `goal-progress-ledger.v1` gate status vocabulary, and `nextAction` is a copy-only command.
 
 ## `goal-progress-ledger.v1`
 

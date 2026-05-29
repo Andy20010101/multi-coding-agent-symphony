@@ -1,0 +1,36 @@
+{
+  "contractName": "goal-prompt-pack.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "generatedAt": "2026-05-29T10:00:00.000Z",
+  "prompts": [
+    {
+      "taskId": "task-1",
+      "role": "approver",
+      "title": "Approve v19 Task 1 by role name",
+      "copyOnly": true,
+      "format": "markdown",
+      "text": "/goal\n审查 v19 Task 1，但 role 使用未知值。",
+      "validationCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ],
+      "evidenceFile": "docs/plans/v19-task1-review-evidence-2026-05-29.md",
+      "registration": {
+        "dryRunCommand": "symphony goal review --goal v19-goal-runbook-next-action --task task-1 --reviewer codex-reviewer-task-1 --verdict approved --evidence-ref docs/plans/v19-task1-review-evidence-2026-05-29.md --dry-run",
+        "confirmCommand": "symphony goal review --goal v19-goal-runbook-next-action --task task-1 --reviewer codex-reviewer-task-1 --verdict approved --evidence-ref docs/plans/v19-task1-review-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confirmRequired": true,
+        "writesInDryRun": false,
+        "appendOnlyOnConfirm": true
+      }
+    }
+  ],
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}

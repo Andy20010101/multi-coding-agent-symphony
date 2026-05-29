@@ -1,0 +1,51 @@
+{
+  "contractName": "goal-closeout-report.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "generatedAt": "2026-05-29T10:00:00.000Z",
+  "summary": {
+    "totalTasks": 2,
+    "workerEvidenceComplete": true,
+    "reviewEvidenceComplete": false,
+    "mainVerificationComplete": false,
+    "releaseReady": false
+  },
+  "missing": [
+    {
+      "kind": "review-evidence",
+      "taskId": "task-2",
+      "expectedEvent": "reviewer.approved"
+    },
+    {
+      "kind": "main-verification",
+      "taskId": "task-2",
+      "expectedEvent": "main.verification-passed"
+    },
+    {
+      "kind": "release-gate",
+      "taskId": null,
+      "expectedEvent": "release.gate-passed"
+    }
+  ],
+  "releaseGates": {
+    "pnpmCheck": "passed",
+    "pnpmTest": "unknown",
+    "workbenchBuild": "unknown",
+    "mutationGate": "unknown",
+    "auditHigh": "unknown",
+    "diffCheck": "unknown",
+    "docsUpdated": "unknown",
+    "tagEvidence": "missing"
+  },
+  "nextAction": "symphony goal next --goal v19-goal-runbook-next-action",
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "writesInDryRun": false,
+    "confirmRequiredForWrites": true,
+    "releaseReadyRequiresEvidence": true
+  }
+}

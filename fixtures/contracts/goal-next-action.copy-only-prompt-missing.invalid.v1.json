@@ -1,0 +1,41 @@
+{
+  "contractName": "goal-next-action.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "status": "action-required",
+  "next": {
+    "taskId": "task-1",
+    "role": "worker",
+    "phase": "implement",
+    "reason": "No explicit worker evidence is recorded for task-1.",
+    "blocked": false
+  },
+  "evidenceState": {
+    "workerEvidenceRef": null,
+    "reviewEvidenceRef": null,
+    "mainVerificationRef": null
+  },
+  "copyOnlyPrompt": {
+    "available": true,
+    "format": "markdown"
+  },
+  "copyOnlyCommands": [
+    "pnpm check",
+    "pnpm test",
+    "git diff --check"
+  ],
+  "afterCompletion": {
+    "registerWith": "symphony goal update",
+    "allowedEvents": [
+      "worker.evidence-recorded",
+      "worker.self-check-passed"
+    ]
+  },
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}

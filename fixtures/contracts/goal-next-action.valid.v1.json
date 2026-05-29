@@ -1,0 +1,42 @@
+{
+  "contractName": "goal-next-action.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "status": "action-required",
+  "next": {
+    "taskId": "task-1",
+    "role": "worker",
+    "phase": "implement",
+    "reason": "No explicit worker evidence is recorded for task-1.",
+    "blocked": false
+  },
+  "evidenceState": {
+    "workerEvidenceRef": null,
+    "reviewEvidenceRef": null,
+    "mainVerificationRef": null
+  },
+  "copyOnlyPrompt": {
+    "available": true,
+    "format": "markdown",
+    "text": "/goal\n执行 v19 Task 1 worker implement：新增 goal-runbook.v1、goal-next-action.v1、goal-prompt-pack.v1、goal-closeout-report.v1 的合同 fixtures、validator 和测试。"
+  },
+  "copyOnlyCommands": [
+    "pnpm check",
+    "pnpm test",
+    "git diff --check"
+  ],
+  "afterCompletion": {
+    "registerWith": "symphony goal update",
+    "allowedEvents": [
+      "worker.evidence-recorded",
+      "worker.self-check-passed"
+    ]
+  },
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}

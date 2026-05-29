@@ -1,0 +1,99 @@
+{
+  "contractName": "goal-prompt-pack.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "generatedAt": "2026-05-29T10:00:00.000Z",
+  "prompts": [
+    {
+      "taskId": "task-1",
+      "role": "worker",
+      "title": "Implement v19 Task 1 contracts",
+      "copyOnly": true,
+      "format": "markdown",
+      "text": "/goal\n执行 v19 Task 1 worker implement：新增四个 goal runbook 合同的 fixtures、validator 和测试。不要实现 CLI、API、Workbench 或 managed runbook state。",
+      "validationCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ],
+      "evidenceFile": "docs/plans/v19-task1-worker-evidence-2026-05-29.md",
+      "registration": {
+        "dryRunCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event worker.evidence-recorded --actor codex-worker-task-1 --evidence-ref docs/plans/v19-task1-worker-evidence-2026-05-29.md --dry-run",
+        "confirmCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event worker.evidence-recorded --actor codex-worker-task-1 --evidence-ref docs/plans/v19-task1-worker-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confirmRequired": true,
+        "writesInDryRun": false,
+        "appendOnlyOnConfirm": true
+      }
+    },
+    {
+      "taskId": "task-1",
+      "role": "reviewer",
+      "title": "Review v19 Task 1 contracts",
+      "copyOnly": true,
+      "format": "markdown",
+      "text": "/goal\n审查 v19 Task 1 的合同 fixtures、validator 和测试。只根据 diff、fixtures 和验收命令结果判断，不根据分支名或文件名推断通过。",
+      "validationCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ],
+      "evidenceFile": "docs/plans/v19-task1-review-evidence-2026-05-29.md",
+      "registration": {
+        "dryRunCommand": "symphony goal review --goal v19-goal-runbook-next-action --task task-1 --reviewer codex-reviewer-task-1 --verdict approved --evidence-ref docs/plans/v19-task1-review-evidence-2026-05-29.md --dry-run",
+        "confirmCommand": "symphony goal review --goal v19-goal-runbook-next-action --task task-1 --reviewer codex-reviewer-task-1 --verdict approved --evidence-ref docs/plans/v19-task1-review-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confirmRequired": true,
+        "writesInDryRun": false,
+        "appendOnlyOnConfirm": true
+      }
+    },
+    {
+      "taskId": "task-1",
+      "role": "main-verifier",
+      "title": "Verify v19 Task 1 on main",
+      "copyOnly": true,
+      "format": "markdown",
+      "text": "/goal\n执行 v19 Task 1 main verification：确认 reviewer approval 已有明确 evidence，再在 main 上运行验收命令并登记 main.verification-passed 或 main.verification-failed。",
+      "validationCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ],
+      "evidenceFile": "docs/plans/v19-task1-main-verification-evidence-2026-05-29.md",
+      "registration": {
+        "dryRunCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event main.verification-passed --actor codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --dry-run",
+        "confirmCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event main.verification-passed --actor codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confirmRequired": true,
+        "writesInDryRun": false,
+        "appendOnlyOnConfirm": true
+      }
+    },
+    {
+      "taskId": "release",
+      "role": "release-manager",
+      "title": "Prepare v19 closeout evidence",
+      "copyOnly": true,
+      "format": "markdown",
+      "text": "/goal\n执行 v19 release closeout：检查 task evidence、review evidence、main verification 和 release gates，只登记明确 evidence，不根据命令文本或路径推断 release-ready。",
+      "validationCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ],
+      "evidenceFile": "docs/plans/v19-closeout-evidence-2026-05-29.md",
+      "registration": {
+        "dryRunCommand": "symphony goal gate --goal v19-goal-runbook-next-action --gate release.pnpm-check --status passed --verifier codex-release-manager --evidence-ref docs/plans/v19-closeout-evidence-2026-05-29.md --dry-run",
+        "confirmCommand": "symphony goal gate --goal v19-goal-runbook-next-action --gate release.pnpm-check --status passed --verifier codex-release-manager --evidence-ref docs/plans/v19-closeout-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confirmRequired": true,
+        "writesInDryRun": false,
+        "appendOnlyOnConfirm": true
+      }
+    }
+  ],
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}

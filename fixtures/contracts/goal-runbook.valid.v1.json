@@ -1,0 +1,83 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "goalTitle": "v19 Goal Runbook + Next Action Control Center",
+  "baseline": {
+    "tag": "v18",
+    "commit": null,
+    "evidenceRef": "docs/plans/v18-tag-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Add goal runbook contracts and validators",
+      "branch": "v19-task1-goal-runbook-contracts",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Valid fixtures pass all v19 contract validators.",
+        "Invalid fixtures reject unsafe refs, invalid roles, invalid events, and missing copy-only prompts."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Add event-aware next action resolver",
+      "branch": "v19-task2-next-action-resolver",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Resolver returns worker when task evidence is missing.",
+        "Resolver returns reviewer only after explicit worker evidence is recorded."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

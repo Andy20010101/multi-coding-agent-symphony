@@ -1,0 +1,36 @@
+{
+  "contractName": "goal-prompt-pack.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "generatedAt": "2026-05-29T10:00:00.000Z",
+  "prompts": [
+    {
+      "taskId": "task-1",
+      "role": "worker",
+      "title": "Implement v19 Task 1 contracts",
+      "copyOnly": true,
+      "format": "markdown",
+      "text": "/goal\n执行 v19 Task 1 worker implement，但 registration 字段故意不一致。",
+      "validationCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ],
+      "evidenceFile": "docs/plans/v19-task1-worker-evidence-2026-05-29.md",
+      "registration": {
+        "dryRunCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event worker.evidence-recorded --actor codex-worker-task-1 --evidence-ref docs/plans/v19-task1-worker-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "confirmCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event worker.evidence-recorded --actor codex-worker-task-1 --evidence-ref docs/plans/v19-task1-worker-evidence-2026-05-29.md --dry-run",
+        "confirmRequired": false,
+        "writesInDryRun": true,
+        "appendOnlyOnConfirm": true
+      }
+    }
+  ],
+  "safety": {
+    "readOnly": true,
+    "copyOnly": true,
+    "workbenchWriteAvailable": false,
+    "browserExecutionAvailable": false,
+    "modelInvocationAvailable": false
+  }
+}
