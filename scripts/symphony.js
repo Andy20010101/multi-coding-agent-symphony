@@ -70,7 +70,8 @@ import {
 import {
   GoalPromptPackError,
   buildGoalPromptPack,
-  renderGoalPromptPackMarkdown
+  renderGoalPromptPackMarkdown,
+  renderGoalPromptPackText
 } from '../src/symphony/goal-prompt-pack.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
@@ -3315,10 +3316,18 @@ async function runSymphonyGoal({ args, stdout }) {
     }
 
     try {
-      const promptPack = await buildGoalPromptPack(options);
+      const promptPack = await buildGoalPromptPack({
+        ...options,
+        promptFormat: options.format === 'text' ? 'text' : 'markdown'
+      });
 
       if (options.format === 'markdown') {
         stdout.write(`${renderGoalPromptPackMarkdown(promptPack)}\n`);
+        return EXIT_CODES.ok;
+      }
+
+      if (options.format === 'text') {
+        stdout.write(`${renderGoalPromptPackText(promptPack)}\n`);
         return EXIT_CODES.ok;
       }
 
@@ -3562,6 +3571,11 @@ function parseGoalPromptArgs(args) {
       continue;
     }
 
+    if (value === '--text') {
+      setGoalPromptFormat(options, 'text');
+      continue;
+    }
+
     if (value === '--format') {
       setGoalPromptFormat(options, readRequiredValue(args, index, '--format'));
       index += 1;
@@ -3641,8 +3655,8 @@ function parseGoalPromptArgs(args) {
 }
 
 function setGoalPromptFormat(options, format) {
-  if (!['json', 'markdown'].includes(format)) {
-    throw new UsageError('goal prompt format must be json or markdown');
+  if (!['json', 'markdown', 'text'].includes(format)) {
+    throw new UsageError('goal prompt format must be json, markdown, or text');
   }
 
   if (options.formatExplicit && options.format !== format) {
@@ -3816,11 +3830,11 @@ function goalInitHelpText() {
 
 function goalPromptHelpText() {
   return [
-    'Usage: symphony goal prompt --goal <goal-id> --task <task-id> --role <worker|reviewer|main-verifier|release-manager> [--json|--markdown]',
-    '       symphony goal prompt --goal latest --next [--json|--markdown]',
+    'Usage: symphony goal prompt --goal <goal-id> --task <task-id> --role <worker|reviewer|main-verifier|release-manager> [--json|--markdown|--text|--format json|markdown|text]',
+    '       symphony goal prompt --goal latest --next [--json|--markdown|--text|--format json|markdown|text]',
     '',
     'JSON is the default and prints goal-prompt-pack.v1.',
-    'Markdown prints only the copy-only /goal prompt text; it does not write files, register events, run commands, or call models.',
+    'Markdown and text print only the copy-only /goal prompt text; neither mode writes files, registers events, runs commands, or calls models.',
     ''
   ].join('\n');
 }

@@ -58,12 +58,17 @@ export async function buildGoalPromptPack({
   taskId,
   role,
   next = false,
+  promptFormat = 'markdown',
   generatedAt = new Date().toISOString()
 } = {}) {
+  const normalizedPromptFormat = normalizePromptFormat(promptFormat);
   const context = next
     ? await buildNextPromptContext({ stateDir, goalId, generatedAt })
     : await buildExplicitPromptContext({ stateDir, goalId, taskId, role });
-  const prompt = buildPrompt(context);
+  const prompt = buildPrompt({
+    ...context,
+    promptFormat: normalizedPromptFormat
+  });
   const promptPack = {
     contractName: GOAL_PROMPT_PACK_CONTRACT_NAME,
     contractVersion: GOAL_PROMPT_PACK_CONTRACT_VERSION,
@@ -86,6 +91,23 @@ export function renderGoalPromptPackMarkdown(promptPack) {
   const prompts = Array.isArray(promptPack?.prompts) ? promptPack.prompts : [];
 
   return prompts.map((prompt) => prompt.text).join('\n\n');
+}
+
+export function renderGoalPromptPackText(promptPack) {
+  const prompts = Array.isArray(promptPack?.prompts) ? promptPack.prompts : [];
+
+  return prompts.map((prompt) => prompt.text).join('\n\n');
+}
+
+function normalizePromptFormat(format) {
+  if (format === 'markdown' || format === 'text') {
+    return format;
+  }
+
+  throw new GoalPromptPackError(
+    'invalid-prompt-format',
+    'goal prompt supports only markdown or text prompt formats.'
+  );
 }
 
 async function buildExplicitPromptContext({ stateDir, goalId, taskId, role }) {
@@ -300,7 +322,7 @@ function buildPrompt(context) {
     role: context.role,
     title: promptTitle(context),
     copyOnly: true,
-    format: 'markdown',
+    format: context.promptFormat,
     text: promptTextFor({
       ...context,
       evidenceFile,
@@ -389,6 +411,8 @@ function reviewerPromptText(context) {
       allowedEvents: ['reviewer.approved', 'reviewer.needs-revision']
     }),
     '',
+    reviewerOutcomeRegistrationSection(context),
+    '',
     'Return:',
     '- Findings first, ordered by severity',
     '- Verdict: APPROVED or NEEDS_REVISION',
@@ -420,6 +444,8 @@ function mainVerifierPromptText(context) {
       registration: context.registration,
       allowedEvents: ['main.verification-passed', 'main.verification-failed']
     }),
+    '',
+    mainVerifierOutcomeRegistrationSection(context),
     '',
     'Return:',
     '- Summary',
@@ -460,6 +486,8 @@ function releaseManagerPromptText(context) {
       registration: context.registration,
       allowedEvents: ['release.gate-passed', 'release.gate-failed', 'release.ready-declared']
     }),
+    '',
+    releaseManagerOutcomeRegistrationSection(context),
     '',
     'Return:',
     '- Summary',
@@ -519,6 +547,179 @@ function registrationSection({ heading, registration, allowedEvents }) {
     registration.confirmCommand,
     '```'
   ].join('\n');
+}
+
+function reviewerOutcomeRegistrationSection({
+  runbook,
+  taskId,
+  evidenceFile
+}) {
+  const approved = buildRegistrationCommandPair([
+    'symphony',
+    'goal',
+    'review',
+    '--goal',
+    runbook.goalId,
+    '--task',
+    taskId,
+    '--reviewer',
+    `codex-reviewer-${taskId}`,
+    '--verdict',
+    'approved',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+  const needsRevision = buildRegistrationCommandPair([
+    'symphony',
+    'goal',
+    'review',
+    '--goal',
+    runbook.goalId,
+    '--task',
+    taskId,
+    '--reviewer',
+    `codex-reviewer-${taskId}`,
+    '--verdict',
+    'needs-revision',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+
+  return outcomeRegistrationSection({
+    heading: 'Verdict-specific registration commands:',
+    entries: [
+      ['APPROVED', approved],
+      ['NEEDS_REVISION', needsRevision]
+    ]
+  });
+}
+
+function mainVerifierOutcomeRegistrationSection({
+  runbook,
+  taskId,
+  evidenceFile
+}) {
+  const passed = buildRegistrationCommandPair([
+    'symphony',
+    'goal',
+    'gate',
+    '--goal',
+    runbook.goalId,
+    '--gate',
+    'main-verification',
+    '--task',
+    taskId,
+    '--status',
+    'passed',
+    '--verifier',
+    'codex-main-verifier',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+  const failed = buildRegistrationCommandPair([
+    'symphony',
+    'goal',
+    'gate',
+    '--goal',
+    runbook.goalId,
+    '--gate',
+    'main-verification',
+    '--task',
+    taskId,
+    '--status',
+    'failed',
+    '--verifier',
+    'codex-main-verifier',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+
+  return outcomeRegistrationSection({
+    heading: 'Main verification outcome commands:',
+    entries: [
+      ['PASSED', passed],
+      ['FAILED', failed]
+    ]
+  });
+}
+
+function releaseManagerOutcomeRegistrationSection({
+  runbook,
+  evidenceFile
+}) {
+  const gate = runbook.releaseGates[0] ?? 'release.pnpm-check';
+  const gatePassed = buildRegistrationCommandPair([
+    'symphony',
+    'goal',
+    'gate',
+    '--goal',
+    runbook.goalId,
+    '--gate',
+    gate,
+    '--status',
+    'passed',
+    '--verifier',
+    'codex-release-manager',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+  const gateFailed = buildRegistrationCommandPair([
+    'symphony',
+    'goal',
+    'gate',
+    '--goal',
+    runbook.goalId,
+    '--gate',
+    gate,
+    '--status',
+    'failed',
+    '--verifier',
+    'codex-release-manager',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+  const readyDeclared = buildRegistrationCommandPair([
+    'symphony',
+    'goal',
+    'gate',
+    '--goal',
+    runbook.goalId,
+    '--gate',
+    'release.ready',
+    '--status',
+    'declared',
+    '--verifier',
+    'codex-release-manager',
+    '--evidence-ref',
+    evidenceFile
+  ]);
+
+  return [
+    'Release event command choices:',
+    `- Replace ${gate} with the release gate that has evidence before copying a gate command.`,
+    ...outcomeRegistrationLines([
+      ['GATE_PASSED', gatePassed],
+      ['GATE_FAILED', gateFailed],
+      ['RELEASE_READY_DECLARED', readyDeclared]
+    ])
+  ].join('\n');
+}
+
+function outcomeRegistrationSection({ heading, entries }) {
+  return [
+    heading,
+    ...outcomeRegistrationLines(entries)
+  ].join('\n');
+}
+
+function outcomeRegistrationLines(entries) {
+  return entries.flatMap(([label, commands]) => [
+    `- ${label}:`,
+    '```bash',
+    commands.dryRunCommand,
+    commands.confirmCommand,
+    '```'
+  ]);
 }
 
 function validationCommandsFor({ runbook, runbookTask, role }) {
@@ -625,11 +826,17 @@ function registrationFor({
 
 function buildRegistration(baseArgs) {
   return {
-    dryRunCommand: [...baseArgs, '--dry-run'].map(shellQuote).join(' '),
-    confirmCommand: [...baseArgs, '--confirm', '--plan-hash', PLACEHOLDER_PLAN_HASH].map(shellQuote).join(' '),
+    ...buildRegistrationCommandPair(baseArgs),
     confirmRequired: true,
     writesInDryRun: false,
     appendOnlyOnConfirm: true
+  };
+}
+
+function buildRegistrationCommandPair(baseArgs) {
+  return {
+    dryRunCommand: [...baseArgs, '--dry-run'].map(shellQuote).join(' '),
+    confirmCommand: [...baseArgs, '--confirm', '--plan-hash', PLACEHOLDER_PLAN_HASH].map(shellQuote).join(' ')
   };
 }
 

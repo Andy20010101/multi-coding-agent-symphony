@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import { runSymphonyCli } from '../scripts/symphony.js';
 import {
   buildGoalPromptPack,
-  renderGoalPromptPackMarkdown
+  renderGoalPromptPackMarkdown,
+  renderGoalPromptPackText
 } from '../src/symphony/goal-prompt-pack.js';
 import {
   buildGoalRunbookInitPlan,
@@ -86,19 +87,22 @@ describe('v19 goal prompt pack generator and CLI', () => {
           taskId: 'task-1',
           role: 'reviewer',
           registration: /symphony goal review/u,
-          text: /independent reviewer/u
+          text: /independent reviewer/u,
+          extraText: [/--verdict approved/u, /--verdict needs-revision/u]
         },
         {
           taskId: 'task-1',
           role: 'main-verifier',
           registration: /symphony goal gate .*--gate main-verification/u,
-          text: /reviewer\.approved evidence/u
+          text: /reviewer\.approved evidence/u,
+          extraText: [/--status passed/u, /--status failed/u]
         },
         {
           taskId: 'release',
           role: 'release-manager',
           registration: /symphony goal gate .*--gate release\.pnpm-check/u,
-          text: /Release scope:/u
+          text: /Release scope:/u,
+          extraText: [/--status failed/u, /--gate release\.ready --status declared/u]
         }
       ];
 
@@ -122,6 +126,10 @@ describe('v19 goal prompt pack generator and CLI', () => {
         assert.match(promptPack.prompts[0].registration.dryRunCommand, testCase.registration);
         assert.match(promptPack.prompts[0].registration.confirmCommand, /--confirm --plan-hash sha256:[a-f0-9]{64}/u);
         assert.match(promptPack.prompts[0].text, testCase.text);
+
+        for (const expectedText of testCase.extraText ?? []) {
+          assert.match(promptPack.prompts[0].text, expectedText);
+        }
       }
 
       const output = createOutput();
@@ -149,6 +157,56 @@ describe('v19 goal prompt pack generator and CLI', () => {
       assert.equal(promptPack.contractName, 'goal-prompt-pack.v1');
       assert.equal(promptPack.prompts[0].copyOnly, true);
       assert.equal(renderGoalPromptPackMarkdown(promptPack), promptPack.prompts[0].text);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('prints copy-only text output and can generate text-format prompt packs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-prompt-text-'));
+    const stateDir = join(root, '.symphony');
+    const output = createOutput();
+
+    try {
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'prompt',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          FIXTURE_GOAL_ID,
+          '--task',
+          'task-1',
+          '--role',
+          'worker',
+          '--format',
+          'text'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+      const text = output.stdoutText();
+      const promptPack = await buildGoalPromptPack({
+        stateDir,
+        goalId: FIXTURE_GOAL_ID,
+        taskId: 'task-1',
+        role: 'worker',
+        promptFormat: 'text',
+        generatedAt: GENERATED_AT
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.match(text, /^\/goal\n/u);
+      assert.match(text, /Task scope:/u);
+      assert.doesNotMatch(text, /^\{/u);
+      assert.deepEqual(validateGoalPromptPackContract(promptPack), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(promptPack.prompts[0].format, 'text');
+      assert.equal(renderGoalPromptPackText(promptPack), promptPack.prompts[0].text);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
