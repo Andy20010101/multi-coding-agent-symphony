@@ -45,7 +45,7 @@ The final closeout gates are recorded in `docs/plans/v18-final-closure-evidence-
 
 ## tag plan
 
-After this evidence and README update are committed and pushed to `origin/main`, create the release tag from the resulting `main` commit:
+After this evidence and README update were committed and pushed to `origin/main`, the release tag was created from the resulting `main` commit:
 
 ```bash
 git tag -a v18 -m "v18 Goal Event Journal and Evidence Recorder release"
@@ -55,4 +55,18 @@ gh release create v18 --title "v18 Goal Event Journal + Evidence Recorder" --lat
 
 ## post-tag evidence
 
-Post-tag command output will be recorded after the tag and GitHub release are created. This post-tag evidence update will not move the already-pushed `v18` tag.
+Commands run after creating the tag and GitHub release:
+
+| Command | Result |
+|---|---|
+| `git show v18 --no-patch --decorate` | Shows annotated tag `v18`, message `v18 Goal Event Journal and Evidence Recorder release`, pointing to commit `a9c05f0f72cfbf341e4b2832e592b8a1c5eacafb`. |
+| `git ls-remote --tags origin refs/tags/v18 'refs/tags/v18^{}'` | Remote tag object `5b68630aded51007416cbf357546acad3b6a1f2e`; peeled commit `a9c05f0f72cfbf341e4b2832e592b8a1c5eacafb`. |
+| `gh release view v18 --repo Andy20010101/multi-coding-agent-symphony --json tagName,name,url,isDraft,isPrerelease,publishedAt,targetCommitish` | Release exists. `tagName: v18`, `name: v18 Goal Event Journal + Evidence Recorder`, `isDraft: false`, `isPrerelease: false`, `publishedAt: 2026-05-29T01:35:51Z`, `targetCommitish: main`. |
+| `pnpm --silent symphony goal gate --goal v18-goal-event-journal-evidence-recorder --gate release.tag-evidence --status passed --verifier codex-v18-tag-verifier --evidence-ref docs/plans/v18-tag-release-evidence-2026-05-29.md --confirm --plan-hash sha256:9bc6d6a643bb9fc9976ad968aef8a976c0f08029c3ce003e436982ba7401a247` | Appended `goal-event-log.v1:evt_628cf503346e4df2`, gate `release.tag-evidence`, status `passed`. |
+| `pnpm --silent symphony goal-status --goal v18-goal-event-journal-evidence-recorder --json` | `completedTasks: 10`, `needsRevisionTasks: 0`, `releaseReady: true`, `releaseGates.tagEvidence: passed`. |
+
+GitHub release:
+
+- https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v18
+
+This post-tag evidence update does not move the already-pushed `v18` tag. The tag remains on commit `a9c05f0f72cfbf341e4b2832e592b8a1c5eacafb`.
