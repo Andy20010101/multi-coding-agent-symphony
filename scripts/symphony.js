@@ -62,6 +62,11 @@ import {
   buildGoalGatePlan,
   confirmGoalGate
 } from '../src/symphony/goal-gate.js';
+import {
+  GoalRunbookRegistryError,
+  buildGoalRunbookInitPlan,
+  confirmGoalRunbookInit
+} from '../src/symphony/goal-runbook-registry.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -3292,8 +3297,33 @@ async function runSymphonyGoal({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
-  if (subcommand !== 'update' && subcommand !== 'review' && subcommand !== 'gate') {
+  if (subcommand !== 'init' && subcommand !== 'update' && subcommand !== 'review' && subcommand !== 'gate') {
     throw new UsageError(`unknown goal subcommand: ${subcommand}`);
+  }
+
+  if (subcommand === 'init') {
+    const options = parseGoalInitArgs(rest);
+
+    if (options.help) {
+      stdout.write(goalInitHelpText());
+      return EXIT_CODES.ok;
+    }
+
+    try {
+      if (options.confirm) {
+        writeJson(stdout, await confirmGoalRunbookInit(options));
+        return EXIT_CODES.ok;
+      }
+
+      writeJson(stdout, await buildGoalRunbookInitPlan(options));
+      return EXIT_CODES.ok;
+    } catch (error) {
+      if (error instanceof GoalRunbookRegistryError) {
+        throw new UsageError(error.message);
+      }
+
+      throw error;
+    }
   }
 
   if (subcommand === 'gate') {
@@ -3368,6 +3398,106 @@ async function runSymphonyGoal({ args, stdout }) {
 
     throw error;
   }
+}
+
+function parseGoalInitArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: null,
+    fromJson: null,
+    confirm: false,
+    dryRun: false,
+    planHash: undefined,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      continue;
+    }
+
+    if (value === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+
+    if (value === '--confirm') {
+      options.confirm = true;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--from-json') {
+      options.fromJson = readRequiredValue(args, index, '--from-json');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--plan-hash') {
+      options.planHash = readRequiredValue(args, index, '--plan-hash');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--from') {
+      throw new UsageError('goal init does not parse markdown paths; use --from-json with a controlled goal-runbook fixture');
+    }
+
+    if (value === '--plan-file') {
+      throw new UsageError('goal init does not read plan files; repeat the dry-run flags with --confirm --plan-hash');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal init writes only managed runbook state on confirm; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal init option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal init argument: ${value}`);
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.confirm && options.dryRun) {
+    throw new UsageError('goal init accepts only one of --dry-run or --confirm');
+  }
+
+  if (!options.confirm && options.planHash !== undefined) {
+    throw new UsageError('--plan-hash requires --confirm');
+  }
+
+  for (const [key, flag] of [
+    ['goalId', '--goal'],
+    ['fromJson', '--from-json']
+  ]) {
+    if (options[key] === null) {
+      throw new UsageError(`goal init requires ${flag}`);
+    }
+  }
+
+  return options;
 }
 
 function parseGoalUpdateArgs(args) {
@@ -3512,10 +3642,21 @@ function parseGoalUpdateArgs(args) {
 
 function goalHelpText() {
   return [
-    'Usage: symphony goal <update|review|gate> [options]',
+    'Usage: symphony goal <init|update|review|gate> [options]',
     '',
-    'Records v18 goal events through a dry-run / confirm flow.',
-    'Currently implemented: symphony goal update, symphony goal review, and symphony goal gate.',
+    'Manages goal runbooks and records goal events through dry-run / confirm flows.',
+    'Currently implemented: symphony goal init, symphony goal update, symphony goal review, and symphony goal gate.',
+    ''
+  ].join('\n');
+}
+
+function goalInitHelpText() {
+  return [
+    'Usage: symphony goal init --goal <goal-id> --from-json fixtures/contracts/goal-runbook.valid.v1.json [--dry-run]',
+    '       symphony goal init --goal <goal-id> --from-json fixtures/contracts/goal-runbook.valid.v1.json --confirm --plan-hash <hash>',
+    '',
+    'Dry-run is the default and prints goal-runbook-init-plan.v1 without writing.',
+    'Confirm writes only managed runbook registry state after the current input matches --plan-hash.',
     ''
   ].join('\n');
 }
