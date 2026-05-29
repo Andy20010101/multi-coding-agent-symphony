@@ -711,7 +711,7 @@ function requireNullableControlledEvidenceRef(errors, ref, path) {
 }
 
 function isUnsafeControlledRef(ref) {
-  if (isUnsafeEvidenceRef(ref) || hasEncodedTraversal(ref)) {
+  if (isUnsafeEvidenceRef(ref) || hasEncodedTraversal(ref) || hasParentDirectorySegment(ref)) {
     return true;
   }
 
@@ -723,13 +723,18 @@ function isUnsafeControlledRef(ref) {
     return true;
   }
 
-  return decoded !== ref && (isUnsafeEvidenceRef(decoded) || hasEncodedTraversal(decoded));
+  return decoded !== ref &&
+    (isUnsafeEvidenceRef(decoded) || hasEncodedTraversal(decoded) || hasParentDirectorySegment(decoded));
 }
 
 function hasEncodedTraversal(ref) {
   const lower = ref.toLowerCase();
 
   return lower.includes('%2e') || lower.includes('%2f') || lower.includes('%5c');
+}
+
+function hasParentDirectorySegment(ref) {
+  return ref.split(/[\\/]+/u).some((segment) => segment === '..');
 }
 
 function isRepoDocRef(ref) {

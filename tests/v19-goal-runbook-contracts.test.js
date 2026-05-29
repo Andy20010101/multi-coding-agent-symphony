@@ -68,6 +68,28 @@ describe('v19 goal runbook, next action, prompt pack, and closeout contracts', (
     );
   });
 
+  it('rejects raw parent directory segments in controlled refs', async () => {
+    const terminalRepoDocTraversal = await loadFixture('../fixtures/contracts/goal-runbook.raw-parent-segment.invalid.v1.json');
+    assertHasError(
+      validateGoalRunbookContract(terminalRepoDocTraversal),
+      'baseline.evidenceRef must be a controlled evidence reference'
+    );
+
+    const nestedRepoDocTraversal = await loadFixture('../fixtures/contracts/goal-runbook.valid.v1.json');
+    nestedRepoDocTraversal.baseline.evidenceRef = 'docs/plans/subdir/..';
+    assertHasError(
+      validateGoalRunbookContract(nestedRepoDocTraversal),
+      'baseline.evidenceRef must be a controlled evidence reference'
+    );
+
+    const terminalManagedArtifactTraversal = await loadFixture('../fixtures/contracts/goal-runbook.valid.v1.json');
+    terminalManagedArtifactTraversal.baseline.evidenceRef = 'artifacts/run/..';
+    assertHasError(
+      validateGoalRunbookContract(terminalManagedArtifactTraversal),
+      'baseline.evidenceRef must be a controlled evidence reference'
+    );
+  });
+
   it('rejects duplicate task ids and empty acceptance criteria', async () => {
     const duplicateTaskId = await loadFixture('../fixtures/contracts/goal-runbook.duplicate-task-id.invalid.v1.json');
     const emptyAcceptance = await loadFixture('../fixtures/contracts/goal-runbook.empty-acceptance.invalid.v1.json');

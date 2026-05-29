@@ -1,0 +1,55 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "goalTitle": "v19 Goal Runbook + Next Action Control Center",
+  "baseline": {
+    "tag": "v18",
+    "commit": null,
+    "evidenceRef": "docs/plans/.."
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Add goal runbook contracts and validators",
+      "branch": "v19-task1-goal-runbook-contracts",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Valid fixtures pass all v19 contract validators."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}
