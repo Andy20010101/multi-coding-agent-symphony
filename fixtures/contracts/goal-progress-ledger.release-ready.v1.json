@@ -39,6 +39,7 @@
     "mutationGate": "passed",
     "auditHigh": "passed",
     "diffCheck": "passed",
+    "mcasDoctor": "passed",
     "docsUpdated": "passed",
     "tagEvidence": "passed"
   },

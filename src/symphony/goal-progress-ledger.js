@@ -47,6 +47,7 @@ export const GOAL_PROGRESS_RELEASE_GATE_IDS = Object.freeze([
   'mutationGate',
   'auditHigh',
   'diffCheck',
+  'mcasDoctor',
   'docsUpdated',
   'tagEvidence'
 ]);
@@ -273,6 +274,7 @@ const RELEASE_GATE_EVENT_IDS = Object.freeze({
   'release.mutation-gate': 'mutationGate',
   'release.audit-high': 'auditHigh',
   'release.diff-check': 'diffCheck',
+  'release.mcas-doctor': 'mcasDoctor',
   'release.docs-updated': 'docsUpdated',
   'release.tag-evidence': 'tagEvidence'
 });

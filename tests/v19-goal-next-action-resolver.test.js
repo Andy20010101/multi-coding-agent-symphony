@@ -193,6 +193,59 @@ describe('v19 event-aware goal-next-action.v1 resolver', () => {
     }
   });
 
+  it('does not treat main.verification-failed evidence as main verified', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-next-main-verification-failed-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook(stateDir);
+      await appendTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_worker_evidence',
+        taskId: 'task-1',
+        eventType: 'worker.evidence-recorded',
+        evidenceRefs: [workerEvidence('task-1')]
+      });
+      await appendTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_approved',
+        taskId: 'task-1',
+        eventType: 'reviewer.approved',
+        phase: 'review',
+        actor: { role: 'reviewer', id: 'codex-reviewer-task-1' },
+        evidenceRefs: [reviewEvidence('task-1')],
+        review: { verdict: 'APPROVED', scope: 'Task 1 diff and tests' }
+      });
+      await appendTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_main_verification_failed',
+        taskId: 'task-1',
+        eventType: 'main.verification-failed',
+        phase: 'main-verification',
+        actor: { role: 'main-verifier', id: 'codex-main-verifier-task-1' },
+        evidenceRefs: [mainEvidence('task-1')]
+      });
+      await appendMainVerification({ stateDir, taskId: 'task-2' });
+
+      const nextAction = await buildGoalNextAction({
+        stateDir,
+        goalId: GOAL_ID,
+        generatedAt: GENERATED_AT
+      });
+
+      assertValidNextAction(nextAction);
+      assert.equal(nextAction.status, 'action-required');
+      assert.equal(nextAction.next.taskId, 'task-1');
+      assert.equal(nextAction.next.role, 'main-verifier');
+      assert.equal(nextAction.next.phase, 'main-verification');
+      assert.match(nextAction.next.reason, /Latest main verification failed for task-1/u);
+      assert.equal(nextAction.evidenceState.mainVerificationRef, 'docs/plans/v19-task-1-main-verification-evidence-2026-05-29.md');
+      assert.doesNotMatch(nextAction.next.reason, /release\.pnpm-check/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('moves to release-manager after every runbook task is main-verified and a release gate is missing', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v19-next-release-gate-'));
     const stateDir = join(root, '.symphony');
@@ -219,6 +272,51 @@ describe('v19 event-aware goal-next-action.v1 resolver', () => {
         'release.gate-failed'
       ]);
       assert.equal(nextAction.copyOnlyCommands.includes('pnpm check'), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('advances release gate progression after release.mcas-doctor passes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-next-mcas-doctor-passed-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook(stateDir);
+      await appendMainVerification({ stateDir, taskId: 'task-1' });
+      await appendMainVerification({ stateDir, taskId: 'task-2' });
+
+      for (const gateName of [
+        'release.pnpm-check',
+        'release.pnpm-test',
+        'release.workbench-build',
+        'release.mutation-gate',
+        'release.audit-high',
+        'release.diff-check',
+        'release.mcas-doctor'
+      ]) {
+        await appendReleaseGate({
+          stateDir,
+          eventId: `evt_${gateName.replaceAll('.', '_').replaceAll('-', '_')}_passed`,
+          gateName,
+          eventType: 'release.gate-passed',
+          status: 'passed'
+        });
+      }
+
+      const nextAction = await buildGoalNextAction({
+        stateDir,
+        goalId: GOAL_ID,
+        generatedAt: GENERATED_AT
+      });
+
+      assertValidNextAction(nextAction);
+      assert.equal(nextAction.status, 'action-required');
+      assert.equal(nextAction.next.taskId, 'release');
+      assert.equal(nextAction.next.role, 'release-manager');
+      assert.equal(nextAction.next.phase, 'release-gate');
+      assert.match(nextAction.next.reason, /release\.docs-updated is not passed/u);
+      assert.doesNotMatch(nextAction.next.reason, /release\.mcas-doctor/u);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

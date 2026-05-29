@@ -73,6 +73,7 @@ describe('v17 goal progress resolver and CLI', () => {
           mutationGate: 'passed',
           auditHigh: 'passed',
           diffCheck: 'passed',
+          mcasDoctor: 'passed',
           docsUpdated: 'passed',
           tagEvidence: 'passed'
         },

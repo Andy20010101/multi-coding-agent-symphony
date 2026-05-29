@@ -213,7 +213,7 @@ function resolveTaskNextAction({
   ledgerTask,
   taskEvents
 }) {
-  if (isTaskMainVerified(ledgerTask)) {
+  if (hasMainVerificationPassed({ ledgerTask, taskEvents })) {
     return null;
   }
 
@@ -271,14 +271,17 @@ function resolveTaskNextAction({
     });
   }
 
-  if (taskEvents.latestReviewVerdict.eventType === 'reviewer.approved' && !hasMainVerification({ ledgerTask, taskEvents })) {
+  if (taskEvents.latestReviewVerdict.eventType === 'reviewer.approved' && !hasMainVerificationPassed({ ledgerTask, taskEvents })) {
     return buildTaskNextAction({
       goalId: runbook.goalId,
       runbookTask,
       ledgerTask,
       role: 'main-verifier',
       phase: 'main-verification',
-      reason: `Reviewer approved ${runbookTask.taskId} but main verification is missing.`,
+      reason: mainVerificationRequiredReason({
+        taskId: runbookTask.taskId,
+        taskEvents
+      }),
       allowedEvents: ['main.verification-passed', 'main.verification-failed'],
       registerWith: 'symphony goal gate --gate main-verification'
     });
@@ -320,15 +323,21 @@ function hasWorkerEvidence({ ledgerTask, taskEvents }) {
   return ledgerTask.workerEvidenceRef !== null || taskEvents.latestWorkerEvidence !== null;
 }
 
-function hasMainVerification({ ledgerTask, taskEvents }) {
-  return ledgerTask.mainVerificationRef !== null ||
-    taskEvents.latestMainVerification?.eventType === 'main.verification-passed';
+function hasMainVerificationPassed({ ledgerTask, taskEvents }) {
+  if (taskEvents.latestMainVerification !== null) {
+    return taskEvents.latestMainVerification.eventType === 'main.verification-passed';
+  }
+
+  return ledgerTask?.status === 'main-verified' ||
+    ledgerTask?.status === 'release-ready';
 }
 
-function isTaskMainVerified(task) {
-  return task?.mainVerificationRef !== null ||
-    task?.status === 'main-verified' ||
-    task?.status === 'release-ready';
+function mainVerificationRequiredReason({ taskId, taskEvents }) {
+  if (taskEvents.latestMainVerification?.eventType === 'main.verification-failed') {
+    return `Latest main verification failed for ${taskId}.`;
+  }
+
+  return `Reviewer approved ${taskId} but main verification is missing.`;
 }
 
 function isEventAfter(left, right) {

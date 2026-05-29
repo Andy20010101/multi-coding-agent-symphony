@@ -19,6 +19,7 @@ const RELEASE_GATES = Object.freeze([
   'release.mutation-gate',
   'release.audit-high',
   'release.diff-check',
+  'release.mcas-doctor',
   'release.docs-updated',
   'release.tag-evidence'
 ]);

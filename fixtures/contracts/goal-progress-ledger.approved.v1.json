@@ -39,6 +39,7 @@
     "mutationGate": "unknown",
     "auditHigh": "unknown",
     "diffCheck": "passed",
+    "mcasDoctor": "unknown",
     "docsUpdated": "unknown",
     "tagEvidence": "unknown"
   },

@@ -24,6 +24,7 @@
     "mutationGate": "unknown",
     "auditHigh": "unknown",
     "diffCheck": "unknown",
+    "mcasDoctor": "unknown",
     "docsUpdated": "unknown",
     "tagEvidence": "missing"
   },
