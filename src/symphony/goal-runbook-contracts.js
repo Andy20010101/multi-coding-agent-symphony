@@ -507,11 +507,11 @@ function validatePrompts(errors, prompts) {
     requireCopyOnlyPromptText(errors, prompt.text, `${path}.text`);
     validateCopyOnlyCommands(errors, prompt.validationCommands, `${path}.validationCommands`);
     requireControlledEvidenceRef(errors, prompt.evidenceFile, `${path}.evidenceFile`);
-    validateRegistration(errors, prompt.registration, `${path}.registration`);
+    validateRegistration(errors, prompt.registration, `${path}.registration`, prompt.role);
   });
 }
 
-function validateRegistration(errors, registration, path) {
+function validateRegistration(errors, registration, path, role) {
   if (!isPlainObject(registration)) {
     errors.push(`${path} must be a plain object`);
     return;
@@ -537,6 +537,39 @@ function validateRegistration(errors, registration, path) {
 
   if (typeof registration.confirmCommand === 'string' && !/\s--plan-hash(?:\s|$)/u.test(registration.confirmCommand)) {
     errors.push(`${path}.confirmCommand must include --plan-hash`);
+  }
+
+  validateRoleRegistrationCommands(errors, registration, path, role);
+}
+
+function validateRoleRegistrationCommands(errors, registration, path, role) {
+  if (role !== 'main-verifier') {
+    return;
+  }
+
+  for (const field of ['dryRunCommand', 'confirmCommand']) {
+    const command = registration[field];
+    const commandPath = `${path}.${field}`;
+
+    if (typeof command !== 'string') {
+      continue;
+    }
+
+    if (!/\bsymphony\s+goal\s+gate\b/u.test(command)) {
+      errors.push(`${commandPath} must use symphony goal gate for main verification`);
+    }
+
+    if (!/\s--gate\s+main-verification(?:\s|$)/u.test(command)) {
+      errors.push(`${commandPath} must include --gate main-verification`);
+    }
+
+    if (!/\s--status\s+(?:passed|failed)(?:\s|$)/u.test(command)) {
+      errors.push(`${commandPath} must include --status passed or --status failed`);
+    }
+
+    if (/\s--event\s+main\.verification-/u.test(command)) {
+      errors.push(`${commandPath} must not register main verification through --event`);
+    }
   }
 }
 

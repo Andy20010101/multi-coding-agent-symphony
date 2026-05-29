@@ -38,16 +38,16 @@
     },
     {
       "taskId": "task-2",
-      "title": "Add event-aware next action resolver",
-      "branch": "v19-task2-next-action-resolver",
+      "title": "Managed goal runbook registry and symphony goal init",
+      "branch": "v19-task2-goal-runbook-registry",
       "roleOrder": [
         "worker",
         "reviewer",
         "main-verifier"
       ],
       "acceptance": [
-        "Resolver returns worker when task evidence is missing.",
-        "Resolver returns reviewer only after explicit worker evidence is recorded."
+        "Goal runbooks are stored in the managed registry only after dry-run and hash confirmation.",
+        "symphony goal init validates goal-runbook.v1 before writing managed state."
       ],
       "expectedEvidence": {
         "worker": "worker.evidence-recorded",

@@ -125,6 +125,23 @@ describe('v19 goal runbook, next action, prompt pack, and closeout contracts', (
     assertHasError(result, 'prompts[0].registration.confirmCommand must include --confirm');
     assertHasError(result, 'prompts[0].registration.confirmCommand must include --plan-hash');
   });
+
+  it('requires main-verifier prompts to register through goal gate', async () => {
+    const promptPack = await loadFixture('../fixtures/contracts/goal-prompt-pack.valid.v1.json');
+    const mainVerifierPrompt = promptPack.prompts.find((prompt) => prompt.role === 'main-verifier');
+
+    mainVerifierPrompt.registration.dryRunCommand = 'symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event main.verification-passed --actor codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --dry-run';
+    mainVerifierPrompt.registration.confirmCommand = 'symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event main.verification-passed --actor codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000';
+
+    const result = validateGoalPromptPackContract(promptPack);
+
+    assertHasError(result, 'prompts[2].registration.dryRunCommand must use symphony goal gate for main verification');
+    assertHasError(result, 'prompts[2].registration.dryRunCommand must include --gate main-verification');
+    assertHasError(result, 'prompts[2].registration.dryRunCommand must not register main verification through --event');
+    assertHasError(result, 'prompts[2].registration.confirmCommand must use symphony goal gate for main verification');
+    assertHasError(result, 'prompts[2].registration.confirmCommand must include --gate main-verification');
+    assertHasError(result, 'prompts[2].registration.confirmCommand must not register main verification through --event');
+  });
 });
 
 async function loadFixture(path) {

@@ -60,8 +60,8 @@
       ],
       "evidenceFile": "docs/plans/v19-task1-main-verification-evidence-2026-05-29.md",
       "registration": {
-        "dryRunCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event main.verification-passed --actor codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --dry-run",
-        "confirmCommand": "symphony goal update --goal v19-goal-runbook-next-action --task task-1 --event main.verification-passed --actor codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "dryRunCommand": "symphony goal gate --goal v19-goal-runbook-next-action --gate main-verification --task task-1 --status passed --verifier codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --dry-run",
+        "confirmCommand": "symphony goal gate --goal v19-goal-runbook-next-action --gate main-verification --task task-1 --status passed --verifier codex-main-verifier --evidence-ref docs/plans/v19-task1-main-verification-evidence-2026-05-29.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000",
         "confirmRequired": true,
         "writesInDryRun": false,
         "appendOnlyOnConfirm": true
