@@ -47,6 +47,7 @@ import {
   renderGoalProgressMarkdown,
   renderGoalProgressText
 } from '../src/symphony/goal-progress-ledger.js';
+import { buildGoalNextAction } from '../src/symphony/goal-next-action-resolver.js';
 import {
   GoalUpdateError,
   buildGoalUpdatePlan,
@@ -65,7 +66,8 @@ import {
 import {
   GoalRunbookRegistryError,
   buildGoalRunbookInitPlan,
-  confirmGoalRunbookInit
+  confirmGoalRunbookInit,
+  readManagedActiveGoalPointer
 } from '../src/symphony/goal-runbook-registry.js';
 import {
   GoalPromptPackError,
@@ -73,6 +75,11 @@ import {
   renderGoalPromptPackMarkdown,
   renderGoalPromptPackText
 } from '../src/symphony/goal-prompt-pack.js';
+import {
+  GoalCloseoutReportError,
+  buildGoalCloseoutReport,
+  renderGoalCloseoutReportMarkdown
+} from '../src/symphony/goal-closeout-report.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -1954,6 +1961,41 @@ async function runSymphonyNext({ args, stdout }) {
     docsDir: options.stageDocsDir,
     command: 'symphony next'
   });
+  const goalId = await resolveSymphonyNextGoalId(options);
+
+  if (goalId !== null) {
+    const goalNextAction = await buildGoalNextAction({
+      stateDir: options.stateDir,
+      goalId
+    });
+    const summary = {
+      version: '1',
+      command: 'symphony next',
+      intent: 'next',
+      semanticCommand: 'next',
+      pipeline: ['next', 'goal-next-action'],
+      safetyMode: 'read-only',
+      projectWrites: false,
+      runtimeWrites: false,
+      externalCalls: false,
+      destructiveWrites: false,
+      status: goalNextAction.status,
+      nextSource: 'goal-next-action',
+      activeGoal: summarizeGoalNextAction(goalNextAction),
+      goalNextAction,
+      stageId: stage.stageId,
+      stage: stage.stage,
+      goal: stage.goal,
+      topRisks: stage.topRisks,
+      blocker: stage.blocker,
+      stageSummary: summarizeStageForGoalNext(stage),
+      nextAction: commandForGoalNextAction(goalNextAction)
+    };
+
+    writeProductOutput(stdout, summary, options.json);
+    return EXIT_CODES.ok;
+  }
+
   const summary = {
     version: '1',
     command: 'symphony next',
@@ -1966,6 +2008,9 @@ async function runSymphonyNext({ args, stdout }) {
     externalCalls: false,
     destructiveWrites: false,
     status: stage.status,
+    nextSource: 'stage-summary',
+    activeGoal: null,
+    goalNextAction: null,
     stageId: stage.stageId,
     stage: stage.stage,
     goal: stage.goal,
@@ -1976,6 +2021,51 @@ async function runSymphonyNext({ args, stdout }) {
 
   writeProductOutput(stdout, summary, options.json);
   return EXIT_CODES.ok;
+}
+
+async function resolveSymphonyNextGoalId(options) {
+  if (options.goalId !== null) {
+    return options.goalId;
+  }
+
+  const pointer = await readManagedActiveGoalPointer({ stateDir: options.stateDir });
+
+  return typeof pointer?.goalId === 'string' && pointer.goalId.trim() !== ''
+    ? 'latest'
+    : null;
+}
+
+function summarizeGoalNextAction(goalNextAction) {
+  return {
+    goalId: goalNextAction.goalId,
+    status: goalNextAction.status,
+    taskId: goalNextAction.next?.taskId ?? null,
+    role: goalNextAction.next?.role ?? null,
+    phase: goalNextAction.next?.phase ?? null,
+    reason: goalNextAction.reason ?? null,
+    blocked: goalNextAction.next?.blocked ?? goalNextAction.status === 'blocked',
+    promptCommand: goalNextAction.next === null ? null : `symphony goal prompt --goal ${goalNextAction.goalId} --next --markdown`,
+    afterCompletion: goalNextAction.afterCompletion
+  };
+}
+
+function summarizeStageForGoalNext(stage) {
+  return {
+    status: stage.status,
+    stageId: stage.stageId,
+    goal: stage.goal,
+    topRisks: stage.topRisks,
+    blocker: stage.blocker,
+    nextAction: stage.nextAction
+  };
+}
+
+function commandForGoalNextAction(goalNextAction) {
+  if (goalNextAction.next !== null) {
+    return `symphony goal prompt --goal ${goalNextAction.goalId} --next --markdown`;
+  }
+
+  return goalNextAction.copyOnlyCommands[0] ?? `symphony goal next --goal ${goalNextAction.goalId}`;
 }
 
 async function runSymphonyAdopt({ args, stdout, runner }) {
@@ -3303,8 +3393,64 @@ async function runSymphonyGoal({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
-  if (subcommand !== 'init' && subcommand !== 'update' && subcommand !== 'review' && subcommand !== 'gate' && subcommand !== 'prompt') {
+  if (subcommand !== 'init' && subcommand !== 'update' && subcommand !== 'review' && subcommand !== 'gate' && subcommand !== 'prompt' && subcommand !== 'next' && subcommand !== 'closeout') {
     throw new UsageError(`unknown goal subcommand: ${subcommand}`);
+  }
+
+  if (subcommand === 'next') {
+    const options = parseGoalNextArgs(rest);
+
+    if (options.help) {
+      stdout.write(goalNextHelpText());
+      return EXIT_CODES.ok;
+    }
+
+    const nextAction = await buildGoalNextAction(options);
+
+    if (options.format === 'markdown') {
+      stdout.write(renderGoalNextActionMarkdown(nextAction));
+      return EXIT_CODES.ok;
+    }
+
+    if (options.format === 'human') {
+      stdout.write(renderGoalNextActionText(nextAction));
+      return EXIT_CODES.ok;
+    }
+
+    writeJson(stdout, nextAction);
+    return EXIT_CODES.ok;
+  }
+
+  if (subcommand === 'closeout') {
+    const options = parseGoalCloseoutArgs(rest);
+
+    if (options.help) {
+      stdout.write(goalCloseoutHelpText());
+      return EXIT_CODES.ok;
+    }
+
+    try {
+      const closeoutReport = await buildGoalCloseoutReport(options);
+
+      if (options.format === 'markdown') {
+        stdout.write(renderGoalCloseoutReportMarkdown(closeoutReport));
+        return EXIT_CODES.ok;
+      }
+
+      if (options.format === 'human') {
+        stdout.write(renderGoalCloseoutReportText(closeoutReport));
+        return EXIT_CODES.ok;
+      }
+
+      writeJson(stdout, closeoutReport);
+      return EXIT_CODES.ok;
+    } catch (error) {
+      if (error instanceof GoalCloseoutReportError) {
+        throw new UsageError(error.message);
+      }
+
+      throw error;
+    }
   }
 
   if (subcommand === 'prompt') {
@@ -3667,6 +3813,161 @@ function setGoalPromptFormat(options, format) {
   options.formatExplicit = true;
 }
 
+function parseGoalNextArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: null,
+    format: 'human',
+    formatExplicit: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      setGoalReadOnlyFormat(options, 'json', 'goal next');
+      continue;
+    }
+
+    if (value === '--markdown') {
+      setGoalReadOnlyFormat(options, 'markdown', 'goal next');
+      continue;
+    }
+
+    if (value === '--format') {
+      setGoalReadOnlyFormat(options, readRequiredValue(args, index, '--format'), 'goal next');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--confirm' || value === '--dry-run' || value === '--plan-hash') {
+      throw new UsageError('goal next is read-only and does not accept write-flow flags');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal next does not write files; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal next option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal next argument: ${value}`);
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.goalId === null) {
+    throw new UsageError('goal next requires --goal');
+  }
+
+  return options;
+}
+
+function parseGoalCloseoutArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: null,
+    format: 'human',
+    formatExplicit: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      setGoalReadOnlyFormat(options, 'json', 'goal closeout');
+      continue;
+    }
+
+    if (value === '--markdown') {
+      setGoalReadOnlyFormat(options, 'markdown', 'goal closeout');
+      continue;
+    }
+
+    if (value === '--format') {
+      setGoalReadOnlyFormat(options, readRequiredValue(args, index, '--format'), 'goal closeout');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--confirm' || value === '--dry-run' || value === '--plan-hash') {
+      throw new UsageError('goal closeout is read-only and does not accept write-flow flags');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('goal closeout does not write files; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown goal closeout option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected goal closeout argument: ${value}`);
+  }
+
+  if (options.help) {
+    return options;
+  }
+
+  if (options.goalId === null) {
+    throw new UsageError('goal closeout requires --goal');
+  }
+
+  return options;
+}
+
+function setGoalReadOnlyFormat(options, format, commandName) {
+  if (!['human', 'json', 'markdown'].includes(format)) {
+    throw new UsageError(`${commandName} format must be human, json, or markdown`);
+  }
+
+  if (options.formatExplicit && options.format !== format) {
+    throw new UsageError(`${commandName} accepts only one output format`);
+  }
+
+  options.format = format;
+  options.formatExplicit = true;
+}
+
 function parseGoalUpdateArgs(args) {
   const options = {
     stateDir: '.symphony',
@@ -3809,10 +4110,10 @@ function parseGoalUpdateArgs(args) {
 
 function goalHelpText() {
   return [
-    'Usage: symphony goal <init|update|review|gate|prompt> [options]',
+    'Usage: symphony goal <init|update|review|gate|prompt|next|closeout> [options]',
     '',
     'Manages goal runbooks and records goal events through dry-run / confirm flows.',
-    'Currently implemented: symphony goal init, symphony goal update, symphony goal review, symphony goal gate, and symphony goal prompt.',
+    'Currently implemented: symphony goal init, symphony goal update, symphony goal review, symphony goal gate, symphony goal prompt, symphony goal next, and symphony goal closeout.',
     ''
   ].join('\n');
 }
@@ -3835,6 +4136,26 @@ function goalPromptHelpText() {
     '',
     'JSON is the default and prints goal-prompt-pack.v1.',
     'Markdown and text print only the copy-only /goal prompt text; neither mode writes files, registers events, runs commands, or calls models.',
+    ''
+  ].join('\n');
+}
+
+function goalNextHelpText() {
+  return [
+    'Usage: symphony goal next --goal <goal-id|latest> [--json|--markdown|--format human|json|markdown]',
+    '',
+    'Prints read-only goal-next-action.v1 from the managed runbook, event log, and ledger.',
+    'The command does not execute prompts, run release gates, write evidence docs, register events, or call models.',
+    ''
+  ].join('\n');
+}
+
+function goalCloseoutHelpText() {
+  return [
+    'Usage: symphony goal closeout --goal <goal-id|latest> [--json|--markdown|--format human|json|markdown]',
+    '',
+    'Prints read-only goal-closeout-report.v1 with missing evidence and release gate gaps.',
+    'The command does not run release gates, write release evidence docs, register events, or infer release readiness from passed tests.',
     ''
   ].join('\n');
 }
@@ -4334,6 +4655,7 @@ function parseNextArgs(args) {
   const options = {
     stateDir: '.symphony',
     stageDocsDir: DEFAULT_STAGE_DOCS_DIR,
+    goalId: null,
     json: false
   };
 
@@ -4347,6 +4669,12 @@ function parseNextArgs(args) {
 
     if (value === '--state-dir') {
       options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
       index += 1;
       continue;
     }
@@ -4762,6 +5090,98 @@ function humanStageStatus(summary) {
   ];
 
   return lines.join('\n');
+}
+
+function renderGoalNextActionText(nextAction) {
+  const lines = [
+    `Goal: ${nextAction.goalId}`,
+    `Status: ${nextAction.status}`
+  ];
+
+  if (nextAction.next === null) {
+    lines.push(`Reason: ${nextAction.reason ?? 'none'}`);
+  } else {
+    lines.push(
+      `Next: ${nextAction.next.taskId} ${nextAction.next.role} (${nextAction.next.phase})`,
+      `Reason: ${nextAction.next.reason}`,
+      `Prompt: ${commandForGoalNextAction(nextAction)}`,
+      `After: ${nextAction.afterCompletion.registerWith} [${nextAction.afterCompletion.allowedEvents.join('|')}]`
+    );
+  }
+
+  if (nextAction.copyOnlyCommands.length > 0) {
+    lines.push('Commands:');
+    lines.push(...nextAction.copyOnlyCommands.map((command) => `- ${command}`));
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+function renderGoalNextActionMarkdown(nextAction) {
+  const lines = [
+    '# Goal Next Action',
+    '',
+    `- Goal: \`${nextAction.goalId}\``,
+    `- Status: \`${nextAction.status}\``
+  ];
+
+  if (nextAction.next === null) {
+    lines.push(`- Reason: ${nextAction.reason ?? 'none'}`);
+  } else {
+    lines.push(
+      `- Task: \`${nextAction.next.taskId}\``,
+      `- Role: \`${nextAction.next.role}\``,
+      `- Phase: \`${nextAction.next.phase}\``,
+      `- Reason: ${nextAction.next.reason}`,
+      `- Prompt: \`${commandForGoalNextAction(nextAction)}\``,
+      `- After: \`${nextAction.afterCompletion.registerWith}\``
+    );
+  }
+
+  lines.push('', '## Copy-only Commands');
+
+  if (nextAction.copyOnlyCommands.length === 0) {
+    lines.push('- none');
+  } else {
+    lines.push(...nextAction.copyOnlyCommands.map((command) => `- \`${command}\``));
+  }
+
+  lines.push('', '## Allowed Events');
+
+  if (nextAction.afterCompletion.allowedEvents.length === 0) {
+    lines.push('- none');
+  } else {
+    lines.push(...nextAction.afterCompletion.allowedEvents.map((event) => `- \`${event}\``));
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+function renderGoalCloseoutReportText(report) {
+  const lines = [
+    `Goal: ${report.goalId}`,
+    `Tasks: ${report.summary.totalTasks}`,
+    `Worker evidence complete: ${report.summary.workerEvidenceComplete ? 'yes' : 'no'}`,
+    `Review evidence complete: ${report.summary.reviewEvidenceComplete ? 'yes' : 'no'}`,
+    `Main verification complete: ${report.summary.mainVerificationComplete ? 'yes' : 'no'}`,
+    `Release ready: ${report.summary.releaseReady ? 'yes' : 'no'}`,
+    'Missing:'
+  ];
+
+  if (report.missing.length === 0) {
+    lines.push('- none');
+  } else {
+    lines.push(...report.missing.map((item) => {
+      const target = item.gateId ?? item.taskId ?? 'release';
+      const status = item.status === undefined ? '' : ` (${item.status})`;
+
+      return `- ${item.kind}: ${target} expects ${item.expectedEvent}${status}`;
+    }));
+  }
+
+  lines.push(`Next: ${report.nextAction}`);
+
+  return `${lines.join('\n')}\n`;
 }
 
 async function buildStageGateProjectState({

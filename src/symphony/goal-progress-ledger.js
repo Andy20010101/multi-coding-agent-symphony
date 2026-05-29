@@ -384,6 +384,40 @@ export async function buildGoalProgressLedger({
   return assertGoalProgressLedgerContract(ledger);
 }
 
+export function buildGoalProgressLedgerFromRunbook({
+  runbook,
+  eventLog,
+  state = null,
+  generatedAt = new Date().toISOString()
+} = {}) {
+  const goalTemplate = {
+    goalId: runbook.goalId,
+    goalTitle: runbook.goalTitle,
+    baseline: structuredClone(runbook.baseline),
+    tasks: runbook.tasks.map((task) => ({
+      taskId: task.taskId,
+      title: task.title,
+      branch: task.branch,
+      nextCopyOnlyCommand: task.copyOnlyCommands[0] ?? `symphony goal-status --goal ${runbook.goalId} --json`
+    }))
+  };
+  const ledger = Array.isArray(eventLog?.events) && eventLog.events.length > 0
+    ? buildLedgerFromEventLog({
+      state,
+      eventLog,
+      goalTemplate,
+      generatedAt
+    })
+    : buildLedgerFromState({
+      state,
+      goalTemplate,
+      generatedAt,
+      templateStatusSource: 'goal-runbook.v1'
+    });
+
+  return assertGoalProgressLedgerContract(ledger);
+}
+
 export function listRegisteredGoals() {
   return [{
     goalId: DEFAULT_GOAL_PROGRESS_GOAL_ID,

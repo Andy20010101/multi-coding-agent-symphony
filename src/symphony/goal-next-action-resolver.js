@@ -1,15 +1,15 @@
-import { readManagedActiveGoalPointer, readManagedGoalRunbookState } from './goal-runbook-registry.js';
-import { readGoalEventJournal } from './goal-event-journal.js';
-import {
-  buildGoalProgressLedger,
-  GOAL_PROGRESS_RELEASE_GATE_IDS
-} from './goal-progress-ledger.js';
+import { GOAL_PROGRESS_RELEASE_GATE_IDS } from './goal-progress-ledger.js';
 import {
   GOAL_NEXT_ACTION_CONTRACT_NAME,
   GOAL_NEXT_ACTION_CONTRACT_VERSION,
   assertGoalNextActionContract,
-  assertGoalRunbookContract
 } from './goal-runbook-contracts.js';
+import {
+  GoalRunbookContextError,
+  buildGoalLedgerForRunbook,
+  loadGoalRunbookContext,
+  readGoalEventLogForRunbook
+} from './goal-runbook-context.js';
 
 const TASK_WORKER_EVIDENCE_EVENTS = Object.freeze([
   'worker.evidence-recorded',
@@ -52,51 +52,43 @@ export async function buildGoalNextAction({
   goalId = 'latest',
   generatedAt = new Date().toISOString()
 } = {}) {
-  const resolvedGoalId = await resolveNextActionGoalId({ stateDir, goalId });
+  let context;
 
-  if (resolvedGoalId === null) {
+  try {
+    context = await loadGoalRunbookContext({
+      stateDir,
+      goalId,
+      allowControlledFixtureFallback: true
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      return buildBlockedNextAction({
+        goalId: goalId ?? 'latest',
+        reason: safeErrorMessage(error)
+      });
+    }
+
+    throw error;
+  }
+
+  if (context === null) {
     return buildMissingRunbookNextAction({
       goalId: goalId ?? 'latest',
       reason: 'No active managed goal runbook is registered.'
     });
   }
 
-  const runbookState = await readManagedGoalRunbookState({
-    stateDir,
-    goalId: resolvedGoalId
-  });
-
-  if (runbookState === null) {
-    return buildMissingRunbookNextAction({
-      goalId: resolvedGoalId,
-      reason: `No managed goal-runbook.v1 state is registered for ${resolvedGoalId}.`
-    });
-  }
-
-  let runbook;
-
-  try {
-    runbook = assertGoalRunbookContract(runbookState.runbook);
-  } catch (error) {
-    return buildBlockedNextAction({
-      goalId: resolvedGoalId,
-      reason: `Managed runbook state is invalid: ${safeErrorMessage(error)}`
-    });
-  }
-
   let eventLog;
 
   try {
-    eventLog = await readGoalEventJournal({
+    eventLog = await readGoalEventLogForRunbook({
       stateDir,
-      goalId: resolvedGoalId,
-      goalTitle: runbook.goalTitle,
-      baseline: runbook.baseline
+      runbook: context.runbook
     });
   } catch (error) {
     if (isEventLogReadFailure(error)) {
       return buildBlockedNextAction({
-        goalId: resolvedGoalId,
+        goalId: context.goalId,
         reason: `Goal event log cannot be resolved: ${safeErrorMessage(error)}`
       });
     }
@@ -107,15 +99,16 @@ export async function buildGoalNextAction({
   let ledger;
 
   try {
-    ledger = await buildGoalProgressLedger({
+    ledger = await buildGoalLedgerForRunbook({
       stateDir,
-      goalId: resolvedGoalId,
+      runbook: context.runbook,
+      eventLog,
       generatedAt
     });
   } catch (error) {
     if (isEventLogReadFailure(error)) {
       return buildBlockedNextAction({
-        goalId: resolvedGoalId,
+        goalId: context.goalId,
         reason: `Goal event log cannot be resolved: ${safeErrorMessage(error)}`
       });
     }
@@ -125,13 +118,13 @@ export async function buildGoalNextAction({
 
   if (ledger === null) {
     return buildBlockedNextAction({
-      goalId: resolvedGoalId,
-      reason: `goal-progress-ledger.v1 is not available for ${resolvedGoalId}.`
+      goalId: context.goalId,
+      reason: `goal-progress-ledger.v1 is not available for ${context.goalId}.`
     });
   }
 
   return resolveGoalNextAction({
-    runbook,
+    runbook: context.runbook,
     eventLog,
     ledger
   });
@@ -288,18 +281,6 @@ function resolveTaskNextAction({
   }
 
   return null;
-}
-
-async function resolveNextActionGoalId({ stateDir, goalId }) {
-  if (goalId !== undefined && goalId !== null && goalId !== 'latest') {
-    return goalId;
-  }
-
-  const pointer = await readManagedActiveGoalPointer({ stateDir });
-
-  return typeof pointer?.goalId === 'string' && pointer.goalId.trim() !== ''
-    ? pointer.goalId
-    : null;
 }
 
 function taskEventState(events, taskId) {
