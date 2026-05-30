@@ -107,51 +107,200 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
     const context = await startPreviewConsoleServer();
 
     try {
-      const response = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
-        command: 'update',
-        task: 'task-4',
-        event: 'worker.evidence-recorded',
-        actor: 'codex-v21-task-4-worker',
-        evidenceRef: 'artifact-ref:artifact:run-1:evidence'
-      })}`);
-      const plan = await response.json();
+      const probes = [
+        {
+          command: 'update',
+          params: {
+            command: 'update',
+            task: 'task-4',
+            event: 'worker.evidence-recorded',
+            actor: 'codex-v21-task-4-worker',
+            evidenceRef: [
+              'docs/plans/v21-task-4-worker-evidence-2026-05-29.md',
+              'artifact-ref:artifact:run-1:evidence'
+            ]
+          }
+        },
+        {
+          command: 'review',
+          params: {
+            command: 'review',
+            task: 'task-4',
+            reviewer: 'codex-v21-task-4-reviewer',
+            verdict: 'needs-revision',
+            evidenceRef: [
+              'repo-doc:docs/plans/v21-task-4-review-evidence-2026-05-29.md',
+              'artifact-ref:artifact:run-1:review'
+            ]
+          }
+        },
+        {
+          command: 'gate',
+          params: {
+            command: 'gate',
+            task: 'task-4',
+            gate: 'main-verification',
+            status: 'failed',
+            verifier: 'codex-v21-task-4-main-verifier',
+            evidenceRef: [
+              'docs/plans/v21-task-4-main-verification-evidence-2026-05-29.md',
+              'artifact-ref:artifact:run-1:gate'
+            ]
+          }
+        }
+      ];
 
-      assert.equal(response.status, 200);
-      assert.deepEqual(validateGoalUpdatePlanContract(plan), {
-        ok: true,
-        errors: []
-      });
-      assert.equal(plan.eventSummary.evidenceRefs[0].kind, 'artifact-ref');
-      assert.equal(plan.eventSummary.evidenceRefs[0].ref, 'artifact:run-1:evidence');
-      assert.equal(plan.previewEndpoint.genericShellRunner, false);
-      assert.equal(plan.eventSummary.writesInDryRun, false);
+      for (const probe of probes) {
+        const response = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${buildSearchParams(probe.params)}`);
+        const plan = await response.json();
+
+        assert.equal(response.status, 200, probe.command);
+        assert.deepEqual(validateGoalUpdatePlanContract(plan), {
+          ok: true,
+          errors: []
+        }, probe.command);
+        assert.deepEqual(plan.eventSummary.evidenceRefs.map((ref) => ref.kind), ['repo-doc', 'artifact-ref'], probe.command);
+        assert.match(plan.eventSummary.evidenceRefs[0].ref, /^docs\/plans\//u, probe.command);
+        assert.equal(plan.eventSummary.evidenceRefs[1].ref, `artifact:run-1:${probe.command === 'update' ? 'evidence' : probe.command}`, probe.command);
+        assert.equal(plan.previewEndpoint.genericShellRunner, false, probe.command);
+        assert.equal(plan.eventSummary.writesInDryRun, false, probe.command);
+      }
     } finally {
       await cleanupPreviewConsoleServer(context);
     }
   });
 
-  it('returns a clear error envelope for uncontrolled evidence refs without appending', async () => {
+  it('returns a clear error envelope for uncontrolled preview evidence refs without appending', async () => {
     const context = await startPreviewConsoleServer();
 
     try {
       const before = await snapshotDirectoryFiles(context.stateDir);
-      const response = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
-        command: 'update',
-        task: 'task-4',
-        event: 'worker.evidence-recorded',
-        actor: 'codex-v21-task-4-worker',
-        evidenceRef: '/Users/example/secret.md'
-      })}`);
-      const envelope = await response.json();
+      const probes = [
+        {
+          name: 'update command evidence',
+          params: {
+            command: 'update',
+            task: 'task-4',
+            event: 'worker.evidence-recorded',
+            actor: 'codex-v21-task-4-worker',
+            evidenceRef: 'command-evidence:approved-looking-note'
+          }
+        },
+        {
+          name: 'review external note',
+          params: {
+            command: 'review',
+            task: 'task-4',
+            reviewer: 'codex-v21-task-4-reviewer',
+            verdict: 'approved',
+            evidenceRef: 'external-note:approved'
+          }
+        },
+        {
+          name: 'gate command evidence',
+          params: {
+            command: 'gate',
+            task: 'task-4',
+            gate: 'main-verification',
+            status: 'passed',
+            verifier: 'codex-v21-task-4-main-verifier',
+            evidenceRef: 'command-evidence:gate-passed'
+          }
+        },
+        {
+          name: 'absolute path',
+          params: {
+            command: 'update',
+            task: 'task-4',
+            event: 'worker.evidence-recorded',
+            actor: 'codex-v21-task-4-worker',
+            evidenceRef: '/Users/example/secret.md'
+          }
+        }
+      ];
 
-      assert.equal(response.status, 400);
-      assert.equal(envelope.contractName, 'error-envelope.v1');
-      assert.equal(envelope.error.code, 'invalid-evidence-ref');
-      assert.match(envelope.error.message, /controlled docs\/plans or managed artifact reference/u);
-      assert.deepEqual(validateErrorEnvelopeContract(envelope), {
-        ok: true,
-        errors: []
-      });
+      for (const probe of probes) {
+        const response = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${buildSearchParams(probe.params)}`);
+        const envelope = await response.json();
+
+        assert.equal(response.status, 400, probe.name);
+        assert.equal(envelope.contractName, 'error-envelope.v1', probe.name);
+        assert.equal(envelope.error.code, 'invalid-evidence-ref', probe.name);
+        assert.match(envelope.error.message, /controlled docs\/plans or managed artifact reference/u, probe.name);
+        assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+          ok: true,
+          errors: []
+        }, probe.name);
+      }
+      assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), before);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
+  it('rejects uncontrolled confirm evidence refs before appending', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      const before = await snapshotDirectoryFiles(context.stateDir);
+      const probes = [
+        {
+          name: 'update command evidence',
+          body: {
+            command: 'update',
+            task: 'task-4',
+            event: 'worker.evidence-recorded',
+            actor: 'codex-v21-task-4-worker',
+            evidenceRef: ['command-evidence:approved-looking-note'],
+            planHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+          }
+        },
+        {
+          name: 'review external note',
+          body: {
+            command: 'review',
+            task: 'task-4',
+            reviewer: 'codex-v21-task-4-reviewer',
+            verdict: 'approved',
+            evidenceRef: ['external-note:approved'],
+            planHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+          }
+        },
+        {
+          name: 'gate command evidence',
+          body: {
+            command: 'gate',
+            task: 'task-4',
+            gate: 'main-verification',
+            status: 'passed',
+            verifier: 'codex-v21-task-4-main-verifier',
+            evidenceRef: ['command-evidence:gate-passed'],
+            planHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+          }
+        }
+      ];
+
+      for (const probe of probes) {
+        const response = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-confirm`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(probe.body)
+        });
+        const envelope = await response.json();
+
+        assert.equal(response.status, 400, probe.name);
+        assert.equal(envelope.contractName, 'error-envelope.v1', probe.name);
+        assert.equal(envelope.error.code, 'invalid-evidence-ref', probe.name);
+        assert.match(envelope.error.message, /controlled docs\/plans or managed artifact reference/u, probe.name);
+        assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+          ok: true,
+          errors: []
+        }, probe.name);
+      }
+
       assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), before);
     } finally {
       await cleanupPreviewConsoleServer(context);
@@ -409,6 +558,22 @@ async function snapshotDirectoryFiles(root) {
   ]));
 
   return Object.fromEntries(entries.sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function buildSearchParams(params) {
+  const searchParams = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        searchParams.append(key, entry);
+      }
+    } else {
+      searchParams.append(key, value);
+    }
+  }
+
+  return searchParams;
 }
 
 async function collectFiles(root, current) {

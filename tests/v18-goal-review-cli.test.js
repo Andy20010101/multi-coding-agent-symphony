@@ -69,6 +69,51 @@ describe('v18 symphony goal review CLI', () => {
     }
   });
 
+  it('accepts only controlled docs/plans and managed artifact review evidence refs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v18-goal-review-controlled-evidence-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'review',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          GOAL_ID,
+          '--task',
+          'task-1',
+          '--reviewer',
+          'codex-reviewer-task-1',
+          '--verdict',
+          'approved',
+          '--evidence-ref',
+          'repo-doc:docs/plans/v18-task1-review-evidence-2026-05-28.md',
+          '--evidence-ref',
+          'artifact-ref:artifact:run-1:review',
+          '--dry-run'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const plan = JSON.parse(output.stdoutText());
+
+      assert.deepEqual(plan.proposedEvents[0].evidenceRefs.map((ref) => [ref.kind, ref.ref]), [
+        ['repo-doc', 'docs/plans/v18-task1-review-evidence-2026-05-28.md'],
+        ['artifact-ref', 'artifact:run-1:review']
+      ]);
+      assert.equal(await pathExists(getManagedGoalEventJournalPath({ stateDir, goalId: GOAL_ID })), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('confirms only when the plan hash matches and appends a needs-revision reviewer event', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v18-goal-review-confirm-'));
     const stateDir = join(root, '.symphony');
@@ -200,6 +245,51 @@ describe('v18 symphony goal review CLI', () => {
       assert.equal(await pathExists(getManagedGoalEventJournalPath({ stateDir, goalId: GOAL_ID })), false);
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects uncontrolled review evidence refs without writing', async () => {
+    const cases = [
+      'command-evidence:approved-looking-note',
+      'external-note:approved',
+      'commit:abc1234'
+    ];
+
+    for (const evidenceRef of cases) {
+      const root = await mkdtemp(join(tmpdir(), 'symphony-v18-goal-review-reject-evidence-'));
+      const stateDir = join(root, '.symphony');
+      const output = createOutput();
+
+      try {
+        const exitCode = await runSymphonyCli({
+          argv: [
+            'goal',
+            'review',
+            '--state-dir',
+            stateDir,
+            '--goal',
+            GOAL_ID,
+            '--task',
+            'task-1',
+            '--reviewer',
+            'codex-reviewer-task-1',
+            '--verdict',
+            'approved',
+            '--evidence-ref',
+            evidenceRef,
+            '--dry-run'
+          ],
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 64, evidenceRef);
+        assert.match(output.stderrText(), /controlled docs\/plans or managed artifact reference/u, evidenceRef);
+        assert.doesNotMatch(output.stderrText(), /\/Users\/andy|multi-coding-agent-symphony/u);
+        assert.equal(await pathExists(getManagedGoalEventJournalPath({ stateDir, goalId: GOAL_ID })), false);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
     }
   });
 

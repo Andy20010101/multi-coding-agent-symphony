@@ -1,9 +1,9 @@
 # v21 task-4 worker evidence
 
-Goal id: `v21-goal-event-registration-workbench`  
-Task id: `task-4`  
-Branch: `v21-task-4-evidence-ref-helper`  
-Worker: `v21 task-4 worker subagent`  
+Goal id: `v21-goal-event-registration-workbench`
+Task id: `task-4`
+Branch: `v21-task-4-evidence-ref-helper`
+Worker: `v21 task-4 worker subagent`
 Date recorded: 2026-05-31
 
 ## User-visible value
@@ -149,3 +149,133 @@ For managed artifact refs, the UI accepts the operator-facing ref and sends the 
 - Check that `invalid-evidence-ref` errors are clear and do not expose local paths.
 - Confirm no new non-preview/non-confirm click action was added to Workbench.
 - Run reviewer dry-run and confirm outside this worker scope if the review passes.
+
+## Revision 2026-05-31
+
+Reviewer verdict addressed: `needs-revision`.
+
+### Revision summary
+
+- Restricted backend evidence ref parsing for `goal update`, `goal review`, and `goal gate` to `repo-doc` and `artifact-ref` evidence kinds.
+- `repo-doc` evidence still must resolve under `docs/plans/`.
+- `artifact-ref:<ref>` remains accepted for managed artifact evidence refs.
+- `command-evidence:*`, `external-note:*`, `commit:*`, bare non-`docs/plans` strings, absolute paths, traversal, and encoded traversal now reach the existing `invalid-evidence-ref` error path.
+- Added CLI tests for update/review/gate acceptance of controlled `docs/plans` plus managed artifact refs, and rejection of uncontrolled evidence kinds without appending state.
+- Added Workbench API tests for update/review/gate preview rejection and confirm rejection of uncontrolled evidence refs before appending.
+- Frontend helper behavior and controlled preview/confirm flow were not changed in this revision.
+
+### Files changed in revision
+
+- `src/symphony/goal-update.js`
+- `src/symphony/goal-review.js`
+- `src/symphony/goal-gate.js`
+- `tests/v18-goal-update-cli.test.js`
+- `tests/v18-goal-review-cli.test.js`
+- `tests/v18-goal-gate-cli.test.js`
+- `tests/v21-goal-plan-preview-api.test.js`
+- `docs/plans/v21-task-4-worker-evidence-2026-05-29.md`
+- `docs/plans/v21-task-4-review-evidence-2026-05-29.md` included because it was present as untracked reviewer evidence.
+
+### Targeted checks
+
+`pnpm test -- tests/v18-goal-update-cli.test.js tests/v18-goal-review-cli.test.js tests/v18-goal-gate-cli.test.js tests/v21-goal-plan-preview-api.test.js`
+
+Exit code: 0
+
+```text
+tests 28
+suites 4
+pass 28
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 123.457542
+```
+
+`pnpm check`
+
+Exit code: 0
+
+```text
+> multi-coding-agent-symphony@0.1.0 check /Users/andy/Documents/project/multi-coding-agent-symphony
+> node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js
+```
+
+`pnpm test`
+
+Exit code: 0
+
+```text
+tests 686
+suites 110
+pass 686
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 3620.599958
+```
+
+`pnpm workbench:build`
+
+Exit code: 0
+
+```text
+> multi-coding-agent-symphony@0.1.0 workbench:build /Users/andy/Documents/project/multi-coding-agent-symphony
+> vite build --config frontend/workbench/vite.config.js
+
+vite v8.0.14 building client environment for production...
+✓ 17 modules transformed.
+rendering chunks...
+computing gzip size...
+src/symphony/workbench-static/index.html                   0.42 kB │ gzip:   0.27 kB
+src/symphony/workbench-static/assets/index-BspYnYKl.css   11.24 kB │ gzip:   2.57 kB
+src/symphony/workbench-static/assets/index-DMa5Vmdp.js   689.08 kB │ gzip: 128.85 kB
+
+✓ built in 144ms
+```
+
+Node printed WASI experimental warnings before and during the Vite build. The command exited 0.
+
+`git diff --check`
+
+Exit code: 0
+
+```text
+<no output>
+```
+
+`pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json`
+
+Exit code: 0
+
+```text
+contractName: goal-progress-ledger.v1
+goalId: v21-goal-event-registration-workbench
+summary.totalTasks: 5
+summary.completedTasks: 3
+summary.blockedTasks: 0
+summary.needsReviewTasks: 0
+summary.needsRevisionTasks: 1
+summary.releaseReady: false
+task-1 status: main-verified
+task-2 status: main-verified
+task-3 status: main-verified
+task-4 status: needs-revision
+task-4 workerEvidenceRef: docs/plans/v21-task-4-worker-evidence-2026-05-29.md
+task-4 reviewEvidenceRef: docs/plans/v21-task-4-review-evidence-2026-05-29.md
+task-4 reviewVerdict: NEEDS_REVISION
+task-5 status: planned
+nextActions[0].label: Start task-4
+nextActions[0].command: pnpm check
+safety.readOnly: true
+safety.copyOnly: true
+```
+
+### Revision boundary notes
+
+- No reviewer, main-verification, release, or self-approval event was registered by this worker revision.
+- No generic shell runner or broad safety framework was added.
+- Confirm and preview remain constrained to `goal update`, `goal review`, and `goal gate`.
+- No v8 top-level action list, filename heuristic, branch heuristic, or commit heuristic status inference was added.

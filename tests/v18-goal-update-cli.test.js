@@ -208,6 +208,51 @@ describe('v18 symphony goal update CLI', () => {
     }
   });
 
+  it('accepts only controlled docs/plans and managed artifact evidence refs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v18-goal-update-controlled-evidence-'));
+    const stateDir = join(root, '.symphony');
+    const output = createOutput();
+
+    try {
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'update',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          GOAL_ID,
+          '--task',
+          'task-1',
+          '--event',
+          'worker.evidence-recorded',
+          '--actor',
+          'codex-worker-task-1',
+          '--evidence-ref',
+          'repo-doc:docs/plans/v18-task1-worker-evidence-2026-05-28.md',
+          '--evidence-ref',
+          'artifact-ref:artifact:run-1:evidence',
+          '--dry-run'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const plan = JSON.parse(output.stdoutText());
+
+      assert.deepEqual(plan.proposedEvents[0].evidenceRefs.map((ref) => [ref.kind, ref.ref]), [
+        ['repo-doc', 'docs/plans/v18-task1-worker-evidence-2026-05-28.md'],
+        ['artifact-ref', 'artifact:run-1:evidence']
+      ]);
+      assert.equal(await pathExists(getManagedGoalEventJournalPath({ stateDir, goalId: GOAL_ID })), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects unsupported or unsafe events and evidence refs without writing', async () => {
     const cases = [
       {
@@ -217,6 +262,18 @@ describe('v18 symphony goal update CLI', () => {
       {
         name: 'unsafe evidence ref',
         args: ['--event', 'worker.self-check-passed', '--evidence-ref', '/Users/example/secret.md']
+      },
+      {
+        name: 'command evidence ref',
+        args: ['--event', 'worker.evidence-recorded', '--evidence-ref', 'command-evidence:approved-looking-note']
+      },
+      {
+        name: 'external note ref',
+        args: ['--event', 'worker.evidence-recorded', '--evidence-ref', 'external-note:approved']
+      },
+      {
+        name: 'commit evidence ref',
+        args: ['--event', 'worker.evidence-recorded', '--evidence-ref', 'commit:abc1234']
       }
     ];
 
@@ -246,6 +303,9 @@ describe('v18 symphony goal update CLI', () => {
         });
 
         assert.equal(exitCode, 64, testCase.name);
+        if (testCase.name !== 'reviewer event') {
+          assert.match(output.stderrText(), /controlled docs\/plans or managed artifact reference/u, testCase.name);
+        }
         assert.doesNotMatch(output.stderrText(), /\/Users\/andy|multi-coding-agent-symphony/u);
         assert.equal(await pathExists(getManagedGoalEventJournalPath({ stateDir, goalId: GOAL_ID })), false);
       } finally {

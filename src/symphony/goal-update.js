@@ -20,10 +20,7 @@ const ALLOWED_UPDATE_EVENTS = Object.freeze([
 ]);
 const EVIDENCE_KIND_PREFIXES = Object.freeze([
   'repo-doc',
-  'artifact-ref',
-  'commit',
-  'command-evidence',
-  'external-note'
+  'artifact-ref'
 ]);
 const HASH_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 
