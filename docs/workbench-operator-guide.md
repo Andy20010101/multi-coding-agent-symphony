@@ -175,6 +175,14 @@ GET /api/goals/<goal-id>/event-plan-preview?command=gate&task=task-2&gate=main-v
 
 Confirm 阶段必须使用 dry-run 生成的 `planHash`。Workbench confirm route 会调用匹配的 `goal update`、`goal review` 或 `goal gate` confirm function，只向受控 managed-goal-event-journal append event。confirm 成功后，Workbench 重新读取 goal-status、events 和 next action。这个流程不会触发 shell、模型、merge 或 tag。
 
+Workbench 不保存“前端状态”。用户看到的 worker、reviewer 和 main verification 状态都来自 confirm 后刷新的后端 contract：
+
+- worker 路径：`command=update` 只允许 `worker.started`、`worker.evidence-recorded`、`worker.self-check-passed`、`worker.self-check-failed`、`blocker.opened` 和 `blocker.resolved`。dry-run 不写入；confirm 成功后 journal 里出现 `symphony goal update` 来源的 event。
+- reviewer 路径：`command=review` 只允许 `verdict=approved` 或 `verdict=needs-revision`。reviewer id 如果等于该 task 最近 worker id，preview/confirm 会被拒绝，不会 append event。
+- main verification 路径：`command=gate&gate=main-verification` 只允许 `status=passed` 或 `status=failed`，并且必须带 `task` 和受控 evidence ref。`status=passed` 写入 `main.verification-passed`；`status=failed` 写入 `main.verification-failed`。
+
+这些失败路径必须保持无写入：不匹配的 `planHash`、未知 command、未知 body/query 字段、缺少 main-verification task、非 JSON confirm body、非受控 evidence ref、unsafe goal ref、reviewer 和 worker actor 冲突。前端可以显示错误摘要，但不能把错误、文件名、分支名、commit message、copy-only command 或 prompt 文案转成任务完成、review approved、main verified 或 release ready。
+
 ## v20 Active Goal Workbench workflow
 
 v20 Workbench 的主路径从 active goal 开始。打开 `/workbench/` 后，第一组面板是 Active Goal Runbook 和 Active Goal Task Queue；Next Action Card、Prompt Preview Drawer、ActiveGoalViewModel 和 Closeout Gaps 紧跟其后。既有 summary、runs、handoff、events、capabilities 和 diagnostics 面板保留在后面，用于核对状态和安全边界。

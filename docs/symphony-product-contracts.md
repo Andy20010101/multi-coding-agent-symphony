@@ -149,6 +149,15 @@ POST /api/goals/<goal-id|latest>/event-plan-confirm
 
 The JSON body must include `command`, `planHash`, and the same controlled fields used for the matching preview command. Confirm recalculates the plan hash through `confirmGoalUpdate`, `confirmGoalReview`, or `confirmGoalGate`; mismatches are rejected and do not append. A successful response uses `goal-event-confirmation.v1` and includes refreshed `goal-progress-ledger.v1`, `goal-event-log.v1`, and `goal-next-action.v1` payloads.
 
+Workbench event registration tests cover the operator paths that can change goal evidence:
+
+- `command=update` confirms worker success and failure events, including `worker.self-check-passed` and `worker.self-check-failed`. The refreshed ledger decides the displayed task status from the appended event.
+- `command=review` confirms `approved` and `needs-revision` verdicts. The same route rejects a reviewer id that matches the latest worker id for the task.
+- `command=gate&gate=main-verification` confirms `status=passed` and `status=failed`. Missing task input is rejected before any append.
+- Rejected preview or confirm requests return `error-envelope.v1` and leave the managed journal unchanged.
+
+The browser may render the returned `eventSummary`, refreshed progress, refreshed events, and refreshed next action. It must not create a local approval, verification, or release-ready state from form selections, evidence filenames, branch names, commit messages, or copied commands.
+
 ## `goal-runbook.v1`
 
 `goal-runbook.v1` defines the executable blueprint for one goal. It is not evidence and does not store completion state.

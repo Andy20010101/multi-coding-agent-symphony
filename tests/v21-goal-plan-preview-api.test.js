@@ -411,6 +411,231 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
     }
   });
 
+  it('confirms controlled worker success and failure events without frontend-created status', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      const passedConfirmation = await previewAndConfirmGoalEvent(context, {
+        previewParams: {
+          command: 'update',
+          task: 'task-5',
+          event: 'worker.self-check-passed',
+          actor: 'codex-v21-task-5-worker',
+          evidenceRef: 'docs/plans/v21-task-5-worker-evidence-2026-05-29.md',
+          statement: 'Task 5 worker self-check passed.',
+          branch: 'v21-task-5-event-registration-tests-and-docs'
+        },
+        confirmBody: {
+          command: 'update',
+          task: 'task-5',
+          event: 'worker.self-check-passed',
+          actor: 'codex-v21-task-5-worker',
+          evidenceRef: ['docs/plans/v21-task-5-worker-evidence-2026-05-29.md'],
+          statement: 'Task 5 worker self-check passed.',
+          branch: 'v21-task-5-event-registration-tests-and-docs'
+        }
+      });
+      const failedConfirmation = await previewAndConfirmGoalEvent(context, {
+        previewParams: {
+          command: 'update',
+          task: 'task-4',
+          event: 'worker.self-check-failed',
+          actor: 'codex-v21-task-4-worker',
+          evidenceRef: 'docs/plans/v21-task-4-worker-evidence-2026-05-29.md',
+          statement: 'Task 4 worker self-check failed.'
+        },
+        confirmBody: {
+          command: 'update',
+          task: 'task-4',
+          event: 'worker.self-check-failed',
+          actor: 'codex-v21-task-4-worker',
+          evidenceRef: ['docs/plans/v21-task-4-worker-evidence-2026-05-29.md'],
+          statement: 'Task 4 worker self-check failed.'
+        }
+      });
+
+      assert.equal(passedConfirmation.command, 'update');
+      assert.equal(passedConfirmation.eventSummary.eventType, 'worker.self-check-passed');
+      assert.equal(passedConfirmation.eventSummary.actorRole, 'worker');
+      assert.equal(passedConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-5').status, 'self-checked');
+      assert.equal(failedConfirmation.command, 'update');
+      assert.equal(failedConfirmation.eventSummary.eventType, 'worker.self-check-failed');
+      assert.equal(failedConfirmation.eventSummary.actorRole, 'worker');
+      assert.equal(failedConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-4').status, 'unknown');
+      assert.equal(failedConfirmation.refreshed.events.log.eventCount, 2);
+      assert.deepEqual(
+        failedConfirmation.refreshed.events.events.map((event) => event.eventType),
+        ['worker.self-check-passed', 'worker.self-check-failed']
+      );
+      assert.equal(failedConfirmation.confirmEndpoint.genericShellRunner, false);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
+  it('confirms review approved and needs-revision verdicts and rejects worker self-approval', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      await previewAndConfirmGoalEvent(context, {
+        previewParams: {
+          command: 'update',
+          task: 'task-1',
+          event: 'worker.evidence-recorded',
+          actor: 'codex-v21-task-1-worker',
+          evidenceRef: 'docs/plans/v21-task-1-worker-evidence-2026-05-29.md'
+        },
+        confirmBody: {
+          command: 'update',
+          task: 'task-1',
+          event: 'worker.evidence-recorded',
+          actor: 'codex-v21-task-1-worker',
+          evidenceRef: ['docs/plans/v21-task-1-worker-evidence-2026-05-29.md']
+        }
+      });
+
+      const beforeSelfApprovalProbe = await snapshotDirectoryFiles(context.stateDir);
+      const selfApprovalResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'review',
+        task: 'task-1',
+        reviewer: 'codex-v21-task-1-worker',
+        verdict: 'approved',
+        evidenceRef: 'docs/plans/v21-task-1-review-evidence-2026-05-29.md'
+      })}`);
+      const selfApprovalEnvelope = await selfApprovalResponse.json();
+
+      assert.equal(selfApprovalResponse.status, 400);
+      assert.equal(selfApprovalEnvelope.contractName, 'error-envelope.v1');
+      assert.equal(selfApprovalEnvelope.error.code, 'reviewer-worker-conflict');
+      assert.match(selfApprovalEnvelope.error.message, /Reviewer id must differ/u);
+      assert.deepEqual(validateErrorEnvelopeContract(selfApprovalEnvelope), {
+        ok: true,
+        errors: []
+      });
+      assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), beforeSelfApprovalProbe);
+
+      const approvedConfirmation = await previewAndConfirmGoalEvent(context, {
+        previewParams: {
+          command: 'review',
+          task: 'task-1',
+          reviewer: 'codex-v21-task-1-reviewer',
+          verdict: 'approved',
+          evidenceRef: 'docs/plans/v21-task-1-review-evidence-2026-05-29.md'
+        },
+        confirmBody: {
+          command: 'review',
+          task: 'task-1',
+          reviewer: 'codex-v21-task-1-reviewer',
+          verdict: 'approved',
+          evidenceRef: ['docs/plans/v21-task-1-review-evidence-2026-05-29.md']
+        }
+      });
+      const needsRevisionConfirmation = await previewAndConfirmGoalEvent(context, {
+        previewParams: {
+          command: 'review',
+          task: 'task-2',
+          reviewer: 'codex-v21-task-2-reviewer',
+          verdict: 'needs-revision',
+          evidenceRef: 'docs/plans/v21-task-2-review-evidence-2026-05-29.md'
+        },
+        confirmBody: {
+          command: 'review',
+          task: 'task-2',
+          reviewer: 'codex-v21-task-2-reviewer',
+          verdict: 'needs-revision',
+          evidenceRef: ['docs/plans/v21-task-2-review-evidence-2026-05-29.md']
+        }
+      });
+
+      assert.equal(approvedConfirmation.command, 'review');
+      assert.equal(approvedConfirmation.eventSummary.eventType, 'reviewer.approved');
+      assert.equal(approvedConfirmation.eventSummary.verdict, 'APPROVED');
+      assert.equal(approvedConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-1').status, 'approved');
+      assert.equal(needsRevisionConfirmation.command, 'review');
+      assert.equal(needsRevisionConfirmation.eventSummary.eventType, 'reviewer.needs-revision');
+      assert.equal(needsRevisionConfirmation.eventSummary.verdict, 'NEEDS_REVISION');
+      assert.equal(needsRevisionConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-2').status, 'needs-revision');
+      assert.equal(needsRevisionConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-2').reviewVerdict, 'NEEDS_REVISION');
+      assert.equal(needsRevisionConfirmation.refreshed.events.log.eventCount, 3);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
+  it('confirms main verification passed and failed gates and rejects incomplete gate input', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      const passedConfirmation = await previewAndConfirmGoalEvent(context, {
+        previewParams: {
+          command: 'gate',
+          task: 'task-1',
+          gate: 'main-verification',
+          status: 'passed',
+          verifier: 'codex-v21-task-1-main-verifier',
+          evidenceRef: 'docs/plans/v21-task-1-main-verification-evidence-2026-05-29.md'
+        },
+        confirmBody: {
+          command: 'gate',
+          task: 'task-1',
+          gate: 'main-verification',
+          status: 'passed',
+          verifier: 'codex-v21-task-1-main-verifier',
+          evidenceRef: ['docs/plans/v21-task-1-main-verification-evidence-2026-05-29.md']
+        }
+      });
+      const failedConfirmation = await previewAndConfirmGoalEvent(context, {
+        previewParams: {
+          command: 'gate',
+          task: 'task-2',
+          gate: 'main-verification',
+          status: 'failed',
+          verifier: 'codex-v21-task-2-main-verifier',
+          evidenceRef: 'docs/plans/v21-task-2-main-verification-evidence-2026-05-29.md'
+        },
+        confirmBody: {
+          command: 'gate',
+          task: 'task-2',
+          gate: 'main-verification',
+          status: 'failed',
+          verifier: 'codex-v21-task-2-main-verifier',
+          evidenceRef: ['docs/plans/v21-task-2-main-verification-evidence-2026-05-29.md']
+        }
+      });
+
+      const beforeInvalidGateProbe = await snapshotDirectoryFiles(context.stateDir);
+      const invalidGateResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'gate',
+        gate: 'main-verification',
+        status: 'passed',
+        verifier: 'codex-v21-main-verifier',
+        evidenceRef: 'docs/plans/v21-main-verification-evidence-2026-05-29.md'
+      })}`);
+      const invalidGateEnvelope = await invalidGateResponse.json();
+
+      assert.equal(passedConfirmation.command, 'gate');
+      assert.equal(passedConfirmation.eventSummary.eventType, 'main.verification-passed');
+      assert.equal(passedConfirmation.eventSummary.gate, 'main-verification');
+      assert.equal(passedConfirmation.eventSummary.gateStatus, 'passed');
+      assert.equal(passedConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-1').status, 'main-verified');
+      assert.equal(failedConfirmation.command, 'gate');
+      assert.equal(failedConfirmation.eventSummary.eventType, 'main.verification-failed');
+      assert.equal(failedConfirmation.eventSummary.gateStatus, 'failed');
+      assert.equal(failedConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-2').status, 'unknown');
+      assert.equal(failedConfirmation.refreshed.events.log.eventCount, 2);
+      assert.equal(invalidGateResponse.status, 400);
+      assert.equal(invalidGateEnvelope.contractName, 'error-envelope.v1');
+      assert.equal(invalidGateEnvelope.error.code, 'missing-main-verification-task');
+      assert.deepEqual(validateErrorEnvelopeContract(invalidGateEnvelope), {
+        ok: true,
+        errors: []
+      });
+      assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), beforeInvalidGateProbe);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
   it('rejects mismatched plan hashes, unsupported confirm commands, unknown fields, and unsafe goal refs without appending', async () => {
     const context = await startPreviewConsoleServer();
 
@@ -531,6 +756,45 @@ async function startPreviewConsoleServer() {
     server,
     baseUrl: `http://127.0.0.1:${address.port}`
   };
+}
+
+async function previewAndConfirmGoalEvent(context, { previewParams, confirmBody }) {
+  const previewResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${buildSearchParams(previewParams)}`);
+  const previewPlan = await previewResponse.json();
+
+  assert.equal(previewResponse.status, 200, JSON.stringify(previewParams));
+  assert.deepEqual(validateGoalUpdatePlanContract(previewPlan), {
+    ok: true,
+    errors: []
+  }, JSON.stringify(previewParams));
+  assert.equal(previewPlan.eventSummary.writesInDryRun, false);
+
+  const confirmResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-confirm`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      ...confirmBody,
+      planHash: previewPlan.planHash
+    })
+  });
+  const confirmation = await confirmResponse.json();
+
+  assert.equal(confirmResponse.status, 200, JSON.stringify(confirmBody));
+  assert.equal(confirmation.contractName, 'goal-event-confirmation.v1');
+  assert.equal(confirmation.status, 'appended');
+  assert.equal(confirmation.written, true);
+  assert.equal(confirmation.appendOnly, true);
+  assert.equal(confirmation.planHash, previewPlan.planHash);
+  assert.equal(confirmation.refreshed.events.contractName, 'goal-event-log.v1');
+  assert.equal(confirmation.refreshed.progress.contractName, 'goal-progress-ledger.v1');
+  assert.equal(confirmation.refreshed.nextAction.contractName, 'goal-next-action.v1');
+  assert.equal(confirmation.confirmEndpoint.genericShellRunner, false);
+  assert.deepEqual(confirmation.confirmEndpoint.constrainedCommands, ['update', 'review', 'gate']);
+
+  return confirmation;
 }
 
 async function cleanupPreviewConsoleServer(context) {
