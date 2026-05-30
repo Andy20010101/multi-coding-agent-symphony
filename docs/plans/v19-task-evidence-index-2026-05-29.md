@@ -3,7 +3,7 @@
 日期：2026-05-29
 目标：`v19-goal-runbook-next-action`
 基线：`v18`
-当前分支：`v19-task7-docs-operator-guide`
+当前分支：`v19-task8-release-verification`
 
 ## 记录规则
 
@@ -14,14 +14,15 @@
 当前 `pnpm --silent symphony goal-status --goal v19-goal-runbook-next-action --json` 显示：
 
 - `summary.totalTasks: 9`
-- `summary.completedTasks: 7`
+- `summary.completedTasks: 8`
 - `summary.needsRevisionTasks: 0`
 - `summary.releaseReady: false`
 - `summary.releaseReadySource: null`
-- task-7 `status: in-progress`, `statusSource: goal-event-log.v1:evt_f7f1d97c224c6cdb`, worker evidence ref `docs/plans/v19-task7-worker-evidence-2026-05-29.md`
-- release gates `pnpmCheck`、`pnpmTest`、`workbenchBuild`、`mutationGate`、`auditHigh`、`diffCheck`、`mcasDoctor`、`docsUpdated`、`tagEvidence` 均为 `unknown`
+- task-8 `status: in-progress`, `statusSource: goal-event-log.v1:evt_03f1bc6b033b537d`
+- release gates `pnpmCheck`、`pnpmTest`、`workbenchBuild`、`mutationGate`、`auditHigh`、`diffCheck`、`mcasDoctor`、`docsUpdated` 均为 `passed`
+- release gate `tagEvidence` 为 `unknown`
 
-`task-0` 是 goal-status template bootstrap 留下的历史 event，不是 v19 runbook 的 task-1 到 task-8 范围。当前本地 `.symphony` 没有 managed runbook state；`symphony goal next --goal v19-goal-runbook-next-action --json` 返回 `status: missing-runbook`，直到 runbook 通过 `symphony goal init` dry-run / confirm 注册。
+`task-0` 是 goal-status template bootstrap 留下的历史 event，不是 v19 runbook 的 task-1 到 task-8 范围。当前本地 `.symphony` 没有 managed runbook state；`symphony goal next --goal v19-goal-runbook-next-action --json` 返回 `status: missing-runbook`，`symphony goal closeout --goal v19-goal-runbook-next-action --json` 退出 64。
 
 ## planning and bootstrap evidence
 
@@ -38,15 +39,17 @@
 | task-1 | `goal-event-log.v1:evt_db50ece4252ca9be`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task1-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_bd196b84947c0c03`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task1-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_beb35401ede44f6c`, `main.verification-passed`, evidence ref `docs/plans/v19-task1-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
 | task-2 | `goal-event-log.v1:evt_e632b250e938b5fa`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task2-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_37bf1244d4a61e59`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task2-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_dbab0ee5a0458362`, `main.verification-passed`, evidence ref `docs/plans/v19-task2-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
 | task-3 | `goal-event-log.v1:evt_ab7f8003e590b4dd`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task3-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_682ed327c9dd2a30`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task3-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_232d71c30611384b`, `main.verification-passed`, evidence ref `docs/plans/v19-task3-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
-| task-4 | Worker evidence doc exists at `docs/plans/v19-task4-worker-evidence-2026-05-29.md`, but the current v19 event log summary used for this index has no `worker.evidence-recorded` event for `task-4`; `goal-status` reports `workerEvidenceRef: null`. | `goal-event-log.v1:evt_2cf40206107dbc86`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task4-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_8221ced231d42c74`, `main.verification-passed`, evidence ref `docs/plans/v19-task4-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
+| task-4 | Worker evidence doc exists at `docs/plans/v19-task4-worker-evidence-2026-05-29.md`, but the current event log has no `worker.evidence-recorded` event for `task-4`; `goal-status` reports `workerEvidenceRef: null`. | `goal-event-log.v1:evt_2cf40206107dbc86`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task4-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_8221ced231d42c74`, `main.verification-passed`, evidence ref `docs/plans/v19-task4-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
 | task-5 | `goal-event-log.v1:evt_43167c831152bdab`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task5-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_4a887152a37eff6c`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task5-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_ea5fbc92432fe9d9`, `main.verification-passed`, evidence ref `docs/plans/v19-task5-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
 | task-6 | `goal-event-log.v1:evt_f9205beab08c9e56`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task6-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_8be3fd362f139622`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task6-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_579bba01c789b474`, `main.verification-passed`, evidence ref `docs/plans/v19-task6-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
-| task-7 | `goal-event-log.v1:evt_f7f1d97c224c6cdb`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task7-worker-evidence-2026-05-29.md`; this branch adds README, product contracts, operator guide, this task evidence index, and `docs/plans/v19-release-evidence-2026-05-29.md`. | Review evidence file `docs/plans/v19-task7-review-evidence-2026-05-29.md` records verdict `APPROVED`, but no reviewer verdict event is registered yet for task-7. | No `main.verification-passed` event is registered yet for task-7. | No v19 release gate event is registered for this task. |
-| task-8 | Planned release verification, final closure, and tag evidence task. No worker evidence event is registered yet. | No reviewer verdict event is registered yet. | No main verification event is registered yet. | No release gate, release-ready, or tag evidence event is registered yet. |
+| task-7 | `goal-event-log.v1:evt_f7f1d97c224c6cdb`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task7-worker-evidence-2026-05-29.md`. | Review evidence file `docs/plans/v19-task7-review-evidence-2026-05-29.md` records verdict `APPROVED`, but no reviewer verdict event is registered yet for task-7; `goal-status` reports `reviewEvidenceRef: null`. | `goal-event-log.v1:evt_82fba2d7f67e16dd`, `main.verification-passed`, evidence ref `docs/plans/v19-task7-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
+| task-8 | `goal-event-log.v1:evt_03f1bc6b033b537d`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-final-closure-evidence-2026-05-29.md`. | No reviewer verdict event is registered yet. | No `main.verification-passed` event is registered yet. | Local command gates passed and release gate events are registered for check, test, Workbench build, mutation, audit high, diff check, mcas doctor, and docs updated; no `release.ready-declared` or tag evidence event is registered yet. |
 
 ## release status
 
 - Local goal-status reports `summary.releaseReady: false`.
-- No `release.gate-passed`, `release.gate-failed`, or `release.ready-declared` events are present in the current v19 event log.
-- Passing local commands during Task 7 must stay command evidence until a release manager explicitly registers the relevant release gates.
-- Tag evidence is not present. This index did not create a tag.
+- `release.gate-passed` events are present for `release.pnpm-check`, `release.pnpm-test`, `release.workbench-build`, `release.mutation-gate`, `release.audit-high`, `release.diff-check`, `release.mcas-doctor`, and `release.docs-updated`.
+- No `release.gate-passed` event is present for `release.tag-evidence`, and no `release.ready-declared` event is present.
+- The required release gate commands ran on branch `v19-task8-release-verification`; results are recorded in `docs/plans/v19-release-evidence-2026-05-29.md`.
+- Tag evidence is not present. `git tag --list v19` returned no output, and this index did not create a tag.
+- `release.ready` declaration is not justified while task-4, task-7, task-8 review/main, managed runbook, release.ready, and tag evidence gaps remain.
