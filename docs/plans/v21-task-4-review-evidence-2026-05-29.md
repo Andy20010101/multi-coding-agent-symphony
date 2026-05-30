@@ -4,63 +4,116 @@ Goal id: `v21-goal-event-registration-workbench`
 Task id: `task-4`
 Task title: `Evidence ref helper`
 Branch reviewed: `v21-task-4-evidence-ref-helper`
-Reviewer: `v21 task-4 independent reviewer subagent`
+Reviewer: `v21 task-4 independent re-reviewer subagent`
 Date reviewed: 2026-05-31
-Verdict: `needs-revision`
+Verdict: `approved`
+
+This review supersedes the earlier `needs-revision` verdict in this file. The prior blocker was that backend dry-run/confirm builders still accepted `command-evidence:*` and `external-note:*`. The revision now rejects those inputs for `goal update`, `goal review`, and `goal gate`.
 
 ## Scope Checked
 
 - Read task-4 scope in `docs/plans/workbench-v20-v28-goal-runbooks/v21_workbench-goal-event-registration_goal_runbook_latest.md`.
-- Read worker evidence in `docs/plans/v21-task-4-worker-evidence-2026-05-29.md`.
-- Reviewed task-4 commit diff `HEAD^..HEAD` and integration diff `main...HEAD`.
-- Checked evidence ref helper projection, Workbench input parsing, recent ref source selection, dry-run preview path, confirm path, API error envelope behavior, and backend evidence normalization in `goal update`, `goal review`, and `goal gate`.
-- Checked for generic shell runner expansion, v8 top-level action list usage, frontend status/readiness inference, and worker self-approval.
+- Read worker evidence in `docs/plans/v21-task-4-worker-evidence-2026-05-29.md`, including the revision note.
+- Reviewed current task-4 revision diff `HEAD^..HEAD` and integration diff `main...HEAD`.
+- Checked backend evidence normalization in `src/symphony/goal-update.js`, `src/symphony/goal-review.js`, and `src/symphony/goal-gate.js`.
+- Checked Workbench preview/confirm routing in `src/symphony/console.js` and `frontend/workbench/src/App.jsx`.
+- Checked evidence helper projection and parsing in `frontend/workbench/src/App.jsx` and `frontend/workbench/src/api/contracts.js`.
+- Checked CLI/API tests for controlled acceptance and uncontrolled rejection in `tests/v18-goal-update-cli.test.js`, `tests/v18-goal-review-cli.test.js`, `tests/v18-goal-gate-cli.test.js`, and `tests/v21-goal-plan-preview-api.test.js`.
 
 ## Files and Diff Checked
 
-- `frontend/workbench/src/App.jsx`
-- `frontend/workbench/src/api/contracts.js`
-- `frontend/workbench/src/styles/workbench.css`
-- `src/symphony/goal-update.js`
-- `src/symphony/goal-review.js`
-- `src/symphony/goal-gate.js`
-- `src/symphony/console.js`
-- `src/symphony/goal-progress-ledger.js`
-- `tests/v21-goal-plan-preview-api.test.js`
-- `tests/workbench-api-client.test.js`
-- `docs/plans/v21-task-4-worker-evidence-2026-05-29.md`
-- Built static Workbench assets under `src/symphony/workbench-static/`
-
-Diff commands checked:
+`git diff --stat HEAD^..HEAD`:
 
 ```text
-git diff --stat main...HEAD
-28 files changed, 7074 insertions(+), 41 deletions(-)
+docs/plans/v21-task-4-review-evidence-2026-05-29.md | 209 ++++++++++++++++++
+docs/plans/v21-task-4-worker-evidence-2026-05-29.md | 138 +++++++++++-
+src/symphony/goal-gate.js                          |   5 +-
+src/symphony/goal-review.js                        |   5 +-
+src/symphony/goal-update.js                        |   5 +-
+tests/v18-goal-gate-cli.test.js                    |  87 ++++++++
+tests/v18-goal-review-cli.test.js                  |  90 ++++++++
+tests/v18-goal-update-cli.test.js                  |  60 ++++++
+tests/v21-goal-plan-preview-api.test.js            | 233 ++++++++++++++++++---
+9 files changed, 782 insertions(+), 50 deletions(-)
+```
 
-git diff --name-status main...HEAD
-Included v21 task-1 through task-4 stacked changes plus task-4 worker evidence.
+`git diff --name-status HEAD^..HEAD`:
 
-git diff --stat HEAD^..HEAD
-12 files changed, 1169 insertions(+), 68 deletions(-)
-
-git diff --name-status HEAD^..HEAD
-A docs/plans/v21-task-4-worker-evidence-2026-05-29.md
-M frontend/workbench/src/App.jsx
-M frontend/workbench/src/api/contracts.js
-M frontend/workbench/src/styles/workbench.css
+```text
+A docs/plans/v21-task-4-review-evidence-2026-05-29.md
+M docs/plans/v21-task-4-worker-evidence-2026-05-29.md
 M src/symphony/goal-gate.js
 M src/symphony/goal-review.js
 M src/symphony/goal-update.js
-R096 src/symphony/workbench-static/assets/index-CMCXVqRN.css -> src/symphony/workbench-static/assets/index-BspYnYKl.css
-R098 src/symphony/workbench-static/assets/index-Di8mm98M.js -> src/symphony/workbench-static/assets/index-DMa5Vmdp.js
-M src/symphony/workbench-static/index.html
+M tests/v18-goal-gate-cli.test.js
+M tests/v18-goal-review-cli.test.js
+M tests/v18-goal-update-cli.test.js
 M tests/v21-goal-plan-preview-api.test.js
-M tests/workbench-api-client.test.js
 ```
+
+`git diff --stat main...HEAD` showed the stacked v21 task-1 through task-4 branch context:
+
+```text
+32 files changed, 7818 insertions(+), 53 deletions(-)
+```
+
+## Findings
+
+No blocking findings remain.
+
+The backend revision fixes the prior blocker. `EVIDENCE_KIND_PREFIXES` in `goal-update.js`, `goal-review.js`, and `goal-gate.js` now contains only `repo-doc` and `artifact-ref`. Unknown prefixes such as `command-evidence:`, `external-note:`, and `commit:` fall through as repo-doc refs and fail the `docs/plans/` requirement. `repo-doc` remains limited to `docs/plans/...`, and `artifact-ref:<ref>` is preserved for managed artifact evidence refs.
+
+The Workbench preview endpoint still accepts only constrained `command=update|review|gate` parameters and calls the matching backend builders. The confirm endpoint still calls `confirmGoalUpdate`, `confirmGoalReview`, or `confirmGoalGate` with a plan hash. The frontend still builds preview and confirm payloads from the same form values and parsed evidence refs; it does not invoke a shell runner.
+
+Task-4 acceptance is covered:
+
+- Evidence ref input exists in the goal event form.
+- Recent refs are projected from exposed runbook, goal progress, goal event, and latest run artifact contracts.
+- Invalid frontend input is blocked before preview with an evidence ref error.
+- Backend preview and confirm return `invalid-evidence-ref` envelopes for uncontrolled refs.
+- `docs/plans/...`, `repo-doc:docs/plans/...`, and `artifact-ref:...` remain accepted.
+- The helper does not infer approval, main verification, release readiness, or task status from file names, branches, commits, artifact labels, or frontend heuristics.
+
+## Evidence Ref Boundary Probes
+
+Manual CLI probes used a temporary `--state-dir` and left `state-files=0`.
+
+```text
+update dry-run command-evidence:approved-looking-note | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+review dry-run command-evidence:approved-looking-note | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+gate dry-run command-evidence:approved-looking-note | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+update confirm command-evidence:approved-looking-note | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+review confirm command-evidence:approved-looking-note | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+gate confirm command-evidence:approved-looking-note | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+update dry-run external-note:approved | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+review dry-run external-note:approved | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+gate dry-run external-note:approved | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+update confirm external-note:approved | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+review confirm external-note:approved | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+gate confirm external-note:approved | exit=64 | message=--evidence-ref must be a controlled docs/plans or managed artifact reference.
+state-files=0
+```
+
+The Workbench API test also asserts `error-envelope.v1` with `error.code: invalid-evidence-ref` for uncontrolled preview and confirm refs.
 
 ## Command Results
 
-### `pnpm check`
+`pnpm test -- tests/v18-goal-update-cli.test.js tests/v18-goal-review-cli.test.js tests/v18-goal-gate-cli.test.js tests/v21-goal-plan-preview-api.test.js`
+
+Exit code: 0
+
+```text
+tests 28
+suites 4
+pass 28
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 123.249959
+```
+
+`pnpm check`
 
 Exit code: 0
 
@@ -69,22 +122,22 @@ Exit code: 0
 > node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js
 ```
 
-### `pnpm test`
+`pnpm test`
 
 Exit code: 0
 
 ```text
-tests 681
+tests 686
 suites 110
-pass 681
+pass 686
 fail 0
 cancelled 0
 skipped 0
 todo 0
-duration_ms 5793.5555
+duration_ms 3591.130166
 ```
 
-### `pnpm workbench:build`
+`pnpm workbench:build`
 
 Exit code: 0
 
@@ -103,9 +156,9 @@ src/symphony/workbench-static/assets/index-DMa5Vmdp.js   689.08 kB │ gzip: 128
 ✓ built in 141ms
 ```
 
-Node printed WASI experimental warnings before and during the Vite build. The command still exited 0.
+Node printed WASI experimental warnings during the Vite build. The command exited 0.
 
-### `git diff --check`
+`git diff --check`
 
 Exit code: 0
 
@@ -113,97 +166,9 @@ Exit code: 0
 <no output>
 ```
 
-### `pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json`
-
-Exit code: 0
-
-```text
-contractName: goal-progress-ledger.v1
-goalId: v21-goal-event-registration-workbench
-summary.totalTasks: 5
-summary.completedTasks: 3
-summary.blockedTasks: 0
-summary.needsReviewTasks: 0
-summary.needsRevisionTasks: 0
-summary.releaseReady: false
-task-1 status: main-verified
-task-2 status: main-verified
-task-3 status: main-verified
-task-4 status: in-progress
-task-4 workerEvidenceRef: docs/plans/v21-task-4-worker-evidence-2026-05-29.md
-task-4 reviewEvidenceRef: null
-task-5 status: planned
-safety.readOnly: true
-safety.copyOnly: true
-```
-
-### Evidence ref boundary probes
-
-Exit code: 0 for both commands below:
-
-```text
-pnpm --silent symphony goal update --goal v21-goal-event-registration-workbench --task task-4 --event worker.evidence-recorded --actor codex-v21-review-probe --evidence-ref command-evidence:approved-looking-note --dry-run --json
-
-Result: goal-update-plan.v1 dry-run accepted the evidence ref.
-eventSummary equivalent in proposedEvents:
-kind: command-evidence
-ref: approved-looking-note
-validation.status: ok
-wouldAppend.writesInDryRun: false
-```
-
-```text
-pnpm --silent symphony goal update --goal v21-goal-event-registration-workbench --task task-4 --event worker.evidence-recorded --actor codex-v21-review-probe --evidence-ref external-note:approved --dry-run --json
-
-Result: goal-update-plan.v1 dry-run accepted the evidence ref.
-eventSummary equivalent in proposedEvents:
-kind: external-note
-ref: approved
-validation.status: ok
-wouldAppend.writesInDryRun: false
-```
-
-Exit code: 64 for the traversal probe:
-
-```text
-pnpm --silent symphony goal update --goal v21-goal-event-registration-workbench --task task-4 --event worker.evidence-recorded --actor codex-v21-review-probe --evidence-ref ../docs/plans/evil.md --dry-run --json
-
-{
-  "version": "1",
-  "status": "error",
-  "exitCode": 64,
-  "message": "--evidence-ref must be a controlled docs/plans or managed artifact reference."
-}
-```
-
-## Findings
-
-### Blocker: Backend still accepts non-`docs/plans` and non-managed-artifact evidence kinds
-
-Task-4 scope is specifically evidence ref input, recent evidence refs, and error display for `docs/plans` or managed artifact refs. The frontend parser follows that boundary: `frontend/workbench/src/App.jsx` accepts `docs/plans/`, `repo-doc:docs/plans/`, `artifact-ref:...`, `artifact:...`, `artifacts/...`, and `managed-artifact:...`, and rejects other inputs before preview.
-
-The backend dry-run and confirm paths do not enforce the same boundary. In `src/symphony/goal-update.js`, `src/symphony/goal-review.js`, and `src/symphony/goal-gate.js`, `splitEvidenceKind` still recognizes `commit`, `command-evidence`, and `external-note`. `isUncontrolledEvidenceRef` only rejects unsafe paths and repo-doc refs outside `docs/plans/`; it does not reject the other evidence kinds. The CLI probes above show `command-evidence:approved-looking-note` and `external-note:approved` both produce valid dry-run plans.
-
-This matters because the controlled Workbench preview endpoint calls these same builders, and `goal-progress-ledger.js` records the first evidence `ref` string as the task evidence signal. A non-file string such as `approved` can therefore satisfy evidence presence for an event even though it is neither a `docs/plans` ref nor a managed artifact ref. That conflicts with the task boundary and with the worker evidence claim that uncontrolled refs return `invalid-evidence-ref`.
-
-Required revision:
-
-- Align backend normalization with the Workbench helper boundary for `goal update`, `goal review`, and `goal gate`.
-- Accept repo-doc evidence only when it resolves to `docs/plans/...`.
-- Accept managed artifact evidence in the existing controlled managed artifact forms, preserving the `artifact-ref:<ref>` handling used by preview and confirm.
-- Reject `commit:...`, `command-evidence:...`, `external-note:...`, bare non-`docs/plans` strings, traversal, encoded traversal, absolute paths, and local file refs with `invalid-evidence-ref`.
-- Add API or CLI tests proving these rejected kinds fail for update, review, and gate without appending state.
-
-## Passing Checks
-
-- Recent evidence refs are projected from exposed runbook baseline, ledger refs, event log refs, and latest run artifact refs. The projection marks `readsEvidenceBodies`, `opensLocalFiles`, `infersStatusFromFilename`, and `infersStatusFromBranch` as false.
-- Recent ref selection is an input helper. It appends refs into the evidence input and does not set task status, verdict, readiness, or gate state.
-- Workbench preview and confirm still route through controlled `update`, `review`, and `gate` dry-run/confirm APIs. I did not find a generic shell runner or arbitrary command execution path in the task-4 diff.
-- The frontend does not infer approval, main verification, release readiness, or task status from filenames or branch names in the helper path.
-- No reviewer approval, main verification, release readiness, or goal review event was registered by this review.
-
 ## Boundary Notes
 
-- This review does not approve task-4.
-- This review did not register a `reviewer.approved` or `reviewer.needs-revision` event.
-- The finding is not based on test failure. The full test suite passes, but it does not cover the non-`docs/plans`/non-artifact evidence kind acceptance.
+- No functional code was changed by this re-review.
+- No goal review event was registered.
+- No generic shell runner, generic safety/permission system, goal framework, artifact framework, v8 top-level action list, frontend heuristic approval/readiness path, or worker self-approval path was found in the reviewed task-4 surface.
+- `src/symphony/goal-event-contracts.js` still lists historical evidence kinds for the event log contract, but the controlled `goal update/review/gate` builders under review now accept only `repo-doc` and `artifact-ref`.
