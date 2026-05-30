@@ -105,9 +105,13 @@ export default function App() {
           </section>
 
           <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
-            <NextActionCard nextAction={model.activeGoal.nextAction} route={findRoute(model.routeStates, 'goalNextAction')} />
+            <NextActionCard
+              nextAction={model.activeGoal.nextAction}
+              route={findRoute(model.routeStates, 'goalNextAction')}
+              onGoalEventConfirmed={refreshWorkbenchContracts}
+            />
             <PromptPreviewDrawer promptPreview={model.activeGoal.promptPreview} route={findRoute(model.routeStates, 'goalPromptPack')} />
-            <ActiveGoalViewModelPanel viewModel={model.activeGoal.viewModel} onGoalEventConfirmed={refreshWorkbenchContracts} />
+            <ActiveGoalViewModelPanel viewModel={model.activeGoal.viewModel} />
             <CloseoutGapsPanel closeoutGaps={model.activeGoal.closeoutGaps} route={findRoute(model.routeStates, 'goalCloseout')} />
           </section>
 
@@ -285,7 +289,7 @@ function EvidenceMatrixPanel({ matrix, route }) {
   );
 }
 
-function ActiveGoalViewModelPanel({ viewModel, onGoalEventConfirmed }) {
+function ActiveGoalViewModelPanel({ viewModel }) {
   return (
     <DataPanel
       id="active-goal-view-model-panel"
@@ -407,7 +411,7 @@ function ActiveGoalTaskQueuePanel({ taskQueue, route, progressRoute, eventsRoute
   );
 }
 
-function NextActionCard({ nextAction, route }) {
+function NextActionCard({ nextAction, route, onGoalEventConfirmed }) {
   return (
     <DataPanel
       id="next-action-card-panel"

@@ -12792,16 +12792,14 @@ function App() {
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
 							nextAction: model.activeGoal.nextAction,
-							route: findRoute(model.routeStates, "goalNextAction")
+							route: findRoute(model.routeStates, "goalNextAction"),
+							onGoalEventConfirmed: refreshWorkbenchContracts
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptPreviewDrawer, {
 							promptPreview: model.activeGoal.promptPreview,
 							route: findRoute(model.routeStates, "goalPromptPack")
 						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalViewModelPanel, {
-							viewModel: model.activeGoal.viewModel,
-							onGoalEventConfirmed: refreshWorkbenchContracts
-						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalViewModelPanel, { viewModel: model.activeGoal.viewModel }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseoutGapsPanel, {
 							closeoutGaps: model.activeGoal.closeoutGaps,
 							route: findRoute(model.routeStates, "goalCloseout")
@@ -13036,7 +13034,7 @@ function EvidenceMatrixPanel({ matrix, route }) {
 		]
 	});
 }
-function ActiveGoalViewModelPanel({ viewModel, onGoalEventConfirmed }) {
+function ActiveGoalViewModelPanel({ viewModel }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "active-goal-view-model-panel",
 		kicker: "v20 active goal",
@@ -13173,7 +13171,7 @@ function ActiveGoalTaskQueuePanel({ taskQueue, route, progressRoute, eventsRoute
 		]
 	});
 }
-function NextActionCard({ nextAction, route }) {
+function NextActionCard({ nextAction, route, onGoalEventConfirmed }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "next-action-card-panel",
 		kicker: "v19 active goal",

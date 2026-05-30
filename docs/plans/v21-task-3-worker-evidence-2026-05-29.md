@@ -200,3 +200,127 @@ The Browser plugin JavaScript control tool was not exposed in this session after
 - Verify plan hash mismatch leaves the managed event journal unchanged.
 - Verify frontend confirm uses the previewed values and returned plan hash.
 - Verify Workbench still uses latest goal/runbook/next-action surfaces rather than the old v8 action list.
+
+## Revision on 2026-05-31
+
+Reviewer verdict before this revision: `needs-revision`.
+
+Revision fix:
+
+- Passed `onGoalEventConfirmed={refreshWorkbenchContracts}` into `NextActionCard`.
+- Updated `NextActionCard` to accept `onGoalEventConfirmed` and forward it to `GoalEventFormModelView`.
+- Removed the unused `onGoalEventConfirmed` prop from `ActiveGoalViewModelPanel`.
+- Added a focused Workbench shell regression test that checks the refresh callback is wired through `NextActionCard`, not `ActiveGoalViewModelPanel`.
+- Rebuilt static Workbench assets. The JS bundle changed from `index-BngtQc4P.js` to `index-Di8mm98M.js`; the CSS bundle hash stayed `index-CMCXVqRN.css`.
+
+Revision files changed:
+
+- `frontend/workbench/src/App.jsx`
+- `tests/workbench-shell.test.js`
+- `src/symphony/workbench-static/index.html`
+- `src/symphony/workbench-static/assets/index-Di8mm98M.js`
+- `src/symphony/workbench-static/assets/index-BngtQc4P.js` removed by the rebuild
+- `docs/plans/v21-task-3-worker-evidence-2026-05-29.md`
+- `docs/plans/v21-task-3-review-evidence-2026-05-29.md` included because it was present as untracked reviewer evidence
+
+Revision command results:
+
+`node --test tests/workbench-shell.test.js`
+
+Result: exit code `0`.
+
+```text
+tests 12
+suites 2
+pass 12
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 89.787292
+```
+
+`pnpm check`
+
+Result: exit code `0`.
+
+```text
+> multi-coding-agent-symphony@0.1.0 check /Users/andy/Documents/project/multi-coding-agent-symphony
+> node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js
+```
+
+`pnpm test`
+
+Result: exit code `0`.
+
+```text
+tests 678
+suites 110
+pass 678
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 3590.2125
+```
+
+`pnpm workbench:build`
+
+Result: exit code `0`.
+
+```text
+> multi-coding-agent-symphony@0.1.0 workbench:build /Users/andy/Documents/project/multi-coding-agent-symphony
+> vite build --config frontend/workbench/vite.config.js
+
+(node:14992) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:14992) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+vite v8.0.14 building client environment for production...
+(node:14992) ExperimentalWarning: WASI is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+transforming...✓ 17 modules transformed.
+rendering chunks...
+computing gzip size...
+src/symphony/workbench-static/index.html                   0.42 kB │ gzip:   0.27 kB
+src/symphony/workbench-static/assets/index-CMCXVqRN.css   10.83 kB │ gzip:   2.50 kB
+src/symphony/workbench-static/assets/index-Di8mm98M.js   678.69 kB │ gzip: 126.36 kB
+
+✓ built in 139ms
+```
+
+`git diff --check`
+
+Result: exit code `0`. No output.
+
+`pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json`
+
+Result: exit code `0`.
+
+```text
+contractName: goal-progress-ledger.v1
+goalId: v21-goal-event-registration-workbench
+summary.totalTasks: 5
+summary.completedTasks: 2
+summary.needsRevisionTasks: 1
+summary.releaseReady: false
+task-1.status: main-verified
+task-2.status: main-verified
+task-3.status: needs-revision
+task-3.reviewVerdict: NEEDS_REVISION
+task-3.workerEvidenceRef: docs/plans/v21-task-3-worker-evidence-2026-05-29.md
+task-3.reviewEvidenceRef: docs/plans/v21-task-3-review-evidence-2026-05-29.md
+task-4.status: planned
+task-5.status: planned
+nextActions[0].label: Start task-3
+```
+
+Revision boundary notes:
+
+- No generic shell runner was added.
+- Confirm remains constrained to `goal update`, `goal review`, and `goal gate`.
+- Confirm still requires a matching dry-run `planHash`.
+- No v8 top-level action list was added.
+- Workbench still does not infer approval, main verification, release readiness, or status from frontend heuristics.
+- This worker did not register reviewer, main-verification, release, or worker evidence events.
+- This worker did not self-approve.

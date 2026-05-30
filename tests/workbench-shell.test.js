@@ -146,6 +146,22 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(source, /symphony goal (update|review|gate) --goal/u);
   });
 
+  it('wires successful goal event confirms to refresh Workbench contracts through the next action card', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const nextActionInvocation = app.match(/<NextActionCard[\s\S]*?\/>/u)?.[0] ?? '';
+    const viewModelInvocation = app.match(/<ActiveGoalViewModelPanel[\s\S]*?\/>/u)?.[0] ?? '';
+    const nextActionSignature = app.match(/function NextActionCard\([^)]*\)/u)?.[0] ?? '';
+    const viewModelSignature = app.match(/function ActiveGoalViewModelPanel\([^)]*\)/u)?.[0] ?? '';
+    const nextActionBody = app.slice(app.indexOf('function NextActionCard'), app.indexOf('function PromptPreviewDrawer'));
+
+    assert.match(app, /async function refreshWorkbenchContracts/u);
+    assert.match(nextActionInvocation, /onGoalEventConfirmed=\{refreshWorkbenchContracts\}/u);
+    assert.doesNotMatch(viewModelInvocation, /onGoalEventConfirmed/u);
+    assert.match(nextActionSignature, /onGoalEventConfirmed/u);
+    assert.doesNotMatch(viewModelSignature, /onGoalEventConfirmed/u);
+    assert.match(nextActionBody, /<GoalEventFormModelView[\s\S]*onGoalEventConfirmed=\{onGoalEventConfirmed\}/u);
+  });
+
   it('keeps frontend API paths limited to the approved read-only endpoints', async () => {
     const sources = await Promise.all(
       frontendFiles.map((file) => readFile(file, 'utf8'))
