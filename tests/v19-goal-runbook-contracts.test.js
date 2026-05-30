@@ -127,6 +127,30 @@ describe('v19 goal runbook, next action, prompt pack, and closeout contracts', (
     );
   });
 
+  it('requires closeout release readiness to cite explicit goal event evidence', async () => {
+    const closeoutReport = await loadFixture('../fixtures/contracts/goal-closeout-report.valid.v1.json');
+
+    closeoutReport.summary.releaseReady = true;
+    closeoutReport.summary.releaseReadySource = null;
+    assertHasError(
+      validateGoalCloseoutReportContract(closeoutReport),
+      'summary.releaseReadySource must be a goal-event-log.v1 source when summary.releaseReady is true'
+    );
+
+    closeoutReport.summary.releaseReadySource = 'local-command-output:pnpm-test';
+    assertHasError(
+      validateGoalCloseoutReportContract(closeoutReport),
+      'summary.releaseReadySource must be a goal-event-log.v1 source when summary.releaseReady is true'
+    );
+
+    closeoutReport.summary.releaseReady = false;
+    closeoutReport.summary.releaseReadySource = 'goal-event-log.v1:evt_release_ready_declared';
+    assertHasError(
+      validateGoalCloseoutReportContract(closeoutReport),
+      'summary.releaseReadySource must be null when summary.releaseReady is false'
+    );
+  });
+
   it('rejects missing copy-only prompts when next action says a prompt is available', async () => {
     const nextAction = await loadFixture('../fixtures/contracts/goal-next-action.copy-only-prompt-missing.invalid.v1.json');
 

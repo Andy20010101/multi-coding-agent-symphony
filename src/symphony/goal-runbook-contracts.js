@@ -607,6 +607,20 @@ function validateCloseoutSummary(errors, summary) {
   ]) {
     requireBoolean(errors, summary[field], `summary.${field}`);
   }
+
+  if (!Object.hasOwn(summary, 'releaseReadySource')) {
+    errors.push('summary.releaseReadySource is required');
+  } else {
+    requireNullableString(errors, summary.releaseReadySource, 'summary.releaseReadySource');
+  }
+
+  if (summary.releaseReady === true && !isGoalEventStatusSource(summary.releaseReadySource)) {
+    errors.push('summary.releaseReadySource must be a goal-event-log.v1 source when summary.releaseReady is true');
+  }
+
+  if (summary.releaseReady === false && summary.releaseReadySource !== null) {
+    errors.push('summary.releaseReadySource must be null when summary.releaseReady is false');
+  }
 }
 
 function validateMissingItems(errors, missing) {
@@ -825,6 +839,10 @@ function requireIsoTimestamp(errors, value, path) {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+function isGoalEventStatusSource(value) {
+  return typeof value === 'string' && value.startsWith('goal-event-log.v1:');
 }
 
 function isPlainObject(value) {

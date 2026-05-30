@@ -9901,6 +9901,37 @@ var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
+var ACTIVE_GOAL_VIEW_MODEL_NAME = "ActiveGoalViewModel";
+var ACTIVE_GOAL_COMMAND_BASELINE = Object.freeze([
+	Object.freeze({
+		id: "goalStatus",
+		label: "goal-status",
+		contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+		routeId: "activeGoalProgress",
+		command: "pnpm --silent symphony goal-status --goal <goal-id> --json"
+	}),
+	Object.freeze({
+		id: "goalNext",
+		label: "goal next",
+		contractName: GOAL_NEXT_ACTION_CONTRACT_NAME,
+		routeId: "goalNextAction",
+		command: "pnpm --silent symphony goal next --goal <goal-id> --json"
+	}),
+	Object.freeze({
+		id: "goalPrompt",
+		label: "goal prompt",
+		contractName: GOAL_PROMPT_PACK_CONTRACT_NAME,
+		routeId: "goalPromptPack",
+		command: "pnpm --silent symphony goal prompt --goal <goal-id> --next --markdown"
+	}),
+	Object.freeze({
+		id: "goalCloseout",
+		label: "goal closeout",
+		contractName: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+		routeId: "goalCloseout",
+		command: "pnpm --silent symphony goal closeout --goal <goal-id> --markdown"
+	})
+]);
 var READONLY_API_ROUTES = Object.freeze([
 	Object.freeze({
 		id: "summary",
@@ -10207,6 +10238,8 @@ function projectWorkbenchContracts(results) {
 			ledger: goalProgressData
 		}),
 		activeGoal: projectActiveGoalControl({
+			statusResult: results.goalProgress,
+			status: goalProgressData,
 			runbookResult: results.goalRunbook,
 			runbook: goalRunbookData,
 			nextActionResult: results.goalNextAction,
@@ -10456,16 +10489,36 @@ function projectGoals(goals) {
 		}))
 	};
 }
-function projectActiveGoalControl({ runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog }) {
+function projectActiveGoalControl({ statusResult, status, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog }) {
 	const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
+	const eventLog = activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null;
+	const goalStatusLedger = ledger ?? (status?.goalId === runbook?.goalId ? status : null);
 	return {
+		viewModel: projectActiveGoalViewModel({
+			statusResult: ledger === null ? statusResult : activeLedgerResult,
+			status: goalStatusLedger,
+			runbookResult,
+			runbook,
+			nextActionResult,
+			nextAction,
+			promptPackResult,
+			promptPack,
+			closeoutResult,
+			closeout
+		}),
 		runbook: projectGoalRunbook({
 			result: runbookResult,
 			runbook,
-			ledger,
-			eventLog: activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null,
+			ledger: goalStatusLedger,
+			eventLog,
 			ledgerResult: activeLedgerResult,
 			eventLogResult: activeEventLogResult
+		}),
+		taskQueue: projectActiveGoalTaskQueue({
+			runbook,
+			ledger: goalStatusLedger,
+			eventLog,
+			nextAction
 		}),
 		nextAction: projectGoalNextAction({
 			result: nextActionResult,
@@ -10478,10 +10531,152 @@ function projectActiveGoalControl({ runbookResult, runbook, nextActionResult, ne
 		}),
 		closeoutGaps: projectGoalCloseoutGaps({
 			result: closeoutResult,
-			closeout,
-			ledger
+			closeout
 		})
 	};
+}
+function projectActiveGoalViewModel({ statusResult, status, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout }) {
+	const goalId = firstNonEmptyString(runbook?.goalId, nextAction?.goalId, promptPack?.goalId, closeout?.goalId, status?.goalId);
+	const goalTitle = firstNonEmptyString(runbook?.goalTitle, status?.goalTitle);
+	const commandInventory = projectActiveGoalCommandInventory({
+		goalId,
+		sourceResults: {
+			goalStatus: statusResult,
+			goalNext: nextActionResult,
+			goalPrompt: promptPackResult,
+			goalCloseout: closeoutResult
+		}
+	});
+	const unavailableCount = commandInventory.items.filter((item) => item.routeState.value !== "ready").length;
+	return {
+		state: commandInventory.items.length === 0 ? "missing" : unavailableCount > 0 ? "partial" : "available",
+		modelName: valueState(ACTIVE_GOAL_VIEW_MODEL_NAME),
+		goalId: valueState(goalId),
+		goalTitle: valueState(goalTitle),
+		baseline: valueState("latest-goal-command-contracts"),
+		commandCount: valueState(commandInventory.items.length),
+		unavailableCommandCount: valueState(unavailableCount),
+		status: {
+			contractName: valueState(status?.contractName ?? GOAL_PROGRESS_LEDGER_CONTRACT_NAME),
+			routeState: valueState(routeStateFromResult(statusResult)),
+			summary: projectGoalProgressSummary(status?.summary),
+			releaseReady: valueState(status?.summary?.releaseReady)
+		},
+		next: {
+			contractName: valueState(nextAction?.contractName ?? GOAL_NEXT_ACTION_CONTRACT_NAME),
+			routeState: valueState(routeStateFromResult(nextActionResult)),
+			taskId: valueState(nextAction?.next?.taskId),
+			role: valueState(nextAction?.next?.role),
+			phase: valueState(nextAction?.next?.phase),
+			reason: valueState(nextAction?.reason ?? nextAction?.next?.reason)
+		},
+		prompt: {
+			contractName: valueState(promptPack?.contractName ?? GOAL_PROMPT_PACK_CONTRACT_NAME),
+			routeState: valueState(routeStateFromResult(promptPackResult)),
+			promptCount: valueState(Array.isArray(promptPack?.prompts) ? promptPack.prompts.length : void 0),
+			copyOnlyCount: valueState(Array.isArray(promptPack?.prompts) ? promptPack.prompts.filter((prompt) => prompt?.copyOnly === true).length : void 0)
+		},
+		closeout: {
+			contractName: valueState(closeout?.contractName ?? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+			routeState: valueState(routeStateFromResult(closeoutResult)),
+			missingCount: valueState(Array.isArray(closeout?.missing) ? closeout.missing.length : void 0),
+			releaseReady: valueState(closeout?.summary?.releaseReady)
+		},
+		commandInventory,
+		note: "ActiveGoalViewModel 的主操作模型只来自 goal-status、goal next、goal prompt 和 goal closeout contracts；不把历史 command list 当 Workbench 顶层 action baseline。"
+	};
+}
+function projectActiveGoalCommandInventory({ goalId, sourceResults }) {
+	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
+	const resultByCommandId = {
+		goalStatus: sourceResults.goalStatus,
+		goalNext: sourceResults.goalNext,
+		goalPrompt: sourceResults.goalPrompt,
+		goalCloseout: sourceResults.goalCloseout
+	};
+	return {
+		state: "available",
+		count: valueState(ACTIVE_GOAL_COMMAND_BASELINE.length),
+		items: ACTIVE_GOAL_COMMAND_BASELINE.map((command) => {
+			const result = resultByCommandId[command.id];
+			return {
+				id: valueState(command.id),
+				label: valueState(command.label),
+				contractName: valueState(command.contractName),
+				routeId: valueState(command.routeId),
+				route: valueState(result?.route),
+				routeState: valueState(routeStateFromResult(result)),
+				httpStatus: valueState(result?.httpStatus),
+				command: valueState(command.command.replace("<goal-id>", commandGoalId))
+			};
+		})
+	};
+}
+function projectActiveGoalTaskQueue({ runbook, ledger, eventLog, nextAction }) {
+	const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : null;
+	const ledgerTasks = new Map((Array.isArray(ledger?.tasks) ? ledger.tasks : []).map((task) => [task.taskId, task]));
+	const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+	const activeNext = nextAction?.next;
+	return {
+		state: runbookTasks === null ? "missing" : runbookTasks.length === 0 ? "empty" : "available",
+		goalId: valueState(runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId),
+		goalTitle: valueState(runbook?.goalTitle ?? ledger?.goalTitle),
+		totalTasks: valueState(runbookTasks === null ? void 0 : runbookTasks.length),
+		completedTasks: valueState(ledger?.summary?.completedTasks),
+		blockedTasks: valueState(ledger?.summary?.blockedTasks),
+		needsReviewTasks: valueState(ledger?.summary?.needsReviewTasks),
+		needsRevisionTasks: valueState(ledger?.summary?.needsRevisionTasks),
+		nextTaskId: valueState(activeNext?.taskId),
+		nextRole: valueState(activeNext?.role),
+		nextPhase: valueState(activeNext?.phase),
+		nextReason: valueState(nextAction?.reason ?? activeNext?.reason),
+		sourcePolicy: valueState("goal-runbook.v1 + goal-progress-ledger.v1 + goal-event-log.v1 + goal-next-action.v1"),
+		items: runbookTasks === null ? [] : runbookTasks.map((task, index) => projectActiveGoalTaskQueueItem({
+			task,
+			index,
+			ledgerTask: ledgerTasks.get(task?.taskId) ?? null,
+			events,
+			activeNext
+		})),
+		note: "Task Queue 使用 runbook task 顺序、ledger status/statusSource、events timeline 和 goal-next-action；不根据 branch、文件名、task title、prompt 或 command text 判断任务状态。"
+	};
+}
+function projectActiveGoalTaskQueueItem({ task, index, ledgerTask, events, activeNext }) {
+	const latestEvent = latestGoalTaskEvent(events, task?.taskId);
+	const progressSource = explicitTaskProgressSource(ledgerTask);
+	return {
+		position: valueState(index + 1),
+		taskId: valueState(task?.taskId),
+		title: valueState(task?.title),
+		status: valueState(ledgerTask?.status),
+		statusSource: valueState(ledgerTask?.statusSource),
+		progressSource: valueState(progressSource),
+		eventBacked: valueState(latestEvent !== null || isGoalEventStatusSource(ledgerTask?.statusSource)),
+		latestEventId: valueState(latestEvent?.eventId),
+		latestEventType: valueState(latestEvent?.eventType),
+		latestEventSequence: valueState(latestEvent?.sequence),
+		nextRole: task?.taskId === activeNext?.taskId ? valueState(activeNext?.role) : valueState(void 0),
+		nextPhase: task?.taskId === activeNext?.taskId ? valueState(activeNext?.phase) : valueState(void 0),
+		workerEvidenceRef: valueState(ledgerTask?.workerEvidenceRef),
+		reviewEvidenceRef: valueState(ledgerTask?.reviewEvidenceRef),
+		reviewVerdict: valueState(ledgerTask?.reviewVerdict),
+		mainVerificationRef: valueState(ledgerTask?.mainVerificationRef),
+		expectedWorker: expectedEvidenceState(task?.expectedEvidence?.worker),
+		expectedReviewer: expectedEvidenceState(task?.expectedEvidence?.reviewer),
+		expectedMainVerifier: expectedEvidenceState(task?.expectedEvidence?.mainVerifier),
+		roleOrder: arrayTextState(task?.roleOrder),
+		acceptance: arrayTextState(task?.acceptance),
+		blockers: projectBlockers(ledgerTask?.blockers)
+	};
+}
+function latestGoalTaskEvent(events, taskId) {
+	if (!isNonEmptyString(taskId)) return null;
+	for (let index = events.length - 1; index >= 0; index -= 1) if (events[index]?.taskId === taskId) return events[index];
+	return null;
+}
+function explicitTaskProgressSource(ledgerTask) {
+	if (ledgerTask === null || ledgerTask === void 0) return MISSING_TEXT;
+	return isGoalEventStatusSource(ledgerTask.statusSource) ? "event-backed goal-progress-ledger.v1" : "goal-progress-ledger.v1";
 }
 function projectGoalRunbook({ result, runbook, ledger, eventLog, ledgerResult, eventLogResult }) {
 	const tasks = Array.isArray(runbook?.tasks) ? runbook.tasks : null;
@@ -10644,7 +10839,7 @@ function projectGoalPromptPreview({ result, promptPack, nextAction }) {
 		note: "Prompt Preview 只把 copy-only text 放进可选择文本块；没有执行、confirm、下载、打开文件或模型调用入口。"
 	};
 }
-function projectGoalCloseoutGaps({ result, closeout, ledger }) {
+function projectGoalCloseoutGaps({ result, closeout }) {
 	const missing = Array.isArray(closeout?.missing) ? closeout.missing : null;
 	if (result?.ok !== true) return {
 		state: "unavailable",
@@ -10652,7 +10847,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
 		contractVersion: valueState(void 0),
 		goalId: valueState(void 0),
 		generatedAt: valueState(void 0),
-		summary: projectCloseoutSummary(void 0, ledger),
+		summary: projectCloseoutSummary(void 0),
 		missing: {
 			state: "missing",
 			count: valueState(void 0),
@@ -10670,7 +10865,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
 		contractVersion: valueState(closeout?.contractVersion),
 		goalId: valueState(closeout?.goalId),
 		generatedAt: valueState(closeout?.generatedAt),
-		summary: projectCloseoutSummary(closeout?.summary, ledger),
+		summary: projectCloseoutSummary(closeout?.summary),
 		missing: {
 			state: missing === null ? "missing" : missing.length === 0 ? "empty" : "available",
 			count: valueState(missing === null ? void 0 : missing.length),
@@ -10678,6 +10873,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
 				kind: valueState(item?.kind),
 				taskId: valueState(item?.taskId),
 				expectedEvent: valueState(item?.expectedEvent),
+				gate: valueState(item?.gate),
 				gateId: valueState(item?.gateId),
 				status: valueState(item?.status)
 			}))
@@ -10689,7 +10885,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
 		nextAction: valueState(closeout?.nextAction),
 		safety: projectGoalCloseoutSafety(closeout?.safety),
 		errorEnvelope: projectErrorEnvelope(null),
-		note: "Closeout Gaps 使用 closeout report 的 missing items 和 releaseGates；releaseReadySource 只来自 active ledger summary 已暴露字段。"
+		note: "Closeout Gaps 使用 goal-closeout-report.v1 的 missing items、releaseGates 和 releaseReadySource；不从命令输出、prompt、branch 或路径推断 release 状态。"
 	};
 }
 function projectGoalNextDetails(next) {
@@ -10718,17 +10914,18 @@ function projectGoalNextCopyOnlyPrompt(copyOnlyPrompt) {
 function projectAfterCompletion(afterCompletion) {
 	return {
 		registerWith: valueState(afterCompletion?.registerWith),
+		registrationCommand: valueState(afterCompletion?.registerWith),
 		allowedEvents: arrayTextState(afterCompletion?.allowedEvents)
 	};
 }
-function projectCloseoutSummary(summary, ledger) {
+function projectCloseoutSummary(summary) {
 	return {
 		totalTasks: valueState(summary?.totalTasks),
 		workerEvidenceComplete: valueState(summary?.workerEvidenceComplete),
 		reviewEvidenceComplete: valueState(summary?.reviewEvidenceComplete),
 		mainVerificationComplete: valueState(summary?.mainVerificationComplete),
 		releaseReady: valueState(summary?.releaseReady),
-		releaseReadySource: valueState(ledger?.summary?.releaseReadySource)
+		releaseReadySource: valueState(summary?.releaseReadySource)
 	};
 }
 function projectGoalControlSafety(safety) {
@@ -11099,6 +11296,9 @@ function goalEventHashChainStatus({ event, previousEvent }) {
 }
 function isMatrixTaskId(value) {
 	return isNonEmptyString(value) && value !== "release";
+}
+function isGoalEventStatusSource(value) {
+	return typeof value === "string" && value.startsWith(`${GOAL_EVENT_LOG_CONTRACT_NAME}:`);
 }
 function matrixMissingState() {
 	return {
@@ -11690,6 +11890,14 @@ function arrayTextState(values, emptyText = "无") {
 function isNonEmptyString(value) {
 	return typeof value === "string" && value.trim().length > 0;
 }
+function firstNonEmptyString(...values) {
+	return values.find((value) => isNonEmptyString(value));
+}
+function routeStateFromResult(result) {
+	if (result?.ok === true) return "ready";
+	if (result?.skipped === true) return "skipped";
+	return "unavailable";
+}
 function hasOwn(value, key) {
 	return value !== null && typeof value === "object" && Object.hasOwn(value, key);
 }
@@ -11902,7 +12110,7 @@ function App() {
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "eyebrow",
-							children: "v19 React/Vite Workbench"
+							children: "v20 Active Goal Workbench"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 							id: "workbench-title",
@@ -11910,7 +12118,7 @@ function App() {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: "展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff， 以及 goal progress、goal events、Active Goal Control Center、capabilities、diagnostics 与安全 error envelope。 浏览器端只读取受控 GET routes，artifact preview 与 prompt preview 只消费后端 contract，不提供写入、下载、终端或执行动作。"
+							children: "展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff， 以及 goal progress、goal events、ActiveGoalViewModel、capabilities、diagnostics 与安全 error envelope。 浏览器端只读取受控 GET routes，artifact preview 与 prompt preview 只消费后端 contract，不提供写入、下载、终端或执行动作。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -11937,6 +12145,41 @@ function App() {
 				copy: "错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。"
 			}) : null,
 			model === null ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "primary-active-goal-grid",
+					"aria-label": "v20 primary active goal workflow",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalRunbookPanel, {
+						runbook: model.activeGoal.runbook,
+						route: findRoute(model.routeStates, "goalRunbook"),
+						progressRoute: findRoute(model.routeStates, "activeGoalProgress"),
+						eventsRoute: findRoute(model.routeStates, "activeGoalEvents")
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalTaskQueuePanel, {
+						taskQueue: model.activeGoal.taskQueue,
+						route: findRoute(model.routeStates, "goalRunbook"),
+						progressRoute: findRoute(model.routeStates, "activeGoalProgress"),
+						eventsRoute: findRoute(model.routeStates, "activeGoalEvents"),
+						nextRoute: findRoute(model.routeStates, "goalNextAction")
+					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "active-goal-grid",
+					"aria-label": "v20 Active Goal supporting contracts",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
+							nextAction: model.activeGoal.nextAction,
+							route: findRoute(model.routeStates, "goalNextAction")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptPreviewDrawer, {
+							promptPreview: model.activeGoal.promptPreview,
+							route: findRoute(model.routeStates, "goalPromptPack")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalViewModelPanel, { viewModel: model.activeGoal.viewModel }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseoutGapsPanel, {
+							closeoutGaps: model.activeGoal.closeoutGaps,
+							route: findRoute(model.routeStates, "goalCloseout")
+						})
+					]
+				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "panel-grid",
 					"aria-label": "Workbench 只读 panels",
@@ -11995,30 +12238,6 @@ function App() {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnosticsV1Panel, {
 							diagnostics: model.diagnosticsV1,
 							route: findRoute(model.routeStates, "diagnostics")
-						})
-					]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-					className: "active-goal-grid",
-					"aria-label": "v19 Active Goal Control Center",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalRunbookPanel, {
-							runbook: model.activeGoal.runbook,
-							route: findRoute(model.routeStates, "goalRunbook"),
-							progressRoute: findRoute(model.routeStates, "activeGoalProgress"),
-							eventsRoute: findRoute(model.routeStates, "activeGoalEvents")
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
-							nextAction: model.activeGoal.nextAction,
-							route: findRoute(model.routeStates, "goalNextAction")
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptPreviewPanel, {
-							promptPreview: model.activeGoal.promptPreview,
-							route: findRoute(model.routeStates, "goalPromptPack")
-						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseoutGapsPanel, {
-							closeoutGaps: model.activeGoal.closeoutGaps,
-							route: findRoute(model.routeStates, "goalCloseout")
 						})
 					]
 				}),
@@ -12189,10 +12408,51 @@ function EvidenceMatrixPanel({ matrix, route }) {
 		]
 	});
 }
+function ActiveGoalViewModelPanel({ viewModel }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "active-goal-view-model-panel",
+		kicker: "v20 active goal",
+		title: "ActiveGoalViewModel",
+		state: activeGoalViewModelStateText(viewModel),
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", viewModel.modelName],
+				["goalId", viewModel.goalId],
+				["goalTitle", viewModel.goalTitle],
+				["baseline", viewModel.baseline],
+				["command count", viewModel.commandCount],
+				["unavailable command count", viewModel.unavailableCommandCount],
+				["goal-status contract", viewModel.status.contractName],
+				["goal-status route", viewModel.status.routeState],
+				["goal next contract", viewModel.next.contractName],
+				["goal next route", viewModel.next.routeState],
+				["goal prompt contract", viewModel.prompt.contractName],
+				["goal prompt route", viewModel.prompt.routeState],
+				["goal closeout contract", viewModel.closeout.contractName],
+				["goal closeout route", viewModel.closeout.routeState],
+				["next.taskId", viewModel.next.taskId],
+				["next.role", viewModel.next.role],
+				["next.phase", viewModel.next.phase],
+				["next.reason", viewModel.next.reason],
+				["prompt copyOnly count", viewModel.prompt.copyOnlyCount],
+				["closeout missing count", viewModel.closeout.missingCount],
+				["releaseReady", viewModel.closeout.releaseReady]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "command-backed sources",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalCommandInventoryList, { inventory: viewModel.commandInventory })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: viewModel.note
+			})
+		]
+	});
+}
 function ActiveGoalRunbookPanel({ runbook, route, progressRoute, eventsRoute }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "active-goal-runbook-panel",
-		kicker: "v19 active goal",
+		kicker: "v20 primary workflow",
 		title: "Active Goal Runbook",
 		state: activeGoalStateText(runbook, route),
 		route,
@@ -12248,6 +12508,43 @@ function ActiveGoalRunbookPanel({ runbook, route, progressRoute, eventsRoute }) 
 		]
 	});
 }
+function ActiveGoalTaskQueuePanel({ taskQueue, route, progressRoute, eventsRoute, nextRoute }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "active-goal-task-queue-panel",
+		kicker: "v20 primary workflow",
+		title: "Active Goal Task Queue",
+		state: activeGoalTaskQueueStateText(taskQueue, route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["goalId", taskQueue.goalId],
+				["goalTitle", taskQueue.goalTitle],
+				["task count", taskQueue.totalTasks],
+				["completedTasks", taskQueue.completedTasks],
+				["blockedTasks", taskQueue.blockedTasks],
+				["needsReviewTasks", taskQueue.needsReviewTasks],
+				["needsRevisionTasks", taskQueue.needsRevisionTasks],
+				["next.taskId", taskQueue.nextTaskId],
+				["next.role", taskQueue.nextRole],
+				["next.phase", taskQueue.nextPhase],
+				["next.reason", taskQueue.nextReason],
+				["runbook route", textValue(routeStateText(route))],
+				["progress route", textValue(routeStateText(progressRoute))],
+				["events route", textValue(routeStateText(eventsRoute))],
+				["next route", textValue(routeStateText(nextRoute))],
+				["source policy", taskQueue.sourcePolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "task queue",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalTaskQueueList, { taskQueue })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: taskQueue.note
+			})
+		]
+	});
+}
 function NextActionCard({ nextAction, route }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "next-action-card-panel",
@@ -12278,6 +12575,7 @@ function NextActionCard({ nextAction, route }) {
 				["workerEvidenceRef", nextAction.evidenceState.workerEvidenceRef],
 				["reviewEvidenceRef", nextAction.evidenceState.reviewEvidenceRef],
 				["mainVerificationRef", nextAction.evidenceState.mainVerificationRef],
+				["afterCompletion.registrationCommand", nextAction.afterCompletion.registrationCommand],
 				["afterCompletion.registerWith", nextAction.afterCompletion.registerWith],
 				["afterCompletion.allowedEvents", nextAction.afterCompletion.allowedEvents],
 				["copyOnlyPrompt.available", nextAction.copyOnlyPrompt.available],
@@ -12308,14 +12606,32 @@ function NextActionCard({ nextAction, route }) {
 		]
 	});
 }
-function PromptPreviewPanel({ promptPreview, route }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
-		id: "prompt-preview-panel",
-		kicker: "v19 active goal",
-		title: "Prompt Preview",
-		state: promptPreviewStateText(promptPreview, route),
-		route,
+function PromptPreviewDrawer({ promptPreview, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
+		className: "data-panel prompt-preview-drawer",
+		"aria-labelledby": "prompt-preview-drawer-title",
 		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "panel-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v19 active goal"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+					id: "prompt-preview-drawer-title",
+					children: "Prompt Preview Drawer"
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "panel-state",
+					children: promptPreviewStateText(promptPreview, route)
+				})]
+			}),
+			route?.state === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: [
+					"错误摘要：",
+					route.error,
+					"。刷新页面后会重新读取只读 API。"
+				]
+			}) : null,
 			promptPreview.state === "unavailable" && promptPreview.errorEnvelope.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 				className: "error-copy",
 				children: [
@@ -12339,7 +12655,7 @@ function PromptPreviewPanel({ promptPreview, route }) {
 				["modelInvocationAvailable", promptPreview.safety.modelInvocationAvailable]
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "copy-only text",
+				title: "copy-only prompt drawer",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptPreviewList, { prompts: promptPreview.items })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -13082,6 +13398,36 @@ function GoalRunbookTaskList({ tasks }) {
 		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BlockerList, { blockers: task.blockers })] }, `${task.taskId.text}-${index}`))
 	});
 }
+function ActiveGoalTaskQueueList({ taskQueue }) {
+	if (taskQueue.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "active goal task queue 未暴露。" });
+	if (taskQueue.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "active goal task queue 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
+		className: "active-goal-task-queue-list",
+		children: taskQueue.items.map((task, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["position", task.position],
+			["taskId", task.taskId],
+			["title", task.title],
+			["status", task.status],
+			["statusSource", task.statusSource],
+			["progressSource", task.progressSource],
+			["eventBacked", task.eventBacked],
+			["latestEventId", task.latestEventId],
+			["latestEventType", task.latestEventType],
+			["latestEventSequence", task.latestEventSequence],
+			["next.role", task.nextRole],
+			["next.phase", task.nextPhase],
+			["workerEvidenceRef", task.workerEvidenceRef],
+			["reviewEvidenceRef", task.reviewEvidenceRef],
+			["reviewVerdict", task.reviewVerdict],
+			["mainVerificationRef", task.mainVerificationRef],
+			["expected worker", task.expectedWorker],
+			["expected reviewer", task.expectedReviewer],
+			["expected main verifier", task.expectedMainVerifier],
+			["roleOrder", task.roleOrder],
+			["acceptance", task.acceptance]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BlockerList, { blockers: task.blockers })] }, `${task.taskId.text}-${index}`))
+	});
+}
 function GoalEventTimelineList({ timeline }) {
 	if (timeline.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "events 未暴露。" });
 	if (timeline.state === "empty") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "未登记事件；timeline empty。" });
@@ -13101,6 +13447,22 @@ function GoalEventTimelineList({ timeline }) {
 			["eventHash", event.eventHash],
 			["hash chain status", event.hashChainStatus]
 		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefList, { evidenceRefs: event.evidenceRefs })] }, `${event.eventId.text}-${index}`))
+	});
+}
+function ActiveGoalCommandInventoryList({ inventory }) {
+	if (inventory.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Active Goal command inventory 未暴露。" });
+	if (inventory.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Active Goal command inventory 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "command-text-list",
+		"aria-label": "Active Goal command-backed sources",
+		children: inventory.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["command", item.label],
+			["contractName", item.contractName],
+			["routeId", item.routeId],
+			["route", item.route],
+			["routeState", item.routeState],
+			["httpStatus", item.httpStatus]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.command.text })] }, item.id.text))
 	});
 }
 function TextItemList({ items, emptyCopy }) {
@@ -13137,6 +13499,7 @@ function CloseoutMissingList({ missing }) {
 			["kind", item.kind],
 			["taskId", item.taskId],
 			["expectedEvent", item.expectedEvent],
+			["gate", item.gate],
 			["gateId", item.gateId],
 			["status", item.status]
 		] }) }, `${item.kind.text}-${item.taskId.text}-${item.gateId.text}-${index}`))
@@ -13280,6 +13643,15 @@ function activeGoalStateText(value, route) {
 	if (value.state === "unavailable") return "不可用";
 	if (value.state === "empty") return "空";
 	return routeStateText(route);
+}
+function activeGoalTaskQueueStateText(taskQueue, route) {
+	if (taskQueue.state === "empty") return "无任务";
+	return activeGoalStateText(taskQueue, route);
+}
+function activeGoalViewModelStateText(viewModel) {
+	if (viewModel.state === "missing") return "未暴露";
+	if (viewModel.state === "partial") return "部分可用";
+	return "只读";
 }
 function promptPreviewStateText(promptPreview, route) {
 	if (promptPreview.state === "empty") return "无 copy-only 文本";

@@ -8,7 +8,8 @@
     "workerEvidenceComplete": true,
     "reviewEvidenceComplete": false,
     "mainVerificationComplete": false,
-    "releaseReady": false
+    "releaseReady": false,
+    "releaseReadySource": null
   },
   "missing": [
     {

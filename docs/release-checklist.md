@@ -9,12 +9,14 @@ Run from the repository root:
 ```sh
 pnpm check
 pnpm test
+pnpm workbench:build
 pnpm test:mutation:gate
+pnpm audit --audit-level high
 git diff --check
 pnpm mcas doctor
 ```
 
-Expected result: every command exits with code `0`. The mutation gate runs Stryker against the hardened core modules and must stay above its configured break threshold.
+Expected result: every command exits with code `0`. The Workbench build must refresh `src/symphony/workbench-static/` from the React/Vite source. The mutation gate runs Stryker against the hardened core modules and must stay above its configured break threshold. Passing these commands is local command evidence; release-ready still requires explicit goal gate events.
 
 For a scoped closeout, an operator may explicitly approve an incremental Stryker gate. Record the exact mutation ranges, test files, score, and break threshold. Before tagging a release, prefer the full `pnpm test:mutation:gate` unless the release owner accepts the recorded incremental gate as sufficient evidence.
 

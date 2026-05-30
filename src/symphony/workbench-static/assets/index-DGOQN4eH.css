@@ -28,6 +28,7 @@ body {
 }
 
 .workbench-header,
+.primary-active-goal-grid,
 .panel-grid,
 .detail-grid,
 .handoff-grid,
@@ -117,6 +118,7 @@ h3 {
 }
 
 .panel-grid,
+.primary-active-goal-grid,
 .detail-grid,
 .handoff-grid,
 .goal-grid,
@@ -129,6 +131,11 @@ h3 {
 
 .panel-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.primary-active-goal-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
 }
 
 .support-grid {
@@ -171,6 +178,11 @@ h3 {
 
 .data-panel {
   padding: 18px;
+}
+
+.prompt-preview-drawer {
+  align-self: start;
+  border-left: 4px solid #255568;
 }
 
 .shell-state {
@@ -311,6 +323,7 @@ h3 {
 .evidence-matrix-task-list,
 .release-gate-matrix-list,
 .goal-runbook-task-list,
+.active-goal-task-queue-list,
 .prompt-preview-list,
 .closeout-missing-list,
 .command-block-list,
@@ -334,6 +347,7 @@ h3 {
 .evidence-matrix-task-list li,
 .release-gate-matrix-list li,
 .goal-runbook-task-list li,
+.active-goal-task-queue-list li,
 .prompt-preview-list li,
 .closeout-missing-list li,
 .command-block-list > li,
@@ -440,6 +454,7 @@ h3 {
 
 @media (max-width: 920px) {
   .workbench-header,
+  .primary-active-goal-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,
@@ -458,6 +473,7 @@ h3 {
 
 @media (max-width: 640px) {
   .workbench-header,
+  .primary-active-goal-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,

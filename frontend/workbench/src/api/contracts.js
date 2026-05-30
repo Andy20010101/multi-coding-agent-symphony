@@ -15,6 +15,38 @@ const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
+const ACTIVE_GOAL_VIEW_MODEL_NAME = 'ActiveGoalViewModel';
+
+const ACTIVE_GOAL_COMMAND_BASELINE = Object.freeze([
+  Object.freeze({
+    id: 'goalStatus',
+    label: 'goal-status',
+    contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+    routeId: 'activeGoalProgress',
+    command: 'pnpm --silent symphony goal-status --goal <goal-id> --json'
+  }),
+  Object.freeze({
+    id: 'goalNext',
+    label: 'goal next',
+    contractName: GOAL_NEXT_ACTION_CONTRACT_NAME,
+    routeId: 'goalNextAction',
+    command: 'pnpm --silent symphony goal next --goal <goal-id> --json'
+  }),
+  Object.freeze({
+    id: 'goalPrompt',
+    label: 'goal prompt',
+    contractName: GOAL_PROMPT_PACK_CONTRACT_NAME,
+    routeId: 'goalPromptPack',
+    command: 'pnpm --silent symphony goal prompt --goal <goal-id> --next --markdown'
+  }),
+  Object.freeze({
+    id: 'goalCloseout',
+    label: 'goal closeout',
+    contractName: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+    routeId: 'goalCloseout',
+    command: 'pnpm --silent symphony goal closeout --goal <goal-id> --markdown'
+  })
+]);
 
 export const READONLY_API_ROUTES = Object.freeze([
   Object.freeze({
@@ -357,6 +389,8 @@ export function projectWorkbenchContracts(results) {
       ledger: goalProgressData
     }),
     activeGoal: projectActiveGoalControl({
+      statusResult: results.goalProgress,
+      status: goalProgressData,
       runbookResult: results.goalRunbook,
       runbook: goalRunbookData,
       nextActionResult: results.goalNextAction,
@@ -661,6 +695,8 @@ function projectGoals(goals) {
 }
 
 function projectActiveGoalControl({
+  statusResult,
+  status,
   runbookResult,
   runbook,
   nextActionResult,
@@ -676,15 +712,34 @@ function projectActiveGoalControl({
 }) {
   const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
   const eventLog = activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null;
+  const goalStatusLedger = ledger ?? (status?.goalId === runbook?.goalId ? status : null);
 
   return {
+    viewModel: projectActiveGoalViewModel({
+      statusResult: ledger === null ? statusResult : activeLedgerResult,
+      status: goalStatusLedger,
+      runbookResult,
+      runbook,
+      nextActionResult,
+      nextAction,
+      promptPackResult,
+      promptPack,
+      closeoutResult,
+      closeout
+    }),
     runbook: projectGoalRunbook({
       result: runbookResult,
       runbook,
-      ledger,
+      ledger: goalStatusLedger,
       eventLog,
       ledgerResult: activeLedgerResult,
       eventLogResult: activeEventLogResult
+    }),
+    taskQueue: projectActiveGoalTaskQueue({
+      runbook,
+      ledger: goalStatusLedger,
+      eventLog,
+      nextAction
     }),
     nextAction: projectGoalNextAction({
       result: nextActionResult,
@@ -697,10 +752,211 @@ function projectActiveGoalControl({
     }),
     closeoutGaps: projectGoalCloseoutGaps({
       result: closeoutResult,
-      closeout,
-      ledger
+      closeout
     })
   };
+}
+
+function projectActiveGoalViewModel({
+  statusResult,
+  status,
+  runbookResult,
+  runbook,
+  nextActionResult,
+  nextAction,
+  promptPackResult,
+  promptPack,
+  closeoutResult,
+  closeout
+}) {
+  const goalId = firstNonEmptyString(
+    runbook?.goalId,
+    nextAction?.goalId,
+    promptPack?.goalId,
+    closeout?.goalId,
+    status?.goalId
+  );
+  const goalTitle = firstNonEmptyString(runbook?.goalTitle, status?.goalTitle);
+  const commandInventory = projectActiveGoalCommandInventory({
+    goalId,
+    sourceResults: {
+      goalStatus: statusResult,
+      goalNext: nextActionResult,
+      goalPrompt: promptPackResult,
+      goalCloseout: closeoutResult
+    }
+  });
+  const unavailableCount = commandInventory.items.filter((item) => item.routeState.value !== 'ready').length;
+
+  return {
+    state: commandInventory.items.length === 0
+      ? 'missing'
+      : unavailableCount > 0 ? 'partial' : 'available',
+    modelName: valueState(ACTIVE_GOAL_VIEW_MODEL_NAME),
+    goalId: valueState(goalId),
+    goalTitle: valueState(goalTitle),
+    baseline: valueState('latest-goal-command-contracts'),
+    commandCount: valueState(commandInventory.items.length),
+    unavailableCommandCount: valueState(unavailableCount),
+    status: {
+      contractName: valueState(status?.contractName ?? GOAL_PROGRESS_LEDGER_CONTRACT_NAME),
+      routeState: valueState(routeStateFromResult(statusResult)),
+      summary: projectGoalProgressSummary(status?.summary),
+      releaseReady: valueState(status?.summary?.releaseReady)
+    },
+    next: {
+      contractName: valueState(nextAction?.contractName ?? GOAL_NEXT_ACTION_CONTRACT_NAME),
+      routeState: valueState(routeStateFromResult(nextActionResult)),
+      taskId: valueState(nextAction?.next?.taskId),
+      role: valueState(nextAction?.next?.role),
+      phase: valueState(nextAction?.next?.phase),
+      reason: valueState(nextAction?.reason ?? nextAction?.next?.reason)
+    },
+    prompt: {
+      contractName: valueState(promptPack?.contractName ?? GOAL_PROMPT_PACK_CONTRACT_NAME),
+      routeState: valueState(routeStateFromResult(promptPackResult)),
+      promptCount: valueState(Array.isArray(promptPack?.prompts) ? promptPack.prompts.length : undefined),
+      copyOnlyCount: valueState(Array.isArray(promptPack?.prompts)
+        ? promptPack.prompts.filter((prompt) => prompt?.copyOnly === true).length
+        : undefined)
+    },
+    closeout: {
+      contractName: valueState(closeout?.contractName ?? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+      routeState: valueState(routeStateFromResult(closeoutResult)),
+      missingCount: valueState(Array.isArray(closeout?.missing) ? closeout.missing.length : undefined),
+      releaseReady: valueState(closeout?.summary?.releaseReady)
+    },
+    commandInventory,
+    note: 'ActiveGoalViewModel 的主操作模型只来自 goal-status、goal next、goal prompt 和 goal closeout contracts；不把历史 command list 当 Workbench 顶层 action baseline。'
+  };
+}
+
+function projectActiveGoalCommandInventory({ goalId, sourceResults }) {
+  const commandGoalId = isNonEmptyString(goalId) ? goalId : '<goal-id>';
+  const resultByCommandId = {
+    goalStatus: sourceResults.goalStatus,
+    goalNext: sourceResults.goalNext,
+    goalPrompt: sourceResults.goalPrompt,
+    goalCloseout: sourceResults.goalCloseout
+  };
+
+  return {
+    state: 'available',
+    count: valueState(ACTIVE_GOAL_COMMAND_BASELINE.length),
+    items: ACTIVE_GOAL_COMMAND_BASELINE.map((command) => {
+      const result = resultByCommandId[command.id];
+
+      return {
+        id: valueState(command.id),
+        label: valueState(command.label),
+        contractName: valueState(command.contractName),
+        routeId: valueState(command.routeId),
+        route: valueState(result?.route),
+        routeState: valueState(routeStateFromResult(result)),
+        httpStatus: valueState(result?.httpStatus),
+        command: valueState(command.command.replace('<goal-id>', commandGoalId))
+      };
+    })
+  };
+}
+
+function projectActiveGoalTaskQueue({
+  runbook,
+  ledger,
+  eventLog,
+  nextAction
+}) {
+  const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : null;
+  const ledgerTasks = new Map(
+    (Array.isArray(ledger?.tasks) ? ledger.tasks : [])
+      .map((task) => [task.taskId, task])
+  );
+  const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+  const activeNext = nextAction?.next;
+
+  return {
+    state: runbookTasks === null ? 'missing' : runbookTasks.length === 0 ? 'empty' : 'available',
+    goalId: valueState(runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId),
+    goalTitle: valueState(runbook?.goalTitle ?? ledger?.goalTitle),
+    totalTasks: valueState(runbookTasks === null ? undefined : runbookTasks.length),
+    completedTasks: valueState(ledger?.summary?.completedTasks),
+    blockedTasks: valueState(ledger?.summary?.blockedTasks),
+    needsReviewTasks: valueState(ledger?.summary?.needsReviewTasks),
+    needsRevisionTasks: valueState(ledger?.summary?.needsRevisionTasks),
+    nextTaskId: valueState(activeNext?.taskId),
+    nextRole: valueState(activeNext?.role),
+    nextPhase: valueState(activeNext?.phase),
+    nextReason: valueState(nextAction?.reason ?? activeNext?.reason),
+    sourcePolicy: valueState('goal-runbook.v1 + goal-progress-ledger.v1 + goal-event-log.v1 + goal-next-action.v1'),
+    items: runbookTasks === null ? [] : runbookTasks.map((task, index) => projectActiveGoalTaskQueueItem({
+      task,
+      index,
+      ledgerTask: ledgerTasks.get(task?.taskId) ?? null,
+      events,
+      activeNext
+    })),
+    note: 'Task Queue 使用 runbook task 顺序、ledger status/statusSource、events timeline 和 goal-next-action；不根据 branch、文件名、task title、prompt 或 command text 判断任务状态。'
+  };
+}
+
+function projectActiveGoalTaskQueueItem({
+  task,
+  index,
+  ledgerTask,
+  events,
+  activeNext
+}) {
+  const latestEvent = latestGoalTaskEvent(events, task?.taskId);
+  const progressSource = explicitTaskProgressSource(ledgerTask);
+
+  return {
+    position: valueState(index + 1),
+    taskId: valueState(task?.taskId),
+    title: valueState(task?.title),
+    status: valueState(ledgerTask?.status),
+    statusSource: valueState(ledgerTask?.statusSource),
+    progressSource: valueState(progressSource),
+    eventBacked: valueState(latestEvent !== null || isGoalEventStatusSource(ledgerTask?.statusSource)),
+    latestEventId: valueState(latestEvent?.eventId),
+    latestEventType: valueState(latestEvent?.eventType),
+    latestEventSequence: valueState(latestEvent?.sequence),
+    nextRole: task?.taskId === activeNext?.taskId ? valueState(activeNext?.role) : valueState(undefined),
+    nextPhase: task?.taskId === activeNext?.taskId ? valueState(activeNext?.phase) : valueState(undefined),
+    workerEvidenceRef: valueState(ledgerTask?.workerEvidenceRef),
+    reviewEvidenceRef: valueState(ledgerTask?.reviewEvidenceRef),
+    reviewVerdict: valueState(ledgerTask?.reviewVerdict),
+    mainVerificationRef: valueState(ledgerTask?.mainVerificationRef),
+    expectedWorker: expectedEvidenceState(task?.expectedEvidence?.worker),
+    expectedReviewer: expectedEvidenceState(task?.expectedEvidence?.reviewer),
+    expectedMainVerifier: expectedEvidenceState(task?.expectedEvidence?.mainVerifier),
+    roleOrder: arrayTextState(task?.roleOrder),
+    acceptance: arrayTextState(task?.acceptance),
+    blockers: projectBlockers(ledgerTask?.blockers)
+  };
+}
+
+function latestGoalTaskEvent(events, taskId) {
+  if (!isNonEmptyString(taskId)) {
+    return null;
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index]?.taskId === taskId) {
+      return events[index];
+    }
+  }
+
+  return null;
+}
+
+function explicitTaskProgressSource(ledgerTask) {
+  if (ledgerTask === null || ledgerTask === undefined) {
+    return MISSING_TEXT;
+  }
+
+  return isGoalEventStatusSource(ledgerTask.statusSource)
+    ? 'event-backed goal-progress-ledger.v1'
+    : 'goal-progress-ledger.v1';
 }
 
 function projectGoalRunbook({
@@ -901,7 +1157,7 @@ function projectGoalPromptPreview({ result, promptPack, nextAction }) {
   };
 }
 
-function projectGoalCloseoutGaps({ result, closeout, ledger }) {
+function projectGoalCloseoutGaps({ result, closeout }) {
   const missing = Array.isArray(closeout?.missing) ? closeout.missing : null;
 
   if (result?.ok !== true) {
@@ -911,7 +1167,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
       contractVersion: valueState(undefined),
       goalId: valueState(undefined),
       generatedAt: valueState(undefined),
-      summary: projectCloseoutSummary(undefined, ledger),
+      summary: projectCloseoutSummary(undefined),
       missing: {
         state: 'missing',
         count: valueState(undefined),
@@ -931,7 +1187,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
     contractVersion: valueState(closeout?.contractVersion),
     goalId: valueState(closeout?.goalId),
     generatedAt: valueState(closeout?.generatedAt),
-    summary: projectCloseoutSummary(closeout?.summary, ledger),
+    summary: projectCloseoutSummary(closeout?.summary),
     missing: {
       state: missing === null ? 'missing' : missing.length === 0 ? 'empty' : 'available',
       count: valueState(missing === null ? undefined : missing.length),
@@ -939,6 +1195,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
         kind: valueState(item?.kind),
         taskId: valueState(item?.taskId),
         expectedEvent: valueState(item?.expectedEvent),
+        gate: valueState(item?.gate),
         gateId: valueState(item?.gateId),
         status: valueState(item?.status)
       }))
@@ -950,7 +1207,7 @@ function projectGoalCloseoutGaps({ result, closeout, ledger }) {
     nextAction: valueState(closeout?.nextAction),
     safety: projectGoalCloseoutSafety(closeout?.safety),
     errorEnvelope: projectErrorEnvelope(null),
-    note: 'Closeout Gaps 使用 closeout report 的 missing items 和 releaseGates；releaseReadySource 只来自 active ledger summary 已暴露字段。'
+    note: 'Closeout Gaps 使用 goal-closeout-report.v1 的 missing items、releaseGates 和 releaseReadySource；不从命令输出、prompt、branch 或路径推断 release 状态。'
   };
 }
 
@@ -983,18 +1240,19 @@ function projectGoalNextCopyOnlyPrompt(copyOnlyPrompt) {
 function projectAfterCompletion(afterCompletion) {
   return {
     registerWith: valueState(afterCompletion?.registerWith),
+    registrationCommand: valueState(afterCompletion?.registerWith),
     allowedEvents: arrayTextState(afterCompletion?.allowedEvents)
   };
 }
 
-function projectCloseoutSummary(summary, ledger) {
+function projectCloseoutSummary(summary) {
   return {
     totalTasks: valueState(summary?.totalTasks),
     workerEvidenceComplete: valueState(summary?.workerEvidenceComplete),
     reviewEvidenceComplete: valueState(summary?.reviewEvidenceComplete),
     mainVerificationComplete: valueState(summary?.mainVerificationComplete),
     releaseReady: valueState(summary?.releaseReady),
-    releaseReadySource: valueState(ledger?.summary?.releaseReadySource)
+    releaseReadySource: valueState(summary?.releaseReadySource)
   };
 }
 
@@ -1516,6 +1774,10 @@ function goalEventHashChainStatus({ event, previousEvent }) {
 
 function isMatrixTaskId(value) {
   return isNonEmptyString(value) && value !== 'release';
+}
+
+function isGoalEventStatusSource(value) {
+  return typeof value === 'string' && value.startsWith(`${GOAL_EVENT_LOG_CONTRACT_NAME}:`);
 }
 
 function matrixMissingState() {
@@ -2258,6 +2520,22 @@ function arrayTextState(values, emptyText = '无') {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function firstNonEmptyString(...values) {
+  return values.find((value) => isNonEmptyString(value));
+}
+
+function routeStateFromResult(result) {
+  if (result?.ok === true) {
+    return 'ready';
+  }
+
+  if (result?.skipped === true) {
+    return 'skipped';
+  }
+
+  return 'unavailable';
 }
 
 function hasOwn(value, key) {

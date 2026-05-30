@@ -268,7 +268,8 @@ CLI and route boundary:
     "workerEvidenceComplete": true,
     "reviewEvidenceComplete": false,
     "mainVerificationComplete": false,
-    "releaseReady": false
+    "releaseReady": false,
+    "releaseReadySource": null
   },
   "missing": [
     {
@@ -302,7 +303,7 @@ CLI and route boundary:
 }
 ```
 
-Closeout reports keep `releaseReady` evidence-based. Missing items must name a supported expected event type, release gates use the existing `goal-progress-ledger.v1` gate status vocabulary, and `nextAction` is a copy-only command.
+Closeout reports keep `releaseReady` evidence-based. `releaseReadySource` is `null` until an explicit `goal-event-log.v1:*` release readiness event is present. Missing items must name a supported expected event type, release gates use the existing `goal-progress-ledger.v1` gate status vocabulary, and `nextAction` is a copy-only command.
 
 CLI and route boundary:
 

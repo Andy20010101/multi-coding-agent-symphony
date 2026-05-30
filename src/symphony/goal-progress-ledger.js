@@ -67,6 +67,8 @@ const V19_BASELINE = Object.freeze({
   commit: null,
   evidenceRef: 'docs/plans/v18-tag-release-evidence-2026-05-29.md'
 });
+const MANAGED_GOAL_RUNBOOK_STATE_CONTRACT_NAME = 'managed-goal-runbook-state.v1';
+const MANAGED_ACTIVE_GOAL_POINTER_CONTRACT_NAME = 'managed-active-goal-pointer.v1';
 
 const DEFAULT_TASKS = Object.freeze([
   Object.freeze({
@@ -350,6 +352,23 @@ export async function buildGoalProgressLedger({
   goalId = 'latest',
   generatedAt = new Date().toISOString()
 } = {}) {
+  const managedRunbook = await readManagedRunbookForProgress({ stateDir, goalId });
+
+  if (managedRunbook !== null) {
+    const eventLog = await readGoalEventJournal({
+      stateDir,
+      goalId: managedRunbook.goalId,
+      goalTitle: managedRunbook.goalTitle,
+      baseline: managedRunbook.baseline
+    });
+
+    return buildGoalProgressLedgerFromRunbook({
+      runbook: managedRunbook,
+      eventLog,
+      generatedAt
+    });
+  }
+
   const resolvedGoalId = resolveGoalId(goalId);
 
   if (resolvedGoalId === null) {
@@ -406,7 +425,8 @@ export function buildGoalProgressLedgerFromRunbook({
       state,
       eventLog,
       goalTemplate,
-      generatedAt
+      generatedAt,
+      templateStatusSource: 'goal-runbook.v1'
     })
     : buildLedgerFromState({
       state,
@@ -544,6 +564,72 @@ function resolveGoalId(goalId) {
   return resolved;
 }
 
+async function readManagedRunbookForProgress({ stateDir, goalId }) {
+  const managedGoalId = await resolveManagedGoalIdForProgress({ stateDir, goalId });
+
+  if (managedGoalId === null) {
+    return null;
+  }
+
+  try {
+    const state = JSON.parse(await readFile(join(stateDir, 'goals', 'runbooks', `${managedGoalId}.json`), 'utf8'));
+
+    return isManagedRunbookProgressCandidate({ state, managedGoalId }) ? state.runbook : null;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+async function resolveManagedGoalIdForProgress({ stateDir, goalId }) {
+  if (goalId === undefined || goalId === null || goalId === 'latest') {
+    try {
+      const pointer = JSON.parse(await readFile(join(stateDir, 'goals', 'latest-active-goal.json'), 'utf8'));
+
+      return pointer?.contractName === MANAGED_ACTIVE_GOAL_POINTER_CONTRACT_NAME && isSafeGoalId(pointer.goalId)
+        ? pointer.goalId
+        : null;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  return isSafeGoalId(goalId) ? goalId : null;
+}
+
+function isManagedRunbookProgressCandidate({ state, managedGoalId }) {
+  const runbook = state?.runbook;
+
+  return isPlainObject(state) &&
+    state.contractName === MANAGED_GOAL_RUNBOOK_STATE_CONTRACT_NAME &&
+    isPlainObject(runbook) &&
+    runbook.goalId === managedGoalId &&
+    isNonEmptyString(runbook.goalTitle) &&
+    isPlainObject(runbook.baseline) &&
+    isNonEmptyString(runbook.baseline.tag) &&
+    (typeof runbook.baseline.commit === 'string' || runbook.baseline.commit === null) &&
+    (typeof runbook.baseline.evidenceRef === 'string' || runbook.baseline.evidenceRef === null) &&
+    Array.isArray(runbook.tasks) &&
+    runbook.tasks.length > 0 &&
+    runbook.tasks.every(isManagedRunbookTaskProgressCandidate) &&
+    Array.isArray(runbook.releaseGates);
+}
+
+function isManagedRunbookTaskProgressCandidate(task) {
+  return isPlainObject(task) &&
+    isNonEmptyString(task.taskId) &&
+    isNonEmptyString(task.title) &&
+    (typeof task.branch === 'string' || task.branch === null) &&
+    Array.isArray(task.copyOnlyCommands);
+}
+
 function getGoalTemplate(goalId) {
   return GOAL_PROGRESS_TEMPLATES[goalId] ?? GOAL_PROGRESS_TEMPLATES[DEFAULT_GOAL_PROGRESS_GOAL_ID];
 }
@@ -644,7 +730,8 @@ function buildLedgerFromEventLog({
   state,
   eventLog,
   goalTemplate,
-  generatedAt
+  generatedAt,
+  templateStatusSource = 'v17-template-no-events'
 }) {
   const stateTasks = new Map(
     (Array.isArray(state?.tasks) ? state.tasks : [])
@@ -661,7 +748,8 @@ function buildLedgerFromEventLog({
       template.taskId,
       initializeEventTaskState({
         template,
-        stateTask: stateTasks.get(template.taskId)
+        stateTask: stateTasks.get(template.taskId),
+        templateStatusSource
       })
     ])
   );
@@ -765,10 +853,10 @@ function buildEventTaskTemplates({ goalTemplate, stateTasks, events }) {
   return [...templates.values()];
 }
 
-function initializeEventTaskState({ template, stateTask }) {
+function initializeEventTaskState({ template, stateTask, templateStatusSource = 'v17-template-no-events' }) {
   return {
     status: 'planned',
-    statusSource: 'v17-template-no-events',
+    statusSource: templateStatusSource,
     branch: stateTask?.branch ?? template.branch ?? null,
     commit: stringOrNull(stateTask?.commit),
     workerEvidenceRef: null,

@@ -1,6 +1,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
+import { createSymphonyConsoleServer } from '../src/symphony/console.js';
+import { appendGoalEvent } from '../src/symphony/goal-event-journal.js';
+import {
+  buildGoalRunbookInitPlan,
+  confirmGoalRunbookInit
+} from '../src/symphony/goal-runbook-registry.js';
 import {
   READONLY_API_ROUTES,
   fetchReadonlyRoute,
@@ -19,6 +28,8 @@ const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
 const V19_GOAL_ID = 'v19-goal-runbook-next-action';
 const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
 const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
+const BACKEND_ACTIVE_GOAL_ID = 'v20-workbench-backend-event-test';
+const BACKEND_ACTIVE_GOAL_FIXTURE = 'fixtures/contracts/goal-runbook.v20-goal-workbench-active-goal-surface.v1.json';
 
 describe('v15 Workbench read-only API client', () => {
   it('exposes only the approved read-only route list', () => {
@@ -406,6 +417,269 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].reviewEvidence.value, 'missing');
     assert.equal(model.goalEvents.evidenceMatrix.tasks.items[0].mainVerification.value, 'unknown');
     assert.equal(model.goalEvents.evidenceMatrix.releaseReady.status.value, 'unknown');
+  });
+
+  it('projects the Active Goal task queue from explicit contracts and event-backed progress only', () => {
+    const runbook = createV19RunbookPayload();
+    const ledger = createV19ProgressPayload();
+    const nextAction = createV19NextActionPayload();
+
+    runbook.tasks[0] = {
+      ...runbook.tasks[0],
+      title: 'APPROVED release-ready title must stay display text',
+      branch: 'main-verified-from-branch-name',
+      copyOnlyCommands: ['symphony goal update --event reviewer.approved --evidence-ref docs/plans/v19-approved-looking.md']
+    };
+    ledger.tasks[0] = {
+      ...ledger.tasks[0],
+      title: runbook.tasks[0].title,
+      branch: runbook.tasks[0].branch,
+      status: 'planned',
+      statusSource: 'goal-runbook.v1',
+      workerEvidenceRef: null,
+      reviewEvidenceRef: null,
+      reviewVerdict: null,
+      mainVerificationRef: null
+    };
+
+    const plannedModel = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', createV19EventsPayload())
+    });
+
+    const plannedTask = plannedModel.activeGoal.taskQueue.items[0];
+
+    assert.equal(plannedTask.title.value, 'APPROVED release-ready title must stay display text');
+    assert.equal(plannedTask.status.value, 'planned');
+    assert.equal(plannedTask.statusSource.value, 'goal-runbook.v1');
+    assert.equal(plannedTask.progressSource.value, 'goal-progress-ledger.v1');
+    assert.equal(plannedTask.eventBacked.value, false);
+    assert.equal(plannedTask.latestEventType.text, CONTRACT_TEXT.missing);
+    assert.equal(plannedTask.workerEvidenceRef.text, CONTRACT_TEXT.missing);
+
+    const eventBackedLedger = {
+      ...ledger,
+      tasks: [{
+        ...ledger.tasks[0],
+        status: 'in-progress',
+        statusSource: 'goal-event-log.v1:evt_task6_worker',
+        workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md'
+      }]
+    };
+    const eventBackedLog = createV19EventsPayload();
+    const eventHash = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    eventBackedLog.events = [{
+      eventId: 'evt_task6_worker',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      occurredAt: '2026-05-29T10:00:00.000Z',
+      recordedAt: '2026-05-29T10:00:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+        label: 'Worker evidence'
+      }],
+      previousEventHash: null,
+      eventHash
+    }];
+    eventBackedLog.log.eventCount = 1;
+    eventBackedLog.log.firstSequence = 1;
+    eventBackedLog.log.lastSequence = 1;
+    eventBackedLog.log.lastEventId = 'evt_task6_worker';
+    eventBackedLog.log.lastEventHash = eventHash;
+
+    const eventBackedModel = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', eventBackedLedger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventBackedLog)
+    });
+
+    const eventBackedTask = eventBackedModel.activeGoal.taskQueue.items[0];
+
+    assert.equal(eventBackedTask.status.value, 'in-progress');
+    assert.equal(eventBackedTask.progressSource.value, 'event-backed goal-progress-ledger.v1');
+    assert.equal(eventBackedTask.eventBacked.value, true);
+    assert.equal(eventBackedTask.latestEventId.value, 'evt_task6_worker');
+    assert.equal(eventBackedTask.latestEventType.value, 'worker.evidence-recorded');
+    assert.equal(eventBackedTask.workerEvidenceRef.value, 'docs/plans/v19-task6-worker-evidence-2026-05-29.md');
+  });
+
+  it('projects the Next Action card and Prompt Preview drawer from explicit copy-only contracts', () => {
+    const runbook = createV19RunbookPayload();
+    const nextAction = createV19NextActionPayload();
+    const promptPack = createV19PromptPackPayload();
+
+    runbook.tasks[0] = {
+      ...runbook.tasks[0],
+      taskId: 'task-title-must-not-drive-next-action',
+      title: 'reviewer.approved release-ready title is only display text',
+      branch: 'main-verification-looking-branch',
+      copyOnlyCommands: ['symphony goal update --event worker.evidence-recorded --evidence-ref docs/plans/branch-looking.md']
+    };
+    nextAction.next = {
+      taskId: 'task-3',
+      role: 'reviewer',
+      phase: 'review',
+      reason: 'Worker evidence exists for task-3 but reviewer verdict is missing.',
+      blocked: false
+    };
+    nextAction.evidenceState = {
+      workerEvidenceRef: 'docs/plans/v20-task-3-worker-evidence-2026-05-31.md',
+      reviewEvidenceRef: null,
+      mainVerificationRef: null
+    };
+    nextAction.copyOnlyCommands = ['pnpm check', 'pnpm test'];
+    nextAction.afterCompletion = {
+      registerWith: 'symphony goal review',
+      allowedEvents: ['reviewer.approved', 'reviewer.needs-revision']
+    };
+    promptPack.prompts = [{
+      ...promptPack.prompts[0],
+      taskId: 'task-hidden',
+      role: 'worker',
+      title: 'non copy-only prompt must stay hidden',
+      copyOnly: false,
+      text: '/goal\nhidden prompt text'
+    }, {
+      ...promptPack.prompts[0],
+      taskId: 'task-3',
+      role: 'reviewer',
+      title: 'reviewer prompt for task-3',
+      copyOnly: true,
+      text: '/goal\ncopy-only reviewer prompt text',
+      registration: {
+        dryRunCommand: 'symphony goal review --goal v19-goal-runbook-next-action --task task-3 --verdict approved --evidence-ref docs/plans/v20-task-3-review-evidence-2026-05-31.md --dry-run',
+        confirmCommand: 'symphony goal review --goal v19-goal-runbook-next-action --task task-3 --verdict approved --evidence-ref docs/plans/v20-task-3-review-evidence-2026-05-31.md --confirm --plan-hash sha256:0000000000000000000000000000000000000000000000000000000000000000',
+        confirmRequired: true,
+        writesInDryRun: false,
+        appendOnlyOnConfirm: true
+      }
+    }];
+
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      goalPromptPack: createWorkbenchResult('goalPromptPack', promptPack)
+    });
+
+    assert.equal(model.activeGoal.nextAction.contractName.value, 'goal-next-action.v1');
+    assert.equal(model.activeGoal.nextAction.next.taskId.value, 'task-3');
+    assert.equal(model.activeGoal.nextAction.next.role.value, 'reviewer');
+    assert.equal(model.activeGoal.nextAction.next.reason.value, 'Worker evidence exists for task-3 but reviewer verdict is missing.');
+    assert.equal(model.activeGoal.nextAction.evidenceState.workerEvidenceRef.value, 'docs/plans/v20-task-3-worker-evidence-2026-05-31.md');
+    assert.equal(model.activeGoal.nextAction.evidenceState.reviewEvidenceRef.text, CONTRACT_TEXT.missing);
+    assert.equal(model.activeGoal.nextAction.afterCompletion.registrationCommand.value, 'symphony goal review');
+    assert.equal(model.activeGoal.nextAction.afterCompletion.registerWith.value, 'symphony goal review');
+    assert.equal(model.activeGoal.nextAction.afterCompletion.allowedEvents.value, 'reviewer.approved、reviewer.needs-revision');
+
+    assert.equal(model.activeGoal.promptPreview.contractName.value, 'goal-prompt-pack.v1');
+    assert.equal(model.activeGoal.promptPreview.visibleCount.value, 1);
+    assert.equal(model.activeGoal.promptPreview.hiddenCount.value, 1);
+    assert.equal(model.activeGoal.promptPreview.items[0].taskId.value, 'task-3');
+    assert.equal(model.activeGoal.promptPreview.items[0].role.value, 'reviewer');
+    assert.equal(model.activeGoal.promptPreview.items[0].text.value, '/goal\ncopy-only reviewer prompt text');
+    assert.equal(Object.hasOwn(model.activeGoal.promptPreview.items[0], 'registration'), false);
+    assert.equal(Object.hasOwn(model.activeGoal.promptPreview.items[0], 'dryRunCommand'), false);
+    assert.equal(Object.hasOwn(model.activeGoal.promptPreview.items[0], 'confirmCommand'), false);
+    assert.equal(model.activeGoal.promptPreview.safety.copyOnly.value, true);
+    assert.equal(model.activeGoal.promptPreview.safety.workbenchWriteAvailable.value, false);
+    assert.equal(model.activeGoal.promptPreview.safety.browserExecutionAvailable.value, false);
+    assert.equal(model.activeGoal.promptPreview.safety.modelInvocationAvailable.value, false);
+  });
+
+  it('projects the Closeout Gaps panel only from goal-closeout-report.v1', () => {
+    const closeout = createV19CloseoutPayload();
+    const ledger = createV19ProgressPayload();
+
+    ledger.summary.releaseReady = true;
+    ledger.summary.releaseReadySource = 'goal-event-log.v1:evt_release_ready_from_ledger_only';
+    ledger.releaseGates = Object.fromEntries(
+      Object.keys(ledger.releaseGates).map((gateId) => [gateId, 'passed'])
+    );
+
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', createV19RunbookPayload()),
+      goalCloseout: createWorkbenchResult('goalCloseout', closeout),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger)
+    });
+
+    assert.equal(model.activeGoal.closeoutGaps.contractName.value, 'goal-closeout-report.v1');
+    assert.equal(model.activeGoal.closeoutGaps.summary.releaseReady.value, false);
+    assert.equal(model.activeGoal.closeoutGaps.summary.releaseReadySource.text, CONTRACT_TEXT.missing);
+    assert.equal(model.activeGoal.closeoutGaps.missing.items[0].kind.value, 'worker-evidence');
+    assert.equal(model.activeGoal.closeoutGaps.missing.items[1].gate.value, 'release.pnpm-test');
+    assert.equal(model.activeGoal.closeoutGaps.releaseGates.find((gate) => gate.gate.value === 'pnpmTest').status.value, 'unknown');
+
+    const readyCloseout = {
+      ...closeout,
+      summary: {
+        ...closeout.summary,
+        workerEvidenceComplete: true,
+        reviewEvidenceComplete: true,
+        mainVerificationComplete: true,
+        releaseReady: true,
+        releaseReadySource: 'goal-event-log.v1:evt_release_ready_from_closeout'
+      },
+      missing: [],
+      releaseGates: Object.fromEntries(
+        Object.keys(closeout.releaseGates).map((gateId) => [gateId, 'passed'])
+      )
+    };
+    const readyModel = projectWorkbenchContracts({
+      goalCloseout: createWorkbenchResult('goalCloseout', readyCloseout)
+    });
+
+    assert.equal(readyModel.activeGoal.closeoutGaps.summary.releaseReady.value, true);
+    assert.equal(readyModel.activeGoal.closeoutGaps.summary.releaseReadySource.value, 'goal-event-log.v1:evt_release_ready_from_closeout');
+
+    const noCloseoutModel = projectWorkbenchContracts({
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger)
+    });
+
+    assert.equal(noCloseoutModel.activeGoal.closeoutGaps.state, 'unavailable');
+    assert.equal(noCloseoutModel.activeGoal.closeoutGaps.summary.releaseReady.text, CONTRACT_TEXT.missing);
+  });
+
+  it('hydrates the Active Goal task queue with backend scoped event-log data', async () => {
+    const context = await startManagedActiveGoalWorkbenchServer();
+
+    try {
+      const model = await fetchWorkbenchContracts({
+        fetchImpl: (path, init) => fetch(`${context.baseUrl}${path}`, init)
+      });
+      const task2 = model.activeGoal.taskQueue.items.find((item) => item.taskId.value === 'task-2');
+      const task3 = model.activeGoal.taskQueue.items.find((item) => item.taskId.value === 'task-3');
+      const activeEventsRoute = model.routeStates.find((route) => route.id === 'activeGoalEvents');
+
+      assert.equal(activeEventsRoute.state, 'ready');
+      assert.equal(activeEventsRoute.path, `/api/goals/${BACKEND_ACTIVE_GOAL_ID}/events`);
+      assert.equal(model.activeGoal.runbook.eventRouteState.value, 'ready');
+      assert.equal(model.activeGoal.taskQueue.goalId.value, BACKEND_ACTIVE_GOAL_ID);
+      assert.equal(task2.status.value, 'in-progress');
+      assert.equal(task2.statusSource.value, 'goal-event-log.v1:evt_task2_backend_worker');
+      assert.equal(task2.progressSource.value, 'event-backed goal-progress-ledger.v1');
+      assert.equal(task2.eventBacked.value, true);
+      assert.equal(task2.latestEventId.value, 'evt_task2_backend_worker');
+      assert.equal(task2.latestEventType.value, 'worker.evidence-recorded');
+      assert.equal(task2.latestEventSequence.value, 1);
+      assert.equal(task2.workerEvidenceRef.value, 'docs/plans/v20-task-2-worker-evidence-2026-05-31.md');
+      assert.equal(task3.status.value, 'planned');
+      assert.equal(task3.statusSource.value, 'goal-runbook.v1');
+      assert.equal(task3.eventBacked.value, false);
+    } finally {
+      await cleanupManagedActiveGoalWorkbenchServer(context);
+    }
   });
 
   it('fetches and projects backend safe artifact preview contracts without inferring safety', async () => {
@@ -799,15 +1073,218 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.handoff.commandBlocks.items[0].title.value, 'Preflight');
     assert.equal(model.handoff.commandBlocks.items[0].commands[0].value, 'git checkout main');
     assert.equal(model.goalProgress.contractName.value, 'goal-progress-ledger.v1');
+    assert.equal(model.activeGoal.viewModel.modelName.value, 'ActiveGoalViewModel');
+    assert.equal(model.activeGoal.viewModel.goalId.value, V19_GOAL_ID);
+    assert.equal(model.activeGoal.viewModel.status.contractName.value, 'goal-progress-ledger.v1');
+    assert.equal(model.activeGoal.viewModel.next.contractName.value, 'goal-next-action.v1');
+    assert.equal(model.activeGoal.viewModel.prompt.contractName.value, 'goal-prompt-pack.v1');
+    assert.equal(model.activeGoal.viewModel.closeout.contractName.value, 'goal-closeout-report.v1');
+    assert.deepEqual(
+      model.activeGoal.viewModel.commandInventory.items.map((item) => [
+        item.label.value,
+        item.contractName.value,
+        item.routeState.value
+      ]),
+      [
+        ['goal-status', 'goal-progress-ledger.v1', 'ready'],
+        ['goal next', 'goal-next-action.v1', 'ready'],
+        ['goal prompt', 'goal-prompt-pack.v1', 'ready'],
+        ['goal closeout', 'goal-closeout-report.v1', 'ready']
+      ]
+    );
+    assert.equal(
+      model.activeGoal.viewModel.commandInventory.items[0].command.value,
+      `pnpm --silent symphony goal-status --goal ${V19_GOAL_ID} --json`
+    );
+    for (const oldCommand of ['scan', 'do', 'review', 'verify', 'status', 'continue', 'artifacts']) {
+      assert.equal(model.activeGoal.viewModel.commandInventory.items.some((item) => item.label.value === oldCommand), false);
+    }
     assert.equal(model.activeGoal.runbook.contractName.value, 'goal-runbook.v1');
     assert.equal(model.activeGoal.runbook.tasks.items[0].status.value, 'planned');
+    assert.equal(model.activeGoal.taskQueue.goalId.value, V19_GOAL_ID);
+    assert.equal(model.activeGoal.taskQueue.items[0].status.value, 'planned');
+    assert.equal(model.activeGoal.taskQueue.items[0].progressSource.value, 'goal-progress-ledger.v1');
+    assert.equal(model.activeGoal.taskQueue.items[0].eventBacked.value, false);
+    assert.equal(model.activeGoal.taskQueue.items[0].nextRole.value, 'worker');
     assert.equal(model.activeGoal.nextAction.next.role.value, 'worker');
     assert.equal(model.activeGoal.promptPreview.items[0].text.value.includes('/goal'), true);
     assert.equal(model.activeGoal.closeoutGaps.missing.items[0].kind.value, 'worker-evidence');
+    assert.equal(model.activeGoal.closeoutGaps.missing.items[1].gate.value, 'release.pnpm-test');
+    assert.equal(model.activeGoal.closeoutGaps.missing.items[1].gateId.value, 'pnpmTest');
+    assert.equal(model.activeGoal.closeoutGaps.summary.releaseReady.value, false);
+    assert.equal(model.activeGoal.closeoutGaps.summary.releaseReadySource.text, CONTRACT_TEXT.missing);
     assert.equal(model.capabilities.browserExecutionAvailable.value, false);
     assert.equal(model.diagnosticsV1.status.value, 'ok');
   });
 });
+
+function createWorkbenchResult(routeId, data) {
+  const route = READONLY_API_ROUTES.find((candidate) => candidate.id === routeId);
+
+  assert.notEqual(route, undefined);
+
+  return {
+    ok: true,
+    route: route.path,
+    method: route.method,
+    routeDescriptor: route,
+    httpStatus: 200,
+    data
+  };
+}
+
+function createActiveGoalResult(routeId, suffix, contractName, data) {
+  const route = {
+    id: routeId,
+    label: routeId,
+    path: `/api/goals/${V19_GOAL_ID}/${suffix}`,
+    method: 'GET',
+    contractName,
+    goalId: V19_GOAL_ID
+  };
+
+  return {
+    ok: true,
+    route: route.path,
+    method: route.method,
+    routeDescriptor: route,
+    httpStatus: 200,
+    data
+  };
+}
+
+async function startManagedActiveGoalWorkbenchServer() {
+  const root = await mkdtemp(join(tmpdir(), 'symphony-workbench-backend-events-'));
+  const stateDir = join(root, '.symphony');
+  const plan = await buildGoalRunbookInitPlan({
+    stateDir,
+    goalId: BACKEND_ACTIVE_GOAL_ID,
+    fromJson: BACKEND_ACTIVE_GOAL_FIXTURE
+  });
+
+  await confirmGoalRunbookInit({
+    stateDir,
+    goalId: BACKEND_ACTIVE_GOAL_ID,
+    fromJson: BACKEND_ACTIVE_GOAL_FIXTURE,
+    planHash: plan.planHash
+  });
+  await appendGoalEvent({
+    stateDir,
+    mode: 'confirm',
+    recordedAt: '2026-05-31T10:01:00.000Z',
+    event: {
+      eventId: 'evt_task2_backend_worker',
+      goalId: BACKEND_ACTIVE_GOAL_ID,
+      taskId: 'task-2',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-2'
+      },
+      occurredAt: '2026-05-31T10:00:00.000Z',
+      branch: null,
+      commit: null,
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/v20-task-2-worker-evidence-2026-05-31.md',
+        label: 'Task 2 worker evidence'
+      }],
+      statement: 'Task 2 worker evidence was recorded for Workbench backend event-log hydration.'
+    }
+  });
+
+  const server = createSymphonyConsoleServer({
+    stateDir,
+    cwd: root,
+    env: { HOME: root },
+    runner: new WorkbenchApiReadinessRunner()
+  });
+  const baseUrl = await listenOnRandomPort(server);
+
+  return {
+    root,
+    stateDir,
+    server,
+    baseUrl
+  };
+}
+
+async function listenOnRandomPort(server) {
+  await new Promise((resolvePromise, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolvePromise();
+    });
+  });
+
+  const address = server.address();
+
+  assert.equal(typeof address, 'object');
+  assert.notEqual(address, null);
+
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function cleanupManagedActiveGoalWorkbenchServer({ root, server }) {
+  await new Promise((resolvePromise, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolvePromise();
+    });
+  });
+  await rm(root, { recursive: true, force: true });
+}
+
+class WorkbenchApiReadinessRunner {
+  async run({ executable, args = [] }) {
+    if (executable === 'pnpm' && args.join(' ') === '--version') {
+      return commandResult({ exitCode: 0, stdout: '10.0.0\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --is-inside-work-tree') {
+      return commandResult({ exitCode: 0, stdout: 'true\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'branch --show-current') {
+      return commandResult({ exitCode: 0, stdout: 'codex/v20-task-2\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short HEAD') {
+      return commandResult({ exitCode: 0, stdout: 'v20task2\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'status --porcelain') {
+      return commandResult({ exitCode: 0, stdout: '' });
+    }
+
+    if (executable === 'gh') {
+      return commandResult({ exitCode: 1, stderr: 'not logged in\n' });
+    }
+
+    return commandResult({ exitCode: 1, stderr: `${executable} unavailable\n` });
+  }
+}
+
+function commandResult({ exitCode, stdout = '', stderr = '' }) {
+  return {
+    exitCode,
+    signal: null,
+    stdout,
+    stderr,
+    durationMs: 1,
+    timedOut: false,
+    cancelled: false,
+    stalled: false,
+    killedAfterTimeout: false,
+    outputFiles: {}
+  };
+}
 
 function createHandoffRefsPayload() {
   return {
@@ -1139,7 +1616,8 @@ function createV19CloseoutPayload() {
       workerEvidenceComplete: false,
       reviewEvidenceComplete: false,
       mainVerificationComplete: false,
-      releaseReady: false
+      releaseReady: false,
+      releaseReadySource: null
     },
     missing: [{
       kind: 'worker-evidence',
@@ -1149,7 +1627,8 @@ function createV19CloseoutPayload() {
       kind: 'release-gate',
       taskId: null,
       expectedEvent: 'release.gate-passed',
-      gateId: 'release.pnpm-test',
+      gate: 'release.pnpm-test',
+      gateId: 'pnpmTest',
       status: 'unknown'
     }],
     releaseGates: {

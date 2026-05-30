@@ -1,0 +1,176 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v20-goal-workbench-active-goal-surface",
+  "goalTitle": "v20 Workbench Active Goal Surface",
+  "baseline": {
+    "tag": "v19",
+    "commit": null,
+    "evidenceRef": "docs/plans/v19-tag-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Latest goal command inventory and Workbench view model",
+      "branch": "v20-task-1-latest-goal-command-inventory-workbench-view-model",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench exposes an ActiveGoalViewModel backed by goal-status, goal next, goal prompt, and goal closeout contracts.",
+        "The Workbench model does not use the old scan/do/review/verify/status/continue/artifacts command list as the top-level action baseline."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Active Goal Runbook panel and task queue",
+      "branch": "v20-task-2-active-goal-runbook-panel-task-queue",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench presents the active goal runbook and task queue as the primary workflow surface.",
+        "Task state is rendered from explicit goal contracts and event-backed progress, not from branch names, file names, task titles, or frontend inference."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Next Action Card and Prompt Preview Drawer",
+      "branch": "v20-task-3-next-action-card-prompt-preview-drawer",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench shows the next task, role, reason, evidence state, and after-completion registration command from goal-next-action.v1.",
+        "Prompt preview remains copy-only and does not execute prompts, invoke models, register events, or expose browser-side confirm."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Closeout Gaps panel",
+      "branch": "v20-task-4-closeout-gaps-panel",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench displays missing task evidence and release gate gaps from goal-closeout-report.v1.",
+        "Release readiness remains tied to explicit goal gate evidence and is not inferred from local command output alone."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Workbench tests, operator docs, and release evidence",
+      "branch": "v20-task-5-workbench-tests-operator-docs-release-evidence",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench tests and route smoke coverage validate the Active Goal surface as the primary Workbench entry point.",
+        "Operator docs and release evidence describe the v20 workflow without claiming auto-merge, auto-tag, model invocation, or generic shell execution."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "pnpm test:mutation:gate",
+        "pnpm audit --audit-level high",
+        "git diff --check",
+        "pnpm mcas doctor"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

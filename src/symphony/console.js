@@ -1139,7 +1139,28 @@ async function writeGoalEventsResponse({ response, stateDir, request, route, met
     return;
   }
 
-  const goal = resolveGoalEventsGoal(request.goalId);
+  let goal;
+
+  try {
+    goal = await resolveGoalEventsGoal({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
 
   if (goal === null) {
     writeApiErrorResponse(response, {
@@ -2000,10 +2021,27 @@ function parseGoalRunbookControlRequestPath({ pathname, searchParams, suffix }) 
   };
 }
 
-function resolveGoalEventsGoal(goalId) {
+async function resolveGoalEventsGoal({ stateDir, goalId }) {
   const resolvedGoalId = goalId === undefined || goalId === null || goalId === 'latest'
     ? V18_GOAL_EVENT_JOURNAL_GOAL_ID
     : goalId;
+
+  if (goalId !== undefined && goalId !== null && goalId !== 'latest') {
+    const managedContext = await loadGoalRunbookContext({
+      stateDir,
+      goalId: resolvedGoalId,
+      allowControlledFixtureFallback: false
+    });
+
+    if (managedContext !== null) {
+      return {
+        goalId: managedContext.runbook.goalId,
+        goalTitle: managedContext.runbook.goalTitle,
+        baseline: managedContext.runbook.baseline
+      };
+    }
+  }
+
   const template = getGoalProgressTemplate(resolvedGoalId);
 
   if (template === null) {

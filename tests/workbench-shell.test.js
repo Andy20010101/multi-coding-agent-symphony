@@ -50,9 +50,11 @@ describe('v15 Workbench React/Vite shell', () => {
       'AdoptionSummaryPanel',
       'HandoffPanel',
       'GoalProgressPanel',
+      'ActiveGoalViewModelPanel',
       'ActiveGoalRunbookPanel',
+      'ActiveGoalTaskQueuePanel',
       'NextActionCard',
-      'PromptPreviewPanel',
+      'PromptPreviewDrawer',
       'CloseoutGapsPanel',
       'GoalEventsTimelinePanel',
       'EvidenceMatrixPanel',
@@ -61,7 +63,9 @@ describe('v15 Workbench React/Vite shell', () => {
       'CommandBlockList',
       'HandoffTaskList',
       'GoalTaskList',
+      'ActiveGoalCommandInventoryList',
       'GoalRunbookTaskList',
+      'ActiveGoalTaskQueueList',
       'PromptPreviewList',
       'CloseoutMissingList',
       'GoalEventTimelineList',
@@ -78,9 +82,14 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /Adoption summary 只读状态/u);
     assert.match(app, /Guided Goal Handoff/u);
     assert.match(app, /Goal Progress Ledger/u);
+    assert.match(app, /ActiveGoalViewModel/u);
     assert.match(app, /Active Goal Runbook/u);
+    assert.match(app, /Active Goal Task Queue/u);
+    assert.match(app, /v20 primary workflow/u);
     assert.match(app, /Next Action Card/u);
-    assert.match(app, /Prompt Preview/u);
+    assert.match(app, /afterCompletion\.registrationCommand/u);
+    assert.match(app, /Prompt Preview Drawer/u);
+    assert.match(app, /copy-only prompt drawer/u);
     assert.match(app, /Closeout Gaps/u);
     assert.match(app, /Goal Events Timeline/u);
     assert.match(app, /Evidence Matrix/u);
@@ -91,6 +100,45 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /刷新页面后会重新读取只读 API/u);
     assert.doesNotMatch(app, /\bfetch\s*\(/u);
     assert.doesNotMatch(app, /rawRunState/u);
+  });
+
+  it('renders the Active Goal workflow before legacy Workbench information panels', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const primarySection = app.indexOf('className="primary-active-goal-grid"');
+    const activeGoalRunbook = app.indexOf('<ActiveGoalRunbookPanel', primarySection);
+    const activeGoalTaskQueue = app.indexOf('<ActiveGoalTaskQueuePanel', primarySection);
+    const supportingSection = app.indexOf('className="active-goal-grid"', primarySection);
+    const legacyPanelSection = app.indexOf('className="panel-grid"', supportingSection);
+    const detailSection = app.indexOf('className="detail-grid"', legacyPanelSection);
+
+    assert.notEqual(primarySection, -1);
+    assert.notEqual(activeGoalRunbook, -1);
+    assert.notEqual(activeGoalTaskQueue, -1);
+    assert.notEqual(supportingSection, -1);
+    assert.notEqual(legacyPanelSection, -1);
+    assert.notEqual(detailSection, -1);
+    assert.equal(activeGoalRunbook > primarySection && activeGoalRunbook < supportingSection, true);
+    assert.equal(activeGoalTaskQueue > activeGoalRunbook && activeGoalTaskQueue < supportingSection, true);
+    assert.equal(primarySection < supportingSection, true);
+    assert.equal(supportingSection < legacyPanelSection, true);
+    assert.equal(legacyPanelSection < detailSection, true);
+    assert.match(app, /aria-label="v20 primary active goal workflow"/u);
+    assert.match(app, /aria-label="v20 Active Goal supporting contracts"/u);
+  });
+
+  it('keeps the next action card and prompt drawer display-only', async () => {
+    const sources = await Promise.all(
+      frontendFiles.map((file) => readFile(file, 'utf8'))
+    );
+    const source = sources.join('\n');
+
+    assert.match(source, /goal-next-action\.v1/u);
+    assert.match(source, /afterCompletion\.registrationCommand/u);
+    assert.match(source, /Prompt Preview Drawer/u);
+    assert.match(source, /copy-only prompt drawer/u);
+    assert.doesNotMatch(source, /confirmCommand|dryRunCommand|--confirm|--dry-run/u);
+    assert.doesNotMatch(source, /navigator\.clipboard|document\.execCommand|window\.open/u);
+    assert.doesNotMatch(source, /symphony goal (update|review|gate) --goal/u);
   });
 
   it('keeps frontend API paths limited to the approved read-only endpoints', async () => {

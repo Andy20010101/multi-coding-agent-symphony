@@ -41,11 +41,11 @@ export default function App() {
     <main className="workbench-shell" aria-labelledby="workbench-title">
       <header className="workbench-header">
         <div className="header-copy">
-          <p className="eyebrow">v19 React/Vite Workbench</p>
+          <p className="eyebrow">v20 Active Goal Workbench</p>
           <h1 id="workbench-title">Symphony Workbench</h1>
           <p className="header-summary">
             展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff，
-            以及 goal progress、goal events、Active Goal Control Center、capabilities、diagnostics 与安全 error envelope。
+            以及 goal progress、goal events、ActiveGoalViewModel、capabilities、diagnostics 与安全 error envelope。
             浏览器端只读取受控 GET routes，artifact preview 与 prompt preview 只消费后端 contract，不提供写入、下载、终端或执行动作。
           </p>
         </div>
@@ -61,6 +61,29 @@ export default function App() {
 
       {model === null ? null : (
         <>
+          <section className="primary-active-goal-grid" aria-label="v20 primary active goal workflow">
+            <ActiveGoalRunbookPanel
+              runbook={model.activeGoal.runbook}
+              route={findRoute(model.routeStates, 'goalRunbook')}
+              progressRoute={findRoute(model.routeStates, 'activeGoalProgress')}
+              eventsRoute={findRoute(model.routeStates, 'activeGoalEvents')}
+            />
+            <ActiveGoalTaskQueuePanel
+              taskQueue={model.activeGoal.taskQueue}
+              route={findRoute(model.routeStates, 'goalRunbook')}
+              progressRoute={findRoute(model.routeStates, 'activeGoalProgress')}
+              eventsRoute={findRoute(model.routeStates, 'activeGoalEvents')}
+              nextRoute={findRoute(model.routeStates, 'goalNextAction')}
+            />
+          </section>
+
+          <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
+            <NextActionCard nextAction={model.activeGoal.nextAction} route={findRoute(model.routeStates, 'goalNextAction')} />
+            <PromptPreviewDrawer promptPreview={model.activeGoal.promptPreview} route={findRoute(model.routeStates, 'goalPromptPack')} />
+            <ActiveGoalViewModelPanel viewModel={model.activeGoal.viewModel} />
+            <CloseoutGapsPanel closeoutGaps={model.activeGoal.closeoutGaps} route={findRoute(model.routeStates, 'goalCloseout')} />
+          </section>
+
           <section className="panel-grid" aria-label="Workbench 只读 panels">
             <SummaryPanel summary={model.summary} route={findRoute(model.routeStates, 'summary')} />
             <ReadinessPanel readiness={model.readiness} route={findRoute(model.routeStates, 'readiness')} />
@@ -86,18 +109,6 @@ export default function App() {
             <GoalProgressPanel progress={model.goalProgress} route={findRoute(model.routeStates, 'goalProgress')} />
             <CapabilitiesPanel capabilities={model.capabilities} route={findRoute(model.routeStates, 'capabilities')} />
             <DiagnosticsV1Panel diagnostics={model.diagnosticsV1} route={findRoute(model.routeStates, 'diagnostics')} />
-          </section>
-
-          <section className="active-goal-grid" aria-label="v19 Active Goal Control Center">
-            <ActiveGoalRunbookPanel
-              runbook={model.activeGoal.runbook}
-              route={findRoute(model.routeStates, 'goalRunbook')}
-              progressRoute={findRoute(model.routeStates, 'activeGoalProgress')}
-              eventsRoute={findRoute(model.routeStates, 'activeGoalEvents')}
-            />
-            <NextActionCard nextAction={model.activeGoal.nextAction} route={findRoute(model.routeStates, 'goalNextAction')} />
-            <PromptPreviewPanel promptPreview={model.activeGoal.promptPreview} route={findRoute(model.routeStates, 'goalPromptPack')} />
-            <CloseoutGapsPanel closeoutGaps={model.activeGoal.closeoutGaps} route={findRoute(model.routeStates, 'goalCloseout')} />
           </section>
 
           <section className="event-grid" aria-label="v18 goal events 只读 panels">
@@ -247,11 +258,52 @@ function EvidenceMatrixPanel({ matrix, route }) {
   );
 }
 
+function ActiveGoalViewModelPanel({ viewModel }) {
+  return (
+    <DataPanel
+      id="active-goal-view-model-panel"
+      kicker="v20 active goal"
+      title="ActiveGoalViewModel"
+      state={activeGoalViewModelStateText(viewModel)}
+    >
+      <FieldList rows={[
+        ['modelName', viewModel.modelName],
+        ['goalId', viewModel.goalId],
+        ['goalTitle', viewModel.goalTitle],
+        ['baseline', viewModel.baseline],
+        ['command count', viewModel.commandCount],
+        ['unavailable command count', viewModel.unavailableCommandCount],
+        ['goal-status contract', viewModel.status.contractName],
+        ['goal-status route', viewModel.status.routeState],
+        ['goal next contract', viewModel.next.contractName],
+        ['goal next route', viewModel.next.routeState],
+        ['goal prompt contract', viewModel.prompt.contractName],
+        ['goal prompt route', viewModel.prompt.routeState],
+        ['goal closeout contract', viewModel.closeout.contractName],
+        ['goal closeout route', viewModel.closeout.routeState],
+        ['next.taskId', viewModel.next.taskId],
+        ['next.role', viewModel.next.role],
+        ['next.phase', viewModel.next.phase],
+        ['next.reason', viewModel.next.reason],
+        ['prompt copyOnly count', viewModel.prompt.copyOnlyCount],
+        ['closeout missing count', viewModel.closeout.missingCount],
+        ['releaseReady', viewModel.closeout.releaseReady]
+      ]} />
+
+      <Subsection title="command-backed sources">
+        <ActiveGoalCommandInventoryList inventory={viewModel.commandInventory} />
+      </Subsection>
+
+      <p className="panel-note">{viewModel.note}</p>
+    </DataPanel>
+  );
+}
+
 function ActiveGoalRunbookPanel({ runbook, route, progressRoute, eventsRoute }) {
   return (
     <DataPanel
       id="active-goal-runbook-panel"
-      kicker="v19 active goal"
+      kicker="v20 primary workflow"
       title="Active Goal Runbook"
       state={activeGoalStateText(runbook, route)}
       route={route}
@@ -291,6 +343,43 @@ function ActiveGoalRunbookPanel({ runbook, route, progressRoute, eventsRoute }) 
   );
 }
 
+function ActiveGoalTaskQueuePanel({ taskQueue, route, progressRoute, eventsRoute, nextRoute }) {
+  return (
+    <DataPanel
+      id="active-goal-task-queue-panel"
+      kicker="v20 primary workflow"
+      title="Active Goal Task Queue"
+      state={activeGoalTaskQueueStateText(taskQueue, route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['goalId', taskQueue.goalId],
+        ['goalTitle', taskQueue.goalTitle],
+        ['task count', taskQueue.totalTasks],
+        ['completedTasks', taskQueue.completedTasks],
+        ['blockedTasks', taskQueue.blockedTasks],
+        ['needsReviewTasks', taskQueue.needsReviewTasks],
+        ['needsRevisionTasks', taskQueue.needsRevisionTasks],
+        ['next.taskId', taskQueue.nextTaskId],
+        ['next.role', taskQueue.nextRole],
+        ['next.phase', taskQueue.nextPhase],
+        ['next.reason', taskQueue.nextReason],
+        ['runbook route', textValue(routeStateText(route))],
+        ['progress route', textValue(routeStateText(progressRoute))],
+        ['events route', textValue(routeStateText(eventsRoute))],
+        ['next route', textValue(routeStateText(nextRoute))],
+        ['source policy', taskQueue.sourcePolicy]
+      ]} />
+
+      <Subsection title="task queue">
+        <ActiveGoalTaskQueueList taskQueue={taskQueue} />
+      </Subsection>
+
+      <p className="panel-note">{taskQueue.note}</p>
+    </DataPanel>
+  );
+}
+
 function NextActionCard({ nextAction, route }) {
   return (
     <DataPanel
@@ -317,6 +406,7 @@ function NextActionCard({ nextAction, route }) {
         ['workerEvidenceRef', nextAction.evidenceState.workerEvidenceRef],
         ['reviewEvidenceRef', nextAction.evidenceState.reviewEvidenceRef],
         ['mainVerificationRef', nextAction.evidenceState.mainVerificationRef],
+        ['afterCompletion.registrationCommand', nextAction.afterCompletion.registrationCommand],
         ['afterCompletion.registerWith', nextAction.afterCompletion.registerWith],
         ['afterCompletion.allowedEvents', nextAction.afterCompletion.allowedEvents],
         ['copyOnlyPrompt.available', nextAction.copyOnlyPrompt.available],
@@ -343,15 +433,19 @@ function NextActionCard({ nextAction, route }) {
   );
 }
 
-function PromptPreviewPanel({ promptPreview, route }) {
+function PromptPreviewDrawer({ promptPreview, route }) {
   return (
-    <DataPanel
-      id="prompt-preview-panel"
-      kicker="v19 active goal"
-      title="Prompt Preview"
-      state={promptPreviewStateText(promptPreview, route)}
-      route={route}
-    >
+    <aside className="data-panel prompt-preview-drawer" aria-labelledby="prompt-preview-drawer-title">
+      <header className="panel-header">
+        <div>
+          <p className="section-kicker">v19 active goal</p>
+          <h2 id="prompt-preview-drawer-title">Prompt Preview Drawer</h2>
+        </div>
+        <span className="panel-state">{promptPreviewStateText(promptPreview, route)}</span>
+      </header>
+      {route?.state === 'failed' ? (
+        <p className="error-copy">错误摘要：{route.error}。刷新页面后会重新读取只读 API。</p>
+      ) : null}
       {promptPreview.state === 'unavailable' && promptPreview.errorEnvelope.state === 'available' ? (
         <p className="error-copy">错误摘要：{promptPreview.errorEnvelope.code.text} / {promptPreview.errorEnvelope.message.text}</p>
       ) : null}
@@ -370,12 +464,12 @@ function PromptPreviewPanel({ promptPreview, route }) {
         ['modelInvocationAvailable', promptPreview.safety.modelInvocationAvailable]
       ]} />
 
-      <Subsection title="copy-only text">
+      <Subsection title="copy-only prompt drawer">
         <PromptPreviewList prompts={promptPreview.items} />
       </Subsection>
 
       <p className="panel-note">{promptPreview.note}</p>
-    </DataPanel>
+    </aside>
   );
 }
 
@@ -1220,6 +1314,49 @@ function GoalRunbookTaskList({ tasks }) {
   );
 }
 
+function ActiveGoalTaskQueueList({ taskQueue }) {
+  if (taskQueue.state === 'missing') {
+    return <EmptyBlock copy="active goal task queue 未暴露。" />;
+  }
+
+  if (taskQueue.items.length === 0) {
+    return <EmptyBlock copy="active goal task queue 为空。" />;
+  }
+
+  return (
+    <ol className="active-goal-task-queue-list">
+      {taskQueue.items.map((task, index) => (
+        <li key={`${task.taskId.text}-${index}`}>
+          <FieldList rows={[
+            ['position', task.position],
+            ['taskId', task.taskId],
+            ['title', task.title],
+            ['status', task.status],
+            ['statusSource', task.statusSource],
+            ['progressSource', task.progressSource],
+            ['eventBacked', task.eventBacked],
+            ['latestEventId', task.latestEventId],
+            ['latestEventType', task.latestEventType],
+            ['latestEventSequence', task.latestEventSequence],
+            ['next.role', task.nextRole],
+            ['next.phase', task.nextPhase],
+            ['workerEvidenceRef', task.workerEvidenceRef],
+            ['reviewEvidenceRef', task.reviewEvidenceRef],
+            ['reviewVerdict', task.reviewVerdict],
+            ['mainVerificationRef', task.mainVerificationRef],
+            ['expected worker', task.expectedWorker],
+            ['expected reviewer', task.expectedReviewer],
+            ['expected main verifier', task.expectedMainVerifier],
+            ['roleOrder', task.roleOrder],
+            ['acceptance', task.acceptance]
+          ]} />
+          <BlockerList blockers={task.blockers} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function GoalEventTimelineList({ timeline }) {
   if (timeline.state === 'missing') {
     return <EmptyBlock copy="events 未暴露。" />;
@@ -1248,6 +1385,34 @@ function GoalEventTimelineList({ timeline }) {
             ['hash chain status', event.hashChainStatus]
           ]} />
           <EvidenceRefList evidenceRefs={event.evidenceRefs} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ActiveGoalCommandInventoryList({ inventory }) {
+  if (inventory.state === 'missing') {
+    return <EmptyBlock copy="Active Goal command inventory 未暴露。" />;
+  }
+
+  if (inventory.items.length === 0) {
+    return <EmptyBlock copy="Active Goal command inventory 为空。" />;
+  }
+
+  return (
+    <ul className="command-text-list" aria-label="Active Goal command-backed sources">
+      {inventory.items.map((item) => (
+        <li key={item.id.text}>
+          <FieldList rows={[
+            ['command', item.label],
+            ['contractName', item.contractName],
+            ['routeId', item.routeId],
+            ['route', item.route],
+            ['routeState', item.routeState],
+            ['httpStatus', item.httpStatus]
+          ]} />
+          <code>{item.command.text}</code>
         </li>
       ))}
     </ul>
@@ -1314,6 +1479,7 @@ function CloseoutMissingList({ missing }) {
             ['kind', item.kind],
             ['taskId', item.taskId],
             ['expectedEvent', item.expectedEvent],
+            ['gate', item.gate],
             ['gateId', item.gateId],
             ['status', item.status]
           ]} />
@@ -1593,6 +1759,26 @@ function activeGoalStateText(value, route) {
   }
 
   return routeStateText(route);
+}
+
+function activeGoalTaskQueueStateText(taskQueue, route) {
+  if (taskQueue.state === 'empty') {
+    return '无任务';
+  }
+
+  return activeGoalStateText(taskQueue, route);
+}
+
+function activeGoalViewModelStateText(viewModel) {
+  if (viewModel.state === 'missing') {
+    return '未暴露';
+  }
+
+  if (viewModel.state === 'partial') {
+    return '部分可用';
+  }
+
+  return '只读';
 }
 
 function promptPreviewStateText(promptPreview, route) {

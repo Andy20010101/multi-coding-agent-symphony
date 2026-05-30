@@ -140,6 +140,7 @@ export function renderGoalCloseoutReportMarkdown(report) {
     `- Review evidence complete: ${yesNo(report.summary.reviewEvidenceComplete)}`,
     `- Main verification complete: ${yesNo(report.summary.mainVerificationComplete)}`,
     `- Release ready: ${yesNo(report.summary.releaseReady)}`,
+    `- Release ready source: ${report.summary.releaseReadySource ?? 'missing'}`,
     '',
     '## Missing Evidence'
   ];
@@ -181,18 +182,21 @@ function closeoutSummary({ runbook, ledger, taskMap }) {
   const workerEvidenceComplete = runbook.tasks.every((task) => hasWorkerEvidence(taskMap.get(task.taskId)));
   const reviewEvidenceComplete = runbook.tasks.every((task) => hasReviewApproval(taskMap.get(task.taskId)));
   const mainVerificationComplete = runbook.tasks.every((task) => hasMainVerification(taskMap.get(task.taskId)));
+  const releaseReadySource = explicitReleaseReadySource(ledger);
   const releaseReady = workerEvidenceComplete &&
     reviewEvidenceComplete &&
     mainVerificationComplete &&
     allReleaseGatesPassed(ledger.releaseGates) &&
-    ledger.summary?.releaseReady === true;
+    ledger.summary?.releaseReady === true &&
+    releaseReadySource !== null;
 
   return {
     totalTasks: runbook.tasks.length,
     workerEvidenceComplete,
     reviewEvidenceComplete,
     mainVerificationComplete,
-    releaseReady
+    releaseReady,
+    releaseReadySource: releaseReady ? releaseReadySource : null
   };
 }
 
@@ -247,7 +251,7 @@ function missingCloseoutItems({ runbook, ledger, taskMap }) {
     }
   }
 
-  if (missing.length === 0 && ledger.summary?.releaseReady !== true) {
+  if (missing.length === 0 && explicitReleaseReadySource(ledger) === null) {
     missing.push({
       kind: 'release-ready',
       taskId: null,
@@ -318,6 +322,14 @@ function expectedEvidenceEvent(runbookTask, key, fallback) {
 
 function allReleaseGatesPassed(releaseGates) {
   return GOAL_PROGRESS_RELEASE_GATE_IDS.every((gateId) => releaseGates?.[gateId] === 'passed');
+}
+
+function explicitReleaseReadySource(ledger) {
+  const source = ledger?.summary?.releaseReadySource;
+
+  return typeof source === 'string' && source.startsWith('goal-event-log.v1:')
+    ? source
+    : null;
 }
 
 function yesNo(value) {

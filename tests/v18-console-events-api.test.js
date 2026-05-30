@@ -8,9 +8,18 @@ import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 import { validateErrorEnvelopeContract } from '../src/symphony/error-envelope.js';
 import { validateGoalEventLogContract } from '../src/symphony/goal-event-contracts.js';
 import { appendGoalEvent } from '../src/symphony/goal-event-journal.js';
-import { V18_GOAL_EVENT_JOURNAL_GOAL_ID } from '../src/symphony/goal-progress-ledger.js';
+import {
+  V18_GOAL_EVENT_JOURNAL_GOAL_ID,
+  validateGoalProgressLedgerContract
+} from '../src/symphony/goal-progress-ledger.js';
+import {
+  buildGoalRunbookInitPlan,
+  confirmGoalRunbookInit
+} from '../src/symphony/goal-runbook-registry.js';
 
 const GOAL_ID = V18_GOAL_EVENT_JOURNAL_GOAL_ID;
+const MANAGED_GOAL_ID = 'v20-managed-events-route-test';
+const MANAGED_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v20-goal-workbench-active-goal-surface.v1.json';
 
 describe('v18 read-only goal events API routes', () => {
   it('serves latest and explicit goal event logs without writing state', async () => {
@@ -87,6 +96,71 @@ describe('v18 read-only goal events API routes', () => {
       assert.equal(eventLog.goalId, GOAL_ID);
       assert.equal(eventLog.log.eventCount, 0);
       assert.deepEqual(eventLog.events, []);
+    } finally {
+      await cleanupConsoleServer(context);
+    }
+  });
+
+  it('serves managed runbook progress and scoped event logs from explicit active goal routes', async () => {
+    const context = await startV18EventsConsoleServer();
+
+    try {
+      const plan = await buildGoalRunbookInitPlan({
+        stateDir: context.stateDir,
+        goalId: MANAGED_GOAL_ID,
+        fromJson: MANAGED_RUNBOOK_FIXTURE
+      });
+
+      await confirmGoalRunbookInit({
+        stateDir: context.stateDir,
+        goalId: MANAGED_GOAL_ID,
+        fromJson: MANAGED_RUNBOOK_FIXTURE,
+        planHash: plan.planHash
+      });
+
+      await appendGoalEvent({
+        stateDir: context.stateDir,
+        mode: 'confirm',
+        recordedAt: '2026-05-31T09:01:00.000Z',
+        event: buildManagedWorkerEvent({
+          eventId: 'evt_task2_worker_evidence',
+          taskId: 'task-2',
+          evidenceRef: 'docs/plans/v20-task-2-worker-evidence-2026-05-31.md',
+          statement: 'Task 2 worker evidence was recorded for the managed runbook route.'
+        })
+      });
+
+      const before = await snapshotDirectoryFiles(context.stateDir);
+      const progressResponse = await fetch(`${context.baseUrl}/api/goals/${MANAGED_GOAL_ID}/progress`);
+      const eventsResponse = await fetch(`${context.baseUrl}/api/goals/${MANAGED_GOAL_ID}/events`);
+
+      assert.equal(progressResponse.status, 200);
+      assert.equal(eventsResponse.status, 200);
+
+      const ledger = await progressResponse.json();
+      const eventLog = await eventsResponse.json();
+
+      assert.deepEqual(validateGoalProgressLedgerContract(ledger), {
+        ok: true,
+        errors: []
+      });
+      assert.deepEqual(validateGoalEventLogContract(eventLog), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(ledger.goalId, MANAGED_GOAL_ID);
+      assert.equal(eventLog.goalId, MANAGED_GOAL_ID);
+      assert.equal(eventLog.goalTitle, 'v20 Workbench Active Goal Surface');
+      assert.equal(eventLog.log.eventCount, 1);
+      assert.equal(eventLog.log.lastEventId, 'evt_task2_worker_evidence');
+      assert.equal(eventLog.events[0].sequence, 1);
+      assert.equal(eventLog.events[0].eventType, 'worker.evidence-recorded');
+      assert.equal(ledger.tasks.find((task) => task.taskId === 'task-2').status, 'in-progress');
+      assert.equal(ledger.tasks.find((task) => task.taskId === 'task-2').statusSource, 'goal-event-log.v1:evt_task2_worker_evidence');
+      assert.equal(ledger.tasks.find((task) => task.taskId === 'task-3').status, 'planned');
+      assert.equal(ledger.tasks.find((task) => task.taskId === 'task-3').statusSource, 'goal-runbook.v1');
+
+      assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), before);
     } finally {
       await cleanupConsoleServer(context);
     }
@@ -203,6 +277,34 @@ function buildWorkerEvent({
     branch: 'codex/v18-task7-read-only-events-api',
     commit: null,
     evidenceRefs,
+    statement
+  };
+}
+
+function buildManagedWorkerEvent({
+  eventId,
+  taskId,
+  evidenceRef,
+  statement
+}) {
+  return {
+    eventId,
+    goalId: MANAGED_GOAL_ID,
+    taskId,
+    eventType: 'worker.evidence-recorded',
+    phase: 'implement',
+    actor: {
+      role: 'worker',
+      id: 'codex-worker-task-2'
+    },
+    occurredAt: '2026-05-31T09:00:00.000Z',
+    branch: null,
+    commit: null,
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: evidenceRef,
+      label: 'Task 2 worker evidence'
+    }],
     statement
   };
 }

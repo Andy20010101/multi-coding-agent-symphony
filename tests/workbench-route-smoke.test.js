@@ -43,7 +43,8 @@ import {
 
 const ROUTE_SMOKE_RUN_ID = 'task9-route-smoke-run';
 const FIXED_TIME = '2026-05-27T00:00:00.000Z';
-const V19_GOAL_ID = 'v19-goal-runbook-next-action';
+const V20_GOAL_ID = 'v20-goal-workbench-active-goal-surface';
+const V20_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v20-goal-workbench-active-goal-surface.v1.json';
 
 describe('v16 Workbench route smoke and server parity', () => {
   it('serves the Workbench browser entry, static assets, and Task 8 fallback/404 behavior', async () => {
@@ -79,13 +80,23 @@ describe('v16 Workbench route smoke and server parity', () => {
       assert.match(jsResponse.headers.get('content-type') ?? '', /javascript/iu);
       assert.equal(jsResponse.headers.get('cache-control'), 'no-store');
       assert.equal(jsResponse.headers.get('x-content-type-options'), 'nosniff');
-      assert.equal((await jsResponse.text()).length > 1000, true);
+      const jsText = await jsResponse.text();
+
+      assert.equal(jsText.length > 1000, true);
+      assert.match(jsText, /primary-active-goal-grid/u);
+      assert.match(jsText, /v20 primary workflow/u);
+      assert.match(jsText, /Active Goal Runbook/u);
+      assert.match(jsText, /Active Goal Task Queue/u);
+      assert.equal(jsText.indexOf('primary-active-goal-grid') < jsText.indexOf('panel-grid'), true);
 
       assert.equal(cssResponse.status, 200);
       assert.match(cssResponse.headers.get('content-type') ?? '', /^text\/css; charset=utf-8/iu);
       assert.equal(cssResponse.headers.get('cache-control'), 'no-store');
       assert.equal(cssResponse.headers.get('x-content-type-options'), 'nosniff');
-      assert.equal((await cssResponse.text()).length > 100, true);
+      const cssText = await cssResponse.text();
+
+      assert.equal(cssText.length > 100, true);
+      assert.match(cssText, /primary-active-goal-grid/u);
 
       assert.equal(fallbackResponse.status, 200);
       assert.match(await fallbackResponse.text(), /<div id="root"><\/div>/u);
@@ -207,8 +218,10 @@ describe('v16 Workbench route smoke and server parity', () => {
               ok: true,
               errors: []
             });
-            assert.equal(payload.summary.totalTasks, 10);
+            assert.equal(payload.goalId, V20_GOAL_ID);
+            assert.equal(payload.summary.totalTasks, 5);
             assert.equal(payload.tasks[0].status, 'planned');
+            assert.equal(payload.tasks[0].statusSource, 'goal-runbook.v1');
           }
         },
         {
@@ -220,6 +233,19 @@ describe('v16 Workbench route smoke and server parity', () => {
               errors: []
             });
             assert.equal(payload.goalId, DEFAULT_GOAL_PROGRESS_GOAL_ID);
+          }
+        },
+        {
+          path: `/api/goals/${V20_GOAL_ID}/progress`,
+          contractName: 'goal-progress-ledger.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalProgressLedgerContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V20_GOAL_ID);
+            assert.equal(payload.summary.totalTasks, 5);
+            assert.equal(payload.tasks[0].statusSource, 'goal-runbook.v1');
           }
         },
         {
@@ -247,6 +273,19 @@ describe('v16 Workbench route smoke and server parity', () => {
           }
         },
         {
+          path: `/api/goals/${V20_GOAL_ID}/events`,
+          contractName: 'goal-event-log.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalEventLogContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V20_GOAL_ID);
+            assert.equal(payload.log.eventCount, 0);
+            assert.deepEqual(payload.events, []);
+          }
+        },
+        {
           path: '/api/goals/latest/runbook',
           contractName: 'goal-runbook.v1',
           assertPayload(payload) {
@@ -254,19 +293,20 @@ describe('v16 Workbench route smoke and server parity', () => {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
+            assert.equal(payload.tasks.length, 5);
             assert.equal(payload.tasks[0].taskId, 'task-1');
           }
         },
         {
-          path: `/api/goals/${V19_GOAL_ID}/runbook`,
+          path: `/api/goals/${V20_GOAL_ID}/runbook`,
           contractName: 'goal-runbook.v1',
           assertPayload(payload) {
             assert.deepEqual(validateGoalRunbookContract(payload), {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
           }
         },
         {
@@ -277,19 +317,19 @@ describe('v16 Workbench route smoke and server parity', () => {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
             assert.equal(payload.next.role, 'worker');
           }
         },
         {
-          path: `/api/goals/${V19_GOAL_ID}/next`,
+          path: `/api/goals/${V20_GOAL_ID}/next`,
           contractName: 'goal-next-action.v1',
           assertPayload(payload) {
             assert.deepEqual(validateGoalNextActionContract(payload), {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
           }
         },
         {
@@ -300,19 +340,19 @@ describe('v16 Workbench route smoke and server parity', () => {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
             assert.equal(payload.prompts[0].copyOnly, true);
           }
         },
         {
-          path: `/api/goals/${V19_GOAL_ID}/prompt`,
+          path: `/api/goals/${V20_GOAL_ID}/prompt`,
           contractName: 'goal-prompt-pack.v1',
           assertPayload(payload) {
             assert.deepEqual(validateGoalPromptPackContract(payload), {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
           }
         },
         {
@@ -323,19 +363,19 @@ describe('v16 Workbench route smoke and server parity', () => {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
             assert.equal(payload.summary.releaseReady, false);
           }
         },
         {
-          path: `/api/goals/${V19_GOAL_ID}/closeout`,
+          path: `/api/goals/${V20_GOAL_ID}/closeout`,
           contractName: 'goal-closeout-report.v1',
           assertPayload(payload) {
             assert.deepEqual(validateGoalCloseoutReportContract(payload), {
               ok: true,
               errors: []
             });
-            assert.equal(payload.goalId, V19_GOAL_ID);
+            assert.equal(payload.goalId, V20_GOAL_ID);
           }
         },
         {
@@ -452,16 +492,18 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/goals',
         '/api/goals/latest/progress',
         `/api/goals/${DEFAULT_GOAL_PROGRESS_GOAL_ID}/progress`,
+        `/api/goals/${V20_GOAL_ID}/progress`,
         '/api/goals/latest/events',
         `/api/goals/${V18_GOAL_EVENT_JOURNAL_GOAL_ID}/events`,
+        `/api/goals/${V20_GOAL_ID}/events`,
         '/api/goals/latest/runbook',
-        `/api/goals/${V19_GOAL_ID}/runbook`,
+        `/api/goals/${V20_GOAL_ID}/runbook`,
         '/api/goals/latest/next',
-        `/api/goals/${V19_GOAL_ID}/next`,
+        `/api/goals/${V20_GOAL_ID}/next`,
         '/api/goals/latest/prompt',
-        `/api/goals/${V19_GOAL_ID}/prompt`,
+        `/api/goals/${V20_GOAL_ID}/prompt`,
         '/api/goals/latest/closeout',
-        `/api/goals/${V19_GOAL_ID}/closeout`,
+        `/api/goals/${V20_GOAL_ID}/closeout`,
         '/api/capabilities',
         '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
@@ -872,14 +914,14 @@ async function writeRouteSmokeRunFixture({ root, stateDir }) {
 
   const initPlan = await buildGoalRunbookInitPlan({
     stateDir,
-    goalId: V19_GOAL_ID,
-    fromJson: 'fixtures/contracts/goal-runbook.valid.v1.json'
+    goalId: V20_GOAL_ID,
+    fromJson: V20_RUNBOOK_FIXTURE
   });
 
   await confirmGoalRunbookInit({
     stateDir,
-    goalId: V19_GOAL_ID,
-    fromJson: 'fixtures/contracts/goal-runbook.valid.v1.json',
+    goalId: V20_GOAL_ID,
+    fromJson: V20_RUNBOOK_FIXTURE,
     planHash: initPlan.planHash
   });
 }

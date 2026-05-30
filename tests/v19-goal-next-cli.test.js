@@ -15,6 +15,17 @@ const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.valid.v1.json';
 const FIXTURE_GOAL_ID = 'v19-fixture';
 const MANAGED_GOAL_ID = 'v19-cli-managed';
 const GENERATED_AT = '2026-05-29T10:00:00.000Z';
+const RELEASE_GATES = Object.freeze([
+  'release.pnpm-check',
+  'release.pnpm-test',
+  'release.workbench-build',
+  'release.mutation-gate',
+  'release.audit-high',
+  'release.diff-check',
+  'release.mcas-doctor',
+  'release.docs-updated',
+  'release.tag-evidence'
+]);
 
 describe('v19 goal next, goal closeout, and symphony next CLI', () => {
   it('prints goal-next-action.v1 JSON for the controlled fixture without requiring registry writes', async () => {
@@ -117,6 +128,7 @@ describe('v19 goal next, goal closeout, and symphony next CLI', () => {
       assert.equal(closeout.summary.reviewEvidenceComplete, false);
       assert.equal(closeout.summary.mainVerificationComplete, false);
       assert.equal(closeout.summary.releaseReady, false);
+      assert.equal(closeout.summary.releaseReadySource, null);
       assert.equal(closeout.releaseGates.tagEvidence, 'missing');
       assert.equal(closeout.missing.some((item) => item.kind === 'worker-evidence' && item.taskId === 'task-1'), true);
       assert.equal(closeout.missing.some((item) => item.kind === 'release-gate' && item.gateId === 'pnpmCheck'), true);
@@ -156,7 +168,84 @@ describe('v19 goal next, goal closeout, and symphony next CLI', () => {
       assert.equal(closeout.releaseGates.pnpmCheck, 'passed');
       assert.equal(closeout.releaseGates.pnpmTest, 'passed');
       assert.equal(closeout.summary.releaseReady, false);
+      assert.equal(closeout.summary.releaseReadySource, null);
       assert.equal(closeout.missing.some((item) => item.kind === 'release-gate' && item.gateId === 'tagEvidence'), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps closeout release readiness false until release.ready-declared evidence exists', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-closeout-ready-source-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook({ stateDir, goalId: MANAGED_GOAL_ID });
+      for (const taskId of ['task-1', 'task-2']) {
+        await appendTaskLifecycle({ stateDir, goalId: MANAGED_GOAL_ID, taskId });
+      }
+      for (const gateName of RELEASE_GATES) {
+        await appendReleaseGate({
+          stateDir,
+          goalId: MANAGED_GOAL_ID,
+          eventId: `evt_${gateName.replaceAll('.', '_').replaceAll('-', '_')}_passed`,
+          gateName
+        });
+      }
+
+      const gatesOnlyOutput = createOutput();
+      const gatesOnlyExitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'closeout',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          MANAGED_GOAL_ID,
+          '--json'
+        ],
+        stdout: gatesOnlyOutput.stdout,
+        stderr: gatesOnlyOutput.stderr
+      });
+      const gatesOnlyCloseout = JSON.parse(gatesOnlyOutput.stdoutText());
+
+      assert.equal(gatesOnlyExitCode, 0);
+      assert.equal(gatesOnlyOutput.stderrText(), '');
+      assert.equal(gatesOnlyCloseout.summary.workerEvidenceComplete, true);
+      assert.equal(gatesOnlyCloseout.summary.reviewEvidenceComplete, true);
+      assert.equal(gatesOnlyCloseout.summary.mainVerificationComplete, true);
+      assert.equal(Object.values(gatesOnlyCloseout.releaseGates).every((status) => status === 'passed'), true);
+      assert.equal(gatesOnlyCloseout.summary.releaseReady, false);
+      assert.equal(gatesOnlyCloseout.summary.releaseReadySource, null);
+      assert.equal(gatesOnlyCloseout.missing.some((item) => item.kind === 'release-ready' && item.expectedEvent === 'release.ready-declared'), true);
+
+      await appendReleaseReady({
+        stateDir,
+        goalId: MANAGED_GOAL_ID,
+        eventId: 'evt_release_ready_declared_for_closeout'
+      });
+
+      const readyOutput = createOutput();
+      const readyExitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'closeout',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          MANAGED_GOAL_ID,
+          '--json'
+        ],
+        stdout: readyOutput.stdout,
+        stderr: readyOutput.stderr
+      });
+      const readyCloseout = JSON.parse(readyOutput.stdoutText());
+
+      assert.equal(readyExitCode, 0);
+      assert.equal(readyOutput.stderrText(), '');
+      assert.equal(readyCloseout.summary.releaseReady, true);
+      assert.equal(readyCloseout.summary.releaseReadySource, 'goal-event-log.v1:evt_release_ready_declared_for_closeout');
+      assert.equal(readyCloseout.missing.length, 0);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -259,6 +348,70 @@ async function registerRunbook({ stateDir, goalId }) {
   });
 }
 
+async function appendTaskLifecycle({ stateDir, goalId, taskId }) {
+  for (const event of [
+    {
+      eventId: `evt_${taskId}_worker_evidence`,
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: `codex-worker-${taskId}`
+      },
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: `docs/plans/v19-${taskId}-worker-evidence-2026-05-29.md`,
+        label: `${taskId} worker evidence`
+      }],
+      statement: `${taskId} worker evidence recorded.`
+    },
+    {
+      eventId: `evt_${taskId}_reviewer_approved`,
+      eventType: 'reviewer.approved',
+      phase: 'review',
+      actor: {
+        role: 'reviewer',
+        id: `codex-reviewer-${taskId}`
+      },
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: `docs/plans/v19-${taskId}-review-evidence-2026-05-29.md`,
+        label: `${taskId} review evidence`
+      }],
+      statement: `${taskId} reviewer approved.`
+    },
+    {
+      eventId: `evt_${taskId}_main_verified`,
+      eventType: 'main.verification-passed',
+      phase: 'main-verification',
+      actor: {
+        role: 'main-verifier',
+        id: `codex-main-verifier-${taskId}`
+      },
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: `docs/plans/v19-${taskId}-main-verification-evidence-2026-05-29.md`,
+        label: `${taskId} main verification evidence`
+      }],
+      statement: `${taskId} main verification passed.`
+    }
+  ]) {
+    await appendGoalEvent({
+      stateDir,
+      mode: 'confirm',
+      recordedAt: GENERATED_AT,
+      event: {
+        goalId,
+        taskId,
+        occurredAt: GENERATED_AT,
+        branch: null,
+        commit: null,
+        ...event
+      }
+    });
+  }
+}
+
 async function appendReleaseGate({ stateDir, goalId, eventId, gateName }) {
   await appendGoalEvent({
     stateDir,
@@ -286,6 +439,38 @@ async function appendReleaseGate({ stateDir, goalId, eventId, gateName }) {
       gate: {
         id: gateName,
         status: 'passed'
+      }
+    }
+  });
+}
+
+async function appendReleaseReady({ stateDir, goalId, eventId }) {
+  await appendGoalEvent({
+    stateDir,
+    mode: 'confirm',
+    recordedAt: GENERATED_AT,
+    event: {
+      eventId,
+      goalId,
+      taskId: 'release',
+      eventType: 'release.ready-declared',
+      phase: 'release-prep',
+      actor: {
+        role: 'release-manager',
+        id: 'codex-release-manager'
+      },
+      occurredAt: GENERATED_AT,
+      branch: null,
+      commit: null,
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/v19-closeout-evidence-2026-05-29.md',
+        label: 'Release ready evidence'
+      }],
+      statement: 'Release readiness explicitly declared.',
+      gate: {
+        id: 'release.ready',
+        status: 'declared'
       }
     }
   });

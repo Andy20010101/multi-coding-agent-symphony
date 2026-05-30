@@ -7,12 +7,18 @@ import assert from 'node:assert/strict';
 import { runSymphonyCli } from '../scripts/symphony.js';
 import { appendGoalEvent } from '../src/symphony/goal-event-journal.js';
 import {
+  buildGoalRunbookInitPlan,
+  confirmGoalRunbookInit
+} from '../src/symphony/goal-runbook-registry.js';
+import {
   V19_GOAL_RUNBOOK_GOAL_ID,
   buildGoalProgressLedger,
   validateGoalProgressLedgerContract
 } from '../src/symphony/goal-progress-ledger.js';
 
 const GENERATED_AT = '2026-05-29T10:00:00.000Z';
+const MANAGED_GOAL_ID = 'v20-managed-progress-test';
+const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.valid.v1.json';
 
 describe('v19 goal progress template bootstrap', () => {
   it('resolves v19 goal-status JSON from an existing planning event journal', async () => {
@@ -109,6 +115,53 @@ describe('v19 goal progress template bootstrap', () => {
       assert.equal(exitCode, 64);
       assert.equal(output.stdoutText(), '');
       assert.match(output.stderrText(), /goal not found/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves goal-status from the latest managed runbook pointer', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-managed-goal-status-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      const plan = await buildGoalRunbookInitPlan({
+        stateDir,
+        goalId: MANAGED_GOAL_ID,
+        fromJson: RUNBOOK_FIXTURE
+      });
+      await confirmGoalRunbookInit({
+        stateDir,
+        goalId: MANAGED_GOAL_ID,
+        fromJson: RUNBOOK_FIXTURE,
+        planHash: plan.planHash
+      });
+
+      const ledger = await buildGoalProgressLedger({
+        stateDir,
+        goalId: 'latest',
+        generatedAt: GENERATED_AT
+      });
+
+      assert.deepEqual(validateGoalProgressLedgerContract(ledger), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(ledger.goalId, MANAGED_GOAL_ID);
+      assert.equal(ledger.contractName, 'goal-progress-ledger.v1');
+      assert.equal(ledger.summary.totalTasks, 2);
+      assert.equal(ledger.tasks[0].statusSource, 'goal-runbook.v1');
+
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: ['goal-status', '--state-dir', stateDir, '--goal', MANAGED_GOAL_ID, '--json'],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.equal(JSON.parse(output.stdoutText()).goalId, MANAGED_GOAL_ID);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
