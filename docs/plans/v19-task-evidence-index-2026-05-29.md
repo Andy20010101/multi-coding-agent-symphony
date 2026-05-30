@@ -19,11 +19,11 @@
 - `summary.needsRevisionTasks: 0`
 - `summary.releaseReady: false`
 - `summary.releaseReadySource: null`
-- task-8 `status: self-checked`, `statusSource: goal-event-log.v1:evt_fb5abf09e074023d`
+- task-8 `status: self-checked`, `statusSource: goal-event-log.v1:evt_76a7b640269afa0e`
 - release gates `pnpmCheck`、`pnpmTest`、`workbenchBuild`、`mutationGate`、`auditHigh`、`diffCheck`、`mcasDoctor`、`docsUpdated` 均为 `passed`
 - release gate `tagEvidence` 为 `unknown`
 
-`task-0` 是 goal-status template bootstrap 留下的历史 event，不是 v19 runbook 的 task-1 到 task-8 范围。当前本地 `.symphony` 没有 managed runbook state；`symphony goal next --goal v19-goal-runbook-next-action --json` 返回 `status: missing-runbook`，`symphony goal closeout --goal v19-goal-runbook-next-action --json` 退出 64。
+`task-0` 是 goal-status template bootstrap 留下的历史 event，不是 v19 runbook 的 task-1 到 task-8 范围。当前本地 managed runbook state 已通过 `fixtures/contracts/goal-runbook.v19-goal-runbook-next-action.v1.json` 注册；`.symphony/` 按 `.gitignore` 不入库。`symphony goal closeout --goal v19-goal-runbook-next-action --json` 现在退出 0，并报告 task-8 reviewer approval、task-8 main verification 和 tag evidence 缺失。
 
 ## planning and bootstrap evidence
 
@@ -32,6 +32,7 @@
 | planning | `goal-event-log.v1:evt_79a5cb787d2dc1b7`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-goal-runbook-next-action-plan-2026-05-29.md`. |
 | task-0 bootstrap worker | `goal-event-log.v1:evt_079f9acb523131ac`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task0-register-goal-template-evidence-2026-05-29.md`. |
 | task-0 bootstrap main verification | `goal-event-log.v1:evt_aaf4e77d186b7730`, `main.verification-passed`, evidence ref `docs/plans/v19-task0-main-verification-evidence-2026-05-29.md`. |
+| managed v19 runbook fixture | `fixtures/contracts/goal-runbook.v19-goal-runbook-next-action.v1.json`; validated with `assertGoalRunbookContract`; `symphony goal init` plan hash `sha256:5ae9b6abca08c0045993fd2eecb837174e5656fbdc720b72c5443a01e13b8ffb`. |
 
 ## task evidence
 
@@ -44,7 +45,7 @@
 | task-5 | `goal-event-log.v1:evt_43167c831152bdab`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task5-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_4a887152a37eff6c`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task5-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_ea5fbc92432fe9d9`, `main.verification-passed`, evidence ref `docs/plans/v19-task5-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
 | task-6 | `goal-event-log.v1:evt_f9205beab08c9e56`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task6-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_8be3fd362f139622`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task6-review-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_579bba01c789b474`, `main.verification-passed`, evidence ref `docs/plans/v19-task6-main-verification-evidence-2026-05-29.md`. | No v19 release gate event is registered for this task. |
 | task-7 | `goal-event-log.v1:evt_f7f1d97c224c6cdb`, `worker.evidence-recorded`, evidence ref `docs/plans/v19-task7-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_fbdf653bb20a15d4`, `reviewer.approved`, verdict `APPROVED`, evidence ref `docs/plans/v19-task7-review-evidence-2026-05-29.md`. | Latest status source `goal-event-log.v1:evt_d791742183fe109e`, `main.verification-passed`, evidence ref `docs/plans/v19-task7-main-verification-evidence-2026-05-29.md`; earlier main verification event `evt_82fba2d7f67e16dd` has the same evidence ref. | No v19 release gate event is registered for this task. |
-| task-8 | Initial worker events `evt_03f1bc6b033b537d` and `evt_eac6ac2b87e494b1` referenced `docs/plans/v19-final-closure-evidence-2026-05-29.md`. Current worker revision self-check is `goal-event-log.v1:evt_fb5abf09e074023d`, `worker.self-check-passed`, evidence ref `docs/plans/v19-task8-worker-evidence-2026-05-29.md`. | `goal-event-log.v1:evt_9d7a05bdf140269b`, `reviewer.needs-revision`, verdict `NEEDS_REVISION`, evidence ref `docs/plans/v19-task8-review-evidence-2026-05-29.md`. A new reviewer approval after the worker revision is not registered yet. | No `main.verification-passed` event is registered yet. | Local command gates passed and release gate events are registered for check, test, Workbench build, mutation, audit high, diff check, mcas doctor, and docs updated; no `release.ready-declared` or tag evidence event is registered yet. |
+| task-8 | Initial worker events `evt_03f1bc6b033b537d` and `evt_eac6ac2b87e494b1` referenced `docs/plans/v19-final-closure-evidence-2026-05-29.md`. Later worker self-checks are `goal-event-log.v1:evt_fb5abf09e074023d`, sequence 37, and `goal-event-log.v1:evt_76a7b640269afa0e`, sequence 40; both reference `docs/plans/v19-task8-worker-evidence-2026-05-29.md`. | Latest review event is `goal-event-log.v1:evt_6fe6116464f73111`, sequence 39, `reviewer.needs-revision`, verdict `NEEDS_REVISION`, evidence ref `docs/plans/v19-task8-review-evidence-2026-05-29.md`. A new reviewer approval after sequence 40 is not registered yet. | No `main.verification-passed` event is registered yet. | Local command gates passed and release gate events are registered for check, test, Workbench build, mutation, audit high, diff check, mcas doctor, and docs updated; no `release.ready-declared` or tag evidence event is registered yet. |
 
 ## release status
 
@@ -53,4 +54,4 @@
 - No `release.gate-passed` event is present for `release.tag-evidence`, and no `release.ready-declared` event is present.
 - The required release gate commands were refreshed on branch `v19-task8-release-verification`; results are recorded in `docs/plans/v19-release-evidence-2026-05-29.md`.
 - Tag evidence is not present. `git tag --list v19` returned no output, and this index did not create a tag.
-- `release.ready` declaration is not justified while managed runbook state, task-8 post-revision reviewer approval, task-8 main verification, release-ready declaration, and tag evidence remain missing.
+- `release.ready` declaration is not justified while task-8 post-revision reviewer approval, task-8 main verification, release-ready declaration, and tag evidence remain missing.

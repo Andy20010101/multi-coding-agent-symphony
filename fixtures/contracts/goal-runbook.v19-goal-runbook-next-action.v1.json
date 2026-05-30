@@ -1,0 +1,259 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v19-goal-runbook-next-action",
+  "goalTitle": "v19 Goal Runbook + Next Action Control Center",
+  "baseline": {
+    "tag": "v18",
+    "commit": null,
+    "evidenceRef": "docs/plans/v18-tag-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Contracts, fixtures, validators",
+      "branch": "v19-task1-goal-runbook-contracts",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "goal-runbook.v1, goal-next-action.v1, goal-prompt-pack.v1, and goal-closeout-report.v1 contracts validate known-good fixtures.",
+        "Invalid fixtures reject unsafe refs, duplicate task ids, empty acceptance, unknown roles, unknown event types, and prompt registration drift."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Managed goal runbook registry and symphony goal init",
+      "branch": "v19-task2-goal-runbook-registry",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Goal runbooks are stored in the managed registry only after dry-run and hash confirmation.",
+        "symphony goal init validates goal-runbook.v1 before writing managed state."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Next-action resolver",
+      "branch": "v19-task3-next-action-resolver",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "goal-next-action.v1 resolves worker, reviewer, main-verifier, and release-manager next actions from explicit runbook and event evidence.",
+        "The resolver does not infer progress from branch names, file names, task titles, command text, or path text."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Goal prompt pack generator",
+      "branch": "v19-task4-goal-prompt-pack-generator",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "symphony goal prompt renders copy-only prompts for worker, reviewer, main-verifier, and release-manager roles.",
+        "Prompt generation does not execute prompts, invoke models, register events, or replace reviewer approval."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm symphony goal prompt --goal v19-fixture --task task-1 --role worker --markdown",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "CLI integration for goal next, goal prompt, goal closeout, and symphony next",
+      "branch": "v19-task5-goal-cli-integration",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "symphony goal next, symphony goal closeout, and symphony next return stable v19 contract output.",
+        "CLI output remains copy-only and does not execute generated prompts or release gates."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm symphony goal next --goal v19-fixture --json",
+        "pnpm symphony goal closeout --goal v19-fixture --json",
+        "pnpm symphony next --json",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-6",
+      "title": "Workbench Active Goal Control Center",
+      "branch": "v19-task6-workbench-active-goal-control-center",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench displays active goal runbook, next action, prompt preview, and closeout gaps through read-only GET routes.",
+        "Workbench does not execute prompts, expose confirm buttons, invoke shell/model actions, download artifacts, or infer evidence from prompt text."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-7",
+      "title": "Docs, operator guide, and contract index",
+      "branch": "v19-task7-docs-operator-guide-contract-index",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "README, product contracts, Workbench operator guide, task evidence index, and release evidence describe v19 without claiming a release tag.",
+        "Docs keep release-ready tied to explicit event state and do not treat local command passes as release readiness."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ]
+    },
+    {
+      "taskId": "task-8",
+      "title": "Release verification, final closure, and tag evidence",
+      "branch": "v19-task8-release-verification-closure-tag-evidence",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Release gates are run and recorded with exact command results.",
+        "Final closure records task evidence, release gate state, tag evidence state, and remaining blockers without fabricating tag or GitHub release evidence."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "pnpm test:mutation:gate",
+        "pnpm audit --audit-level high",
+        "git diff --check",
+        "pnpm mcas doctor"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}
