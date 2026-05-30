@@ -482,6 +482,33 @@ h3 {
   color: #43535a;
 }
 
+.evidence-ref-helper {
+  display: grid;
+  gap: 8px;
+}
+
+.evidence-ref-choice-select,
+.evidence-ref-error-list {
+  margin: 0;
+}
+
+.evidence-ref-error-list {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-ref-error-list li {
+  border: 1px solid #e7b4a6;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fff1ee;
+  color: #8b2f1d;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .goal-event-preview-actions,
 .goal-event-confirm-actions {
   display: grid;

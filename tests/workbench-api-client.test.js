@@ -720,6 +720,81 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(mainForms.safety.browserExecutionAvailable.value, false);
   });
 
+  it('projects recent controlled evidence refs for the event form helper without status inference', () => {
+    const runbook = createV19RunbookPayload();
+    const nextAction = createV19NextActionPayload();
+    const ledger = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+
+    nextAction.afterCompletion = {
+      registerWith: 'symphony goal update',
+      allowedEvents: ['worker.evidence-recorded']
+    };
+    ledger.tasks[0] = {
+      ...ledger.tasks[0],
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      reviewEvidenceRef: 'docs/plans/v19-task6-review-evidence-2026-05-29.md'
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_artifact_worker',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      occurredAt: '2026-05-29T10:00:00.000Z',
+      recordedAt: '2026-05-29T10:00:00.000Z',
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:run-1:evidence',
+        label: 'Managed artifact evidence'
+      }],
+      previousEventHash: null,
+      eventHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    }];
+
+    const model = projectWorkbenchContracts({
+      latestRun: createWorkbenchResult('latestRun', {
+        contractName: 'symphony.console-run',
+        contractVersion: '1',
+        run: {
+          runId: 'run-1',
+          status: 'passed',
+          verifierStatus: 'passed',
+          modelInvocation: false,
+          artifactRefs: [{
+            kind: 'evidence',
+            path: '/tmp/example/evidence.json',
+            ref: 'artifact:run-1:evidence'
+          }]
+        }
+      }),
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog)
+    });
+
+    const helper = model.activeGoal.nextAction.eventForms.evidenceRefHelper;
+    const workerEvidenceForm = model.activeGoal.nextAction.eventForms.recommendedForms.items[0];
+    const helperRefs = helper.recentRefs.items.map((item) => item.ref.value);
+
+    assert.equal(helper.helperName.value, 'EvidenceRefHelper');
+    assert.equal(helper.acceptedPatterns.value.includes('docs/plans/<file>'), true);
+    assert.equal(helper.acceptedPatterns.value.includes('artifact-ref:<managed-artifact-ref>'), true);
+    assert.equal(helperRefs.includes('artifact-ref:artifact:run-1:evidence'), true);
+    assert.equal(helperRefs.includes('docs/plans/v19-task6-worker-evidence-2026-05-29.md'), true);
+    assert.equal(helperRefs.includes('docs/plans/v18-tag-release-evidence-2026-05-29.md'), true);
+    assert.equal(workerEvidenceForm.evidenceRefHelper.recentRefs.items[0].ref.value, 'artifact-ref:artifact:run-1:evidence');
+    assert.equal(helper.safety.readsEvidenceBodies.value, false);
+    assert.equal(helper.safety.infersStatusFromFilename.value, false);
+    assert.equal(model.activeGoal.nextAction.eventForms.policy.approvalReadinessSource.value, 'explicit goal events only');
+  });
+
   it('projects the Closeout Gaps panel only from goal-closeout-report.v1', () => {
     const closeout = createV19CloseoutPayload();
     const ledger = createV19ProgressPayload();

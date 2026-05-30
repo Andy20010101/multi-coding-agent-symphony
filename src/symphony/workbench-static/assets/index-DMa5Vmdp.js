@@ -9904,6 +9904,16 @@ var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
 var ACTIVE_GOAL_VIEW_MODEL_NAME = "ActiveGoalViewModel";
 var GOAL_EVENT_FORM_MODEL_NAME = "GoalEventRegistrationFormModel";
+var EVIDENCE_REF_HELPER_NAME = "EvidenceRefHelper";
+var EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
+var EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
+	"docs/plans/<file>",
+	"repo-doc:docs/plans/<file>",
+	"artifact-ref:<managed-artifact-ref>",
+	"artifact:<run-id>:<artifact-kind>",
+	"artifacts/<managed-ref>",
+	"managed-artifact:<managed-ref>"
+]);
 var GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
 	Object.freeze({
 		eventType: "worker.started",
@@ -10474,7 +10484,8 @@ function projectWorkbenchContracts(results) {
 			activeLedgerResult: results.activeGoalProgress,
 			activeLedger: activeGoalProgressData,
 			activeEventLogResult: results.activeGoalEvents,
-			activeEventLog: activeGoalEventsData
+			activeEventLog: activeGoalEventsData,
+			latestRun
 		}),
 		capabilities: projectCapabilities(capabilitiesData),
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
@@ -10712,7 +10723,7 @@ function projectGoals(goals) {
 		}))
 	};
 }
-function projectActiveGoalControl({ statusResult, status, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog }) {
+function projectActiveGoalControl({ statusResult, status, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog, latestRun }) {
 	const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
 	const eventLog = activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null;
 	const goalStatusLedger = ledger ?? (status?.goalId === runbook?.goalId ? status : null);
@@ -10745,7 +10756,11 @@ function projectActiveGoalControl({ statusResult, status, runbookResult, runbook
 		}),
 		nextAction: projectGoalNextAction({
 			result: nextActionResult,
-			nextAction
+			nextAction,
+			runbook,
+			ledger: goalStatusLedger,
+			eventLog,
+			latestRun
 		}),
 		promptPreview: projectGoalPromptPreview({
 			result: promptPackResult,
@@ -10979,7 +10994,7 @@ function projectGoalRunbook({ result, runbook, ledger, eventLog, ledgerResult, e
 		note: "Task status、statusSource 和 evidence refs 来自 active goal progress/events routes；Workbench 不根据 prompt、branch、文件名或命令文本推断完成状态。"
 	};
 }
-function projectGoalNextAction({ result, nextAction }) {
+function projectGoalNextAction({ result, nextAction, runbook, ledger, eventLog, latestRun }) {
 	if (result?.ok !== true) return {
 		state: "unavailable",
 		contractName: valueState(GOAL_NEXT_ACTION_CONTRACT_NAME),
@@ -11009,7 +11024,12 @@ function projectGoalNextAction({ result, nextAction }) {
 		copyOnlyPrompt: projectGoalNextCopyOnlyPrompt(nextAction?.copyOnlyPrompt),
 		copyOnlyCommands: projectTextItems(nextAction?.copyOnlyCommands),
 		afterCompletion: projectAfterCompletion(nextAction?.afterCompletion),
-		eventForms: projectGoalEventFormModel(nextAction),
+		eventForms: projectGoalEventFormModel(nextAction, {
+			runbook,
+			ledger,
+			eventLog,
+			latestRun
+		}),
 		safety: projectGoalControlSafety(nextAction?.safety),
 		errorEnvelope: projectErrorEnvelope(null),
 		note: "Next Action Card 使用 resolver 输出的 task、role、phase、reason 和 afterCompletion；浏览器端不运行命令、不登记事件。"
@@ -11143,18 +11163,22 @@ function projectAfterCompletion(afterCompletion) {
 		allowedEvents: arrayTextState(afterCompletion?.allowedEvents)
 	};
 }
-function projectGoalEventFormModel(nextAction) {
+function projectGoalEventFormModel(nextAction, evidenceRefContext = {}) {
 	const allowedEvents = Array.isArray(nextAction?.afterCompletion?.allowedEvents) ? nextAction.afterCompletion.allowedEvents.filter((eventType) => isNonEmptyString(eventType)) : [];
 	const supportedDefinitions = GOAL_EVENT_FORM_DEFINITIONS;
-	const recommendedForms = allowedEvents.map((eventType) => supportedDefinitions.find((definition) => definition.eventType === eventType)).filter((definition) => definition !== void 0).map((definition) => projectGoalEventFormSpec({
+	const recommendedDefinitions = allowedEvents.map((eventType) => supportedDefinitions.find((definition) => definition.eventType === eventType)).filter((definition) => definition !== void 0);
+	const evidenceRefHelper = projectEvidenceRefHelper(evidenceRefContext);
+	const recommendedForms = recommendedDefinitions.map((definition) => projectGoalEventFormSpec({
 		definition,
 		nextAction,
-		recommended: true
+		recommended: true,
+		evidenceRefHelper
 	}));
 	const supportedForms = supportedDefinitions.map((definition) => projectGoalEventFormSpec({
 		definition,
 		nextAction,
-		recommended: allowedEvents.includes(definition.eventType)
+		recommended: allowedEvents.includes(definition.eventType),
+		evidenceRefHelper
 	}));
 	const unsupportedAllowedEvents = allowedEvents.filter((eventType) => supportedDefinitions.every((definition) => definition.eventType !== eventType));
 	return {
@@ -11169,6 +11193,7 @@ function projectGoalEventFormModel(nextAction) {
 		allowedEvents: arrayTextState(allowedEvents),
 		unsupportedAllowedEvents: arrayTextState(unsupportedAllowedEvents),
 		defaultFormId: valueState(recommendedForms[0]?.formId.value),
+		evidenceRefHelper,
 		recommendedForms: {
 			state: recommendedForms.length === 0 ? "empty" : "available",
 			count: valueState(recommendedForms.length),
@@ -11200,10 +11225,10 @@ function projectGoalEventFormModel(nextAction) {
 			browserExecutionAvailable: valueState(false),
 			modelInvocationAvailable: valueState(false)
 		},
-		note: "Form model uses goal-next-action.v1 allowedEvents for recommended forms and a fixed goal update/review/gate catalog for supported forms; confirm is limited to the matching dry-run plan hash and does not run shell, model, merge, or tag operations."
+		note: "Form model uses goal-next-action.v1 allowedEvents for recommended forms, recent evidence refs from exposed contracts, and a fixed goal update/review/gate catalog for supported forms; confirm is limited to the matching dry-run plan hash and does not run shell, model, merge, tag, or filename status inference."
 	};
 }
-function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
+function projectGoalEventFormSpec({ definition, nextAction, recommended, evidenceRefHelper }) {
 	const taskId = nextAction?.next?.taskId;
 	const goalId = nextAction?.goalId;
 	const taskRequired = definition.eventFamily !== "release";
@@ -11222,6 +11247,7 @@ function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
 		requiresEvidence: valueState(definition.requiresEvidence),
 		confirmRequiresPlanHash: valueState(true),
 		planPreviewContract: valueState(GOAL_UPDATE_PLAN_CONTRACT_NAME),
+		evidenceRefHelper,
 		fields: {
 			state: definition.fields.length === 0 ? "empty" : "available",
 			count: valueState(definition.fields.length),
@@ -11233,6 +11259,139 @@ function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
 			}))
 		}
 	};
+}
+function projectEvidenceRefHelper({ runbook, ledger, eventLog, latestRun }) {
+	const recentRefs = collectRecentEvidenceRefs({
+		runbook,
+		ledger,
+		eventLog,
+		latestRun
+	});
+	return {
+		state: recentRefs.length === 0 ? "empty" : "available",
+		helperName: valueState(EVIDENCE_REF_HELPER_NAME),
+		inputMode: valueState("newline-separated-controlled-refs"),
+		acceptedPatterns: arrayTextState(EVIDENCE_REF_ACCEPTED_PATTERNS),
+		recentRefs: {
+			state: recentRefs.length === 0 ? "empty" : "available",
+			count: valueState(recentRefs.length),
+			items: recentRefs
+		},
+		safety: {
+			readsEvidenceBodies: valueState(false),
+			opensLocalFiles: valueState(false),
+			infersStatusFromFilename: valueState(false),
+			infersStatusFromBranch: valueState(false)
+		},
+		note: "Recent evidence refs are selectable identifiers from exposed runbook, ledger, events, and latest run artifact refs; they are not task status or approval signals."
+	};
+}
+function collectRecentEvidenceRefs({ runbook, ledger, eventLog, latestRun }) {
+	const refs = [];
+	for (const event of [...Array.isArray(eventLog?.events) ? eventLog.events : []].reverse()) {
+		if (!Array.isArray(event?.evidenceRefs)) continue;
+		for (const evidenceRef of event.evidenceRefs) addRecentEvidenceRef(refs, {
+			ref: evidenceRef?.kind === "repo-doc" ? evidenceRef?.ref : `${evidenceRef?.kind}:${evidenceRef?.ref}`,
+			displayRef: evidenceRef?.ref,
+			kind: evidenceRef?.kind,
+			label: evidenceRef?.label,
+			source: "goal-event-log.v1",
+			taskId: event?.taskId,
+			eventType: event?.eventType,
+			sequence: event?.sequence
+		});
+	}
+	addRecentEvidenceRef(refs, {
+		ref: ledger?.baseline?.evidenceRef,
+		kind: "repo-doc",
+		label: "Baseline evidence",
+		source: "goal-progress-ledger.v1 baseline"
+	});
+	addRecentEvidenceRef(refs, {
+		ref: runbook?.baseline?.evidenceRef,
+		kind: "repo-doc",
+		label: "Runbook baseline evidence",
+		source: "goal-runbook.v1 baseline"
+	});
+	for (const task of Array.isArray(ledger?.tasks) ? ledger.tasks : []) {
+		addRecentEvidenceRef(refs, {
+			ref: task?.workerEvidenceRef,
+			kind: "repo-doc",
+			label: "Worker evidence",
+			source: "goal-progress-ledger.v1",
+			taskId: task?.taskId
+		});
+		addRecentEvidenceRef(refs, {
+			ref: task?.reviewEvidenceRef,
+			kind: "repo-doc",
+			label: "Review evidence",
+			source: "goal-progress-ledger.v1",
+			taskId: task?.taskId
+		});
+		addRecentEvidenceRef(refs, {
+			ref: task?.mainVerificationRef,
+			kind: "repo-doc",
+			label: "Main verification evidence",
+			source: "goal-progress-ledger.v1",
+			taskId: task?.taskId
+		});
+	}
+	for (const artifact of Array.isArray(latestRun?.artifactRefs) ? latestRun.artifactRefs : []) addRecentEvidenceRef(refs, {
+		ref: normalizedManagedArtifactEvidenceRef(artifact?.ref ?? artifact?.path),
+		displayRef: artifact?.ref ?? artifact?.path,
+		kind: "artifact-ref",
+		label: artifact?.kind,
+		source: "latest run artifactRefs",
+		artifactKind: artifact?.kind
+	});
+	return refs.slice(0, EVIDENCE_REF_HELPER_RECENT_LIMIT);
+}
+function addRecentEvidenceRef(refs, candidate) {
+	if (!isNonEmptyString(candidate?.ref) || !isControlledEvidenceRefInput(candidate.ref)) return;
+	const normalizedRef = normalizeEvidenceRefInput(candidate.ref);
+	if (!isNonEmptyString(normalizedRef) || refs.some((item) => item.ref.value === normalizedRef)) return;
+	refs.push({
+		ref: valueState(normalizedRef),
+		displayRef: valueState(candidate.displayRef ?? normalizedRef),
+		kind: valueState(candidate.kind ?? evidenceRefKindForInput(normalizedRef)),
+		label: valueState(candidate.label),
+		source: valueState(candidate.source),
+		taskId: valueState(candidate.taskId),
+		eventType: valueState(candidate.eventType),
+		sequence: valueState(candidate.sequence),
+		artifactKind: valueState(candidate.artifactKind)
+	});
+}
+function normalizedManagedArtifactEvidenceRef(value) {
+	if (!isNonEmptyString(value)) return null;
+	const ref = value.trim();
+	if (ref.startsWith("artifact-ref:")) return ref;
+	if (ref.startsWith("artifact:") || ref.startsWith("artifacts/") || ref.startsWith("managed-artifact:")) return `artifact-ref:${ref}`;
+	return null;
+}
+function normalizeEvidenceRefInput(value) {
+	const ref = String(value ?? "").trim();
+	if (ref.startsWith("repo-doc:")) return ref.slice(9);
+	return normalizedManagedArtifactEvidenceRef(ref) ?? ref;
+}
+function isControlledEvidenceRefInput(value) {
+	const ref = normalizeEvidenceRefInput(value);
+	if (!isNonEmptyString(ref) || isUnsafeControlledEvidenceRefInput(ref)) return false;
+	return ref.startsWith("docs/plans/") || ref.startsWith("artifact-ref:");
+}
+function evidenceRefKindForInput(value) {
+	return String(value ?? "").startsWith("artifact-ref:") ? "artifact-ref" : "repo-doc";
+}
+function isUnsafeControlledEvidenceRefInput(value) {
+	const ref = String(value ?? "");
+	const lower = ref.toLowerCase();
+	if (ref.startsWith("/") || ref.startsWith("file://") || ref.startsWith("~/") || ref.includes("\\") || ref.includes("../") || ref.includes("..\\") || lower.includes("%2e") || lower.includes("%2f") || lower.includes("%5c")) return true;
+	try {
+		const decoded = decodeURIComponent(ref);
+		return decoded !== ref && isUnsafeControlledEvidenceRefInput(decoded);
+	} catch {
+		return true;
+	}
 }
 function projectGoalEventFormField({ fieldId, definition, goalId, taskId }) {
 	const field = goalEventFieldDefinition({
@@ -11355,13 +11514,12 @@ function goalEventFieldDefinition({ fieldId, definition, goalId, taskId }) {
 			label: "evidence ref",
 			flag: "--evidence-ref",
 			required: definition.requiresEvidence,
-			placeholder: "docs/plans/<evidence>.md"
+			placeholder: "docs/plans/<evidence>.md or artifact:run:kind"
 		};
 		case "statement": return {
 			...common,
 			label: "statement",
 			flag: "--statement",
-			inputType: "textarea",
 			placeholder: "short event statement"
 		};
 		case "branch": return {
@@ -11386,7 +11544,6 @@ function goalEventFieldDefinition({ fieldId, definition, goalId, taskId }) {
 		case "blockerReason": return {
 			...common,
 			label: "blocker reason",
-			inputType: "textarea",
 			required: definition.eventType === "blocker.opened",
 			placeholder: "what is blocking this task"
 		};
@@ -14186,6 +14343,7 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 		result: null,
 		error: null
 	});
+	const evidenceRefValidation = validateGoalEventEvidenceRefInput(form, values.evidenceRef);
 	const previewPath = buildGoalEventPreviewPath(form, values);
 	const missingRequired = missingRequiredGoalEventFields(form, values);
 	function updateValue(fieldId, value) {
@@ -14206,11 +14364,11 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 		});
 	}
 	async function handlePreview() {
-		if (previewPath === null || missingRequired.length > 0) {
+		if (previewPath === null || missingRequired.length > 0 || evidenceRefValidation.errors.length > 0) {
 			setPreviewState({
 				phase: "failed",
 				plan: null,
-				error: `缺少字段：${missingRequired.join("、")}`,
+				error: `缺少字段：${missingRequired.length === 0 ? "无" : missingRequired.join("、")}${evidenceRefValidation.errors.length === 0 ? "" : `；evidence ref 错误：${evidenceRefValidation.errors.join("；")}`}`,
 				values: null
 			});
 			return;
@@ -14289,18 +14447,12 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "dry-run preview / confirm" }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "goal-event-preview-fields",
-				children: form.fields.items.filter((field) => shouldRenderGoalEventPreviewInput(field)).map((field) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: field.label.text }), field.options.state === "available" && field.options.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+				children: form.fields.items.filter((field) => shouldRenderGoalEventPreviewInput(field)).map((field) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: field.label.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventPreviewInput, {
+					field,
 					value: values[field.id.value] ?? "",
-					onChange: (event) => updateValue(field.id.value, event.target.value),
-					children: field.options.items.map((option) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-						value: option.value,
-						children: option.text
-					}, option.value))
-				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
-					value: values[field.id.value] ?? "",
-					placeholder: field.placeholder.text,
-					readOnly: field.readOnly.value === true,
-					onChange: (event) => updateValue(field.id.value, event.target.value)
+					form,
+					evidenceRefValidation,
+					onChange: (value) => updateValue(field.id.value, value)
 				})] }, field.id.text))
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -14368,6 +14520,68 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 		]
 	});
 }
+function GoalEventPreviewInput({ field, value, form, evidenceRefValidation, onChange }) {
+	if (field.options.state === "available" && field.options.items.length > 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+		value,
+		onChange: (event) => onChange(event.target.value),
+		children: field.options.items.map((option) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+			value: option.value,
+			children: option.text
+		}, option.value))
+	});
+	if (field.id.value === "evidenceRef") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefInput, {
+		value,
+		placeholder: field.placeholder.text,
+		readOnly: field.readOnly.value === true,
+		helper: form.evidenceRefHelper,
+		validation: evidenceRefValidation,
+		onChange
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+		value,
+		placeholder: field.placeholder.text,
+		readOnly: field.readOnly.value === true,
+		onChange: (event) => onChange(event.target.value)
+	});
+}
+function EvidenceRefInput({ value, placeholder, readOnly, helper, validation, onChange }) {
+	const recentRefs = helper?.recentRefs?.items ?? [];
+	function useEvidenceRef(ref) {
+		if (String(ref ?? "").trim() === "") return;
+		const currentRefs = String(value ?? "").split(/[\r\n,]+/u).map((entry) => entry.trim()).filter((entry) => entry !== "");
+		if (currentRefs.includes(ref)) return;
+		onChange([...currentRefs, ref].join(", "));
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "evidence-ref-helper",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+				value,
+				placeholder,
+				readOnly,
+				onChange: (event) => onChange(event.target.value)
+			}),
+			recentRefs.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+				className: "evidence-ref-choice-select",
+				"aria-label": "Recent evidence refs",
+				value: "",
+				onChange: (event) => useEvidenceRef(event.target.value),
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+					value: "",
+					children: "Recent evidence refs"
+				}), recentRefs.map((candidate, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+					value: candidate.ref.value,
+					children: candidate.ref.text
+				}, `${candidate.ref.value}-${index}`))]
+			}) : null,
+			validation.errors.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				className: "evidence-ref-error-list",
+				"aria-label": "Evidence ref errors",
+				children: validation.errors.map((error, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: error }, `${error}-${index}`))
+			}) : null
+		]
+	});
+}
 function initialGoalEventPreviewValues(form) {
 	return Object.fromEntries(form.fields.items.map((field) => [field.id.value, field.value.state === "available" ? String(field.value.value) : ""]));
 }
@@ -14422,7 +14636,7 @@ function buildGoalEventPreviewPath(form, values) {
 	appendSearchParam(searchParams, "blockerId", values.blockerId);
 	appendSearchParam(searchParams, "blockerReason", values.blockerReason);
 	appendSearchParam(searchParams, "blockerSeverity", values.blockerSeverity);
-	for (const evidenceRef of String(values.evidenceRef ?? "").split(/\r?\n/u)) appendSearchParam(searchParams, "evidenceRef", evidenceRef);
+	for (const evidenceRef of parseGoalEventEvidenceRefs(values.evidenceRef).refs) appendSearchParam(searchParams, "evidenceRef", evidenceRef);
 	return `${GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE.replace("<goal-id>", encodeURIComponent(goalId))}?${searchParams.toString()}`;
 }
 function buildGoalEventConfirmPath(values) {
@@ -14456,7 +14670,7 @@ function buildGoalEventConfirmBody(form, values, planHash) {
 	assignBodyValue(body, "blockerId", values.blockerId);
 	assignBodyValue(body, "blockerReason", values.blockerReason);
 	assignBodyValue(body, "blockerSeverity", values.blockerSeverity);
-	const evidenceRefs = String(values.evidenceRef ?? "").split(/\r?\n/u).map((entry) => entry.trim()).filter((entry) => entry !== "");
+	const evidenceRefs = parseGoalEventEvidenceRefs(values.evidenceRef).refs;
 	if (evidenceRefs.length > 0) body.evidenceRef = evidenceRefs;
 	return body;
 }
@@ -14467,6 +14681,54 @@ function assignBodyValue(body, key, value) {
 function appendSearchParam(searchParams, key, value) {
 	const normalized = String(value ?? "").trim();
 	if (normalized !== "") searchParams.append(key, normalized);
+}
+function validateGoalEventEvidenceRefInput(form, value) {
+	const required = form.fields.items.find((field) => field.id.value === "evidenceRef")?.required.value === true;
+	const parsed = parseGoalEventEvidenceRefs(value);
+	const errors = [...parsed.errors];
+	if (required && parsed.refs.length === 0) errors.unshift("required evidence ref is missing");
+	return {
+		refs: parsed.refs,
+		errors
+	};
+}
+function parseGoalEventEvidenceRefs(value) {
+	const refs = [];
+	const errors = [];
+	String(value ?? "").split(/[\r\n,]+/u).map((entry) => entry.trim()).filter((entry) => entry !== "").forEach((entry, index) => {
+		const normalized = normalizeGoalEventEvidenceRef(entry);
+		if (normalized === null) {
+			errors.push(`line ${index + 1} must be docs/plans/<file> or a managed artifact ref`);
+			return;
+		}
+		if (!refs.includes(normalized)) refs.push(normalized);
+	});
+	return {
+		refs,
+		errors
+	};
+}
+function normalizeGoalEventEvidenceRef(value) {
+	const ref = String(value ?? "").trim();
+	if (ref === "" || hasUnsafeGoalEventEvidenceRefInput(ref)) return null;
+	if (ref.startsWith("repo-doc:")) {
+		const repoDocRef = ref.slice(9);
+		return repoDocRef.startsWith("docs/plans/") && !hasUnsafeGoalEventEvidenceRefInput(repoDocRef) ? repoDocRef : null;
+	}
+	if (ref.startsWith("docs/plans/")) return ref;
+	if (ref.startsWith("artifact-ref:")) return ref.slice(13).trim() === "" ? null : ref;
+	if (ref.startsWith("artifact:") || ref.startsWith("artifacts/") || ref.startsWith("managed-artifact:")) return `artifact-ref:${ref}`;
+	return null;
+}
+function hasUnsafeGoalEventEvidenceRefInput(ref) {
+	const lower = ref.toLowerCase();
+	if (ref.startsWith("/") || ref.startsWith("file://") || ref.startsWith("~/") || ref.includes("\\") || ref.includes("../") || ref.includes("..\\") || lower.includes("%2e") || lower.includes("%2f") || lower.includes("%5c")) return true;
+	try {
+		const decoded = decodeURIComponent(ref);
+		return decoded !== ref && hasUnsafeGoalEventEvidenceRefInput(decoded);
+	} catch {
+		return true;
+	}
 }
 function GoalEventFormFieldList({ fields }) {
 	if (fields.state === "missing" || fields.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "form fields 为空。" });

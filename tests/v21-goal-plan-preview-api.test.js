@@ -103,6 +103,61 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
     }
   });
 
+  it('accepts controlled repo-doc and managed artifact evidence refs in preview plans', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      const response = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'update',
+        task: 'task-4',
+        event: 'worker.evidence-recorded',
+        actor: 'codex-v21-task-4-worker',
+        evidenceRef: 'artifact-ref:artifact:run-1:evidence'
+      })}`);
+      const plan = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(validateGoalUpdatePlanContract(plan), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(plan.eventSummary.evidenceRefs[0].kind, 'artifact-ref');
+      assert.equal(plan.eventSummary.evidenceRefs[0].ref, 'artifact:run-1:evidence');
+      assert.equal(plan.previewEndpoint.genericShellRunner, false);
+      assert.equal(plan.eventSummary.writesInDryRun, false);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
+  it('returns a clear error envelope for uncontrolled evidence refs without appending', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      const before = await snapshotDirectoryFiles(context.stateDir);
+      const response = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'update',
+        task: 'task-4',
+        event: 'worker.evidence-recorded',
+        actor: 'codex-v21-task-4-worker',
+        evidenceRef: '/Users/example/secret.md'
+      })}`);
+      const envelope = await response.json();
+
+      assert.equal(response.status, 400);
+      assert.equal(envelope.contractName, 'error-envelope.v1');
+      assert.equal(envelope.error.code, 'invalid-evidence-ref');
+      assert.match(envelope.error.message, /controlled docs\/plans or managed artifact reference/u);
+      assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+        ok: true,
+        errors: []
+      });
+      assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), before);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
   it('rejects arbitrary commands, confirm inputs, unknown parameters, and unsafe goal refs safely', async () => {
     const context = await startPreviewConsoleServer();
 

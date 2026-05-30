@@ -18,6 +18,16 @@ const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
 const ACTIVE_GOAL_VIEW_MODEL_NAME = 'ActiveGoalViewModel';
 const GOAL_EVENT_FORM_MODEL_NAME = 'GoalEventRegistrationFormModel';
+const EVIDENCE_REF_HELPER_NAME = 'EvidenceRefHelper';
+const EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
+const EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
+  'docs/plans/<file>',
+  'repo-doc:docs/plans/<file>',
+  'artifact-ref:<managed-artifact-ref>',
+  'artifact:<run-id>:<artifact-kind>',
+  'artifacts/<managed-ref>',
+  'managed-artifact:<managed-ref>'
+]);
 
 const GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
   Object.freeze({
@@ -533,7 +543,8 @@ export function projectWorkbenchContracts(results) {
       activeLedgerResult: results.activeGoalProgress,
       activeLedger: activeGoalProgressData,
       activeEventLogResult: results.activeGoalEvents,
-      activeEventLog: activeGoalEventsData
+      activeEventLog: activeGoalEventsData,
+      latestRun
     }),
     capabilities: projectCapabilities(capabilitiesData),
     diagnosticsV1: projectDiagnostics(diagnosticsData),
@@ -839,7 +850,8 @@ function projectActiveGoalControl({
   activeLedgerResult,
   activeLedger,
   activeEventLogResult,
-  activeEventLog
+  activeEventLog,
+  latestRun
 }) {
   const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
   const eventLog = activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null;
@@ -874,7 +886,11 @@ function projectActiveGoalControl({
     }),
     nextAction: projectGoalNextAction({
       result: nextActionResult,
-      nextAction
+      nextAction,
+      runbook,
+      ledger: goalStatusLedger,
+      eventLog,
+      latestRun
     }),
     promptPreview: projectGoalPromptPreview({
       result: promptPackResult,
@@ -1190,7 +1206,14 @@ function projectGoalRunbook({
   };
 }
 
-function projectGoalNextAction({ result, nextAction }) {
+function projectGoalNextAction({
+  result,
+  nextAction,
+  runbook,
+  ledger,
+  eventLog,
+  latestRun
+}) {
   if (result?.ok !== true) {
     return {
       state: 'unavailable',
@@ -1223,7 +1246,12 @@ function projectGoalNextAction({ result, nextAction }) {
     copyOnlyPrompt: projectGoalNextCopyOnlyPrompt(nextAction?.copyOnlyPrompt),
     copyOnlyCommands: projectTextItems(nextAction?.copyOnlyCommands),
     afterCompletion: projectAfterCompletion(nextAction?.afterCompletion),
-    eventForms: projectGoalEventFormModel(nextAction),
+    eventForms: projectGoalEventFormModel(nextAction, {
+      runbook,
+      ledger,
+      eventLog,
+      latestRun
+    }),
     safety: projectGoalControlSafety(nextAction?.safety),
     errorEnvelope: projectErrorEnvelope(null),
     note: 'Next Action Card 使用 resolver 输出的 task、role、phase、reason 和 afterCompletion；浏览器端不运行命令、不登记事件。'
@@ -1378,7 +1406,7 @@ function projectAfterCompletion(afterCompletion) {
   };
 }
 
-function projectGoalEventFormModel(nextAction) {
+function projectGoalEventFormModel(nextAction, evidenceRefContext = {}) {
   const allowedEvents = Array.isArray(nextAction?.afterCompletion?.allowedEvents)
     ? nextAction.afterCompletion.allowedEvents.filter((eventType) => isNonEmptyString(eventType))
     : [];
@@ -1386,15 +1414,18 @@ function projectGoalEventFormModel(nextAction) {
   const recommendedDefinitions = allowedEvents
     .map((eventType) => supportedDefinitions.find((definition) => definition.eventType === eventType))
     .filter((definition) => definition !== undefined);
+  const evidenceRefHelper = projectEvidenceRefHelper(evidenceRefContext);
   const recommendedForms = recommendedDefinitions.map((definition) => projectGoalEventFormSpec({
     definition,
     nextAction,
-    recommended: true
+    recommended: true,
+    evidenceRefHelper
   }));
   const supportedForms = supportedDefinitions.map((definition) => projectGoalEventFormSpec({
     definition,
     nextAction,
-    recommended: allowedEvents.includes(definition.eventType)
+    recommended: allowedEvents.includes(definition.eventType),
+    evidenceRefHelper
   }));
   const unsupportedAllowedEvents = allowedEvents.filter((eventType) => (
     supportedDefinitions.every((definition) => definition.eventType !== eventType)
@@ -1414,6 +1445,7 @@ function projectGoalEventFormModel(nextAction) {
     allowedEvents: arrayTextState(allowedEvents),
     unsupportedAllowedEvents: arrayTextState(unsupportedAllowedEvents),
     defaultFormId: valueState(recommendedForms[0]?.formId.value),
+    evidenceRefHelper,
     recommendedForms: {
       state: recommendedForms.length === 0 ? 'empty' : 'available',
       count: valueState(recommendedForms.length),
@@ -1440,11 +1472,16 @@ function projectGoalEventFormModel(nextAction) {
       browserExecutionAvailable: valueState(false),
       modelInvocationAvailable: valueState(false)
     },
-    note: 'Form model uses goal-next-action.v1 allowedEvents for recommended forms and a fixed goal update/review/gate catalog for supported forms; confirm is limited to the matching dry-run plan hash and does not run shell, model, merge, or tag operations.'
+    note: 'Form model uses goal-next-action.v1 allowedEvents for recommended forms, recent evidence refs from exposed contracts, and a fixed goal update/review/gate catalog for supported forms; confirm is limited to the matching dry-run plan hash and does not run shell, model, merge, tag, or filename status inference.'
   };
 }
 
-function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
+function projectGoalEventFormSpec({
+  definition,
+  nextAction,
+  recommended,
+  evidenceRefHelper
+}) {
   const taskId = nextAction?.next?.taskId;
   const goalId = nextAction?.goalId;
   const taskRequired = definition.eventFamily !== 'release';
@@ -1464,6 +1501,7 @@ function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
     requiresEvidence: valueState(definition.requiresEvidence),
     confirmRequiresPlanHash: valueState(true),
     planPreviewContract: valueState(GOAL_UPDATE_PLAN_CONTRACT_NAME),
+    evidenceRefHelper,
     fields: {
       state: definition.fields.length === 0 ? 'empty' : 'available',
       count: valueState(definition.fields.length),
@@ -1475,6 +1513,213 @@ function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
       }))
     }
   };
+}
+
+function projectEvidenceRefHelper({
+  runbook,
+  ledger,
+  eventLog,
+  latestRun
+}) {
+  const recentRefs = collectRecentEvidenceRefs({
+    runbook,
+    ledger,
+    eventLog,
+    latestRun
+  });
+
+  return {
+    state: recentRefs.length === 0 ? 'empty' : 'available',
+    helperName: valueState(EVIDENCE_REF_HELPER_NAME),
+    inputMode: valueState('newline-separated-controlled-refs'),
+    acceptedPatterns: arrayTextState(EVIDENCE_REF_ACCEPTED_PATTERNS),
+    recentRefs: {
+      state: recentRefs.length === 0 ? 'empty' : 'available',
+      count: valueState(recentRefs.length),
+      items: recentRefs
+    },
+    safety: {
+      readsEvidenceBodies: valueState(false),
+      opensLocalFiles: valueState(false),
+      infersStatusFromFilename: valueState(false),
+      infersStatusFromBranch: valueState(false)
+    },
+    note: 'Recent evidence refs are selectable identifiers from exposed runbook, ledger, events, and latest run artifact refs; they are not task status or approval signals.'
+  };
+}
+
+function collectRecentEvidenceRefs({
+  runbook,
+  ledger,
+  eventLog,
+  latestRun
+}) {
+  const refs = [];
+
+  for (const event of [...(Array.isArray(eventLog?.events) ? eventLog.events : [])].reverse()) {
+    if (!Array.isArray(event?.evidenceRefs)) {
+      continue;
+    }
+
+    for (const evidenceRef of event.evidenceRefs) {
+      addRecentEvidenceRef(refs, {
+        ref: evidenceRef?.kind === 'repo-doc' ? evidenceRef?.ref : `${evidenceRef?.kind}:${evidenceRef?.ref}`,
+        displayRef: evidenceRef?.ref,
+        kind: evidenceRef?.kind,
+        label: evidenceRef?.label,
+        source: 'goal-event-log.v1',
+        taskId: event?.taskId,
+        eventType: event?.eventType,
+        sequence: event?.sequence
+      });
+    }
+  }
+
+  addRecentEvidenceRef(refs, {
+    ref: ledger?.baseline?.evidenceRef,
+    kind: 'repo-doc',
+    label: 'Baseline evidence',
+    source: 'goal-progress-ledger.v1 baseline'
+  });
+
+  addRecentEvidenceRef(refs, {
+    ref: runbook?.baseline?.evidenceRef,
+    kind: 'repo-doc',
+    label: 'Runbook baseline evidence',
+    source: 'goal-runbook.v1 baseline'
+  });
+
+  for (const task of Array.isArray(ledger?.tasks) ? ledger.tasks : []) {
+    addRecentEvidenceRef(refs, {
+      ref: task?.workerEvidenceRef,
+      kind: 'repo-doc',
+      label: 'Worker evidence',
+      source: 'goal-progress-ledger.v1',
+      taskId: task?.taskId
+    });
+    addRecentEvidenceRef(refs, {
+      ref: task?.reviewEvidenceRef,
+      kind: 'repo-doc',
+      label: 'Review evidence',
+      source: 'goal-progress-ledger.v1',
+      taskId: task?.taskId
+    });
+    addRecentEvidenceRef(refs, {
+      ref: task?.mainVerificationRef,
+      kind: 'repo-doc',
+      label: 'Main verification evidence',
+      source: 'goal-progress-ledger.v1',
+      taskId: task?.taskId
+    });
+  }
+
+  for (const artifact of Array.isArray(latestRun?.artifactRefs) ? latestRun.artifactRefs : []) {
+    const artifactRef = normalizedManagedArtifactEvidenceRef(artifact?.ref ?? artifact?.path);
+
+    addRecentEvidenceRef(refs, {
+      ref: artifactRef,
+      displayRef: artifact?.ref ?? artifact?.path,
+      kind: 'artifact-ref',
+      label: artifact?.kind,
+      source: 'latest run artifactRefs',
+      artifactKind: artifact?.kind
+    });
+  }
+
+  return refs.slice(0, EVIDENCE_REF_HELPER_RECENT_LIMIT);
+}
+
+function addRecentEvidenceRef(refs, candidate) {
+  if (!isNonEmptyString(candidate?.ref) || !isControlledEvidenceRefInput(candidate.ref)) {
+    return;
+  }
+
+  const normalizedRef = normalizeEvidenceRefInput(candidate.ref);
+
+  if (!isNonEmptyString(normalizedRef) || refs.some((item) => item.ref.value === normalizedRef)) {
+    return;
+  }
+
+  refs.push({
+    ref: valueState(normalizedRef),
+    displayRef: valueState(candidate.displayRef ?? normalizedRef),
+    kind: valueState(candidate.kind ?? evidenceRefKindForInput(normalizedRef)),
+    label: valueState(candidate.label),
+    source: valueState(candidate.source),
+    taskId: valueState(candidate.taskId),
+    eventType: valueState(candidate.eventType),
+    sequence: valueState(candidate.sequence),
+    artifactKind: valueState(candidate.artifactKind)
+  });
+}
+
+function normalizedManagedArtifactEvidenceRef(value) {
+  if (!isNonEmptyString(value)) {
+    return null;
+  }
+
+  const ref = value.trim();
+
+  if (ref.startsWith('artifact-ref:')) {
+    return ref;
+  }
+
+  if (ref.startsWith('artifact:') || ref.startsWith('artifacts/') || ref.startsWith('managed-artifact:')) {
+    return `artifact-ref:${ref}`;
+  }
+
+  return null;
+}
+
+function normalizeEvidenceRefInput(value) {
+  const ref = String(value ?? '').trim();
+
+  if (ref.startsWith('repo-doc:')) {
+    return ref.slice('repo-doc:'.length);
+  }
+
+  return normalizedManagedArtifactEvidenceRef(ref) ?? ref;
+}
+
+function isControlledEvidenceRefInput(value) {
+  const ref = normalizeEvidenceRefInput(value);
+
+  if (!isNonEmptyString(ref) || isUnsafeControlledEvidenceRefInput(ref)) {
+    return false;
+  }
+
+  return ref.startsWith('docs/plans/') || ref.startsWith('artifact-ref:');
+}
+
+function evidenceRefKindForInput(value) {
+  return String(value ?? '').startsWith('artifact-ref:') ? 'artifact-ref' : 'repo-doc';
+}
+
+function isUnsafeControlledEvidenceRefInput(value) {
+  const ref = String(value ?? '');
+  const lower = ref.toLowerCase();
+
+  if (
+    ref.startsWith('/') ||
+    ref.startsWith('file://') ||
+    ref.startsWith('~/') ||
+    ref.includes('\\') ||
+    ref.includes('../') ||
+    ref.includes('..\\') ||
+    lower.includes('%2e') ||
+    lower.includes('%2f') ||
+    lower.includes('%5c')
+  ) {
+    return true;
+  }
+
+  try {
+    const decoded = decodeURIComponent(ref);
+
+    return decoded !== ref && isUnsafeControlledEvidenceRefInput(decoded);
+  } catch {
+    return true;
+  }
 }
 
 function projectGoalEventFormField({
@@ -1616,14 +1861,13 @@ function goalEventFieldDefinition({
         label: 'evidence ref',
         flag: '--evidence-ref',
         required: definition.requiresEvidence,
-        placeholder: 'docs/plans/<evidence>.md'
+        placeholder: 'docs/plans/<evidence>.md or artifact:run:kind'
       };
     case 'statement':
       return {
         ...common,
         label: 'statement',
         flag: '--statement',
-        inputType: 'textarea',
         placeholder: 'short event statement'
       };
     case 'branch':
@@ -1652,7 +1896,6 @@ function goalEventFieldDefinition({
       return {
         ...common,
         label: 'blocker reason',
-        inputType: 'textarea',
         required: definition.eventType === 'blocker.opened',
         placeholder: 'what is blocking this task'
       };

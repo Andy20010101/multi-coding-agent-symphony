@@ -5,6 +5,7 @@ import {
   GOAL_UPDATE_PLAN_CONTRACT_NAME,
   GOAL_UPDATE_PLAN_CONTRACT_VERSION,
   assertGoalUpdatePlanContract,
+  isUnsafeEvidenceRef,
   isSafeGoalEventToken
 } from './goal-event-contracts.js';
 import {
@@ -308,6 +309,13 @@ function normalizeEvidenceRef(value) {
   const trimmed = value.trim();
   const [kind, ref] = splitEvidenceKind(trimmed);
 
+  if (isUncontrolledEvidenceRef(kind, ref)) {
+    throw new GoalReviewError(
+      'invalid-evidence-ref',
+      '--evidence-ref must be a controlled docs/plans or managed artifact reference.'
+    );
+  }
+
   return {
     kind,
     ref,
@@ -327,6 +335,19 @@ function splitEvidenceKind(value) {
   }
 
   return ['repo-doc', value];
+}
+
+function isUncontrolledEvidenceRef(kind, ref) {
+  return ref.trim() === '' ||
+    isUnsafeEvidenceRef(ref) ||
+    hasEncodedTraversal(ref) ||
+    (kind === 'repo-doc' && !ref.startsWith('docs/plans/'));
+}
+
+function hasEncodedTraversal(ref) {
+  const lower = ref.toLowerCase();
+
+  return lower.includes('%2e') || lower.includes('%2f') || lower.includes('%5c');
 }
 
 function normalizeOptionalString(value, field) {

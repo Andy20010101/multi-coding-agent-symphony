@@ -1547,6 +1547,7 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
     result: null,
     error: null
   });
+  const evidenceRefValidation = validateGoalEventEvidenceRefInput(form, values.evidenceRef);
   const previewPath = buildGoalEventPreviewPath(form, values);
   const missingRequired = missingRequiredGoalEventFields(form, values);
 
@@ -1569,11 +1570,18 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
   }
 
   async function handlePreview() {
-    if (previewPath === null || missingRequired.length > 0) {
+    if (previewPath === null || missingRequired.length > 0 || evidenceRefValidation.errors.length > 0) {
+      const missingCopy = missingRequired.length === 0
+        ? '无'
+        : missingRequired.join('、');
+      const evidenceErrors = evidenceRefValidation.errors.length === 0
+        ? ''
+        : `；evidence ref 错误：${evidenceRefValidation.errors.join('；')}`;
+
       setPreviewState({
         phase: 'failed',
         plan: null,
-        error: `缺少字段：${missingRequired.join('、')}`,
+        error: `缺少字段：${missingCopy}${evidenceErrors}`,
         values: null
       });
       return;
@@ -1674,23 +1682,13 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
           .map((field) => (
             <label key={field.id.text}>
               <span>{field.label.text}</span>
-              {field.options.state === 'available' && field.options.items.length > 0 ? (
-                <select
-                  value={values[field.id.value] ?? ''}
-                  onChange={(event) => updateValue(field.id.value, event.target.value)}
-                >
-                  {field.options.items.map((option) => (
-                    <option key={option.value} value={option.value}>{option.text}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={values[field.id.value] ?? ''}
-                  placeholder={field.placeholder.text}
-                  readOnly={field.readOnly.value === true}
-                  onChange={(event) => updateValue(field.id.value, event.target.value)}
-                />
-              )}
+              <GoalEventPreviewInput
+                field={field}
+                value={values[field.id.value] ?? ''}
+                form={form}
+                evidenceRefValidation={evidenceRefValidation}
+                onChange={(value) => updateValue(field.id.value, value)}
+              />
             </label>
           ))}
       </div>
@@ -1743,6 +1741,110 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
             ['refreshed.nextAction', textValue(confirmState.result.refreshed.nextAction?.contractName)]
           ]} />
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function GoalEventPreviewInput({
+  field,
+  value,
+  form,
+  evidenceRefValidation,
+  onChange
+}) {
+  if (field.options.state === 'available' && field.options.items.length > 0) {
+    return (
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {field.options.items.map((option) => (
+          <option key={option.value} value={option.value}>{option.text}</option>
+        ))}
+      </select>
+    );
+  }
+
+  if (field.id.value === 'evidenceRef') {
+    return (
+      <EvidenceRefInput
+        value={value}
+        placeholder={field.placeholder.text}
+        readOnly={field.readOnly.value === true}
+        helper={form.evidenceRefHelper}
+        validation={evidenceRefValidation}
+        onChange={onChange}
+      />
+    );
+  }
+
+  return (
+    <input
+      value={value}
+      placeholder={field.placeholder.text}
+      readOnly={field.readOnly.value === true}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+}
+
+function EvidenceRefInput({
+  value,
+  placeholder,
+  readOnly,
+  helper,
+  validation,
+  onChange
+}) {
+  const recentRefs = helper?.recentRefs?.items ?? [];
+
+  function useEvidenceRef(ref) {
+    if (String(ref ?? '').trim() === '') {
+      return;
+    }
+
+    const currentRefs = String(value ?? '')
+      .split(/[\r\n,]+/u)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== '');
+
+    if (currentRefs.includes(ref)) {
+      return;
+    }
+
+    onChange([...currentRefs, ref].join(', '));
+  }
+
+  return (
+    <div className="evidence-ref-helper">
+      <input
+        value={value}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {recentRefs.length > 0 ? (
+        <select
+          className="evidence-ref-choice-select"
+          aria-label="Recent evidence refs"
+          value=""
+          onChange={(event) => useEvidenceRef(event.target.value)}
+        >
+          <option value="">Recent evidence refs</option>
+          {recentRefs.map((candidate, index) => (
+            <option key={`${candidate.ref.value}-${index}`} value={candidate.ref.value}>
+              {candidate.ref.text}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {validation.errors.length > 0 ? (
+        <ul className="evidence-ref-error-list" aria-label="Evidence ref errors">
+          {validation.errors.map((error, index) => (
+            <li key={`${error}-${index}`}>{error}</li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );
@@ -1820,7 +1922,7 @@ function buildGoalEventPreviewPath(form, values) {
   appendSearchParam(searchParams, 'blockerReason', values.blockerReason);
   appendSearchParam(searchParams, 'blockerSeverity', values.blockerSeverity);
 
-  for (const evidenceRef of String(values.evidenceRef ?? '').split(/\r?\n/u)) {
+  for (const evidenceRef of parseGoalEventEvidenceRefs(values.evidenceRef).refs) {
     appendSearchParam(searchParams, 'evidenceRef', evidenceRef);
   }
 
@@ -1872,10 +1974,7 @@ function buildGoalEventConfirmBody(form, values, planHash) {
   assignBodyValue(body, 'blockerReason', values.blockerReason);
   assignBodyValue(body, 'blockerSeverity', values.blockerSeverity);
 
-  const evidenceRefs = String(values.evidenceRef ?? '')
-    .split(/\r?\n/u)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== '');
+  const evidenceRefs = parseGoalEventEvidenceRefs(values.evidenceRef).refs;
 
   if (evidenceRefs.length > 0) {
     body.evidenceRef = evidenceRefs;
@@ -1897,6 +1996,105 @@ function appendSearchParam(searchParams, key, value) {
 
   if (normalized !== '') {
     searchParams.append(key, normalized);
+  }
+}
+
+function validateGoalEventEvidenceRefInput(form, value) {
+  const evidenceField = form.fields.items.find((field) => field.id.value === 'evidenceRef');
+  const required = evidenceField?.required.value === true;
+  const parsed = parseGoalEventEvidenceRefs(value);
+  const errors = [...parsed.errors];
+
+  if (required && parsed.refs.length === 0) {
+    errors.unshift('required evidence ref is missing');
+  }
+
+  return {
+    refs: parsed.refs,
+    errors
+  };
+}
+
+function parseGoalEventEvidenceRefs(value) {
+  const refs = [];
+  const errors = [];
+  const entries = String(value ?? '')
+    .split(/[\r\n,]+/u)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+
+  entries.forEach((entry, index) => {
+    const normalized = normalizeGoalEventEvidenceRef(entry);
+
+    if (normalized === null) {
+      errors.push(`line ${index + 1} must be docs/plans/<file> or a managed artifact ref`);
+      return;
+    }
+
+    if (!refs.includes(normalized)) {
+      refs.push(normalized);
+    }
+  });
+
+  return {
+    refs,
+    errors
+  };
+}
+
+function normalizeGoalEventEvidenceRef(value) {
+  const ref = String(value ?? '').trim();
+
+  if (ref === '' || hasUnsafeGoalEventEvidenceRefInput(ref)) {
+    return null;
+  }
+
+  if (ref.startsWith('repo-doc:')) {
+    const repoDocRef = ref.slice('repo-doc:'.length);
+
+    return repoDocRef.startsWith('docs/plans/') && !hasUnsafeGoalEventEvidenceRefInput(repoDocRef)
+      ? repoDocRef
+      : null;
+  }
+
+  if (ref.startsWith('docs/plans/')) {
+    return ref;
+  }
+
+  if (ref.startsWith('artifact-ref:')) {
+    return ref.slice('artifact-ref:'.length).trim() === '' ? null : ref;
+  }
+
+  if (ref.startsWith('artifact:') || ref.startsWith('artifacts/') || ref.startsWith('managed-artifact:')) {
+    return `artifact-ref:${ref}`;
+  }
+
+  return null;
+}
+
+function hasUnsafeGoalEventEvidenceRefInput(ref) {
+  const lower = ref.toLowerCase();
+
+  if (
+    ref.startsWith('/') ||
+    ref.startsWith('file://') ||
+    ref.startsWith('~/') ||
+    ref.includes('\\') ||
+    ref.includes('../') ||
+    ref.includes('..\\') ||
+    lower.includes('%2e') ||
+    lower.includes('%2f') ||
+    lower.includes('%5c')
+  ) {
+    return true;
+  }
+
+  try {
+    const decoded = decodeURIComponent(ref);
+
+    return decoded !== ref && hasUnsafeGoalEventEvidenceRefInput(decoded);
+  } catch {
+    return true;
   }
 }
 
