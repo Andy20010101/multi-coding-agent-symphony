@@ -64,8 +64,21 @@ import {
 } from './goal-closeout-report.js';
 import {
   GoalRunbookContextError,
-  loadGoalRunbookContext
+  loadGoalRunbookContext,
+  resolveGoalRunbookGoalId
 } from './goal-runbook-context.js';
+import {
+  GoalUpdateError,
+  buildGoalUpdatePlan
+} from './goal-update.js';
+import {
+  GoalReviewError,
+  buildGoalReviewPlan
+} from './goal-review.js';
+import {
+  GoalGateError,
+  buildGoalGatePlan
+} from './goal-gate.js';
 import {
   buildStageCommandSummary
 } from './stage.js';
@@ -856,6 +869,19 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      const goalEventPlanPreviewRequest = parseGoalEventPlanPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (goalEventPlanPreviewRequest !== null) {
+        await writeGoalEventPlanPreviewResponse({
+          response,
+          stateDir,
+          request: goalEventPlanPreviewRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
       const goalRunbookRequest = parseGoalRunbookRequestPath(url.pathname, url.searchParams);
 
       if (goalRunbookRequest !== null) {
@@ -1181,6 +1207,85 @@ async function writeGoalEventsResponse({ response, stateDir, request, route, met
   });
 
   writeJsonResponse(response, 200, eventLog);
+}
+
+async function writeGoalEventPlanPreviewResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-goal-ref',
+      message: 'Goal event plan preview ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for event plan preview was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const plan = await buildGoalEventPlanPreview({
+      stateDir,
+      goalId: resolvedGoalId,
+      searchParams: request.searchParams
+    });
+
+    writeJsonResponse(response, 200, addGoalEventPlanPreviewSummary(plan));
+  } catch (error) {
+    if (
+      error instanceof GoalUpdateError ||
+      error instanceof GoalReviewError ||
+      error instanceof GoalGateError ||
+      error instanceof GoalEventPlanPreviewError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
 }
 
 async function writeGoalRunbookResponse({ response, stateDir, request, route, method }) {
@@ -1946,6 +2051,43 @@ function parseGoalEventsRequestPath(pathname, searchParams = new URLSearchParams
   };
 }
 
+function parseGoalEventPlanPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/event-plan-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'goal-event-plan-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/event-plan-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'goal-event-plan-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
 function parseGoalRunbookRequestPath(pathname, searchParams = new URLSearchParams()) {
   return parseGoalRunbookControlRequestPath({
     pathname,
@@ -2053,6 +2195,268 @@ async function resolveGoalEventsGoal({ stateDir, goalId }) {
     goalTitle: template.goalTitle,
     baseline: template.baseline
   };
+}
+
+async function resolveGoalEventPlanPreviewGoalId({ stateDir, goalId }) {
+  if (goalId === 'latest') {
+    return await resolveGoalRunbookGoalId({
+      stateDir,
+      goalId: 'latest'
+    });
+  }
+
+  const managedContext = await loadGoalRunbookContext({
+    stateDir,
+    goalId,
+    allowControlledFixtureFallback: false
+  });
+
+  if (managedContext !== null) {
+    return managedContext.runbook.goalId;
+  }
+
+  return getGoalProgressTemplate(goalId) === null ? null : goalId;
+}
+
+class GoalEventPlanPreviewError extends Error {
+  constructor(code, message, safeDetails) {
+    super(message);
+    this.name = 'GoalEventPlanPreviewError';
+    this.code = code;
+
+    if (safeDetails !== undefined) {
+      this.safeDetails = safeDetails;
+    }
+  }
+}
+
+async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
+  const command = requiredSingleSearchParam(searchParams, 'command');
+
+  switch (command) {
+    case 'update':
+      assertOnlySearchParams(searchParams, [
+        'command',
+        'task',
+        'event',
+        'actor',
+        'evidenceRef',
+        'statement',
+        'branch',
+        'commit',
+        'blockerId',
+        'blockerReason',
+        'blockerSeverity'
+      ]);
+
+      return buildGoalUpdatePlan({
+        stateDir,
+        goalId,
+        taskId: requiredSingleSearchParam(searchParams, 'task'),
+        eventType: requiredSingleSearchParam(searchParams, 'event'),
+        actorId: requiredSingleSearchParam(searchParams, 'actor'),
+        evidenceRefs: searchParams.getAll('evidenceRef'),
+        statement: optionalSingleSearchParam(searchParams, 'statement'),
+        branch: optionalSingleSearchParam(searchParams, 'branch'),
+        commit: optionalSingleSearchParam(searchParams, 'commit'),
+        blocker: buildPreviewBlocker(searchParams)
+      });
+    case 'review':
+      assertOnlySearchParams(searchParams, [
+        'command',
+        'task',
+        'reviewer',
+        'verdict',
+        'evidenceRef',
+        'statement',
+        'branch',
+        'commit'
+      ]);
+
+      return await buildGoalReviewPlan({
+        stateDir,
+        goalId,
+        taskId: requiredSingleSearchParam(searchParams, 'task'),
+        reviewerId: requiredSingleSearchParam(searchParams, 'reviewer'),
+        verdict: requiredSingleSearchParam(searchParams, 'verdict'),
+        evidenceRefs: searchParams.getAll('evidenceRef'),
+        statement: optionalSingleSearchParam(searchParams, 'statement'),
+        branch: optionalSingleSearchParam(searchParams, 'branch'),
+        commit: optionalSingleSearchParam(searchParams, 'commit')
+      });
+    case 'gate':
+      assertOnlySearchParams(searchParams, [
+        'command',
+        'task',
+        'gate',
+        'status',
+        'verifier',
+        'evidenceRef',
+        'statement',
+        'branch',
+        'commit'
+      ]);
+
+      return buildGoalGatePlan({
+        stateDir,
+        goalId,
+        taskId: optionalSingleSearchParam(searchParams, 'task'),
+        gateName: requiredSingleSearchParam(searchParams, 'gate'),
+        status: requiredSingleSearchParam(searchParams, 'status'),
+        verifierId: requiredSingleSearchParam(searchParams, 'verifier'),
+        evidenceRefs: searchParams.getAll('evidenceRef'),
+        statement: optionalSingleSearchParam(searchParams, 'statement'),
+        branch: optionalSingleSearchParam(searchParams, 'branch'),
+        commit: optionalSingleSearchParam(searchParams, 'commit')
+      });
+    default:
+      throw new GoalEventPlanPreviewError(
+        'unsupported-goal-preview-command',
+        'Goal event plan preview supports only update, review, or gate dry-runs.',
+        { command }
+      );
+  }
+}
+
+function addGoalEventPlanPreviewSummary(plan) {
+  const proposedEvent = plan.proposedEvents[0] ?? {};
+
+  return {
+    ...plan,
+    eventSummary: stripUndefined({
+      commandName: plan.command.name,
+      commandIntent: plan.command.intent,
+      eventType: proposedEvent.eventType,
+      taskId: proposedEvent.taskId ?? null,
+      phase: proposedEvent.phase,
+      actorRole: plan.actor.role,
+      actorId: plan.actor.id,
+      evidenceRefs: Array.isArray(proposedEvent.evidenceRefs)
+        ? proposedEvent.evidenceRefs.map((entry) => stripUndefined({
+            kind: entry.kind,
+            ref: entry.ref,
+            label: entry.label
+          }))
+        : [],
+      statement: proposedEvent.statement ?? null,
+      verdict: proposedEvent.review?.verdict,
+      gate: proposedEvent.gate?.name,
+      gateStatus: proposedEvent.gate?.status,
+      branch: proposedEvent.branch ?? null,
+      commit: proposedEvent.commit ?? null,
+      blocker: proposedEvent.blocker,
+      planHash: plan.planHash,
+      wouldAppendTo: plan.wouldAppend.target,
+      writesInDryRun: plan.wouldAppend.writesInDryRun
+    }),
+    previewEndpoint: {
+      dryRunOnly: true,
+      constrainedCommands: ['update', 'review', 'gate'],
+      genericShellRunner: false,
+      confirmAvailable: false
+    }
+  };
+}
+
+function assertOnlySearchParams(searchParams, allowedKeys) {
+  const allowed = new Set(allowedKeys);
+  const unsupported = Array.from(searchParams.keys()).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      'Goal event plan preview received unsupported query parameters.',
+      { parameter: unsupported[0] }
+    );
+  }
+
+  for (const [key, values] of groupSearchParamValues(searchParams)) {
+    if (key !== 'evidenceRef' && values.length > 1) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-preview-request',
+        'Goal event plan preview accepts repeated values only for evidenceRef.',
+        { parameter: key }
+      );
+    }
+  }
+
+  for (const blockedKey of ['confirm', 'planHash', 'plan-hash', 'dryRun', 'dry-run']) {
+    if (searchParams.has(blockedKey)) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-preview-request',
+        'Goal event plan preview is dry-run only and does not accept confirm or plan hash parameters.',
+        { parameter: blockedKey }
+      );
+    }
+  }
+}
+
+function requiredSingleSearchParam(searchParams, key) {
+  const value = optionalSingleSearchParam(searchParams, key);
+
+  if (value === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      `Goal event plan preview requires ${key}.`,
+      { parameter: key }
+    );
+  }
+
+  return value;
+}
+
+function optionalSingleSearchParam(searchParams, key) {
+  const values = searchParams.getAll(key);
+
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  if (values.length > 1) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      'Goal event plan preview received repeated single-value query parameters.',
+      { parameter: key }
+    );
+  }
+
+  const trimmed = values[0].trim();
+
+  if (trimmed === '') {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      'Goal event plan preview query parameters must be non-empty.',
+      { parameter: key }
+    );
+  }
+
+  return trimmed;
+}
+
+function groupSearchParamValues(searchParams) {
+  const groups = new Map();
+
+  for (const [key, value] of searchParams.entries()) {
+    groups.set(key, [...(groups.get(key) ?? []), value]);
+  }
+
+  return groups.entries();
+}
+
+function buildPreviewBlocker(searchParams) {
+  const blockerId = optionalSingleSearchParam(searchParams, 'blockerId');
+  const reason = optionalSingleSearchParam(searchParams, 'blockerReason');
+  const severity = optionalSingleSearchParam(searchParams, 'blockerSeverity');
+
+  if (blockerId === undefined && reason === undefined && severity === undefined) {
+    return undefined;
+  }
+
+  return stripUndefined({
+    blockerId,
+    reason,
+    severity
+  });
 }
 
 function isUnsafeGoalRouteSegment(value) {

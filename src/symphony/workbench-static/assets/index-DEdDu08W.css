@@ -442,6 +442,86 @@ h3 {
   font-size: 0.78rem;
 }
 
+.goal-event-plan-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border-top: 1px solid rgba(24, 35, 42, 0.1);
+  padding-top: 12px;
+}
+
+.goal-event-preview-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.goal-event-preview-fields label {
+  display: grid;
+  gap: 4px;
+  color: #59686e;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.goal-event-preview-fields input,
+.goal-event-preview-fields select {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid #cbd7d9;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #ffffff;
+  color: #17262d;
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.goal-event-preview-fields input[readonly] {
+  background: #eef3f2;
+  color: #43535a;
+}
+
+.goal-event-preview-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.goal-event-preview-actions button {
+  justify-self: start;
+  min-height: 34px;
+  border: 1px solid #255568;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #255568;
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.goal-event-preview-actions code,
+.goal-event-preview-result code {
+  display: block;
+  min-width: 0;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f3f6f6;
+  color: #18232a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.goal-event-preview-result {
+  display: grid;
+  gap: 10px;
+}
+
 .safe-preview-block {
   display: grid;
   gap: 10px;
@@ -546,5 +626,9 @@ h3 {
   .artifact-list .field-row {
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+
+  .goal-event-preview-fields {
+    grid-template-columns: 1fr;
   }
 }

@@ -12409,6 +12409,7 @@ Object.freeze({
 //#endregion
 //#region frontend/workbench/src/api/client.js
 var READONLY_ERROR_MESSAGE = "读取失败 / contract 未暴露 / 不可用";
+var GOAL_PLAN_PREVIEW_ERROR_MESSAGE = "dry-run plan preview 未返回可用 contract";
 async function fetchReadonlyRoute(route, { fetchImpl = globalThis.fetch } = {}) {
 	if (typeof fetchImpl !== "function") return readonlyError({
 		route,
@@ -12493,6 +12494,57 @@ async function fetchWorkbenchContracts(options = {}) {
 	results.safeArtifactPreviews = await Promise.all(safeArtifactPreviewRoutes.map((route) => fetchReadonlyRoute(route, options)));
 	return projectWorkbenchContracts(results);
 }
+async function fetchGoalEventPlanPreview(path, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "GET",
+			cache: "no-store",
+			headers: { Accept: "application/json" }
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== "goal-update-plan.v1") return {
+		ok: false,
+		httpStatus: response.status,
+		message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
 function readonlyError({ route, httpStatus = null, message, errorEnvelope = null }) {
 	return {
 		ok: false,
@@ -12575,6 +12627,7 @@ var initialState = {
 	phase: "loading",
 	model: null
 };
+var GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE = "/api/goals/<goal-id>/event-plan-preview";
 function App() {
 	const [viewState, setViewState] = (0, import_react.useState)(initialState);
 	(0, import_react.useEffect)(() => {
@@ -14013,23 +14066,184 @@ function GoalEventFormList({ forms, emptyCopy }) {
 	if (forms.state === "missing" || forms.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "goal-event-form-list",
-		children: forms.items.map((form, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["formId", form.formId],
-			["eventType", form.eventType],
-			["eventFamily", form.eventFamily],
-			["commandName", form.commandName],
-			["commandIntent", form.commandIntent],
-			["actorRole", form.actorRole],
-			["actorFlag", form.actorFlag],
-			["phase", form.phase],
-			["recommended", form.recommended],
-			["availableForCurrentNextAction", form.availableForCurrentNextAction],
-			["requiresTask", form.requiresTask],
-			["requiresEvidence", form.requiresEvidence],
-			["confirmRequiresPlanHash", form.confirmRequiresPlanHash],
-			["planPreviewContract", form.planPreviewContract]
-		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormFieldList, { fields: form.fields })] }, `${form.formId.text}-${index}`))
+		children: forms.items.map((form, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["formId", form.formId],
+				["eventType", form.eventType],
+				["eventFamily", form.eventFamily],
+				["commandName", form.commandName],
+				["commandIntent", form.commandIntent],
+				["actorRole", form.actorRole],
+				["actorFlag", form.actorFlag],
+				["phase", form.phase],
+				["recommended", form.recommended],
+				["availableForCurrentNextAction", form.availableForCurrentNextAction],
+				["requiresTask", form.requiresTask],
+				["requiresEvidence", form.requiresEvidence],
+				["confirmRequiresPlanHash", form.confirmRequiresPlanHash],
+				["planPreviewContract", form.planPreviewContract]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormFieldList, { fields: form.fields }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventPlanPreview, { form })
+		] }, `${form.formId.text}-${index}`))
 	});
+}
+function GoalEventPlanPreview({ form }) {
+	const [values, setValues] = (0, import_react.useState)(() => initialGoalEventPreviewValues(form));
+	const [previewState, setPreviewState] = (0, import_react.useState)({
+		phase: "idle",
+		plan: null,
+		error: null
+	});
+	const previewPath = buildGoalEventPreviewPath(form, values);
+	const missingRequired = missingRequiredGoalEventFields(form, values);
+	async function handlePreview() {
+		if (previewPath === null || missingRequired.length > 0) {
+			setPreviewState({
+				phase: "failed",
+				plan: null,
+				error: `缺少字段：${missingRequired.join("、")}`
+			});
+			return;
+		}
+		setPreviewState({
+			phase: "loading",
+			plan: null,
+			error: null
+		});
+		const result = await fetchGoalEventPlanPreview(previewPath);
+		if (result.ok) {
+			setPreviewState({
+				phase: "ready",
+				plan: result.data,
+				error: null
+			});
+			return;
+		}
+		setPreviewState({
+			phase: "failed",
+			plan: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "goal-event-plan-preview",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "dry-run plan preview" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "goal-event-preview-fields",
+				children: form.fields.items.filter((field) => shouldRenderGoalEventPreviewInput(field)).map((field) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: field.label.text }), field.options.state === "available" && field.options.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+					value: values[field.id.value] ?? "",
+					onChange: (event) => setValues({
+						...values,
+						[field.id.value]: event.target.value
+					}),
+					children: field.options.items.map((option) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+						value: option.value,
+						children: option.text
+					}, option.value))
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+					value: values[field.id.value] ?? "",
+					placeholder: field.placeholder.text,
+					readOnly: field.readOnly.value === true,
+					onChange: (event) => setValues({
+						...values,
+						[field.id.value]: event.target.value
+					})
+				})] }, field.id.text))
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "goal-event-preview-actions",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					onClick: handlePreview,
+					children: "Preview dry-run plan"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: previewPath ?? "preview route unavailable" })]
+			}),
+			previewState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: ["错误摘要：", previewState.error]
+			}) : null,
+			previewState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "empty-copy",
+				children: "正在读取 dry-run plan preview。"
+			}) : null,
+			previewState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "goal-event-preview-result",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["planHash", textValue(previewState.plan.planHash)],
+					["command", textValue(previewState.plan.eventSummary.commandName)],
+					["eventType", textValue(previewState.plan.eventSummary.eventType)],
+					["taskId", textValue(previewState.plan.eventSummary.taskId)],
+					["actorRole", textValue(previewState.plan.eventSummary.actorRole)],
+					["actorId", textValue(previewState.plan.eventSummary.actorId)],
+					["writesInDryRun", textValue(previewState.plan.eventSummary.writesInDryRun)],
+					["confirmAvailable", textValue(previewState.plan.previewEndpoint.confirmAvailable)]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: previewState.plan.confirm.copyOnlyCommand })]
+			}) : null
+		]
+	});
+}
+function initialGoalEventPreviewValues(form) {
+	return Object.fromEntries(form.fields.items.map((field) => [field.id.value, field.value.state === "available" ? String(field.value.value) : ""]));
+}
+function shouldRenderGoalEventPreviewInput(field) {
+	return [
+		"goalId",
+		"taskId",
+		"eventType",
+		"actorId",
+		"reviewerId",
+		"verifierId",
+		"verdict",
+		"gateName",
+		"gateStatus",
+		"evidenceRef",
+		"statement",
+		"branch",
+		"commit",
+		"blockerId",
+		"blockerReason",
+		"blockerSeverity"
+	].includes(field.id.value);
+}
+function missingRequiredGoalEventFields(form, values) {
+	return form.fields.items.filter((field) => shouldRenderGoalEventPreviewInput(field) && field.required.value === true).filter((field) => String(values[field.id.value] ?? "").trim() === "").map((field) => field.label.text);
+}
+function buildGoalEventPreviewPath(form, values) {
+	const goalId = String(values.goalId ?? "").trim();
+	if (goalId === "") return null;
+	const searchParams = new URLSearchParams();
+	const commandName = form.commandName.value;
+	if (commandName === "symphony goal update") {
+		searchParams.set("command", "update");
+		appendSearchParam(searchParams, "task", values.taskId);
+		appendSearchParam(searchParams, "event", values.eventType);
+		appendSearchParam(searchParams, "actor", values.actorId);
+	} else if (commandName === "symphony goal review") {
+		searchParams.set("command", "review");
+		appendSearchParam(searchParams, "task", values.taskId);
+		appendSearchParam(searchParams, "reviewer", values.reviewerId);
+		appendSearchParam(searchParams, "verdict", values.verdict);
+	} else if (commandName === "symphony goal gate") {
+		searchParams.set("command", "gate");
+		appendSearchParam(searchParams, "task", values.taskId);
+		appendSearchParam(searchParams, "gate", values.gateName);
+		appendSearchParam(searchParams, "status", values.gateStatus);
+		appendSearchParam(searchParams, "verifier", values.verifierId);
+	} else return null;
+	appendSearchParam(searchParams, "statement", values.statement);
+	appendSearchParam(searchParams, "branch", values.branch);
+	appendSearchParam(searchParams, "commit", values.commit);
+	appendSearchParam(searchParams, "blockerId", values.blockerId);
+	appendSearchParam(searchParams, "blockerReason", values.blockerReason);
+	appendSearchParam(searchParams, "blockerSeverity", values.blockerSeverity);
+	for (const evidenceRef of String(values.evidenceRef ?? "").split(/\r?\n/u)) appendSearchParam(searchParams, "evidenceRef", evidenceRef);
+	return `${GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE.replace("<goal-id>", encodeURIComponent(goalId))}?${searchParams.toString()}`;
+}
+function appendSearchParam(searchParams, key, value) {
+	const normalized = String(value ?? "").trim();
+	if (normalized !== "") searchParams.append(key, normalized);
 }
 function GoalEventFormFieldList({ fields }) {
 	if (fields.state === "missing" || fields.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "form fields 为空。" });

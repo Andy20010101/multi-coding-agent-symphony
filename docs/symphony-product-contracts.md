@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 adds the implemented/draft `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract family for Goal Runbook + Next Action Control Center work. v19 is not released or tagged by this document. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 adds the implemented/draft `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract family for Goal Runbook + Next Action Control Center work. v21 adds a Workbench dry-run preview route for the existing `goal-update-plan.v1` contract. v19 and v21 are not released or tagged by this document. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -37,6 +37,7 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v19 goal status must come from explicit `goal-event-log.v1` evidence. Branch names, filenames, task titles, command text, and path strings are never approval, main verification, or release-ready proof.
 - v19 prompt and command fields are copy-only text. Dry-run and confirm fields must stay explicit and consistent; dry-run fields must not imply writes.
 - v19 release-ready requires an explicit `symphony goal gate --gate release.ready --status declared` confirm flow, which records `release.ready-declared`. Passing `pnpm check`, `pnpm test`, `pnpm workbench:build`, mutation, audit, doctor, or diff commands is command evidence only until the matching release gate events are registered.
+- v21 Workbench dry-run preview uses `GET /api/goals/<goal-id|latest>/event-plan-preview`. It accepts only `command=update`, `command=review`, or `command=gate` plus that command's required goal event fields. It returns `goal-update-plan.v1` with an additive `eventSummary`; it does not run shell commands, accept arbitrary commands, append events, confirm plans, infer approval, or declare release readiness.
 
 ## `goal-event-log.v1`
 
@@ -73,9 +74,11 @@ Routes:
 ```text
 GET /api/goals/latest/events
 GET /api/goals/<goal-id>/events
+GET /api/goals/latest/event-plan-preview
+GET /api/goals/<goal-id>/event-plan-preview
 ```
 
-These routes accept only `GET`. Unknown goals and unsafe path segments return `error-envelope.v1`. Query path, absolute paths, `file://`, `~/`, and encoded traversal do not trigger filesystem reads. Evidence refs are identifiers only; the API, resolver, and Workbench do not read evidence document bodies.
+These routes accept only `GET`. Unknown goals and unsafe path segments return `error-envelope.v1`. Event plan preview query parameters are limited to the selected command shape; `path`, `confirm`, `planHash`, arbitrary command names, absolute paths, `file://`, `~/`, and encoded traversal do not trigger filesystem reads or shell execution. Evidence refs are identifiers only; the API, resolver, and Workbench do not read evidence document bodies.
 
 ## `goal-update-plan.v1`
 
@@ -125,6 +128,16 @@ symphony goal gate --goal v18-goal-event-journal-evidence-recorder --gate releas
 ```
 
 Confirm recalculates the plan hash from the current CLI input and refuses mismatches. Confirm does not run tests, audit, mutation, doctor, package installs, shell commands, model calls, merge, or tag operations. It only appends the explicit event to the managed goal event journal.
+
+Workbench dry-run preview route:
+
+```text
+GET /api/goals/<goal-id|latest>/event-plan-preview?command=update&task=<task-id>&event=<worker-or-blocker-event>&actor=<actor-id>[&evidenceRef=<ref>]
+GET /api/goals/<goal-id|latest>/event-plan-preview?command=review&task=<task-id>&reviewer=<reviewer-id>&verdict=approved|needs-revision&evidenceRef=<ref>
+GET /api/goals/<goal-id|latest>/event-plan-preview?command=gate&gate=main-verification|release.ready|release.<gate>&status=passed|failed|declared&verifier=<verifier-id>&evidenceRef=<ref>[&task=<task-id>]
+```
+
+The route calls the same controlled plan builders used by `symphony goal update`, `symphony goal review`, and `symphony goal gate`. The response keeps `mode: "dry-run"`, `wouldAppend.writesInDryRun: false`, and `confirm.available: true` as copy-only text. The additive `eventSummary` repeats the event that would be appended and the returned `planHash`; it is display data, not completion state.
 
 ## `goal-runbook.v1`
 

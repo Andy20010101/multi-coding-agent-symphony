@@ -800,11 +800,11 @@ describe('v16 Workbench route smoke and server parity', () => {
     const forbiddenEntrypoints = [
       {
         label: 'mutation controls',
-        pattern: /<(?:button|form)\b|<a\b[^>]*(?:href|download)\s*=/iu
+        pattern: /<form\b|<a\b[^>]*(?:href|download)\s*=/iu
       },
       {
         label: 'mutation event handlers',
-        pattern: /\bon(?:Click|Submit)\s*=/u
+        pattern: /\bonSubmit\s*=/u
       },
       {
         label: 'raw HTML rendering',
@@ -835,6 +835,12 @@ describe('v16 Workbench route smoke and server parity', () => {
     for (const [relativePath, source] of files) {
       for (const forbidden of forbiddenEntrypoints) {
         assert.doesNotMatch(source, forbidden.pattern, `${relativePath} exposes ${forbidden.label}`);
+      }
+      if (relativePath === 'App.jsx') {
+        assert.match(source, /Preview dry-run plan/u, 'App.jsx exposes the v21 dry-run preview control');
+        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!handlePreview\})/u, 'App.jsx exposes a non-preview click handler');
+      } else {
+        assert.doesNotMatch(source, /\bonClick\s*=/u, `${relativePath} exposes a click handler`);
       }
       assert.doesNotMatch(source, /\bfetch\s*\(/u, `${relativePath} should use the read-only fetch wrapper only`);
       assert.doesNotMatch(source, /\bbody\s*:/u, `${relativePath} should not attach request bodies`);
