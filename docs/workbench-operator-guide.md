@@ -4,14 +4,14 @@
 
 Workbench 是 `symphony console` 提供的本地浏览器展示面。它消费 console server 暴露的本地 `GET` API，用于查看 active goal runbook、task queue、next action、prompt preview、closeout gaps、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
 
-Workbench 默认是 read-only / display-only / copy-only。v21 增加一个例外：浏览器可以请求受控 dry-run plan preview，后端只计算 `symphony goal update/review/gate` 会产生的 `goal-update-plan.v1`，不 append event。
+Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受控例外：浏览器可以请求 `symphony goal update/review/gate` 的 dry-run plan preview；确认时只能带同一组字段和 dry-run 返回的 `planHash` 调用匹配的 confirm path，向 managed goal event journal append 一个 event。
 
 - 浏览器只展示状态、contract 字段和可复制的命令文本。
 - 浏览器不执行 shell 命令，不写文件，不触发模型，不触发 agent。
 - 浏览器不下载 artifact，不打开本地文件，不接受任意路径输入。
 - 浏览器不是 canonical state；`.symphony` 只保存 summary、ref、pointer，完整 evidence 继续由 ArtifactStore 承担。
 
-v18 增加 `goal-event-log.v1` 和 `goal-update-plan.v1`。v21 之前，`symphony goal update`、`symphony goal review`、`symphony goal gate` 的 dry-run / confirm 流程只在终端 CLI 中运行；Workbench 只展示后端已经写入的 event log 和 resolver 生成的 ledger。v21 后，Workbench 可以请求 dry-run 预览，但 confirm 仍需要后续受控流程，不能由文件名、分支名、commit message 或前端判断替代。
+v18 增加 `goal-event-log.v1` 和 `goal-update-plan.v1`。v21 之前，`symphony goal update`、`symphony goal review`、`symphony goal gate` 的 dry-run / confirm 流程只在终端 CLI 中运行；Workbench 只展示后端已经写入的 event log 和 resolver 生成的 ledger。v21 后，Workbench 可以请求 dry-run 预览，并用 plan hash 完成受控 confirm。任何状态变化仍来自后端写入的 explicit event，不能由文件名、分支名、commit message 或前端判断替代。
 
 v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout` 和 `symphony next`。v20 把 active goal runbook 和 task queue 放到 Workbench 第一屏主路径；summary、runs、handoff、events、capabilities 和 diagnostics 仍是支撑信息。v20 不是 release-ready 状态；release-ready 仍需要终端中显式登记 `symphony goal gate --gate release.ready --status declared`。
 
@@ -102,6 +102,8 @@ GET /api/goals/latest/events
 GET /api/goals/<goal-id>/events
 GET /api/goals/latest/event-plan-preview
 GET /api/goals/<goal-id>/event-plan-preview
+POST /api/goals/latest/event-plan-confirm
+POST /api/goals/<goal-id>/event-plan-confirm
 GET /api/goals/latest/runbook
 GET /api/goals/<goal-id>/runbook
 GET /api/goals/latest/next
@@ -114,7 +116,7 @@ GET /api/capabilities
 GET /api/diagnostics
 ```
 
-所有非 `GET` 请求都必须返回 `405`，并使用 `error-envelope.v1`。`/api/goals/<goal-id>/event-plan-preview` 是 dry-run 预览 GET route，只接受受控 query 字段，不接受任意 `path`、`confirm`、`planHash` 或未登记命令。`/api/handoff` 只暴露 registered handoff ref，当前为 `guided-goal-handoff.v1`。safe preview route 只接受 run state 已登记的 artifact kind，不接受 `path` query、encoded traversal 或任意本地路径。
+除 `POST /api/goals/<goal-id|latest>/event-plan-confirm` 外，所有非 `GET` 请求都必须返回 `405`，并使用 `error-envelope.v1`。`/api/goals/<goal-id>/event-plan-preview` 是 dry-run 预览 GET route，只接受受控 query 字段，不接受任意 `path`、`confirm`、`planHash` 或未登记命令。confirm route 只接受 JSON body 中的 `command=update|review|gate`、该 command 的字段和 `planHash`，不接受任意 command、path 或 shell 输入。`/api/handoff` 只暴露 registered handoff ref，当前为 `guided-goal-handoff.v1`。safe preview route 只接受 run state 已登记的 artifact kind，不接受 `path` query、encoded traversal 或任意本地路径。
 
 `/workbench` 的静态资源服务只允许读取 `src/symphony/workbench-static/` 中的构建产物。`/workbench/api/*` 只会落到 Workbench HTML fallback，不返回 API JSON contract；`/workbench/docs/stages/*.html`、`/workbench/docs/stages/*.stage.json`、`/workbench/src/*`、`/workbench/package.json` 和 lockfile 路径不能暴露仓库文件内容。
 
@@ -171,7 +173,7 @@ GET /api/goals/<goal-id>/event-plan-preview?command=gate&task=task-2&gate=main-v
 
 响应仍是 `goal-update-plan.v1`，并额外提供 `eventSummary`，包括 plan hash、command、event type、task、actor、evidence refs、gate/verdict 和 `writesInDryRun: false`。后端直接调用受控 goal update/review/gate plan builder，不通过 shell runner，不接受任意命令。
 
-Confirm 阶段必须带 dry-run 生成的 `--plan-hash`，只向受控 managed-goal-event-journal append event。Workbench 当前不提供 confirm 按钮，也不会触发 shell、模型、review、gate、merge 或 tag。
+Confirm 阶段必须使用 dry-run 生成的 `planHash`。Workbench confirm route 会调用匹配的 `goal update`、`goal review` 或 `goal gate` confirm function，只向受控 managed-goal-event-journal append event。confirm 成功后，Workbench 重新读取 goal-status、events 和 next action。这个流程不会触发 shell、模型、merge 或 tag。
 
 ## v20 Active Goal Workbench workflow
 

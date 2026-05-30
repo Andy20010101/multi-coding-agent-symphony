@@ -14,6 +14,7 @@ import {
 
 const READONLY_ERROR_MESSAGE = '读取失败 / contract 未暴露 / 不可用';
 const GOAL_PLAN_PREVIEW_ERROR_MESSAGE = 'dry-run plan preview 未返回可用 contract';
+const GOAL_PLAN_CONFIRM_ERROR_MESSAGE = 'event confirm 未返回可用 contract';
 
 export async function fetchReadonlyRoute(route, {
   fetchImpl = globalThis.fetch
@@ -200,6 +201,77 @@ export async function fetchGoalEventPlanPreview(path, {
       ok: false,
       httpStatus: response.status,
       message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmGoalEventPlan(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'goal-event-confirmation.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
       errorEnvelope: null
     };
   }

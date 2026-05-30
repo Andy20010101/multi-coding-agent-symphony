@@ -8,7 +8,7 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - `contractName` identifies the response shape.
 - Legacy top-level fields remain in product command JSON responses.
 - `artifactRefs` is the only artifact path source used by `symphony console` previews.
-- The console is local and read-only; non-GET HTTP requests return `405`.
+- The console is local and read-only except the v21 controlled goal event confirm route; unsupported non-GET HTTP requests return `405`.
 - File previews are capped at 200 KiB and return `truncated: true` when capped.
 - v9 workbench commands are copy-only recommendations. The browser UI does not execute commands or write files.
 - v9 readiness checks may inspect local CLI availability, git state, GitHub auth/CI visibility, and real CLI gate status; they do not invoke models and must not expose token values.
@@ -37,7 +37,7 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v19 goal status must come from explicit `goal-event-log.v1` evidence. Branch names, filenames, task titles, command text, and path strings are never approval, main verification, or release-ready proof.
 - v19 prompt and command fields are copy-only text. Dry-run and confirm fields must stay explicit and consistent; dry-run fields must not imply writes.
 - v19 release-ready requires an explicit `symphony goal gate --gate release.ready --status declared` confirm flow, which records `release.ready-declared`. Passing `pnpm check`, `pnpm test`, `pnpm workbench:build`, mutation, audit, doctor, or diff commands is command evidence only until the matching release gate events are registered.
-- v21 Workbench dry-run preview uses `GET /api/goals/<goal-id|latest>/event-plan-preview`. It accepts only `command=update`, `command=review`, or `command=gate` plus that command's required goal event fields. It returns `goal-update-plan.v1` with an additive `eventSummary`; it does not run shell commands, accept arbitrary commands, append events, confirm plans, infer approval, or declare release readiness.
+- v21 Workbench dry-run preview uses `GET /api/goals/<goal-id|latest>/event-plan-preview`. It accepts only `command=update`, `command=review`, or `command=gate` plus that command's required goal event fields. It returns `goal-update-plan.v1` with an additive `eventSummary`; it does not run shell commands, accept arbitrary commands, append events, infer approval, or declare release readiness. v21 confirm uses `POST /api/goals/<goal-id|latest>/event-plan-confirm`; it accepts only JSON for the same three commands with the dry-run `planHash`, calls the matching goal command confirm implementation, appends one managed event, and returns refreshed goal progress/events/next-action contracts.
 
 ## `goal-event-log.v1`
 
@@ -76,9 +76,11 @@ GET /api/goals/latest/events
 GET /api/goals/<goal-id>/events
 GET /api/goals/latest/event-plan-preview
 GET /api/goals/<goal-id>/event-plan-preview
+POST /api/goals/latest/event-plan-confirm
+POST /api/goals/<goal-id>/event-plan-confirm
 ```
 
-These routes accept only `GET`. Unknown goals and unsafe path segments return `error-envelope.v1`. Event plan preview query parameters are limited to the selected command shape; `path`, `confirm`, `planHash`, arbitrary command names, absolute paths, `file://`, `~/`, and encoded traversal do not trigger filesystem reads or shell execution. Evidence refs are identifiers only; the API, resolver, and Workbench do not read evidence document bodies.
+Preview routes accept only `GET`. Confirm routes accept only `POST` with `application/json`. Unknown goals and unsafe path segments return `error-envelope.v1`. Event plan preview query parameters are limited to the selected command shape; `path`, `confirm`, `planHash`, arbitrary command names, absolute paths, `file://`, `~/`, and encoded traversal do not trigger filesystem reads or shell execution. Confirm bodies are limited to the selected command shape plus `planHash`; unsupported fields are rejected. Evidence refs are identifiers only; the API, resolver, and Workbench do not read evidence document bodies.
 
 ## `goal-update-plan.v1`
 
@@ -138,6 +140,14 @@ GET /api/goals/<goal-id|latest>/event-plan-preview?command=gate&gate=main-verifi
 ```
 
 The route calls the same controlled plan builders used by `symphony goal update`, `symphony goal review`, and `symphony goal gate`. The response keeps `mode: "dry-run"`, `wouldAppend.writesInDryRun: false`, and `confirm.available: true` as copy-only text. The additive `eventSummary` repeats the event that would be appended and the returned `planHash`; it is display data, not completion state.
+
+Workbench confirm route:
+
+```text
+POST /api/goals/<goal-id|latest>/event-plan-confirm
+```
+
+The JSON body must include `command`, `planHash`, and the same controlled fields used for the matching preview command. Confirm recalculates the plan hash through `confirmGoalUpdate`, `confirmGoalReview`, or `confirmGoalGate`; mismatches are rejected and do not append. A successful response uses `goal-event-confirmation.v1` and includes refreshed `goal-progress-ledger.v1`, `goal-event-log.v1`, and `goal-next-action.v1` payloads.
 
 ## `goal-runbook.v1`
 

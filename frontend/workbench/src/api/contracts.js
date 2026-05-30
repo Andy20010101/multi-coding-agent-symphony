@@ -1433,13 +1433,14 @@ function projectGoalEventFormModel(nextAction) {
     safety: {
       readOnly: valueState(true),
       copyOnly: valueState(true),
-      dryRunOnly: valueState(true),
+      dryRunOnly: valueState(false),
       confirmAvailableInTask1: valueState(false),
-      workbenchWriteAvailable: valueState(false),
+      confirmAvailableInTask3: valueState(true),
+      workbenchWriteAvailable: valueState(true),
       browserExecutionAvailable: valueState(false),
       modelInvocationAvailable: valueState(false)
     },
-    note: 'Form model uses goal-next-action.v1 allowedEvents for recommended forms and a fixed goal update/review/gate catalog for supported forms; it does not execute dry-run, confirm, shell, model, review, gate, merge, or tag operations.'
+    note: 'Form model uses goal-next-action.v1 allowedEvents for recommended forms and a fixed goal update/review/gate catalog for supported forms; confirm is limited to the matching dry-run plan hash and does not run shell, model, merge, or tag operations.'
   };
 }
 

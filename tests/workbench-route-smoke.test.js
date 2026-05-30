@@ -838,22 +838,30 @@ describe('v16 Workbench route smoke and server parity', () => {
       }
       if (relativePath === 'App.jsx') {
         assert.match(source, /Preview dry-run plan/u, 'App.jsx exposes the v21 dry-run preview control');
-        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!handlePreview\})/u, 'App.jsx exposes a non-preview click handler');
+        assert.match(source, /Confirm event append/u, 'App.jsx exposes the v21 controlled confirm control');
+        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:handlePreview|handleConfirm)\})/u, 'App.jsx exposes a non-preview/non-confirm click handler');
       } else {
         assert.doesNotMatch(source, /\bonClick\s*=/u, `${relativePath} exposes a click handler`);
       }
       assert.doesNotMatch(source, /\bfetch\s*\(/u, `${relativePath} should use the read-only fetch wrapper only`);
-      assert.doesNotMatch(source, /\bbody\s*:/u, `${relativePath} should not attach request bodies`);
-      assert.doesNotMatch(
-        source,
-        /\bmethod\s*:\s*['"`](?:POST|PUT|PATCH|DELETE|HEAD)['"`]/u,
-        `${relativePath} should not declare non-GET Workbench requests`
-      );
+      if (relativePath === 'api/client.js') {
+        assert.match(source, /confirmGoalEventPlan/u, 'api/client.js exposes the controlled confirm wrapper');
+        assert.match(source, /\bmethod\s*:\s*'POST'[\s\S]*body:\s*JSON\.stringify\(body\)/u);
+        assert.doesNotMatch(source, /\bmethod\s*:\s*['"`](?:PUT|PATCH|DELETE|HEAD)['"`]/u);
+      } else {
+        assert.doesNotMatch(source, /\bbody\s*:/u, `${relativePath} should not attach request bodies`);
+        assert.doesNotMatch(
+          source,
+          /\bmethod\s*:\s*['"`](?:POST|PUT|PATCH|DELETE|HEAD)['"`]/u,
+          `${relativePath} should not declare non-GET Workbench requests`
+        );
+      }
     }
 
     const clientSource = files.find(([relativePath]) => relativePath === 'api/client.js')?.[1] ?? '';
 
     assert.match(clientSource, /fetchImpl\(route\.path,\s*\{\s*method:\s*'GET'/su);
+    assert.match(clientSource, /fetchImpl\(path,\s*\{\s*method:\s*'POST'/su);
   });
 });
 

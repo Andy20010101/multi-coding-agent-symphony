@@ -151,6 +151,146 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
       await cleanupPreviewConsoleServer(context);
     }
   });
+
+  it('confirms a matching update plan hash, appends one event, and returns refreshed goal state', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      const previewResponse = await fetch(`${context.baseUrl}/api/goals/latest/event-plan-preview?${new URLSearchParams({
+        command: 'update',
+        task: 'task-3',
+        event: 'worker.evidence-recorded',
+        actor: 'codex-v21-task-3-worker',
+        evidenceRef: 'docs/plans/v21-task-3-worker-evidence-2026-05-29.md',
+        statement: 'Task 3 worker evidence is ready for independent review.',
+        branch: 'v21-task-3-confirm-event-append-flow'
+      })}`);
+      const previewPlan = await previewResponse.json();
+      const confirmResponse = await fetch(`${context.baseUrl}/api/goals/latest/event-plan-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          command: 'update',
+          task: 'task-3',
+          event: 'worker.evidence-recorded',
+          actor: 'codex-v21-task-3-worker',
+          evidenceRef: ['docs/plans/v21-task-3-worker-evidence-2026-05-29.md'],
+          statement: 'Task 3 worker evidence is ready for independent review.',
+          branch: 'v21-task-3-confirm-event-append-flow',
+          planHash: previewPlan.planHash
+        })
+      });
+      const confirmation = await confirmResponse.json();
+
+      assert.equal(confirmResponse.status, 200);
+      assert.equal(confirmation.contractName, 'goal-event-confirmation.v1');
+      assert.equal(confirmation.command, 'update');
+      assert.equal(confirmation.status, 'appended');
+      assert.equal(confirmation.written, true);
+      assert.equal(confirmation.appendOnly, true);
+      assert.equal(confirmation.planHash, previewPlan.planHash);
+      assert.equal(confirmation.eventSummary.eventType, 'worker.evidence-recorded');
+      assert.equal(confirmation.eventSummary.taskId, 'task-3');
+      assert.equal(confirmation.eventSummary.actorId, 'codex-v21-task-3-worker');
+      assert.equal(confirmation.refreshed.events.contractName, 'goal-event-log.v1');
+      assert.equal(confirmation.refreshed.events.log.eventCount, 1);
+      assert.equal(confirmation.refreshed.progress.contractName, 'goal-progress-ledger.v1');
+      assert.equal(confirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-3').workerEvidenceRef, 'docs/plans/v21-task-3-worker-evidence-2026-05-29.md');
+      assert.equal(confirmation.refreshed.nextAction.contractName, 'goal-next-action.v1');
+      assert.equal(confirmation.confirmEndpoint.genericShellRunner, false);
+      assert.deepEqual(confirmation.confirmEndpoint.constrainedCommands, ['update', 'review', 'gate']);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
+  it('rejects mismatched plan hashes, unsupported confirm commands, unknown fields, and unsafe goal refs without appending', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      const before = await snapshotDirectoryFiles(context.stateDir);
+      const previewResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'update',
+        task: 'task-3',
+        event: 'worker.started',
+        actor: 'codex-v21-task-3-worker'
+      })}`);
+      const previewPlan = await previewResponse.json();
+      const probes = [
+        {
+          path: `/api/goals/${GOAL_ID}/event-plan-confirm`,
+          body: {
+            command: 'update',
+            task: 'task-3',
+            event: 'worker.started',
+            actor: 'codex-v21-task-3-worker',
+            planHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+          },
+          code: 'plan-hash-mismatch'
+        },
+        {
+          path: `/api/goals/${GOAL_ID}/event-plan-confirm`,
+          body: {
+            command: 'scan',
+            planHash: previewPlan.planHash
+          },
+          code: 'unsupported-goal-confirm-command'
+        },
+        {
+          path: `/api/goals/${GOAL_ID}/event-plan-confirm`,
+          body: {
+            command: 'update',
+            task: 'task-3',
+            event: 'worker.started',
+            actor: 'codex-v21-task-3-worker',
+            path: 'package.json',
+            planHash: previewPlan.planHash
+          },
+          code: 'invalid-goal-confirm-request'
+        },
+        {
+          path: '/api/goals/%2e%2e%2fpackage.json/event-plan-confirm',
+          body: {
+            command: 'update',
+            task: 'task-3',
+            event: 'worker.started',
+            actor: 'codex-v21-task-3-worker',
+            planHash: previewPlan.planHash
+          },
+          code: 'invalid-goal-ref'
+        }
+      ];
+
+      for (const probe of probes) {
+        const response = await fetch(`${context.baseUrl}${probe.path}`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(probe.body)
+        });
+        const body = await response.text();
+        const envelope = JSON.parse(body);
+
+        assert.equal(response.status, 400, probe.path);
+        assert.equal(envelope.contractName, 'error-envelope.v1');
+        assert.equal(envelope.error.code, probe.code);
+        assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+          ok: true,
+          errors: []
+        });
+        assert.doesNotMatch(body, /\/Users\/|multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer/u);
+      }
+
+      assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), before);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
 });
 
 async function startPreviewConsoleServer() {

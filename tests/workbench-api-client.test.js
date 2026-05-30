@@ -12,6 +12,7 @@ import {
 } from '../src/symphony/goal-runbook-registry.js';
 import {
   READONLY_API_ROUTES,
+  confirmGoalEventPlan,
   fetchReadonlyRoute,
   fetchWorkbenchContracts
 } from '../frontend/workbench/src/api/client.js';
@@ -165,6 +166,51 @@ describe('v15 Workbench read-only API client', () => {
         ['/api/runs/run-1/artifacts/summary/preview', 'GET', 'no-store', 'application/json', false]
       ]
     );
+  });
+
+  it('posts controlled goal event confirm requests with a JSON body and validates the confirmation contract', async () => {
+    const calls = [];
+    const result = await confirmGoalEventPlan('/api/goals/latest/event-plan-confirm', {
+      command: 'update',
+      task: 'task-3',
+      event: 'worker.evidence-recorded',
+      actor: 'codex-v21-task-3-worker',
+      evidenceRef: ['docs/plans/v21-task-3-worker-evidence-2026-05-29.md'],
+      planHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111'
+    }, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'goal-event-confirmation.v1',
+              contractVersion: 1,
+              status: 'appended'
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      init.headers['Content-Type'],
+      JSON.parse(init.body).planHash
+    ]), [[
+      '/api/goals/latest/event-plan-confirm',
+      'POST',
+      'no-store',
+      'application/json',
+      'application/json',
+      'sha256:1111111111111111111111111111111111111111111111111111111111111111'
+    ]]);
   });
 
   it('returns read-only error state for non-OK responses', async () => {
@@ -598,7 +644,8 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.activeGoal.nextAction.eventForms.supportedForms.items.some((form) => form.eventType.value === 'blocker.opened'), true);
     assert.equal(model.activeGoal.nextAction.eventForms.policy.workerCannotApproveOwnTask.value, true);
     assert.equal(model.activeGoal.nextAction.eventForms.safety.confirmAvailableInTask1.value, false);
-    assert.equal(model.activeGoal.nextAction.eventForms.safety.workbenchWriteAvailable.value, false);
+    assert.equal(model.activeGoal.nextAction.eventForms.safety.confirmAvailableInTask3.value, true);
+    assert.equal(model.activeGoal.nextAction.eventForms.safety.workbenchWriteAvailable.value, true);
 
     assert.equal(model.activeGoal.promptPreview.contractName.value, 'goal-prompt-pack.v1');
     assert.equal(model.activeGoal.promptPreview.visibleCount.value, 1);

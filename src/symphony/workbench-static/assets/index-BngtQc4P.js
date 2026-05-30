@@ -11193,13 +11193,14 @@ function projectGoalEventFormModel(nextAction) {
 		safety: {
 			readOnly: valueState(true),
 			copyOnly: valueState(true),
-			dryRunOnly: valueState(true),
+			dryRunOnly: valueState(false),
 			confirmAvailableInTask1: valueState(false),
-			workbenchWriteAvailable: valueState(false),
+			confirmAvailableInTask3: valueState(true),
+			workbenchWriteAvailable: valueState(true),
 			browserExecutionAvailable: valueState(false),
 			modelInvocationAvailable: valueState(false)
 		},
-		note: "Form model uses goal-next-action.v1 allowedEvents for recommended forms and a fixed goal update/review/gate catalog for supported forms; it does not execute dry-run, confirm, shell, model, review, gate, merge, or tag operations."
+		note: "Form model uses goal-next-action.v1 allowedEvents for recommended forms and a fixed goal update/review/gate catalog for supported forms; confirm is limited to the matching dry-run plan hash and does not run shell, model, merge, or tag operations."
 	};
 }
 function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
@@ -12410,6 +12411,7 @@ Object.freeze({
 //#region frontend/workbench/src/api/client.js
 var READONLY_ERROR_MESSAGE = "读取失败 / contract 未暴露 / 不可用";
 var GOAL_PLAN_PREVIEW_ERROR_MESSAGE = "dry-run plan preview 未返回可用 contract";
+var GOAL_PLAN_CONFIRM_ERROR_MESSAGE = "event confirm 未返回可用 contract";
 async function fetchReadonlyRoute(route, { fetchImpl = globalThis.fetch } = {}) {
 	if (typeof fetchImpl !== "function") return readonlyError({
 		route,
@@ -12545,6 +12547,61 @@ async function fetchGoalEventPlanPreview(path, { fetchImpl = globalThis.fetch } 
 		data
 	};
 }
+async function confirmGoalEventPlan(path, body, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "POST",
+			cache: "no-store",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify(body)
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== "goal-event-confirmation.v1") return {
+		ok: false,
+		httpStatus: response.status,
+		message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
 function readonlyError({ route, httpStatus = null, message, errorEnvelope = null }) {
 	return {
 		ok: false,
@@ -12628,8 +12685,26 @@ var initialState = {
 	model: null
 };
 var GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE = "/api/goals/<goal-id>/event-plan-preview";
+var GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE = "/api/goals/<goal-id>/event-plan-confirm";
 function App() {
 	const [viewState, setViewState] = (0, import_react.useState)(initialState);
+	async function refreshWorkbenchContracts() {
+		setViewState((current) => ({
+			phase: "loading",
+			model: current.model
+		}));
+		try {
+			setViewState({
+				phase: "ready",
+				model: await fetchWorkbenchContracts()
+			});
+		} catch {
+			setViewState({
+				phase: "failed",
+				model: null
+			});
+		}
+	}
 	(0, import_react.useEffect)(() => {
 		let cancelled = false;
 		fetchWorkbenchContracts().then((model) => {
@@ -12668,7 +12743,7 @@ function App() {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: "展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff， 以及 goal progress、goal events、ActiveGoalViewModel、capabilities、diagnostics 与安全 error envelope。 浏览器端只读取受控 GET routes，artifact preview 与 prompt preview 只消费后端 contract，不提供写入、下载、终端或执行动作。"
+							children: "展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff， 以及 goal progress、goal events、ActiveGoalViewModel、capabilities、diagnostics 与安全 error envelope。 浏览器端读取受控 routes；v21 event form 只能用 dry-run plan hash 确认 goal update/review/gate event append，不提供任意命令、下载、终端或执行动作。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -12682,7 +12757,7 @@ function App() {
 							routeCounts.total,
 							" routes 已读取"
 						] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "刷新页面后会重新读取只读 API" })
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "confirm 后会刷新 goal-status / events / next action" })
 					]
 				})]
 			}),
@@ -12723,7 +12798,10 @@ function App() {
 							promptPreview: model.activeGoal.promptPreview,
 							route: findRoute(model.routeStates, "goalPromptPack")
 						}),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalViewModelPanel, { viewModel: model.activeGoal.viewModel }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveGoalViewModelPanel, {
+							viewModel: model.activeGoal.viewModel,
+							onGoalEventConfirmed: refreshWorkbenchContracts
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseoutGapsPanel, {
 							closeoutGaps: model.activeGoal.closeoutGaps,
 							route: findRoute(model.routeStates, "goalCloseout")
@@ -12958,7 +13036,7 @@ function EvidenceMatrixPanel({ matrix, route }) {
 		]
 	});
 }
-function ActiveGoalViewModelPanel({ viewModel }) {
+function ActiveGoalViewModelPanel({ viewModel, onGoalEventConfirmed }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "active-goal-view-model-panel",
 		kicker: "v20 active goal",
@@ -13141,7 +13219,10 @@ function NextActionCard({ nextAction, route }) {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "event registration forms",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormModelView, { formModel: nextAction.eventForms })
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormModelView, {
+					formModel: nextAction.eventForms,
+					onGoalEventConfirmed
+				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "safety",
@@ -14019,7 +14100,7 @@ function ActiveGoalCommandInventoryList({ inventory }) {
 		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.command.text })] }, item.id.text))
 	});
 }
-function GoalEventFormModelView({ formModel }) {
+function GoalEventFormModelView({ formModel, onGoalEventConfirmed }) {
 	if (formModel.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "event form model 未暴露。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "event-form-model",
@@ -14039,20 +14120,23 @@ function GoalEventFormModelView({ formModel }) {
 				["approvalReadinessSource", formModel.policy.approvalReadinessSource],
 				["dryRunOnly", formModel.safety.dryRunOnly],
 				["confirmAvailableInTask1", formModel.safety.confirmAvailableInTask1],
+				["confirmAvailableInTask3", formModel.safety.confirmAvailableInTask3],
 				["workbenchWriteAvailable", formModel.safety.workbenchWriteAvailable]
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "recommended forms",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
 					forms: formModel.recommendedForms,
-					emptyCopy: "当前 next action 没有可推荐的登记表单。"
+					emptyCopy: "当前 next action 没有可推荐的登记表单。",
+					onGoalEventConfirmed
 				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "supported form catalog",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
 					forms: formModel.supportedForms,
-					emptyCopy: "supported form catalog 为空。"
+					emptyCopy: "supported form catalog 为空。",
+					onGoalEventConfirmed
 				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -14062,7 +14146,7 @@ function GoalEventFormModelView({ formModel }) {
 		]
 	});
 }
-function GoalEventFormList({ forms, emptyCopy }) {
+function GoalEventFormList({ forms, emptyCopy, onGoalEventConfirmed }) {
 	if (forms.state === "missing" || forms.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "goal-event-form-list",
@@ -14084,31 +14168,64 @@ function GoalEventFormList({ forms, emptyCopy }) {
 				["planPreviewContract", form.planPreviewContract]
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormFieldList, { fields: form.fields }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventPlanPreview, { form })
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventPlanPreview, {
+				form,
+				onGoalEventConfirmed
+			})
 		] }, `${form.formId.text}-${index}`))
 	});
 }
-function GoalEventPlanPreview({ form }) {
+function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 	const [values, setValues] = (0, import_react.useState)(() => initialGoalEventPreviewValues(form));
 	const [previewState, setPreviewState] = (0, import_react.useState)({
 		phase: "idle",
 		plan: null,
+		error: null,
+		values: null
+	});
+	const [confirmState, setConfirmState] = (0, import_react.useState)({
+		phase: "idle",
+		result: null,
 		error: null
 	});
 	const previewPath = buildGoalEventPreviewPath(form, values);
 	const missingRequired = missingRequiredGoalEventFields(form, values);
+	function updateValue(fieldId, value) {
+		setValues({
+			...values,
+			[fieldId]: value
+		});
+		setPreviewState({
+			phase: "idle",
+			plan: null,
+			error: null,
+			values: null
+		});
+		setConfirmState({
+			phase: "idle",
+			result: null,
+			error: null
+		});
+	}
 	async function handlePreview() {
 		if (previewPath === null || missingRequired.length > 0) {
 			setPreviewState({
 				phase: "failed",
 				plan: null,
-				error: `缺少字段：${missingRequired.join("、")}`
+				error: `缺少字段：${missingRequired.join("、")}`,
+				values: null
 			});
 			return;
 		}
 		setPreviewState({
 			phase: "loading",
 			plan: null,
+			error: null,
+			values: null
+		});
+		setConfirmState({
+			phase: "idle",
+			result: null,
 			error: null
 		});
 		const result = await fetchGoalEventPlanPreview(previewPath);
@@ -14116,28 +14233,67 @@ function GoalEventPlanPreview({ form }) {
 			setPreviewState({
 				phase: "ready",
 				plan: result.data,
-				error: null
+				error: null,
+				values: { ...values }
 			});
 			return;
 		}
 		setPreviewState({
 			phase: "failed",
 			plan: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`,
+			values: null
+		});
+	}
+	async function handleConfirm() {
+		if (previewState.phase !== "ready" || previewState.plan === null || previewState.values === null) {
+			setConfirmState({
+				phase: "failed",
+				result: null,
+				error: "需要先生成 dry-run plan preview。"
+			});
+			return;
+		}
+		const confirmPath = buildGoalEventConfirmPath(previewState.values);
+		const confirmBody = buildGoalEventConfirmBody(form, previewState.values, previewState.plan.planHash);
+		if (confirmPath === null || confirmBody === null) {
+			setConfirmState({
+				phase: "failed",
+				result: null,
+				error: "confirm route unavailable"
+			});
+			return;
+		}
+		setConfirmState({
+			phase: "loading",
+			result: null,
+			error: null
+		});
+		const result = await confirmGoalEventPlan(confirmPath, confirmBody);
+		if (result.ok) {
+			setConfirmState({
+				phase: "ready",
+				result: result.data,
+				error: null
+			});
+			if (typeof onGoalEventConfirmed === "function") await onGoalEventConfirmed(result.data);
+			return;
+		}
+		setConfirmState({
+			phase: "failed",
+			result: null,
 			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
 		});
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "goal-event-plan-preview",
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "dry-run plan preview" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "dry-run preview / confirm" }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "goal-event-preview-fields",
 				children: form.fields.items.filter((field) => shouldRenderGoalEventPreviewInput(field)).map((field) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: field.label.text }), field.options.state === "available" && field.options.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
 					value: values[field.id.value] ?? "",
-					onChange: (event) => setValues({
-						...values,
-						[field.id.value]: event.target.value
-					}),
+					onChange: (event) => updateValue(field.id.value, event.target.value),
 					children: field.options.items.map((option) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
 						value: option.value,
 						children: option.text
@@ -14146,10 +14302,7 @@ function GoalEventPlanPreview({ form }) {
 					value: values[field.id.value] ?? "",
 					placeholder: field.placeholder.text,
 					readOnly: field.readOnly.value === true,
-					onChange: (event) => setValues({
-						...values,
-						[field.id.value]: event.target.value
-					})
+					onChange: (event) => updateValue(field.id.value, event.target.value)
 				})] }, field.id.text))
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -14170,16 +14323,49 @@ function GoalEventPlanPreview({ form }) {
 			}) : null,
 			previewState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "goal-event-preview-result",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-					["planHash", textValue(previewState.plan.planHash)],
-					["command", textValue(previewState.plan.eventSummary.commandName)],
-					["eventType", textValue(previewState.plan.eventSummary.eventType)],
-					["taskId", textValue(previewState.plan.eventSummary.taskId)],
-					["actorRole", textValue(previewState.plan.eventSummary.actorRole)],
-					["actorId", textValue(previewState.plan.eventSummary.actorId)],
-					["writesInDryRun", textValue(previewState.plan.eventSummary.writesInDryRun)],
-					["confirmAvailable", textValue(previewState.plan.previewEndpoint.confirmAvailable)]
-				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: previewState.plan.confirm.copyOnlyCommand })]
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["planHash", textValue(previewState.plan.planHash)],
+						["command", textValue(previewState.plan.eventSummary.commandName)],
+						["eventType", textValue(previewState.plan.eventSummary.eventType)],
+						["taskId", textValue(previewState.plan.eventSummary.taskId)],
+						["actorRole", textValue(previewState.plan.eventSummary.actorRole)],
+						["actorId", textValue(previewState.plan.eventSummary.actorId)],
+						["writesInDryRun", textValue(previewState.plan.eventSummary.writesInDryRun)],
+						["confirmAvailable", textValue(previewState.plan.previewEndpoint.confirmAvailable)]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: previewState.plan.confirm.copyOnlyCommand }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "goal-event-confirm-actions",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: handleConfirm,
+							children: "Confirm event append"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: buildGoalEventConfirmPath(previewState.values) ?? "confirm route unavailable" })]
+					})
+				]
+			}) : null,
+			confirmState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: ["confirm 错误摘要：", confirmState.error]
+			}) : null,
+			confirmState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "empty-copy",
+				children: "正在确认 event append，并刷新 goal-status / events / next action。"
+			}) : null,
+			confirmState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "goal-event-confirm-result",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["status", textValue(confirmState.result.status)],
+					["written", textValue(confirmState.result.written)],
+					["eventType", textValue(confirmState.result.eventSummary.eventType)],
+					["sequence", textValue(confirmState.result.eventSummary.sequence)],
+					["eventId", textValue(confirmState.result.eventSummary.eventId)],
+					["eventHash", textValue(confirmState.result.eventSummary.eventHash)],
+					["refreshed.progress", textValue(confirmState.result.refreshed.progress?.contractName)],
+					["refreshed.events", textValue(confirmState.result.refreshed.events?.contractName)],
+					["refreshed.nextAction", textValue(confirmState.result.refreshed.nextAction?.contractName)]
+				] })
 			}) : null
 		]
 	});
@@ -14240,6 +14426,45 @@ function buildGoalEventPreviewPath(form, values) {
 	appendSearchParam(searchParams, "blockerSeverity", values.blockerSeverity);
 	for (const evidenceRef of String(values.evidenceRef ?? "").split(/\r?\n/u)) appendSearchParam(searchParams, "evidenceRef", evidenceRef);
 	return `${GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE.replace("<goal-id>", encodeURIComponent(goalId))}?${searchParams.toString()}`;
+}
+function buildGoalEventConfirmPath(values) {
+	const goalId = String(values?.goalId ?? "").trim();
+	if (goalId === "") return null;
+	return GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE.replace("<goal-id>", encodeURIComponent(goalId));
+}
+function buildGoalEventConfirmBody(form, values, planHash) {
+	const commandName = form.commandName.value;
+	const body = { planHash };
+	if (commandName === "symphony goal update") {
+		body.command = "update";
+		assignBodyValue(body, "task", values.taskId);
+		assignBodyValue(body, "event", values.eventType);
+		assignBodyValue(body, "actor", values.actorId);
+	} else if (commandName === "symphony goal review") {
+		body.command = "review";
+		assignBodyValue(body, "task", values.taskId);
+		assignBodyValue(body, "reviewer", values.reviewerId);
+		assignBodyValue(body, "verdict", values.verdict);
+	} else if (commandName === "symphony goal gate") {
+		body.command = "gate";
+		assignBodyValue(body, "task", values.taskId);
+		assignBodyValue(body, "gate", values.gateName);
+		assignBodyValue(body, "status", values.gateStatus);
+		assignBodyValue(body, "verifier", values.verifierId);
+	} else return null;
+	assignBodyValue(body, "statement", values.statement);
+	assignBodyValue(body, "branch", values.branch);
+	assignBodyValue(body, "commit", values.commit);
+	assignBodyValue(body, "blockerId", values.blockerId);
+	assignBodyValue(body, "blockerReason", values.blockerReason);
+	assignBodyValue(body, "blockerSeverity", values.blockerSeverity);
+	const evidenceRefs = String(values.evidenceRef ?? "").split(/\r?\n/u).map((entry) => entry.trim()).filter((entry) => entry !== "");
+	if (evidenceRefs.length > 0) body.evidenceRef = evidenceRefs;
+	return body;
+}
+function assignBodyValue(body, key, value) {
+	const normalized = String(value ?? "").trim();
+	if (normalized !== "") body[key] = normalized;
 }
 function appendSearchParam(searchParams, key, value) {
 	const normalized = String(value ?? "").trim();

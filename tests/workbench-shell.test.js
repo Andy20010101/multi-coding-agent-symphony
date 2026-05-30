@@ -24,7 +24,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.equal(pkg.scripts['workbench:dev'], 'vite --host 127.0.0.1 --config frontend/workbench/vite.config.js');
   });
 
-  it('keeps the shell without browser execution controls or write API calls', async () => {
+  it('keeps the shell without browser execution controls or generic write API calls', async () => {
     const sources = await Promise.all(
       frontendFiles.map((file) => readFile(file, 'utf8'))
     );
@@ -32,11 +32,14 @@ describe('v15 Workbench React/Vite shell', () => {
 
     assert.doesNotMatch(source, /role\s*=\s*["']button["']|<a\s|href\s*=|<form\b|<textarea\b/i);
     assert.match(source, /Preview dry-run plan/u);
+    assert.match(source, /Confirm event append/u);
     assert.match(source, /fetchGoalEventPlanPreview/u);
+    assert.match(source, /confirmGoalEventPlan/u);
     assert.doesNotMatch(source, /\bonSubmit\b|addEventListener\s*\(/);
     assert.doesNotMatch(source, /XMLHttpRequest|WebSocket|EventSource|navigator\.sendBeacon|navigator\.clipboard|serviceWorker|localStorage|indexedDB/);
-    assert.doesNotMatch(source, /\bmethod\s*:\s*['"`](POST|PUT|PATCH|DELETE)['"`]/i);
-    assert.doesNotMatch(source, /\bhandle(Execute|Retry|Apply|Adopt|Rollback|Delete|Install|Mutate|Audit|Confirm)\b/);
+    assert.match(source, /method:\s*'POST'[\s\S]*body:\s*JSON\.stringify\(body\)/u);
+    assert.doesNotMatch(source, /\bmethod\s*:\s*['"`](PUT|PATCH|DELETE)['"`]/i);
+    assert.doesNotMatch(source, /\bhandle(Execute|Retry|Apply|Adopt|Rollback|Delete|Install|Mutate|Audit)\b/);
   });
 
   it('renders the Task 6 and Task 7 panels as read-only source components', async () => {
@@ -157,6 +160,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/diagnostics',
       '/api/goals',
       '/api/goals/<goal-id>/closeout',
+      '/api/goals/<goal-id>/event-plan-confirm',
       '/api/goals/<goal-id>/event-plan-preview',
       '/api/goals/<goal-id>/events',
       '/api/goals/<goal-id>/next',
