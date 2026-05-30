@@ -319,6 +319,8 @@ h3 {
 .gap-list,
 .timeline-list,
 .goal-event-timeline-list,
+.goal-event-form-list,
+.goal-event-form-field-list,
 .evidence-ref-list,
 .evidence-matrix-task-list,
 .release-gate-matrix-list,
@@ -343,6 +345,8 @@ h3 {
 .gap-list li,
 .timeline-list li,
 .goal-event-timeline-list li,
+.goal-event-form-list li,
+.goal-event-form-field-list li,
 .evidence-ref-list li,
 .evidence-matrix-task-list li,
 .release-gate-matrix-list li,
@@ -398,6 +402,44 @@ h3 {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: text;
+}
+
+.event-form-model {
+  display: grid;
+  gap: 12px;
+}
+
+.goal-event-form-list code {
+  display: block;
+  min-width: 0;
+  margin: 10px 0;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f3f6f6;
+  color: #18232a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.field-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.field-options span {
+  border: 1px solid #d8e0e2;
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: #eef3f2;
+  color: #43535a;
+  font-size: 0.78rem;
 }
 
 .safe-preview-block {

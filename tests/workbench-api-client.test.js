@@ -582,6 +582,23 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.activeGoal.nextAction.afterCompletion.registrationCommand.value, 'symphony goal review');
     assert.equal(model.activeGoal.nextAction.afterCompletion.registerWith.value, 'symphony goal review');
     assert.equal(model.activeGoal.nextAction.afterCompletion.allowedEvents.value, 'reviewer.approved、reviewer.needs-revision');
+    assert.equal(model.activeGoal.nextAction.eventForms.modelName.value, 'GoalEventRegistrationFormModel');
+    assert.equal(model.activeGoal.nextAction.eventForms.sourceContract.value, 'goal-next-action.v1');
+    assert.equal(model.activeGoal.nextAction.eventForms.goalId.value, V19_GOAL_ID);
+    assert.equal(model.activeGoal.nextAction.eventForms.taskId.value, 'task-3');
+    assert.equal(model.activeGoal.nextAction.eventForms.registerWith.value, 'symphony goal review');
+    assert.equal(model.activeGoal.nextAction.eventForms.defaultFormId.value, 'goal-review-approved');
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.count.value, 2);
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].eventType.value, 'reviewer.approved');
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].commandName.value, 'symphony goal review');
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].requiresEvidence.value, true);
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].fields.items.some((field) => field.id.value === 'reviewerId' && field.required.value === true), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].fields.items.some((field) => field.id.value === 'verdict' && field.value.value === 'approved'), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.supportedForms.items.some((form) => form.eventType.value === 'worker.started'), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.supportedForms.items.some((form) => form.eventType.value === 'blocker.opened'), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.policy.workerCannotApproveOwnTask.value, true);
+    assert.equal(model.activeGoal.nextAction.eventForms.safety.confirmAvailableInTask1.value, false);
+    assert.equal(model.activeGoal.nextAction.eventForms.safety.workbenchWriteAvailable.value, false);
 
     assert.equal(model.activeGoal.promptPreview.contractName.value, 'goal-prompt-pack.v1');
     assert.equal(model.activeGoal.promptPreview.visibleCount.value, 1);
@@ -596,6 +613,64 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.activeGoal.promptPreview.safety.workbenchWriteAvailable.value, false);
     assert.equal(model.activeGoal.promptPreview.safety.browserExecutionAvailable.value, false);
     assert.equal(model.activeGoal.promptPreview.safety.modelInvocationAvailable.value, false);
+  });
+
+  it('projects worker, blocker, reviewer, and main-verification event form specs without approving from Workbench heuristics', () => {
+    const runbook = createV19RunbookPayload();
+    const workerNext = createV19NextActionPayload();
+
+    workerNext.afterCompletion = {
+      registerWith: 'symphony goal update',
+      allowedEvents: ['worker.evidence-recorded', 'worker.self-check-passed', 'worker.self-check-failed']
+    };
+
+    const workerModel = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', workerNext)
+    });
+    const workerForms = workerModel.activeGoal.nextAction.eventForms;
+    const workerEvidenceForm = workerForms.recommendedForms.items.find((form) => form.eventType.value === 'worker.evidence-recorded');
+    const workerStartedForm = workerForms.supportedForms.items.find((form) => form.eventType.value === 'worker.started');
+    const blockerOpenedForm = workerForms.supportedForms.items.find((form) => form.eventType.value === 'blocker.opened');
+    const blockerResolvedForm = workerForms.supportedForms.items.find((form) => form.eventType.value === 'blocker.resolved');
+
+    assert.equal(workerForms.recommendedForms.count.value, 3);
+    assert.equal(workerEvidenceForm.commandName.value, 'symphony goal update');
+    assert.equal(workerEvidenceForm.fields.items.some((field) => field.id.value === 'evidenceRef' && field.required.value === true), true);
+    assert.equal(workerStartedForm.requiresEvidence.value, false);
+    assert.equal(blockerOpenedForm.fields.items.some((field) => field.id.value === 'blockerReason' && field.required.value === true), true);
+    assert.equal(blockerResolvedForm.fields.items.some((field) => field.id.value === 'blockerId' && field.required.value === true), true);
+    assert.equal(blockerOpenedForm.availableForCurrentNextAction.value, false);
+
+    const mainNext = createV19NextActionPayload();
+    mainNext.next = {
+      taskId: 'task-6',
+      role: 'main-verifier',
+      phase: 'main-verification',
+      reason: 'Reviewer approved task-6 but main verification is missing.',
+      blocked: false
+    };
+    mainNext.afterCompletion = {
+      registerWith: 'symphony goal gate --gate main-verification',
+      allowedEvents: ['main.verification-passed', 'main.verification-failed']
+    };
+
+    const mainModel = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', mainNext)
+    });
+    const mainForms = mainModel.activeGoal.nextAction.eventForms;
+    const passedForm = mainForms.recommendedForms.items.find((form) => form.eventType.value === 'main.verification-passed');
+    const failedForm = mainForms.recommendedForms.items.find((form) => form.eventType.value === 'main.verification-failed');
+
+    assert.equal(mainForms.defaultFormId.value, 'goal-gate-main-verification-passed');
+    assert.equal(passedForm.commandName.value, 'symphony goal gate');
+    assert.equal(passedForm.fields.items.some((field) => field.id.value === 'gateName' && field.value.value === 'main-verification'), true);
+    assert.equal(passedForm.fields.items.some((field) => field.id.value === 'gateStatus' && field.value.value === 'passed'), true);
+    assert.equal(failedForm.fields.items.some((field) => field.id.value === 'gateStatus' && field.value.value === 'failed'), true);
+    assert.equal(mainForms.policy.approvalReadinessSource.value, 'explicit goal events only');
+    assert.equal(mainForms.policy.unsupportedInferenceSources.value, 'file-name、branch、commit-message、frontend-heuristic');
+    assert.equal(mainForms.safety.browserExecutionAvailable.value, false);
   });
 
   it('projects the Closeout Gaps panel only from goal-closeout-report.v1', () => {

@@ -418,6 +418,10 @@ function NextActionCard({ nextAction, route }) {
         <TextItemList items={nextAction.copyOnlyCommands} emptyCopy="copyOnlyCommands 为空或未暴露。" />
       </Subsection>
 
+      <Subsection title="event registration forms">
+        <GoalEventFormModelView formModel={nextAction.eventForms} />
+      </Subsection>
+
       <Subsection title="safety">
         <FieldList rows={[
           ['readOnly', nextAction.safety.readOnly],
@@ -1416,6 +1420,117 @@ function ActiveGoalCommandInventoryList({ inventory }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function GoalEventFormModelView({ formModel }) {
+  if (formModel.state === 'missing') {
+    return <EmptyBlock copy="event form model 未暴露。" />;
+  }
+
+  return (
+    <div className="event-form-model">
+      <FieldList rows={[
+        ['modelName', formModel.modelName],
+        ['sourceContract', formModel.sourceContract],
+        ['goalId', formModel.goalId],
+        ['taskId', formModel.taskId],
+        ['role', formModel.role],
+        ['phase', formModel.phase],
+        ['registerWith', formModel.registerWith],
+        ['allowedEvents', formModel.allowedEvents],
+        ['unsupportedAllowedEvents', formModel.unsupportedAllowedEvents],
+        ['defaultFormId', formModel.defaultFormId],
+        ['workerCannotApproveOwnTask', formModel.policy.workerCannotApproveOwnTask],
+        ['approvalReadinessSource', formModel.policy.approvalReadinessSource],
+        ['dryRunOnly', formModel.safety.dryRunOnly],
+        ['confirmAvailableInTask1', formModel.safety.confirmAvailableInTask1],
+        ['workbenchWriteAvailable', formModel.safety.workbenchWriteAvailable]
+      ]} />
+
+      <Subsection title="recommended forms">
+        <GoalEventFormList forms={formModel.recommendedForms} emptyCopy="当前 next action 没有可推荐的登记表单。" />
+      </Subsection>
+
+      <Subsection title="supported form catalog">
+        <GoalEventFormList forms={formModel.supportedForms} emptyCopy="supported form catalog 为空。" />
+      </Subsection>
+
+      <p className="panel-note">{formModel.note}</p>
+    </div>
+  );
+}
+
+function GoalEventFormList({ forms, emptyCopy }) {
+  if (forms.state === 'missing' || forms.items.length === 0) {
+    return <EmptyBlock copy={emptyCopy} />;
+  }
+
+  return (
+    <ul className="goal-event-form-list">
+      {forms.items.map((form, index) => (
+        <li key={`${form.formId.text}-${index}`}>
+          <FieldList rows={[
+            ['formId', form.formId],
+            ['eventType', form.eventType],
+            ['eventFamily', form.eventFamily],
+            ['commandName', form.commandName],
+            ['commandIntent', form.commandIntent],
+            ['actorRole', form.actorRole],
+            ['actorFlag', form.actorFlag],
+            ['phase', form.phase],
+            ['recommended', form.recommended],
+            ['availableForCurrentNextAction', form.availableForCurrentNextAction],
+            ['requiresTask', form.requiresTask],
+            ['requiresEvidence', form.requiresEvidence],
+            ['confirmRequiresPlanHash', form.confirmRequiresPlanHash],
+            ['planPreviewContract', form.planPreviewContract]
+          ]} />
+          <GoalEventFormFieldList fields={form.fields} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function GoalEventFormFieldList({ fields }) {
+  if (fields.state === 'missing' || fields.items.length === 0) {
+    return <EmptyBlock copy="form fields 为空。" />;
+  }
+
+  return (
+    <ul className="goal-event-form-field-list">
+      {fields.items.map((field, index) => (
+        <li key={`${field.id.text}-${index}`}>
+          <FieldList rows={[
+            ['id', field.id],
+            ['label', field.label],
+            ['flag', field.flag],
+            ['inputType', field.inputType],
+            ['required', field.required],
+            ['readOnly', field.readOnly],
+            ['value', field.value],
+            ['placeholder', field.placeholder],
+            ['source', field.source]
+          ]} />
+          <GoalEventFormFieldOptions options={field.options} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function GoalEventFormFieldOptions({ options }) {
+  if (options.state !== 'available') {
+    return null;
+  }
+
+  return (
+    <div className="field-options">
+      {options.items.map((option, index) => (
+        <span key={`${option.text}-${index}`}>{option.text}</span>
+      ))}
+    </div>
   );
 }
 

@@ -9892,6 +9892,7 @@ var GUIDED_GOAL_HANDOFF_CONTRACT_NAME = "guided-goal-handoff.v1";
 var SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME = "safe-artifact-preview.v1";
 var GOAL_PROGRESS_LEDGER_CONTRACT_NAME = "goal-progress-ledger.v1";
 var GOAL_EVENT_LOG_CONTRACT_NAME = "goal-event-log.v1";
+var GOAL_UPDATE_PLAN_CONTRACT_NAME = "goal-update-plan.v1";
 var GOAL_RUNBOOK_CONTRACT_NAME = "goal-runbook.v1";
 var GOAL_NEXT_ACTION_CONTRACT_NAME = "goal-next-action.v1";
 var GOAL_PROMPT_PACK_CONTRACT_NAME = "goal-prompt-pack.v1";
@@ -9902,6 +9903,228 @@ var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
 var ACTIVE_GOAL_VIEW_MODEL_NAME = "ActiveGoalViewModel";
+var GOAL_EVENT_FORM_MODEL_NAME = "GoalEventRegistrationFormModel";
+var GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
+	Object.freeze({
+		eventType: "worker.started",
+		formId: "goal-update-worker-started",
+		eventFamily: "worker",
+		commandName: "symphony goal update",
+		commandIntent: "record-worker-task-event",
+		actorFlag: "--actor",
+		actorRole: "worker",
+		phase: "implement",
+		requiresEvidence: false,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "worker.evidence-recorded",
+		formId: "goal-update-worker-evidence-recorded",
+		eventFamily: "worker",
+		commandName: "symphony goal update",
+		commandIntent: "record-worker-task-event",
+		actorFlag: "--actor",
+		actorRole: "worker",
+		phase: "implement",
+		requiresEvidence: true,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "worker.self-check-passed",
+		formId: "goal-update-worker-self-check-passed",
+		eventFamily: "worker",
+		commandName: "symphony goal update",
+		commandIntent: "record-worker-task-event",
+		actorFlag: "--actor",
+		actorRole: "worker",
+		phase: "implement",
+		requiresEvidence: true,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "worker.self-check-failed",
+		formId: "goal-update-worker-self-check-failed",
+		eventFamily: "worker",
+		commandName: "symphony goal update",
+		commandIntent: "record-worker-task-event",
+		actorFlag: "--actor",
+		actorRole: "worker",
+		phase: "implement",
+		requiresEvidence: true,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "blocker.opened",
+		formId: "goal-update-blocker-opened",
+		eventFamily: "blocker",
+		commandName: "symphony goal update",
+		commandIntent: "record-task-blocker-event",
+		actorFlag: "--actor",
+		actorRole: "worker",
+		phase: "implement",
+		requiresEvidence: false,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"blockerId",
+			"blockerReason",
+			"blockerSeverity",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "blocker.resolved",
+		formId: "goal-update-blocker-resolved",
+		eventFamily: "blocker",
+		commandName: "symphony goal update",
+		commandIntent: "record-task-blocker-event",
+		actorFlag: "--actor",
+		actorRole: "worker",
+		phase: "implement",
+		requiresEvidence: false,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"blockerId",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "reviewer.approved",
+		formId: "goal-review-approved",
+		eventFamily: "reviewer-verdict",
+		commandName: "symphony goal review",
+		commandIntent: "record-review-verdict",
+		actorFlag: "--reviewer",
+		actorRole: "reviewer",
+		phase: "review",
+		requiresEvidence: true,
+		verdict: "approved",
+		fields: [
+			"goalId",
+			"taskId",
+			"reviewerId",
+			"verdict",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "reviewer.needs-revision",
+		formId: "goal-review-needs-revision",
+		eventFamily: "reviewer-verdict",
+		commandName: "symphony goal review",
+		commandIntent: "record-review-verdict",
+		actorFlag: "--reviewer",
+		actorRole: "reviewer",
+		phase: "review",
+		requiresEvidence: true,
+		verdict: "needs-revision",
+		fields: [
+			"goalId",
+			"taskId",
+			"reviewerId",
+			"verdict",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "main.verification-passed",
+		formId: "goal-gate-main-verification-passed",
+		eventFamily: "main-verification",
+		commandName: "symphony goal gate",
+		commandIntent: "record-goal-gate",
+		actorFlag: "--verifier",
+		actorRole: "main-verifier",
+		phase: "main-verification",
+		requiresEvidence: true,
+		gate: "main-verification",
+		gateStatus: "passed",
+		fields: [
+			"goalId",
+			"taskId",
+			"gateName",
+			"gateStatus",
+			"verifierId",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "main.verification-failed",
+		formId: "goal-gate-main-verification-failed",
+		eventFamily: "main-verification",
+		commandName: "symphony goal gate",
+		commandIntent: "record-goal-gate",
+		actorFlag: "--verifier",
+		actorRole: "main-verifier",
+		phase: "main-verification",
+		requiresEvidence: true,
+		gate: "main-verification",
+		gateStatus: "failed",
+		fields: [
+			"goalId",
+			"taskId",
+			"gateName",
+			"gateStatus",
+			"verifierId",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	})
+]);
 var ACTIVE_GOAL_COMMAND_BASELINE = Object.freeze([
 	Object.freeze({
 		id: "goalStatus",
@@ -10769,6 +10992,7 @@ function projectGoalNextAction({ result, nextAction }) {
 		copyOnlyPrompt: projectGoalNextCopyOnlyPrompt(void 0),
 		copyOnlyCommands: projectTextItems(void 0),
 		afterCompletion: projectAfterCompletion(void 0),
+		eventForms: projectGoalEventFormModel(void 0),
 		safety: projectGoalControlSafety(void 0),
 		errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
 		note: "Next Action Card 只展示 goal-next-action.v1；route 不可用时不从其他文本推断下一步。"
@@ -10785,6 +11009,7 @@ function projectGoalNextAction({ result, nextAction }) {
 		copyOnlyPrompt: projectGoalNextCopyOnlyPrompt(nextAction?.copyOnlyPrompt),
 		copyOnlyCommands: projectTextItems(nextAction?.copyOnlyCommands),
 		afterCompletion: projectAfterCompletion(nextAction?.afterCompletion),
+		eventForms: projectGoalEventFormModel(nextAction),
 		safety: projectGoalControlSafety(nextAction?.safety),
 		errorEnvelope: projectErrorEnvelope(null),
 		note: "Next Action Card 使用 resolver 输出的 task、role、phase、reason 和 afterCompletion；浏览器端不运行命令、不登记事件。"
@@ -10916,6 +11141,278 @@ function projectAfterCompletion(afterCompletion) {
 		registerWith: valueState(afterCompletion?.registerWith),
 		registrationCommand: valueState(afterCompletion?.registerWith),
 		allowedEvents: arrayTextState(afterCompletion?.allowedEvents)
+	};
+}
+function projectGoalEventFormModel(nextAction) {
+	const allowedEvents = Array.isArray(nextAction?.afterCompletion?.allowedEvents) ? nextAction.afterCompletion.allowedEvents.filter((eventType) => isNonEmptyString(eventType)) : [];
+	const supportedDefinitions = GOAL_EVENT_FORM_DEFINITIONS;
+	const recommendedForms = allowedEvents.map((eventType) => supportedDefinitions.find((definition) => definition.eventType === eventType)).filter((definition) => definition !== void 0).map((definition) => projectGoalEventFormSpec({
+		definition,
+		nextAction,
+		recommended: true
+	}));
+	const supportedForms = supportedDefinitions.map((definition) => projectGoalEventFormSpec({
+		definition,
+		nextAction,
+		recommended: allowedEvents.includes(definition.eventType)
+	}));
+	const unsupportedAllowedEvents = allowedEvents.filter((eventType) => supportedDefinitions.every((definition) => definition.eventType !== eventType));
+	return {
+		state: nextAction === null || nextAction === void 0 ? "missing" : recommendedForms.length > 0 ? "available" : "empty",
+		modelName: valueState(GOAL_EVENT_FORM_MODEL_NAME),
+		sourceContract: valueState(GOAL_NEXT_ACTION_CONTRACT_NAME),
+		goalId: valueState(nextAction?.goalId),
+		taskId: valueState(nextAction?.next?.taskId),
+		role: valueState(nextAction?.next?.role),
+		phase: valueState(nextAction?.next?.phase),
+		registerWith: valueState(nextAction?.afterCompletion?.registerWith),
+		allowedEvents: arrayTextState(allowedEvents),
+		unsupportedAllowedEvents: arrayTextState(unsupportedAllowedEvents),
+		defaultFormId: valueState(recommendedForms[0]?.formId.value),
+		recommendedForms: {
+			state: recommendedForms.length === 0 ? "empty" : "available",
+			count: valueState(recommendedForms.length),
+			items: recommendedForms
+		},
+		supportedForms: {
+			state: supportedForms.length === 0 ? "empty" : "available",
+			count: valueState(supportedForms.length),
+			items: supportedForms
+		},
+		policy: {
+			workerCannotApproveOwnTask: valueState(true),
+			reviewerActorMustDifferFromLatestWorker: valueState(true),
+			approvalReadinessSource: valueState("explicit goal events only"),
+			unsupportedInferenceSources: arrayTextState([
+				"file-name",
+				"branch",
+				"commit-message",
+				"frontend-heuristic"
+			])
+		},
+		safety: {
+			readOnly: valueState(true),
+			copyOnly: valueState(true),
+			dryRunOnly: valueState(true),
+			confirmAvailableInTask1: valueState(false),
+			workbenchWriteAvailable: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false)
+		},
+		note: "Form model uses goal-next-action.v1 allowedEvents for recommended forms and a fixed goal update/review/gate catalog for supported forms; it does not execute dry-run, confirm, shell, model, review, gate, merge, or tag operations."
+	};
+}
+function projectGoalEventFormSpec({ definition, nextAction, recommended }) {
+	const taskId = nextAction?.next?.taskId;
+	const goalId = nextAction?.goalId;
+	const taskRequired = definition.eventFamily !== "release";
+	return {
+		formId: valueState(definition.formId),
+		eventType: valueState(definition.eventType),
+		eventFamily: valueState(definition.eventFamily),
+		commandName: valueState(definition.commandName),
+		commandIntent: valueState(definition.commandIntent),
+		actorRole: valueState(definition.actorRole),
+		actorFlag: valueState(definition.actorFlag),
+		phase: valueState(definition.phase),
+		recommended: valueState(recommended),
+		availableForCurrentNextAction: valueState(recommended),
+		requiresTask: valueState(taskRequired),
+		requiresEvidence: valueState(definition.requiresEvidence),
+		confirmRequiresPlanHash: valueState(true),
+		planPreviewContract: valueState(GOAL_UPDATE_PLAN_CONTRACT_NAME),
+		fields: {
+			state: definition.fields.length === 0 ? "empty" : "available",
+			count: valueState(definition.fields.length),
+			items: definition.fields.map((fieldId) => projectGoalEventFormField({
+				fieldId,
+				definition,
+				goalId,
+				taskId
+			}))
+		}
+	};
+}
+function projectGoalEventFormField({ fieldId, definition, goalId, taskId }) {
+	const field = goalEventFieldDefinition({
+		fieldId,
+		definition,
+		goalId,
+		taskId
+	});
+	return {
+		id: valueState(field.id),
+		label: valueState(field.label),
+		flag: valueState(field.flag),
+		inputType: valueState(field.inputType),
+		required: valueState(field.required),
+		readOnly: valueState(field.readOnly),
+		value: valueState(field.value),
+		placeholder: valueState(field.placeholder),
+		source: valueState(field.source),
+		options: projectGoalEventFieldOptions(field.options)
+	};
+}
+function goalEventFieldDefinition({ fieldId, definition, goalId, taskId }) {
+	const common = {
+		id: fieldId,
+		label: fieldId,
+		flag: null,
+		inputType: "text",
+		required: false,
+		readOnly: false,
+		value: void 0,
+		placeholder: void 0,
+		source: "operator-input",
+		options: []
+	};
+	switch (fieldId) {
+		case "goalId": return {
+			...common,
+			label: "goal id",
+			flag: "--goal",
+			required: true,
+			readOnly: true,
+			value: goalId,
+			source: GOAL_NEXT_ACTION_CONTRACT_NAME
+		};
+		case "taskId": return {
+			...common,
+			label: "task id",
+			flag: "--task",
+			required: true,
+			readOnly: true,
+			value: taskId,
+			source: GOAL_NEXT_ACTION_CONTRACT_NAME
+		};
+		case "eventType": return {
+			...common,
+			label: "event",
+			flag: "--event",
+			inputType: "select",
+			required: true,
+			readOnly: definition.commandName !== "symphony goal update",
+			value: definition.eventType,
+			source: "form-catalog",
+			options: [definition.eventType]
+		};
+		case "workerActor": return {
+			...common,
+			id: "actorId",
+			label: "worker actor id",
+			flag: "--actor",
+			required: true,
+			placeholder: "codex-worker-task-id"
+		};
+		case "reviewerId": return {
+			...common,
+			label: "reviewer id",
+			flag: "--reviewer",
+			required: true,
+			placeholder: "codex-reviewer-task-id"
+		};
+		case "verifierId": return {
+			...common,
+			label: "verifier id",
+			flag: "--verifier",
+			required: true,
+			placeholder: "codex-main-verifier"
+		};
+		case "verdict": return {
+			...common,
+			label: "verdict",
+			flag: "--verdict",
+			inputType: "select",
+			required: true,
+			value: definition.verdict,
+			source: "form-catalog",
+			options: ["approved", "needs-revision"]
+		};
+		case "gateName": return {
+			...common,
+			label: "gate",
+			flag: "--gate",
+			inputType: "select",
+			required: true,
+			readOnly: true,
+			value: definition.gate,
+			source: "form-catalog",
+			options: ["main-verification"]
+		};
+		case "gateStatus": return {
+			...common,
+			label: "status",
+			flag: "--status",
+			inputType: "select",
+			required: true,
+			value: definition.gateStatus,
+			source: "form-catalog",
+			options: ["passed", "failed"]
+		};
+		case "evidenceRef": return {
+			...common,
+			label: "evidence ref",
+			flag: "--evidence-ref",
+			required: definition.requiresEvidence,
+			placeholder: "docs/plans/<evidence>.md"
+		};
+		case "statement": return {
+			...common,
+			label: "statement",
+			flag: "--statement",
+			inputType: "textarea",
+			placeholder: "short event statement"
+		};
+		case "branch": return {
+			...common,
+			label: "branch",
+			flag: "--branch",
+			placeholder: "current branch"
+		};
+		case "commit": return {
+			...common,
+			label: "commit",
+			flag: "--commit",
+			placeholder: "commit sha or null"
+		};
+		case "blockerId": return {
+			...common,
+			label: "blocker id",
+			inputType: "text",
+			required: definition.eventType === "blocker.resolved",
+			placeholder: "task-blocker-id"
+		};
+		case "blockerReason": return {
+			...common,
+			label: "blocker reason",
+			inputType: "textarea",
+			required: definition.eventType === "blocker.opened",
+			placeholder: "what is blocking this task"
+		};
+		case "blockerSeverity": return {
+			...common,
+			label: "blocker severity",
+			inputType: "select",
+			value: "warning",
+			options: [
+				"info",
+				"warning",
+				"error"
+			]
+		};
+		default: return common;
+	}
+}
+function projectGoalEventFieldOptions(options) {
+	if (!Array.isArray(options) || options.length === 0) return {
+		state: "empty",
+		count: valueState(0),
+		items: []
+	};
+	return {
+		state: "available",
+		count: valueState(options.length),
+		items: options.map((option) => valueState(option))
 	};
 }
 function projectCloseoutSummary(summary) {
@@ -12590,6 +13087,10 @@ function NextActionCard({ nextAction, route }) {
 				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "event registration forms",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormModelView, { formModel: nextAction.eventForms })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "safety",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 					["readOnly", nextAction.safety.readOnly],
@@ -13463,6 +13964,95 @@ function ActiveGoalCommandInventoryList({ inventory }) {
 			["routeState", item.routeState],
 			["httpStatus", item.httpStatus]
 		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.command.text })] }, item.id.text))
+	});
+}
+function GoalEventFormModelView({ formModel }) {
+	if (formModel.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "event form model 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "event-form-model",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", formModel.modelName],
+				["sourceContract", formModel.sourceContract],
+				["goalId", formModel.goalId],
+				["taskId", formModel.taskId],
+				["role", formModel.role],
+				["phase", formModel.phase],
+				["registerWith", formModel.registerWith],
+				["allowedEvents", formModel.allowedEvents],
+				["unsupportedAllowedEvents", formModel.unsupportedAllowedEvents],
+				["defaultFormId", formModel.defaultFormId],
+				["workerCannotApproveOwnTask", formModel.policy.workerCannotApproveOwnTask],
+				["approvalReadinessSource", formModel.policy.approvalReadinessSource],
+				["dryRunOnly", formModel.safety.dryRunOnly],
+				["confirmAvailableInTask1", formModel.safety.confirmAvailableInTask1],
+				["workbenchWriteAvailable", formModel.safety.workbenchWriteAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "recommended forms",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
+					forms: formModel.recommendedForms,
+					emptyCopy: "当前 next action 没有可推荐的登记表单。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "supported form catalog",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
+					forms: formModel.supportedForms,
+					emptyCopy: "supported form catalog 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: formModel.note
+			})
+		]
+	});
+}
+function GoalEventFormList({ forms, emptyCopy }) {
+	if (forms.state === "missing" || forms.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "goal-event-form-list",
+		children: forms.items.map((form, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["formId", form.formId],
+			["eventType", form.eventType],
+			["eventFamily", form.eventFamily],
+			["commandName", form.commandName],
+			["commandIntent", form.commandIntent],
+			["actorRole", form.actorRole],
+			["actorFlag", form.actorFlag],
+			["phase", form.phase],
+			["recommended", form.recommended],
+			["availableForCurrentNextAction", form.availableForCurrentNextAction],
+			["requiresTask", form.requiresTask],
+			["requiresEvidence", form.requiresEvidence],
+			["confirmRequiresPlanHash", form.confirmRequiresPlanHash],
+			["planPreviewContract", form.planPreviewContract]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormFieldList, { fields: form.fields })] }, `${form.formId.text}-${index}`))
+	});
+}
+function GoalEventFormFieldList({ fields }) {
+	if (fields.state === "missing" || fields.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "form fields 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "goal-event-form-field-list",
+		children: fields.items.map((field, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["id", field.id],
+			["label", field.label],
+			["flag", field.flag],
+			["inputType", field.inputType],
+			["required", field.required],
+			["readOnly", field.readOnly],
+			["value", field.value],
+			["placeholder", field.placeholder],
+			["source", field.source]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormFieldOptions, { options: field.options })] }, `${field.id.text}-${index}`))
+	});
+}
+function GoalEventFormFieldOptions({ options }) {
+	if (options.state !== "available") return null;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "field-options",
+		children: options.items.map((option, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: option.text }, `${option.text}-${index}`))
 	});
 }
 function TextItemList({ items, emptyCopy }) {
