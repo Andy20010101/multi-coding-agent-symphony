@@ -18,9 +18,11 @@ import {
 import { validateGoalPromptPackContract } from '../src/symphony/goal-runbook-contracts.js';
 
 const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.valid.v1.json';
+const V22_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v22-goal-prompt-handoff-workspace.v1.json';
 const FIXTURE_GOAL_ID = 'v19-fixture';
 const MANAGED_GOAL_ID = 'v19-prompt-managed';
 const NEXT_GOAL_ID = 'v19-goal-runbook-next-action';
+const V22_GOAL_ID = 'v22-goal-prompt-handoff-workspace';
 const GENERATED_AT = '2026-05-29T10:00:00.000Z';
 
 describe('v19 goal prompt pack generator and CLI', () => {
@@ -162,6 +164,89 @@ describe('v19 goal prompt pack generator and CLI', () => {
     }
   });
 
+  it('renders v22 role-specific prompts with goal-specific evidence paths and structured role guidance', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v22-goal-prompt-roles-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook({
+        stateDir,
+        goalId: V22_GOAL_ID,
+        fromJson: V22_RUNBOOK_FIXTURE
+      });
+
+      const cases = [
+        {
+          taskId: 'task-2',
+          role: 'worker',
+          evidenceFile: 'docs/plans/v22-task-2-worker-evidence-2026-05-29.md',
+          label: 'worker implementation',
+          phase: 'implement',
+          text: [/worker implementation/u, /Reviewer handoff/u]
+        },
+        {
+          taskId: 'task-2',
+          role: 'reviewer',
+          evidenceFile: 'docs/plans/v22-task-2-review-evidence-2026-05-29.md',
+          label: 'independent reviewer',
+          phase: 'review',
+          text: [/independent reviewer/u, /Verdict: APPROVED or NEEDS_REVISION/u]
+        },
+        {
+          taskId: 'task-2',
+          role: 'main-verifier',
+          evidenceFile: 'docs/plans/v22-task-2-main-verification-evidence-2026-05-29.md',
+          label: 'main verifier',
+          phase: 'main-verification',
+          text: [/reviewer\.approved evidence/u, /--gate main-verification/u]
+        },
+        {
+          taskId: 'release',
+          role: 'release-manager',
+          evidenceFile: 'docs/plans/v22-release-evidence-2026-05-29.md',
+          label: 'release manager',
+          phase: 'release-gate',
+          text: [/Release scope:/u, /release\.ready --status declared/u]
+        }
+      ];
+
+      for (const testCase of cases) {
+        const promptPack = await buildGoalPromptPack({
+          stateDir,
+          goalId: V22_GOAL_ID,
+          taskId: testCase.taskId,
+          role: testCase.role,
+          generatedAt: GENERATED_AT
+        });
+        const [prompt] = promptPack.prompts;
+
+        assert.deepEqual(validateGoalPromptPackContract(promptPack), {
+          ok: true,
+          errors: []
+        });
+        assert.equal(prompt.evidenceFile, testCase.evidenceFile);
+        assert.equal(prompt.roleGuidance.label, testCase.label);
+        assert.equal(prompt.roleGuidance.phase, testCase.phase);
+        assert.equal(Array.isArray(prompt.roleGuidance.boundary), true);
+        assert.equal(Array.isArray(prompt.roleGuidance.evidenceRequirements), true);
+        assert.equal(Array.isArray(prompt.roleGuidance.handoffChecklist), true);
+        assert.match(prompt.text, /Role boundary:/u);
+        assert.match(prompt.text, /Role evidence checklist:/u);
+        assert.match(prompt.text, /Handoff checklist:/u);
+        assert.match(prompt.text, new RegExp(testCase.evidenceFile.replaceAll('.', '\\.'), 'u'));
+        assert.doesNotMatch(prompt.text, /docs\/plans\/v19-/u);
+        assert.match(prompt.text, /pnpm workbench:build/u);
+        assert.match(prompt.text, /pnpm --silent symphony goal-status --goal v22-goal-prompt-handoff-workspace --json/u);
+
+        for (const expectedText of testCase.text) {
+          assert.match(prompt.text, expectedText);
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('prints copy-only text output and can generate text-format prompt packs', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-prompt-text-'));
     const stateDir = join(root, '.symphony');
@@ -280,17 +365,17 @@ describe('v19 goal prompt pack generator and CLI', () => {
   });
 });
 
-async function registerRunbook({ stateDir, goalId }) {
+async function registerRunbook({ stateDir, goalId, fromJson = RUNBOOK_FIXTURE }) {
   const plan = await buildGoalRunbookInitPlan({
     stateDir,
     goalId,
-    fromJson: RUNBOOK_FIXTURE
+    fromJson
   });
 
   await confirmGoalRunbookInit({
     stateDir,
     goalId,
-    fromJson: RUNBOOK_FIXTURE,
+    fromJson,
     planHash: plan.planHash
   });
 }

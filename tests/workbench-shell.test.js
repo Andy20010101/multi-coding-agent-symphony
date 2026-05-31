@@ -60,6 +60,7 @@ describe('v15 Workbench React/Vite shell', () => {
       'ActiveGoalTaskQueuePanel',
       'NextActionCard',
       'PromptPreviewDrawer',
+      'PromptRoleGuidance',
       'CloseoutGapsPanel',
       'GoalEventsTimelinePanel',
       'EvidenceMatrixPanel',
@@ -95,6 +96,9 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /afterCompletion\.registrationCommand/u);
     assert.match(app, /Prompt Preview Drawer/u);
     assert.match(app, /copy-only prompt drawer/u);
+    assert.match(app, /role boundary/u);
+    assert.match(app, /evidence requirements/u);
+    assert.match(app, /handoff checklist/u);
     assert.match(app, /Closeout Gaps/u);
     assert.match(app, /Goal Events Timeline/u);
     assert.match(app, /Evidence Matrix/u);

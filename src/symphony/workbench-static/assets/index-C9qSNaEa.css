@@ -206,6 +206,10 @@ h3 {
   min-width: 0;
 }
 
+.prompt-role-guidance {
+  margin-top: 12px;
+}
+
 .prompt-selector-stack {
   display: grid;
   gap: 12px;

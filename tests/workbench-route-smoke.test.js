@@ -369,7 +369,10 @@ describe('v16 Workbench route smoke and server parity', () => {
             assert.equal(payload.goalId, V20_GOAL_ID);
             assert.equal(payload.prompts[0].taskId, 'task-1');
             assert.equal(payload.prompts[0].role, 'reviewer');
+            assert.equal(payload.prompts[0].roleGuidance.label, 'independent reviewer');
+            assert.equal(payload.prompts[0].evidenceFile, 'docs/plans/v20-task-1-review-evidence-2026-05-29.md');
             assert.match(payload.prompts[0].text, /independent reviewer/u);
+            assert.match(payload.prompts[0].text, /Role evidence checklist:/u);
           }
         },
         {

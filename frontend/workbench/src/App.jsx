@@ -426,9 +426,12 @@ function PromptWorkspacePromptPack({ promptPack }) {
                 ['title', textValue(prompt?.title)],
                 ['format', textValue(prompt?.format)],
                 ['copyOnly', textValue(prompt?.copyOnly)],
+                ['role label', textValue(prompt?.roleGuidance?.label)],
+                ['phase', textValue(prompt?.roleGuidance?.phase)],
                 ['evidenceFile', textValue(prompt?.evidenceFile)],
                 ['validationCommands', textValue(Array.isArray(prompt?.validationCommands) ? prompt.validationCommands.join(' / ') : undefined)]
               ]} />
+              <PromptRoleGuidance guidance={prompt?.roleGuidance} />
               <pre className="prompt-preview-text"><code>{prompt?.text ?? ''}</code></pre>
             </li>
           ))}
@@ -437,6 +440,26 @@ function PromptWorkspacePromptPack({ promptPack }) {
 
       <p className="panel-note">Prompt Workspace 只展示 goal prompt 生成的 copy-only prompt pack；不会启动 subagent、运行 shell、登记 approval 或判断任务完成。</p>
     </>
+  );
+}
+
+function PromptRoleGuidance({ guidance }) {
+  if (guidance === null || typeof guidance !== 'object') {
+    return null;
+  }
+
+  return (
+    <div className="prompt-role-guidance" aria-label="role boundary and evidence checklist">
+      <Subsection title="role boundary">
+        <CompactList items={guidance.boundary} />
+      </Subsection>
+      <Subsection title="evidence requirements">
+        <CompactList items={guidance.evidenceRequirements} />
+      </Subsection>
+      <Subsection title="handoff checklist">
+        <CompactList items={guidance.handoffChecklist} />
+      </Subsection>
+    </div>
   );
 }
 
@@ -1352,6 +1375,26 @@ function FieldList({ rows }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function CompactList({ items }) {
+  const normalizedItems = Array.isArray(items)
+    ? items.filter((item) => typeof item === 'string' && item.trim() !== '')
+    : [];
+
+  if (normalizedItems.length === 0) {
+    return <EmptyBlock copy="未暴露。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {normalizedItems.map((item) => (
+        <li key={item}>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

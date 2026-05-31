@@ -310,6 +310,10 @@ function resolveRunbookTask({ runbook, taskId, role }) {
 
 function buildPrompt(context) {
   const evidenceFile = evidenceFileFor(context);
+  const roleGuidance = roleGuidanceFor({
+    ...context,
+    evidenceFile
+  });
   const registration = registrationFor({
     goalId: context.runbook.goalId,
     taskId: context.taskId,
@@ -326,10 +330,12 @@ function buildPrompt(context) {
     text: promptTextFor({
       ...context,
       evidenceFile,
+      roleGuidance,
       registration
     }),
     validationCommands: context.validationCommands,
     evidenceFile,
+    roleGuidance,
     registration
   };
 }
@@ -365,10 +371,7 @@ function workerPromptText(context) {
     '',
     commonTaskScope(context),
     '',
-    'Role boundary:',
-    '- 只做 worker implementation 和自测记录；不要 reviewer approval、main verification 或 release readiness。',
-    '- 禁止 self-review：worker 不能审查、批准或合并自己的 task。',
-    '- 不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -396,10 +399,7 @@ function reviewerPromptText(context) {
     '',
     commonTaskScope(context),
     '',
-    'Role boundary:',
-    '- 你是 independent reviewer；如果你参与过本 task 的 worker implementation，先停止并说明，不能 self-review。',
-    '- 只根据 diff、tests、contract output 和 evidence 判断，不复述 worker 总结当作结论。',
-    '- 不做 implementation、不登记 main verification、不声明 release ready。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -429,11 +429,7 @@ function mainVerifierPromptText(context) {
     '',
     commonTaskScope(context),
     '',
-    'Role boundary:',
-    '- 先确认 reviewer.approved evidence 明确存在；没有 reviewer approval 就停止。',
-    '- 禁止 self-review：main verification 不能替代 independent reviewer approval。',
-    '- 只登记 main verification gate；不要登记 worker 或 reviewer event。',
-    '- 不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -472,10 +468,7 @@ function releaseManagerPromptText(context) {
     releaseGates,
     context.reason === null ? '' : `- Next-action reason: ${context.reason}`,
     '',
-    'Role boundary:',
-    '- 禁止 self-review：release-manager 不能补做缺失的 worker/reviewer/main-verifier approval。',
-    '- 不执行 prompt，不调用模型，不把 prompt 文本当 evidence。',
-    '- 只根据明确 event log 和 gate evidence 判断；不从文件名、branch 或命令文本推断 release-ready。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -529,10 +522,24 @@ function validationSection(commands) {
 
 function evidenceSection({ evidenceFile }) {
   return [
-    'Evidence file naming:',
+    'Evidence requirements:',
     `- Suggested path: ${evidenceFile}`,
+    '- Include goal id, task id, branch, changed files, exact command results, and boundary notes.',
     '- Record exact command results, relevant files changed, and any blockers.',
     '- Do not claim reviewer approval, main verification, or release ready unless the matching event is explicitly registered.'
+  ].join('\n');
+}
+
+function roleGuidanceSection(roleGuidance) {
+  return [
+    'Role boundary:',
+    ...roleGuidance.boundary.map((item) => `- ${item}`),
+    '',
+    'Role evidence checklist:',
+    ...roleGuidance.evidenceRequirements.map((item) => `- ${item}`),
+    '',
+    'Handoff checklist:',
+    ...roleGuidance.handoffChecklist.map((item) => `- ${item}`)
   ].join('\n');
 }
 
@@ -724,25 +731,137 @@ function outcomeRegistrationLines(entries) {
 
 function validationCommandsFor({ runbook, runbookTask, role }) {
   if (role === 'release-manager') {
-    return uniqueNonEmptyStrings(runbook.releaseGates.map((gate) => RELEASE_GATE_COMMANDS[gate]));
+    return uniqueNonEmptyStrings([
+      ...runbook.releaseGates.map((gate) => RELEASE_GATE_COMMANDS[gate]),
+      `pnpm --silent symphony goal closeout --goal ${runbook.goalId} --markdown`,
+      `pnpm --silent symphony goal-status --goal ${runbook.goalId} --json`
+    ]);
   }
 
   return uniqueNonEmptyStrings(runbookTask.copyOnlyCommands);
 }
 
-function evidenceFileFor({ taskId, role }) {
-  if (role === 'release-manager') {
-    return `docs/plans/v19-closeout-evidence-${EVIDENCE_DATE}.md`;
+function roleGuidanceFor({ role, runbook, runbookTask, evidenceFile }) {
+  if (role === 'worker') {
+    return {
+      label: 'worker implementation',
+      phase: 'implement',
+      boundary: [
+        '只做 worker implementation 和自测记录；不要 reviewer approval、main verification 或 release readiness。',
+        '禁止 self-review：worker 不能审查、批准或合并自己的 task。',
+        '不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。'
+      ],
+      evidenceRequirements: [
+        `Worker evidence file: ${evidenceFile}`,
+        'Record implementation summary, files changed, exact validation command results, boundary notes, and reviewer handoff checklist.',
+        'If a blocker remains, record the blocker and do not register approval events.'
+      ],
+      handoffChecklist: [
+        'Worker evidence exists at the suggested path.',
+        'All required validation commands have exact results.',
+        'Independent reviewer can inspect the diff and evidence without relying on worker self-approval.'
+      ]
+    };
   }
 
-  const taskSegment = taskId.replaceAll('-', '');
+  if (role === 'reviewer') {
+    return {
+      label: 'independent reviewer',
+      phase: 'review',
+      boundary: [
+        '你是 independent reviewer；如果你参与过本 task 的 worker implementation，先停止并说明，不能 self-review。',
+        '只根据 diff、tests、contract output 和 evidence 判断，不复述 worker 总结当作结论。',
+        '不做 implementation、不登记 main verification、不声明 release ready。'
+      ],
+      evidenceRequirements: [
+        `Review evidence file: ${evidenceFile}`,
+        `Read worker evidence expected for ${runbookTask.taskId} before giving a verdict.`,
+        'Record findings first, verdict, exact tests checked, and whether the task goes to main-verifier or back to worker.'
+      ],
+      handoffChecklist: [
+        'Verdict is APPROVED or NEEDS_REVISION.',
+        'Review evidence cites the diff, evidence refs, and command results checked.',
+        'No main verification or release gate is registered from this role.'
+      ]
+    };
+  }
+
+  if (role === 'main-verifier') {
+    return {
+      label: 'main verifier',
+      phase: 'main-verification',
+      boundary: [
+        '先确认 reviewer.approved evidence 明确存在；没有 reviewer approval 就停止。',
+        '禁止 self-review：main verification 不能替代 independent reviewer approval。',
+        '只登记 main verification gate；不要登记 worker 或 reviewer event。',
+        '不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。'
+      ],
+      evidenceRequirements: [
+        `Main verification evidence file: ${evidenceFile}`,
+        'Record reviewer approval evidence checked, main or checked commit, exact validation command results, and remaining blockers.',
+        'Use goal gate main-verification only after the reviewer-approved evidence is explicit.'
+      ],
+      handoffChecklist: [
+        'Reviewer approval evidence is named and checked.',
+        'Main verification result is passed or failed with exact commands.',
+        'Release manager receives only explicit main verification evidence, not branch or filename assumptions.'
+      ]
+    };
+  }
+
+  return {
+    label: 'release manager',
+    phase: 'release-gate',
+    boundary: [
+      '禁止 self-review：release-manager 不能补做缺失的 worker/reviewer/main-verifier approval。',
+      '不执行 prompt，不调用模型，不把 prompt 文本当 evidence。',
+      '只根据明确 event log 和 gate evidence 判断；不从文件名、branch 或命令文本推断 release-ready。'
+    ],
+    evidenceRequirements: [
+      `Release evidence file: ${evidenceFile}`,
+      `Check every task in ${runbook.goalId} has worker evidence, reviewer approval, and main verification before release.ready.`,
+      'Record each release gate command result, gate evidence refs, remaining blockers, and the next gate to register.'
+    ],
+    handoffChecklist: [
+      'Every release gate has explicit evidence before a gate-passed event.',
+      'release.ready is declared only after required task and gate evidence exists.',
+      'No worker, reviewer, or main-verifier evidence is backfilled by the release-manager role.'
+    ]
+  };
+}
+
+function evidenceFileFor({ runbook, taskId, role }) {
+  const goalSegment = evidenceGoalSegment(runbook.goalId);
+
+  if (role === 'release-manager') {
+    return `docs/plans/${goalSegment}-release-evidence-${EVIDENCE_DATE}.md`;
+  }
+
+  const taskSegment = evidenceTaskSegment({
+    goalSegment,
+    taskId
+  });
   const roleSegment = role === 'main-verifier'
     ? 'main-verification'
     : role === 'reviewer'
       ? 'review'
       : 'worker';
 
-  return `docs/plans/v19-${taskSegment}-${roleSegment}-evidence-${EVIDENCE_DATE}.md`;
+  return `docs/plans/${goalSegment}-${taskSegment}-${roleSegment}-evidence-${EVIDENCE_DATE}.md`;
+}
+
+function evidenceGoalSegment(goalId) {
+  const match = /^(v\d+)(?:-|$)/u.exec(goalId);
+
+  return match?.[1] ?? goalId;
+}
+
+function evidenceTaskSegment({ goalSegment, taskId }) {
+  if (goalSegment === 'v19') {
+    return taskId.replaceAll('-', '');
+  }
+
+  return taskId;
 }
 
 function registrationFor({

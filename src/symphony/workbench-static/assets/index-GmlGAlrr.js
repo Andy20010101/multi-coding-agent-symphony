@@ -13355,24 +13355,51 @@ function PromptWorkspacePromptPack({ promptPack }) {
 		] }),
 		prompts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "prompt pack 没有返回 prompts。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 			className: "prompt-preview-list",
-			children: prompts.map((prompt, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-				["taskId", textValue(prompt?.taskId)],
-				["role", textValue(prompt?.role)],
-				["title", textValue(prompt?.title)],
-				["format", textValue(prompt?.format)],
-				["copyOnly", textValue(prompt?.copyOnly)],
-				["evidenceFile", textValue(prompt?.evidenceFile)],
-				["validationCommands", textValue(Array.isArray(prompt?.validationCommands) ? prompt.validationCommands.join(" / ") : void 0)]
-			] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
-				className: "prompt-preview-text",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: prompt?.text ?? "" })
-			})] }, `${prompt?.taskId ?? "task"}-${prompt?.role ?? "role"}-${index}`))
+			children: prompts.map((prompt, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["taskId", textValue(prompt?.taskId)],
+					["role", textValue(prompt?.role)],
+					["title", textValue(prompt?.title)],
+					["format", textValue(prompt?.format)],
+					["copyOnly", textValue(prompt?.copyOnly)],
+					["role label", textValue(prompt?.roleGuidance?.label)],
+					["phase", textValue(prompt?.roleGuidance?.phase)],
+					["evidenceFile", textValue(prompt?.evidenceFile)],
+					["validationCommands", textValue(Array.isArray(prompt?.validationCommands) ? prompt.validationCommands.join(" / ") : void 0)]
+				] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptRoleGuidance, { guidance: prompt?.roleGuidance }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+					className: "prompt-preview-text",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: prompt?.text ?? "" })
+				})
+			] }, `${prompt?.taskId ?? "task"}-${prompt?.role ?? "role"}-${index}`))
 		}),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 			className: "panel-note",
 			children: "Prompt Workspace 只展示 goal prompt 生成的 copy-only prompt pack；不会启动 subagent、运行 shell、登记 approval 或判断任务完成。"
 		})
 	] });
+}
+function PromptRoleGuidance({ guidance }) {
+	if (guidance === null || typeof guidance !== "object") return null;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "prompt-role-guidance",
+		"aria-label": "role boundary and evidence checklist",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "role boundary",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: guidance.boundary })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "evidence requirements",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: guidance.evidenceRequirements })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "handoff checklist",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: guidance.handoffChecklist })
+			})
+		]
+	});
 }
 function promptWorkspaceGoalOptions(model) {
 	const options = [];
@@ -14334,6 +14361,14 @@ function FieldList({ rows }) {
 				children: formatState(state)
 			})]
 		}, label))
+	});
+}
+function CompactList({ items }) {
+	const normalizedItems = Array.isArray(items) ? items.filter((item) => typeof item === "string" && item.trim() !== "") : [];
+	if (normalizedItems.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: normalizedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item }) }, item))
 	});
 }
 function CheckList({ checks }) {
