@@ -98,3 +98,87 @@ Validation from this revision:
 ## Boundary
 
 Workbench mainline for v21 is based on the latest goal/runbook flow: open the next action, choose the event to record, run goal update/review/gate dry-run, inspect the plan hash, confirm the event, and refresh the timeline. This evidence does not recommend a v8 action dashboard, does not make v8 `scan/do/review/verify/status/continue/artifacts` the top-level Workbench action list, and does not recommend tagging or publishing a release.
+
+## Final Release Pass 2026-05-31
+
+Goal id: `v21-goal-event-registration-workbench`
+
+Release name: `v21 Workbench Goal Event Registration`
+
+Main commit used for validation: `9d9ff9b22237841cf534ba4f51494ff2bdf48b0f`
+
+This pass ran on `main` after the worker revision for release-ready closeout behavior. The worktree already contained the task-5 review evidence and retry main-verification evidence updates from reviewer/verifier subagents. This release manager did not register goal gates, create a tag, create a release, or add `release.tag-evidence`.
+
+### Command Results
+
+`pnpm check`
+
+- Exit status: 0
+- Result: passed
+- Output: `node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js`
+
+`pnpm test`
+
+- Exit status: 0
+- Result: passed
+- Output: `tests 691`, `suites 111`, `pass 691`, `fail 0`, `cancelled 0`, `skipped 0`, `todo 0`, `duration_ms 3655.42475`
+
+`pnpm workbench:build`
+
+- Exit status: 0
+- Result: passed
+- Output: `vite v8.0.14 building client environment for production`; `17 modules transformed`; `src/symphony/workbench-static/index.html 0.42 kB`; `src/symphony/workbench-static/assets/index-BspYnYKl.css 11.24 kB`; `src/symphony/workbench-static/assets/index-DMa5Vmdp.js 689.08 kB`; `built in 142ms`
+- Note: Node printed WASI experimental warnings.
+
+`pnpm test:mutation:gate`
+
+- Exit status: 0
+- Result: passed
+- Output: `Final mutation score of 74.22 is greater than or equal to break threshold 60`; `Done in 21 minutes and 12 seconds.`
+- Mutation report summary: all files total score `74.22`; killed `1762`; timeout `6`; survived `488`; no coverage `126`; errors `0`
+
+`pnpm audit --audit-level high`
+
+- Exit status: 0
+- Result: passed
+- Output: `1 vulnerabilities found`; `Severity: 1 moderate`
+- Gate note: the command was run with `--audit-level high`; the moderate finding did not fail this gate.
+
+`pnpm mcas doctor`
+
+- Exit status: 0
+- Result: passed
+- Output: status `ok`; node version `24.14.0`; package manager `pnpm`; commands include `doctor`, `intake`, `github issue`, `harness run-taskpacket`, `queue manual`, `run-next`, `run-task`, `smoke`, and `eval replay`
+
+`git diff --check`
+
+- Exit status: 0
+- Result: passed
+- Output: no whitespace errors reported
+
+`pnpm --silent symphony goal closeout --goal v21-goal-event-registration-workbench --markdown`
+
+- Exit status: 0
+- Result: passed
+- Output: worker evidence complete `yes`; review evidence complete `yes`; main verification complete `yes`; release ready `yes`; release ready source `goal-event-log.v1:evt_b98db420aa0e67bd`; missing evidence `none`; release gate gaps `none`
+- Release gates in closeout: `pnpmCheck: passed`; `pnpmTest: passed`; `workbenchBuild: passed`; `mutationGate: passed`; `auditHigh: passed`; `diffCheck: passed`; `mcasDoctor: passed`; `docsUpdated: passed`; `tagEvidence: unknown`
+
+### Closeout Gaps
+
+No closeout gaps were reported. `releaseReady` is `true`, `missing` is empty, and `tagEvidence` remains `unknown` because the v21 runbook intentionally excludes `release.tag-evidence`.
+
+### Gate Recommendations
+
+- `release.pnpm-check`: recommend `passed`
+- `release.pnpm-test`: recommend `passed`
+- `release.workbench-build`: recommend `passed`
+- `release.mutation-gate`: recommend `passed`
+- `release.audit-high`: recommend `passed`
+- `release.diff-check`: recommend `passed`
+- `release.mcas-doctor`: recommend `passed`
+- `release.docs-updated`: recommend `passed` after this final evidence section is committed
+- `release.ready`: recommend declared after the eight listed release gates are registered from this final pass evidence
+
+### Final Boundary
+
+Workbench mainline is the latest goal/runbook flow: dry-run a controlled goal event, inspect the plan hash, confirm through the backend, and refresh the event-backed Workbench contracts. It is not a v8 action dashboard. This pass does not recommend creating a tag, publishing a release, or registering `release.tag-evidence`.

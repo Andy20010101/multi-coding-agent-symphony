@@ -151,3 +151,71 @@ afterCompletion.allowedEvents: reviewer.approved, reviewer.needs-revision
 - No generic shell runner, permission system, safety framework, goal framework, or artifact framework was added by task-5.
 - I found no worker self-approval path in the task-5 changes; the route tests assert worker/reviewer actor conflict rejection.
 - Passing tests and build commands are command evidence only. They do not declare task-5 main verification or release readiness.
+
+## Post-release-ready revision review: runbook release gates
+
+Revision commit reviewed: `9d9ff9b22237841cf534ba4f51494ff2bdf48b0f` (`Respect runbook release gates for v21 closeout`)
+Reviewer: `independent v21 reviewer subagent`
+Date reviewed: 2026-05-31
+Verdict: `approved`
+
+### Scope Checked
+
+- Reviewed the commit diff for `src/symphony/goal-next-action-resolver.js`, `src/symphony/goal-closeout-report.js`, `tests/v19-goal-next-action-resolver.test.js`, and `tests/v21-release-ready-boundary.test.js`.
+- Read `docs/plans/v21-release-evidence-2026-05-29.md`, including the revision notes and registered v21 release gates.
+- Checked `fixtures/contracts/goal-runbook.v21-goal-event-registration-workbench.v1.json`: v21 lists eight release gates and does not list `release.tag-evidence`.
+- Checked `fixtures/contracts/goal-runbook.valid.v1.json`: the v19 fixture still lists `release.tag-evidence`.
+- Checked the current v21 `goal-status`, `goal next`, and `goal closeout` outputs without registering any events.
+
+### Findings
+
+No blocking findings.
+
+The resolver and closeout paths now use `runbook.releaseGates` for release completion. That matches the v21 boundary: v21 can close out with the eight listed release gates plus explicit `release.ready`, while `tagEvidence` remains `unknown`.
+
+Tag evidence is still required when the runbook lists it. The v19 fixture includes `release.tag-evidence`; the updated v19 resolver test completes only after every listed release gate, including tag evidence, has a passed event. The v19 closeout CLI tests also keep closeout not-ready and report a `tagEvidence` release-gate gap when tag evidence is missing.
+
+I did not find readiness being inferred from branch names, file names, command text, or frontend state in this revision. The current v21 CLI outputs are driven by the event ledger and runbook gate list.
+
+### Command Results
+
+`git diff --check`
+
+- Exit code: 0
+- Output: no whitespace errors reported.
+
+`pnpm test -- tests/v19-goal-next-action-resolver.test.js tests/v19-goal-next-cli.test.js tests/v21-release-ready-boundary.test.js`
+
+- Exit code: 0
+- Result: `tests 21`, `suites 3`, `pass 21`, `fail 0`.
+
+`pnpm check`
+
+- Exit code: 0
+- Output: `node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js`
+
+`pnpm test`
+
+- Exit code: 0
+- Result: `tests 691`, `suites 111`, `pass 691`, `fail 0`, `duration_ms 3703.813042`.
+
+`pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json`
+
+- Exit code: 0
+- Observed: `summary.releaseReady: true`; `summary.releaseReadySource: goal-event-log.v1:evt_b98db420aa0e67bd`; all five tasks `release-ready`; `tagEvidence: unknown`.
+
+`pnpm --silent symphony goal next --goal v21-goal-event-registration-workbench --json`
+
+- Exit code: 0
+- Observed: `status: complete`; `next: null`; reason says `release.ready-declared` is recorded and all runbook release gates passed; `copyOnlyCommands: []`.
+
+`pnpm --silent symphony goal closeout --goal v21-goal-event-registration-workbench --json`
+
+- Exit code: 0
+- Observed: `summary.releaseReady: true`; `missing: []`; all eight v21 release gates passed; `tagEvidence: unknown`.
+
+### Boundary Notes
+
+- This review did not implement product code.
+- This review did not register goal review events or release events.
+- This review does not require `release.tag-evidence` for v21 because the v21 runbook does not list that gate.

@@ -1,53 +1,40 @@
 # v21 task-5 main verification evidence
 
-Goal id: `v21-goal-event-registration-workbench`  
-Task id: `task-5`  
-Task title: `Event registration tests and docs`  
-Branch checked: `v21-task-5-event-registration-tests-and-docs`  
-Commit checked: `7d8c4cb4eb38624cc2c4a4345415b64c91983ae3`  
-Verification date: 2026-05-31  
-Gate recommendation: `passed`
+Goal id: `v21-goal-event-registration-workbench`
+Task id: `task-5`
+Task title: `Event registration tests and docs`
+Revision commit checked: `9d9ff9b22237841cf534ba4f51494ff2bdf48b0f`
+Verification date: 2026-05-31
+Latest gate recommendation: `passed`
 
-## Reviewer approval check
+## Post-release-ready Revision Verification
 
-Explicit reviewer approval evidence exists before this verification:
+This pass verified the task-5 revision after independent reviewer approval. The verifier did not register `main.verification-passed`, `main.verification-failed`, `release.ready-declared`, or any other goal gate event.
 
-- `docs/plans/v21-task-5-review-evidence-2026-05-29.md` records `Verdict: approved`.
-- `pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json` reports task-5 `status: approved`, `reviewVerdict: APPROVED`, and `reviewEvidenceRef: docs/plans/v21-task-5-review-evidence-2026-05-29.md`.
-- `pnpm --silent symphony goal next --goal v21-goal-event-registration-workbench --json` reports task-5 `role: main-verifier` and `phase: main-verification`.
+The revision behavior is partially correct:
 
-No main-verification event or release-ready event was registered by this verifier.
+- The required code checks, full tests, Workbench build, and whitespace check pass.
+- The v21 boundary tests pass: v21 closeout can complete without `release.tag-evidence` when all release gates listed in the v21 runbook pass and `release.ready-declared` is explicit.
+- Runbooks that include `release.tag-evidence` still require it; the v19 resolver and closeout tests passed.
+- The managed v21 runbook lists eight release gates and does not list `release.tag-evidence`.
 
-## Scope checked
+The live goal state has a blocking discrepancy after the worker revision and reviewer approval:
 
-- Read v21 runbook task-5 scope in `docs/plans/workbench-v20-v28-goal-runbooks/v21_workbench-goal-event-registration_goal_runbook_latest.md`.
-- Read managed runbook fixture acceptance in `fixtures/contracts/goal-runbook.v21-goal-event-registration-workbench.v1.json`.
-- Read worker evidence at `docs/plans/v21-task-5-worker-evidence-2026-05-29.md`.
-- Read review evidence at `docs/plans/v21-task-5-review-evidence-2026-05-29.md`.
-- Checked task-5 tests in `tests/v21-goal-plan-preview-api.test.js`.
-- Checked docs in `docs/workbench-operator-guide.md` and `docs/symphony-product-contracts.md`.
-- Checked current goal-status and next-action surfaces.
+- `goal closeout` reports `summary.mainVerificationComplete: false`, `summary.releaseReady: false`, and a missing `main.verification-passed` item for task-5.
+- `goal next` does not route back to `task-5` main verification. It reports `next.taskId: release`, `next.role: release-manager`, `next.phase: release-prep`, with the reason `All runbook tasks are main-verified and release gates are passed, but release.ready-declared is missing.`
+- `goal-status` still reports `summary.releaseReady: true` from an earlier `release.ready-declared` event while task-5 is currently only `status: approved` after the revision.
 
-## Acceptance verification
+Because the next-action surface and closeout surface disagree about the required post-review main-verification step, this verifier cannot recommend registering the main-verification gate as passed.
 
-Task-5 acceptance is met on the current working tree.
+## Command Results
 
-- Worker event success/failure coverage exists in `tests/v21-goal-plan-preview-api.test.js`: `worker.self-check-passed` and `worker.self-check-failed` are confirmed through the Workbench preview/confirm API, and the refreshed contracts are asserted.
-- Review verdict coverage exists for `reviewer.approved` and `reviewer.needs-revision`, including rejection of worker self-approval with a no-write snapshot check.
-- Main verification gate coverage exists for `main.verification-passed` and `main.verification-failed`, including rejection of incomplete main-verification gate input with a no-write snapshot check.
-- Docs state that Workbench uses controlled backend `goal update/review/gate` dry-run and confirm paths, appends managed goal events on confirm, and displays refreshed backend `goal-progress-ledger.v1`, `goal-event-log.v1`, and `goal-next-action.v1`.
-- Docs state that Workbench does not create frontend status and must not infer task completion, review approval, main verification, or release readiness from errors, file names, branch names, commit messages, copy-only commands, prompt text, task ids, titles, or paths.
+### `git rev-parse HEAD`
 
-## Boundary notes
+Exit code: 0
 
-- Latest goal/runbook/next-action remains the active surface. `goal next` reports task-5 main-verification as the next action.
-- No v8 top-level action list was introduced for this task.
-- No generic shell runner, safety framework, permission system, goal framework, or artifact framework was added by this verification.
-- No status or release inference from branch, file, commit, prompt, command text, or frontend heuristics was accepted as evidence.
-- Worker self-approval remains rejected by route coverage.
-- This verifier did not do worker implementation, did not issue reviewer approval, did not register the main-verification gate, and did not declare release readiness.
-
-## Command results
+```text
+9d9ff9b22237841cf534ba4f51494ff2bdf48b0f
+```
 
 ### `pnpm check`
 
@@ -58,83 +45,47 @@ Exit code: 0
 > node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js
 ```
 
-### `git diff --check`
+### `pnpm test`
 
 Exit code: 0
 
 ```text
-<no output>
+tests 691
+suites 111
+pass 691
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 4025.642208
 ```
+
+The full suite included:
+
+- `v21 Workbench goal event dry-run plan preview API`: 11 passing tests.
+- `v21 release-ready boundary without release.tag-evidence`: 2 passing tests.
 
 ### `pnpm workbench:build`
 
 Exit code: 0
 
 ```text
-> multi-coding-agent-symphony@0.1.0 workbench:build /Users/andy/Documents/project/multi-coding-agent-symphony
-> vite build --config frontend/workbench/vite.config.js
-
-(node:93446) ExperimentalWarning: WASI is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-(node:93446) ExperimentalWarning: WASI is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
 vite v8.0.14 building client environment for production...
-(node:93446) ExperimentalWarning: WASI is an experimental feature and might change at any time
-(Use `node --trace-warnings ...` to show where the warning was created)
-transforming...
-✓ 17 modules transformed.
-rendering chunks...
-computing gzip size...
-src/symphony/workbench-static/index.html                   0.42 kB │ gzip:   0.27 kB
-src/symphony/workbench-static/assets/index-BspYnYKl.css   11.24 kB │ gzip:   2.57 kB
-src/symphony/workbench-static/assets/index-DMa5Vmdp.js   689.08 kB │ gzip: 128.85 kB
-
-✓ built in 152ms
+17 modules transformed.
+src/symphony/workbench-static/index.html                   0.42 kB gzip 0.27 kB
+src/symphony/workbench-static/assets/index-BspYnYKl.css   11.24 kB gzip 2.57 kB
+src/symphony/workbench-static/assets/index-DMa5Vmdp.js   689.08 kB gzip 128.85 kB
+built in 142ms
 ```
 
-### `pnpm test`
+The command printed Node WASI experimental warnings only.
+
+### `git diff --check`
 
 Exit code: 0
 
 ```text
-ℹ tests 689
-ℹ suites 110
-ℹ pass 689
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 3666.088416
-```
-
-The full test run included `v21 Workbench goal event dry-run plan preview API` with 11 passing tests.
-
-### `pnpm test tests/v21-goal-plan-preview-api.test.js`
-
-Exit code: 0
-
-```text
-▶ v21 Workbench goal event dry-run plan preview API
-  ✔ serves a latest goal update dry-run preview with plan hash and event summary without writing state (22.923459ms)
-  ✔ serves review and gate dry-run previews only through constrained command parameters (7.799167ms)
-  ✔ accepts controlled repo-doc and managed artifact evidence refs in preview plans (5.293583ms)
-  ✔ returns a clear error envelope for uncontrolled preview evidence refs without appending (6.009584ms)
-  ✔ rejects uncontrolled confirm evidence refs before appending (6.872958ms)
-  ✔ rejects arbitrary commands, confirm inputs, unknown parameters, and unsafe goal refs safely (4.6165ms)
-  ✔ confirms a matching update plan hash, appends one event, and returns refreshed goal state (5.465ms)
-  ✔ confirms controlled worker success and failure events without frontend-created status (6.904958ms)
-  ✔ confirms review approved and needs-revision verdicts and rejects worker self-approval (10.667208ms)
-  ✔ confirms main verification passed and failed gates and rejects incomplete gate input (7.86125ms)
-  ✔ rejects mismatched plan hashes, unsupported confirm commands, unknown fields, and unsafe goal refs without appending (4.804208ms)
-✔ v21 Workbench goal event dry-run plan preview API (89.803292ms)
-ℹ tests 11
-ℹ suites 1
-ℹ pass 11
-ℹ fail 0
-ℹ cancelled 0
-ℹ skipped 0
-ℹ todo 0
-ℹ duration_ms 138.164792
+<no output>
 ```
 
 ### `pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json`
@@ -146,22 +97,193 @@ contractName: goal-progress-ledger.v1
 goalId: v21-goal-event-registration-workbench
 summary.totalTasks: 5
 summary.completedTasks: 5
-summary.releaseReady: false
-summary.releaseReadySource: null
+summary.releaseReady: true
+summary.releaseReadySource: goal-event-log.v1:evt_b98db420aa0e67bd
 task-5.status: approved
-task-5.statusSource: goal-event-log.v1:evt_a0b73f715e269c05
-task-5.workerEvidenceRef: docs/plans/v21-task-5-worker-evidence-2026-05-29.md
+task-5.statusSource: goal-event-log.v1:evt_d771262c501c60a8
+task-5.workerEvidenceRef: docs/plans/v21-release-evidence-2026-05-29.md
 task-5.reviewEvidenceRef: docs/plans/v21-task-5-review-evidence-2026-05-29.md
 task-5.reviewVerdict: APPROVED
-task-5.mainVerificationRef: null
-releaseGates.pnpmCheck: unknown
-releaseGates.pnpmTest: unknown
-releaseGates.workbenchBuild: unknown
-releaseGates.mutationGate: unknown
-releaseGates.auditHigh: unknown
-releaseGates.diffCheck: unknown
-releaseGates.mcasDoctor: unknown
-releaseGates.docsUpdated: unknown
+task-5.mainVerificationRef: docs/plans/v21-task-5-main-verification-evidence-2026-05-29.md
+releaseGates.pnpmCheck: passed
+releaseGates.pnpmTest: passed
+releaseGates.workbenchBuild: passed
+releaseGates.mutationGate: passed
+releaseGates.auditHigh: passed
+releaseGates.diffCheck: passed
+releaseGates.mcasDoctor: passed
+releaseGates.docsUpdated: passed
+releaseGates.tagEvidence: unknown
+```
+
+### `pnpm --silent symphony goal next --goal v21-goal-event-registration-workbench --json`
+
+Exit code: 0
+
+```text
+contractName: goal-next-action.v1
+goalId: v21-goal-event-registration-workbench
+status: action-required
+next.taskId: release
+next.role: release-manager
+next.phase: release-prep
+reason: All runbook tasks are main-verified and release gates are passed, but release.ready-declared is missing.
+afterCompletion.registerWith: symphony goal gate
+afterCompletion.allowedEvents: release.ready-declared
+copyOnlyCommands: symphony goal-status --goal v21-goal-event-registration-workbench --json
+```
+
+This is not acceptable for the current revision state because task-5 has newer worker and reviewer events after the earlier task-5 main verification event, and `goal closeout` reports task-5 main verification missing.
+
+### `pnpm --silent symphony goal closeout --goal v21-goal-event-registration-workbench --json`
+
+Exit code: 0
+
+```text
+contractName: goal-closeout-report.v1
+goalId: v21-goal-event-registration-workbench
+summary.totalTasks: 5
+summary.workerEvidenceComplete: true
+summary.reviewEvidenceComplete: true
+summary.mainVerificationComplete: false
+summary.releaseReady: false
+summary.releaseReadySource: null
+missing[0].kind: main-verification
+missing[0].taskId: task-5
+missing[0].expectedEvent: main.verification-passed
+releaseGates.pnpmCheck: passed
+releaseGates.pnpmTest: passed
+releaseGates.workbenchBuild: passed
+releaseGates.mutationGate: passed
+releaseGates.auditHigh: passed
+releaseGates.diffCheck: passed
+releaseGates.mcasDoctor: passed
+releaseGates.docsUpdated: passed
+releaseGates.tagEvidence: unknown
+```
+
+### `pnpm test -- tests/v19-goal-next-action-resolver.test.js tests/v19-goal-next-cli.test.js tests/v21-release-ready-boundary.test.js`
+
+Exit code: 0
+
+```text
+tests 21
+suites 3
+pass 21
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 108.46475
+```
+
+This targeted run verified:
+
+- v21 `goal next` completes when listed release gates pass and explicit `release.ready-declared` exists, without `release.tag-evidence`.
+- v21 `goal closeout` reports `releaseReady: true`, `missing: []`, and `tagEvidence: unknown` when the v21 runbook omits that gate.
+- v19 coverage still includes `release.tag-evidence` and keeps closeout not ready until required listed gates and explicit `release.ready-declared` evidence exist.
+
+## Release Gate Boundary
+
+The v21 managed runbook release gates are:
+
+```text
+release.pnpm-check
+release.pnpm-test
+release.workbench-build
+release.mutation-gate
+release.audit-high
+release.diff-check
+release.mcas-doctor
+release.docs-updated
+```
+
+`release.tag-evidence` is not listed for v21 and was not required by this verification. The v19 managed runbook still lists `release.tag-evidence`, and the targeted v19 tests passed.
+
+## Recommendation
+
+Gate recommendation: `failed`.
+
+Do not register task-5 `main.verification-passed` from this evidence. The release-ready boundary tests pass, but the live `goal next` and `goal closeout` surfaces disagree about the post-revision task-5 main-verification requirement.
+
+## Retry Main Verification
+
+Revision commit checked: `9d9ff9b22237841cf534ba4f51494ff2bdf48b0f`
+Retry verification date: 2026-05-31
+Gate recommendation: `passed`
+
+This retry verified the same revision after the failed main-verification gate was registered as `evt_54e49b1db6812f4e`. This verifier did not register `main.verification-passed`, `main.verification-failed`, `release.ready-declared`, or any other goal event.
+
+Reviewer approval is present for the revision in `docs/plans/v21-task-5-review-evidence-2026-05-29.md`: the post-release-ready revision review records `Verdict: approved` for commit `9d9ff9b22237841cf534ba4f51494ff2bdf48b0f`.
+
+The earlier blocker is resolved. `goal next` now routes to `task-5` / `main-verifier` / `main-verification` with reason `Latest main verification failed for task-5.` `goal closeout` still reports `releaseReady: false`, but the only missing item is the expected pending `main.verification-passed` event for task-5. No unexpected closeout blocker was observed.
+
+### `pnpm check`
+
+Exit code: 0
+
+```text
+> multi-coding-agent-symphony@0.1.0 check /Users/andy/Documents/project/multi-coding-agent-symphony
+> node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js
+```
+
+### `pnpm test`
+
+Exit code: 0
+
+```text
+tests 691
+suites 111
+pass 691
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 3628.876875
+```
+
+The full suite included `v21 Workbench goal event dry-run plan preview API` with 11 passing tests and `v21 release-ready boundary without release.tag-evidence` with 2 passing tests.
+
+### `pnpm workbench:build`
+
+Exit code: 0
+
+```text
+vite v8.0.14 building client environment for production...
+17 modules transformed.
+src/symphony/workbench-static/index.html                   0.42 kB gzip 0.27 kB
+src/symphony/workbench-static/assets/index-BspYnYKl.css   11.24 kB gzip 2.57 kB
+src/symphony/workbench-static/assets/index-DMa5Vmdp.js   689.08 kB gzip 128.85 kB
+built in 142ms
+```
+
+The command printed Node WASI experimental warnings only.
+
+### `pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json`
+
+Exit code: 0
+
+```text
+contractName: goal-progress-ledger.v1
+goalId: v21-goal-event-registration-workbench
+summary.totalTasks: 5
+summary.completedTasks: 4
+summary.releaseReady: true
+summary.releaseReadySource: goal-event-log.v1:evt_b98db420aa0e67bd
+task-5.status: unknown
+task-5.statusSource: goal-event-log.v1:evt_54e49b1db6812f4e
+task-5.workerEvidenceRef: docs/plans/v21-release-evidence-2026-05-29.md
+task-5.reviewEvidenceRef: docs/plans/v21-task-5-review-evidence-2026-05-29.md
+task-5.reviewVerdict: APPROVED
+task-5.mainVerificationRef: docs/plans/v21-task-5-main-verification-evidence-2026-05-29.md
+releaseGates.pnpmCheck: passed
+releaseGates.pnpmTest: passed
+releaseGates.workbenchBuild: passed
+releaseGates.mutationGate: passed
+releaseGates.auditHigh: passed
+releaseGates.diffCheck: passed
+releaseGates.mcasDoctor: passed
+releaseGates.docsUpdated: passed
 releaseGates.tagEvidence: unknown
 ```
 
@@ -176,23 +298,67 @@ status: action-required
 next.taskId: task-5
 next.role: main-verifier
 next.phase: main-verification
-reason: Reviewer approved task-5 but main verification is missing.
+reason: Latest main verification failed for task-5.
 afterCompletion.registerWith: symphony goal gate --gate main-verification
 afterCompletion.allowedEvents: main.verification-passed, main.verification-failed
 ```
 
-### `git status --short && git diff --name-status`
+### `pnpm --silent symphony goal closeout --goal v21-goal-event-registration-workbench --json`
 
 Exit code: 0
 
 ```text
-?? docs/plans/v21-task-5-review-evidence-2026-05-29.md
+contractName: goal-closeout-report.v1
+goalId: v21-goal-event-registration-workbench
+summary.totalTasks: 5
+summary.workerEvidenceComplete: true
+summary.reviewEvidenceComplete: true
+summary.mainVerificationComplete: false
+summary.releaseReady: false
+summary.releaseReadySource: null
+missing[0].kind: main-verification
+missing[0].taskId: task-5
+missing[0].expectedEvent: main.verification-passed
+releaseGates.pnpmCheck: passed
+releaseGates.pnpmTest: passed
+releaseGates.workbenchBuild: passed
+releaseGates.mutationGate: passed
+releaseGates.auditHigh: passed
+releaseGates.diffCheck: passed
+releaseGates.mcasDoctor: passed
+releaseGates.docsUpdated: passed
+releaseGates.tagEvidence: unknown
 ```
 
-After writing this evidence file, the expected additional untracked file is `docs/plans/v21-task-5-main-verification-evidence-2026-05-29.md`.
+### `pnpm test -- tests/v19-goal-next-action-resolver.test.js tests/v19-goal-next-cli.test.js tests/v21-release-ready-boundary.test.js`
 
-## Gaps
+Exit code: 0
 
-No blocking gaps found for task-5 main verification.
+```text
+tests 21
+suites 3
+pass 21
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 107.487667
+```
 
-Release gates remain unregistered in goal-status, which is expected for this scope. Mutation, audit, and `pnpm mcas doctor` were not run in this verification pass and were not registered as release gates.
+This focused run verified that v21 can complete when the runbook-listed release gates pass and `release.ready-declared` exists without requiring `release.tag-evidence`, while v19 still keeps the release tag gate in its runbook boundary.
+
+### `git diff --check`
+
+Run after this retry section was appended.
+
+Exit code: 0
+
+```text
+<no output>
+```
+
+## Retry Recommendation
+
+Gate recommendation: `passed`.
+
+Registering `main.verification-passed` for task-5 is recommended. All requested technical checks passed, reviewer approval is present, the runbook boundary around `release.tag-evidence` is preserved, and the only closeout gap is the expected pending task-5 main-verification event.
