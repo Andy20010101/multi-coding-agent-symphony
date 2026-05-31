@@ -305,3 +305,72 @@ Observed summary:
   }
 }
 ```
+
+### Workspace rerun after branch update
+
+After moving `v24-task-1-main-verification-readiness-panel` to `613c4e1850e10ac334319bb34a39fc780758c245`, I reran the required commands in `/Users/andy/Documents/project/multi-coding-agent-symphony`. These results include the remaining unrelated v23/workbench dirty files in the working tree; those files were not staged into the task-1 commit.
+
+`pnpm check`: exit 0.
+
+```text
+> multi-coding-agent-symphony@0.1.0 check /Users/andy/Documents/project/multi-coding-agent-symphony
+> node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js
+```
+
+`pnpm test`: exit 0.
+
+```text
+tests 711
+suites 113
+pass 711
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 4498.955125
+```
+
+`pnpm workbench:build`: exit 0.
+
+```text
+vite v8.0.14 building client environment for production...
+✓ 17 modules transformed.
+rendering chunks...
+computing gzip size...
+src/symphony/workbench-static/index.html                   0.42 kB │ gzip:   0.27 kB
+src/symphony/workbench-static/assets/index-D00NDVfk.css   15.41 kB │ gzip:   3.01 kB
+src/symphony/workbench-static/assets/index-C-y1-j-H.js   768.56 kB │ gzip: 143.42 kB
+
+✓ built in 153ms
+```
+
+The build also printed Node WASI `ExperimentalWarning` messages.
+
+`git diff --check`: exit 0, no output.
+
+`pnpm --silent symphony goal-status --goal v24-main-verification-workbench --json`: exit 0.
+
+Observed workspace summary:
+
+```json
+{
+  "goalId": "v24-main-verification-workbench",
+  "summary": {
+    "totalTasks": 5,
+    "completedTasks": 0,
+    "blockedTasks": 1,
+    "needsReviewTasks": 0,
+    "needsRevisionTasks": 0,
+    "releaseReady": false
+  },
+  "task1": {
+    "status": "blocked",
+    "statusSource": "goal-event-log.v1:evt_4c089c2b431671a9",
+    "branch": "v24-task-1-main-verification-readiness-panel",
+    "workerEvidenceRef": "docs/plans/v24-task-1-worker-evidence-2026-05-29.md",
+    "reviewEvidenceRef": "docs/plans/v24-task-1-review-evidence-2026-05-29.md",
+    "reviewVerdict": "APPROVED",
+    "mainVerificationRef": null
+  }
+}
+```
