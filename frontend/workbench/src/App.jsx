@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import {
   confirmGoalEventPlan,
   fetchGoalEventPlanPreview,
+  fetchPromptWorkspacePromptPack,
+  fetchPromptWorkspaceRunbook,
   fetchWorkbenchContracts
 } from './api/client.js';
 
@@ -63,6 +65,7 @@ export default function App() {
 
   const model = viewState.model;
   const routeCounts = routeStateCounts(model?.routeStates ?? []);
+  const workbenchRoute = currentWorkbenchRoute();
 
   return (
     <main className="workbench-shell" aria-labelledby="workbench-title">
@@ -87,7 +90,10 @@ export default function App() {
       {viewState.phase === 'failed' ? <ShellState title="读取失败" copy="错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。" /> : null}
 
       {model === null ? null : (
-        <>
+        workbenchRoute === 'prompts' ? (
+          <PromptWorkspaceRoute model={model} />
+        ) : (
+          <>
           <section className="primary-active-goal-grid" aria-label="v20 primary active goal workflow">
             <ActiveGoalRunbookPanel
               runbook={model.activeGoal.runbook}
@@ -151,10 +157,367 @@ export default function App() {
             <RoutePanel routes={model.routeStates} />
             <ContractGapPanel gaps={model.deferredGaps} />
           </section>
-        </>
+          </>
+        )
       )}
     </main>
   );
+}
+
+function PromptWorkspaceRoute({ model }) {
+  const goalOptions = promptWorkspaceGoalOptions(model);
+  const initialGoalId = promptWorkspaceInitialGoalId(model, goalOptions);
+  const [selectedGoalId, setSelectedGoalId] = useState(initialGoalId);
+  const [selectedRole, setSelectedRole] = useState('worker');
+  const [selectedTaskId, setSelectedTaskId] = useState('');
+  const [runbookState, setRunbookState] = useState({
+    phase: initialGoalId === '' ? 'empty' : 'loading',
+    runbook: null,
+    error: null,
+    route: null
+  });
+  const [promptState, setPromptState] = useState({
+    phase: 'idle',
+    promptPack: null,
+    error: null,
+    route: null
+  });
+
+  useEffect(() => {
+    if (selectedGoalId === '') {
+      setRunbookState({
+        phase: 'empty',
+        runbook: null,
+        error: null,
+        route: null
+      });
+      return;
+    }
+
+    let cancelled = false;
+
+    setRunbookState({
+      phase: 'loading',
+      runbook: null,
+      error: null,
+      route: null
+    });
+
+    fetchPromptWorkspaceRunbook(selectedGoalId).then((result) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (result.ok) {
+        setRunbookState({
+          phase: 'ready',
+          runbook: result.data,
+          error: null,
+          route: result.route
+        });
+        return;
+      }
+
+      setRunbookState({
+        phase: 'failed',
+        runbook: null,
+        error: promptWorkspaceErrorText(result),
+        route: result.route
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGoalId]);
+
+  const taskOptions = promptWorkspaceTaskOptions(runbookState.runbook, selectedRole);
+
+  useEffect(() => {
+    if (taskOptions.length === 0) {
+      if (selectedTaskId !== '') {
+        setSelectedTaskId('');
+      }
+      return;
+    }
+
+    if (!taskOptions.some((task) => task.taskId === selectedTaskId)) {
+      setSelectedTaskId(taskOptions[0].taskId);
+    }
+  }, [selectedTaskId, taskOptions]);
+
+  useEffect(() => {
+    if (selectedGoalId === '' || selectedTaskId === '' || selectedRole === '') {
+      setPromptState({
+        phase: 'idle',
+        promptPack: null,
+        error: null,
+        route: null
+      });
+      return;
+    }
+
+    let cancelled = false;
+
+    setPromptState({
+      phase: 'loading',
+      promptPack: null,
+      error: null,
+      route: null
+    });
+
+    fetchPromptWorkspacePromptPack({
+      goalId: selectedGoalId,
+      taskId: selectedTaskId,
+      role: selectedRole
+    }).then((result) => {
+      if (cancelled) {
+        return;
+      }
+
+      if (result.ok) {
+        setPromptState({
+          phase: 'ready',
+          promptPack: result.data,
+          error: null,
+          route: result.route
+        });
+        return;
+      }
+
+      setPromptState({
+        phase: 'failed',
+        promptPack: null,
+        error: promptWorkspaceErrorText(result),
+        route: result.route
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGoalId, selectedTaskId, selectedRole]);
+
+  function updateGoal(goalId) {
+    setSelectedGoalId(goalId);
+    setSelectedTaskId('');
+  }
+
+  function updateRole(role) {
+    setSelectedRole(role);
+    setSelectedTaskId('');
+  }
+
+  return (
+    <section className="prompt-workspace-route" aria-label="Prompt Handoff Workspace">
+      <aside className="prompt-workspace-selector" aria-labelledby="prompt-workspace-selector-title">
+        <header className="panel-header">
+          <div>
+            <p className="section-kicker">v22 prompt workspace</p>
+            <h2 id="prompt-workspace-selector-title">Prompt Handoff Workspace</h2>
+          </div>
+          <span className="panel-state">{promptWorkspacePhaseText(promptState.phase)}</span>
+        </header>
+
+        <div className="prompt-selector-stack">
+          <label>
+            <span>goal</span>
+            <select value={selectedGoalId} onChange={(event) => updateGoal(event.target.value)}>
+              {goalOptions.length === 0 ? <option value="">No managed goals</option> : null}
+              {goalOptions.map((goal) => (
+                <option key={goal.goalId} value={goal.goalId}>{goal.goalId}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>role</span>
+            <select value={selectedRole} onChange={(event) => updateRole(event.target.value)}>
+              {PROMPT_WORKSPACE_ROLES.map((role) => (
+                <option key={role.id} value={role.id}>{role.label}</option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            <span>task</span>
+            <select
+              value={selectedTaskId}
+              disabled={taskOptions.length === 0}
+              onChange={(event) => setSelectedTaskId(event.target.value)}
+            >
+              {taskOptions.length === 0 ? <option value="">No task for role</option> : null}
+              {taskOptions.map((task) => (
+                <option key={task.taskId} value={task.taskId}>{task.taskId}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <FieldList rows={[
+          ['runbook route', textValue(runbookState.route ?? '未暴露')],
+          ['runbook state', textValue(promptWorkspacePhaseText(runbookState.phase))],
+          ['selected goal', textValue(selectedGoalId)],
+          ['selected task', textValue(selectedTaskId)],
+          ['selected role', textValue(selectedRole)],
+          ['prompt route', textValue(promptState.route ?? '未暴露')]
+        ]} />
+
+        {runbookState.phase === 'failed' ? <p className="error-copy">错误摘要：{runbookState.error}</p> : null}
+        {taskOptions.length === 0 && runbookState.phase === 'ready' ? (
+          <EmptyBlock copy="当前 runbook 没有可用于该 role 的 task。" />
+        ) : null}
+        <p className="panel-note">左侧只选择 managed goal、runbook task 和 prompt role；状态仍来自 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 这组 goal contract。</p>
+      </aside>
+
+      <article className="data-panel prompt-workspace-output" aria-labelledby="prompt-workspace-output-title">
+        <header className="panel-header">
+          <div>
+            <p className="section-kicker">goal-prompt-pack.v1</p>
+            <h2 id="prompt-workspace-output-title">Generated Prompt Pack</h2>
+          </div>
+          <span className="panel-state">{promptWorkspacePhaseText(promptState.phase)}</span>
+        </header>
+
+        {promptState.phase === 'loading' ? <EmptyBlock copy="正在生成 prompt pack。" /> : null}
+        {promptState.phase === 'failed' ? <p className="error-copy">错误摘要：{promptState.error}</p> : null}
+        {promptState.phase === 'ready' ? (
+          <PromptWorkspacePromptPack promptPack={promptState.promptPack} />
+        ) : null}
+      </article>
+    </section>
+  );
+}
+
+const PROMPT_WORKSPACE_ROLES = Object.freeze([
+  Object.freeze({ id: 'worker', label: 'worker' }),
+  Object.freeze({ id: 'reviewer', label: 'reviewer' }),
+  Object.freeze({ id: 'main-verifier', label: 'main-verifier' }),
+  Object.freeze({ id: 'release-manager', label: 'release-manager' })
+]);
+
+function PromptWorkspacePromptPack({ promptPack }) {
+  const prompts = Array.isArray(promptPack?.prompts) ? promptPack.prompts : [];
+
+  return (
+    <>
+      <FieldList rows={[
+        ['contractName', textValue(promptPack?.contractName)],
+        ['contractVersion', textValue(promptPack?.contractVersion)],
+        ['goalId', textValue(promptPack?.goalId)],
+        ['generatedAt', textValue(promptPack?.generatedAt)],
+        ['prompt count', textValue(prompts.length)],
+        ['readOnly', textValue(promptPack?.safety?.readOnly)],
+        ['copyOnly', textValue(promptPack?.safety?.copyOnly)],
+        ['workbenchWriteAvailable', textValue(promptPack?.safety?.workbenchWriteAvailable)],
+        ['browserExecutionAvailable', textValue(promptPack?.safety?.browserExecutionAvailable)],
+        ['modelInvocationAvailable', textValue(promptPack?.safety?.modelInvocationAvailable)]
+      ]} />
+
+      {prompts.length === 0 ? (
+        <EmptyBlock copy="prompt pack 没有返回 prompts。" />
+      ) : (
+        <ul className="prompt-preview-list">
+          {prompts.map((prompt, index) => (
+            <li key={`${prompt?.taskId ?? 'task'}-${prompt?.role ?? 'role'}-${index}`}>
+              <FieldList rows={[
+                ['taskId', textValue(prompt?.taskId)],
+                ['role', textValue(prompt?.role)],
+                ['title', textValue(prompt?.title)],
+                ['format', textValue(prompt?.format)],
+                ['copyOnly', textValue(prompt?.copyOnly)],
+                ['evidenceFile', textValue(prompt?.evidenceFile)],
+                ['validationCommands', textValue(Array.isArray(prompt?.validationCommands) ? prompt.validationCommands.join(' / ') : undefined)]
+              ]} />
+              <pre className="prompt-preview-text"><code>{prompt?.text ?? ''}</code></pre>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="panel-note">Prompt Workspace 只展示 goal prompt 生成的 copy-only prompt pack；不会启动 subagent、运行 shell、登记 approval 或判断任务完成。</p>
+    </>
+  );
+}
+
+function promptWorkspaceGoalOptions(model) {
+  const options = [];
+
+  addPromptWorkspaceGoalOption(options, model?.activeGoal?.runbook?.goalId?.value);
+  addPromptWorkspaceGoalOption(options, model?.activeGoal?.viewModel?.goalId?.value);
+
+  for (const goal of model?.goals?.items ?? []) {
+    addPromptWorkspaceGoalOption(options, goal.goalId?.value);
+  }
+
+  return options;
+}
+
+function addPromptWorkspaceGoalOption(options, goalId) {
+  if (typeof goalId !== 'string' || goalId.trim() === '') {
+    return;
+  }
+
+  if (options.some((option) => option.goalId === goalId)) {
+    return;
+  }
+
+  options.push({ goalId });
+}
+
+function promptWorkspaceInitialGoalId(model, goalOptions) {
+  const activeGoalId = model?.activeGoal?.runbook?.goalId?.value
+    ?? model?.activeGoal?.viewModel?.goalId?.value;
+
+  if (typeof activeGoalId === 'string' && activeGoalId.trim() !== '') {
+    return activeGoalId;
+  }
+
+  return goalOptions[0]?.goalId ?? '';
+}
+
+function promptWorkspaceTaskOptions(runbook, role) {
+  if (role === 'release-manager') {
+    return [{ taskId: 'release', title: 'release closeout' }];
+  }
+
+  const tasks = Array.isArray(runbook?.tasks) ? runbook.tasks : [];
+
+  return tasks
+    .filter((task) => Array.isArray(task?.roleOrder) && task.roleOrder.includes(role))
+    .map((task) => ({
+      taskId: task.taskId,
+      title: task.title
+    }))
+    .filter((task) => typeof task.taskId === 'string' && task.taskId.trim() !== '');
+}
+
+function promptWorkspaceErrorText(result) {
+  if (result?.errorEnvelope?.error?.code && result?.errorEnvelope?.error?.message) {
+    return `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`;
+  }
+
+  return result?.message ?? 'route unavailable';
+}
+
+function promptWorkspacePhaseText(phase) {
+  if (phase === 'ready') {
+    return '已生成';
+  }
+
+  if (phase === 'loading') {
+    return '读取中';
+  }
+
+  if (phase === 'failed') {
+    return '不可用';
+  }
+
+  if (phase === 'empty') {
+    return '无 goal';
+  }
+
+  return '等待选择';
 }
 
 function GoalProgressPanel({ progress, route }) {
@@ -2374,6 +2737,19 @@ function findRoute(routes, id) {
   return routes.find((route) => route.id === id) ?? null;
 }
 
+function currentWorkbenchRoute() {
+  const pathname = typeof globalThis.location?.pathname === 'string'
+    ? globalThis.location.pathname
+    : '/workbench/';
+  const normalized = pathname.endsWith('/') ? pathname : `${pathname}/`;
+
+  if (normalized === '/workbench/prompts/') {
+    return 'prompts';
+  }
+
+  return 'home';
+}
+
 function routeStateCounts(routes) {
   return {
     total: routes.length,
@@ -2522,9 +2898,11 @@ function phaseText(phase) {
 }
 
 function textValue(text) {
+  const normalized = text === null || text === undefined ? '' : String(text);
+
   return {
-    state: text === '未暴露' || text === '' ? 'missing' : 'available',
-    text,
+    state: normalized === '未暴露' || normalized === '' ? 'missing' : 'available',
+    text: normalized,
     value: text
   };
 }

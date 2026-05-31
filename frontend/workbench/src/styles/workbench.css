@@ -36,6 +36,7 @@ body {
 .active-goal-grid,
 .event-grid,
 .support-grid,
+.prompt-workspace-route,
 .shell-state {
   width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
@@ -168,6 +169,12 @@ h3 {
   margin-top: 16px;
 }
 
+.prompt-workspace-route {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 0.58fr);
+  gap: 16px;
+}
+
 .data-panel,
 .shell-state {
   border: 1px solid #d4dddf;
@@ -183,6 +190,51 @@ h3 {
 .prompt-preview-drawer {
   align-self: start;
   border-left: 4px solid #255568;
+}
+
+.prompt-workspace-selector {
+  align-self: start;
+  border: 1px solid #d4dddf;
+  border-left: 4px solid #a3571c;
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 0 rgba(16, 33, 42, 0.04);
+}
+
+.prompt-workspace-output {
+  min-width: 0;
+}
+
+.prompt-selector-stack {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.prompt-selector-stack label {
+  display: grid;
+  gap: 6px;
+  color: #59686e;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.prompt-selector-stack select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd7d9;
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: #ffffff;
+  color: #17262d;
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.prompt-selector-stack select:disabled {
+  background: #eef3f2;
+  color: #6a777c;
 }
 
 .shell-state {
@@ -618,6 +670,10 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .prompt-workspace-route {
+    grid-template-columns: 1fr;
+  }
+
   .status-strip {
     display: flex;
     flex-wrap: wrap;
@@ -634,6 +690,7 @@ h3 {
   .active-goal-grid,
   .event-grid,
   .support-grid,
+  .prompt-workspace-route,
   .shell-state {
     width: min(100% - 28px, 1180px);
   }
@@ -643,6 +700,7 @@ h3 {
   }
 
   .data-panel,
+  .prompt-workspace-selector,
   .shell-state {
     padding: 14px;
   }

@@ -13,6 +13,8 @@ import {
 import {
   READONLY_API_ROUTES,
   confirmGoalEventPlan,
+  fetchPromptWorkspacePromptPack,
+  fetchPromptWorkspaceRunbook,
   fetchReadonlyRoute,
   fetchWorkbenchContracts
 } from '../frontend/workbench/src/api/client.js';
@@ -211,6 +213,72 @@ describe('v15 Workbench read-only API client', () => {
       'application/json',
       'sha256:1111111111111111111111111111111111111111111111111111111111111111'
     ]]);
+  });
+
+  it('fetches Prompt Workspace runbook and explicit role prompt pack through controlled GET routes', async () => {
+    const calls = [];
+    const fetchImpl = async (path, init) => {
+      calls.push([path, init]);
+
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          if (path.endsWith('/runbook')) {
+            return {
+              contractName: 'goal-runbook.v1',
+              contractVersion: 1,
+              goalId: 'v22-goal-prompt-handoff-workspace',
+              tasks: []
+            };
+          }
+
+          return {
+            contractName: 'goal-prompt-pack.v1',
+            contractVersion: 1,
+            goalId: 'v22-goal-prompt-handoff-workspace',
+            prompts: [{
+              taskId: 'task-1',
+              role: 'main-verifier',
+              copyOnly: true,
+              text: '/goal'
+            }]
+          };
+        }
+      };
+    };
+
+    const runbookResult = await fetchPromptWorkspaceRunbook('v22-goal-prompt-handoff-workspace', { fetchImpl });
+    const promptResult = await fetchPromptWorkspacePromptPack({
+      goalId: 'v22-goal-prompt-handoff-workspace',
+      taskId: 'task-1',
+      role: 'main-verifier'
+    }, { fetchImpl });
+
+    assert.equal(runbookResult.ok, true);
+    assert.equal(promptResult.ok, true);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      Object.hasOwn(init, 'body')
+    ]), [
+      [
+        '/api/goals/v22-goal-prompt-handoff-workspace/runbook',
+        'GET',
+        'no-store',
+        'application/json',
+        false
+      ],
+      [
+        '/api/goals/v22-goal-prompt-handoff-workspace/prompt?task=task-1&role=main-verifier',
+        'GET',
+        'no-store',
+        'application/json',
+        false
+      ]
+    ]);
   });
 
   it('returns read-only error state for non-OK responses', async () => {

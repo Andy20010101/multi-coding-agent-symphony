@@ -72,6 +72,7 @@ describe('v16 Workbench route smoke and server parity', () => {
       const jsResponse = await fetch(`${context.baseUrl}${assetPaths.script}`);
       const cssResponse = await fetch(`${context.baseUrl}${assetPaths.style}`);
       const fallbackResponse = await fetch(`${context.baseUrl}/workbench/runs/${ROUTE_SMOKE_RUN_ID}`);
+      const promptWorkspaceResponse = await fetch(`${context.baseUrl}/workbench/prompts`);
       const missingAssetResponse = await fetch(`${context.baseUrl}/workbench/assets/missing.js`);
       const extensionRouteResponse = await fetch(`${context.baseUrl}/workbench/missing.css`);
       const rootAssetResponse = await fetch(`${context.baseUrl}${assetPaths.script.replace('/workbench', '')}`);
@@ -100,6 +101,8 @@ describe('v16 Workbench route smoke and server parity', () => {
 
       assert.equal(fallbackResponse.status, 200);
       assert.match(await fallbackResponse.text(), /<div id="root"><\/div>/u);
+      assert.equal(promptWorkspaceResponse.status, 200);
+      assert.match(await promptWorkspaceResponse.text(), /<div id="root"><\/div>/u);
 
       assert.equal(missingAssetResponse.status, 404);
       assert.doesNotMatch(await missingAssetResponse.text(), /<div id="root"><\/div>/u);
@@ -353,6 +356,20 @@ describe('v16 Workbench route smoke and server parity', () => {
               errors: []
             });
             assert.equal(payload.goalId, V20_GOAL_ID);
+          }
+        },
+        {
+          path: `/api/goals/${V20_GOAL_ID}/prompt?task=task-1&role=reviewer`,
+          contractName: 'goal-prompt-pack.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalPromptPackContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V20_GOAL_ID);
+            assert.equal(payload.prompts[0].taskId, 'task-1');
+            assert.equal(payload.prompts[0].role, 'reviewer');
+            assert.match(payload.prompts[0].text, /independent reviewer/u);
           }
         },
         {
@@ -701,7 +718,10 @@ describe('v16 Workbench route smoke and server parity', () => {
 
         assert.equal(response.status, 400, path);
         assert.equal(envelope.contractName, 'error-envelope.v1');
-        assert.equal(envelope.error.code, 'invalid-goal-ref');
+        assert.equal(
+          envelope.error.code,
+          path.includes('/prompt?') ? 'invalid-goal-prompt-request' : 'invalid-goal-ref'
+        );
         assert.deepEqual(validateErrorEnvelopeContract(envelope), {
           ok: true,
           errors: []

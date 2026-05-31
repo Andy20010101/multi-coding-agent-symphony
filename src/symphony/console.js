@@ -1464,7 +1464,12 @@ async function writeGoalNextActionResponse({ response, stateDir, request, route,
 
 async function writeGoalPromptPackResponse({ response, stateDir, request, route, method }) {
   if (request.kind === 'invalid') {
-    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    if (request.reason === 'invalid-route-segment') {
+      writeInvalidGoalRunbookControlResponse({ response, route, method });
+      return;
+    }
+
+    writeInvalidGoalPromptPackRequestResponse({ response, route, method, reason: request.reason });
     return;
   }
 
@@ -1472,7 +1477,9 @@ async function writeGoalPromptPackResponse({ response, stateDir, request, route,
     writeJsonResponse(response, 200, await buildGoalPromptPack({
       stateDir,
       goalId: request.goalId,
-      next: true,
+      taskId: request.taskId,
+      role: request.role,
+      next: request.next,
       promptFormat: 'markdown'
     }));
   } catch (error) {
@@ -1529,6 +1536,19 @@ function writeInvalidGoalRunbookControlResponse({ response, route, method }) {
     method,
     safeDetails: {
       reason: 'invalid-route-segment'
+    }
+  });
+}
+
+function writeInvalidGoalPromptPackRequestResponse({ response, route, method, reason = 'invalid-route-segment' }) {
+  writeApiErrorResponse(response, {
+    status: 400,
+    code: 'invalid-goal-prompt-request',
+    message: 'Goal prompt request is invalid.',
+    route,
+    method,
+    safeDetails: {
+      reason
     }
   });
 }
@@ -2259,11 +2279,65 @@ function parseGoalNextActionRequestPath(pathname, searchParams = new URLSearchPa
 }
 
 function parseGoalPromptPackRequestPath(pathname, searchParams = new URLSearchParams()) {
-  return parseGoalRunbookControlRequestPath({
-    pathname,
-    searchParams,
-    suffix: 'prompt'
-  });
+  const latestPath = '/api/goals/latest/prompt';
+  const explicitPattern = /^\/api\/goals\/([^/]+)\/prompt$/u;
+  const routeMatches = pathname === latestPath || explicitPattern.test(pathname);
+
+  if (!routeMatches) {
+    return null;
+  }
+
+  const goalId = pathname === latestPath
+    ? 'latest'
+    : safeGoalIdFromPromptPath(pathname, explicitPattern);
+
+  if (goalId === null) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  if (!hasSearchParams(searchParams)) {
+    return {
+      kind: 'goal-prompt-pack',
+      goalId,
+      next: true,
+      taskId: undefined,
+      role: undefined
+    };
+  }
+
+  const unsupported = Array.from(searchParams.keys())
+    .filter((key) => key !== 'task' && key !== 'role');
+
+  if (unsupported.length > 0) {
+    return {
+      kind: 'invalid',
+      goalId,
+      reason: 'unsupported-query-parameter'
+    };
+  }
+
+  const taskId = singlePromptPackSearchParam(searchParams, 'task');
+  const role = singlePromptPackSearchParam(searchParams, 'role');
+
+  if (taskId === null || role === null) {
+    return {
+      kind: 'invalid',
+      goalId,
+      reason: 'missing-or-repeated-query-parameter'
+    };
+  }
+
+  return {
+    kind: 'goal-prompt-pack',
+    goalId,
+    next: false,
+    taskId,
+    role
+  };
 }
 
 function parseGoalCloseoutRequestPath(pathname, searchParams = new URLSearchParams()) {
@@ -2315,6 +2389,34 @@ function parseGoalRunbookControlRequestPath({ pathname, searchParams, suffix }) 
     kind: 'goal-runbook-control',
     goalId: decoded.value
   };
+}
+
+function safeGoalIdFromPromptPath(pathname, explicitPattern) {
+  const match = explicitPattern.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return null;
+  }
+
+  return decoded.value;
+}
+
+function singlePromptPackSearchParam(searchParams, key) {
+  const values = searchParams.getAll(key);
+
+  if (values.length !== 1) {
+    return null;
+  }
+
+  const trimmed = values[0].trim();
+
+  return trimmed === '' ? null : trimmed;
 }
 
 async function resolveGoalEventsGoal({ stateDir, goalId }) {

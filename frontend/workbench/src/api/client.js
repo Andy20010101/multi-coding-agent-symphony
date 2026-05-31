@@ -1,5 +1,7 @@
 import {
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+  GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+  GOAL_RUNBOOK_ROUTE_TEMPLATE,
   READONLY_API_ROUTES,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   GOAL_EVENTS_ROUTE_TEMPLATE,
@@ -15,6 +17,7 @@ import {
 const READONLY_ERROR_MESSAGE = '读取失败 / contract 未暴露 / 不可用';
 const GOAL_PLAN_PREVIEW_ERROR_MESSAGE = 'dry-run plan preview 未返回可用 contract';
 const GOAL_PLAN_CONFIRM_ERROR_MESSAGE = 'event confirm 未返回可用 contract';
+const PROMPT_WORKSPACE_ERROR_MESSAGE = 'prompt workspace route 未返回可用 contract';
 
 export async function fetchReadonlyRoute(route, {
   fetchImpl = globalThis.fetch
@@ -283,6 +286,53 @@ export async function confirmGoalEventPlan(path, body, {
   };
 }
 
+export async function fetchPromptWorkspaceRunbook(goalId, options = {}) {
+  const route = createGoalWorkspaceRoute({
+    template: GOAL_RUNBOOK_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'runbook'
+  });
+
+  if (route === null) {
+    return readonlyError({
+      route: {
+        ...GOAL_RUNBOOK_ROUTE_TEMPLATE,
+        path: GOAL_RUNBOOK_ROUTE_TEMPLATE.path
+      },
+      message: PROMPT_WORKSPACE_ERROR_MESSAGE
+    });
+  }
+
+  return fetchReadonlyRoute(route, options);
+}
+
+export async function fetchPromptWorkspacePromptPack({ goalId, taskId, role }, options = {}) {
+  const route = createGoalWorkspaceRoute({
+    template: GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'prompt'
+  });
+
+  if (route === null || !isSafeWorkspaceQueryToken(taskId) || !isSafeWorkspaceQueryToken(role)) {
+    return readonlyError({
+      route: {
+        ...GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+        path: GOAL_PROMPT_PACK_ROUTE_TEMPLATE.path
+      },
+      message: PROMPT_WORKSPACE_ERROR_MESSAGE
+    });
+  }
+
+  const searchParams = new URLSearchParams();
+  searchParams.set('task', taskId);
+  searchParams.set('role', role);
+
+  return fetchReadonlyRoute({
+    ...route,
+    path: `${route.path}?${searchParams.toString()}`
+  }, options);
+}
+
 function readonlyError({ route, httpStatus = null, message, errorEnvelope = null }) {
   return {
     ok: false,
@@ -327,6 +377,22 @@ function activeGoalIdFromResults(results) {
   const goalId = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
 
   return goalId === 'latest' ? null : goalId ?? null;
+}
+
+function createGoalWorkspaceRoute({ template, goalId, suffix }) {
+  if (!isSafeWorkspaceQueryToken(goalId)) {
+    return null;
+  }
+
+  return {
+    ...template,
+    path: ['', 'api', 'goals', encodeURIComponent(goalId), suffix].join('/'),
+    goalId
+  };
+}
+
+function isSafeWorkspaceQueryToken(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value);
 }
 
 function errorMessageFromEnvelope(data) {
