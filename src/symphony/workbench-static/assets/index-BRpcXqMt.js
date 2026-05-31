@@ -10754,6 +10754,16 @@ function projectActiveGoalControl({ statusResult, status, runbookResult, runbook
 			eventLog,
 			nextAction
 		}),
+		subagentHandoffBoard: projectSubagentHandoffBoard({
+			progressResult: ledger === null ? statusResult : activeLedgerResult,
+			progress: goalStatusLedger,
+			eventsResult: activeEventLogResult,
+			eventLog,
+			nextResult: nextActionResult,
+			nextAction,
+			closeoutResult,
+			closeout
+		}),
 		nextAction: projectGoalNextAction({
 			result: nextActionResult,
 			nextAction,
@@ -10848,6 +10858,152 @@ function projectActiveGoalCommandInventory({ goalId, sourceResults }) {
 				command: valueState(command.command.replace("<goal-id>", commandGoalId))
 			};
 		})
+	};
+}
+function projectSubagentHandoffBoard({ progressResult, progress, eventsResult, eventLog, nextResult, nextAction, closeoutResult, closeout } = {}) {
+	const progressTasks = Array.isArray(progress?.tasks) ? progress.tasks : null;
+	const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+	const closeoutMissing = Array.isArray(closeout?.missing) ? closeout.missing : [];
+	const activeNext = nextAction?.next;
+	return {
+		state: progressTasks === null ? "missing" : progressTasks.length === 0 ? "empty" : "available",
+		goalId: valueState(firstNonEmptyString(progress?.goalId, eventLog?.goalId, nextAction?.goalId, closeout?.goalId)),
+		goalTitle: valueState(firstNonEmptyString(progress?.goalTitle, eventLog?.goalTitle)),
+		taskCount: valueState(progressTasks === null ? void 0 : progressTasks.length),
+		sourcePolicy: valueState("goal-event-log.v1 + goal-progress-ledger.v1 + goal-next-action.v1 + goal-closeout-report.v1"),
+		routeStates: {
+			goalStatus: valueState(routeStateFromResult(progressResult)),
+			eventLog: valueState(routeStateFromResult(eventsResult)),
+			goalNext: valueState(routeStateFromResult(nextResult)),
+			goalCloseout: valueState(routeStateFromResult(closeoutResult))
+		},
+		next: {
+			taskId: valueState(activeNext?.taskId),
+			role: valueState(activeNext?.role),
+			phase: valueState(activeNext?.phase),
+			reason: valueState(nextAction?.reason ?? activeNext?.reason)
+		},
+		closeout: {
+			missingCount: valueState(closeoutMissing.length),
+			workerEvidenceComplete: valueState(closeout?.summary?.workerEvidenceComplete),
+			reviewEvidenceComplete: valueState(closeout?.summary?.reviewEvidenceComplete),
+			mainVerificationComplete: valueState(closeout?.summary?.mainVerificationComplete),
+			releaseReady: valueState(closeout?.summary?.releaseReady)
+		},
+		items: progressTasks === null ? [] : progressTasks.map((task) => projectSubagentHandoffTask({
+			task,
+			events,
+			activeNext,
+			closeoutMissing
+		})),
+		note: "Subagent Handoff Board uses goal events for worker started, goal-status/events for evidence and verdicts, goal next for the current handoff role, and goal closeout for missing handoff gaps. It does not read branch names, file names, commit messages, prompt text, or command text as task status."
+	};
+}
+function projectSubagentHandoffTask({ task, events, activeNext, closeoutMissing }) {
+	const taskId = task?.taskId;
+	const taskEvents = events.filter((event) => event?.taskId === taskId);
+	const workerStartedEvent = latestEventOfTypes(taskEvents, ["worker.started"]);
+	const workerEvidenceEvent = latestEventOfTypes(taskEvents, ["worker.evidence-recorded"]);
+	const reviewEvent = latestEventOfTypes(taskEvents, ["reviewer.approved", "reviewer.needs-revision"]);
+	const mainVerificationEvent = latestEventOfTypes(taskEvents, ["main.verification-passed", "main.verification-failed"]);
+	const missingKinds = closeoutMissing.filter((item) => item?.taskId === taskId).map((item) => item?.kind).filter((kind) => isNonEmptyString(kind));
+	const isCurrentNext = taskId === activeNext?.taskId;
+	return {
+		taskId: valueState(taskId),
+		title: valueState(task?.title),
+		ledgerStatus: valueState(task?.status),
+		statusSource: valueState(task?.statusSource),
+		currentHandoff: {
+			active: valueState(isCurrentNext),
+			role: isCurrentNext ? valueState(activeNext?.role) : valueState(void 0),
+			phase: isCurrentNext ? valueState(activeNext?.phase) : valueState(void 0),
+			reason: isCurrentNext ? valueState(activeNext?.reason) : valueState(void 0),
+			source: valueState(isCurrentNext ? GOAL_NEXT_ACTION_CONTRACT_NAME : "goal-next-action.v1:not-current-next")
+		},
+		workerStarted: projectHandoffEventCell({
+			event: workerStartedEvent,
+			completeText: "started",
+			missingText: "missing",
+			missingKind: null,
+			sourceWhenMissing: GOAL_EVENT_LOG_CONTRACT_NAME
+		}),
+		workerEvidence: projectHandoffEvidenceCell({
+			ledgerValue: task?.workerEvidenceRef,
+			event: workerEvidenceEvent,
+			completeText: "recorded",
+			missingText: "missing",
+			missingKind: "worker-evidence",
+			missingKinds
+		}),
+		reviewerVerdict: projectHandoffVerdictCell({
+			ledgerValue: task?.reviewVerdict,
+			event: reviewEvent,
+			missingKind: "review-evidence",
+			missingKinds
+		}),
+		mainVerification: projectHandoffMainVerificationCell({
+			ledgerValue: task?.mainVerificationRef,
+			event: mainVerificationEvent,
+			missingKind: "main-verification",
+			missingKinds
+		}),
+		closeoutMissingKinds: arrayTextState(missingKinds, "无")
+	};
+}
+function projectHandoffEventCell({ event, completeText, missingText, missingKind, missingKinds, sourceWhenMissing }) {
+	const closeoutMissing = missingKind !== null && Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+	return {
+		status: valueState(event === null ? closeoutMissing ? "missing-closeout" : missingText : completeText),
+		eventId: valueState(event?.eventId),
+		eventType: valueState(event?.eventType),
+		actor: valueState(goalEventActorText(event?.actor)),
+		recordedAt: valueState(event?.recordedAt),
+		evidenceRef: valueState(firstGoalEvidenceRef(event)),
+		source: valueState(event === null ? closeoutMissing ? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME : sourceWhenMissing : GOAL_EVENT_LOG_CONTRACT_NAME)
+	};
+}
+function projectHandoffEvidenceCell({ ledgerValue, event, completeText, missingText, missingKind, missingKinds }) {
+	const evidenceRef = firstNonEmptyString(ledgerValue, firstGoalEvidenceRef(event));
+	const closeoutMissing = Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+	const source = isNonEmptyString(ledgerValue) ? GOAL_PROGRESS_LEDGER_CONTRACT_NAME : event !== null ? GOAL_EVENT_LOG_CONTRACT_NAME : closeoutMissing ? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME : GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+	return {
+		status: valueState(evidenceRef === void 0 ? closeoutMissing ? "missing-closeout" : missingText : completeText),
+		evidenceRef: valueState(evidenceRef),
+		eventId: valueState(event?.eventId),
+		eventType: valueState(event?.eventType),
+		source: valueState(source)
+	};
+}
+function projectHandoffVerdictCell({ ledgerValue, event, missingKind, missingKinds }) {
+	const eventVerdict = explicitReviewVerdictState(event).value;
+	const verdict = firstNonEmptyString(ledgerValue, eventVerdict === MATRIX_UNKNOWN_TEXT ? void 0 : eventVerdict);
+	const closeoutMissing = Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+	const source = isNonEmptyString(ledgerValue) ? GOAL_PROGRESS_LEDGER_CONTRACT_NAME : event !== null ? GOAL_EVENT_LOG_CONTRACT_NAME : closeoutMissing ? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME : GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+	return {
+		status: valueState(verdict === void 0 ? closeoutMissing ? "missing-closeout" : "missing" : verdict),
+		verdict: valueState(verdict),
+		evidenceRef: valueState(firstGoalEvidenceRef(event)),
+		eventId: valueState(event?.eventId),
+		eventType: valueState(event?.eventType),
+		source: valueState(source)
+	};
+}
+function projectHandoffMainVerificationCell({ ledgerValue, event, missingKind, missingKinds }) {
+	const eventStatus = explicitGateStatusState(event).value;
+	const explicitEventStatus = eventStatus === MATRIX_UNKNOWN_TEXT ? void 0 : eventStatus;
+	const value = explicitEventStatus ?? (isNonEmptyString(ledgerValue) ? "recorded" : void 0);
+	const closeoutMissing = Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+	let source = GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+	if (explicitEventStatus !== void 0) source = GOAL_EVENT_LOG_CONTRACT_NAME;
+	else if (isNonEmptyString(ledgerValue)) source = GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+	else if (event !== null) source = GOAL_EVENT_LOG_CONTRACT_NAME;
+	else if (closeoutMissing) source = GOAL_CLOSEOUT_REPORT_CONTRACT_NAME;
+	return {
+		status: valueState(value === void 0 ? closeoutMissing ? "missing-closeout" : "missing" : value),
+		evidenceRef: valueState(ledgerValue ?? firstGoalEvidenceRef(event)),
+		eventId: valueState(event?.eventId),
+		eventType: valueState(event?.eventType),
+		source: valueState(source)
 	};
 }
 function projectActiveGoalTaskQueue({ runbook, ledger, eventLog, nextAction }) {
@@ -11898,6 +12054,8 @@ function explicitReviewVerdictState(event) {
 }
 function explicitGateStatusState(event) {
 	if (event?.gate?.status === "passed" || event?.gate?.status === "failed" || event?.gate?.status === "declared") return valueState(event.gate.status);
+	if (event?.eventType === "main.verification-passed") return matrixValueState("passed");
+	if (event?.eventType === "main.verification-failed") return matrixValueState("failed");
 	if (event?.eventType === "release.gate-passed") return matrixValueState("passed");
 	if (event?.eventType === "release.gate-failed") return matrixValueState("failed");
 	if (event?.eventType === "release.ready-declared") return matrixValueState("declared");
@@ -12796,6 +12954,81 @@ async function fetchPromptWorkspacePromptPack({ goalId, taskId, role }, options 
 		path: `${route.path}?${searchParams.toString()}`
 	}, options);
 }
+async function fetchPromptWorkspaceHandoffBoard(goalId, options = {}) {
+	const progressRoute = createGoalWorkspaceRoute({
+		template: GOAL_PROGRESS_ROUTE_TEMPLATE,
+		goalId,
+		suffix: "progress"
+	});
+	const eventsRoute = createGoalWorkspaceRoute({
+		template: GOAL_EVENTS_ROUTE_TEMPLATE,
+		goalId,
+		suffix: "events"
+	});
+	const nextRoute = createGoalWorkspaceRoute({
+		template: GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
+		goalId,
+		suffix: "next"
+	});
+	const closeoutRoute = createGoalWorkspaceRoute({
+		template: GOAL_CLOSEOUT_ROUTE_TEMPLATE,
+		goalId,
+		suffix: "closeout"
+	});
+	if (progressRoute === null || eventsRoute === null || nextRoute === null || closeoutRoute === null) {
+		const errorResult = readonlyError({
+			route: {
+				...GOAL_PROGRESS_ROUTE_TEMPLATE,
+				path: GOAL_PROGRESS_ROUTE_TEMPLATE.path
+			},
+			message: PROMPT_WORKSPACE_ERROR_MESSAGE
+		});
+		return {
+			ok: false,
+			board: projectSubagentHandoffBoard({
+				progressResult: errorResult,
+				progress: null,
+				eventsResult: errorResult,
+				eventLog: null,
+				nextResult: errorResult,
+				nextAction: null,
+				closeoutResult: errorResult,
+				closeout: null
+			}),
+			routes: {
+				progress: errorResult,
+				events: errorResult,
+				next: errorResult,
+				closeout: errorResult
+			}
+		};
+	}
+	const [progressResult, eventsResult, nextResult, closeoutResult] = await Promise.all([
+		fetchReadonlyRoute(progressRoute, options),
+		fetchReadonlyRoute(eventsRoute, options),
+		fetchReadonlyRoute(nextRoute, options),
+		fetchReadonlyRoute(closeoutRoute, options)
+	]);
+	return {
+		ok: progressResult.ok === true && eventsResult.ok === true && nextResult.ok === true && closeoutResult.ok === true,
+		board: projectSubagentHandoffBoard({
+			progressResult,
+			progress: progressResult.ok === true ? progressResult.data : null,
+			eventsResult,
+			eventLog: eventsResult.ok === true ? eventsResult.data : null,
+			nextResult,
+			nextAction: nextResult.ok === true ? nextResult.data : null,
+			closeoutResult,
+			closeout: closeoutResult.ok === true ? closeoutResult.data : null
+		}),
+		routes: {
+			progress: progressResult,
+			events: eventsResult,
+			next: nextResult,
+			closeout: closeoutResult
+		}
+	};
+}
 function readonlyError({ route, httpStatus = null, message, errorEnvelope = null }) {
 	return {
 		ok: false,
@@ -13117,6 +13350,11 @@ function PromptWorkspaceRoute({ model }) {
 		error: null,
 		route: null
 	});
+	const [handoffState, setHandoffState] = (0, import_react.useState)({
+		phase: initialGoalId === "" ? "empty" : "loading",
+		board: null,
+		error: null
+	});
 	(0, import_react.useEffect)(() => {
 		if (selectedGoalId === "") {
 			setRunbookState({
@@ -13150,6 +13388,39 @@ function PromptWorkspaceRoute({ model }) {
 				runbook: null,
 				error: promptWorkspaceErrorText(result),
 				route: result.route
+			});
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [selectedGoalId]);
+	(0, import_react.useEffect)(() => {
+		if (selectedGoalId === "") {
+			setHandoffState({
+				phase: "empty",
+				board: null,
+				error: null
+			});
+			return;
+		}
+		let cancelled = false;
+		setHandoffState({
+			phase: "loading",
+			board: null,
+			error: null
+		});
+		fetchPromptWorkspaceHandoffBoard(selectedGoalId).then((result) => {
+			if (cancelled) return;
+			setHandoffState({
+				phase: result.ok ? "ready" : "partial",
+				board: result.board,
+				error: result.ok ? null : "handoff source route 未全部 ready"
+			});
+		}).catch(() => {
+			if (!cancelled) setHandoffState({
+				phase: "failed",
+				board: null,
+				error: "handoff source route 不可用"
 			});
 		});
 		return () => {
@@ -13222,102 +13493,106 @@ function PromptWorkspaceRoute({ model }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "prompt-workspace-route",
 		"aria-label": "Prompt Handoff Workspace",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
-			className: "prompt-workspace-selector",
-			"aria-labelledby": "prompt-workspace-selector-title",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
-					className: "panel-header",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "section-kicker",
-						children: "v22 prompt workspace"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-						id: "prompt-workspace-selector-title",
-						children: "Prompt Handoff Workspace"
-					})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-						className: "panel-state",
-						children: promptWorkspacePhaseText(promptState.phase)
-					})]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "prompt-selector-stack",
-					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "goal" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
-							value: selectedGoalId,
-							onChange: (event) => updateGoal(event.target.value),
-							children: [goalOptions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-								value: "",
-								children: "No managed goals"
-							}) : null, goalOptions.map((goal) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-								value: goal.goalId,
-								children: goal.goalId
-							}, goal.goalId))]
-						})] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "role" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
-							value: selectedRole,
-							onChange: (event) => updateRole(event.target.value),
-							children: PROMPT_WORKSPACE_ROLES.map((role) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-								value: role.id,
-								children: role.label
-							}, role.id))
-						})] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "task" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
-							value: selectedTaskId,
-							disabled: taskOptions.length === 0,
-							onChange: (event) => setSelectedTaskId(event.target.value),
-							children: [taskOptions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-								value: "",
-								children: "No task for role"
-							}) : null, taskOptions.map((task) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
-								value: task.taskId,
-								children: task.taskId
-							}, task.taskId))]
-						})] })
-					]
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-					["runbook route", textValue(runbookState.route ?? "未暴露")],
-					["runbook state", textValue(promptWorkspacePhaseText(runbookState.phase))],
-					["selected goal", textValue(selectedGoalId)],
-					["selected task", textValue(selectedTaskId)],
-					["selected role", textValue(selectedRole)],
-					["prompt route", textValue(promptState.route ?? "未暴露")]
-				] }),
-				runbookState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-					className: "error-copy",
-					children: ["错误摘要：", runbookState.error]
-				}) : null,
-				taskOptions.length === 0 && runbookState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前 runbook 没有可用于该 role 的 task。" }) : null,
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "panel-note",
-					children: "左侧只选择 managed goal、runbook task 和 prompt role；状态仍来自 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 这组 goal contract。"
-				})
-			]
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
-			className: "data-panel prompt-workspace-output",
-			"aria-labelledby": "prompt-workspace-output-title",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
-					className: "panel-header",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-						className: "section-kicker",
-						children: "goal-prompt-pack.v1"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-						id: "prompt-workspace-output-title",
-						children: "Generated Prompt Pack"
-					})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-						className: "panel-state",
-						children: promptWorkspacePhaseText(promptState.phase)
-					})]
-				}),
-				promptState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "正在生成 prompt pack。" }) : null,
-				promptState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-					className: "error-copy",
-					children: ["错误摘要：", promptState.error]
-				}) : null,
-				promptState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspacePromptPack, { promptPack: promptState.promptPack }) : null
-			]
-		})]
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
+				className: "prompt-workspace-selector",
+				"aria-labelledby": "prompt-workspace-selector-title",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+						className: "panel-header",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "section-kicker",
+							children: "v22 prompt workspace"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+							id: "prompt-workspace-selector-title",
+							children: "Prompt Handoff Workspace"
+						})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "panel-state",
+							children: promptWorkspacePhaseText(promptState.phase)
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "prompt-selector-stack",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "goal" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+								value: selectedGoalId,
+								onChange: (event) => updateGoal(event.target.value),
+								children: [goalOptions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: "",
+									children: "No managed goals"
+								}) : null, goalOptions.map((goal) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: goal.goalId,
+									children: goal.goalId
+								}, goal.goalId))]
+							})] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "role" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+								value: selectedRole,
+								onChange: (event) => updateRole(event.target.value),
+								children: PROMPT_WORKSPACE_ROLES.map((role) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: role.id,
+									children: role.label
+								}, role.id))
+							})] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "task" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+								value: selectedTaskId,
+								disabled: taskOptions.length === 0,
+								onChange: (event) => setSelectedTaskId(event.target.value),
+								children: [taskOptions.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: "",
+									children: "No task for role"
+								}) : null, taskOptions.map((task) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+									value: task.taskId,
+									children: task.taskId
+								}, task.taskId))]
+							})] })
+						]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["runbook route", textValue(runbookState.route ?? "未暴露")],
+						["runbook state", textValue(promptWorkspacePhaseText(runbookState.phase))],
+						["selected goal", textValue(selectedGoalId)],
+						["selected task", textValue(selectedTaskId)],
+						["selected role", textValue(selectedRole)],
+						["prompt route", textValue(promptState.route ?? "未暴露")]
+					] }),
+					runbookState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "error-copy",
+						children: ["错误摘要：", runbookState.error]
+					}) : null,
+					taskOptions.length === 0 && runbookState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前 runbook 没有可用于该 role 的 task。" }) : null,
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "panel-note",
+						children: "左侧只选择 managed goal、runbook task 和 prompt role；状态仍来自 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 这组 goal contract。"
+					})
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+				className: "data-panel prompt-workspace-output",
+				"aria-labelledby": "prompt-workspace-output-title",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+						className: "panel-header",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "section-kicker",
+							children: "goal-prompt-pack.v1"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+							id: "prompt-workspace-output-title",
+							children: "Generated Prompt Pack"
+						})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "panel-state",
+							children: promptWorkspacePhaseText(promptState.phase)
+						})]
+					}),
+					promptState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "正在生成 prompt pack。" }) : null,
+					promptState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "error-copy",
+						children: ["错误摘要：", promptState.error]
+					}) : null,
+					promptState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspacePromptPack, { promptPack: promptState.promptPack }) : null
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspaceHandoffBoardPanel, { handoffState })
+		]
 	});
 }
 var PROMPT_WORKSPACE_ROLES = Object.freeze([
@@ -13400,6 +13675,138 @@ function PromptRoleGuidance({ guidance }) {
 			})
 		]
 	});
+}
+function PromptWorkspaceHandoffBoardPanel({ handoffState }) {
+	const board = handoffState.board;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "data-panel prompt-workspace-handoff",
+		"aria-labelledby": "prompt-workspace-handoff-title",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "panel-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "goal handoff board"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+					id: "prompt-workspace-handoff-title",
+					children: "Subagent Handoff Board"
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "panel-state",
+					children: promptWorkspaceHandoffPhaseText(handoffState.phase)
+				})]
+			}),
+			handoffState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "正在读取 handoff source contracts。" }) : null,
+			handoffState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: ["错误摘要：", handoffState.error]
+			}) : null,
+			handoffState.phase === "partial" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: ["错误摘要：", handoffState.error]
+			}) : null,
+			board === null ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["goalId", board.goalId],
+					["goalTitle", board.goalTitle],
+					["task count", board.taskCount],
+					["next.taskId", board.next.taskId],
+					["next.role", board.next.role],
+					["next.phase", board.next.phase],
+					["next.reason", board.next.reason],
+					["goal-status route", board.routeStates.goalStatus],
+					["events route", board.routeStates.eventLog],
+					["goal next route", board.routeStates.goalNext],
+					["goal closeout route", board.routeStates.goalCloseout],
+					["closeout missing count", board.closeout.missingCount],
+					["source policy", board.sourcePolicy]
+				] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+					title: "subagent handoff by task",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubagentHandoffTaskList, { board })
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "panel-note",
+					children: board.note
+				})
+			] })
+		]
+	});
+}
+function SubagentHandoffTaskList({ board }) {
+	if (board.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "goal-status tasks 未暴露。" });
+	if (board.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前 goal 没有 task。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
+		className: "subagent-handoff-list",
+		children: board.items.map((task, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: task.currentHandoff.active.value === true ? "current-handoff-task" : "",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "run-row-header",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h3", { children: [
+						task.taskId.text,
+						" · ",
+						task.title.text
+					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "state-pill",
+						children: task.currentHandoff.active.value === true ? `handoff: ${task.currentHandoff.role.text}` : "not current next"
+					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["ledgerStatus", task.ledgerStatus],
+					["statusSource", task.statusSource],
+					["current role", task.currentHandoff.role],
+					["current phase", task.currentHandoff.phase],
+					["current reason", task.currentHandoff.reason],
+					["current source", task.currentHandoff.source],
+					["closeout missing", task.closeoutMissingKinds]
+				] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "subagent-handoff-steps",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubagentHandoffStep, {
+							title: "worker started",
+							cell: task.workerStarted
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubagentHandoffStep, {
+							title: "evidence recorded",
+							cell: task.workerEvidence
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubagentHandoffStep, {
+							title: "reviewer verdict",
+							cell: task.reviewerVerdict
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubagentHandoffStep, {
+							title: "main verification",
+							cell: task.mainVerification
+						})
+					]
+				})
+			]
+		}, `${task.taskId.text}-${index}`))
+	});
+}
+function SubagentHandoffStep({ title, cell }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "subagent-handoff-step",
+		"aria-label": title,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: title }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["status", cell.status],
+			["source", cell.source],
+			["eventId", cell.eventId],
+			["eventType", cell.eventType],
+			["evidenceRef", cell.evidenceRef],
+			["actor", cell.actor],
+			["recordedAt", cell.recordedAt],
+			["verdict", cell.verdict]
+		].filter(([, state]) => state !== void 0) })]
+	});
+}
+function promptWorkspaceHandoffPhaseText(phase) {
+	if (phase === "ready") return "已读取";
+	if (phase === "partial") return "部分可用";
+	if (phase === "loading") return "读取中";
+	if (phase === "failed") return "不可用";
+	return "无 goal";
 }
 function promptWorkspaceGoalOptions(model) {
 	const options = [];

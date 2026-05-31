@@ -206,6 +206,45 @@ h3 {
   min-width: 0;
 }
 
+.prompt-workspace-handoff {
+  grid-column: 1 / -1;
+}
+
+.subagent-handoff-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subagent-handoff-list > li {
+  border: 1px solid #d8e0e2;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.subagent-handoff-list > li.current-handoff-task {
+  border-color: #9db9c4;
+  background: #f3f8f7;
+}
+
+.subagent-handoff-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.subagent-handoff-step {
+  min-width: 0;
+  border: 1px solid #d8e0e2;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
 .prompt-role-guidance {
   margin-top: 12px;
 }
@@ -382,6 +421,7 @@ h3 {
 .release-gate-matrix-list,
 .goal-runbook-task-list,
 .active-goal-task-queue-list,
+.subagent-handoff-list,
 .prompt-preview-list,
 .closeout-missing-list,
 .command-block-list,
@@ -678,6 +718,10 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .subagent-handoff-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .status-strip {
     display: flex;
     flex-wrap: wrap;
@@ -722,6 +766,10 @@ h3 {
   }
 
   .goal-event-preview-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .subagent-handoff-steps {
     grid-template-columns: 1fr;
   }
 }

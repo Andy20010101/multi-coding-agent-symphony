@@ -6,11 +6,14 @@ import {
   RUN_TIMELINE_ROUTE_TEMPLATE,
   GOAL_EVENTS_ROUTE_TEMPLATE,
   GOAL_PROGRESS_ROUTE_TEMPLATE,
+  GOAL_CLOSEOUT_ROUTE_TEMPLATE,
+  GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
   createGoalEventsRoute,
   createGoalProgressRoute,
   createRunTimelineRoute,
   createSafeArtifactPreviewRoutes,
+  projectSubagentHandoffBoard,
   projectWorkbenchContracts
 } from './contracts.js';
 
@@ -331,6 +334,86 @@ export async function fetchPromptWorkspacePromptPack({ goalId, taskId, role }, o
     ...route,
     path: `${route.path}?${searchParams.toString()}`
   }, options);
+}
+
+export async function fetchPromptWorkspaceHandoffBoard(goalId, options = {}) {
+  const progressRoute = createGoalWorkspaceRoute({
+    template: GOAL_PROGRESS_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'progress'
+  });
+  const eventsRoute = createGoalWorkspaceRoute({
+    template: GOAL_EVENTS_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'events'
+  });
+  const nextRoute = createGoalWorkspaceRoute({
+    template: GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'next'
+  });
+  const closeoutRoute = createGoalWorkspaceRoute({
+    template: GOAL_CLOSEOUT_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'closeout'
+  });
+
+  if (progressRoute === null || eventsRoute === null || nextRoute === null || closeoutRoute === null) {
+    const errorResult = readonlyError({
+      route: {
+        ...GOAL_PROGRESS_ROUTE_TEMPLATE,
+        path: GOAL_PROGRESS_ROUTE_TEMPLATE.path
+      },
+      message: PROMPT_WORKSPACE_ERROR_MESSAGE
+    });
+
+    return {
+      ok: false,
+      board: projectSubagentHandoffBoard({
+        progressResult: errorResult,
+        progress: null,
+        eventsResult: errorResult,
+        eventLog: null,
+        nextResult: errorResult,
+        nextAction: null,
+        closeoutResult: errorResult,
+        closeout: null
+      }),
+      routes: {
+        progress: errorResult,
+        events: errorResult,
+        next: errorResult,
+        closeout: errorResult
+      }
+    };
+  }
+
+  const [progressResult, eventsResult, nextResult, closeoutResult] = await Promise.all([
+    fetchReadonlyRoute(progressRoute, options),
+    fetchReadonlyRoute(eventsRoute, options),
+    fetchReadonlyRoute(nextRoute, options),
+    fetchReadonlyRoute(closeoutRoute, options)
+  ]);
+
+  return {
+    ok: progressResult.ok === true && eventsResult.ok === true && nextResult.ok === true && closeoutResult.ok === true,
+    board: projectSubagentHandoffBoard({
+      progressResult,
+      progress: progressResult.ok === true ? progressResult.data : null,
+      eventsResult,
+      eventLog: eventsResult.ok === true ? eventsResult.data : null,
+      nextResult,
+      nextAction: nextResult.ok === true ? nextResult.data : null,
+      closeoutResult,
+      closeout: closeoutResult.ok === true ? closeoutResult.data : null
+    }),
+    routes: {
+      progress: progressResult,
+      events: eventsResult,
+      next: nextResult,
+      closeout: closeoutResult
+    }
+  };
 }
 
 function readonlyError({ route, httpStatus = null, message, errorEnvelope = null }) {

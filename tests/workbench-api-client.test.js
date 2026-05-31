@@ -13,6 +13,7 @@ import {
 import {
   READONLY_API_ROUTES,
   confirmGoalEventPlan,
+  fetchPromptWorkspaceHandoffBoard,
   fetchPromptWorkspacePromptPack,
   fetchPromptWorkspaceRunbook,
   fetchReadonlyRoute,
@@ -24,6 +25,7 @@ import {
   createSafeArtifactPreviewRoutes,
   createRunTimelineRoute,
   projectArtifactRefs,
+  projectSubagentHandoffBoard,
   projectWorkbenchContracts
 } from '../frontend/workbench/src/api/contracts.js';
 
@@ -278,6 +280,73 @@ describe('v15 Workbench read-only API client', () => {
         'application/json',
         false
       ]
+    ]);
+  });
+
+  it('fetches the Prompt Workspace subagent handoff board from controlled goal source routes', async () => {
+    const calls = [];
+    const progress = createV19ProgressPayload();
+    const events = createV19EventsPayload();
+    const nextAction = createV19NextActionPayload();
+    const closeout = createV19CloseoutPayload();
+
+    events.events = [{
+      eventId: 'evt_task6_worker_started',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.started',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T10:00:00.000Z',
+      evidenceRefs: []
+    }];
+    progress.tasks[0] = {
+      ...progress.tasks[0],
+      status: 'in-progress',
+      statusSource: 'goal-event-log.v1:evt_task6_worker_started'
+    };
+
+    const payloadByPath = new Map([
+      [`/api/goals/${V19_GOAL_ID}/progress`, progress],
+      [`/api/goals/${V19_GOAL_ID}/events`, events],
+      [`/api/goals/${V19_GOAL_ID}/next`, nextAction],
+      [`/api/goals/${V19_GOAL_ID}/closeout`, closeout]
+    ]);
+
+    const result = await fetchPromptWorkspaceHandoffBoard(V19_GOAL_ID, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return payloadByPath.get(path);
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.board.goalId.value, V19_GOAL_ID);
+    assert.equal(result.board.items[0].workerStarted.status.value, 'started');
+    assert.equal(result.board.items[0].currentHandoff.role.value, 'worker');
+    assert.equal(result.board.items[0].workerEvidence.status.value, 'missing-closeout');
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      Object.hasOwn(init, 'body')
+    ]), [
+      [`/api/goals/${V19_GOAL_ID}/progress`, 'GET', 'no-store', 'application/json', false],
+      [`/api/goals/${V19_GOAL_ID}/events`, 'GET', 'no-store', 'application/json', false],
+      [`/api/goals/${V19_GOAL_ID}/next`, 'GET', 'no-store', 'application/json', false],
+      [`/api/goals/${V19_GOAL_ID}/closeout`, 'GET', 'no-store', 'application/json', false]
     ]);
   });
 
@@ -627,6 +696,164 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(eventBackedTask.latestEventId.value, 'evt_task6_worker');
     assert.equal(eventBackedTask.latestEventType.value, 'worker.evidence-recorded');
     assert.equal(eventBackedTask.workerEvidenceRef.value, 'docs/plans/v19-task6-worker-evidence-2026-05-29.md');
+  });
+
+  it('projects the Subagent Handoff Board only from goal events, goal-status, goal next, and closeout', () => {
+    const progress = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+    const nextAction = createV19NextActionPayload();
+    const closeout = createV19CloseoutPayload();
+
+    progress.tasks[0] = {
+      ...progress.tasks[0],
+      title: 'reviewer.approved in title is not a verdict',
+      branch: 'main-verification-looking-branch',
+      status: 'needs-review',
+      statusSource: 'goal-event-log.v1:evt_task6_worker_evidence',
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      reviewEvidenceRef: null,
+      reviewVerdict: null,
+      mainVerificationRef: null
+    };
+    nextAction.next = {
+      taskId: 'task-6',
+      role: 'reviewer',
+      phase: 'review',
+      reason: 'Worker evidence exists for task-6 but reviewer verdict is missing.',
+      blocked: false
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_worker_started',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.started',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T10:00:00.000Z',
+      evidenceRefs: []
+    }, {
+      eventId: 'evt_task6_worker_evidence',
+      sequence: 2,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T10:05:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/event-log-worker-evidence.md',
+        label: 'Worker evidence'
+      }]
+    }];
+    closeout.missing = [{
+      kind: 'review-evidence',
+      taskId: 'task-6',
+      expectedEvent: 'reviewer.approved'
+    }, {
+      kind: 'main-verification',
+      taskId: 'task-6',
+      expectedEvent: 'main.verification-passed'
+    }];
+
+    const board = projectSubagentHandoffBoard({
+      progressResult: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', progress),
+      progress,
+      eventsResult: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog),
+      eventLog,
+      nextResult: createWorkbenchResult('goalNextAction', nextAction),
+      nextAction,
+      closeoutResult: createWorkbenchResult('goalCloseout', closeout),
+      closeout
+    });
+    const task = board.items[0];
+
+    assert.equal(board.sourcePolicy.value, 'goal-event-log.v1 + goal-progress-ledger.v1 + goal-next-action.v1 + goal-closeout-report.v1');
+    assert.equal(task.title.value, 'reviewer.approved in title is not a verdict');
+    assert.equal(task.workerStarted.status.value, 'started');
+    assert.equal(task.workerStarted.source.value, 'goal-event-log.v1');
+    assert.equal(task.workerEvidence.status.value, 'recorded');
+    assert.equal(task.workerEvidence.evidenceRef.value, 'docs/plans/v19-task6-worker-evidence-2026-05-29.md');
+    assert.equal(task.workerEvidence.source.value, 'goal-progress-ledger.v1');
+    assert.equal(task.currentHandoff.active.value, true);
+    assert.equal(task.currentHandoff.role.value, 'reviewer');
+    assert.equal(task.currentHandoff.source.value, 'goal-next-action.v1');
+    assert.equal(task.reviewerVerdict.status.value, 'missing-closeout');
+    assert.equal(task.reviewerVerdict.source.value, 'goal-closeout-report.v1');
+    assert.equal(task.mainVerification.status.value, 'missing-closeout');
+    assert.equal(task.mainVerification.source.value, 'goal-closeout-report.v1');
+    assert.equal(task.closeoutMissingKinds.value, 'review-evidence、main-verification');
+
+    const verifiedProgress = createV19ProgressPayload();
+    const verifiedEventLog = createV19EventsPayload();
+    const verifiedCloseout = createV19CloseoutPayload();
+    const mainEvidenceRef = 'docs/plans/v19-task6-main-verification-evidence-2026-05-29.md';
+
+    verifiedProgress.tasks[0] = {
+      ...verifiedProgress.tasks[0],
+      status: 'main-verified',
+      statusSource: 'goal-event-log.v1:evt_task6_main_passed',
+      mainVerificationRef: mainEvidenceRef
+    };
+    verifiedEventLog.events = [{
+      eventId: 'evt_task6_main_passed',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'main.verification-passed',
+      phase: 'main-verification',
+      actor: {
+        role: 'main-verifier',
+        id: 'codex-main-verifier'
+      },
+      recordedAt: '2026-05-29T10:20:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/event-log-main-verification-evidence.md',
+        label: 'Main verification event evidence'
+      }]
+    }];
+    verifiedCloseout.missing = [];
+
+    const verifiedBoard = projectSubagentHandoffBoard({
+      progressResult: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', verifiedProgress),
+      progress: verifiedProgress,
+      eventsResult: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', verifiedEventLog),
+      eventLog: verifiedEventLog,
+      nextResult: createWorkbenchResult('goalNextAction', nextAction),
+      nextAction,
+      closeoutResult: createWorkbenchResult('goalCloseout', verifiedCloseout),
+      closeout: verifiedCloseout
+    });
+    const verifiedTask = verifiedBoard.items[0];
+
+    assert.equal(verifiedTask.mainVerification.status.value, 'passed');
+    assert.equal(verifiedTask.mainVerification.evidenceRef.value, mainEvidenceRef);
+    assert.equal(verifiedTask.mainVerification.eventType.value, 'main.verification-passed');
+    assert.equal(verifiedTask.mainVerification.source.value, 'goal-event-log.v1');
+
+    const recordedBoard = projectSubagentHandoffBoard({
+      progressResult: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', verifiedProgress),
+      progress: verifiedProgress,
+      eventsResult: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', createV19EventsPayload()),
+      eventLog: createV19EventsPayload(),
+      nextResult: createWorkbenchResult('goalNextAction', nextAction),
+      nextAction,
+      closeoutResult: createWorkbenchResult('goalCloseout', verifiedCloseout),
+      closeout: verifiedCloseout
+    });
+    const recordedTask = recordedBoard.items[0];
+
+    assert.equal(recordedTask.mainVerification.status.value, 'recorded');
+    assert.equal(recordedTask.mainVerification.evidenceRef.value, mainEvidenceRef);
+    assert.equal(recordedTask.mainVerification.source.value, 'goal-progress-ledger.v1');
   });
 
   it('projects the Next Action card and Prompt Preview drawer from explicit copy-only contracts', () => {

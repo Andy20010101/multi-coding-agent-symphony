@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   confirmGoalEventPlan,
   fetchGoalEventPlanPreview,
+  fetchPromptWorkspaceHandoffBoard,
   fetchPromptWorkspacePromptPack,
   fetchPromptWorkspaceRunbook,
   fetchWorkbenchContracts
@@ -182,6 +183,11 @@ function PromptWorkspaceRoute({ model }) {
     error: null,
     route: null
   });
+  const [handoffState, setHandoffState] = useState({
+    phase: initialGoalId === '' ? 'empty' : 'loading',
+    board: null,
+    error: null
+  });
 
   useEffect(() => {
     if (selectedGoalId === '') {
@@ -224,6 +230,49 @@ function PromptWorkspaceRoute({ model }) {
         error: promptWorkspaceErrorText(result),
         route: result.route
       });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGoalId]);
+
+  useEffect(() => {
+    if (selectedGoalId === '') {
+      setHandoffState({
+        phase: 'empty',
+        board: null,
+        error: null
+      });
+      return;
+    }
+
+    let cancelled = false;
+
+    setHandoffState({
+      phase: 'loading',
+      board: null,
+      error: null
+    });
+
+    fetchPromptWorkspaceHandoffBoard(selectedGoalId).then((result) => {
+      if (cancelled) {
+        return;
+      }
+
+      setHandoffState({
+        phase: result.ok ? 'ready' : 'partial',
+        board: result.board,
+        error: result.ok ? null : 'handoff source route 未全部 ready'
+      });
+    }).catch(() => {
+      if (!cancelled) {
+        setHandoffState({
+          phase: 'failed',
+          board: null,
+          error: 'handoff source route 不可用'
+        });
+      }
     });
 
     return () => {
@@ -385,6 +434,8 @@ function PromptWorkspaceRoute({ model }) {
           <PromptWorkspacePromptPack promptPack={promptState.promptPack} />
         ) : null}
       </article>
+
+      <PromptWorkspaceHandoffBoardPanel handoffState={handoffState} />
     </section>
   );
 }
@@ -461,6 +512,128 @@ function PromptRoleGuidance({ guidance }) {
       </Subsection>
     </div>
   );
+}
+
+function PromptWorkspaceHandoffBoardPanel({ handoffState }) {
+  const board = handoffState.board;
+
+  return (
+    <article className="data-panel prompt-workspace-handoff" aria-labelledby="prompt-workspace-handoff-title">
+      <header className="panel-header">
+        <div>
+          <p className="section-kicker">goal handoff board</p>
+          <h2 id="prompt-workspace-handoff-title">Subagent Handoff Board</h2>
+        </div>
+        <span className="panel-state">{promptWorkspaceHandoffPhaseText(handoffState.phase)}</span>
+      </header>
+
+      {handoffState.phase === 'loading' ? <EmptyBlock copy="正在读取 handoff source contracts。" /> : null}
+      {handoffState.phase === 'failed' ? <p className="error-copy">错误摘要：{handoffState.error}</p> : null}
+      {handoffState.phase === 'partial' ? <p className="error-copy">错误摘要：{handoffState.error}</p> : null}
+
+      {board === null ? null : (
+        <>
+          <FieldList rows={[
+            ['goalId', board.goalId],
+            ['goalTitle', board.goalTitle],
+            ['task count', board.taskCount],
+            ['next.taskId', board.next.taskId],
+            ['next.role', board.next.role],
+            ['next.phase', board.next.phase],
+            ['next.reason', board.next.reason],
+            ['goal-status route', board.routeStates.goalStatus],
+            ['events route', board.routeStates.eventLog],
+            ['goal next route', board.routeStates.goalNext],
+            ['goal closeout route', board.routeStates.goalCloseout],
+            ['closeout missing count', board.closeout.missingCount],
+            ['source policy', board.sourcePolicy]
+          ]} />
+
+          <Subsection title="subagent handoff by task">
+            <SubagentHandoffTaskList board={board} />
+          </Subsection>
+
+          <p className="panel-note">{board.note}</p>
+        </>
+      )}
+    </article>
+  );
+}
+
+function SubagentHandoffTaskList({ board }) {
+  if (board.state === 'missing') {
+    return <EmptyBlock copy="goal-status tasks 未暴露。" />;
+  }
+
+  if (board.items.length === 0) {
+    return <EmptyBlock copy="当前 goal 没有 task。" />;
+  }
+
+  return (
+    <ol className="subagent-handoff-list">
+      {board.items.map((task, index) => (
+        <li key={`${task.taskId.text}-${index}`} className={task.currentHandoff.active.value === true ? 'current-handoff-task' : ''}>
+          <div className="run-row-header">
+            <h3>{task.taskId.text} · {task.title.text}</h3>
+            <span className="state-pill">{task.currentHandoff.active.value === true ? `handoff: ${task.currentHandoff.role.text}` : 'not current next'}</span>
+          </div>
+          <FieldList rows={[
+            ['ledgerStatus', task.ledgerStatus],
+            ['statusSource', task.statusSource],
+            ['current role', task.currentHandoff.role],
+            ['current phase', task.currentHandoff.phase],
+            ['current reason', task.currentHandoff.reason],
+            ['current source', task.currentHandoff.source],
+            ['closeout missing', task.closeoutMissingKinds]
+          ]} />
+          <div className="subagent-handoff-steps">
+            <SubagentHandoffStep title="worker started" cell={task.workerStarted} />
+            <SubagentHandoffStep title="evidence recorded" cell={task.workerEvidence} />
+            <SubagentHandoffStep title="reviewer verdict" cell={task.reviewerVerdict} />
+            <SubagentHandoffStep title="main verification" cell={task.mainVerification} />
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function SubagentHandoffStep({ title, cell }) {
+  return (
+    <section className="subagent-handoff-step" aria-label={title}>
+      <h3>{title}</h3>
+      <FieldList rows={[
+        ['status', cell.status],
+        ['source', cell.source],
+        ['eventId', cell.eventId],
+        ['eventType', cell.eventType],
+        ['evidenceRef', cell.evidenceRef],
+        ['actor', cell.actor],
+        ['recordedAt', cell.recordedAt],
+        ['verdict', cell.verdict]
+      ].filter(([, state]) => state !== undefined)} />
+    </section>
+  );
+}
+
+function promptWorkspaceHandoffPhaseText(phase) {
+  if (phase === 'ready') {
+    return '已读取';
+  }
+
+  if (phase === 'partial') {
+    return '部分可用';
+  }
+
+  if (phase === 'loading') {
+    return '读取中';
+  }
+
+  if (phase === 'failed') {
+    return '不可用';
+  }
+
+  return '无 goal';
 }
 
 function promptWorkspaceGoalOptions(model) {

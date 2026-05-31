@@ -884,6 +884,16 @@ function projectActiveGoalControl({
       eventLog,
       nextAction
     }),
+    subagentHandoffBoard: projectSubagentHandoffBoard({
+      progressResult: ledger === null ? statusResult : activeLedgerResult,
+      progress: goalStatusLedger,
+      eventsResult: activeEventLogResult,
+      eventLog,
+      nextResult: nextActionResult,
+      nextAction,
+      closeoutResult,
+      closeout
+    }),
     nextAction: projectGoalNextAction({
       result: nextActionResult,
       nextAction,
@@ -1004,6 +1014,226 @@ function projectActiveGoalCommandInventory({ goalId, sourceResults }) {
         command: valueState(command.command.replace('<goal-id>', commandGoalId))
       };
     })
+  };
+}
+
+export function projectSubagentHandoffBoard({
+  progressResult,
+  progress,
+  eventsResult,
+  eventLog,
+  nextResult,
+  nextAction,
+  closeoutResult,
+  closeout
+} = {}) {
+  const progressTasks = Array.isArray(progress?.tasks) ? progress.tasks : null;
+  const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+  const closeoutMissing = Array.isArray(closeout?.missing) ? closeout.missing : [];
+  const activeNext = nextAction?.next;
+
+  return {
+    state: progressTasks === null ? 'missing' : progressTasks.length === 0 ? 'empty' : 'available',
+    goalId: valueState(firstNonEmptyString(progress?.goalId, eventLog?.goalId, nextAction?.goalId, closeout?.goalId)),
+    goalTitle: valueState(firstNonEmptyString(progress?.goalTitle, eventLog?.goalTitle)),
+    taskCount: valueState(progressTasks === null ? undefined : progressTasks.length),
+    sourcePolicy: valueState('goal-event-log.v1 + goal-progress-ledger.v1 + goal-next-action.v1 + goal-closeout-report.v1'),
+    routeStates: {
+      goalStatus: valueState(routeStateFromResult(progressResult)),
+      eventLog: valueState(routeStateFromResult(eventsResult)),
+      goalNext: valueState(routeStateFromResult(nextResult)),
+      goalCloseout: valueState(routeStateFromResult(closeoutResult))
+    },
+    next: {
+      taskId: valueState(activeNext?.taskId),
+      role: valueState(activeNext?.role),
+      phase: valueState(activeNext?.phase),
+      reason: valueState(nextAction?.reason ?? activeNext?.reason)
+    },
+    closeout: {
+      missingCount: valueState(closeoutMissing.length),
+      workerEvidenceComplete: valueState(closeout?.summary?.workerEvidenceComplete),
+      reviewEvidenceComplete: valueState(closeout?.summary?.reviewEvidenceComplete),
+      mainVerificationComplete: valueState(closeout?.summary?.mainVerificationComplete),
+      releaseReady: valueState(closeout?.summary?.releaseReady)
+    },
+    items: progressTasks === null ? [] : progressTasks.map((task) => projectSubagentHandoffTask({
+      task,
+      events,
+      activeNext,
+      closeoutMissing
+    })),
+    note: 'Subagent Handoff Board uses goal events for worker started, goal-status/events for evidence and verdicts, goal next for the current handoff role, and goal closeout for missing handoff gaps. It does not read branch names, file names, commit messages, prompt text, or command text as task status.'
+  };
+}
+
+function projectSubagentHandoffTask({
+  task,
+  events,
+  activeNext,
+  closeoutMissing
+}) {
+  const taskId = task?.taskId;
+  const taskEvents = events.filter((event) => event?.taskId === taskId);
+  const workerStartedEvent = latestEventOfTypes(taskEvents, ['worker.started']);
+  const workerEvidenceEvent = latestEventOfTypes(taskEvents, ['worker.evidence-recorded']);
+  const reviewEvent = latestEventOfTypes(taskEvents, ['reviewer.approved', 'reviewer.needs-revision']);
+  const mainVerificationEvent = latestEventOfTypes(taskEvents, ['main.verification-passed', 'main.verification-failed']);
+  const missingKinds = closeoutMissing
+    .filter((item) => item?.taskId === taskId)
+    .map((item) => item?.kind)
+    .filter((kind) => isNonEmptyString(kind));
+  const isCurrentNext = taskId === activeNext?.taskId;
+
+  return {
+    taskId: valueState(taskId),
+    title: valueState(task?.title),
+    ledgerStatus: valueState(task?.status),
+    statusSource: valueState(task?.statusSource),
+    currentHandoff: {
+      active: valueState(isCurrentNext),
+      role: isCurrentNext ? valueState(activeNext?.role) : valueState(undefined),
+      phase: isCurrentNext ? valueState(activeNext?.phase) : valueState(undefined),
+      reason: isCurrentNext ? valueState(activeNext?.reason) : valueState(undefined),
+      source: valueState(isCurrentNext ? GOAL_NEXT_ACTION_CONTRACT_NAME : 'goal-next-action.v1:not-current-next')
+    },
+    workerStarted: projectHandoffEventCell({
+      event: workerStartedEvent,
+      completeText: 'started',
+      missingText: 'missing',
+      missingKind: null,
+      sourceWhenMissing: GOAL_EVENT_LOG_CONTRACT_NAME
+    }),
+    workerEvidence: projectHandoffEvidenceCell({
+      ledgerValue: task?.workerEvidenceRef,
+      event: workerEvidenceEvent,
+      completeText: 'recorded',
+      missingText: 'missing',
+      missingKind: 'worker-evidence',
+      missingKinds
+    }),
+    reviewerVerdict: projectHandoffVerdictCell({
+      ledgerValue: task?.reviewVerdict,
+      event: reviewEvent,
+      missingKind: 'review-evidence',
+      missingKinds
+    }),
+    mainVerification: projectHandoffMainVerificationCell({
+      ledgerValue: task?.mainVerificationRef,
+      event: mainVerificationEvent,
+      missingKind: 'main-verification',
+      missingKinds
+    }),
+    closeoutMissingKinds: arrayTextState(missingKinds, '无')
+  };
+}
+
+function projectHandoffEventCell({
+  event,
+  completeText,
+  missingText,
+  missingKind,
+  missingKinds,
+  sourceWhenMissing
+}) {
+  const closeoutMissing = missingKind !== null && Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+
+  return {
+    status: valueState(event === null ? (closeoutMissing ? 'missing-closeout' : missingText) : completeText),
+    eventId: valueState(event?.eventId),
+    eventType: valueState(event?.eventType),
+    actor: valueState(goalEventActorText(event?.actor)),
+    recordedAt: valueState(event?.recordedAt),
+    evidenceRef: valueState(firstGoalEvidenceRef(event)),
+    source: valueState(event === null
+      ? closeoutMissing ? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME : sourceWhenMissing
+      : GOAL_EVENT_LOG_CONTRACT_NAME)
+  };
+}
+
+function projectHandoffEvidenceCell({
+  ledgerValue,
+  event,
+  completeText,
+  missingText,
+  missingKind,
+  missingKinds
+}) {
+  const eventEvidenceRef = firstGoalEvidenceRef(event);
+  const evidenceRef = firstNonEmptyString(ledgerValue, eventEvidenceRef);
+  const closeoutMissing = Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+  const source = isNonEmptyString(ledgerValue)
+    ? GOAL_PROGRESS_LEDGER_CONTRACT_NAME
+    : event !== null
+      ? GOAL_EVENT_LOG_CONTRACT_NAME
+      : closeoutMissing
+        ? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME
+        : GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+
+  return {
+    status: valueState(evidenceRef === undefined ? (closeoutMissing ? 'missing-closeout' : missingText) : completeText),
+    evidenceRef: valueState(evidenceRef),
+    eventId: valueState(event?.eventId),
+    eventType: valueState(event?.eventType),
+    source: valueState(source)
+  };
+}
+
+function projectHandoffVerdictCell({
+  ledgerValue,
+  event,
+  missingKind,
+  missingKinds
+}) {
+  const eventVerdict = explicitReviewVerdictState(event).value;
+  const verdict = firstNonEmptyString(ledgerValue, eventVerdict === MATRIX_UNKNOWN_TEXT ? undefined : eventVerdict);
+  const closeoutMissing = Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+  const source = isNonEmptyString(ledgerValue)
+    ? GOAL_PROGRESS_LEDGER_CONTRACT_NAME
+    : event !== null
+      ? GOAL_EVENT_LOG_CONTRACT_NAME
+      : closeoutMissing
+        ? GOAL_CLOSEOUT_REPORT_CONTRACT_NAME
+        : GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+
+  return {
+    status: valueState(verdict === undefined ? (closeoutMissing ? 'missing-closeout' : 'missing') : verdict),
+    verdict: valueState(verdict),
+    evidenceRef: valueState(firstGoalEvidenceRef(event)),
+    eventId: valueState(event?.eventId),
+    eventType: valueState(event?.eventType),
+    source: valueState(source)
+  };
+}
+
+function projectHandoffMainVerificationCell({
+  ledgerValue,
+  event,
+  missingKind,
+  missingKinds
+}) {
+  const eventStatus = explicitGateStatusState(event).value;
+  const explicitEventStatus = eventStatus === MATRIX_UNKNOWN_TEXT ? undefined : eventStatus;
+  const value = explicitEventStatus ?? (isNonEmptyString(ledgerValue) ? 'recorded' : undefined);
+  const closeoutMissing = Array.isArray(missingKinds) && missingKinds.includes(missingKind);
+  let source = GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+
+  if (explicitEventStatus !== undefined) {
+    source = GOAL_EVENT_LOG_CONTRACT_NAME;
+  } else if (isNonEmptyString(ledgerValue)) {
+    source = GOAL_PROGRESS_LEDGER_CONTRACT_NAME;
+  } else if (event !== null) {
+    source = GOAL_EVENT_LOG_CONTRACT_NAME;
+  } else if (closeoutMissing) {
+    source = GOAL_CLOSEOUT_REPORT_CONTRACT_NAME;
+  }
+
+  return {
+    status: valueState(value === undefined ? (closeoutMissing ? 'missing-closeout' : 'missing') : value),
+    evidenceRef: valueState(ledgerValue ?? firstGoalEvidenceRef(event)),
+    eventId: valueState(event?.eventId),
+    eventType: valueState(event?.eventType),
+    source: valueState(source)
   };
 }
 
@@ -2345,6 +2575,14 @@ function explicitReviewVerdictState(event) {
 function explicitGateStatusState(event) {
   if (event?.gate?.status === 'passed' || event?.gate?.status === 'failed' || event?.gate?.status === 'declared') {
     return valueState(event.gate.status);
+  }
+
+  if (event?.eventType === 'main.verification-passed') {
+    return matrixValueState('passed');
+  }
+
+  if (event?.eventType === 'main.verification-failed') {
+    return matrixValueState('failed');
   }
 
   if (event?.eventType === 'release.gate-passed') {
