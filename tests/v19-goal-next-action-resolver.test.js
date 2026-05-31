@@ -18,6 +18,17 @@ import { validateGoalNextActionContract } from '../src/symphony/goal-runbook-con
 const GOAL_ID = 'v19-goal-runbook-next-action';
 const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.valid.v1.json';
 const GENERATED_AT = '2026-05-29T10:00:00.000Z';
+const RELEASE_GATES = Object.freeze([
+  'release.pnpm-check',
+  'release.pnpm-test',
+  'release.workbench-build',
+  'release.mutation-gate',
+  'release.audit-high',
+  'release.diff-check',
+  'release.mcas-doctor',
+  'release.docs-updated',
+  'release.tag-evidence'
+]);
 
 describe('v19 event-aware goal-next-action.v1 resolver', () => {
   it('returns missing-runbook when no managed runbook is registered', async () => {
@@ -322,7 +333,7 @@ describe('v19 event-aware goal-next-action.v1 resolver', () => {
     }
   });
 
-  it('returns complete when release.ready-declared and tagEvidence passed are explicit events', async () => {
+  it('returns complete when release.ready-declared and all runbook release gates have explicit events', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v19-next-complete-'));
     const stateDir = join(root, '.symphony');
 
@@ -330,13 +341,15 @@ describe('v19 event-aware goal-next-action.v1 resolver', () => {
       await registerRunbook(stateDir);
       await appendMainVerification({ stateDir, taskId: 'task-1' });
       await appendMainVerification({ stateDir, taskId: 'task-2' });
-      await appendReleaseGate({
-        stateDir,
-        eventId: 'evt_release_tag_evidence_passed',
-        gateName: 'release.tag-evidence',
-        eventType: 'release.gate-passed',
-        status: 'passed'
-      });
+      for (const gateName of RELEASE_GATES) {
+        await appendReleaseGate({
+          stateDir,
+          eventId: `evt_${gateName.replaceAll('.', '_').replaceAll('-', '_')}_passed`,
+          gateName,
+          eventType: 'release.gate-passed',
+          status: 'passed'
+        });
+      }
       await appendReleaseGate({
         stateDir,
         eventId: 'evt_release_ready_declared',
@@ -355,7 +368,7 @@ describe('v19 event-aware goal-next-action.v1 resolver', () => {
       assertValidNextAction(nextAction);
       assert.equal(nextAction.status, 'complete');
       assert.equal(nextAction.next, null);
-      assert.equal(nextAction.reason, 'release.ready-declared is recorded and release.tag-evidence has passed.');
+      assert.equal(nextAction.reason, 'release.ready-declared is recorded and all runbook release gates have passed.');
       assert.deepEqual(nextAction.copyOnlyCommands, []);
       assert.deepEqual(nextAction.afterCompletion.allowedEvents, []);
     } finally {

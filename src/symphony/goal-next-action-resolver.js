@@ -140,10 +140,10 @@ export function resolveGoalNextAction({
       .map((task) => [task.taskId, task])
   );
 
-  if (isReleaseComplete({ eventLog, ledger })) {
+  if (isReleaseComplete({ runbook, eventLog, ledger, ledgerTasks })) {
     return buildCompleteNextAction({
       goalId: runbook.goalId,
-      reason: 'release.ready-declared is recorded and release.tag-evidence has passed.'
+      reason: 'release.ready-declared is recorded and all runbook release gates have passed.'
     });
   }
 
@@ -341,9 +341,15 @@ function firstMissingReleaseGate({ runbook, ledger }) {
   return null;
 }
 
-function isReleaseComplete({ eventLog, ledger }) {
+function isReleaseComplete({ runbook, eventLog, ledger, ledgerTasks }) {
   return eventLog.events.some((event) => event.eventType === 'release.ready-declared') &&
-    ledger.releaseGates.tagEvidence === 'passed';
+    runbook.releaseGates.every((gate) => {
+      const ledgerGateId = RELEASE_GATE_TO_LEDGER_ID[gate];
+
+      return GOAL_PROGRESS_RELEASE_GATE_IDS.includes(ledgerGateId) &&
+        ledger.releaseGates?.[ledgerGateId] === 'passed';
+    }) &&
+    runbook.tasks.every((task) => ['main-verified', 'release-ready'].includes(ledgerTasks.get(task.taskId)?.status));
 }
 
 function buildTaskNextAction({

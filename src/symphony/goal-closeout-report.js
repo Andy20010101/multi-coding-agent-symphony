@@ -186,7 +186,10 @@ function closeoutSummary({ runbook, ledger, taskMap }) {
   const releaseReady = workerEvidenceComplete &&
     reviewEvidenceComplete &&
     mainVerificationComplete &&
-    allReleaseGatesPassed(ledger.releaseGates) &&
+    allRunbookReleaseGatesPassed({
+      runbook,
+      ledger
+    }) &&
     ledger.summary?.releaseReady === true &&
     releaseReadySource !== null;
 
@@ -320,8 +323,13 @@ function expectedEvidenceEvent(runbookTask, key, fallback) {
   return fallback;
 }
 
-function allReleaseGatesPassed(releaseGates) {
-  return GOAL_PROGRESS_RELEASE_GATE_IDS.every((gateId) => releaseGates?.[gateId] === 'passed');
+function allRunbookReleaseGatesPassed({ runbook, ledger }) {
+  return runbook.releaseGates.every((gate) => {
+    const ledgerGateId = RELEASE_GATE_TO_LEDGER_ID[gate];
+
+    return GOAL_PROGRESS_RELEASE_GATE_IDS.includes(ledgerGateId) &&
+      normalizedGateStatus(ledger.releaseGates?.[ledgerGateId]) === 'passed';
+  });
 }
 
 function explicitReleaseReadySource(ledger) {
