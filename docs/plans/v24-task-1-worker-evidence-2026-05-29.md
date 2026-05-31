@@ -198,3 +198,110 @@ The local console server was stopped after the check.
 - 检查 ff-only 指引、verification commands、evidence path 是否可见且均为 copy-only。
 - 检查 panel 没有 shell runner、merge action、file writer、confirm action、model invocation 或 release-ready 推断。
 - 复跑 `pnpm check`、`pnpm test`、`pnpm workbench:build`、`git diff --check`。
+
+## Revision note - main-verification blocker
+
+Revision worker: `v24 task-1 revision worker`
+
+The blocker was that task-1 existed only as dirty and untracked workspace files. I rebuilt a task-1-only commit from an isolated worktree and left unrelated v23 operation-console files unstaged.
+
+Implementation commit created before this evidence update:
+
+```text
+c7ed1e0 Implement v24 task-1 main verification readiness panel
+```
+
+Committed task-1 scope:
+
+- `frontend/workbench/src/App.jsx`
+- `frontend/workbench/src/api/contracts.js`
+- `frontend/workbench/src/styles/workbench.css`
+- `tests/workbench-api-client.test.js`
+- `tests/workbench-shell.test.js`
+- `src/symphony/workbench-static/index.html`
+- `src/symphony/workbench-static/assets/index-wQbBCopW.js`
+- `src/symphony/workbench-static/assets/index-DfZ2uJ6P.css`
+- `docs/plans/v24-task-1-worker-evidence-2026-05-29.md`
+- `docs/plans/v24-task-1-review-evidence-2026-05-29.md`
+- `fixtures/contracts/goal-runbook.v24-main-verification-workbench.v1.json`
+
+The commit excludes unrelated v23 evidence docs, v23 tests, `src/symphony/goal-operation-run-registry.js`, `src/symphony/console.js`, `frontend/workbench/src/api/client.js`, `docs/symphony-product-contracts.md`, `docs/workbench-operator-guide.md`, and `tests/v21-goal-plan-preview-api.test.js`.
+
+Revision command results were run in `/tmp/mcas-v24-task1-isolated` on the task-1-only commit. The temporary worktree used a symlink to the workspace `node_modules` for frontend tooling. For `goal-status`, the existing ignored `.symphony` state from `/Users/andy/Documents/project/multi-coding-agent-symphony` was copied into the temporary worktree so the command read the same goal event state.
+
+### `pnpm check`
+
+Result: exit 0.
+
+```text
+> multi-coding-agent-symphony@0.1.0 check /private/tmp/mcas-v24-task1-isolated
+> node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js
+```
+
+### `pnpm test`
+
+Result: exit 0.
+
+```text
+tests 702
+suites 111
+pass 702
+fail 0
+cancelled 0
+skipped 0
+todo 0
+duration_ms 2650.682625
+```
+
+### `pnpm workbench:build`
+
+Result: exit 0.
+
+```text
+vite v8.0.14 building client environment for production...
+✓ 17 modules transformed.
+rendering chunks...
+computing gzip size...
+src/symphony/workbench-static/index.html                   0.42 kB │ gzip:   0.28 kB
+src/symphony/workbench-static/assets/index-DfZ2uJ6P.css   13.47 kB │ gzip:   2.85 kB
+src/symphony/workbench-static/assets/index-wQbBCopW.js   745.96 kB │ gzip: 139.14 kB
+
+✓ built in 150ms
+```
+
+The build also printed Node WASI `ExperimentalWarning` messages.
+
+### `git diff --check`
+
+Result: exit 0.
+
+Output: no output.
+
+### `pnpm --silent symphony goal-status --goal v24-main-verification-workbench --json`
+
+Result: exit 0.
+
+Observed summary:
+
+```json
+{
+  "goalId": "v24-main-verification-workbench",
+  "summary": {
+    "totalTasks": 5,
+    "completedTasks": 0,
+    "blockedTasks": 1,
+    "needsReviewTasks": 0,
+    "needsRevisionTasks": 0,
+    "releaseReady": false
+  },
+  "task1": {
+    "status": "blocked",
+    "statusSource": "goal-event-log.v1:evt_4c089c2b431671a9",
+    "branch": "v24-task-1-main-verification-readiness-panel",
+    "workerEvidenceRef": "docs/plans/v24-task-1-worker-evidence-2026-05-29.md",
+    "reviewEvidenceRef": "docs/plans/v24-task-1-review-evidence-2026-05-29.md",
+    "reviewVerdict": "APPROVED",
+    "mainVerificationRef": null
+  }
+}
+```
