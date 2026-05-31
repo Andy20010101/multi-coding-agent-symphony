@@ -188,6 +188,7 @@ function PromptWorkspaceRoute({ model }) {
     board: null,
     error: null
   });
+  const [handoffRefreshToken, setHandoffRefreshToken] = useState(0);
 
   useEffect(() => {
     if (selectedGoalId === '') {
@@ -278,7 +279,7 @@ function PromptWorkspaceRoute({ model }) {
     return () => {
       cancelled = true;
     };
-  }, [selectedGoalId]);
+  }, [selectedGoalId, handoffRefreshToken]);
 
   const taskOptions = promptWorkspaceTaskOptions(runbookState.runbook, selectedRole);
 
@@ -355,6 +356,10 @@ function PromptWorkspaceRoute({ model }) {
   function updateRole(role) {
     setSelectedRole(role);
     setSelectedTaskId('');
+  }
+
+  async function refreshPromptWorkspaceHandoff() {
+    setHandoffRefreshToken((current) => current + 1);
   }
 
   return (
@@ -436,6 +441,13 @@ function PromptWorkspaceRoute({ model }) {
       </article>
 
       <PromptWorkspaceHandoffBoardPanel handoffState={handoffState} />
+
+      <PromptWorkspaceEventShortcuts
+        selectedGoalId={selectedGoalId}
+        selectedTaskId={selectedTaskId}
+        selectedRole={selectedRole}
+        onGoalEventConfirmed={refreshPromptWorkspaceHandoff}
+      />
     </section>
   );
 }
@@ -558,6 +570,283 @@ function PromptWorkspaceHandoffBoardPanel({ handoffState }) {
       )}
     </article>
   );
+}
+
+function PromptWorkspaceEventShortcuts({
+  selectedGoalId,
+  selectedTaskId,
+  selectedRole,
+  onGoalEventConfirmed
+}) {
+  const forms = createPromptWorkspaceWorkerEventShortcutForms({
+    goalId: selectedGoalId,
+    taskId: selectedTaskId
+  });
+  const shortcutsReady = selectedRole === 'worker' && forms.length > 0;
+
+  return (
+    <article className="data-panel prompt-workspace-event-shortcuts" aria-labelledby="prompt-workspace-event-shortcuts-title">
+      <header className="panel-header">
+        <div>
+          <p className="section-kicker">goal update shortcuts</p>
+          <h2 id="prompt-workspace-event-shortcuts-title">Worker Event Registration</h2>
+        </div>
+        <span className="panel-state">{shortcutsReady ? 'dry-run / confirm' : '等待 worker task'}</span>
+      </header>
+
+      <FieldList rows={[
+        ['goalId', textValue(selectedGoalId)],
+        ['taskId', textValue(selectedTaskId)],
+        ['role', textValue(selectedRole)],
+        ['supported events', textValue('worker.started、worker.evidence-recorded')],
+        ['command surface', textValue('symphony goal update')],
+        ['confirm required', textValue(true)]
+      ]} />
+
+      {selectedRole !== 'worker' ? (
+        <EmptyBlock copy="当前 role 不生成 worker.started 或 worker.evidence-recorded 登记表单。" />
+      ) : null}
+      {selectedRole === 'worker' && forms.length === 0 ? (
+        <EmptyBlock copy="选择 goal 和 task 后可生成 worker event 登记表单。" />
+      ) : null}
+      {shortcutsReady ? (
+        <ul className="goal-event-form-list prompt-event-shortcut-list">
+          {forms.map((form) => {
+            const shortcutKey = promptWorkspaceWorkerEventShortcutKey({
+              goalId: selectedGoalId,
+              taskId: selectedTaskId,
+              eventType: form.eventType.value
+            });
+
+            return (
+              <li key={shortcutKey}>
+                <FieldList rows={[
+                  ['formId', form.formId],
+                  ['eventType', form.eventType],
+                  ['commandName', form.commandName],
+                  ['actorRole', form.actorRole],
+                  ['phase', form.phase],
+                  ['requiresEvidence', form.requiresEvidence],
+                  ['confirmRequiresPlanHash', form.confirmRequiresPlanHash],
+                  ['planPreviewContract', form.planPreviewContract]
+                ]} />
+                <GoalEventFormFieldList fields={form.fields} />
+                <GoalEventPlanPreview key={shortcutKey} form={form} onGoalEventConfirmed={onGoalEventConfirmed} />
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+
+      <p className="panel-note">这些快捷入口只调用受控 goal update dry-run preview 和 plan-hash confirm；不会启动 subagent、运行 shell、登记 review/main/release 事件，或从文件名、分支、commit 文本推断任务状态。</p>
+    </article>
+  );
+}
+
+function promptWorkspaceWorkerEventShortcutKey({ goalId, taskId, eventType }) {
+  return [goalId, taskId, eventType]
+    .map((part) => String(part ?? '').trim())
+    .join('::');
+}
+
+function createPromptWorkspaceWorkerEventShortcutForms({ goalId, taskId }) {
+  if (!isNonEmptyText(goalId) || !isNonEmptyText(taskId)) {
+    return [];
+  }
+
+  return [
+    createPromptWorkspaceWorkerEventShortcutForm({
+      goalId,
+      taskId,
+      eventType: 'worker.started',
+      formId: 'prompt-workspace-worker-started',
+      requiresEvidence: false,
+      fields: ['goalId', 'taskId', 'eventType', 'workerActor', 'statement', 'branch', 'commit']
+    }),
+    createPromptWorkspaceWorkerEventShortcutForm({
+      goalId,
+      taskId,
+      eventType: 'worker.evidence-recorded',
+      formId: 'prompt-workspace-worker-evidence-recorded',
+      requiresEvidence: true,
+      fields: ['goalId', 'taskId', 'eventType', 'workerActor', 'evidenceRef', 'statement', 'branch', 'commit']
+    })
+  ];
+}
+
+function createPromptWorkspaceWorkerEventShortcutForm({
+  goalId,
+  taskId,
+  eventType,
+  formId,
+  requiresEvidence,
+  fields
+}) {
+  return {
+    formId: textValue(formId),
+    eventType: textValue(eventType),
+    eventFamily: textValue('worker'),
+    commandName: textValue('symphony goal update'),
+    commandIntent: textValue('prompt-workspace-worker-event-shortcut'),
+    actorRole: textValue('worker'),
+    actorFlag: textValue('--actor'),
+    phase: textValue('implement'),
+    recommended: textValue(true),
+    availableForCurrentNextAction: textValue(false),
+    requiresTask: textValue(true),
+    requiresEvidence: textValue(requiresEvidence),
+    confirmRequiresPlanHash: textValue(true),
+    planPreviewContract: textValue('goal-update-plan.v1'),
+    evidenceRefHelper: createEmptyPromptWorkspaceEvidenceRefHelper(),
+    fields: {
+      state: 'available',
+      count: textValue(fields.length),
+      items: fields.map((fieldId) => createPromptWorkspaceWorkerEventField({
+        fieldId,
+        goalId,
+        taskId,
+        eventType,
+        requiresEvidence
+      }))
+    }
+  };
+}
+
+function createPromptWorkspaceWorkerEventField({
+  fieldId,
+  goalId,
+  taskId,
+  eventType,
+  requiresEvidence
+}) {
+  const common = {
+    id: fieldId,
+    label: fieldId,
+    flag: null,
+    required: false,
+    readOnly: false,
+    value: undefined,
+    placeholder: undefined,
+    source: 'operator-input',
+    options: []
+  };
+  const field = (() => {
+    if (fieldId === 'goalId') {
+      return {
+        ...common,
+        label: 'goal id',
+        flag: '--goal',
+        required: true,
+        readOnly: true,
+        value: goalId,
+        source: 'prompt-workspace-selection'
+      };
+    }
+
+    if (fieldId === 'taskId') {
+      return {
+        ...common,
+        label: 'task id',
+        flag: '--task',
+        required: true,
+        readOnly: true,
+        value: taskId,
+        source: 'prompt-workspace-selection'
+      };
+    }
+
+    if (fieldId === 'eventType') {
+      return {
+        ...common,
+        label: 'event',
+        flag: '--event',
+        required: true,
+        readOnly: true,
+        value: eventType,
+        source: 'prompt-workspace-shortcut',
+        options: [eventType]
+      };
+    }
+
+    if (fieldId === 'workerActor') {
+      return {
+        ...common,
+        id: 'actorId',
+        label: 'worker actor id',
+        flag: '--actor',
+        required: true,
+        placeholder: 'codex-worker-task-id'
+      };
+    }
+
+    if (fieldId === 'evidenceRef') {
+      return {
+        ...common,
+        label: 'evidence ref',
+        flag: '--evidence-ref',
+        required: requiresEvidence,
+        placeholder: 'docs/plans/<evidence>.md or artifact:run:kind'
+      };
+    }
+
+    if (fieldId === 'statement') {
+      return {
+        ...common,
+        label: 'statement',
+        flag: '--statement',
+        placeholder: 'short event statement'
+      };
+    }
+
+    if (fieldId === 'branch') {
+      return {
+        ...common,
+        label: 'branch',
+        flag: '--branch',
+        placeholder: 'current branch'
+      };
+    }
+
+    if (fieldId === 'commit') {
+      return {
+        ...common,
+        label: 'commit',
+        flag: '--commit',
+        placeholder: 'commit sha or null'
+      };
+    }
+
+    return common;
+  })();
+
+  return {
+    id: textValue(field.id),
+    label: textValue(field.label),
+    flag: textValue(field.flag),
+    inputType: textValue(field.options.length > 0 ? 'select' : 'text'),
+    required: textValue(field.required),
+    readOnly: textValue(field.readOnly),
+    value: textValue(field.value),
+    placeholder: textValue(field.placeholder),
+    source: textValue(field.source),
+    options: {
+      state: field.options.length === 0 ? 'empty' : 'available',
+      count: textValue(field.options.length),
+      items: field.options.map((option) => textValue(option))
+    }
+  };
+}
+
+function createEmptyPromptWorkspaceEvidenceRefHelper() {
+  return {
+    state: 'empty',
+    recentRefs: {
+      state: 'empty',
+      count: textValue(0),
+      items: []
+    },
+    note: 'Prompt Workspace shortcut accepts typed controlled docs/plans refs or managed artifact refs.'
+  };
 }
 
 function SubagentHandoffTaskList({ board }) {
@@ -2126,6 +2415,23 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
     result: null,
     error: null
   });
+  const formIdentity = goalEventFormIdentity(form);
+
+  useEffect(() => {
+    setValues(initialGoalEventPreviewValues(form));
+    setPreviewState({
+      phase: 'idle',
+      plan: null,
+      error: null,
+      values: null
+    });
+    setConfirmState({
+      phase: 'idle',
+      result: null,
+      error: null
+    });
+  }, [formIdentity]);
+
   const evidenceRefValidation = validateGoalEventEvidenceRefInput(form, values.evidenceRef);
   const previewPath = buildGoalEventPreviewPath(form, values);
   const missingRequired = missingRequiredGoalEventFields(form, values);
@@ -2434,6 +2740,15 @@ function initialGoalEventPreviewValues(form) {
     field.id.value,
     field.value.state === 'available' ? String(field.value.value) : ''
   ]));
+}
+
+function goalEventFormIdentity(form) {
+  const goalId = form.fields.items.find((field) => field.id.value === 'goalId')?.value.value;
+  const taskId = form.fields.items.find((field) => field.id.value === 'taskId')?.value.value;
+
+  return [goalId, taskId, form.eventType.value]
+    .map((part) => String(part ?? '').trim())
+    .join('::');
 }
 
 function shouldRenderGoalEventPreviewInput(field) {
@@ -3121,6 +3436,10 @@ function textValue(text) {
     text: normalized,
     value: text
   };
+}
+
+function isNonEmptyText(value) {
+  return typeof value === 'string' && value.trim() !== '';
 }
 
 function formatState(state) {

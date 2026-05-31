@@ -210,6 +210,10 @@ h3 {
   grid-column: 1 / -1;
 }
 
+.prompt-workspace-event-shortcuts {
+  grid-column: 1 / -1;
+}
+
 .subagent-handoff-list {
   display: grid;
   gap: 12px;

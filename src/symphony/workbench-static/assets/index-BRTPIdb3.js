@@ -13355,6 +13355,7 @@ function PromptWorkspaceRoute({ model }) {
 		board: null,
 		error: null
 	});
+	const [handoffRefreshToken, setHandoffRefreshToken] = (0, import_react.useState)(0);
 	(0, import_react.useEffect)(() => {
 		if (selectedGoalId === "") {
 			setRunbookState({
@@ -13426,7 +13427,7 @@ function PromptWorkspaceRoute({ model }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [selectedGoalId]);
+	}, [selectedGoalId, handoffRefreshToken]);
 	const taskOptions = promptWorkspaceTaskOptions(runbookState.runbook, selectedRole);
 	(0, import_react.useEffect)(() => {
 		if (taskOptions.length === 0) {
@@ -13489,6 +13490,9 @@ function PromptWorkspaceRoute({ model }) {
 	function updateRole(role) {
 		setSelectedRole(role);
 		setSelectedTaskId("");
+	}
+	async function refreshPromptWorkspaceHandoff() {
+		setHandoffRefreshToken((current) => current + 1);
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "prompt-workspace-route",
@@ -13591,7 +13595,13 @@ function PromptWorkspaceRoute({ model }) {
 					promptState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspacePromptPack, { promptPack: promptState.promptPack }) : null
 				]
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspaceHandoffBoardPanel, { handoffState })
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspaceHandoffBoardPanel, { handoffState }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspaceEventShortcuts, {
+				selectedGoalId,
+				selectedTaskId,
+				selectedRole,
+				onGoalEventConfirmed: refreshPromptWorkspaceHandoff
+			})
 		]
 	});
 }
@@ -13731,6 +13741,249 @@ function PromptWorkspaceHandoffBoardPanel({ handoffState }) {
 			] })
 		]
 	});
+}
+function PromptWorkspaceEventShortcuts({ selectedGoalId, selectedTaskId, selectedRole, onGoalEventConfirmed }) {
+	const forms = createPromptWorkspaceWorkerEventShortcutForms({
+		goalId: selectedGoalId,
+		taskId: selectedTaskId
+	});
+	const shortcutsReady = selectedRole === "worker" && forms.length > 0;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "data-panel prompt-workspace-event-shortcuts",
+		"aria-labelledby": "prompt-workspace-event-shortcuts-title",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "panel-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "goal update shortcuts"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+					id: "prompt-workspace-event-shortcuts-title",
+					children: "Worker Event Registration"
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "panel-state",
+					children: shortcutsReady ? "dry-run / confirm" : "等待 worker task"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["goalId", textValue(selectedGoalId)],
+				["taskId", textValue(selectedTaskId)],
+				["role", textValue(selectedRole)],
+				["supported events", textValue("worker.started、worker.evidence-recorded")],
+				["command surface", textValue("symphony goal update")],
+				["confirm required", textValue(true)]
+			] }),
+			selectedRole !== "worker" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前 role 不生成 worker.started 或 worker.evidence-recorded 登记表单。" }) : null,
+			selectedRole === "worker" && forms.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "选择 goal 和 task 后可生成 worker event 登记表单。" }) : null,
+			shortcutsReady ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				className: "goal-event-form-list prompt-event-shortcut-list",
+				children: forms.map((form) => {
+					const shortcutKey = promptWorkspaceWorkerEventShortcutKey({
+						goalId: selectedGoalId,
+						taskId: selectedTaskId,
+						eventType: form.eventType.value
+					});
+					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+							["formId", form.formId],
+							["eventType", form.eventType],
+							["commandName", form.commandName],
+							["actorRole", form.actorRole],
+							["phase", form.phase],
+							["requiresEvidence", form.requiresEvidence],
+							["confirmRequiresPlanHash", form.confirmRequiresPlanHash],
+							["planPreviewContract", form.planPreviewContract]
+						] }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormFieldList, { fields: form.fields }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventPlanPreview, {
+							form,
+							onGoalEventConfirmed
+						}, shortcutKey)
+					] }, shortcutKey);
+				})
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: "这些快捷入口只调用受控 goal update dry-run preview 和 plan-hash confirm；不会启动 subagent、运行 shell、登记 review/main/release 事件，或从文件名、分支、commit 文本推断任务状态。"
+			})
+		]
+	});
+}
+function promptWorkspaceWorkerEventShortcutKey({ goalId, taskId, eventType }) {
+	return [
+		goalId,
+		taskId,
+		eventType
+	].map((part) => String(part ?? "").trim()).join("::");
+}
+function createPromptWorkspaceWorkerEventShortcutForms({ goalId, taskId }) {
+	if (!isNonEmptyText(goalId) || !isNonEmptyText(taskId)) return [];
+	return [createPromptWorkspaceWorkerEventShortcutForm({
+		goalId,
+		taskId,
+		eventType: "worker.started",
+		formId: "prompt-workspace-worker-started",
+		requiresEvidence: false,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}), createPromptWorkspaceWorkerEventShortcutForm({
+		goalId,
+		taskId,
+		eventType: "worker.evidence-recorded",
+		formId: "prompt-workspace-worker-evidence-recorded",
+		requiresEvidence: true,
+		fields: [
+			"goalId",
+			"taskId",
+			"eventType",
+			"workerActor",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	})];
+}
+function createPromptWorkspaceWorkerEventShortcutForm({ goalId, taskId, eventType, formId, requiresEvidence, fields }) {
+	return {
+		formId: textValue(formId),
+		eventType: textValue(eventType),
+		eventFamily: textValue("worker"),
+		commandName: textValue("symphony goal update"),
+		commandIntent: textValue("prompt-workspace-worker-event-shortcut"),
+		actorRole: textValue("worker"),
+		actorFlag: textValue("--actor"),
+		phase: textValue("implement"),
+		recommended: textValue(true),
+		availableForCurrentNextAction: textValue(false),
+		requiresTask: textValue(true),
+		requiresEvidence: textValue(requiresEvidence),
+		confirmRequiresPlanHash: textValue(true),
+		planPreviewContract: textValue("goal-update-plan.v1"),
+		evidenceRefHelper: createEmptyPromptWorkspaceEvidenceRefHelper(),
+		fields: {
+			state: "available",
+			count: textValue(fields.length),
+			items: fields.map((fieldId) => createPromptWorkspaceWorkerEventField({
+				fieldId,
+				goalId,
+				taskId,
+				eventType,
+				requiresEvidence
+			}))
+		}
+	};
+}
+function createPromptWorkspaceWorkerEventField({ fieldId, goalId, taskId, eventType, requiresEvidence }) {
+	const common = {
+		id: fieldId,
+		label: fieldId,
+		flag: null,
+		required: false,
+		readOnly: false,
+		value: void 0,
+		placeholder: void 0,
+		source: "operator-input",
+		options: []
+	};
+	const field = (() => {
+		if (fieldId === "goalId") return {
+			...common,
+			label: "goal id",
+			flag: "--goal",
+			required: true,
+			readOnly: true,
+			value: goalId,
+			source: "prompt-workspace-selection"
+		};
+		if (fieldId === "taskId") return {
+			...common,
+			label: "task id",
+			flag: "--task",
+			required: true,
+			readOnly: true,
+			value: taskId,
+			source: "prompt-workspace-selection"
+		};
+		if (fieldId === "eventType") return {
+			...common,
+			label: "event",
+			flag: "--event",
+			required: true,
+			readOnly: true,
+			value: eventType,
+			source: "prompt-workspace-shortcut",
+			options: [eventType]
+		};
+		if (fieldId === "workerActor") return {
+			...common,
+			id: "actorId",
+			label: "worker actor id",
+			flag: "--actor",
+			required: true,
+			placeholder: "codex-worker-task-id"
+		};
+		if (fieldId === "evidenceRef") return {
+			...common,
+			label: "evidence ref",
+			flag: "--evidence-ref",
+			required: requiresEvidence,
+			placeholder: "docs/plans/<evidence>.md or artifact:run:kind"
+		};
+		if (fieldId === "statement") return {
+			...common,
+			label: "statement",
+			flag: "--statement",
+			placeholder: "short event statement"
+		};
+		if (fieldId === "branch") return {
+			...common,
+			label: "branch",
+			flag: "--branch",
+			placeholder: "current branch"
+		};
+		if (fieldId === "commit") return {
+			...common,
+			label: "commit",
+			flag: "--commit",
+			placeholder: "commit sha or null"
+		};
+		return common;
+	})();
+	return {
+		id: textValue(field.id),
+		label: textValue(field.label),
+		flag: textValue(field.flag),
+		inputType: textValue(field.options.length > 0 ? "select" : "text"),
+		required: textValue(field.required),
+		readOnly: textValue(field.readOnly),
+		value: textValue(field.value),
+		placeholder: textValue(field.placeholder),
+		source: textValue(field.source),
+		options: {
+			state: field.options.length === 0 ? "empty" : "available",
+			count: textValue(field.options.length),
+			items: field.options.map((option) => textValue(option))
+		}
+	};
+}
+function createEmptyPromptWorkspaceEvidenceRefHelper() {
+	return {
+		state: "empty",
+		recentRefs: {
+			state: "empty",
+			count: textValue(0),
+			items: []
+		},
+		note: "Prompt Workspace shortcut accepts typed controlled docs/plans refs or managed artifact refs."
+	};
 }
 function SubagentHandoffTaskList({ board }) {
 	if (board.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "goal-status tasks 未暴露。" });
@@ -15153,6 +15406,20 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 		result: null,
 		error: null
 	});
+	(0, import_react.useEffect)(() => {
+		setValues(initialGoalEventPreviewValues(form));
+		setPreviewState({
+			phase: "idle",
+			plan: null,
+			error: null,
+			values: null
+		});
+		setConfirmState({
+			phase: "idle",
+			result: null,
+			error: null
+		});
+	}, [goalEventFormIdentity(form)]);
 	const evidenceRefValidation = validateGoalEventEvidenceRefInput(form, values.evidenceRef);
 	const previewPath = buildGoalEventPreviewPath(form, values);
 	const missingRequired = missingRequiredGoalEventFields(form, values);
@@ -15394,6 +15661,13 @@ function EvidenceRefInput({ value, placeholder, readOnly, helper, validation, on
 }
 function initialGoalEventPreviewValues(form) {
 	return Object.fromEntries(form.fields.items.map((field) => [field.id.value, field.value.state === "available" ? String(field.value.value) : ""]));
+}
+function goalEventFormIdentity(form) {
+	return [
+		form.fields.items.find((field) => field.id.value === "goalId")?.value.value,
+		form.fields.items.find((field) => field.id.value === "taskId")?.value.value,
+		form.eventType.value
+	].map((part) => String(part ?? "").trim()).join("::");
 }
 function shouldRenderGoalEventPreviewInput(field) {
 	return [
@@ -15773,6 +16047,9 @@ function textValue(text) {
 		text: normalized,
 		value: text
 	};
+}
+function isNonEmptyText(value) {
+	return typeof value === "string" && value.trim() !== "";
 }
 function formatState(state) {
 	if (state === null || state === void 0) return "未暴露";

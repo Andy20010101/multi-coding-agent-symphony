@@ -166,6 +166,58 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(nextActionBody, /<GoalEventFormModelView[\s\S]*onGoalEventConfirmed=\{onGoalEventConfirmed\}/u);
   });
 
+  it('wires Prompt Workspace worker event shortcuts through the controlled goal update dry-run and confirm flow', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const shortcutInvocation = app.match(/<PromptWorkspaceEventShortcuts[\s\S]*?\/>/u)?.[0] ?? '';
+    const shortcutBody = app.slice(
+      app.indexOf('function PromptWorkspaceEventShortcuts'),
+      app.indexOf('function SubagentHandoffTaskList')
+    );
+
+    assert.match(shortcutInvocation, /selectedGoalId=\{selectedGoalId\}/u);
+    assert.match(shortcutInvocation, /selectedTaskId=\{selectedTaskId\}/u);
+    assert.match(shortcutInvocation, /selectedRole=\{selectedRole\}/u);
+    assert.match(shortcutInvocation, /onGoalEventConfirmed=\{refreshPromptWorkspaceHandoff\}/u);
+    assert.match(shortcutBody, /worker\.started/u);
+    assert.match(shortcutBody, /worker\.evidence-recorded/u);
+    assert.match(shortcutBody, /symphony goal update/u);
+    assert.match(shortcutBody, /<GoalEventPlanPreview[\s\S]*onGoalEventConfirmed=\{onGoalEventConfirmed\}/u);
+    assert.match(shortcutBody, /dry-run preview/u);
+    assert.match(shortcutBody, /plan-hash confirm/u);
+    assert.doesNotMatch(shortcutBody, /symphony goal review|symphony goal gate|release\.ready|reviewer\.approved|main\.verification-passed/u);
+    assert.doesNotMatch(shortcutBody, /child_process|exec\(|spawn\(|shell runner|window\.open|navigator\.clipboard/u);
+  });
+
+  it('remounts Prompt Workspace worker shortcut previews after task selection changes', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const shortcutBody = app.slice(
+      app.indexOf('function PromptWorkspaceEventShortcuts'),
+      app.indexOf('function createPromptWorkspaceWorkerEventShortcutForms')
+    );
+    const planPreviewBody = app.slice(
+      app.indexOf('function GoalEventPlanPreview'),
+      app.indexOf('function GoalEventPreviewInput')
+    );
+    const previewPathBody = app.slice(
+      app.indexOf('function buildGoalEventPreviewPath'),
+      app.indexOf('function buildGoalEventConfirmPath')
+    );
+    const confirmBody = app.slice(
+      app.indexOf('function buildGoalEventConfirmBody'),
+      app.indexOf('function assignBodyValue')
+    );
+
+    assert.match(shortcutBody, /promptWorkspaceWorkerEventShortcutKey\(\{[\s\S]*goalId:\s*selectedGoalId[\s\S]*taskId:\s*selectedTaskId[\s\S]*eventType:\s*form\.eventType\.value[\s\S]*\}\)/u);
+    assert.match(shortcutBody, /<li key=\{shortcutKey\}>/u);
+    assert.match(shortcutBody, /<GoalEventPlanPreview key=\{shortcutKey\} form=\{form\}/u);
+    assert.match(app, /function promptWorkspaceWorkerEventShortcutKey\(\{ goalId, taskId, eventType \}\)[\s\S]*join\('::'\)/u);
+    assert.match(planPreviewBody, /const formIdentity = goalEventFormIdentity\(form\)/u);
+    assert.match(planPreviewBody, /useEffect\(\(\) => \{[\s\S]*setValues\(initialGoalEventPreviewValues\(form\)\)[\s\S]*setPreviewState\(\{[\s\S]*phase:\s*'idle'[\s\S]*setConfirmState\(\{[\s\S]*phase:\s*'idle'[\s\S]*\}, \[formIdentity\]\)/u);
+    assert.match(app, /function goalEventFormIdentity\(form\)[\s\S]*field\.id\.value === 'goalId'[\s\S]*field\.id\.value === 'taskId'[\s\S]*form\.eventType\.value[\s\S]*join\('::'\)/u);
+    assert.match(previewPathBody, /appendSearchParam\(searchParams,\s*'task',\s*values\.taskId\)/u);
+    assert.match(confirmBody, /assignBodyValue\(body,\s*'task',\s*values\.taskId\)/u);
+  });
+
   it('keeps frontend API paths limited to the approved read-only endpoints', async () => {
     const sources = await Promise.all(
       frontendFiles.map((file) => readFile(file, 'utf8'))
