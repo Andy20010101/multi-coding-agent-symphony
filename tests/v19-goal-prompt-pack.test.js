@@ -190,7 +190,12 @@ describe('v19 goal prompt pack generator and CLI', () => {
           evidenceFile: 'docs/plans/v22-task-2-review-evidence-2026-05-29.md',
           label: 'independent reviewer',
           phase: 'review',
-          text: [/independent reviewer/u, /Verdict: APPROVED or NEEDS_REVISION/u]
+          text: [
+            /independent reviewer/u,
+            /如果你参与过本 task 的 worker implementation，先停止并说明，不能 self-review/u,
+            /不复述 worker 总结当作结论/u,
+            /Verdict: APPROVED or NEEDS_REVISION/u
+          ]
         },
         {
           taskId: 'task-2',

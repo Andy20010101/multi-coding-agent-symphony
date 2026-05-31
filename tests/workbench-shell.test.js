@@ -150,6 +150,20 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(source, /symphony goal (update|review|gate) --goal/u);
   });
 
+  it('renders Prompt Workspace prompt text as manual copy-only handoff content', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const promptPackBody = app.slice(
+      app.indexOf('function PromptWorkspacePromptPack'),
+      app.indexOf('function PromptRoleGuidance')
+    );
+
+    assert.match(promptPackBody, /<pre className="prompt-preview-text"><code>\{prompt\?\.text \?\? ''\}<\/code><\/pre>/u);
+    assert.match(promptPackBody, /Prompt Workspace 只展示 goal prompt 生成的 copy-only prompt pack/u);
+    assert.match(promptPackBody, /不会启动 subagent、运行 shell、登记 approval 或判断任务完成/u);
+    assert.doesNotMatch(promptPackBody, /navigator\.clipboard|document\.execCommand|window\.open|copyCommand|handleCopy/u);
+    assert.doesNotMatch(promptPackBody, /symphony goal review|symphony goal gate|release\.ready/u);
+  });
+
   it('wires successful goal event confirms to refresh Workbench contracts through the next action card', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const nextActionInvocation = app.match(/<NextActionCard[\s\S]*?\/>/u)?.[0] ?? '';

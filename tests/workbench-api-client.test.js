@@ -13,6 +13,7 @@ import {
 import {
   READONLY_API_ROUTES,
   confirmGoalEventPlan,
+  fetchGoalEventPlanPreview,
   fetchPromptWorkspaceHandoffBoard,
   fetchPromptWorkspacePromptPack,
   fetchPromptWorkspaceRunbook,
@@ -172,6 +173,45 @@ describe('v15 Workbench read-only API client', () => {
     );
   });
 
+  it('gets controlled goal event dry-run previews before confirm requests write event state', async () => {
+    const calls = [];
+    const result = await fetchGoalEventPlanPreview('/api/goals/latest/event-plan-preview?command=update&task=task-3&event=worker.evidence-recorded&actor=codex-v22-task-3-worker&evidenceRef=docs/plans/v22-task-3-worker-evidence-2026-05-29.md', {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'goal-update-plan.v1',
+              contractVersion: 1,
+              planHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+              command: 'goal update',
+              writesInDryRun: false
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.writesInDryRun, false);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      Object.hasOwn(init, 'body')
+    ]), [[
+      '/api/goals/latest/event-plan-preview?command=update&task=task-3&event=worker.evidence-recorded&actor=codex-v22-task-3-worker&evidenceRef=docs/plans/v22-task-3-worker-evidence-2026-05-29.md',
+      'GET',
+      'no-store',
+      'application/json',
+      false
+    ]]);
+  });
+
   it('posts controlled goal event confirm requests with a JSON body and validates the confirmation contract', async () => {
     const calls = [];
     const result = await confirmGoalEventPlan('/api/goals/latest/event-plan-confirm', {
@@ -281,6 +321,42 @@ describe('v15 Workbench read-only API client', () => {
         false
       ]
     ]);
+  });
+
+  it('keeps unsupported Prompt Workspace goal state local and read-only', async () => {
+    const calls = [];
+    const fetchImpl = async (path, init) => {
+      calls.push([path, init]);
+
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {};
+        }
+      };
+    };
+
+    const runbookResult = await fetchPromptWorkspaceRunbook('../unsafe-goal', { fetchImpl });
+    const promptResult = await fetchPromptWorkspacePromptPack({
+      goalId: 'v22-goal-prompt-handoff-workspace',
+      taskId: 'task/5',
+      role: 'worker'
+    }, { fetchImpl });
+    const handoffResult = await fetchPromptWorkspaceHandoffBoard('unsupported goal', { fetchImpl });
+
+    assert.equal(runbookResult.ok, false);
+    assert.equal(runbookResult.readonly, true);
+    assert.equal(promptResult.ok, false);
+    assert.equal(promptResult.readonly, true);
+    assert.equal(handoffResult.ok, false);
+    assert.equal(handoffResult.board.state, 'missing');
+    assert.equal(handoffResult.board.sourcePolicy.value, 'goal-event-log.v1 + goal-progress-ledger.v1 + goal-next-action.v1 + goal-closeout-report.v1');
+    assert.equal(handoffResult.board.routeStates.goalStatus.value, 'unavailable');
+    assert.equal(handoffResult.board.routeStates.eventLog.value, 'unavailable');
+    assert.equal(handoffResult.board.routeStates.goalNext.value, 'unavailable');
+    assert.equal(handoffResult.board.routeStates.goalCloseout.value, 'unavailable');
+    assert.deepEqual(calls, []);
   });
 
   it('fetches the Prompt Workspace subagent handoff board from controlled goal source routes', async () => {
