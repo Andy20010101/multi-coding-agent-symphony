@@ -1091,6 +1091,105 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(mainForms.safety.browserExecutionAvailable.value, false);
   });
 
+  it('projects main verification readiness from explicit reviewer approval, git readiness, runbook commands, and evidence path', () => {
+    const runbook = createV19RunbookPayload();
+    const ledger = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+    const nextAction = createV19NextActionPayload();
+    const closeout = createV19CloseoutPayload();
+    const reviewEvidenceRef = 'docs/plans/v19-task6-review-evidence-2026-05-29.md';
+
+    ledger.tasks[0] = {
+      ...ledger.tasks[0],
+      status: 'approved',
+      statusSource: 'goal-event-log.v1:evt_task6_review_approved',
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      reviewEvidenceRef,
+      reviewVerdict: 'APPROVED'
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_review_approved',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'reviewer.approved',
+      phase: 'review',
+      actor: {
+        role: 'reviewer',
+        id: 'codex-reviewer-task-6'
+      },
+      recordedAt: '2026-05-29T10:10:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: reviewEvidenceRef,
+        label: 'review evidence'
+      }]
+    }];
+    nextAction.next = {
+      taskId: 'task-6',
+      role: 'main-verifier',
+      phase: 'main-verification',
+      reason: 'Reviewer approved task-6 but main verification is missing.',
+      blocked: false
+    };
+    nextAction.afterCompletion = {
+      registerWith: 'symphony goal gate --gate main-verification',
+      allowedEvents: ['main.verification-passed', 'main.verification-failed']
+    };
+
+    const model = projectWorkbenchContracts({
+      readiness: createWorkbenchResult('readiness', createReadinessPayload({
+        branch: 'v19-task6-workbench-active-goal',
+        dirty: false,
+        dirtyPaths: []
+      })),
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      goalCloseout: createWorkbenchResult('goalCloseout', closeout),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog)
+    });
+    const readiness = model.activeGoal.mainVerificationReadiness;
+
+    assert.equal(readiness.state, 'ready');
+    assert.equal(readiness.readiness.canEnterMainVerification.value, true);
+    assert.equal(readiness.reviewerApproval.status.value, 'approved');
+    assert.equal(readiness.reviewerApproval.eventType.value, 'reviewer.approved');
+    assert.equal(readiness.reviewerApproval.evidenceRef.value, reviewEvidenceRef);
+    assert.equal(readiness.reviewerApproval.source.value, 'goal-event-log.v1');
+    assert.equal(readiness.branchState.state.value, 'on-task-branch');
+    assert.equal(readiness.branchState.currentBranch.value, 'v19-task6-workbench-active-goal');
+    assert.equal(readiness.ffOnlyMerge.commands.items.map((item) => item.value).includes('git merge --ff-only v19-task6-workbench-active-goal'), true);
+    assert.equal(readiness.verificationCommands.items.map((item) => item.value).includes('pnpm workbench:build'), true);
+    assert.equal(readiness.evidence.path.value, 'docs/plans/v19-task6-main-verification-evidence-2026-05-29.md');
+    assert.match(readiness.evidence.gateCommand.value, /symphony goal gate --goal v19-goal-runbook-next-action --task task-6 --gate main-verification/u);
+    assert.equal(readiness.safety.browserExecutionAvailable.value, false);
+
+    const heuristicRunbook = createV19RunbookPayload();
+    heuristicRunbook.tasks[0] = {
+      ...heuristicRunbook.tasks[0],
+      title: 'reviewer.approved in title is display text',
+      branch: 'reviewer-approved-looking-branch',
+      copyOnlyCommands: ['symphony goal review --verdict approved']
+    };
+    const heuristicModel = projectWorkbenchContracts({
+      readiness: createWorkbenchResult('readiness', createReadinessPayload({
+        branch: 'reviewer-approved-looking-branch',
+        dirty: false,
+        dirtyPaths: []
+      })),
+      goalRunbook: createWorkbenchResult('goalRunbook', heuristicRunbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', createV19NextActionPayload()),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', createV19ProgressPayload()),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', createV19EventsPayload())
+    }).activeGoal.mainVerificationReadiness;
+
+    assert.equal(heuristicModel.state, 'waiting');
+    assert.equal(heuristicModel.readiness.canEnterMainVerification.value, false);
+    assert.equal(heuristicModel.reviewerApproval.status.value, 'missing');
+    assert.equal(heuristicModel.safety.unsupportedInferenceSources.value, 'file-name、branch、commit-message、frontend-heuristic');
+  });
+
   it('projects recent controlled evidence refs for the event form helper without status inference', () => {
     const runbook = createV19RunbookPayload();
     const nextAction = createV19NextActionPayload();
@@ -1698,6 +1797,39 @@ function createWorkbenchResult(routeId, data) {
     routeDescriptor: route,
     httpStatus: 200,
     data
+  };
+}
+
+function createReadinessPayload({
+  branch = 'main',
+  dirty = false,
+  dirtyPaths = []
+} = {}) {
+  return {
+    contractName: 'symphony.console-readiness',
+    contractVersion: '1',
+    status: dirty ? 'attention' : 'ready',
+    readOnly: true,
+    modelInvocation: false,
+    tools: {
+      git: {
+        status: 'available',
+        branch,
+        head: 'abc1234',
+        dirty,
+        dirtyFilesCount: dirtyPaths.length,
+        dirtyPaths
+      },
+      packageManager: {
+        status: 'available'
+      }
+    },
+    checks: [],
+    riskSummary: {
+      status: dirty ? 'attention' : 'ok',
+      total: 0,
+      items: []
+    }
   };
 }
 

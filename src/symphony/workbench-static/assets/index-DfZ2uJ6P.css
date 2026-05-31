@@ -29,6 +29,7 @@ body {
 
 .workbench-header,
 .primary-active-goal-grid,
+.main-verification-readiness-grid,
 .panel-grid,
 .detail-grid,
 .handoff-grid,
@@ -120,6 +121,7 @@ h3 {
 
 .panel-grid,
 .primary-active-goal-grid,
+.main-verification-readiness-grid,
 .detail-grid,
 .handoff-grid,
 .goal-grid,
@@ -137,6 +139,11 @@ h3 {
 
 .primary-active-goal-grid {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
+}
+
+.main-verification-readiness-grid {
+  grid-template-columns: 1fr;
+  margin-top: 16px;
 }
 
 .support-grid {
@@ -708,6 +715,7 @@ h3 {
 @media (max-width: 920px) {
   .workbench-header,
   .primary-active-goal-grid,
+  .main-verification-readiness-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,
@@ -735,6 +743,7 @@ h3 {
 @media (max-width: 640px) {
   .workbench-header,
   .primary-active-goal-grid,
+  .main-verification-readiness-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,

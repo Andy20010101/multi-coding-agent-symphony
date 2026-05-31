@@ -60,6 +60,7 @@ describe('v15 Workbench React/Vite shell', () => {
       'ActiveGoalTaskQueuePanel',
       'NextActionCard',
       'PromptPreviewDrawer',
+      'MainVerificationReadinessPanel',
       'PromptRoleGuidance',
       'CloseoutGapsPanel',
       'GoalEventsTimelinePanel',
@@ -93,6 +94,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /Active Goal Task Queue/u);
     assert.match(app, /v20 primary workflow/u);
     assert.match(app, /Next Action Card/u);
+    assert.match(app, /Main Verification Readiness/u);
     assert.match(app, /afterCompletion\.registrationCommand/u);
     assert.match(app, /Prompt Preview Drawer/u);
     assert.match(app, /copy-only prompt drawer/u);
@@ -136,12 +138,14 @@ describe('v15 Workbench React/Vite shell', () => {
   });
 
   it('keeps the next action card and prompt drawer display-only', async () => {
-    const sources = await Promise.all(
-      frontendFiles.map((file) => readFile(file, 'utf8'))
-    );
-    const source = sources.join('\n');
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const source = [
+      app.slice(app.indexOf('function NextActionCard'), app.indexOf('function PromptPreviewDrawer')),
+      app.slice(app.indexOf('function PromptPreviewDrawer'), app.indexOf('function CloseoutGapsPanel'))
+    ].join('\n');
 
-    assert.match(source, /goal-next-action\.v1/u);
+    assert.match(contracts, /goal-next-action\.v1/u);
     assert.match(source, /afterCompletion\.registrationCommand/u);
     assert.match(source, /Prompt Preview Drawer/u);
     assert.match(source, /copy-only prompt drawer/u);
@@ -178,6 +182,26 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(nextActionSignature, /onGoalEventConfirmed/u);
     assert.doesNotMatch(viewModelSignature, /onGoalEventConfirmed/u);
     assert.match(nextActionBody, /<GoalEventFormModelView[\s\S]*onGoalEventConfirmed=\{onGoalEventConfirmed\}/u);
+  });
+
+  it('wires the v24 main verification readiness panel as copy-only display', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const panelBody = app.slice(
+      app.indexOf('function MainVerificationReadinessPanel'),
+      app.indexOf('function ActiveGoalRunbookPanel')
+    );
+
+    assert.match(app, /<MainVerificationReadinessPanel readiness=\{model\.activeGoal\.mainVerificationReadiness\}/u);
+    assert.match(panelBody, /reviewer\.approved/u);
+    assert.match(panelBody, /branch \/ main state/u);
+    assert.match(panelBody, /ff-only merge guidance/u);
+    assert.match(panelBody, /required verification commands/u);
+    assert.match(panelBody, /evidence path/u);
+    assert.match(contracts, /projectMainVerificationReadiness/u);
+    assert.match(contracts, /git merge --ff-only/u);
+    assert.match(contracts, /main-verification-evidence-2026-05-29/u);
+    assert.doesNotMatch(panelBody, /fetchGoalEventPlanPreview|confirmGoalEventPlan|window\.open|navigator\.clipboard/u);
   });
 
   it('wires Prompt Workspace worker event shortcuts through the controlled goal update dry-run and confirm flow', async () => {

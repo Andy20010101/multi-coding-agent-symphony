@@ -532,6 +532,7 @@ export function projectWorkbenchContracts(results) {
     activeGoal: projectActiveGoalControl({
       statusResult: results.goalProgress,
       status: goalProgressData,
+      readiness: readinessData,
       runbookResult: results.goalRunbook,
       runbook: goalRunbookData,
       nextActionResult: results.goalNextAction,
@@ -839,6 +840,7 @@ function projectGoals(goals) {
 function projectActiveGoalControl({
   statusResult,
   status,
+  readiness,
   runbookResult,
   runbook,
   nextActionResult,
@@ -884,6 +886,14 @@ function projectActiveGoalControl({
       eventLog,
       nextAction
     }),
+    mainVerificationReadiness: projectMainVerificationReadiness({
+      runbook,
+      ledger: goalStatusLedger,
+      eventLog,
+      nextAction,
+      closeout,
+      readiness
+    }),
     subagentHandoffBoard: projectSubagentHandoffBoard({
       progressResult: ledger === null ? statusResult : activeLedgerResult,
       progress: goalStatusLedger,
@@ -912,6 +922,248 @@ function projectActiveGoalControl({
       closeout
     })
   };
+}
+
+function projectMainVerificationReadiness({
+  runbook,
+  ledger,
+  eventLog,
+  nextAction,
+  closeout,
+  readiness
+}) {
+  const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : [];
+  const ledgerTasks = new Map(
+    (Array.isArray(ledger?.tasks) ? ledger.tasks : [])
+      .map((task) => [task.taskId, task])
+  );
+  const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+  const targetTask = selectMainVerificationReadinessTask({
+    runbookTasks,
+    ledgerTasks,
+    nextAction
+  });
+  const taskId = targetTask?.taskId;
+  const ledgerTask = isNonEmptyString(taskId) ? ledgerTasks.get(taskId) ?? null : null;
+  const taskEvents = events.filter((event) => event?.taskId === taskId);
+  const reviewEvent = latestEventOfTypes(taskEvents, ['reviewer.approved', 'reviewer.needs-revision']);
+  const mainVerificationEvent = latestEventOfTypes(taskEvents, ['main.verification-passed', 'main.verification-failed']);
+  const reviewerApproval = projectReviewerApprovalReadiness({
+    reviewEvent,
+    ledgerTask
+  });
+  const branchState = projectMainVerificationBranchState({
+    readiness,
+    targetBranch: targetTask?.branch
+  });
+  const evidencePath = evidenceFileForMainVerification({
+    goalId: runbook?.goalId,
+    taskId
+  });
+  const requiredCommands = Array.isArray(targetTask?.copyOnlyCommands)
+    ? targetTask.copyOnlyCommands
+    : [];
+  const missingCloseoutKinds = Array.isArray(closeout?.missing)
+    ? closeout.missing
+      .filter((item) => item?.taskId === taskId)
+      .map((item) => item?.kind)
+      .filter((kind) => isNonEmptyString(kind))
+    : [];
+  const canEnter = reviewerApproval.approved.value === true && mainVerificationEvent?.eventType !== 'main.verification-passed';
+  const state = runbookTasks.length === 0
+    ? 'missing'
+    : canEnter
+      ? 'ready'
+      : reviewerApproval.status.value === 'needs-revision'
+        ? 'blocked'
+        : 'waiting';
+
+  return {
+    state,
+    sourcePolicy: valueState('goal-runbook.v1 + goal-progress-ledger.v1 + goal-event-log.v1 + goal-next-action.v1 + goal-closeout-report.v1 + symphony.console-readiness'),
+    goalId: valueState(runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId),
+    taskId: valueState(taskId),
+    title: valueState(targetTask?.title),
+    readiness: {
+      canEnterMainVerification: valueState(canEnter),
+      reason: valueState(mainVerificationReadinessReason({
+        targetTask,
+        reviewerApproval,
+        mainVerificationEvent,
+        missingCloseoutKinds
+      })),
+      currentNextRole: valueState(nextAction?.next?.role),
+      currentNextPhase: valueState(nextAction?.next?.phase),
+      closeoutMissingKinds: arrayTextState(missingCloseoutKinds)
+    },
+    reviewerApproval,
+    branchState,
+    ffOnlyMerge: {
+      guidance: valueState('Use ff-only on main after explicit reviewer.approved is present; branch text is guidance, not approval evidence.'),
+      commands: projectTextItems(ffOnlyMergeCommands(targetTask?.branch))
+    },
+    verificationCommands: projectTextItems(requiredCommands),
+    evidence: {
+      path: valueState(evidencePath),
+      expectedEvent: valueState(targetTask?.expectedEvidence?.mainVerifier),
+      existingMainVerificationRef: valueState(ledgerTask?.mainVerificationRef ?? firstGoalEvidenceRef(mainVerificationEvent)),
+      gateCommand: valueState(isNonEmptyString(evidencePath) && isNonEmptyString(runbook?.goalId) && isNonEmptyString(taskId)
+        ? `pnpm --silent symphony goal gate --goal ${runbook.goalId} --task ${taskId} --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref ${evidencePath} --dry-run --json`
+        : undefined)
+    },
+    safety: {
+      readOnly: valueState(true),
+      copyOnly: valueState(true),
+      browserExecutionAvailable: valueState(false),
+      modelInvocationAvailable: valueState(false),
+      approvalReadinessSource: valueState('explicit reviewer.approved event or event-backed goal-status ledger'),
+      unsupportedInferenceSources: valueState('file-name、branch、commit-message、frontend-heuristic')
+    },
+    note: 'Main Verification Readiness 只展示是否可以进入 main verification；它不执行 merge、验证命令、evidence 写入或 goal gate 登记，也不从 branch、文件名或 command text 推断 approval。'
+  };
+}
+
+function selectMainVerificationReadinessTask({ runbookTasks, ledgerTasks, nextAction }) {
+  const nextTaskId = nextAction?.next?.taskId;
+  const nextRole = nextAction?.next?.role;
+  const nextPhase = nextAction?.next?.phase;
+
+  if ((nextRole === 'main-verifier' || nextPhase === 'main-verification') && isNonEmptyString(nextTaskId)) {
+    return runbookTasks.find((task) => task?.taskId === nextTaskId) ?? null;
+  }
+
+  const approvedTask = runbookTasks.find((task) => {
+    const ledgerTask = ledgerTasks.get(task?.taskId);
+
+    return normalizedReviewVerdict(ledgerTask?.reviewVerdict) === 'approved' &&
+      !isNonEmptyString(ledgerTask?.mainVerificationRef);
+  });
+
+  if (approvedTask !== undefined) {
+    return approvedTask;
+  }
+
+  if (isNonEmptyString(nextTaskId)) {
+    return runbookTasks.find((task) => task?.taskId === nextTaskId) ?? null;
+  }
+
+  return runbookTasks[0] ?? null;
+}
+
+function projectReviewerApprovalReadiness({ reviewEvent, ledgerTask }) {
+  const eventVerdict = reviewEvent?.eventType === 'reviewer.approved'
+    ? 'approved'
+    : reviewEvent?.eventType === 'reviewer.needs-revision'
+      ? 'needs-revision'
+      : undefined;
+  const ledgerVerdict = normalizedReviewVerdict(ledgerTask?.reviewVerdict);
+  const status = eventVerdict ?? ledgerVerdict ?? 'missing';
+  const source = eventVerdict !== undefined
+    ? GOAL_EVENT_LOG_CONTRACT_NAME
+    : ledgerVerdict !== undefined
+      ? GOAL_PROGRESS_LEDGER_CONTRACT_NAME
+      : GOAL_EVENT_LOG_CONTRACT_NAME;
+
+  return {
+    status: valueState(status),
+    approved: valueState(status === 'approved'),
+    eventType: valueState(reviewEvent?.eventType ?? (status === 'approved' ? 'reviewer.approved' : undefined)),
+    evidenceRef: valueState(ledgerTask?.reviewEvidenceRef ?? firstGoalEvidenceRef(reviewEvent)),
+    eventId: valueState(reviewEvent?.eventId),
+    actor: valueState(goalEventActorText(reviewEvent?.actor)),
+    recordedAt: valueState(reviewEvent?.recordedAt),
+    source: valueState(source)
+  };
+}
+
+function projectMainVerificationBranchState({ readiness, targetBranch }) {
+  const git = readiness?.tools?.git;
+  const currentBranch = git?.branch;
+  const dirty = git?.dirty;
+  const branchState = !isNonEmptyString(currentBranch)
+    ? 'missing'
+    : currentBranch === targetBranch
+      ? 'on-task-branch'
+      : currentBranch === 'main'
+        ? 'on-main'
+        : 'on-other-branch';
+
+  return {
+    state: valueState(branchState),
+    currentBranch: valueState(currentBranch),
+    currentHead: valueState(git?.head),
+    taskBranch: valueState(targetBranch),
+    mainBranch: valueState('main'),
+    gitStatus: valueState(git?.status),
+    worktreeDirty: valueState(dirty),
+    dirtyFilesCount: valueState(git?.dirtyFilesCount),
+    dirtyPaths: projectTextItems(git?.dirtyPaths),
+    ffOnlyAvailableAfterCheckoutMain: valueState(isNonEmptyString(targetBranch)),
+    source: valueState('symphony.console-readiness')
+  };
+}
+
+function normalizedReviewVerdict(value) {
+  if (value === 'APPROVED' || value === 'approved') {
+    return 'approved';
+  }
+
+  if (value === 'NEEDS_REVISION' || value === 'needs-revision') {
+    return 'needs-revision';
+  }
+
+  return undefined;
+}
+
+function mainVerificationReadinessReason({
+  targetTask,
+  reviewerApproval,
+  mainVerificationEvent,
+  missingCloseoutKinds
+}) {
+  if (targetTask === null || targetTask === undefined) {
+    return 'No runbook task is available for main verification readiness.';
+  }
+
+  if (mainVerificationEvent?.eventType === 'main.verification-passed') {
+    return `${targetTask.taskId} already has main.verification-passed.`;
+  }
+
+  if (reviewerApproval.status.value === 'approved') {
+    return `${targetTask.taskId} has reviewer.approved; main verification can start after the ff-only main merge check.`;
+  }
+
+  if (reviewerApproval.status.value === 'needs-revision') {
+    return `${targetTask.taskId} has reviewer.needs-revision; main verification must wait.`;
+  }
+
+  if (missingCloseoutKinds.includes('review-evidence')) {
+    return `${targetTask.taskId} is missing review evidence in goal closeout.`;
+  }
+
+  return `${targetTask.taskId} is waiting for explicit reviewer.approved evidence.`;
+}
+
+function ffOnlyMergeCommands(targetBranch) {
+  const branch = isNonEmptyString(targetBranch) ? targetBranch : '<task-branch>';
+
+  return [
+    'git checkout main',
+    'git pull --ff-only',
+    `git merge --ff-only ${branch}`
+  ];
+}
+
+function evidenceFileForMainVerification({ goalId, taskId }) {
+  if (!isNonEmptyString(goalId) || !isNonEmptyString(taskId)) {
+    return undefined;
+  }
+
+  const goalMatch = goalId.match(/^(v\d+)(?:-|$)/u);
+  const goalSegment = goalMatch?.[1] ?? goalId;
+  const taskSegment = goalSegment === 'v19' ? taskId.replaceAll('-', '') : taskId;
+
+  return `docs/plans/${goalSegment}-${taskSegment}-main-verification-evidence-2026-05-29.md`;
 }
 
 function projectActiveGoalViewModel({

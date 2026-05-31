@@ -111,6 +111,10 @@ export default function App() {
             />
           </section>
 
+          <section className="main-verification-readiness-grid" aria-label="v24 main verification readiness">
+            <MainVerificationReadinessPanel readiness={model.activeGoal.mainVerificationReadiness} />
+          </section>
+
           <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
             <NextActionCard
               nextAction={model.activeGoal.nextAction}
@@ -1174,6 +1178,92 @@ function ActiveGoalViewModelPanel({ viewModel }) {
       </Subsection>
 
       <p className="panel-note">{viewModel.note}</p>
+    </DataPanel>
+  );
+}
+
+function MainVerificationReadinessPanel({ readiness }) {
+  return (
+    <DataPanel
+      id="main-verification-readiness-panel"
+      kicker="v24 main verification"
+      title="Main Verification Readiness"
+      state={readiness.state}
+      route={null}
+    >
+      <FieldList rows={[
+        ['goalId', readiness.goalId],
+        ['taskId', readiness.taskId],
+        ['title', readiness.title],
+        ['canEnterMainVerification', readiness.readiness.canEnterMainVerification],
+        ['reason', readiness.readiness.reason],
+        ['currentNext.role', readiness.readiness.currentNextRole],
+        ['currentNext.phase', readiness.readiness.currentNextPhase],
+        ['closeout missing', readiness.readiness.closeoutMissingKinds],
+        ['source policy', readiness.sourcePolicy]
+      ]} />
+
+      <Subsection title="reviewer.approved">
+        <FieldList rows={[
+          ['status', readiness.reviewerApproval.status],
+          ['approved', readiness.reviewerApproval.approved],
+          ['eventType', readiness.reviewerApproval.eventType],
+          ['evidenceRef', readiness.reviewerApproval.evidenceRef],
+          ['eventId', readiness.reviewerApproval.eventId],
+          ['actor', readiness.reviewerApproval.actor],
+          ['recordedAt', readiness.reviewerApproval.recordedAt],
+          ['source', readiness.reviewerApproval.source]
+        ]} />
+      </Subsection>
+
+      <Subsection title="branch / main state">
+        <FieldList rows={[
+          ['state', readiness.branchState.state],
+          ['currentBranch', readiness.branchState.currentBranch],
+          ['currentHead', readiness.branchState.currentHead],
+          ['taskBranch', readiness.branchState.taskBranch],
+          ['mainBranch', readiness.branchState.mainBranch],
+          ['git.status', readiness.branchState.gitStatus],
+          ['worktreeDirty', readiness.branchState.worktreeDirty],
+          ['dirtyFilesCount', readiness.branchState.dirtyFilesCount],
+          ['ffOnlyAvailableAfterCheckoutMain', readiness.branchState.ffOnlyAvailableAfterCheckoutMain],
+          ['source', readiness.branchState.source]
+        ]} />
+        <TextItemList items={readiness.branchState.dirtyPaths} emptyCopy="dirty paths 为空或未暴露。" />
+      </Subsection>
+
+      <Subsection title="ff-only merge guidance">
+        <FieldList rows={[
+          ['guidance', readiness.ffOnlyMerge.guidance]
+        ]} />
+        <TextItemList items={readiness.ffOnlyMerge.commands} emptyCopy="ff-only merge commands 未暴露。" />
+      </Subsection>
+
+      <Subsection title="required verification commands">
+        <TextItemList items={readiness.verificationCommands} emptyCopy="required verification commands 未暴露。" />
+      </Subsection>
+
+      <Subsection title="evidence path">
+        <FieldList rows={[
+          ['path', readiness.evidence.path],
+          ['expectedEvent', readiness.evidence.expectedEvent],
+          ['existingMainVerificationRef', readiness.evidence.existingMainVerificationRef],
+          ['copy-only gate dry-run', readiness.evidence.gateCommand]
+        ]} />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', readiness.safety.readOnly],
+          ['copyOnly', readiness.safety.copyOnly],
+          ['browserExecutionAvailable', readiness.safety.browserExecutionAvailable],
+          ['modelInvocationAvailable', readiness.safety.modelInvocationAvailable],
+          ['approvalReadinessSource', readiness.safety.approvalReadinessSource],
+          ['unsupportedInferenceSources', readiness.safety.unsupportedInferenceSources]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{readiness.note}</p>
     </DataPanel>
   );
 }

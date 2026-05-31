@@ -21,7 +21,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 	enumerable: true
 }) : target, mod));
 //#endregion
-//#region node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react.production.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react.production.js
 /**
 * @license React
 * react.production.js
@@ -381,12 +381,12 @@ var require_react_production = /* @__PURE__ */ __commonJSMin(((exports) => {
 	exports.version = "19.2.6";
 }));
 //#endregion
-//#region node_modules/.pnpm/react@19.2.6/node_modules/react/index.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/react@19.2.6/node_modules/react/index.js
 var require_react = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_production();
 }));
 //#endregion
-//#region node_modules/.pnpm/scheduler@0.27.0/node_modules/scheduler/cjs/scheduler.production.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/scheduler@0.27.0/node_modules/scheduler/cjs/scheduler.production.js
 /**
 * @license React
 * scheduler.production.js
@@ -627,12 +627,12 @@ var require_scheduler_production = /* @__PURE__ */ __commonJSMin(((exports) => {
 	};
 }));
 //#endregion
-//#region node_modules/.pnpm/scheduler@0.27.0/node_modules/scheduler/index.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/scheduler@0.27.0/node_modules/scheduler/index.js
 var require_scheduler = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_scheduler_production();
 }));
 //#endregion
-//#region node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/cjs/react-dom.production.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/cjs/react-dom.production.js
 /**
 * @license React
 * react-dom.production.js
@@ -773,7 +773,7 @@ var require_react_dom_production = /* @__PURE__ */ __commonJSMin(((exports) => {
 	exports.version = "19.2.6";
 }));
 //#endregion
-//#region node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/index.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/index.js
 var require_react_dom = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function checkDCE() {
 		if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") return;
@@ -787,7 +787,7 @@ var require_react_dom = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_dom_production();
 }));
 //#endregion
-//#region node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/cjs/react-dom-client.production.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/cjs/react-dom-client.production.js
 /**
 * @license React
 * react-dom-client.production.js
@@ -9867,7 +9867,7 @@ var require_react_dom_client_production = /* @__PURE__ */ __commonJSMin(((export
 	};
 }));
 //#endregion
-//#region node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/client.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/react-dom@19.2.6_react@19.2.6/node_modules/react-dom/client.js
 var require_client = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	function checkDCE() {
 		if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") return;
@@ -10473,6 +10473,7 @@ function projectWorkbenchContracts(results) {
 		activeGoal: projectActiveGoalControl({
 			statusResult: results.goalProgress,
 			status: goalProgressData,
+			readiness: readinessData,
 			runbookResult: results.goalRunbook,
 			runbook: goalRunbookData,
 			nextActionResult: results.goalNextAction,
@@ -10723,7 +10724,7 @@ function projectGoals(goals) {
 		}))
 	};
 }
-function projectActiveGoalControl({ statusResult, status, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog, latestRun }) {
+function projectActiveGoalControl({ statusResult, status, readiness, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog, latestRun }) {
 	const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
 	const eventLog = activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null;
 	const goalStatusLedger = ledger ?? (status?.goalId === runbook?.goalId ? status : null);
@@ -10754,6 +10755,14 @@ function projectActiveGoalControl({ statusResult, status, runbookResult, runbook
 			eventLog,
 			nextAction
 		}),
+		mainVerificationReadiness: projectMainVerificationReadiness({
+			runbook,
+			ledger: goalStatusLedger,
+			eventLog,
+			nextAction,
+			closeout,
+			readiness
+		}),
 		subagentHandoffBoard: projectSubagentHandoffBoard({
 			progressResult: ledger === null ? statusResult : activeLedgerResult,
 			progress: goalStatusLedger,
@@ -10782,6 +10791,148 @@ function projectActiveGoalControl({ statusResult, status, runbookResult, runbook
 			closeout
 		})
 	};
+}
+function projectMainVerificationReadiness({ runbook, ledger, eventLog, nextAction, closeout, readiness }) {
+	const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : [];
+	const ledgerTasks = new Map((Array.isArray(ledger?.tasks) ? ledger.tasks : []).map((task) => [task.taskId, task]));
+	const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+	const targetTask = selectMainVerificationReadinessTask({
+		runbookTasks,
+		ledgerTasks,
+		nextAction
+	});
+	const taskId = targetTask?.taskId;
+	const ledgerTask = isNonEmptyString(taskId) ? ledgerTasks.get(taskId) ?? null : null;
+	const taskEvents = events.filter((event) => event?.taskId === taskId);
+	const reviewEvent = latestEventOfTypes(taskEvents, ["reviewer.approved", "reviewer.needs-revision"]);
+	const mainVerificationEvent = latestEventOfTypes(taskEvents, ["main.verification-passed", "main.verification-failed"]);
+	const reviewerApproval = projectReviewerApprovalReadiness({
+		reviewEvent,
+		ledgerTask
+	});
+	const branchState = projectMainVerificationBranchState({
+		readiness,
+		targetBranch: targetTask?.branch
+	});
+	const evidencePath = evidenceFileForMainVerification({
+		goalId: runbook?.goalId,
+		taskId
+	});
+	const requiredCommands = Array.isArray(targetTask?.copyOnlyCommands) ? targetTask.copyOnlyCommands : [];
+	const missingCloseoutKinds = Array.isArray(closeout?.missing) ? closeout.missing.filter((item) => item?.taskId === taskId).map((item) => item?.kind).filter((kind) => isNonEmptyString(kind)) : [];
+	const canEnter = reviewerApproval.approved.value === true && mainVerificationEvent?.eventType !== "main.verification-passed";
+	return {
+		state: runbookTasks.length === 0 ? "missing" : canEnter ? "ready" : reviewerApproval.status.value === "needs-revision" ? "blocked" : "waiting",
+		sourcePolicy: valueState("goal-runbook.v1 + goal-progress-ledger.v1 + goal-event-log.v1 + goal-next-action.v1 + goal-closeout-report.v1 + symphony.console-readiness"),
+		goalId: valueState(runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId),
+		taskId: valueState(taskId),
+		title: valueState(targetTask?.title),
+		readiness: {
+			canEnterMainVerification: valueState(canEnter),
+			reason: valueState(mainVerificationReadinessReason({
+				targetTask,
+				reviewerApproval,
+				mainVerificationEvent,
+				missingCloseoutKinds
+			})),
+			currentNextRole: valueState(nextAction?.next?.role),
+			currentNextPhase: valueState(nextAction?.next?.phase),
+			closeoutMissingKinds: arrayTextState(missingCloseoutKinds)
+		},
+		reviewerApproval,
+		branchState,
+		ffOnlyMerge: {
+			guidance: valueState("Use ff-only on main after explicit reviewer.approved is present; branch text is guidance, not approval evidence."),
+			commands: projectTextItems(ffOnlyMergeCommands(targetTask?.branch))
+		},
+		verificationCommands: projectTextItems(requiredCommands),
+		evidence: {
+			path: valueState(evidencePath),
+			expectedEvent: valueState(targetTask?.expectedEvidence?.mainVerifier),
+			existingMainVerificationRef: valueState(ledgerTask?.mainVerificationRef ?? firstGoalEvidenceRef(mainVerificationEvent)),
+			gateCommand: valueState(isNonEmptyString(evidencePath) && isNonEmptyString(runbook?.goalId) && isNonEmptyString(taskId) ? `pnpm --silent symphony goal gate --goal ${runbook.goalId} --task ${taskId} --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref ${evidencePath} --dry-run --json` : void 0)
+		},
+		safety: {
+			readOnly: valueState(true),
+			copyOnly: valueState(true),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			approvalReadinessSource: valueState("explicit reviewer.approved event or event-backed goal-status ledger"),
+			unsupportedInferenceSources: valueState("file-name、branch、commit-message、frontend-heuristic")
+		},
+		note: "Main Verification Readiness 只展示是否可以进入 main verification；它不执行 merge、验证命令、evidence 写入或 goal gate 登记，也不从 branch、文件名或 command text 推断 approval。"
+	};
+}
+function selectMainVerificationReadinessTask({ runbookTasks, ledgerTasks, nextAction }) {
+	const nextTaskId = nextAction?.next?.taskId;
+	const nextRole = nextAction?.next?.role;
+	const nextPhase = nextAction?.next?.phase;
+	if ((nextRole === "main-verifier" || nextPhase === "main-verification") && isNonEmptyString(nextTaskId)) return runbookTasks.find((task) => task?.taskId === nextTaskId) ?? null;
+	const approvedTask = runbookTasks.find((task) => {
+		const ledgerTask = ledgerTasks.get(task?.taskId);
+		return normalizedReviewVerdict(ledgerTask?.reviewVerdict) === "approved" && !isNonEmptyString(ledgerTask?.mainVerificationRef);
+	});
+	if (approvedTask !== void 0) return approvedTask;
+	if (isNonEmptyString(nextTaskId)) return runbookTasks.find((task) => task?.taskId === nextTaskId) ?? null;
+	return runbookTasks[0] ?? null;
+}
+function projectReviewerApprovalReadiness({ reviewEvent, ledgerTask }) {
+	const eventVerdict = reviewEvent?.eventType === "reviewer.approved" ? "approved" : reviewEvent?.eventType === "reviewer.needs-revision" ? "needs-revision" : void 0;
+	const ledgerVerdict = normalizedReviewVerdict(ledgerTask?.reviewVerdict);
+	const status = eventVerdict ?? ledgerVerdict ?? "missing";
+	const source = eventVerdict !== void 0 ? GOAL_EVENT_LOG_CONTRACT_NAME : ledgerVerdict !== void 0 ? GOAL_PROGRESS_LEDGER_CONTRACT_NAME : GOAL_EVENT_LOG_CONTRACT_NAME;
+	return {
+		status: valueState(status),
+		approved: valueState(status === "approved"),
+		eventType: valueState(reviewEvent?.eventType ?? (status === "approved" ? "reviewer.approved" : void 0)),
+		evidenceRef: valueState(ledgerTask?.reviewEvidenceRef ?? firstGoalEvidenceRef(reviewEvent)),
+		eventId: valueState(reviewEvent?.eventId),
+		actor: valueState(goalEventActorText(reviewEvent?.actor)),
+		recordedAt: valueState(reviewEvent?.recordedAt),
+		source: valueState(source)
+	};
+}
+function projectMainVerificationBranchState({ readiness, targetBranch }) {
+	const git = readiness?.tools?.git;
+	const currentBranch = git?.branch;
+	const dirty = git?.dirty;
+	return {
+		state: valueState(!isNonEmptyString(currentBranch) ? "missing" : currentBranch === targetBranch ? "on-task-branch" : currentBranch === "main" ? "on-main" : "on-other-branch"),
+		currentBranch: valueState(currentBranch),
+		currentHead: valueState(git?.head),
+		taskBranch: valueState(targetBranch),
+		mainBranch: valueState("main"),
+		gitStatus: valueState(git?.status),
+		worktreeDirty: valueState(dirty),
+		dirtyFilesCount: valueState(git?.dirtyFilesCount),
+		dirtyPaths: projectTextItems(git?.dirtyPaths),
+		ffOnlyAvailableAfterCheckoutMain: valueState(isNonEmptyString(targetBranch)),
+		source: valueState("symphony.console-readiness")
+	};
+}
+function normalizedReviewVerdict(value) {
+	if (value === "APPROVED" || value === "approved") return "approved";
+	if (value === "NEEDS_REVISION" || value === "needs-revision") return "needs-revision";
+}
+function mainVerificationReadinessReason({ targetTask, reviewerApproval, mainVerificationEvent, missingCloseoutKinds }) {
+	if (targetTask === null || targetTask === void 0) return "No runbook task is available for main verification readiness.";
+	if (mainVerificationEvent?.eventType === "main.verification-passed") return `${targetTask.taskId} already has main.verification-passed.`;
+	if (reviewerApproval.status.value === "approved") return `${targetTask.taskId} has reviewer.approved; main verification can start after the ff-only main merge check.`;
+	if (reviewerApproval.status.value === "needs-revision") return `${targetTask.taskId} has reviewer.needs-revision; main verification must wait.`;
+	if (missingCloseoutKinds.includes("review-evidence")) return `${targetTask.taskId} is missing review evidence in goal closeout.`;
+	return `${targetTask.taskId} is waiting for explicit reviewer.approved evidence.`;
+}
+function ffOnlyMergeCommands(targetBranch) {
+	return [
+		"git checkout main",
+		"git pull --ff-only",
+		`git merge --ff-only ${isNonEmptyString(targetBranch) ? targetBranch : "<task-branch>"}`
+	];
+}
+function evidenceFileForMainVerification({ goalId, taskId }) {
+	if (!isNonEmptyString(goalId) || !isNonEmptyString(taskId)) return;
+	const goalSegment = goalId.match(/^(v\d+)(?:-|$)/u)?.[1] ?? goalId;
+	return `docs/plans/${goalSegment}-${goalSegment === "v19" ? taskId.replaceAll("-", "") : taskId}-main-verification-evidence-2026-05-29.md`;
 }
 function projectActiveGoalViewModel({ statusResult, status, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, closeoutResult, closeout }) {
 	const goalId = firstNonEmptyString(runbook?.goalId, nextAction?.goalId, promptPack?.goalId, closeout?.goalId, status?.goalId);
@@ -13086,7 +13237,7 @@ function isErrorEnvelope(data) {
 	return data?.contractName === "error-envelope.v1" && data?.ok === false && typeof data?.error?.message === "string";
 }
 //#endregion
-//#region node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react-jsx-runtime.production.js
+//#region ../../../Users/andy/Documents/project/multi-coding-agent-symphony/node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react-jsx-runtime.production.js
 /**
 * @license React
 * react-jsx-runtime.production.js
@@ -13230,6 +13381,11 @@ function App() {
 						eventsRoute: findRoute(model.routeStates, "activeGoalEvents"),
 						nextRoute: findRoute(model.routeStates, "goalNextAction")
 					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "main-verification-readiness-grid",
+					"aria-label": "v24 main verification readiness",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MainVerificationReadinessPanel, { readiness: model.activeGoal.mainVerificationReadiness })
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "active-goal-grid",
@@ -14283,6 +14439,97 @@ function ActiveGoalViewModelPanel({ viewModel }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: viewModel.note
+			})
+		]
+	});
+}
+function MainVerificationReadinessPanel({ readiness }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "main-verification-readiness-panel",
+		kicker: "v24 main verification",
+		title: "Main Verification Readiness",
+		state: readiness.state,
+		route: null,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["goalId", readiness.goalId],
+				["taskId", readiness.taskId],
+				["title", readiness.title],
+				["canEnterMainVerification", readiness.readiness.canEnterMainVerification],
+				["reason", readiness.readiness.reason],
+				["currentNext.role", readiness.readiness.currentNextRole],
+				["currentNext.phase", readiness.readiness.currentNextPhase],
+				["closeout missing", readiness.readiness.closeoutMissingKinds],
+				["source policy", readiness.sourcePolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "reviewer.approved",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["status", readiness.reviewerApproval.status],
+					["approved", readiness.reviewerApproval.approved],
+					["eventType", readiness.reviewerApproval.eventType],
+					["evidenceRef", readiness.reviewerApproval.evidenceRef],
+					["eventId", readiness.reviewerApproval.eventId],
+					["actor", readiness.reviewerApproval.actor],
+					["recordedAt", readiness.reviewerApproval.recordedAt],
+					["source", readiness.reviewerApproval.source]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "branch / main state",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["state", readiness.branchState.state],
+					["currentBranch", readiness.branchState.currentBranch],
+					["currentHead", readiness.branchState.currentHead],
+					["taskBranch", readiness.branchState.taskBranch],
+					["mainBranch", readiness.branchState.mainBranch],
+					["git.status", readiness.branchState.gitStatus],
+					["worktreeDirty", readiness.branchState.worktreeDirty],
+					["dirtyFilesCount", readiness.branchState.dirtyFilesCount],
+					["ffOnlyAvailableAfterCheckoutMain", readiness.branchState.ffOnlyAvailableAfterCheckoutMain],
+					["source", readiness.branchState.source]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: readiness.branchState.dirtyPaths,
+					emptyCopy: "dirty paths 为空或未暴露。"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "ff-only merge guidance",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["guidance", readiness.ffOnlyMerge.guidance]] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: readiness.ffOnlyMerge.commands,
+					emptyCopy: "ff-only merge commands 未暴露。"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "required verification commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: readiness.verificationCommands,
+					emptyCopy: "required verification commands 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "evidence path",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["path", readiness.evidence.path],
+					["expectedEvent", readiness.evidence.expectedEvent],
+					["existingMainVerificationRef", readiness.evidence.existingMainVerificationRef],
+					["copy-only gate dry-run", readiness.evidence.gateCommand]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", readiness.safety.readOnly],
+					["copyOnly", readiness.safety.copyOnly],
+					["browserExecutionAvailable", readiness.safety.browserExecutionAvailable],
+					["modelInvocationAvailable", readiness.safety.modelInvocationAvailable],
+					["approvalReadinessSource", readiness.safety.approvalReadinessSource],
+					["unsupportedInferenceSources", readiness.safety.unsupportedInferenceSources]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: readiness.note
 			})
 		]
 	});

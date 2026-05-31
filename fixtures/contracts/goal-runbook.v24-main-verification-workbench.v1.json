@@ -1,0 +1,192 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v24-main-verification-workbench",
+  "goalTitle": "v24 Main Verification Workbench",
+  "baseline": {
+    "tag": "v23",
+    "commit": null,
+    "evidenceRef": "docs/plans/v23-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Main verification readiness panel",
+      "branch": "v24-task-1-main-verification-readiness-panel",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户知道是否可以进入 main verification。",
+        "Workbench shows reviewer.approved, branch/main state, ff-only merge guidance, required verification commands, and the evidence path before main verification.",
+        "The main Workbench path follows goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal closeout -> symphony next --goal latest, not the v8 scan/do/review/verify/status/continue/artifacts action list.",
+        "Do not infer task approval or release readiness from file names, branch names, commit messages, or frontend heuristics; worker self-approval remains disallowed."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v24-main-verification-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Allowlisted verification runner",
+      "branch": "v24-task-2-allowlisted-verification-runner",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能在 Workbench 里执行主线验证，而不是切终端。",
+        "Workbench reads and runs only the allowed verification commands from the runbook or plan, including pnpm check, pnpm test, pnpm workbench:build, and git diff --check.",
+        "This is not a generic shell runner or a new safety framework; the product purpose is to reduce manual main verification steps.",
+        "The runner does not make v8 scan/do/review/verify/status/continue/artifacts the top-level Workbench action model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v24-main-verification-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Main verification evidence writer",
+      "branch": "v24-task-3-main-verification-evidence-writer",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户不用手写验收证据。",
+        "Workbench generates a main verification evidence draft or file that records command results, main commit, merge mode, task id, and goal id.",
+        "Evidence writing supports the Product spine from reviewer approval through verification commands to main-verification gate registration.",
+        "Evidence generation does not claim reviewer approved, main verified, release ready, auto-merge, or auto-tag unless the explicit registered event exists."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v24-main-verification-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Main verification gate registration",
+      "branch": "v24-task-4-main-verification-gate-registration",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "验证完成后 goal 状态能从 Workbench 推进。",
+        "Workbench reuses the v21/v23 flow to call symphony goal gate --gate main-verification --status passed|failed.",
+        "Main verification gate registration requires reviewer approval first and records explicit goal gate evidence.",
+        "Release readiness remains blocked until all task main-verification gates pass and release closeout gates are recorded."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v24-main-verification-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Main verification tests/docs",
+      "branch": "v24-task-5-main-verification-tests-docs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "把 task close loop 变成 Workbench 能力。",
+        "Tests and docs cover blocking before approved, verification failure, evidence writing, gate dry-run/confirm, and status refresh.",
+        "Release closeout verifies pnpm check, pnpm test, pnpm workbench:build, pnpm test:mutation:gate, pnpm audit --audit-level high, git diff --check, and goal closeout before release.ready.",
+        "Release evidence records the v24 Main Verification Workbench boundary: the Workbench main path is based on the latest goal/runbook flow, not a v8 action dashboard."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v24-main-verification-workbench --json",
+        "pnpm test:mutation:gate",
+        "pnpm audit --audit-level high",
+        "pnpm mcas doctor",
+        "pnpm --silent symphony goal closeout --goal v24-main-verification-workbench --markdown",
+        "pnpm --silent symphony goal gate --goal v24-main-verification-workbench --gate release.ready --status declared --verifier codex-v24-release-manager --evidence-ref docs/plans/v24-release-evidence-2026-05-29.md --dry-run --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}
