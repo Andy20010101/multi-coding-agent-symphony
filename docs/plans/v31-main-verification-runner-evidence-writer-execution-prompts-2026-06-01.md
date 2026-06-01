@@ -128,6 +128,145 @@ Use these prompts with `/goal`. The canonical full command flow is in the matchi
 - 不自动 push，除非父流程明确要求且 main verification 已完成。
 ```
 
+## Common registration commands
+
+Worker evidence registration:
+
+```bash
+pnpm --silent symphony goal update \
+  --goal v31-main-verification-runner-evidence-writer \
+  --task <task-id> \
+  --event worker.evidence-recorded \
+  --actor <worker-id> \
+  --evidence-ref <worker-evidence-ref> \
+  --dry-run --json
+
+pnpm --silent symphony goal update \
+  --goal v31-main-verification-runner-evidence-writer \
+  --task <task-id> \
+  --event worker.evidence-recorded \
+  --actor <worker-id> \
+  --evidence-ref <worker-evidence-ref> \
+  --confirm \
+  --plan-hash sha256:<PLAN_HASH>
+```
+
+Independent review registration:
+
+```bash
+pnpm --silent symphony goal review \
+  --goal v31-main-verification-runner-evidence-writer \
+  --task <task-id> \
+  --verdict approved \
+  --reviewer <reviewer-id> \
+  --evidence-ref <review-evidence-ref> \
+  --dry-run --json
+
+pnpm --silent symphony goal review \
+  --goal v31-main-verification-runner-evidence-writer \
+  --task <task-id> \
+  --verdict approved \
+  --reviewer <reviewer-id> \
+  --evidence-ref <review-evidence-ref> \
+  --confirm \
+  --plan-hash sha256:<PLAN_HASH>
+```
+
+Main verification gate registration:
+
+```bash
+pnpm --silent symphony goal gate \
+  --goal v31-main-verification-runner-evidence-writer \
+  --gate main-verification \
+  --task <task-id> \
+  --status passed \
+  --verifier <main-verifier-id> \
+  --evidence-ref <main-verification-evidence-ref> \
+  --dry-run --json
+
+pnpm --silent symphony goal gate \
+  --goal v31-main-verification-runner-evidence-writer \
+  --gate main-verification \
+  --task <task-id> \
+  --status passed \
+  --verifier <main-verifier-id> \
+  --evidence-ref <main-verification-evidence-ref> \
+  --confirm \
+  --plan-hash sha256:<PLAN_HASH>
+```
+
+## Release closeout prompt
+
+```text
+/goal
+执行 v31 release manager closeout。
+
+目标：
+- 确认 v31 的 5 个 task 都有 worker evidence、independent review、main verification evidence 和 main-verification gate。
+- 在干净 main/ref 上运行 release validation。
+- 写 release evidence：docs/plans/v31-release-evidence-2026-06-01.md
+- 使用 goal gate dry-run + confirm 登记 runbook 要求的 release gates。
+- 所有 release gates passed 后，才允许登记 release.ready declared。
+
+必须运行：
+- git checkout main
+- git pull --ff-only
+- git status -sb
+- pnpm check
+- pnpm test
+- pnpm workbench:build
+- git diff --check
+- pnpm --silent symphony goal-status --goal v31-main-verification-runner-evidence-writer --json
+- pnpm --silent symphony goal closeout --goal v31-main-verification-runner-evidence-writer --markdown
+
+禁止：
+- 不从 README、branch、tag name、file name、prompt text、frontend state 或测试文案推断 release-ready。
+- 不自动创建 tag、push tag、publish release。
+- 不把 v8 command surface 当作 Workbench 主入口。
+```
+
+Release gates use this dry-run/confirm shape for `release.pnpm-check`, `release.pnpm-test`, `release.workbench-build`, `release.diff-check`, and `release.docs-updated`:
+
+```bash
+pnpm --silent symphony goal gate \
+  --goal v31-main-verification-runner-evidence-writer \
+  --gate <release-gate> \
+  --status passed \
+  --verifier codex-v31-release-manager \
+  --evidence-ref docs/plans/v31-release-evidence-2026-06-01.md \
+  --dry-run --json
+
+pnpm --silent symphony goal gate \
+  --goal v31-main-verification-runner-evidence-writer \
+  --gate <release-gate> \
+  --status passed \
+  --verifier codex-v31-release-manager \
+  --evidence-ref docs/plans/v31-release-evidence-2026-06-01.md \
+  --confirm \
+  --plan-hash sha256:<PLAN_HASH>
+```
+
+Release readiness is separate and must wait for complete closeout evidence:
+
+```bash
+pnpm --silent symphony goal gate \
+  --goal v31-main-verification-runner-evidence-writer \
+  --gate release.ready \
+  --status declared \
+  --verifier codex-v31-release-manager \
+  --evidence-ref docs/plans/v31-release-evidence-2026-06-01.md \
+  --dry-run --json
+
+pnpm --silent symphony goal gate \
+  --goal v31-main-verification-runner-evidence-writer \
+  --gate release.ready \
+  --status declared \
+  --verifier codex-v31-release-manager \
+  --evidence-ref docs/plans/v31-release-evidence-2026-06-01.md \
+  --confirm \
+  --plan-hash sha256:<PLAN_HASH>
+```
+
 ## task-2: Allowlisted verification plan preview
 
 ### Worker prompt

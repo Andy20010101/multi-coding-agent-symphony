@@ -2746,6 +2746,9 @@ describe('v8 prompt-driven symphony CLI', () => {
       assert.equal(readiness.modelInvocation, false);
       assert.equal(readiness.tools.packageManager.version, '10.30.3');
       assert.equal(readiness.tools.git.branch, 'main');
+      assert.equal(readiness.tools.git.mainHead, 'abc1234');
+      assert.equal(readiness.tools.git.originMainHead, 'abc1234');
+      assert.equal(readiness.tools.git.commands.originMainHead, 'git rev-parse --short origin/main');
       assert.equal(readiness.tools.git.dirty, true);
       assert.equal(readiness.tools.github.account, 'Andy20010101');
       assert.equal(readiness.tools.github.ci.latest.conclusion, 'success');
@@ -5564,6 +5567,18 @@ class ConsoleReadinessRunner {
       return commandResult({ stdout: 'abc1234\n' });
     }
 
+    if (executable === 'git' && args.join(' ') === 'rev-parse HEAD') {
+      return commandResult({ stdout: 'abc1234full\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short main') {
+      return commandResult({ stdout: 'abc1234\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short origin/main') {
+      return commandResult({ stdout: 'abc1234\n' });
+    }
+
     if (executable === 'git' && args.join(' ') === 'status --porcelain') {
       return commandResult({ stdout: ' M README.md\n' });
     }
@@ -5633,6 +5648,18 @@ class DiagnosticReadinessRunner {
       return commandResult({ stdout: 'def5678\n' });
     }
 
+    if (executable === 'git' && args.join(' ') === 'rev-parse HEAD') {
+      return commandResult({ stdout: 'def5678full\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short main') {
+      return commandResult({ stdout: 'def5678\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short origin/main') {
+      return commandResult({ stdout: 'def5678\n' });
+    }
+
     if (executable === 'git' && args.join(' ') === 'status --porcelain') {
       return commandResult({ stdout: ' M README.md\n?? tmp.txt\n' });
     }
@@ -5694,6 +5721,18 @@ class DirtyGitReadinessRunner {
     }
 
     if (executable === 'git' && args.join(' ') === 'rev-parse --short HEAD') {
+      return commandResult({ stdout: 'v15abc1\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse HEAD') {
+      return commandResult({ stdout: 'v15abc1full\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short main') {
+      return commandResult({ stdout: 'v15abc1\n' });
+    }
+
+    if (executable === 'git' && args.join(' ') === 'rev-parse --short origin/main') {
       return commandResult({ stdout: 'v15abc1\n' });
     }
 

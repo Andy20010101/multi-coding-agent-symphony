@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 
 import {
+  confirmControlledAdoptionPlan,
+  confirmControlledAdoptionPlanFreeze,
+  confirmControlledImplementationRunPlan,
+  confirmControlledVerificationRun,
   confirmGoalEventPlan,
+  fetchAdoptionInspection,
   fetchGoalEventPlanPreview,
   fetchPromptWorkspaceHandoffBoard,
   fetchPromptWorkspacePromptPack,
@@ -24,6 +29,7 @@ const WORKBENCH_NAV_ITEMS = Object.freeze([
   Object.freeze({ id: 'adoption', label: 'Adoption', targetId: 'adoption-candidate-panel' }),
   Object.freeze({ id: 'review', label: 'Review', targetId: 'review-workspace-panel' }),
   Object.freeze({ id: 'verification', label: 'Verification', targetId: 'main-verification-readiness-panel' }),
+  Object.freeze({ id: 'release', label: 'Release', targetId: 'closeout-gaps-panel' }),
   Object.freeze({ id: 'closeout', label: 'Closeout', targetId: 'closeout-gaps-panel' })
 ]);
 
@@ -196,12 +202,45 @@ export function WorkbenchShell({
             />
           </section>
 
-          <section className="main-verification-readiness-grid" aria-label="v24 main verification readiness">
-            <MainVerificationReadinessPanel readiness={model.activeGoal.mainVerificationReadiness} />
+          <section className="implementation-eligibility-grid" aria-label="v29 active task implementation eligibility">
+            <ActiveTaskImplementationEligibilityPanel eligibility={model.activeGoal.activeTaskImplementationEligibility} />
           </section>
 
-          <section className="adoption-candidate-grid" aria-label="v26 adoption candidates">
+          <section className="implementation-plan-preview-grid" aria-label="v29 controlled implementation plan preview">
+            <ControlledImplementationPlanPreviewPanel
+              preview={model.activeGoal.controlledImplementationPlanPreview}
+              onControlledImplementationConfirmed={onRefreshWorkbenchContracts}
+            />
+          </section>
+
+          <section className="main-verification-readiness-grid" aria-label="v24 main verification readiness">
+            <MainVerificationReadinessPanel
+              readiness={model.activeGoal.mainVerificationReadiness}
+              onVerificationRunConfirmed={onRefreshWorkbenchContracts}
+            />
+            <MainVerificationEvidenceDraftPanel draft={model.activeGoal.mainVerificationEvidenceDraft} />
+            <MainVerificationGateRegistrationPanel
+              registration={model.activeGoal.mainVerificationGateRegistration}
+              onGoalEventConfirmed={onRefreshWorkbenchContracts}
+            />
+          </section>
+
+          <section className="adoption-candidate-grid" aria-label="v30 adoption candidate normalization">
             <AdoptionCandidatePanel candidates={model.adoptionCandidates} />
+          </section>
+
+          <section className="adoption-plan-preview-grid" aria-label="v30 adoption plan preview workspace">
+            <AdoptionPlanPreviewWorkspacePanel
+              workspace={model.adoptionPlanPreviewWorkspace}
+              onAdoptionPlanFrozen={onRefreshWorkbenchContracts}
+            />
+          </section>
+
+          <section className="adoption-inspect-grid" aria-label="v30 adoption inspect and recovery view">
+            <AdoptionInspectRecoveryPanel
+              workspace={model.adoptionInspectRecoveryWorkspace}
+              onAdoptionConfirmed={onRefreshWorkbenchContracts}
+            />
           </section>
 
           <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
@@ -1471,11 +1510,14 @@ function ActiveGoalViewModelPanel({ viewModel }) {
   );
 }
 
-function MainVerificationReadinessPanel({ readiness }) {
+function MainVerificationReadinessPanel({
+  readiness,
+  onVerificationRunConfirmed = () => undefined
+}) {
   return (
     <DataPanel
       id="main-verification-readiness-panel"
-      kicker="v24 main verification"
+      kicker="v31 main verification"
       title="Main Verification Readiness"
       state={readiness.state}
       route={null}
@@ -1491,6 +1533,7 @@ function MainVerificationReadinessPanel({ readiness }) {
         ['closeout missing', readiness.readiness.closeoutMissingKinds],
         ['source policy', readiness.sourcePolicy]
       ]} />
+      <TextItemList items={readiness.readiness.blockers} emptyCopy="readiness blockers 未暴露。" />
 
       <Subsection title="reviewer.approved">
         <FieldList rows={[
@@ -1505,20 +1548,25 @@ function MainVerificationReadinessPanel({ readiness }) {
         ]} />
       </Subsection>
 
-      <Subsection title="branch / main state">
+      <Subsection title="adoption state">
         <FieldList rows={[
-          ['state', readiness.branchState.state],
-          ['currentBranch', readiness.branchState.currentBranch],
-          ['currentHead', readiness.branchState.currentHead],
-          ['taskBranch', readiness.branchState.taskBranch],
-          ['mainBranch', readiness.branchState.mainBranch],
-          ['git.status', readiness.branchState.gitStatus],
-          ['worktreeDirty', readiness.branchState.worktreeDirty],
-          ['dirtyFilesCount', readiness.branchState.dirtyFilesCount],
-          ['ffOnlyAvailableAfterCheckoutMain', readiness.branchState.ffOnlyAvailableAfterCheckoutMain],
-          ['source', readiness.branchState.source]
+          ['status', readiness.adoptionState.status],
+          ['required', readiness.adoptionState.required],
+          ['applied', readiness.adoptionState.applied],
+          ['adoptionPlanId', readiness.adoptionState.adoptionPlanId],
+          ['planOperationId', readiness.adoptionState.planOperationId],
+          ['planOperationStatus', readiness.adoptionState.planOperationStatus],
+          ['confirmOperationId', readiness.adoptionState.confirmOperationId],
+          ['confirmOperationStatus', readiness.adoptionState.confirmOperationStatus],
+          ['confirmationRunStatus', readiness.adoptionState.confirmationRunStatus],
+          ['inspectRouteState', readiness.adoptionState.inspectRouteState],
+          ['inspectStatus', readiness.adoptionState.inspectStatus],
+          ['journalStatus', readiness.adoptionState.journalStatus],
+          ['currentWorktreeMatchesAfterHash', readiness.adoptionState.currentWorktreeMatchesAfterHash],
+          ['currentWorktreeMatchesJournalBeforeFiles', readiness.adoptionState.currentWorktreeMatchesJournalBeforeFiles],
+          ['source', readiness.adoptionState.source],
+          ['note', readiness.adoptionState.note]
         ]} />
-        <TextItemList items={readiness.branchState.dirtyPaths} emptyCopy="dirty paths 为空或未暴露。" />
       </Subsection>
 
       <Subsection title="ff-only merge guidance">
@@ -1532,6 +1580,13 @@ function MainVerificationReadinessPanel({ readiness }) {
         <TextItemList items={readiness.verificationCommands} emptyCopy="required verification commands 未暴露。" />
       </Subsection>
 
+      <Subsection title="allowlisted verification plan preview">
+        <AllowlistedVerificationPlanPreview
+          preview={readiness.verificationPlanPreview}
+          onVerificationRunConfirmed={onVerificationRunConfirmed}
+        />
+      </Subsection>
+
       <Subsection title="evidence path">
         <FieldList rows={[
           ['path', readiness.evidence.path],
@@ -1541,6 +1596,14 @@ function MainVerificationReadinessPanel({ readiness }) {
         ]} />
       </Subsection>
 
+      <Subsection title="explicit state sources">
+        <TextItemList items={readiness.explicitStateSources} emptyCopy="explicit state sources 未暴露。" />
+      </Subsection>
+
+      <Subsection title="ignored inference sources">
+        <TextItemList items={readiness.ignoredInferenceSources} emptyCopy="ignored inference sources 未暴露。" />
+      </Subsection>
+
       <Subsection title="safety">
         <FieldList rows={[
           ['readOnly', readiness.safety.readOnly],
@@ -1548,11 +1611,394 @@ function MainVerificationReadinessPanel({ readiness }) {
           ['browserExecutionAvailable', readiness.safety.browserExecutionAvailable],
           ['modelInvocationAvailable', readiness.safety.modelInvocationAvailable],
           ['approvalReadinessSource', readiness.safety.approvalReadinessSource],
+          ['adoptionReadinessSource', readiness.safety.adoptionReadinessSource],
           ['unsupportedInferenceSources', readiness.safety.unsupportedInferenceSources]
         ]} />
       </Subsection>
 
       <p className="panel-note">{readiness.note}</p>
+    </DataPanel>
+  );
+}
+
+function AllowlistedVerificationPlanPreview({
+  preview,
+  onVerificationRunConfirmed = () => undefined
+}) {
+  const [runState, setRunState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+
+  if (preview?.state === 'missing' || preview === undefined || preview === null) {
+    return <EmptyBlock copy="allowlisted verification plan preview 未暴露。" />;
+  }
+
+  const startRoute = preview.operationStart?.endpoint?.route?.value;
+  const startBody = buildControlledVerificationRunBody(preview);
+  const startAvailable = preview.operationStart?.available?.value === true
+    && typeof startRoute === 'string'
+    && startRoute.trim() !== ''
+    && startBody !== null;
+
+  async function handleConfirm() {
+    if (!startAvailable) {
+      setRunState({
+        phase: 'failed',
+        result: null,
+        error: 'verification run endpoint unavailable'
+      });
+      return;
+    }
+
+    setRunState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await confirmControlledVerificationRun(startRoute, startBody);
+
+    if (result.ok) {
+      setRunState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+
+      if (typeof onVerificationRunConfirmed === 'function') {
+        await onVerificationRunConfirmed(result.data);
+      }
+      return;
+    }
+
+    setRunState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  return (
+    <div className="verification-plan-preview">
+      <FieldList rows={[
+        ['modelName', preview.modelName],
+        ['goalId', preview.goalId],
+        ['taskId', preview.taskId],
+        ['title', preview.title],
+        ['command count', preview.commandCount],
+        ['rejected task command count', preview.rejectedTaskCommandCount],
+        ['source policy', preview.sourcePolicy]
+      ]} />
+      <Subsection title="active goal/task/run/evidence context">
+        <FieldList rows={[
+          ['context source', preview.context.sourcePolicy],
+          ['activeGoalId', preview.context.activeGoalId],
+          ['activeTaskId', preview.context.activeTaskId],
+          ['latestRunId', preview.context.latestRunId],
+          ['latestRunStatus', preview.context.latestRunStatus],
+          ['workerEvidenceRef', preview.context.workerEvidenceRef],
+          ['reviewEvidenceRef', preview.context.reviewEvidenceRef],
+          ['adoptionPlanOperationId', preview.context.adoptionPlanOperationId],
+          ['adoptionConfirmOperationId', preview.context.adoptionConfirmOperationId],
+          ['existingMainVerificationRef', preview.context.existingMainVerificationRef],
+          ['existingMainVerificationEventId', preview.context.existingMainVerificationEventId]
+        ]} />
+      </Subsection>
+      <VerificationPlanCommandList commands={preview.commands} />
+      <Subsection title="controlled verification operation">
+        <FieldList rows={[
+          ['available', preview.operationStart?.available],
+          ['suiteId', preview.operationStart?.suiteId],
+          ['endpoint.method', preview.operationStart?.endpoint?.method],
+          ['endpoint.route', preview.operationStart?.endpoint?.route],
+          ['endpoint.allowedBodyFields', preview.operationStart?.endpoint?.allowedBodyFields],
+          ['resultContract', preview.operationStart?.resultContract],
+          ['operationKind', preview.operationStart?.operationKind],
+          ['operationRegistryContract', preview.operationStart?.operationRegistryContract]
+        ]} />
+        <div className="goal-event-confirm-actions">
+          <button type="button" onClick={handleConfirm} disabled={!startAvailable || runState.phase === 'loading'}>
+            Start controlled verification run
+          </button>
+          <code>{startRoute ?? 'verification run route unavailable'}</code>
+        </div>
+        {runState.phase === 'failed' ? (
+          <p className="error-copy">verification 错误摘要：{runState.error}</p>
+        ) : null}
+        {runState.phase === 'loading' ? (
+          <p className="empty-copy">正在运行固定 verification command suite。Operation Console 会从 registry 刷新状态和输出摘要。</p>
+        ) : null}
+        {runState.phase === 'ready' ? (
+          <div className="goal-event-confirm-result">
+            <FieldList rows={[
+              ['contractName', textValue(runState.result.contractName)],
+              ['status', textValue(runState.result.status)],
+              ['suiteId', textValue(runState.result.suiteId)],
+              ['operationId', textValue(runState.result.operationRun?.operationId)],
+              ['operationStatus', textValue(runState.result.operationRun?.status)],
+              ['exitCode', textValue(runState.result.output?.exitCode)],
+              ['commandCount', textValue(runState.result.runResult?.commandCount)],
+              ['failedCommandCount', textValue(runState.result.runResult?.failedCommandCount)],
+              ['successImpliesGatePassed', textValue(runState.result.safety?.successImpliesGatePassed)]
+            ]} />
+          </div>
+        ) : null}
+      </Subsection>
+      <Subsection title="fixed verification allowlist">
+        <TextItemList items={preview.requiredVerificationCommands} emptyCopy="fixed verification allowlist 未暴露。" />
+      </Subsection>
+      <Subsection title="task-scoped controlled commands">
+        <TextItemList items={preview.taskScopedControlledCommands} emptyCopy="task-scoped controlled commands 未暴露。" />
+      </Subsection>
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['copyOnly', preview.safety.copyOnly],
+          ['commandInputAccepted', preview.safety.commandInputAccepted],
+          ['arbitraryShellAccepted', preview.safety.arbitraryShellAccepted],
+          ['browserExecutionAvailable', preview.safety.browserExecutionAvailable],
+          ['modelInvocationAvailable', preview.safety.modelInvocationAvailable],
+          ['genericShellRunner', preview.safety.genericShellRunner],
+          ['controlledOperationStartAvailable', preview.safety.controlledOperationStartAvailable],
+          ['writesGoalEvents', preview.safety.writesGoalEvents],
+          ['registersGates', preview.safety.registersGates]
+        ]} />
+      </Subsection>
+      <Subsection title="explicit contracts">
+        <TextItemList items={preview.explicitContracts} emptyCopy="explicit contracts 未暴露。" />
+      </Subsection>
+      <Subsection title="ignored inference sources">
+        <TextItemList items={preview.ignoredInferenceSources} emptyCopy="ignored inference sources 未暴露。" />
+      </Subsection>
+      <p className="panel-note">{preview.note}</p>
+    </div>
+  );
+}
+
+function VerificationPlanCommandList({ commands }) {
+  if (commands?.state === 'missing' || commands === undefined || commands === null) {
+    return <EmptyBlock copy="verification plan commands 未暴露。" />;
+  }
+
+  if (!Array.isArray(commands.items) || commands.items.length === 0) {
+    return <EmptyBlock copy="verification plan commands 为空。" />;
+  }
+
+  return (
+    <ol className="verification-plan-command-list" aria-label="allowlisted verification commands">
+      {commands.items.map((item) => (
+        <li key={`${item.index.text}-${item.command.text}`}>
+          <code>{item.command.text}</code>
+          <FieldList rows={[
+            ['kind', item.kind],
+            ['source', item.source],
+            ['copyOnly', item.copyOnly],
+            ['browserExecutionAvailable', item.browserExecutionAvailable],
+            ['acceptsArbitraryInput', item.acceptsArbitraryInput]
+          ]} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function MainVerificationEvidenceDraftPanel({ draft }) {
+  return (
+    <DataPanel
+      id="main-verification-evidence-draft-panel"
+      kicker="v31 main verification"
+      title="Main Verification Evidence Draft"
+      state={draft?.state ?? 'missing'}
+      route={null}
+    >
+      <FieldList rows={[
+        ['modelName', draft?.modelName],
+        ['goalId', draft?.goalId],
+        ['taskId', draft?.taskId],
+        ['title', draft?.title],
+        ['targetEvidenceRef', draft?.targetEvidenceRef],
+        ['status', draft?.status],
+        ['copy-only gate dry-run', draft?.copyOnlyGateDryRun],
+        ['sourcePolicy', draft?.sourcePolicy]
+      ]} />
+
+      <Subsection title="missing inputs / blockers">
+        <TextItemList items={draft?.missingInputs} emptyCopy="draft blocker 为空。" />
+      </Subsection>
+
+      <Subsection title="verification operation refs">
+        <FieldList rows={[
+          ['operationId', draft?.verification?.operationId],
+          ['operationStatus', draft?.verification?.operationStatus],
+          ['source', draft?.verification?.source],
+          ['runId', draft?.verification?.runId],
+          ['suiteId', draft?.verification?.suiteId],
+          ['runStatus', draft?.verification?.runStatus],
+          ['exitCode', draft?.verification?.exitCode],
+          ['commandCount', draft?.verification?.commandCount],
+          ['failedCommandCount', draft?.verification?.failedCommandCount],
+          ['gatePassed', draft?.verification?.gatePassed],
+          ['planHash', draft?.verification?.planHash],
+          ['failureReason', draft?.verification?.failureReason]
+        ]} />
+      </Subsection>
+
+      <Subsection title="verification command results">
+        <MainVerificationDraftCommandResultList commandResults={draft?.commandResults} />
+      </Subsection>
+
+      <Subsection title="review evidence and run refs">
+        <FieldList rows={[
+          ['workerEvidenceRef', draft?.refs?.workerEvidenceRef],
+          ['reviewEvidenceRef', draft?.refs?.reviewEvidenceRef],
+          ['latestRunId', draft?.refs?.latestRunId],
+          ['existingMainVerificationRef', draft?.refs?.existingMainVerificationRef],
+          ['existingMainVerificationEventId', draft?.refs?.existingMainVerificationEventId]
+        ]} />
+      </Subsection>
+
+      <Subsection title="adoption refs">
+        <FieldList rows={[
+          ['adoptionPlanId', draft?.adoptionRefs?.adoptionPlanId],
+          ['adoptionPlanOperationId', draft?.adoptionRefs?.adoptionPlanOperationId],
+          ['adoptionPlanArtifactPath', draft?.adoptionRefs?.adoptionPlanArtifactPath],
+          ['adoptionConfirmOperationId', draft?.adoptionRefs?.adoptionConfirmOperationId],
+          ['adoptionConfirmStatus', draft?.adoptionRefs?.adoptionConfirmStatus],
+          ['latestConfirmationRunId', draft?.adoptionRefs?.latestConfirmationRunId],
+          ['latestConfirmationEvidenceArtifactPath', draft?.adoptionRefs?.latestConfirmationEvidenceArtifactPath],
+          ['journalStatus', draft?.adoptionRefs?.journalStatus]
+        ]} />
+      </Subsection>
+
+      <Subsection title="draft needing operator / reviewer check">
+        <FieldList rows={[
+          ['draft markdown', draft?.markdown],
+          ['draftOnly', draft?.safety?.draftOnly],
+          ['needsOperatorReview', draft?.safety?.needsOperatorReview],
+          ['requiresOperatorReview', draft?.safety?.requiresOperatorReview],
+          ['declaresPassed', draft?.safety?.declaresPassed],
+          ['registersGates', draft?.safety?.registersGates],
+          ['writesEvidenceFile', draft?.safety?.writesEvidenceFile],
+          ['writesFiles', draft?.safety?.writesFiles]
+        ]} />
+        <pre className="prompt-preview-text"><code>{draft?.markdown?.text ?? ''}</code></pre>
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readsEvidenceBodies', draft?.safety?.readsEvidenceBodies],
+          ['writesFiles', draft?.safety?.writesFiles],
+          ['registersGates', draft?.safety?.registersGates],
+          ['browserExecutionAvailable', draft?.safety?.browserExecutionAvailable],
+          ['arbitraryShellAccepted', draft?.safety?.arbitraryShellAccepted],
+          ['modelInvocationAvailable', draft?.safety?.modelInvocationAvailable],
+          ['declaresPassed', draft?.safety?.declaresPassed],
+          ['successImpliesGatePassed', draft?.safety?.successImpliesGatePassed],
+          ['selfApprovalAvailable', draft?.safety?.selfApprovalAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{draft?.note ?? 'Main verification evidence draft is unavailable until explicit goal and verification contracts load.'}</p>
+    </DataPanel>
+  );
+}
+
+function MainVerificationDraftCommandResultList({ commandResults }) {
+  const items = commandResults?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="verification command results 未暴露。" />;
+  }
+
+  return (
+    <ol className="verification-plan-command-list" aria-label="main verification evidence draft command results">
+      {items.map((item, index) => (
+        <li key={`${item.command.text}-${index}`}>
+          <code>{item.command.text}</code>
+          <FieldList rows={[
+            ['status', item.status],
+            ['exitCode', item.exitCode],
+            ['stdoutSummary', item.stdoutSummary],
+            ['stderrSummary', item.stderrSummary],
+            ['startedAt', item.startedAt],
+            ['completedAt', item.completedAt]
+          ]} />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function MainVerificationGateRegistrationPanel({
+  registration,
+  onGoalEventConfirmed
+}) {
+  return (
+    <DataPanel
+      id="main-verification-gate-registration-panel"
+      kicker="v31 main verification"
+      title="Main Verification Gate Registration"
+      state={registration?.state ?? 'missing'}
+      route={null}
+    >
+      <FieldList rows={[
+        ['modelName', registration?.modelName],
+        ['goalId', registration?.goalId],
+        ['taskId', registration?.taskId],
+        ['title', registration?.title],
+        ['targetEvidenceRef', registration?.targetEvidenceRef],
+        ['existingMainVerificationRef', registration?.existingMainVerificationRef],
+        ['existingMainVerificationEventId', registration?.existingMainVerificationEventId],
+        ['verificationOperationId', registration?.verificationOperationId],
+        ['verificationRunId', registration?.verificationRunId],
+        ['readinessState', registration?.readinessState],
+        ['draftState', registration?.draftState],
+        ['dryRunCommand', registration?.dryRunCommand],
+        ['confirmCommandPattern', registration?.confirmCommandPattern],
+        ['sourcePolicy', registration?.sourcePolicy]
+      ]} />
+
+      <Subsection title="registration blockers">
+        <TextItemList items={registration?.missingInputs} emptyCopy="registration blockers 为空。" />
+      </Subsection>
+
+      <Subsection title="main-verification gate form">
+        <GoalEventFormList
+          forms={{
+            state: registration?.form === null || registration?.form === undefined ? 'empty' : 'available',
+            count: textValue(registration?.form === null || registration?.form === undefined ? 0 : 1),
+            items: registration?.form === null || registration?.form === undefined ? [] : [registration.form]
+          }}
+          emptyCopy="main-verification gate form 不可用。"
+          onGoalEventConfirmed={onGoalEventConfirmed}
+        />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['confirmRequiresPlanHash', registration?.safety?.confirmRequiresPlanHash],
+          ['appendOnlyOnConfirm', registration?.safety?.appendOnlyOnConfirm],
+          ['workbenchWriteAvailable', registration?.safety?.workbenchWriteAvailable],
+          ['usesGoalGateOnly', registration?.safety?.usesGoalGateOnly],
+          ['requiresMainVerifierInput', registration?.safety?.requiresMainVerifierInput],
+          ['readsEvidenceBodies', registration?.safety?.readsEvidenceBodies],
+          ['writesEvidenceFile', registration?.safety?.writesEvidenceFile],
+          ['browserExecutionAvailable', registration?.safety?.browserExecutionAvailable],
+          ['arbitraryShellAccepted', registration?.safety?.arbitraryShellAccepted],
+          ['modelInvocationAvailable', registration?.safety?.modelInvocationAvailable],
+          ['mergeAvailable', registration?.safety?.mergeAvailable],
+          ['pushAvailable', registration?.safety?.pushAvailable],
+          ['tagAvailable', registration?.safety?.tagAvailable],
+          ['releaseReadyAvailable', registration?.safety?.releaseReadyAvailable],
+          ['selfApprovalAvailable', registration?.safety?.selfApprovalAvailable],
+          ['successImpliesGatePassed', registration?.safety?.successImpliesGatePassed]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{registration?.note?.text ?? registration?.note}</p>
     </DataPanel>
   );
 }
@@ -1636,6 +2082,419 @@ function ActiveGoalTaskQueuePanel({ taskQueue, route, progressRoute, eventsRoute
       <p className="panel-note">{taskQueue.note}</p>
     </DataPanel>
   );
+}
+
+function ActiveTaskImplementationEligibilityPanel({ eligibility }) {
+  return (
+    <DataPanel
+      id="active-task-implementation-eligibility-panel"
+      kicker="v29 active task"
+      title="Active Task Implementation Eligibility"
+      state={implementationEligibilityStateText(eligibility)}
+    >
+      <FieldList rows={[
+        ['modelName', eligibility.modelName],
+        ['goalId', eligibility.goalId],
+        ['taskId', eligibility.taskId],
+        ['title', eligibility.title],
+        ['canEnterControlledImplementation', eligibility.canEnterControlledImplementation],
+        ['decision.status', eligibility.decision.status],
+        ['decision.reason', eligibility.decision.reason],
+        ['currentNextRole', eligibility.decision.currentNextRole],
+        ['currentNextPhase', eligibility.decision.currentNextPhase],
+        ['currentNextStatus', eligibility.decision.currentNextStatus],
+        ['currentNextBlocked', eligibility.decision.currentNextBlocked],
+        ['sourcePolicy', eligibility.sourcePolicy]
+      ]} />
+
+      <Subsection title="route context">
+        <FieldList rows={[
+          ['route.goalId', eligibility.routeContext.goalId],
+          ['route.taskId', eligibility.routeContext.taskId],
+          ['route.activeRole', eligibility.routeContext.activeRole],
+          ['route.activePhase', eligibility.routeContext.activePhase],
+          ['route.operationId', eligibility.routeContext.operationId],
+          ['route.goalMatches', eligibility.routeContext.goalMatches],
+          ['route.taskMatches', eligibility.routeContext.taskMatches]
+        ]} />
+      </Subsection>
+
+      <Subsection title="required contracts">
+        <FieldList rows={[
+          ['goal-status route', eligibility.requiredContracts.goalStatusRoute],
+          ['goal next route', eligibility.requiredContracts.goalNextRoute],
+          ['runbook route', eligibility.requiredContracts.runbookRoute],
+          ['events route', eligibility.requiredContracts.eventsRoute],
+          ['operations route', eligibility.requiredContracts.operationsRoute],
+          ['goalStatusTaskPresent', eligibility.requiredContracts.goalStatusTaskPresent],
+          ['runbookTaskPresent', eligibility.requiredContracts.runbookTaskPresent],
+          ['scopedEventLogPresent', eligibility.requiredContracts.scopedEventLogPresent]
+        ]} />
+      </Subsection>
+
+      <Subsection title="goal-status task">
+        <FieldList rows={[
+          ['status', eligibility.goalStatusTask.status],
+          ['statusSource', eligibility.goalStatusTask.statusSource],
+          ['eventBacked', eligibility.goalStatusTask.eventBacked],
+          ['workerEvidenceRef', eligibility.goalStatusTask.workerEvidenceRef],
+          ['reviewEvidenceRef', eligibility.goalStatusTask.reviewEvidenceRef],
+          ['reviewVerdict', eligibility.goalStatusTask.reviewVerdict],
+          ['mainVerificationRef', eligibility.goalStatusTask.mainVerificationRef]
+        ]} />
+      </Subsection>
+
+      <Subsection title="explicit events">
+        <FieldList rows={[
+          ['task event count', eligibility.explicitEvents.count],
+          ['hasOpenBlocker', eligibility.explicitEvents.hasOpenBlocker],
+          ['workerStarted.eventId', eligibility.explicitEvents.latestWorkerStarted.eventId],
+          ['workerEvidence.eventId', eligibility.explicitEvents.latestWorkerEvidence.eventId],
+          ['workerEvidence.evidenceRef', eligibility.explicitEvents.latestWorkerEvidence.evidenceRef],
+          ['review.eventId', eligibility.explicitEvents.latestReview.eventId],
+          ['review.eventType', eligibility.explicitEvents.latestReview.eventType],
+          ['mainVerification.eventId', eligibility.explicitEvents.latestMainVerification.eventId],
+          ['blockerOpened.eventId', eligibility.explicitEvents.latestBlockerOpened.eventId],
+          ['blockerResolved.eventId', eligibility.explicitEvents.latestBlockerResolved.eventId]
+        ]} />
+      </Subsection>
+
+      <Subsection title="runbook task">
+        <FieldList rows={[
+          ['branch', eligibility.runbookTask.branch],
+          ['roleOrder', eligibility.runbookTask.roleOrder],
+          ['expectedWorker', eligibility.runbookTask.expectedWorker]
+        ]} />
+        <h4>acceptance</h4>
+        <TextItemList items={eligibility.runbookTask.acceptance} emptyCopy="acceptance 未暴露。" />
+        <h4>copy-only commands</h4>
+        <TextItemList items={eligibility.runbookTask.copyOnlyCommands} emptyCopy="copy-only commands 未暴露。" />
+      </Subsection>
+
+      <Subsection title="next action">
+        <FieldList rows={[
+          ['reason', eligibility.nextAction.reason],
+          ['registerWith', eligibility.nextAction.registerWith],
+          ['allowedEvents', eligibility.nextAction.allowedEvents],
+          ['copyOnlyPromptAvailable', eligibility.nextAction.copyOnlyPromptAvailable],
+          ['workerEvidenceRef', eligibility.nextAction.workerEvidenceRef]
+        ]} />
+      </Subsection>
+
+      <Subsection title="operation context">
+        <FieldList rows={[
+          ['operations route', eligibility.operationContext.routeState],
+          ['latestOperationId', eligibility.operationContext.latestOperationId],
+          ['latestStatus', eligibility.operationContext.latestStatus],
+          ['latestSource', eligibility.operationContext.latestSource],
+          ['latestCommandKind', eligibility.operationContext.latestCommandKind],
+          ['latestPlanHash', eligibility.operationContext.latestPlanHash]
+        ]} />
+      </Subsection>
+
+      <Subsection title="blocking reasons">
+        <TextItemList items={eligibility.decision.blockingReasons} emptyCopy="blocking reasons 为空。" />
+      </Subsection>
+
+      <Subsection title="recovery steps">
+        <TextItemList items={eligibility.recoverySteps} emptyCopy="recovery steps 未暴露。" />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', eligibility.safety.readOnly],
+          ['copyOnly', eligibility.safety.copyOnly],
+          ['workbenchWriteAvailable', eligibility.safety.workbenchWriteAvailable],
+          ['controlledImplementationStartsRun', eligibility.safety.controlledImplementationStartsRun],
+          ['browserExecutionAvailable', eligibility.safety.browserExecutionAvailable],
+          ['modelInvocationAvailable', eligibility.safety.modelInvocationAvailable],
+          ['genericShellRunner', eligibility.safety.genericShellRunner],
+          ['approvalReadinessSource', eligibility.safety.approvalReadinessSource],
+          ['unsupportedInferenceSources', eligibility.safety.unsupportedInferenceSources]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{eligibility.note}</p>
+    </DataPanel>
+  );
+}
+
+function ControlledImplementationPlanPreviewPanel({
+  preview,
+  onControlledImplementationConfirmed = () => undefined
+}) {
+  const [confirmState, setConfirmState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+  const confirmRoute = preview?.confirm?.endpoint?.route?.value;
+  const confirmBody = buildControlledImplementationConfirmBody(preview);
+  const confirmAvailable = preview?.state === 'preview-ready'
+    && preview?.confirm?.available?.value === true
+    && typeof confirmRoute === 'string'
+    && confirmRoute.trim() !== ''
+    && confirmBody !== null;
+
+  async function handleConfirm() {
+    if (!confirmAvailable) {
+      setConfirmState({
+        phase: 'failed',
+        result: null,
+        error: 'confirm route unavailable'
+      });
+      return;
+    }
+
+    setConfirmState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await confirmControlledImplementationRunPlan(confirmRoute, confirmBody);
+
+    if (result.ok) {
+      setConfirmState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+
+      if (typeof onControlledImplementationConfirmed === 'function') {
+        await onControlledImplementationConfirmed(result.data);
+      }
+      return;
+    }
+
+    setConfirmState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  return (
+    <DataPanel
+      id="controlled-implementation-plan-preview-panel"
+      kicker="v29 active task"
+      title="Controlled Implementation Plan Preview"
+      state={preview?.state ?? 'unavailable'}
+    >
+      <FieldList rows={[
+        ['modelName', preview?.modelName],
+        ['routeState', preview?.routeState],
+        ['goalId', preview?.goalId],
+        ['taskId', preview?.taskId],
+        ['canPreview', preview?.canPreview],
+        ['reason', preview?.reason],
+        ['planId', preview?.plan?.planId],
+        ['planHash', preview?.plan?.planHash],
+        ['mode', preview?.plan?.mode],
+        ['status', preview?.plan?.status],
+        ['commandName', preview?.plan?.commandName],
+        ['previewOf', preview?.plan?.previewOf],
+        ['confirmRequired', preview?.plan?.confirmRequired]
+      ]} />
+
+      <Subsection title="write semantics">
+        <FieldList rows={[
+          ['safetyMode', preview?.writeSemantics?.safetyMode],
+          ['writeBoundary', preview?.writeSemantics?.writeBoundary],
+          ['mainWorktreeWrites', preview?.writeSemantics?.mainWorktreeWrites],
+          ['workspaceWrites', preview?.writeSemantics?.workspaceWrites],
+          ['runtimeWrites', preview?.writeSemantics?.runtimeWrites],
+          ['destructiveWrites', preview?.writeSemantics?.destructiveWrites]
+        ]} />
+      </Subsection>
+
+      <Subsection title="active task constraints">
+        <FieldList rows={[
+          ['title', preview?.activeTaskConstraints?.title],
+          ['branch', preview?.activeTaskConstraints?.branch],
+          ['roleOrder', preview?.activeTaskConstraints?.roleOrder],
+          ['expectedWorkerEvidence', preview?.activeTaskConstraints?.expectedWorkerEvidence]
+        ]} />
+        <h4>acceptance</h4>
+        <TextItemList items={preview?.activeTaskConstraints?.acceptance} emptyCopy="acceptance 未暴露。" />
+        <h4>copy-only commands</h4>
+        <TextItemList items={preview?.activeTaskConstraints?.copyOnlyCommands} emptyCopy="copy-only commands 未暴露。" />
+      </Subsection>
+
+      <Subsection title="worker prompt">
+        <FieldList rows={[
+          ['available', preview?.workerPrompt?.available],
+          ['copyOnly', preview?.workerPrompt?.copyOnly],
+          ['format', preview?.workerPrompt?.format],
+          ['role', preview?.workerPrompt?.role]
+        ]} />
+        <CopyBlock value={preview?.workerPrompt?.text?.value} emptyCopy="worker prompt 未暴露。" />
+      </Subsection>
+
+      <Subsection title="goal/task/evidence refs">
+        <FieldList rows={[
+          ['currentWorkerEvidenceRef', preview?.evidenceRefs?.currentWorkerEvidenceRef],
+          ['currentReviewEvidenceRef', preview?.evidenceRefs?.currentReviewEvidenceRef],
+          ['currentMainVerificationRef', preview?.evidenceRefs?.currentMainVerificationRef]
+        ]} />
+        <EvidenceRefItemList refs={preview?.evidenceRefs?.explicitEventEvidenceRefs} />
+      </Subsection>
+
+      <Subsection title="confirm handoff">
+        <FieldList rows={[
+          ['available', preview?.confirm?.available],
+          ['enabledByTask', preview?.confirm?.enabledByTask],
+          ['requiredContext', preview?.confirm?.requiredContext],
+          ['copyOnlyCommand', preview?.confirm?.copyOnlyCommand],
+          ['endpoint.method', preview?.confirm?.endpoint?.method],
+          ['endpoint.route', preview?.confirm?.endpoint?.route],
+          ['endpoint.allowedBodyFields', preview?.confirm?.endpoint?.allowedBodyFields],
+          ['endpoint.requiresSameGoalTaskContext', preview?.confirm?.endpoint?.requiresSameGoalTaskContext],
+          ['endpoint.confirmUsesPlanHash', preview?.confirm?.endpoint?.confirmUsesPlanHash]
+        ]} />
+        <div className="goal-event-confirm-actions">
+          <button type="button" onClick={handleConfirm} disabled={!confirmAvailable || confirmState.phase === 'loading'}>
+            Confirm isolated workspace run
+          </button>
+          <code>{confirmRoute ?? 'confirm route unavailable'}</code>
+        </div>
+        {confirmState.phase === 'failed' ? (
+          <p className="error-copy">confirm 错误摘要：{confirmState.error}</p>
+        ) : null}
+        {confirmState.phase === 'loading' ? (
+          <p className="empty-copy">正在确认 frozen implementation plan，并启动 isolated workspace run path。</p>
+        ) : null}
+        {confirmState.phase === 'ready' ? (
+          <div className="goal-event-confirm-result">
+            <FieldList rows={[
+              ['contractName', textValue(confirmState.result.contractName)],
+              ['status', textValue(confirmState.result.status)],
+              ['planId', textValue(confirmState.result.planId)],
+              ['planHash', textValue(confirmState.result.planHash)],
+              ['runId', textValue(confirmState.result.confirmedRun?.runId)],
+              ['executionPlanId', textValue(confirmState.result.confirmedRun?.executionPlanId)],
+              ['writeBoundary', textValue(confirmState.result.confirmedRun?.writeBoundary)],
+              ['mainWorktreeWrites', textValue(confirmState.result.confirmedRun?.mainWorktreeWrites)],
+              ['workspaceWrites', textValue(confirmState.result.confirmedRun?.workspaceWrites)],
+              ['verifierStatus', textValue(confirmState.result.confirmedRun?.verifierStatus)]
+            ]} />
+          </div>
+        ) : null}
+      </Subsection>
+
+      <Subsection title="run result bridge">
+        <FieldList rows={[
+          ['state', textValue(preview?.runResultBridge?.state)],
+          ['sourceContract', preview?.runResultBridge?.sourceContract],
+          ['operationId', preview?.runResultBridge?.operationId],
+          ['operationStatus', preview?.runResultBridge?.operationStatus],
+          ['commandKind', preview?.runResultBridge?.commandKind],
+          ['runId', preview?.runResultBridge?.run?.runId],
+          ['executionPlanId', preview?.runResultBridge?.run?.executionPlanId],
+          ['run.status', preview?.runResultBridge?.run?.status],
+          ['run.exitCode', preview?.runResultBridge?.run?.exitCode],
+          ['verifierStatus', preview?.runResultBridge?.run?.verifierStatus],
+          ['writeBoundary', preview?.runResultBridge?.run?.writeBoundary],
+          ['mainWorktreeWrites', preview?.runResultBridge?.run?.mainWorktreeWrites],
+          ['workspaceWrites', preview?.runResultBridge?.run?.workspaceWrites],
+          ['evidenceArtifactPath', preview?.runResultBridge?.run?.evidenceArtifactPath],
+          ['sourceWorkspacePath', preview?.runResultBridge?.run?.sourceWorkspacePath],
+          ['artifact count', preview?.runResultBridge?.artifactRefs?.count],
+          ['changed files', textValue(preview?.runResultBridge?.changedFiles?.items?.length ?? 0)],
+          ['failureReason', preview?.runResultBridge?.run?.failureReason]
+        ]} />
+        <h4>artifact refs</h4>
+        <OperationArtifactRefList artifactRefs={preview?.runResultBridge?.artifactRefs} />
+        <h4>verifier summary</h4>
+        <FieldList rows={[
+          ['status', preview?.runResultBridge?.verifierSummary?.status],
+          ['runStatus', preview?.runResultBridge?.verifierSummary?.runStatus],
+          ['passed', preview?.runResultBridge?.verifierSummary?.passed],
+          ['changedFileCount', preview?.runResultBridge?.verifierSummary?.changedFileCount],
+          ['artifactCount', preview?.runResultBridge?.verifierSummary?.artifactCount],
+          ['failureReason', preview?.runResultBridge?.verifierSummary?.failureReason]
+        ]} />
+        <h4>output summary</h4>
+        <div className="operation-console-streams" aria-label="implementation run output summary">
+          <label>
+            <span>stdout</span>
+            <pre><code>{preview?.runResultBridge?.outputSummary?.stdout?.text}</code></pre>
+          </label>
+          <label>
+            <span>stderr</span>
+            <pre><code>{preview?.runResultBridge?.outputSummary?.stderr?.text}</code></pre>
+          </label>
+        </div>
+        <p className="panel-note">{preview?.runResultBridge?.note}</p>
+      </Subsection>
+
+      <Subsection title="endpoint">
+        <FieldList rows={[
+          ['method', preview?.endpoint?.method],
+          ['route', preview?.endpoint?.route],
+          ['allowedQueryFields', preview?.endpoint?.allowedQueryFields],
+          ['rejectsPromptInput', preview?.endpoint?.rejectsPromptInput],
+          ['rejectsPlanHashInput', preview?.endpoint?.rejectsPlanHashInput],
+          ['rejectsConfirmInput', preview?.endpoint?.rejectsConfirmInput],
+          ['writesInDryRun', preview?.endpoint?.writesInDryRun],
+          ['genericShellRunner', preview?.endpoint?.genericShellRunner]
+        ]} />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', preview?.safety?.readOnly],
+          ['copyOnly', preview?.safety?.copyOnly],
+          ['workbenchWriteAvailable', preview?.safety?.workbenchWriteAvailable],
+          ['browserExecutionAvailable', preview?.safety?.browserExecutionAvailable],
+          ['modelInvocationAvailable', preview?.safety?.modelInvocationAvailable],
+          ['genericShellRunner', preview?.safety?.genericShellRunner],
+          ['arbitraryPathReadAvailable', preview?.safety?.arbitraryPathReadAvailable],
+          ['implementationRunStarted', preview?.safety?.implementationRunStarted],
+          ['approvalReadinessSource', preview?.safety?.approvalReadinessSource],
+          ['unsupportedInferenceSources', preview?.safety?.unsupportedInferenceSources]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note}</p>
+    </DataPanel>
+  );
+}
+
+function buildControlledImplementationConfirmBody(preview) {
+  const goalId = preview?.goalId?.value;
+  const taskId = preview?.taskId?.value;
+  const planId = preview?.plan?.planId?.value;
+  const planHash = preview?.plan?.planHash?.value;
+
+  if (![goalId, taskId, planId, planHash].every((value) => typeof value === 'string' && value.trim() !== '')) {
+    return null;
+  }
+
+  return {
+    goalId,
+    taskId,
+    planId,
+    planHash
+  };
+}
+
+function buildControlledVerificationRunBody(preview) {
+  const goalId = preview?.goalId?.value;
+  const taskId = preview?.taskId?.value;
+  const suiteId = preview?.operationStart?.suiteId?.value;
+
+  if (![goalId, taskId, suiteId].every((value) => typeof value === 'string' && value.trim() !== '')) {
+    return null;
+  }
+
+  return {
+    goalId,
+    taskId,
+    suiteId
+  };
 }
 
 function NextActionCard({ nextAction, route, onGoalEventConfirmed }) {
@@ -1960,6 +2819,10 @@ function CloseoutGapsPanel({
         ['nextAction', closeoutGaps.nextAction]
       ]} />
 
+      <Subsection title="release baseline resolver">
+        <ReleaseBaselineResolver baseline={closeoutGaps.releaseBaseline} />
+      </Subsection>
+
       <Subsection title="missing evidence and gates">
         <CloseoutMissingList missing={closeoutGaps.missing} />
       </Subsection>
@@ -1969,7 +2832,10 @@ function CloseoutGapsPanel({
       </Subsection>
 
       <Subsection title="release verification checklist">
-        <ReleaseVerificationChecklist checklist={closeoutGaps.verificationChecklist} />
+        <ReleaseVerificationChecklist
+          checklist={closeoutGaps.verificationChecklist}
+          onGoalEventConfirmed={onGoalEventConfirmed}
+        />
       </Subsection>
 
       <Subsection title="release.ready gate registration">
@@ -1979,8 +2845,16 @@ function CloseoutGapsPanel({
         />
       </Subsection>
 
-      <Subsection title="tag evidence prompt">
+      <Subsection title="release evidence draft">
+        <ReleaseEvidenceDraft draft={closeoutGaps.releaseEvidenceDraft} />
+      </Subsection>
+
+      <Subsection title="tag evidence draft / prompt">
         <TagEvidencePrompt prompt={closeoutGaps.tagEvidencePrompt} />
+      </Subsection>
+
+      <Subsection title="next-version handoff draft">
+        <NextVersionHandoffDraft draft={closeoutGaps.nextVersionHandoffDraft} />
       </Subsection>
 
       <Subsection title="safety">
@@ -2001,7 +2875,111 @@ function CloseoutGapsPanel({
   );
 }
 
-function ReleaseVerificationChecklist({ checklist }) {
+function ReleaseBaselineResolver({ baseline }) {
+  if (baseline?.state === 'missing' || baseline === undefined || baseline === null) {
+    return <EmptyBlock copy="release baseline resolver 未暴露。" />;
+  }
+
+  return (
+    <div className="release-baseline-resolver">
+      <FieldList rows={[
+        ['modelName', baseline.modelName],
+        ['state', textValue(baseline.state)],
+        ['sourcePolicy', baseline.sourcePolicy],
+        ['goalId', baseline.goalId],
+        ['taskId', baseline.taskId],
+        ['role', baseline.role],
+        ['phase', baseline.phase],
+        ['reason', baseline.reason],
+        ['activeTaskTitle', baseline.activeTaskTitle],
+        ['activeTaskBranch', baseline.activeTaskBranch],
+        ['expectedWorkerEvent', baseline.activeTaskExpectedWorkerEvent],
+        ['workerEvidenceRef', baseline.currentWorkerEvidenceRef],
+        ['currentBranch', baseline.currentBranch],
+        ['currentHead', baseline.currentHead],
+        ['mainHead', baseline.mainHead],
+        ['originMainHead', baseline.originMainHead],
+        ['worktree.clean', baseline.worktree?.clean],
+        ['worktree.dirty', baseline.worktree?.dirty],
+        ['worktree.dirtyFilesCount', baseline.worktree?.dirtyFilesCount],
+        ['releaseReadinessAllowed', baseline.judgment?.releaseReadinessAllowed],
+        ['stopReason', baseline.judgment?.stopReason],
+        ['finalJudgmentFromFallbackCheckout', baseline.judgment?.finalJudgmentFromFallbackCheckout],
+        ['mainVerifiedTaskCount', baseline.judgment?.mainVerifiedTaskCount],
+        ['explicitEventCount', baseline.judgment?.explicitEventCount]
+      ]} />
+      <Subsection title="PR / CI ref">
+        <FieldList rows={[
+          ['status', baseline.prCiRef?.status],
+          ['workflowName', baseline.prCiRef?.workflowName],
+          ['displayTitle', baseline.prCiRef?.displayTitle],
+          ['headBranch', baseline.prCiRef?.headBranch],
+          ['headSha', baseline.prCiRef?.headSha],
+          ['conclusion', baseline.prCiRef?.conclusion],
+          ['createdAt', baseline.prCiRef?.createdAt],
+          ['source', baseline.prCiRef?.source]
+        ]} />
+      </Subsection>
+      <Subsection title="dirty paths">
+        <TextItemList items={baseline.worktree?.dirtyPaths} emptyCopy="dirty paths 为空。" />
+      </Subsection>
+      <Subsection title="stop / fix guidance">
+        <TextItemList items={baseline.fixGuidance} emptyCopy="stop / fix guidance 为空。" />
+      </Subsection>
+      <Subsection title="fixed command outputs">
+        <ReleaseBaselineCommandOutputList outputs={baseline.commandOutputs} />
+      </Subsection>
+      <Subsection title="copy-only baseline commands">
+        <TextItemList items={baseline.copyOnlyCommands} emptyCopy="baseline commands 未暴露。" />
+      </Subsection>
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', baseline.safety?.readOnly],
+          ['copyOnly', baseline.safety?.copyOnly],
+          ['browserExecutionAvailable', baseline.safety?.browserExecutionAvailable],
+          ['genericShellRunner', baseline.safety?.genericShellRunner],
+          ['modelInvocationAvailable', baseline.safety?.modelInvocationAvailable],
+          ['releaseReadyBlockedWhenDirtyOrNonMain', baseline.safety?.releaseReadyBlockedWhenDirtyOrNonMain],
+          ['infersReadinessFromBranchName', baseline.safety?.infersReadinessFromBranchName],
+          ['infersReadinessFromCommandText', baseline.safety?.infersReadinessFromCommandText]
+        ]} />
+      </Subsection>
+      <p className="panel-note">{baseline.note?.text}</p>
+    </div>
+  );
+}
+
+function ReleaseBaselineCommandOutputList({ outputs }) {
+  if (outputs?.state === 'missing' || outputs === undefined || outputs === null) {
+    return <EmptyBlock copy="fixed command outputs 未暴露。" />;
+  }
+
+  if (!Array.isArray(outputs.items) || outputs.items.length === 0) {
+    return <EmptyBlock copy="fixed command outputs 为空。" />;
+  }
+
+  return (
+    <ul className="release-baseline-command-output-list">
+      {outputs.items.map((output, index) => (
+        <li key={`${output.id.text}-${index}`}>
+          <FieldList rows={[
+            ['id', output.id],
+            ['command', output.command],
+            ['status', output.status],
+            ['exitCode', output.exitCode],
+            ['stdout', output.stdout],
+            ['stderr', output.stderr]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReleaseVerificationChecklist({
+  checklist,
+  onGoalEventConfirmed
+}) {
   if (checklist?.state === 'missing') {
     return <EmptyBlock copy="release verification checklist 未暴露。" />;
   }
@@ -2015,7 +2993,11 @@ function ReleaseVerificationChecklist({ checklist }) {
         ['passedCount', checklist.passedCount],
         ['pendingCount', checklist.pendingCount],
         ['copyOnlyCommands', checklist.safety.copyOnlyCommands],
+        ['goalGatePreviewAvailable', checklist.safety.goalGatePreviewAvailable],
+        ['confirmRequiresPlanHash', checklist.safety.confirmRequiresPlanHash],
+        ['appendOnlyOnConfirm', checklist.safety.appendOnlyOnConfirm],
         ['genericShellRunner', checklist.safety.genericShellRunner],
+        ['modelInvocationAvailable', checklist.safety.modelInvocationAvailable],
         ['releaseReadyInferredFromCommands', checklist.safety.releaseReadyInferredFromCommands]
       ]} />
       {checklist.items.length === 0 ? (
@@ -2029,10 +3011,26 @@ function ReleaseVerificationChecklist({ checklist }) {
                 ['gate', item.gate],
                 ['gateId', item.gateId],
                 ['status', item.status],
+                ['eventBackedStatus', item.eventBackedStatus],
+                ['latestEventId', item.latestEventId],
+                ['latestEventType', item.latestEventType],
+                ['latestRecordedAt', item.latestRecordedAt],
+                ['latestVerifier', item.latestVerifier],
                 ['command', item.command],
                 ['registrationCommand', item.registrationCommand],
+                ['dryRunCommand', item.dryRunCommand],
+                ['confirmCommandPattern', item.confirmCommandPattern],
                 ['needsEvidence', item.needsEvidence]
               ]} />
+              <Subsection title="release gate evidence refs">
+                <EvidenceRefList evidenceRefs={item.evidenceRefs} />
+              </Subsection>
+              <Subsection title="release gate registration">
+                <ReleaseGateRegistration
+                  registration={item.registration}
+                  onGoalEventConfirmed={onGoalEventConfirmed}
+                />
+              </Subsection>
             </li>
           ))}
         </ul>
@@ -2042,11 +3040,51 @@ function ReleaseVerificationChecklist({ checklist }) {
   );
 }
 
+function ReleaseGateRegistration({
+  registration,
+  onGoalEventConfirmed
+}) {
+  if (registration?.state === 'missing') {
+    return <EmptyBlock copy="release gate registration form 未暴露。" />;
+  }
+
+  return (
+    <div className="release-gate-registration">
+      <FieldList rows={[
+        ['state', textValue(registration.state)],
+        ['sourcePolicy', registration.sourcePolicy],
+        ['currentStatus', registration.currentStatus],
+        ['latestEventId', registration.latestEventId],
+        ['latestEventType', registration.latestEventType],
+        ['releaseGateEvidencePath', registration.releaseGateEvidencePath],
+        ['dryRunCommand', registration.dryRunCommand],
+        ['confirmCommandPattern', registration.confirmCommandPattern],
+        ['confirmRequiresPlanHash', registration.safety.confirmRequiresPlanHash],
+        ['appendOnlyOnConfirm', registration.safety.appendOnlyOnConfirm],
+        ['workbenchWriteAvailable', registration.safety.workbenchWriteAvailable],
+        ['usesGoalGateOnly', registration.safety.usesGoalGateOnly],
+        ['browserExecutionAvailable', registration.safety.browserExecutionAvailable],
+        ['modelInvocationAvailable', registration.safety.modelInvocationAvailable],
+        ['arbitraryShellAccepted', registration.safety.arbitraryShellAccepted],
+        ['releaseReadyAvailable', registration.safety.releaseReadyAvailable],
+        ['commandSuccessImpliesGatePassed', registration.safety.commandSuccessImpliesGatePassed]
+      ]} />
+      <EvidenceRefList evidenceRefs={registration.latestEvidenceRefs} />
+      <GoalEventFormList
+        forms={registration.forms}
+        emptyCopy="release gate forms 不可用。"
+        onGoalEventConfirmed={onGoalEventConfirmed}
+      />
+      <p className="panel-note">{registration.note.text}</p>
+    </div>
+  );
+}
+
 function ReleaseReadyGateRegistration({
   registration,
   onGoalEventConfirmed
 }) {
-  if (registration?.state === 'missing' || registration?.form === null) {
+  if (registration?.state === 'missing') {
     return <EmptyBlock copy="release.ready gate registration form 未暴露。" />;
   }
 
@@ -2055,47 +3093,311 @@ function ReleaseReadyGateRegistration({
       <FieldList rows={[
         ['state', textValue(registration.state)],
         ['sourcePolicy', registration.sourcePolicy],
+        ['baselineState', registration.baselineState],
+        ['baselineStopReason', registration.baselineStopReason],
+        ['baselineReleaseReadinessAllowed', registration.baselineReleaseReadinessAllowed],
         ['missingReleaseReady', registration.missingReleaseReady],
+        ['closeoutMissingCount', registration.closeoutMissingCount],
+        ['closeoutBlockingGapCount', registration.closeoutBlockingGapCount],
+        ['requiredReleaseGatesPassed', registration.requiredReleaseGatesPassed],
         ['releaseEvidencePath', registration.releaseEvidencePath],
         ['dryRunCommand', registration.dryRunCommand],
         ['confirmCommandPattern', registration.confirmCommandPattern],
         ['confirmRequiresPlanHash', registration.safety.confirmRequiresPlanHash],
         ['appendOnlyOnConfirm', registration.safety.appendOnlyOnConfirm],
         ['workbenchWriteAvailable', registration.safety.workbenchWriteAvailable],
-        ['declaresReleaseReadyOnlyOnConfirm', registration.safety.declaresReleaseReadyOnlyOnConfirm]
+        ['declaresReleaseReadyOnlyOnConfirm', registration.safety.declaresReleaseReadyOnlyOnConfirm],
+        ['dirtyOrNonMainBlocksFinalJudgment', registration.safety.dirtyOrNonMainBlocksFinalJudgment],
+        ['closeoutGapsBlockConfirm', registration.safety.closeoutGapsBlockConfirm],
+        ['unknownOrMissingReleaseGatesBlockConfirm', registration.safety.unknownOrMissingReleaseGatesBlockConfirm],
+        ['frontendInferenceAvailable', registration.safety.frontendInferenceAvailable]
       ]} />
-      <GoalEventFormList
-        forms={{
-          state: 'available',
-          items: [registration.form]
-        }}
-        emptyCopy="release.ready gate form 不可用。"
-        onGoalEventConfirmed={onGoalEventConfirmed}
-      />
+      <Subsection title="pending required release gates">
+        <TextItemList items={registration.pendingRequiredReleaseGateIds} emptyCopy="required release gates 已全部 passed。" />
+      </Subsection>
+      {registration.form === null ? (
+        <Subsection title="stop / fix guidance">
+          <TextItemList items={registration.stopGuidance} emptyCopy="stop / fix guidance 未暴露。" />
+        </Subsection>
+      ) : (
+        <GoalEventFormList
+          forms={{
+            state: 'available',
+            items: [registration.form]
+          }}
+          emptyCopy="release.ready gate form 不可用。"
+          onGoalEventConfirmed={onGoalEventConfirmed}
+        />
+      )}
       <p className="panel-note">{registration.note.text}</p>
     </div>
   );
 }
 
+function ReleaseEvidenceDraft({ draft }) {
+  if (draft?.state === 'missing') {
+    return <EmptyBlock copy="release evidence draft 未暴露。" />;
+  }
+
+  return (
+    <div className="release-evidence-draft">
+      <FieldList rows={[
+        ['modelName', draft.modelName],
+        ['sourcePolicy', draft.sourcePolicy],
+        ['goalId', draft.goalId],
+        ['releaseName', draft.releaseName],
+        ['evidencePath', draft.evidencePath],
+        ['tagEvidencePath', draft.tagEvidencePath],
+        ['targetCommit', draft.targetCommit],
+        ['targetCommitSource', draft.targetCommitSource],
+        ['copyOnly', draft.safety.copyOnly],
+        ['writesEvidenceFile', draft.safety.writesEvidenceFile],
+        ['runsShell', draft.safety.runsShell],
+        ['declaresReleaseReady', draft.safety.declaresReleaseReady],
+        ['createsTag', draft.safety.createsTag],
+        ['pushesTag', draft.safety.pushesTag],
+        ['publishesRelease', draft.safety.publishesRelease],
+        ['infersStatusFromFilenames', draft.safety.infersStatusFromFilenames]
+      ]} />
+      <Subsection title="release notes summary">
+        <TextItemList items={draft.releaseNotesSummary} emptyCopy="release notes summary 为空。" />
+      </Subsection>
+      <Subsection title="command result fields">
+        <ReleaseEvidenceCommandResultList commandResults={draft.commandResults} />
+      </Subsection>
+      <pre className="prompt-preview-text"><code>{draft.markdown.text}</code></pre>
+      <p className="panel-note">{draft.boundaryText.text}</p>
+    </div>
+  );
+}
+
+function ReleaseEvidenceCommandResultList({ commandResults }) {
+  if (commandResults?.state === 'missing' || commandResults === undefined || commandResults === null) {
+    return <EmptyBlock copy="command result fields 未暴露。" />;
+  }
+
+  if (!Array.isArray(commandResults.items) || commandResults.items.length === 0) {
+    return <EmptyBlock copy="command result fields 为空。" />;
+  }
+
+  return (
+    <ul className="release-command-result-list">
+      {commandResults.items.map((item, index) => (
+        <li key={`${item.gate.text}-${index}`}>
+          <FieldList rows={[
+            ['gate', item.gate],
+            ['label', item.label],
+            ['command', item.command],
+            ['resultStatus', item.resultStatus],
+            ['latestEventId', item.latestEventId],
+            ['latestVerifier', item.latestVerifier],
+            ['latestEvidenceRef', item.latestEvidenceRef],
+            ['commandOutputRequired', item.commandOutputRequired]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function TagEvidencePrompt({ prompt }) {
   if (prompt?.state === 'missing') {
-    return <EmptyBlock copy="tag evidence prompt 未暴露。" />;
+    return <EmptyBlock copy="tag evidence draft 未暴露。" />;
   }
 
   return (
     <div className="tag-evidence-prompt">
       <FieldList rows={[
+        ['modelName', prompt.modelName],
         ['sourceContract', prompt.sourceContract],
+        ['sourcePolicy', prompt.sourcePolicy],
         ['evidencePath', prompt.evidencePath],
         ['releaseEvidencePath', prompt.releaseEvidencePath],
+        ['tagRecommendation', prompt.tagRecommendation],
+        ['targetCommit', prompt.targetCommit],
+        ['targetCommitSource', prompt.targetCommitSource],
+        ['copyOnlyTagCommand', prompt.copyOnlyTagCommand],
+        ['latestTagGateEventId', prompt.latestTagGateEventId],
+        ['latestTagGateStatus', prompt.latestTagGateStatus],
         ['promptFormat', prompt.promptFormat],
         ['copyOnly', prompt.safety.copyOnly],
         ['createsTag', prompt.safety.createsTag],
+        ['tagExecutionAvailable', prompt.safety.tagExecutionAvailable],
+        ['pushesTag', prompt.safety.pushesTag],
+        ['publishesRelease', prompt.safety.publishesRelease],
+        ['mergeAvailable', prompt.safety.mergeAvailable],
         ['declaresReleaseReady', prompt.safety.declaresReleaseReady],
-        ['runsShell', prompt.safety.runsShell]
+        ['runsShell', prompt.safety.runsShell],
+        ['opensLocalFiles', prompt.safety.opensLocalFiles],
+        ['downloadsArtifacts', prompt.safety.downloadsArtifacts]
       ]} />
+      <Subsection title="release notes summary">
+        <TextItemList items={prompt.releaseNotesSummary} emptyCopy="release notes summary 为空。" />
+      </Subsection>
+      <Subsection title="tag command result fields">
+        <FieldList rows={[
+          ['command', prompt.commandResultFields?.command],
+          ['result', prompt.commandResultFields?.result],
+          ['exitCode', prompt.commandResultFields?.exitCode],
+          ['stdout', prompt.commandResultFields?.stdout],
+          ['stderr', prompt.commandResultFields?.stderr],
+          ['evidenceRef', prompt.commandResultFields?.evidenceRef]
+        ]} />
+      </Subsection>
+      <Subsection title="tag evidence gate refs">
+        <EvidenceRefList evidenceRefs={prompt.latestTagEvidenceRefs} />
+      </Subsection>
       <pre className="prompt-preview-text"><code>{prompt.text.text}</code></pre>
+      <p className="panel-note">{prompt.boundaryText.text}</p>
     </div>
+  );
+}
+
+function NextVersionHandoffDraft({ draft }) {
+  if (draft?.state === 'missing') {
+    return <EmptyBlock copy="next-version handoff draft 未暴露。" />;
+  }
+
+  return (
+    <div className="next-version-handoff-draft">
+      <FieldList rows={[
+        ['modelName', draft.modelName],
+        ['sourcePolicy', draft.sourcePolicy],
+        ['goalId', draft.goalId],
+        ['releaseName', draft.releaseName],
+        ['currentVersion', draft.currentVersion],
+        ['nextVersion', draft.nextVersion],
+        ['targetCommit', draft.targetCommit],
+        ['targetCommitSource', draft.targetCommitSource],
+        ['latestRunId', draft.latestRunId],
+        ['releaseReady', draft.releaseReady],
+        ['releaseReadySource', draft.releaseReadySource],
+        ['releaseReadyEventId', draft.releaseReadyEventId],
+        ['closeoutMissingCount', draft.closeoutMissingCount]
+      ]} />
+      <Subsection title="source refs">
+        <TextItemList items={draft.sourceRefs} emptyCopy="source refs 未暴露。" />
+      </Subsection>
+      <Subsection title="evidence anchors">
+        <EvidenceRefList evidenceRefs={draft.evidenceRefs} />
+      </Subsection>
+      <Subsection title="task anchors">
+        <NextVersionTaskAnchorList anchors={draft.taskAnchors} />
+      </Subsection>
+      <Subsection title="release gate anchors">
+        <NextVersionReleaseGateAnchorList anchors={draft.releaseGateAnchors} />
+      </Subsection>
+      <Subsection title="implemented capabilities">
+        <NextVersionCapabilityList capabilities={draft.implementedCapabilities} />
+      </Subsection>
+      <Subsection title="copy-only context commands">
+        <TextItemList items={draft.copyOnlyCommands} emptyCopy="copy-only context commands 未暴露。" />
+      </Subsection>
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['copyOnly', draft.safety.copyOnly],
+          ['createsManagedGoal', draft.safety.createsManagedGoal],
+          ['entersNextVersion', draft.safety.entersNextVersion],
+          ['runsShell', draft.safety.runsShell],
+          ['invokesModel', draft.safety.invokesModel],
+          ['readsEvidenceBodies', draft.safety.readsEvidenceBodies],
+          ['opensLocalFiles', draft.safety.opensLocalFiles],
+          ['downloadsArtifacts', draft.safety.downloadsArtifacts],
+          ['mergesBranches', draft.safety.mergesBranches],
+          ['pushesBranchesOrTags', draft.safety.pushesBranchesOrTags],
+          ['createsTag', draft.safety.createsTag],
+          ['publishesRelease', draft.safety.publishesRelease],
+          ['declaresReleaseReady', draft.safety.declaresReleaseReady],
+          ['selfApprovalAvailable', draft.safety.selfApprovalAvailable],
+          ['v8TopLevelModel', draft.safety.v8TopLevelModel],
+          ['infersStateFromFilenames', draft.safety.infersStateFromFilenames],
+          ['infersStateFromBranches', draft.safety.infersStateFromBranches],
+          ['infersStateFromPrompts', draft.safety.infersStateFromPrompts]
+        ]} />
+      </Subsection>
+      <pre className="prompt-preview-text"><code>{draft.markdown.text}</code></pre>
+      <p className="panel-note">{draft.boundaryText.text}</p>
+    </div>
+  );
+}
+
+function NextVersionTaskAnchorList({ anchors }) {
+  if (anchors?.state === 'missing' || anchors === undefined || anchors === null) {
+    return <EmptyBlock copy="task anchors 未暴露。" />;
+  }
+
+  if (!Array.isArray(anchors.items) || anchors.items.length === 0) {
+    return <EmptyBlock copy="task anchors 为空。" />;
+  }
+
+  return (
+    <ul className="next-version-anchor-list">
+      {anchors.items.map((item, index) => (
+        <li key={`${item.taskId.text}-${index}`}>
+          <FieldList rows={[
+            ['taskId', item.taskId],
+            ['title', item.title],
+            ['status', item.status],
+            ['workerEvidenceRef', item.workerEvidenceRef],
+            ['reviewEvidenceRef', item.reviewEvidenceRef],
+            ['reviewVerdict', item.reviewVerdict],
+            ['mainVerificationRef', item.mainVerificationRef],
+            ['statusSource', item.statusSource]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NextVersionReleaseGateAnchorList({ anchors }) {
+  if (anchors?.state === 'missing' || anchors === undefined || anchors === null) {
+    return <EmptyBlock copy="release gate anchors 未暴露。" />;
+  }
+
+  if (!Array.isArray(anchors.items) || anchors.items.length === 0) {
+    return <EmptyBlock copy="release gate anchors 为空。" />;
+  }
+
+  return (
+    <ul className="next-version-anchor-list">
+      {anchors.items.map((item, index) => (
+        <li key={`${item.gate.text}-${index}`}>
+          <FieldList rows={[
+            ['gate', item.gate],
+            ['label', item.label],
+            ['status', item.status],
+            ['latestEventId', item.latestEventId],
+            ['latestEvidenceRef', item.latestEvidenceRef],
+            ['command', item.command]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NextVersionCapabilityList({ capabilities }) {
+  if (capabilities?.state === 'missing' || capabilities === undefined || capabilities === null) {
+    return <EmptyBlock copy="implemented capabilities 未暴露。" />;
+  }
+
+  if (!Array.isArray(capabilities.items) || capabilities.items.length === 0) {
+    return <EmptyBlock copy="implemented capabilities 为空。" />;
+  }
+
+  return (
+    <ul className="next-version-capability-list">
+      {capabilities.items.map((item, index) => (
+        <li key={`${item.name.text}-${index}`}>
+          <FieldList rows={[
+            ['name', item.name],
+            ['state', item.state],
+            ['source', item.source]
+          ]} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -2164,10 +3466,43 @@ function OperationConsoleRunCard({ run }) {
         ['exitCode', run.exitCode],
         ['planHash', run.planHash],
         ['eventIds', run.eventIds],
+          ['runId', run.runResult.runId],
+          ['suiteId', run.runResult.suiteId],
+          ['run.status', run.runResult.status],
+          ['commandCount', run.runResult.commandCount],
+          ['failedCommandCount', run.runResult.failedCommandCount],
+          ['gatePassed', run.runResult.gatePassed],
+          ['verifierStatus', run.runResult.verifierStatus],
+        ['artifact count', run.artifactRefs.count],
+        ['failureReason', run.failureReason],
         ['startedAt', run.startedAt],
         ['updatedAt', run.updatedAt],
         ['completedAt', run.completedAt]
       ]} />
+      <Subsection title="run result">
+        <FieldList rows={[
+          ['plannedRunId', run.runResult.plannedRunId],
+          ['executionPlanId', run.runResult.executionPlanId],
+          ['exitCode', run.runResult.exitCode],
+          ['writeBoundary', run.runResult.writeBoundary],
+          ['mainWorktreeWrites', run.runResult.mainWorktreeWrites],
+          ['workspaceWrites', run.runResult.workspaceWrites],
+          ['sourceWorkspacePath', run.runResult.sourceWorkspacePath],
+          ['sourceWorkspaceManifestPath', run.runResult.sourceWorkspaceManifestPath],
+          ['evidenceArtifactPath', run.runResult.evidenceArtifactPath]
+        ]} />
+      </Subsection>
+      <Subsection title="artifact refs / verifier summary">
+        <OperationArtifactRefList artifactRefs={run.artifactRefs} />
+        <FieldList rows={[
+          ['verifier.status', run.verifierSummary.status],
+          ['verifier.runStatus', run.verifierSummary.runStatus],
+          ['verifier.passed', run.verifierSummary.passed],
+          ['verifier.changedFileCount', run.verifierSummary.changedFileCount],
+          ['verifier.artifactCount', run.verifierSummary.artifactCount],
+          ['verifier.failureReason', run.verifierSummary.failureReason]
+        ]} />
+      </Subsection>
       <div className="operation-console-streams" aria-label="operation console output">
         <label>
           <span>command preview</span>
@@ -2183,6 +3518,30 @@ function OperationConsoleRunCard({ run }) {
         </label>
       </div>
     </div>
+  );
+}
+
+function OperationArtifactRefList({ artifactRefs }) {
+  const items = Array.isArray(artifactRefs?.items) ? artifactRefs.items : [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="artifact refs 未暴露。" />;
+  }
+
+  return (
+    <ul className="operation-artifact-ref-list">
+      {items.map((artifact, index) => (
+        <li key={`${artifact.kind.text}-${artifact.path.text}-${index}`}>
+          <FieldList rows={[
+            ['kind', artifact.kind],
+            ['path', artifact.path],
+            ['ref', artifact.ref],
+            ['uri', artifact.uri],
+            ['status', artifact.status]
+          ]} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -2499,54 +3858,80 @@ function AdoptionCandidatePanel({ candidates }) {
   return (
     <DataPanel
       id="adoption-candidate-panel"
-      kicker="v26 adoption candidates"
-      title="Adoption candidate runs"
-      state={candidates.state === 'available' ? `${candidates.count.text} candidates` : candidates.state}
+      kicker="v30 adoption candidates"
+      title="Adoption candidate normalization"
+      state={candidates.state === 'available' ? `${candidates.count.text} candidates / ${candidates.blockedCount.text} blocked` : candidates.state}
     >
       <FieldList rows={[
+        ['goalId', candidates.goalId],
+        ['taskId', candidates.taskId],
         ['sourceContract', candidates.sourceContract],
         ['routeState', candidates.routeState],
         ['route', candidates.route],
         ['candidate count', candidates.count],
+        ['blocked count', candidates.blockedCount],
         ['total runs scanned', candidates.totalRunsScanned],
         ['status criterion', candidates.criteria.status],
         ['verifier criterion', candidates.criteria.verifierStatus],
+        ['artifactRefs criterion', candidates.criteria.artifactRefs],
         ['workspace criterion', candidates.criteria.workspace],
+        ['fingerprint criterion', candidates.criteria.fingerprint],
         ['mainWorktreeWrites criterion', candidates.criteria.mainWorktreeWrites],
-        ['evidence criterion', candidates.criteria.evidence],
         ['genericShellRunner', candidates.safety.genericShellRunner],
         ['workerCanApproveOwnTask', candidates.safety.workerCanApproveOwnTask]
       ]} />
 
-      {candidates.state === 'missing' ? <EmptyBlock copy="runs contract 未暴露，无法列出 adoption candidates。" /> : null}
-      {candidates.state === 'empty' ? <EmptyBlock copy="当前没有 passed verifier 的 isolated workspace run 可采纳。" /> : null}
-      {candidates.state === 'available' ? <AdoptionCandidateList candidates={candidates.items} /> : null}
+      {candidates.state === 'missing' ? <EmptyBlock copy="operation/runs contract 未暴露，无法列出 adoption candidates。" /> : null}
+      {candidates.state === 'empty' ? <EmptyBlock copy="当前没有 implementation run 可归一化。" /> : null}
+      {candidates.state === 'available' ? (
+        <>
+          <Subsection title="adoptable runs">
+            <AdoptionCandidateList candidates={candidates.items} emptyCopy="当前没有满足条件的 adoption candidate。" />
+          </Subsection>
+          <Subsection title="blocked runs">
+            <AdoptionCandidateList candidates={candidates.blockedItems} emptyCopy="当前没有 blocked implementation run。" />
+          </Subsection>
+        </>
+      ) : null}
 
       <p className="panel-note">{candidates.note}</p>
     </DataPanel>
   );
 }
 
-function AdoptionCandidateList({ candidates }) {
+function AdoptionCandidateList({ candidates, emptyCopy }) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return <EmptyBlock copy={emptyCopy} />;
+  }
+
   return (
     <ul className="adoption-candidate-list">
       {candidates.map((candidate) => (
-        <li key={candidate.sourceRunId.text}>
+        <li key={`${candidate.sourceRunId.text}-${candidate.operationId.text}`}>
           <div className="run-row-header">
             <h3>{candidate.sourceRunId.text}</h3>
-            <span className="state-pill">{candidate.isLatest.value === true ? 'latest' : 'history'}</span>
+            <span className="state-pill">{candidate.adoptionStatus.text}</span>
           </div>
           <FieldList rows={[
+            ['adoption status', candidate.adoptionStatus],
+            ['blocking reasons', candidate.blockingReasons],
             ['source run', candidate.sourceRunId],
+            ['source contract', candidate.sourceContract],
+            ['operationId', candidate.operationId],
+            ['operationStatus', candidate.operationStatus],
+            ['goalId', candidate.goalId],
+            ['taskId', candidate.taskId],
             ['workspace', candidate.workspace.path],
             ['workspace manifest', candidate.workspace.manifestPath],
+            ['workspace fingerprint', candidate.workspace.fingerprint],
             ['evidenceArtifactPath', candidate.evidence.artifactPath],
             ['evidenceRef', candidate.evidence.ref],
+            ['artifact count', candidate.evidence.artifactCount],
             ['changed file count', candidate.changedFiles.count],
             ['changed files', candidate.changedFiles.text],
             ['verifierStatus', candidate.verifierStatus],
+            ['verifier passed', candidate.verifier.passed],
             ['status', candidate.status],
-            ['executionPlanId', candidate.executionPlanId],
             ['writeBoundary', candidate.writeBoundary],
             ['workspaceWrites', candidate.workspaceWrites],
             ['mainWorktreeWrites', candidate.mainWorktreeWrites],
@@ -2555,6 +3940,685 @@ function AdoptionCandidateList({ candidates }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function AdoptionPlanPreviewWorkspacePanel({
+  workspace,
+  onAdoptionPlanFrozen = () => undefined
+}) {
+  const [freezeState, setFreezeState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+
+  async function handleConfirm(event) {
+    const candidateIndex = Number.parseInt(event.currentTarget.dataset.freezeIndex ?? '-1', 10);
+    const candidate = Array.isArray(workspace?.candidates?.items)
+      ? workspace.candidates.items[candidateIndex]
+      : null;
+    const route = candidate?.freeze?.endpointRoute?.value;
+    const body = candidate?.freeze?.requestPayload;
+
+    if (candidate?.freeze?.available?.value !== true || typeof route !== 'string' || body === null) {
+      setFreezeState({
+        phase: 'failed',
+        result: null,
+        error: 'freeze route unavailable'
+      });
+      return;
+    }
+
+    setFreezeState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await confirmControlledAdoptionPlanFreeze(route, body);
+
+    if (result.ok) {
+      setFreezeState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+
+      if (typeof onAdoptionPlanFrozen === 'function') {
+        await onAdoptionPlanFrozen(result.data);
+      }
+      return;
+    }
+
+    setFreezeState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  return (
+    <DataPanel
+      id="adoption-plan-preview-workspace-panel"
+      kicker="v30 adoption plan"
+      title="Adoption plan preview workspace"
+      state={workspace?.state ?? 'unavailable'}
+    >
+      <FieldList rows={[
+        ['modelName', workspace?.modelName],
+        ['contractName', workspace?.contractName],
+        ['goalId', workspace?.goalId],
+        ['taskId', workspace?.taskId],
+        ['freeze route', workspace?.freezeEndpoint?.route],
+        ['method', workspace?.freezeEndpoint?.method],
+        ['allowedBodyFields', workspace?.freezeEndpoint?.allowedBodyFields],
+        ['requiresSameGoalTaskContext', workspace?.freezeEndpoint?.requiresSameGoalTaskContext],
+        ['requiresAdoptableCandidate', workspace?.freezeEndpoint?.requiresAdoptableCandidate],
+        ['rejectsPromptInput', workspace?.freezeEndpoint?.rejectsPromptInput],
+        ['rejectsConfirmAdoptionInput', workspace?.freezeEndpoint?.rejectsConfirmAdoptionInput]
+      ]} />
+
+      <Subsection title="freeze candidates">
+        <AdoptionFreezeCandidateList
+          candidates={workspace?.candidates?.items}
+          busy={freezeState.phase === 'loading'}
+          handleConfirm={handleConfirm}
+        />
+      </Subsection>
+
+      {freezeState.phase === 'failed' ? (
+        <p className="error-copy">freeze 错误摘要：{freezeState.error}</p>
+      ) : null}
+      {freezeState.phase === 'loading' ? (
+        <p className="empty-copy">正在冻结 adoption plan，main worktree 保持不变。</p>
+      ) : null}
+      {freezeState.phase === 'ready' ? (
+        <Subsection title="latest freeze result">
+          <AdoptionFreezeResult result={freezeState.result} />
+        </Subsection>
+      ) : null}
+
+      <Subsection title="frozen plan from operations">
+        <FrozenAdoptionPlanView plan={workspace?.frozenPlan} />
+      </Subsection>
+
+      <Subsection title="recovery notes">
+        <FieldList rows={[
+          ['inspect command pattern', workspace?.recoveryNotes?.inspectCommandPattern],
+          ['confirm command source', workspace?.recoveryNotes?.confirmCommandSource],
+          ['failure recovery', workspace?.recoveryNotes?.failureRecovery]
+        ]} />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['workbenchWriteAvailable', workspace?.safety?.workbenchWriteAvailable],
+          ['writeScope', workspace?.safety?.writeScope],
+          ['mappedToExistingAdoptRun', workspace?.safety?.mappedToExistingAdoptRun],
+          ['mainWorktreeWrites', workspace?.safety?.mainWorktreeWrites],
+          ['adoptionConfirmAvailable', workspace?.safety?.adoptionConfirmAvailable],
+          ['browserExecutionAvailable', workspace?.safety?.browserExecutionAvailable],
+          ['modelInvocationAvailable', workspace?.safety?.modelInvocationAvailable],
+          ['genericShellRunner', workspace?.safety?.genericShellRunner],
+          ['arbitraryPathReadAvailable', workspace?.safety?.arbitraryPathReadAvailable],
+          ['mergeAvailable', workspace?.safety?.mergeAvailable],
+          ['pushAvailable', workspace?.safety?.pushAvailable],
+          ['tagAvailable', workspace?.safety?.tagAvailable],
+          ['selfApprovalAvailable', workspace?.safety?.selfApprovalAvailable],
+          ['unsupportedInferenceSources', workspace?.safety?.unsupportedInferenceSources]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{workspace?.note}</p>
+    </DataPanel>
+  );
+}
+
+function AdoptionFreezeCandidateList({ candidates, busy, handleConfirm }) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return <EmptyBlock copy="当前没有可冻结的 adoption candidate。" />;
+  }
+
+  return (
+    <ul className="adoption-candidate-list">
+      {candidates.map((candidate, index) => (
+        <li key={`${candidate.sourceRunId.text}-${candidate.operationId.text}-freeze`}>
+          <div className="run-row-header">
+            <h3>{candidate.sourceRunId.text}</h3>
+            <button
+              type="button"
+              data-freeze-index={index}
+              onClick={handleConfirm}
+              disabled={busy || candidate.freeze.available.value !== true}
+            >
+              Freeze adoption plan
+            </button>
+          </div>
+          <FieldList rows={[
+            ['operationId', candidate.operationId],
+            ['workspace fingerprint', candidate.sourceWorkspaceFingerprint],
+            ['changed files', candidate.changedFiles.text],
+            ['verifierStatus', candidate.verifierStatus],
+            ['evidenceRef', candidate.evidence.ref],
+            ['freeze route', candidate.freeze.endpointRoute]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function AdoptionFreezeResult({ result }) {
+  return (
+    <>
+      <FieldList rows={[
+        ['contractName', textValue(result?.contractName)],
+        ['status', textValue(result?.status)],
+        ['sourceRunId', textValue(result?.sourceRunId)],
+        ['sourceOperationId', textValue(result?.sourceOperationId)],
+        ['adoptionPlanId', textValue(result?.adoptionPlan?.adoptionPlanId)],
+        ['adoptionPlanArtifactPath', textValue(result?.adoptionPlan?.adoptionPlanArtifactPath)],
+        ['patchArtifactPath', textValue(result?.adoptionPlan?.patchArtifactPath)],
+        ['patchHash', textValue(result?.adoptionPlan?.patchHash)],
+        ['changedFileCount', textValue(result?.patchSummary?.changedFileCount)],
+        ['fileOperationCount', textValue(result?.patchSummary?.fileOperationCount)],
+        ['sourceWorkspaceFingerprint', textValue(result?.fingerprints?.sourceWorkspaceFingerprint)],
+        ['projectFingerprint', textValue(result?.fingerprints?.projectFingerprint)],
+        ['gitHead', textValue(result?.fingerprints?.gitHead)],
+        ['gitStatusFingerprint', textValue(result?.fingerprints?.gitStatusFingerprint)],
+        ['inspectCommand', textValue(result?.recoveryNotes?.inspectCommand)],
+        ['confirmCommand', textValue(result?.recoveryNotes?.confirmCommand)],
+        ['mainWorktreeUnchanged', textValue(result?.recoveryNotes?.mainWorktreeUnchanged)]
+      ]} />
+      <h4>affected files</h4>
+      <TextItemList
+        items={{
+          state: 'available',
+          items: (result?.patchSummary?.changedFiles ?? []).map((file) => textValue(file))
+        }}
+        emptyCopy="affected files 未暴露。"
+      />
+    </>
+  );
+}
+
+function FrozenAdoptionPlanView({ plan }) {
+  return (
+    <>
+      <FieldList rows={[
+        ['state', textValue(plan?.state)],
+        ['sourceContract', plan?.sourceContract],
+        ['operationId', plan?.operationId],
+        ['operationStatus', plan?.operationStatus],
+        ['commandKind', plan?.commandKind],
+        ['adoptionPlanId', plan?.adoptionPlanId],
+        ['adoptionPlanArtifactPath', plan?.adoptionPlanArtifactPath],
+        ['patchArtifactPath', plan?.patchArtifactPath],
+        ['patchHash', plan?.patchHash],
+        ['sourceRunId', plan?.sourceRunId],
+        ['sourceOperationId', plan?.sourceOperationId],
+        ['sourceWorkspacePath', plan?.sourceWorkspacePath],
+        ['sourceWorkspaceManifestPath', plan?.sourceWorkspaceManifestPath],
+        ['changedFileCount', plan?.changedFiles?.count],
+        ['fileOperationCount', plan?.fileOperations?.count],
+        ['sourceWorkspaceFingerprint', plan?.fingerprints?.sourceWorkspaceFingerprint],
+        ['projectFingerprint', plan?.fingerprints?.projectFingerprint],
+        ['gitHead', plan?.fingerprints?.gitHead],
+        ['gitStatusFingerprint', plan?.fingerprints?.gitStatusFingerprint],
+        ['inspectCommand', plan?.recoveryNotes?.inspectCommand],
+        ['confirmCommand', plan?.recoveryNotes?.confirmCommand],
+        ['failureRecovery', plan?.recoveryNotes?.failureRecovery]
+      ]} />
+      <h4>affected files</h4>
+      <TextItemList items={plan?.changedFiles?.items} emptyCopy="affected files 未暴露。" />
+      <h4>file operations</h4>
+      <KeyValueList
+        rows={plan?.fileOperations?.items ?? []}
+        nameKey="path"
+        valueKey="operation"
+        emptyCopy="file operations 未暴露。"
+      />
+    </>
+  );
+}
+
+function AdoptionInspectRecoveryPanel({
+  workspace,
+  onAdoptionConfirmed = () => undefined
+}) {
+  const [inspectState, setInspectState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+  const [confirmState, setConfirmState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+  const projectedInspection = inspectState.phase === 'ready' ? null : workspace?.inspection;
+
+  async function handlePreview() {
+    const route = workspace?.inspectEndpoint?.route?.value;
+
+    if (!['available', 'inspected'].includes(workspace?.state) || typeof route !== 'string' || route.trim() === '') {
+      setInspectState({
+        phase: 'failed',
+        result: null,
+        error: 'inspect route unavailable'
+      });
+      return;
+    }
+
+    setInspectState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await fetchAdoptionInspection(route);
+
+    if (result.ok) {
+      setInspectState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+      return;
+    }
+
+    setInspectState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  async function handleConfirm() {
+    const route = workspace?.confirmEndpoint?.route?.value;
+    const body = workspace?.confirmEndpoint?.requestPayload;
+
+    if (workspace?.safety?.adoptionConfirmAvailable?.value !== true || typeof route !== 'string' || body === null) {
+      setConfirmState({
+        phase: 'failed',
+        result: null,
+        error: 'adoption confirm route unavailable'
+      });
+      return;
+    }
+
+    setConfirmState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await confirmControlledAdoptionPlan(route, body);
+
+    if (result.ok) {
+      setConfirmState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+
+      if (typeof onAdoptionConfirmed === 'function') {
+        await onAdoptionConfirmed(result.data);
+      }
+      return;
+    }
+
+    setConfirmState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  return (
+    <DataPanel
+      id="adoption-inspect-recovery-panel"
+      kicker="v30 adoption inspect"
+      title="Adoption inspect and recovery view"
+      state={workspace?.state ?? 'unavailable'}
+    >
+      <FieldList rows={[
+        ['modelName', workspace?.modelName],
+        ['contractName', workspace?.contractName],
+        ['goalId', workspace?.goalId],
+        ['taskId', workspace?.taskId],
+        ['adoptionPlanId', workspace?.selectedFrozenPlan?.adoptionPlanId],
+        ['operationId', workspace?.selectedFrozenPlan?.operationId],
+        ['patchHash', workspace?.selectedFrozenPlan?.patchHash],
+        ['inspect route', workspace?.inspectEndpoint?.route],
+        ['method', workspace?.inspectEndpoint?.method],
+        ['adoptionIdSource', workspace?.inspectEndpoint?.adoptionIdSource],
+        ['acceptsUserPathInput', workspace?.inspectEndpoint?.acceptsUserPathInput],
+        ['acceptsConfirmInput', workspace?.inspectEndpoint?.acceptsConfirmInput]
+      ]} />
+
+      <div className="panel-actions">
+        <button
+          type="button"
+          onClick={handlePreview}
+          disabled={inspectState.phase === 'loading' || !['available', 'inspected'].includes(workspace?.state)}
+        >
+          Inspect recovery state
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={confirmState.phase === 'loading' || workspace?.safety?.adoptionConfirmAvailable?.value !== true}
+        >
+          Confirm adoption
+        </button>
+      </div>
+
+      {inspectState.phase === 'failed' ? (
+        <p className="error-copy">inspect 错误摘要：{inspectState.error}</p>
+      ) : null}
+      {inspectState.phase === 'loading' ? (
+        <p className="empty-copy">正在读取 adoption inspect 输出，不确认采纳也不应用 patch。</p>
+      ) : null}
+      {inspectState.phase === 'ready' ? (
+        <Subsection title="inspect output">
+          <AdoptionInspectResult result={inspectState.result} />
+        </Subsection>
+      ) : null}
+      {inspectState.phase !== 'ready' && projectedInspection?.state === 'available' ? (
+        <Subsection title="inspect output">
+          <ProjectedAdoptionInspectResult inspection={projectedInspection} />
+        </Subsection>
+      ) : null}
+      {inspectState.phase !== 'ready' && workspace?.inspection?.state === 'available' ? (
+        <Subsection title="inspect output from route">
+          <ProjectedAdoptionInspectOutput inspection={workspace.inspection} />
+        </Subsection>
+      ) : null}
+      {confirmState.phase === 'failed' ? (
+        <p className="error-copy">confirm 错误摘要：{confirmState.error}</p>
+      ) : null}
+      {confirmState.phase === 'loading' ? (
+        <p className="empty-copy">正在确认 frozen adoption plan。不会 merge、push、tag、publish 或登记审批事件。</p>
+      ) : null}
+      {confirmState.phase === 'ready' ? (
+        <Subsection title="confirm result">
+          <AdoptionConfirmResult result={confirmState.result} />
+        </Subsection>
+      ) : null}
+
+      <Subsection title="confirm endpoint">
+        <FieldList rows={[
+          ['route', workspace?.confirmEndpoint?.route],
+          ['method', workspace?.confirmEndpoint?.method],
+          ['adoptionIdSource', workspace?.confirmEndpoint?.adoptionIdSource],
+          ['allowedBodyFields', workspace?.confirmEndpoint?.allowedBodyFields],
+          ['requiresFrozenPlanOperation', workspace?.confirmEndpoint?.requiresFrozenPlanOperation],
+          ['refreshesAfterConfirm', workspace?.confirmEndpoint?.refreshesAfterConfirm],
+          ['acceptsUserPathInput', workspace?.confirmEndpoint?.acceptsUserPathInput],
+          ['acceptsPlanHashInput', workspace?.confirmEndpoint?.acceptsPlanHashInput],
+          ['acceptsShellCommandInput', workspace?.confirmEndpoint?.acceptsShellCommandInput]
+        ]} />
+      </Subsection>
+
+      <Subsection title="patch refs">
+        <FieldList rows={[
+          ['adoptionPlanArtifactPath', workspace?.patchRefs?.adoptionPlanArtifactPath],
+          ['patchArtifactPath', workspace?.patchRefs?.patchArtifactPath],
+          ['patchHash', workspace?.patchRefs?.patchHash],
+          ['fileOperationCount', workspace?.patchRefs?.fileOperations?.count]
+        ]} />
+      </Subsection>
+
+      <Subsection title="evidence context">
+        <FieldList rows={[
+          ['sourceRunId', workspace?.evidenceContext?.sourceRunId],
+          ['sourceRunArtifactPath', workspace?.evidenceContext?.sourceRunArtifactPath],
+          ['sourceEvidenceArtifactPath', workspace?.evidenceContext?.sourceEvidenceArtifactPath],
+          ['sourceVerifierStatus', workspace?.evidenceContext?.sourceVerifierStatus],
+          ['latestConfirmationEvidenceArtifactPath', workspace?.evidenceContext?.latestConfirmationEvidenceArtifactPath]
+        ]} />
+      </Subsection>
+
+      <Subsection title="recovery context">
+        <FieldList rows={[
+          ['journalStateSource', workspace?.recoveryContext?.journalStateSource],
+          ['beforeHashSource', workspace?.recoveryContext?.beforeHashSource],
+          ['afterHashSource', workspace?.recoveryContext?.afterHashSource],
+          ['currentWorktreeMatchSource', workspace?.recoveryContext?.currentWorktreeMatchSource],
+          ['copyOnlyInspectCommand', workspace?.recoveryContext?.copyOnlyInspectCommand]
+        ]} />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', workspace?.safety?.readOnly],
+          ['workbenchWriteAvailable', workspace?.safety?.workbenchWriteAvailable],
+          ['writeScope', workspace?.safety?.writeScope],
+          ['adoptionConfirmAvailable', workspace?.safety?.adoptionConfirmAvailable],
+          ['applyPatchAvailable', workspace?.safety?.applyPatchAvailable],
+          ['browserExecutionAvailable', workspace?.safety?.browserExecutionAvailable],
+          ['modelInvocationAvailable', workspace?.safety?.modelInvocationAvailable],
+          ['genericShellRunner', workspace?.safety?.genericShellRunner],
+          ['arbitraryPathReadAvailable', workspace?.safety?.arbitraryPathReadAvailable],
+          ['mergeAvailable', workspace?.safety?.mergeAvailable],
+          ['pushAvailable', workspace?.safety?.pushAvailable],
+          ['tagAvailable', workspace?.safety?.tagAvailable],
+          ['selfApprovalAvailable', workspace?.safety?.selfApprovalAvailable],
+          ['readinessInferenceAvailable', workspace?.safety?.readinessInferenceAvailable],
+          ['unsupportedInferenceSources', workspace?.safety?.unsupportedInferenceSources]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{workspace?.note}</p>
+    </DataPanel>
+  );
+}
+
+function AdoptionConfirmResult({ result }) {
+  return (
+    <>
+      <FieldList rows={[
+        ['contractName', textValue(result?.contractName)],
+        ['status', textValue(result?.status)],
+        ['goalId', textValue(result?.goalId)],
+        ['taskId', textValue(result?.taskId)],
+        ['adoptionPlanId', textValue(result?.adoptionPlanId)],
+        ['confirmationRunId', textValue(result?.confirmedRun?.runId)],
+        ['confirmationStatus', textValue(result?.confirmedRun?.status)],
+        ['verifierStatus', textValue(result?.confirmedRun?.verifierStatus)],
+        ['mainWorktreeWrites', textValue(result?.confirmedRun?.mainWorktreeWrites)],
+        ['adoptionJournalArtifactPath', textValue(result?.confirmedRun?.adoptionJournalArtifactPath)],
+        ['evidenceArtifactPath', textValue(result?.confirmedRun?.evidenceArtifactPath)],
+        ['operationId', textValue(result?.operationRun?.operationId)],
+        ['operationStatus', textValue(result?.operationRun?.status)],
+        ['nextActionStatus', textValue(result?.refreshed?.nextAction?.status)],
+        ['nextTask', textValue(result?.refreshed?.nextAction?.next?.taskId)],
+        ['nextRole', textValue(result?.refreshed?.nextAction?.next?.role)],
+        ['genericShellRunner', textValue(result?.safety?.genericShellRunner)],
+        ['modelInvocationAvailable', textValue(result?.safety?.modelInvocationAvailable)],
+        ['reviewerEventRegistered', textValue(result?.safety?.reviewerEventRegistered)],
+        ['mainVerificationEventRegistered', textValue(result?.safety?.mainVerificationEventRegistered)],
+        ['releaseReadinessRegistered', textValue(result?.safety?.releaseReadinessRegistered)],
+        ['mergeAvailable', textValue(result?.safety?.mergeAvailable)],
+        ['pushAvailable', textValue(result?.safety?.pushAvailable)],
+        ['tagAvailable', textValue(result?.safety?.tagAvailable)],
+        ['publishAvailable', textValue(result?.safety?.publishAvailable)]
+      ]} />
+      <h4>changed files</h4>
+      <TextItemList
+        items={{
+          state: 'available',
+          items: (result?.confirmedRun?.changedFiles ?? []).map((file) => textValue(file))
+        }}
+        emptyCopy="confirmed changed files 未暴露。"
+      />
+    </>
+  );
+}
+
+function ProjectedAdoptionInspectOutput({ inspection }) {
+  return (
+    <>
+      <FieldList rows={[
+        ['contractName', inspection?.contractName],
+        ['status', inspection?.status],
+        ['adoptionPlanId', inspection?.adoptionPlanId],
+        ['journalStatus', inspection?.journal?.status],
+        ['journalArtifactPath', inspection?.journal?.artifactPath],
+        ['latestConfirmationRunId', inspection?.latestConfirmationRun?.runId],
+        ['latestConfirmationStatus', inspection?.latestConfirmationRun?.status],
+        ['latestConfirmationEvidenceArtifactPath', inspection?.latestConfirmationRun?.evidenceArtifactPath],
+        ['patchHash', inspection?.hashes?.patchHash],
+        ['currentWorktreeMatchesAfterHash', inspection?.hashes?.currentWorktreeMatchesAfterHash],
+        ['currentWorktreeMatchesJournalBeforeFiles', inspection?.hashes?.currentWorktreeMatchesJournalBeforeFiles],
+        ['recommendedCommandCount', inspection?.recommendedCommands?.count]
+      ]} />
+      <h4>after hash match</h4>
+      <AdoptionInspectProjectedHashFiles files={inspection?.afterHashFiles} />
+      <h4>before journal match</h4>
+      <AdoptionInspectProjectedHashFiles files={inspection?.beforeJournalFiles} />
+    </>
+  );
+}
+
+function AdoptionInspectProjectedHashFiles({ files }) {
+  if (!Array.isArray(files?.items) || files.items.length === 0) {
+    return (
+      <FieldList rows={[
+        ['matches', files?.matches],
+        ['reason', files?.reason]
+      ]} />
+    );
+  }
+
+  return (
+    <KeyValueList
+      rows={files.items.map((file) => ({
+        path: file.path,
+        state: textValue(`matches ${file.matches.text} / expected ${file.expectedHash.text} / actual ${file.actualHash.text}`)
+      }))}
+      nameKey="path"
+      valueKey="state"
+      emptyCopy="match file details 未暴露。"
+    />
+  );
+}
+
+function ProjectedAdoptionInspectResult({ inspection }) {
+  return (
+    <>
+      <FieldList rows={[
+        ['routeState', inspection?.routeState],
+        ['httpStatus', inspection?.httpStatus],
+        ['contractName', inspection?.contractName],
+        ['status', inspection?.status],
+        ['adoptionPlanId', inspection?.adoptionPlanId],
+        ['journalStatus', inspection?.journal?.status],
+        ['journalArtifactPath', inspection?.journal?.artifactPath],
+        ['latestConfirmationRunId', inspection?.latestConfirmationRun?.runId],
+        ['latestConfirmationStatus', inspection?.latestConfirmationRun?.status],
+        ['latestConfirmationEvidenceArtifactPath', inspection?.latestConfirmationRun?.evidenceArtifactPath],
+        ['patchHash', inspection?.hashes?.patchHash],
+        ['currentWorktreeMatchesAfterHash', inspection?.hashes?.currentWorktreeMatchesAfterHash],
+        ['currentWorktreeMatchesJournalBeforeFiles', inspection?.hashes?.currentWorktreeMatchesJournalBeforeFiles],
+        ['recommendedCommandCount', inspection?.recommendedCommands?.count]
+      ]} />
+      <h4>after hash match</h4>
+      <KeyValueList
+        rows={(inspection?.afterHashFiles?.items ?? []).map((file) => ({
+          path: file.path,
+          state: textValue(`matches ${file.matches.text} / expected ${file.expectedHash.text} / actual ${file.actualHash.text}`)
+        }))}
+        nameKey="path"
+        valueKey="state"
+        emptyCopy="after hash match details 未暴露。"
+      />
+      <h4>before journal match</h4>
+      <KeyValueList
+        rows={(inspection?.beforeJournalFiles?.items ?? []).map((file) => ({
+          path: file.path,
+          state: textValue(`matches ${file.matches.text} / expected ${file.expectedHash.text} / actual ${file.actualHash.text}`)
+        }))}
+        nameKey="path"
+        valueKey="state"
+        emptyCopy="before journal match details 未暴露。"
+      />
+    </>
+  );
+}
+
+function AdoptionInspectResult({ result }) {
+  const afterDetails = result?.currentWorktreeMatchesAfterHashDetails;
+  const beforeDetails = result?.currentWorktreeMatchesJournalBeforeFilesDetails;
+
+  return (
+    <>
+      <FieldList rows={[
+        ['contractName', textValue(result?.contractName)],
+        ['status', textValue(result?.status)],
+        ['adoptionPlanId', textValue(result?.adoptionPlanId)],
+        ['sourceRunId', textValue(result?.sourceRunId)],
+        ['journalStatus', textValue(result?.journal?.status ?? 'missing')],
+        ['journalArtifactPath', textValue(result?.journal?.artifactPath)],
+        ['latestConfirmationRunId', textValue(result?.latestConfirmationRun?.runId)],
+        ['latestConfirmationStatus', textValue(result?.latestConfirmationRun?.status)],
+        ['latestConfirmationEvidenceArtifactPath', textValue(result?.latestConfirmationRun?.evidenceArtifactPath)],
+        ['patchArtifactPath', textValue(result?.adoptionPlanRefs?.patchArtifactPath)],
+        ['patchHash', textValue(result?.patchHash)],
+        ['currentWorktreeMatchesAfterHash', textValue(result?.currentWorktreeMatchesAfterHash)],
+        ['currentWorktreeMatchesJournalBeforeFiles', textValue(result?.currentWorktreeMatchesJournalBeforeFiles)],
+        ['nextAction', textValue(result?.nextAction)]
+      ]} />
+      <h4>file operation hashes</h4>
+      <KeyValueList
+        rows={(result?.fileOperations ?? []).map((operation) => ({
+          path: textValue(operation?.path),
+          operation: textValue(`${operation?.operation ?? 'unknown'} / before ${operation?.beforeHash ?? 'missing'} / after ${operation?.afterHash ?? 'missing'}`)
+        }))}
+        nameKey="path"
+        valueKey="operation"
+        emptyCopy="file operation hash 未暴露。"
+      />
+      <h4>after hash match</h4>
+      <AdoptionInspectMatchDetails details={afterDetails} />
+      <h4>before journal match</h4>
+      <AdoptionInspectMatchDetails details={beforeDetails} />
+    </>
+  );
+}
+
+function AdoptionInspectMatchDetails({ details }) {
+  if (details === null || details === undefined) {
+    return <EmptyBlock copy="match details 未暴露。" />;
+  }
+
+  if (Array.isArray(details.files) && details.files.length > 0) {
+    return (
+      <KeyValueList
+        rows={details.files.map((file) => ({
+          path: textValue(file?.path),
+          state: textValue(`matches ${String(file?.matches)} / expected ${file?.expected?.hash ?? 'missing'} / actual ${file?.actual?.hash ?? 'missing'}`)
+        }))}
+        nameKey="path"
+        valueKey="state"
+        emptyCopy="match file details 未暴露。"
+      />
+    );
+  }
+
+  return (
+    <FieldList rows={[
+      ['matches', textValue(details.matches)],
+      ['reason', textValue(details.reason)]
+    ]} />
   );
 }
 
@@ -3240,8 +5304,12 @@ function WorkerEvidenceHandoffView({ handoff, onGoalEventConfirmed }) {
       <FieldList rows={[
         ['goalId', handoff.goalId],
         ['taskId', handoff.taskId],
+        ['sourceContract', handoff.sourceContract],
+        ['sourceOperationId', handoff.sourceOperationId],
         ['sourceRunId', handoff.sourceRunId],
         ['executionPlanId', handoff.executionPlanId],
+        ['runStatus', handoff.runStatus],
+        ['verifierStatus', handoff.verifierStatus],
         ['evidenceArtifactPath', handoff.evidenceArtifactPath],
         ['sourceWorkspacePath', handoff.sourceWorkspacePath],
         ['evidenceRef', handoff.evidenceRef],
@@ -3521,7 +5589,7 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
         <p className="error-copy">confirm 错误摘要：{confirmState.error}</p>
       ) : null}
       {confirmState.phase === 'loading' ? (
-        <p className="empty-copy">正在确认 event append，并刷新 goal-status / events / next action。</p>
+        <p className="empty-copy">正在确认 event append，并刷新 goal-status / events / next action / closeout。</p>
       ) : null}
       {confirmState.phase === 'ready' ? (
         <div className="goal-event-confirm-result">
@@ -3537,7 +5605,10 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
             ['operationCompletedAt', textValue(confirmState.result.operationRun?.timestamps?.completedAt)],
             ['refreshed.progress', textValue(confirmState.result.refreshed.progress?.contractName)],
             ['refreshed.events', textValue(confirmState.result.refreshed.events?.contractName)],
-            ['refreshed.nextAction', textValue(confirmState.result.refreshed.nextAction?.contractName)]
+            ['refreshed.nextAction', textValue(confirmState.result.refreshed.nextAction?.contractName)],
+            ['refreshed.closeout', textValue(confirmState.result.refreshed.closeout?.contractName)],
+            ['refreshed.closeout.missingCount', textValue(confirmState.result.refreshed.closeout?.missing?.length)],
+            ['refreshed.closeout.releaseReady', textValue(confirmState.result.refreshed.closeout?.summary?.releaseReady)]
           ]} />
         </div>
       ) : null}
@@ -4253,19 +6324,55 @@ function GoalEventFormFieldOptions({ options }) {
 }
 
 function TextItemList({ items, emptyCopy }) {
-  if (items.state === 'missing') {
+  if (items?.state === 'missing' || items === undefined || items === null) {
     return <EmptyBlock copy={emptyCopy} />;
   }
 
-  if (items.items.length === 0) {
+  const normalizedItems = Array.isArray(items) ? items : items.items;
+
+  if (!Array.isArray(normalizedItems) || normalizedItems.length === 0) {
     return <EmptyBlock copy={emptyCopy} />;
   }
 
   return (
     <ul className="command-text-list" aria-label="copy-only text list">
-      {items.items.map((item, index) => (
+      {normalizedItems.map((item, index) => (
         <li key={`${item.text}-${index}`}>
           <code>{item.text}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CopyBlock({ value, emptyCopy }) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return <EmptyBlock copy={emptyCopy} />;
+  }
+
+  return (
+    <pre className="copy-block"><code>{value}</code></pre>
+  );
+}
+
+function EvidenceRefItemList({ refs }) {
+  const items = refs?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="explicit event evidence refs 为空。" />;
+  }
+
+  return (
+    <ul className="evidence-ref-list">
+      {items.map((item, index) => (
+        <li key={`${item.ref.text}-${index}`}>
+          <FieldList rows={[
+            ['kind', item.kind],
+            ['ref', item.ref],
+            ['label', item.label],
+            ['eventId', item.eventId],
+            ['eventType', item.eventType]
+          ]} />
         </li>
       ))}
     </ul>
@@ -4774,6 +6881,26 @@ function activeGoalTaskQueueStateText(taskQueue, route) {
   }
 
   return activeGoalStateText(taskQueue, route);
+}
+
+function implementationEligibilityStateText(eligibility) {
+  if (eligibility?.state === 'eligible') {
+    return '可进入 controlled implementation';
+  }
+
+  if (eligibility?.state === 'blocked') {
+    return '被显式 blocker 阻止';
+  }
+
+  if (eligibility?.state === 'waiting') {
+    return '等待 goal next';
+  }
+
+  if (eligibility?.state === 'unavailable') {
+    return '不可用';
+  }
+
+  return '未暴露';
 }
 
 function goalOperationConsoleStateText(operationConsole, route) {

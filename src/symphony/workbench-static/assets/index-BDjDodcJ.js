@@ -9898,15 +9898,26 @@ var GOAL_RUNBOOK_CONTRACT_NAME = "goal-runbook.v1";
 var GOAL_NEXT_ACTION_CONTRACT_NAME = "goal-next-action.v1";
 var GOAL_PROMPT_PACK_CONTRACT_NAME = "goal-prompt-pack.v1";
 var GOAL_CLOSEOUT_REPORT_CONTRACT_NAME = "goal-closeout-report.v1";
+var CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME = "controlled-implementation-plan-preview.v1";
+var CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = "controlled-adoption-plan-freeze.v1";
+var CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = "controlled-adoption-confirmation.v1";
+var CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = "symphony.console-adoption-inspect";
+var RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = "release-baseline-resolver.v1";
 var CAPABILITIES_CONTRACT_NAME = "capabilities.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
 var ACTIVE_GOAL_VIEW_MODEL_NAME = "ActiveGoalViewModel";
+var ACTIVE_TASK_IMPLEMENTATION_ELIGIBILITY_MODEL_NAME = "ActiveTaskImplementationEligibility";
 var GOAL_EVENT_FORM_MODEL_NAME = "GoalEventRegistrationFormModel";
 var REVIEW_WORKSPACE_MODEL_NAME = "ReviewWorkspaceContextModel";
+var MAIN_VERIFICATION_EVIDENCE_DRAFT_MODEL_NAME = "MainVerificationEvidenceDraftWriter";
 var RELEASE_CLOSEOUT_WORKSPACE_MODEL_NAME = "ReleaseCloseoutWorkspaceModel";
+var RELEASE_BASELINE_RESOLVER_MODEL_NAME = "ReleaseBaselineResolver";
+var RELEASE_EVIDENCE_DRAFT_MODEL_NAME = "ReleaseEvidenceDraftWriter";
+var TAG_EVIDENCE_DRAFT_MODEL_NAME = "TagEvidenceDraftWriter";
+var NEXT_VERSION_HANDOFF_DRAFT_MODEL_NAME = "NextVersionHandoffDraft";
 var EVIDENCE_REF_HELPER_NAME = "EvidenceRefHelper";
 var V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = "v25-controlled-implementation-lane";
 var EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
@@ -10141,6 +10152,52 @@ var GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
 		]
 	}),
 	Object.freeze({
+		eventType: "release.gate-passed",
+		formId: "goal-gate-release-gate-passed",
+		eventFamily: "release",
+		commandName: "symphony goal gate",
+		commandIntent: "record-release-gate",
+		actorFlag: "--verifier",
+		actorRole: "release-verifier",
+		phase: "release-gate",
+		requiresEvidence: true,
+		gate: "release.<gate>",
+		gateStatus: "passed",
+		fields: [
+			"goalId",
+			"gateName",
+			"gateStatus",
+			"verifierId",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
+		eventType: "release.gate-failed",
+		formId: "goal-gate-release-gate-failed",
+		eventFamily: "release",
+		commandName: "symphony goal gate",
+		commandIntent: "record-release-gate",
+		actorFlag: "--verifier",
+		actorRole: "release-verifier",
+		phase: "release-gate",
+		requiresEvidence: true,
+		gate: "release.<gate>",
+		gateStatus: "failed",
+		fields: [
+			"goalId",
+			"gateName",
+			"gateStatus",
+			"verifierId",
+			"evidenceRef",
+			"statement",
+			"branch",
+			"commit"
+		]
+	}),
+	Object.freeze({
 		eventType: "release.ready-declared",
 		formId: "goal-gate-release-ready-declared",
 		eventFamily: "release",
@@ -10259,6 +10316,21 @@ var RELEASE_VERIFICATION_CHECKLIST = Object.freeze([
 		command: "write tag evidence prompt output before any tag is created"
 	})
 ]);
+var MAIN_VERIFICATION_COMMAND_ALLOWLIST = Object.freeze([
+	"pnpm check",
+	"pnpm test",
+	"pnpm workbench:build",
+	"git diff --check"
+]);
+var CONTROLLED_VERIFICATION_CONTEXT_COMMANDS = Object.freeze([Object.freeze({
+	id: "goal-status",
+	contractName: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+	command: (goalId) => `pnpm --silent symphony goal-status --goal ${goalId} --json`
+}), Object.freeze({
+	id: "goal-next",
+	contractName: GOAL_NEXT_ACTION_CONTRACT_NAME,
+	command: (goalId) => `pnpm --silent symphony goal next --goal ${goalId} --json`
+})]);
 var READONLY_API_ROUTES = Object.freeze([
 	Object.freeze({
 		id: "summary",
@@ -10356,6 +10428,14 @@ var READONLY_API_ROUTES = Object.freeze([
 		acceptErrorContract: true
 	}),
 	Object.freeze({
+		id: "releaseBaseline",
+		label: "Release Baseline",
+		path: "/api/goals/latest/release-baseline",
+		method: "GET",
+		contractName: RELEASE_BASELINE_RESOLVER_CONTRACT_NAME,
+		acceptErrorContract: true
+	}),
+	Object.freeze({
 		id: "capabilities",
 		label: "Capabilities",
 		path: "/api/capabilities",
@@ -10448,8 +10528,47 @@ var GOAL_CLOSEOUT_ROUTE_TEMPLATE = Object.freeze({
 	contractName: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
 	acceptErrorContract: true
 });
+var RELEASE_BASELINE_ROUTE_TEMPLATE = Object.freeze({
+	id: "releaseBaselineById",
+	label: "Release Baseline By Id",
+	path: "/api/goals/<goal-id>/release-baseline",
+	method: "GET",
+	contractName: RELEASE_BASELINE_RESOLVER_CONTRACT_NAME,
+	acceptErrorContract: true
+});
+var CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
+	id: "controlledImplementationPlanPreview",
+	label: "Controlled Implementation Plan Preview",
+	path: "/api/goals/<goal-id>/implementation-plan-preview",
+	method: "GET",
+	contractName: CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME,
+	acceptErrorContract: true
+});
+var CONTROLLED_ADOPTION_PLAN_FREEZE_ROUTE_TEMPLATE = Object.freeze({
+	id: "controlledAdoptionPlanFreeze",
+	label: "Controlled Adoption Plan Freeze",
+	path: "/api/goals/<goal-id>/adoption-plan-freeze",
+	contractName: CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME,
+	acceptErrorContract: true
+});
+var CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE = Object.freeze({
+	id: "controlledAdoptionConfirm",
+	label: "Controlled Adoption Confirm",
+	path: "/api/goals/<goal-id>/adoption-confirm",
+	contractName: CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME,
+	acceptErrorContract: true
+});
+var ADOPTION_INSPECT_ROUTE_TEMPLATE = Object.freeze({
+	id: "adoptionInspect",
+	label: "Adoption Inspect",
+	path: "/api/adoptions/<adoption-id>/inspect",
+	method: "GET",
+	contractName: CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME,
+	acceptErrorContract: true
+});
 var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
 	...READONLY_API_ROUTES,
+	ADOPTION_INSPECT_ROUTE_TEMPLATE,
 	GOAL_EVENTS_ROUTE_TEMPLATE,
 	GOAL_OPERATIONS_ROUTE_TEMPLATE,
 	GOAL_PROGRESS_ROUTE_TEMPLATE,
@@ -10457,6 +10576,8 @@ var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
 	GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
 	GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
 	GOAL_CLOSEOUT_ROUTE_TEMPLATE,
+	RELEASE_BASELINE_ROUTE_TEMPLATE,
+	CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
 	GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
 	RUN_TIMELINE_ROUTE_TEMPLATE,
 	SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
@@ -10476,9 +10597,13 @@ var OPTIONAL_ROUTE_IDS = new Set([
 	"goalPromptPack",
 	"goalReviewerPromptPack",
 	"goalCloseout",
+	"releaseBaseline",
+	"activeReleaseBaseline",
 	"activeGoalProgress",
 	"activeGoalEvents",
-	"activeGoalOperations"
+	"activeGoalOperations",
+	"controlledImplementationPlanPreview",
+	"adoptionInspect"
 ]);
 var DEFERRED_CONTRACT_GAPS = Object.freeze(["dirty adoption 当前仍由 pending adoption 与 Git readiness 分别暴露"]);
 var ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
@@ -10534,6 +10659,9 @@ function projectWorkbenchContracts(results) {
 	const activeGoalProgressData = dataFrom(results.activeGoalProgress);
 	const activeGoalEventsData = dataFrom(results.activeGoalEvents);
 	const activeGoalOperationsData = dataFrom(results.activeGoalOperations);
+	const activeReleaseBaselineData = dataFrom(results.activeReleaseBaseline);
+	const adoptionInspectData = dataFrom(results.adoptionInspect);
+	const controlledImplementationPlanPreviewData = dataFrom(results.controlledImplementationPlanPreview);
 	const capabilitiesData = dataFrom(results.capabilities);
 	const diagnosticsData = dataFrom(results.diagnostics);
 	const latestRun = latestRunData?.run ?? null;
@@ -10545,6 +10673,9 @@ function projectWorkbenchContracts(results) {
 		projectRouteState(results.activeGoalProgress?.routeDescriptor ?? GOAL_PROGRESS_ROUTE_TEMPLATE, results.activeGoalProgress),
 		projectRouteState(results.activeGoalEvents?.routeDescriptor ?? GOAL_EVENTS_ROUTE_TEMPLATE, results.activeGoalEvents),
 		projectRouteState(results.activeGoalOperations?.routeDescriptor ?? GOAL_OPERATIONS_ROUTE_TEMPLATE, results.activeGoalOperations),
+		projectRouteState(results.activeReleaseBaseline?.routeDescriptor ?? RELEASE_BASELINE_ROUTE_TEMPLATE, results.activeReleaseBaseline),
+		projectRouteState(results.controlledImplementationPlanPreview?.routeDescriptor ?? CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE, results.controlledImplementationPlanPreview),
+		projectRouteState(results.adoptionInspect?.routeDescriptor ?? ADOPTION_INSPECT_ROUTE_TEMPLATE, results.adoptionInspect),
 		projectRouteState(results.goalReviewerPromptPack?.routeDescriptor ?? GOAL_PROMPT_PACK_ROUTE_TEMPLATE, results.goalReviewerPromptPack),
 		...safeArtifactPreviewResults.map((result) => projectRouteState(result?.routeDescriptor ?? SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE, result))
 	];
@@ -10570,21 +10701,61 @@ function projectWorkbenchContracts(results) {
 		reviewerPromptPack: goalReviewerPromptPackData,
 		closeoutResult: results.goalCloseout,
 		closeout: goalCloseoutData,
+		releaseBaselineResult: results.activeReleaseBaseline,
+		releaseBaseline: activeReleaseBaselineData,
 		activeLedgerResult: results.activeGoalProgress,
 		activeLedger: activeGoalProgressData,
 		activeEventLogResult: results.activeGoalEvents,
 		activeEventLog: activeGoalEventsData,
 		activeOperationsResult: results.activeGoalOperations,
 		activeOperations: activeGoalOperationsData,
+		adoptionInspectResult: results.adoptionInspect,
+		adoptionInspect: adoptionInspectData,
 		latestRun
+	});
+	const routeContext = projectWorkbenchRouteContext({
+		activeGoal: activeGoalControl,
+		latestRun: projectedLatestRun
+	});
+	const activeGoalLedger = activeGoalProgressData?.goalId === goalRunbookData?.goalId ? activeGoalProgressData : goalProgressData?.goalId === goalRunbookData?.goalId ? goalProgressData : null;
+	const activeGoalEventLog = activeGoalEventsData?.goalId === goalRunbookData?.goalId ? activeGoalEventsData : null;
+	const activeGoalOperations = activeGoalOperationsData?.goalId === goalRunbookData?.goalId ? activeGoalOperationsData : null;
+	activeGoalControl.activeTaskImplementationEligibility = projectActiveTaskImplementationEligibility({
+		statusResult: activeGoalLedger === activeGoalProgressData ? results.activeGoalProgress : results.goalProgress,
+		ledger: activeGoalLedger,
+		nextActionResult: results.goalNextAction,
+		nextAction: goalNextActionData,
+		runbookResult: results.goalRunbook,
+		runbook: goalRunbookData,
+		eventLogResult: results.activeGoalEvents,
+		eventLog: activeGoalEventLog,
+		operationsResult: results.activeGoalOperations,
+		operations: activeGoalOperations,
+		routeContext
+	});
+	activeGoalControl.controlledImplementationPlanPreview = projectControlledImplementationPlanPreview({
+		result: results.controlledImplementationPlanPreview,
+		preview: controlledImplementationPlanPreviewData,
+		eligibility: activeGoalControl.activeTaskImplementationEligibility,
+		operations: activeGoalOperations
+	});
+	const adoptionCandidates = projectAdoptionCandidates({
+		runsResult: results.runs,
+		runs: runsData,
+		latestRun,
+		operationsResult: results.activeGoalOperations,
+		operations: activeGoalOperations,
+		activeGoal: activeGoalControl
+	});
+	const adoptionPlanPreviewWorkspace = projectAdoptionPlanPreviewWorkspace({
+		candidates: adoptionCandidates,
+		operations: activeGoalOperations,
+		activeGoal: activeGoalControl
 	});
 	return {
 		state: failedRequiredRoutes.length > 0 ? "partial" : "ready",
 		routeStates,
-		routeContext: projectWorkbenchRouteContext({
-			activeGoal: activeGoalControl,
-			latestRun: projectedLatestRun
-		}),
+		routeContext,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -10607,10 +10778,13 @@ function projectWorkbenchContracts(results) {
 			summary: summaryData,
 			readiness: readinessData
 		}),
-		adoptionCandidates: projectAdoptionCandidates({
-			runsResult: results.runs,
-			runs: runsData,
-			latestRun
+		adoptionCandidates,
+		adoptionPlanPreviewWorkspace,
+		adoptionInspectRecoveryWorkspace: projectAdoptionInspectRecoveryWorkspace({
+			planPreviewWorkspace: adoptionPlanPreviewWorkspace,
+			activeGoal: activeGoalControl,
+			result: results.adoptionInspect,
+			inspect: adoptionInspectData
 		}),
 		artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus, safeArtifactPreviewResults),
 		goals: projectGoals(goalsData),
@@ -10806,6 +10980,15 @@ function createGoalOperationsRoute(goalId) {
 		label: "Active Goal Operations"
 	});
 }
+function createReleaseBaselineRoute(goalId) {
+	return createGoalScopedRoute({
+		template: RELEASE_BASELINE_ROUTE_TEMPLATE,
+		goalId,
+		suffix: "release-baseline",
+		id: "activeReleaseBaseline",
+		label: "Active Release Baseline"
+	});
+}
 function createGoalReviewerPromptRoute(goalId, nextAction) {
 	const taskId = nextAction?.next?.taskId;
 	if (!isSafeGoalRouteSegment(goalId) || !isSafeGoalRouteSegment(taskId) || taskId === "release") return null;
@@ -10817,6 +11000,36 @@ function createGoalReviewerPromptRoute(goalId, nextAction) {
 		goalId,
 		taskId,
 		role: "reviewer"
+	});
+}
+function createControlledImplementationPlanPreviewRoute(goalId, nextAction) {
+	const taskId = nextAction?.next?.taskId;
+	const role = nextAction?.next?.role;
+	const phase = nextAction?.next?.phase;
+	if (!isSafeGoalRouteSegment(goalId) || !isSafeGoalRouteSegment(taskId) || role !== "worker" || ![
+		"implement",
+		"implementation",
+		"revision"
+	].includes(phase) || nextAction?.next?.blocked === true) return null;
+	return Object.freeze({
+		...CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
+		path: `${CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE.path.replace("<goal-id>", encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}`,
+		goalId,
+		taskId
+	});
+}
+function createAdoptionInspectRoute(operations) {
+	const operation = latestAdoptionPlanFreezeOperationForTask(operations, {
+		goalId: operations?.goalId,
+		taskId: null
+	});
+	const adoptionId = operation?.runResult?.adoptionPlanId;
+	if (!isSafeGoalRouteSegment(adoptionId)) return null;
+	return Object.freeze({
+		...ADOPTION_INSPECT_ROUTE_TEMPLATE,
+		path: ADOPTION_INSPECT_ROUTE_TEMPLATE.path.replace("<adoption-id>", encodeURIComponent(adoptionId)),
+		adoptionId,
+		operationId: operation.operationId
 	});
 }
 function createSafeArtifactPreviewRoutes(artifactRefs) {
@@ -11073,6 +11286,12 @@ function collectWorkbenchContextEvidenceRefs(activeGoal) {
 		label: "source run evidence",
 		taskId: firstValue(activeGoal?.reviewWorkspace?.taskId)
 	});
+	addWorkbenchContextEvidenceRef(refs, activeGoal?.nextAction?.eventForms?.workerEvidenceHandoff?.evidenceRef, {
+		source: GOAL_OPERATION_RUNS_CONTRACT_NAME,
+		label: "implementation worker evidence handoff",
+		taskId: firstValue(activeGoal?.nextAction?.eventForms?.workerEvidenceHandoff?.taskId),
+		kind: "artifact-ref"
+	});
 	addWorkbenchContextEvidenceRef(refs, activeGoal?.mainVerificationReadiness?.evidence?.path, {
 		source: "main-verification readiness",
 		label: "main verification evidence path",
@@ -11119,10 +11338,32 @@ function addWorkbenchContextEvidenceRef(refs, refState, metadata = {}) {
 		taskId: valueState(metadata.taskId)
 	});
 }
-function projectActiveGoalControl({ statusResult, status, readiness, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, reviewerPromptPackResult, reviewerPromptPack, closeoutResult, closeout, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog, activeOperationsResult, activeOperations, latestRun }) {
+function projectActiveGoalControl({ statusResult, status, readiness, runbookResult, runbook, nextActionResult, nextAction, promptPackResult, promptPack, reviewerPromptPackResult, reviewerPromptPack, closeoutResult, closeout, releaseBaselineResult, releaseBaseline, activeLedgerResult, activeLedger, activeEventLogResult, activeEventLog, activeOperationsResult, activeOperations, adoptionInspectResult, adoptionInspect, latestRun }) {
 	const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
 	const eventLog = activeEventLog?.goalId === runbook?.goalId ? activeEventLog : null;
 	const goalStatusLedger = ledger ?? (status?.goalId === runbook?.goalId ? status : null);
+	const scopedOperations = activeOperations?.goalId === runbook?.goalId ? activeOperations : null;
+	const mainVerificationReadiness = projectMainVerificationReadiness({
+		runbook,
+		ledger: goalStatusLedger,
+		eventLog,
+		operations: scopedOperations,
+		adoptionInspectResult,
+		adoptionInspect,
+		nextAction,
+		closeout,
+		latestRun
+	});
+	const mainVerificationEvidenceDraft = projectMainVerificationEvidenceDraftWriter({
+		runbook,
+		ledger: goalStatusLedger,
+		eventLog,
+		operations: scopedOperations,
+		adoptionInspectResult,
+		adoptionInspect,
+		nextAction,
+		latestRun
+	});
 	return {
 		viewModel: projectActiveGoalViewModel({
 			statusResult: ledger === null ? statusResult : activeLedgerResult,
@@ -11150,13 +11391,16 @@ function projectActiveGoalControl({ statusResult, status, readiness, runbookResu
 			eventLog,
 			nextAction
 		}),
-		mainVerificationReadiness: projectMainVerificationReadiness({
+		mainVerificationReadiness,
+		mainVerificationEvidenceDraft,
+		mainVerificationGateRegistration: projectMainVerificationGateRegistration({
 			runbook,
 			ledger: goalStatusLedger,
 			eventLog,
 			nextAction,
-			closeout,
-			readiness
+			latestRun,
+			readiness: mainVerificationReadiness,
+			evidenceDraft: mainVerificationEvidenceDraft
 		}),
 		reviewWorkspace: projectReviewWorkspace({
 			runbook,
@@ -11183,7 +11427,8 @@ function projectActiveGoalControl({ statusResult, status, readiness, runbookResu
 			runbook,
 			ledger: goalStatusLedger,
 			eventLog,
-			latestRun
+			latestRun,
+			operations: scopedOperations
 		}),
 		promptPreview: projectGoalPromptPreview({
 			result: promptPackResult,
@@ -11193,16 +11438,394 @@ function projectActiveGoalControl({ statusResult, status, readiness, runbookResu
 		closeoutGaps: projectGoalCloseoutGaps({
 			result: closeoutResult,
 			closeout,
+			releaseBaselineResult,
+			releaseBaseline,
 			runbook,
 			ledger: goalStatusLedger,
 			eventLog,
-			latestRun
+			latestRun,
+			readiness
+		}),
+		releaseBaseline: projectReleaseBaselineResolver({
+			result: releaseBaselineResult,
+			releaseBaseline,
+			runbook,
+			nextAction
 		}),
 		operationConsole: projectGoalOperationConsole({
 			result: activeOperationsResult,
 			operations: activeOperations?.goalId === runbook?.goalId ? activeOperations : null,
 			nextAction
 		})
+	};
+}
+function projectActiveTaskImplementationEligibility({ statusResult, ledger, nextActionResult, nextAction, runbookResult, runbook, eventLogResult, eventLog, operationsResult, operations, routeContext }) {
+	const routeGoalId = firstValue(routeContext?.goalId);
+	const routeTaskId = firstValue(routeContext?.taskId);
+	const goalId = firstNonEmptyString(runbook?.goalId, nextAction?.goalId, ledger?.goalId, eventLog?.goalId, routeGoalId);
+	const taskId = firstNonEmptyString(nextAction?.next?.taskId, routeTaskId);
+	const task = (Array.isArray(runbook?.tasks) ? runbook.tasks : []).find((candidate) => candidate?.taskId === taskId) ?? null;
+	const ledgerTask = findLedgerTask(ledger, taskId);
+	const taskEvents = (Array.isArray(eventLog?.events) ? eventLog.events : []).filter((event) => event?.goalId === goalId && event?.taskId === taskId);
+	const latestWorkerEvidence = latestEventOfTypes(taskEvents, ["worker.evidence-recorded"]);
+	const latestWorkerStarted = latestEventOfTypes(taskEvents, ["worker.started"]);
+	const latestReview = latestEventOfTypes(taskEvents, ["reviewer.approved", "reviewer.needs-revision"]);
+	const latestMainVerification = latestEventOfTypes(taskEvents, ["main.verification-passed", "main.verification-failed"]);
+	const latestBlockerOpened = latestEventOfTypes(taskEvents, ["blocker.opened"]);
+	const latestBlockerResolved = latestEventOfTypes(taskEvents, ["blocker.resolved"]);
+	const hasOpenBlocker = latestBlockerOpened !== null && !goalEventIsAfter(latestBlockerResolved, latestBlockerOpened);
+	const routeGoalMatches = !isNonEmptyString(routeGoalId) || routeGoalId === goalId;
+	const routeTaskMatches = !isNonEmptyString(routeTaskId) || routeTaskId === taskId;
+	const nextRole = nextAction?.next?.role;
+	const nextPhase = nextAction?.next?.phase;
+	const nextStatus = nextAction?.status;
+	const nextBlocked = nextAction?.next?.blocked === true;
+	const nextActionAllowsImplementation = nextStatus === "action-required" && nextRole === "worker" && [
+		"implement",
+		"implementation",
+		"revision"
+	].includes(nextPhase) && nextBlocked !== true;
+	const requiredContractsReady = runbookResult?.ok === true && statusResult?.ok === true && nextActionResult?.ok === true && eventLogResult?.ok === true;
+	const hasScopedEventLog = eventLog?.goalId === goalId && Array.isArray(eventLog?.events);
+	const hasScopedGoalStatus = ledger?.goalId === goalId && ledgerTask !== null;
+	const hasScopedRunbookTask = runbook?.goalId === goalId && task !== null;
+	const routeContextMatches = routeGoalMatches && routeTaskMatches;
+	const canEnterControlledImplementation = requiredContractsReady && hasScopedRunbookTask && hasScopedGoalStatus && hasScopedEventLog && routeContextMatches && nextActionAllowsImplementation && !hasOpenBlocker;
+	const blockingReasons = [];
+	if (!requiredContractsReady) blockingReasons.push("required goal contracts are not all ready");
+	if (!hasScopedRunbookTask) blockingReasons.push("active task is not present in goal-runbook.v1");
+	if (!hasScopedGoalStatus) blockingReasons.push("active task is not present in goal-status task ledger");
+	if (!hasScopedEventLog) blockingReasons.push("scoped goal-event-log.v1 is not available");
+	if (!routeContextMatches) blockingReasons.push("Workbench route context does not match the active goal/task");
+	if (!nextActionAllowsImplementation) blockingReasons.push("goal-next-action.v1 does not hand this task to the worker implementation role");
+	if (hasOpenBlocker) blockingReasons.push("latest explicit blocker.opened event is not resolved");
+	const latestOperation = latestGoalOperationForTask(operations, taskId);
+	const state = !requiredContractsReady || !hasScopedRunbookTask || !hasScopedGoalStatus || !hasScopedEventLog ? "unavailable" : canEnterControlledImplementation ? "eligible" : hasOpenBlocker ? "blocked" : "waiting";
+	return {
+		state,
+		modelName: valueState(ACTIVE_TASK_IMPLEMENTATION_ELIGIBILITY_MODEL_NAME),
+		sourcePolicy: valueState("goal-status command output + goal-next-action.v1 + goal-runbook.v1 + goal-event-log.v1 explicit events + Workbench route context"),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		title: valueState(task?.title ?? ledgerTask?.title),
+		canEnterControlledImplementation: valueState(canEnterControlledImplementation),
+		decision: {
+			status: valueState(canEnterControlledImplementation ? "eligible" : state),
+			reason: valueState(canEnterControlledImplementation ? "goal next assigns the active task to worker implementation and no unresolved blocker event is recorded" : blockingReasons.join("; ")),
+			currentNextRole: valueState(nextRole),
+			currentNextPhase: valueState(nextPhase),
+			currentNextStatus: valueState(nextStatus),
+			currentNextBlocked: valueState(nextBlocked),
+			allowedImplementationPhases: arrayTextState([
+				"implement",
+				"implementation",
+				"revision"
+			]),
+			blockingReasons: projectTextItems(blockingReasons)
+		},
+		routeContext: {
+			goalId: valueState(routeGoalId),
+			taskId: valueState(routeTaskId),
+			activeRole: valueState(firstValue(routeContext?.activeRole)),
+			activePhase: valueState(firstValue(routeContext?.activePhase)),
+			operationId: valueState(firstValue(routeContext?.operationId)),
+			goalMatches: valueState(routeGoalMatches),
+			taskMatches: valueState(routeTaskMatches)
+		},
+		requiredContracts: {
+			goalStatusRoute: valueState(routeStateFromResult(statusResult)),
+			goalNextRoute: valueState(routeStateFromResult(nextActionResult)),
+			runbookRoute: valueState(routeStateFromResult(runbookResult)),
+			eventsRoute: valueState(routeStateFromResult(eventLogResult)),
+			operationsRoute: valueState(routeStateFromResult(operationsResult)),
+			goalStatusTaskPresent: valueState(hasScopedGoalStatus),
+			runbookTaskPresent: valueState(hasScopedRunbookTask),
+			scopedEventLogPresent: valueState(hasScopedEventLog)
+		},
+		goalStatusTask: {
+			status: valueState(ledgerTask?.status),
+			statusSource: valueState(ledgerTask?.statusSource),
+			eventBacked: valueState(isGoalEventStatusSource(ledgerTask?.statusSource)),
+			workerEvidenceRef: valueState(ledgerTask?.workerEvidenceRef),
+			reviewEvidenceRef: valueState(ledgerTask?.reviewEvidenceRef),
+			reviewVerdict: valueState(ledgerTask?.reviewVerdict),
+			mainVerificationRef: valueState(ledgerTask?.mainVerificationRef)
+		},
+		explicitEvents: {
+			count: valueState(taskEvents.length),
+			latestWorkerStarted: projectEligibilityEventState(latestWorkerStarted),
+			latestWorkerEvidence: projectEligibilityEventState(latestWorkerEvidence),
+			latestReview: projectEligibilityEventState(latestReview),
+			latestMainVerification: projectEligibilityEventState(latestMainVerification),
+			latestBlockerOpened: projectEligibilityEventState(latestBlockerOpened),
+			latestBlockerResolved: projectEligibilityEventState(latestBlockerResolved),
+			hasOpenBlocker: valueState(hasOpenBlocker)
+		},
+		runbookTask: {
+			branch: valueState(task?.branch),
+			roleOrder: arrayTextState(task?.roleOrder),
+			expectedWorker: expectedEvidenceState(task?.expectedEvidence?.worker),
+			acceptance: projectTextItems(task?.acceptance),
+			copyOnlyCommands: projectTextItems(task?.copyOnlyCommands)
+		},
+		nextAction: {
+			reason: valueState(nextAction?.reason ?? nextAction?.next?.reason),
+			registerWith: valueState(nextAction?.afterCompletion?.registerWith),
+			allowedEvents: arrayTextState(nextAction?.afterCompletion?.allowedEvents),
+			copyOnlyPromptAvailable: valueState(nextAction?.copyOnlyPrompt?.available === true),
+			workerEvidenceRef: valueState(nextAction?.evidenceState?.workerEvidenceRef)
+		},
+		operationContext: {
+			routeState: valueState(routeStateFromResult(operationsResult)),
+			latestOperationId: valueState(latestOperation?.operationId ?? operations?.latestOperationId),
+			latestStatus: valueState(latestOperation?.status),
+			latestSource: valueState(latestOperation?.source),
+			latestCommandKind: valueState(latestOperation?.commandKind),
+			latestPlanHash: valueState(latestOperation?.planHash)
+		},
+		recoverySteps: projectTextItems(canEnterControlledImplementation ? ["Open the controlled implementation plan preview for the same active goal/task context.", "If preview fields are missing, refresh goal-status, goal next, runbook, events, and operations routes before starting implementation."] : [
+			"Run goal-status and goal next for the active goal.",
+			"Inspect goal-event-log.v1 for blocker, worker evidence, review, or main verification events.",
+			"Do not use branch names, filenames, prompt text, task titles, or frontend state to override this decision."
+		]),
+		safety: {
+			readOnly: valueState(true),
+			copyOnly: valueState(true),
+			workbenchWriteAvailable: valueState(false),
+			controlledImplementationStartsRun: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			genericShellRunner: valueState(false),
+			approvalReadinessSource: valueState("explicit goal events only"),
+			unsupportedInferenceSources: arrayTextState([
+				"branch",
+				"filename",
+				"commit-message",
+				"prompt-text",
+				"task-title",
+				"frontend-heuristic"
+			])
+		},
+		note: "ActiveTaskImplementationEligibility only answers whether the active task may proceed to the controlled implementation preview path. It does not execute symphony do, invoke a model, open files, merge, push, tag, approve review, or declare main verification."
+	};
+}
+function projectEligibilityEventState(event) {
+	return {
+		eventId: valueState(event?.eventId),
+		eventType: valueState(event?.eventType),
+		sequence: valueState(event?.sequence),
+		actor: valueState(goalEventActorText(event?.actor)),
+		evidenceRef: valueState(firstGoalEvidenceRef(event)),
+		recordedAt: valueState(event?.recordedAt),
+		source: valueState(event === null || event === void 0 ? void 0 : GOAL_EVENT_LOG_CONTRACT_NAME)
+	};
+}
+function latestGoalOperationForTask(operations, taskId) {
+	if (!Array.isArray(operations?.runs) || !isNonEmptyString(taskId)) return null;
+	for (let index = operations.runs.length - 1; index >= 0; index -= 1) if (operations.runs[index]?.taskId === taskId) return operations.runs[index];
+	return null;
+}
+function projectControlledImplementationPlanPreview({ result, preview, eligibility, operations }) {
+	const routeState = routeStateFromResult(result);
+	const runResultBridge = projectImplementationRunResultBridge({
+		operations,
+		goalId: firstValue(eligibility?.goalId),
+		taskId: firstValue(eligibility?.taskId)
+	});
+	if (result?.ok !== true || preview?.contractName !== CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME) return {
+		state: "unavailable",
+		modelName: valueState("ControlledImplementationPlanPreview"),
+		routeState: valueState(routeState),
+		goalId: valueState(firstValue(eligibility?.goalId)),
+		taskId: valueState(firstValue(eligibility?.taskId)),
+		canPreview: valueState(false),
+		reason: valueState(result?.message ?? "controlled implementation plan preview route is unavailable"),
+		plan: {
+			planId: valueState(null),
+			planHash: valueState(null),
+			status: valueState(null)
+		},
+		safety: {
+			readOnly: valueState(true),
+			workbenchWriteAvailable: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			genericShellRunner: valueState(false),
+			implementationRunStarted: valueState(false)
+		},
+		runResultBridge,
+		note: "Controlled implementation plan preview is unavailable until the backend returns controlled-implementation-plan-preview.v1 for the active goal/task."
+	};
+	const scopedRunResultBridge = projectImplementationRunResultBridge({
+		operations,
+		goalId: preview.goalId,
+		taskId: preview.taskId
+	});
+	return {
+		state: "preview-ready",
+		modelName: valueState("ControlledImplementationPlanPreview"),
+		routeState: valueState(routeState),
+		goalId: valueState(preview.goalId),
+		taskId: valueState(preview.taskId),
+		canPreview: valueState(true),
+		reason: valueState(preview.allowedPreview?.nextAction?.reason),
+		plan: {
+			planId: valueState(preview.planId),
+			planHash: valueState(preview.planHash),
+			mode: valueState(preview.mode),
+			status: valueState(preview.status),
+			commandName: valueState(preview.command?.name),
+			previewOf: valueState(preview.command?.previewOf),
+			confirmRequired: valueState(preview.command?.confirmRequired === true)
+		},
+		writeSemantics: {
+			safetyMode: valueState(preview.writeSemantics?.safetyMode),
+			writeBoundary: valueState(preview.writeSemantics?.writeBoundary),
+			mainWorktreeWrites: valueState(preview.writeSemantics?.mainWorktreeWrites === true),
+			workspaceWrites: valueState(preview.writeSemantics?.workspaceWrites === true),
+			runtimeWrites: valueState(preview.writeSemantics?.runtimeWrites === true),
+			destructiveWrites: valueState(preview.writeSemantics?.destructiveWrites === true)
+		},
+		activeTaskConstraints: {
+			title: valueState(preview.allowedPreview?.task?.title),
+			branch: valueState(preview.allowedPreview?.task?.branch),
+			roleOrder: arrayTextState(preview.allowedPreview?.task?.roleOrder),
+			acceptance: projectTextItems(preview.allowedPreview?.task?.acceptance),
+			expectedWorkerEvidence: valueState(preview.allowedPreview?.task?.expectedWorkerEvidence),
+			copyOnlyCommands: projectTextItems(preview.allowedPreview?.task?.copyOnlyCommands)
+		},
+		workerPrompt: {
+			available: valueState(preview.allowedPreview?.workerPrompt?.available === true),
+			copyOnly: valueState(preview.allowedPreview?.workerPrompt?.copyOnly === true),
+			format: valueState(preview.allowedPreview?.workerPrompt?.format),
+			role: valueState(preview.allowedPreview?.workerPrompt?.role),
+			text: valueState(preview.allowedPreview?.workerPrompt?.text)
+		},
+		evidenceRefs: {
+			currentWorkerEvidenceRef: valueState(preview.allowedPreview?.evidenceRefs?.currentWorkerEvidenceRef),
+			currentReviewEvidenceRef: valueState(preview.allowedPreview?.evidenceRefs?.currentReviewEvidenceRef),
+			currentMainVerificationRef: valueState(preview.allowedPreview?.evidenceRefs?.currentMainVerificationRef),
+			explicitEventEvidenceRefs: projectEvidenceRefItems(preview.allowedPreview?.evidenceRefs?.explicitEventEvidenceRefs)
+		},
+		confirm: {
+			available: valueState(preview.confirm?.available === true),
+			enabledByTask: valueState(preview.confirm?.enabledByTask),
+			requiredContext: arrayTextState(preview.confirm?.requiredContext),
+			copyOnlyCommand: valueState(preview.confirm?.copyOnlyCommand),
+			endpoint: {
+				method: valueState(preview.confirm?.endpoint?.method),
+				route: valueState(preview.confirm?.endpoint?.route),
+				allowedBodyFields: arrayTextState(preview.confirm?.endpoint?.allowedBodyFields),
+				requiresSameGoalTaskContext: valueState(preview.confirm?.endpoint?.requiresSameGoalTaskContext === true),
+				confirmUsesPlanHash: valueState(preview.confirm?.endpoint?.confirmUsesPlanHash === true)
+			}
+		},
+		endpoint: {
+			method: valueState(preview.previewEndpoint?.method),
+			route: valueState(preview.previewEndpoint?.route),
+			allowedQueryFields: arrayTextState(preview.previewEndpoint?.allowedQueryFields),
+			rejectsPromptInput: valueState(preview.previewEndpoint?.rejectsPromptInput === true),
+			rejectsPlanHashInput: valueState(preview.previewEndpoint?.rejectsPlanHashInput === true),
+			rejectsConfirmInput: valueState(preview.previewEndpoint?.rejectsConfirmInput === true),
+			writesInDryRun: valueState(preview.previewEndpoint?.writesInDryRun === true),
+			genericShellRunner: valueState(preview.previewEndpoint?.genericShellRunner === true)
+		},
+		safety: {
+			readOnly: valueState(preview.safety?.readOnly === true),
+			copyOnly: valueState(preview.safety?.copyOnly === true),
+			workbenchWriteAvailable: valueState(preview.safety?.workbenchWriteAvailable === true),
+			browserExecutionAvailable: valueState(preview.safety?.browserExecutionAvailable === true),
+			modelInvocationAvailable: valueState(preview.safety?.modelInvocationAvailable === true),
+			genericShellRunner: valueState(preview.safety?.genericShellRunner === true),
+			arbitraryPathReadAvailable: valueState(preview.safety?.arbitraryPathReadAvailable === true),
+			implementationRunStarted: valueState(preview.safety?.implementationRunStarted === true),
+			approvalReadinessSource: valueState(preview.safety?.approvalReadinessSource),
+			unsupportedInferenceSources: arrayTextState(preview.safety?.unsupportedInferenceSources)
+		},
+		runResultBridge: scopedRunResultBridge,
+		note: "This preview is generated from active goal/task contracts and the worker prompt. It does not execute symphony do, call a model, open files, merge, push, tag, approve review, or declare readiness."
+	};
+}
+function projectImplementationRunResultBridge({ operations, goalId, taskId }) {
+	const operation = latestImplementationOperationForTask(operations, {
+		goalId,
+		taskId
+	});
+	const runResult = operation?.runResult ?? null;
+	const artifactRefs = Array.isArray(operation?.artifactRefs) ? operation.artifactRefs : Array.isArray(runResult?.artifactRefs) ? runResult.artifactRefs : [];
+	const changedFiles = Array.isArray(runResult?.changedFiles) ? runResult.changedFiles : [];
+	const verifierSummary = operation?.verifierSummary ?? {};
+	return {
+		state: operation === null ? "waiting-for-confirmed-run" : operation.status === "failed" || runResult?.status === "failed" || runResult?.verifierStatus === "failed" ? "failed" : "available",
+		sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+		operationId: valueState(operation?.operationId),
+		operationStatus: valueState(operation?.status),
+		operationSource: valueState(operation?.source),
+		commandName: valueState(operation?.commandName),
+		commandKind: valueState(operation?.commandKind),
+		planHash: valueState(operation?.planHash),
+		run: {
+			runId: valueState(runResult?.runId),
+			plannedRunId: valueState(runResult?.plannedRunId),
+			executionPlanId: valueState(runResult?.executionPlanId),
+			status: valueState(runResult?.status),
+			exitCode: valueState(runResult?.exitCode),
+			verifierStatus: valueState(runResult?.verifierStatus),
+			writeBoundary: valueState(runResult?.writeBoundary),
+			mainWorktreeWrites: valueState(runResult?.mainWorktreeWrites),
+			workspaceWrites: valueState(runResult?.workspaceWrites),
+			sourceWorkspacePath: valueState(runResult?.sourceWorkspacePath),
+			sourceWorkspaceManifestPath: valueState(runResult?.sourceWorkspaceManifestPath),
+			evidenceArtifactPath: valueState(runResult?.evidenceArtifactPath),
+			failureReason: valueState(operation?.failureReason)
+		},
+		verifierSummary: {
+			status: valueState(verifierSummary.status),
+			runStatus: valueState(verifierSummary.runStatus),
+			passed: valueState(verifierSummary.passed === true),
+			changedFileCount: valueState(verifierSummary.changedFileCount),
+			artifactCount: valueState(verifierSummary.artifactCount),
+			failureReason: valueState(verifierSummary.failureReason)
+		},
+		artifactRefs: {
+			count: valueState(artifactRefs.length),
+			text: textState(artifactRefs.length === 0 ? MISSING_TEXT : artifactRefs.map((artifact) => artifact.kind ?? artifact.path ?? artifact.ref).join("、")),
+			items: artifactRefs.map((artifact) => ({
+				kind: valueState(artifact?.kind),
+				path: valueState(artifact?.path),
+				ref: valueState(artifact?.ref),
+				uri: valueState(artifact?.uri),
+				status: valueState(artifact?.status)
+			}))
+		},
+		changedFiles: projectTextItems(changedFiles),
+		outputSummary: {
+			stdout: textState(operation?.output?.stdout ?? MISSING_TEXT),
+			stderr: textState(operation?.output?.stderr ?? ""),
+			exitCode: valueState(operation?.output?.exitCode)
+		},
+		note: "Run result bridge reads confirmed implementation output from goal-operation-runs.v1. It does not inspect arbitrary paths, start agents, approve review, or infer readiness."
+	};
+}
+function latestImplementationOperationForTask(operations, { goalId, taskId }) {
+	if (!Array.isArray(operations?.runs)) return null;
+	for (let index = operations.runs.length - 1; index >= 0; index -= 1) {
+		const run = operations.runs[index];
+		if (run?.commandKind === "implementation" && (!isNonEmptyString(goalId) || run.goalId === goalId) && (!isNonEmptyString(taskId) || run.taskId === taskId)) return run;
+	}
+	return null;
+}
+function projectEvidenceRefItems(refs) {
+	const items = Array.isArray(refs) ? refs : [];
+	return {
+		count: valueState(items.length),
+		items: items.map((entry) => ({
+			kind: valueState(entry?.kind),
+			ref: valueState(entry?.ref),
+			label: valueState(entry?.label),
+			eventId: valueState(entry?.eventId),
+			eventType: valueState(entry?.eventType)
+		}))
 	};
 }
 function projectReviewWorkspace({ runbook, ledger, eventLog, nextAction, promptPack, reviewerPromptPack, latestRun }) {
@@ -11505,7 +12128,7 @@ function controlledReviewEvidenceRef(value) {
 	if (!isControlledEvidenceRefInput(value)) return;
 	return normalizeEvidenceRefInput(value);
 }
-function projectMainVerificationReadiness({ runbook, ledger, eventLog, nextAction, closeout, readiness }) {
+function projectMainVerificationReadiness({ runbook, ledger, eventLog, operations, adoptionInspectResult, adoptionInspect, nextAction, closeout, latestRun }) {
 	const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : [];
 	const ledgerTasks = new Map((Array.isArray(ledger?.tasks) ? ledger.tasks : []).map((task) => [task.taskId, task]));
 	const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
@@ -11523,20 +12146,25 @@ function projectMainVerificationReadiness({ runbook, ledger, eventLog, nextActio
 		reviewEvent,
 		ledgerTask
 	});
-	const branchState = projectMainVerificationBranchState({
-		readiness,
-		targetBranch: targetTask?.branch
-	});
-	const evidencePath = evidenceFileForMainVerification({
-		goalId: runbook?.goalId,
+	const adoptionState = projectMainVerificationAdoptionState({
+		operations,
+		adoptionInspectResult,
+		adoptionInspect,
+		goalId: runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId,
 		taskId
 	});
 	const requiredCommands = Array.isArray(targetTask?.copyOnlyCommands) ? targetTask.copyOnlyCommands : [];
 	const missingCloseoutKinds = Array.isArray(closeout?.missing) ? closeout.missing.filter((item) => item?.taskId === taskId).map((item) => item?.kind).filter((kind) => isNonEmptyString(kind)) : [];
-	const canEnter = reviewerApproval.approved.value === true && mainVerificationEvent?.eventType !== "main.verification-passed";
+	const blockerReasons = mainVerificationBlockerReasons({
+		reviewerApproval,
+		adoptionState,
+		mainVerificationEvent,
+		missingCloseoutKinds
+	});
+	const canEnter = blockerReasons.length === 0;
 	return {
-		state: runbookTasks.length === 0 ? "missing" : canEnter ? "ready" : reviewerApproval.status.value === "needs-revision" ? "blocked" : "waiting",
-		sourcePolicy: valueState("goal-runbook.v1 + goal-progress-ledger.v1 + goal-event-log.v1 + goal-next-action.v1 + goal-closeout-report.v1 + symphony.console-readiness"),
+		state: runbookTasks.length === 0 ? "missing" : canEnter ? "ready" : reviewerApproval.status.value === "needs-revision" || adoptionState.status.value === "needs-adoption" || adoptionState.status.value === "adoption-failed" || mainVerificationEvent?.eventType === "main.verification-failed" ? "blocked" : "waiting",
+		sourcePolicy: valueState("goal-progress-ledger.v1 + goal-event-log.v1 + goal-next-action.v1 + goal-closeout-report.v1 + goal-operation-runs.v1 + symphony.console-adoption-inspect"),
 		goalId: valueState(runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId),
 		taskId: valueState(taskId),
 		title: valueState(targetTask?.title),
@@ -11545,25 +12173,57 @@ function projectMainVerificationReadiness({ runbook, ledger, eventLog, nextActio
 			reason: valueState(mainVerificationReadinessReason({
 				targetTask,
 				reviewerApproval,
+				adoptionState,
 				mainVerificationEvent,
-				missingCloseoutKinds
+				missingCloseoutKinds,
+				blockerReasons
 			})),
 			currentNextRole: valueState(nextAction?.next?.role),
 			currentNextPhase: valueState(nextAction?.next?.phase),
-			closeoutMissingKinds: arrayTextState(missingCloseoutKinds)
+			closeoutMissingKinds: arrayTextState(missingCloseoutKinds),
+			blockers: projectTextItems(blockerReasons)
 		},
 		reviewerApproval,
-		branchState,
+		adoptionState,
+		explicitStateSources: projectTextItems([
+			"goal-status task status, evidence refs, and reviewer verdict",
+			"goal-event-log reviewer and main-verification events for the active task",
+			"goal next role/phase and closeout missing kinds",
+			"goal-operation-runs adoption-plan/adoption-confirm operations for the active task",
+			"symphony.console-adoption-inspect journal, latest confirmation run, and worktree match fields when a frozen adoption plan exists"
+		]),
+		ignoredInferenceSources: projectTextItems([
+			"branch names",
+			"file names",
+			"commit messages",
+			"prompt text",
+			"task titles",
+			"frontend component state",
+			"copy-only command text"
+		]),
 		ffOnlyMerge: {
-			guidance: valueState("Use ff-only on main after explicit reviewer.approved is present; branch text is guidance, not approval evidence."),
-			commands: projectTextItems(ffOnlyMergeCommands(targetTask?.branch))
+			guidance: valueState("Run the ff-only main merge check from a terminal after explicit readiness is true; the browser only shows copy-only guidance."),
+			commands: projectTextItems(ffOnlyMergeCommands())
 		},
 		verificationCommands: projectTextItems(requiredCommands),
+		verificationPlanPreview: projectAllowlistedVerificationPlanPreview({
+			goalId: runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId,
+			taskId,
+			targetTask,
+			nextAction,
+			operations,
+			ledgerTask,
+			reviewerApproval,
+			reviewEvent,
+			adoptionState,
+			mainVerificationEvent,
+			latestRun
+		}),
 		evidence: {
-			path: valueState(evidencePath),
+			path: valueState(void 0),
 			expectedEvent: valueState(targetTask?.expectedEvidence?.mainVerifier),
 			existingMainVerificationRef: valueState(ledgerTask?.mainVerificationRef ?? firstGoalEvidenceRef(mainVerificationEvent)),
-			gateCommand: valueState(isNonEmptyString(evidencePath) && isNonEmptyString(runbook?.goalId) && isNonEmptyString(taskId) ? `pnpm --silent symphony goal gate --goal ${runbook.goalId} --task ${taskId} --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref ${evidencePath} --dry-run --json` : void 0)
+			gateCommand: valueState(isNonEmptyString(runbook?.goalId) && isNonEmptyString(taskId) ? `pnpm --silent symphony goal gate --goal ${runbook.goalId} --task ${taskId} --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref <main-verification-evidence-ref> --dry-run --json` : void 0)
 		},
 		safety: {
 			readOnly: valueState(true),
@@ -11571,10 +12231,604 @@ function projectMainVerificationReadiness({ runbook, ledger, eventLog, nextActio
 			browserExecutionAvailable: valueState(false),
 			modelInvocationAvailable: valueState(false),
 			approvalReadinessSource: valueState("explicit reviewer.approved event or event-backed goal-status ledger"),
-			unsupportedInferenceSources: valueState("file-name、branch、commit-message、frontend-heuristic")
+			adoptionReadinessSource: valueState("explicit goal-operation-runs adoption operations and adoption inspect output only"),
+			unsupportedInferenceSources: valueState("file-name、branch、commit-message、prompt-text、task-title、frontend-heuristic")
 		},
-		note: "Main Verification Readiness 只展示是否可以进入 main verification；它不执行 merge、验证命令、evidence 写入或 goal gate 登记，也不从 branch、文件名或 command text 推断 approval。"
+		note: "Main Verification Readiness only displays whether main verification can start from explicit backend state. It does not execute merge, verification commands, evidence writing, or goal gate registration, and it does not infer approval or adoption state from branch names, file names, prompt text, task titles, command text, or frontend state."
 	};
+}
+function projectAllowlistedVerificationPlanPreview({ goalId, taskId, targetTask, nextAction, operations, ledgerTask, reviewerApproval, reviewEvent, adoptionState, mainVerificationEvent, latestRun }) {
+	const scopedCommands = [...commandsFromContract(targetTask?.copyOnlyCommands), ...commandsFromContract(nextAction?.copyOnlyCommands)];
+	const taskScopedControlledCommands = uniqueStrings(scopedCommands).filter((command) => isControlledVerificationContextCommand(command, goalId));
+	const allowedCommands = uniqueStrings([...MAIN_VERIFICATION_COMMAND_ALLOWLIST, ...taskScopedControlledCommands]);
+	const rejectedTaskCommandCount = uniqueStrings(scopedCommands).filter((command) => !isAllowlistedVerificationCommand(command, goalId)).length;
+	return {
+		state: isNonEmptyString(goalId) && isNonEmptyString(taskId) ? "available" : "missing",
+		modelName: valueState("AllowlistedVerificationPlanPreview"),
+		sourcePolicy: valueState("goal-runbook.v1 copyOnlyCommands + goal-next-action.v1 copyOnlyCommands + fixed v31 verification command allowlist"),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		title: valueState(targetTask?.title),
+		context: {
+			sourcePolicy: valueState("active goal/task/run/evidence refs from backend contracts"),
+			activeGoalId: valueState(goalId),
+			activeTaskId: valueState(taskId),
+			latestRunId: valueState(latestRun?.runId),
+			latestRunStatus: valueState(latestRun?.status),
+			workerEvidenceRef: valueState(ledgerTask?.workerEvidenceRef ?? nextAction?.evidenceState?.workerEvidenceRef),
+			reviewEvidenceRef: valueState(reviewerApproval?.evidenceRef?.value ?? ledgerTask?.reviewEvidenceRef ?? nextAction?.evidenceState?.reviewEvidenceRef),
+			adoptionPlanOperationId: valueState(adoptionState?.planOperationId?.value),
+			adoptionConfirmOperationId: valueState(adoptionState?.confirmOperationId?.value),
+			existingMainVerificationRef: valueState(ledgerTask?.mainVerificationRef ?? firstGoalEvidenceRef(mainVerificationEvent) ?? nextAction?.evidenceState?.mainVerificationRef),
+			existingMainVerificationEventId: valueState(mainVerificationEvent?.eventId)
+		},
+		commandCount: valueState(allowedCommands.length),
+		commands: projectVerificationPlanCommandItems({
+			commands: allowedCommands,
+			goalId
+		}),
+		operationStart: {
+			available: valueState(isNonEmptyString(goalId) && isNonEmptyString(taskId)),
+			suiteId: valueState("v31-main-verification-command-suite"),
+			endpoint: {
+				route: valueState(isNonEmptyString(goalId) ? `/api/goals/${goalId}/verification-run-confirm` : void 0),
+				method: valueState("POST"),
+				allowedBodyFields: arrayTextState([
+					"goalId",
+					"taskId",
+					"suiteId"
+				]),
+				requiresSameGoalTaskContext: valueState(true)
+			},
+			resultContract: valueState("controlled-verification-run-confirmation.v1"),
+			operationKind: valueState("verification"),
+			operationRegistryContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME)
+		},
+		requiredVerificationCommands: projectTextItems(MAIN_VERIFICATION_COMMAND_ALLOWLIST),
+		taskScopedControlledCommands: projectTextItems(taskScopedControlledCommands),
+		rejectedTaskCommandCount: valueState(rejectedTaskCommandCount),
+		explicitContracts: projectTextItems([
+			"goal-runbook.v1",
+			"goal-next-action.v1",
+			GOAL_PROGRESS_LEDGER_CONTRACT_NAME
+		]),
+		ignoredInferenceSources: projectTextItems([
+			"browser command input",
+			"free-form shell text",
+			"branch names",
+			"file names",
+			"prompt text",
+			"task titles",
+			"frontend component state"
+		]),
+		safety: {
+			copyOnly: valueState(true),
+			commandInputAccepted: valueState(false),
+			arbitraryShellAccepted: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			genericShellRunner: valueState(false),
+			controlledOperationStartAvailable: valueState(isNonEmptyString(goalId) && isNonEmptyString(taskId)),
+			writesGoalEvents: valueState(false),
+			registersGates: valueState(false)
+		},
+		evidenceDraft: projectMainVerificationEvidenceDraft({
+			goalId,
+			taskId,
+			targetTask,
+			operations,
+			ledgerTask,
+			reviewerApproval,
+			reviewEvent,
+			adoptionState,
+			mainVerificationEvent,
+			latestRun
+		}),
+		note: "The preview lists only the fixed v31 verification commands plus task-scoped controlled goal context commands. It does not accept command text and does not execute commands in the browser."
+	};
+}
+function projectMainVerificationEvidenceDraft(options = {}) {
+	let { goalId, taskId, targetTask, operations, ledgerTask, reviewerApproval, reviewEvent, adoptionState, mainVerificationEvent, latestRun } = options;
+	if (Array.isArray(options.runbook?.tasks)) {
+		const runbookTasks = options.runbook.tasks;
+		const ledgerTasks = new Map((Array.isArray(options.ledger?.tasks) ? options.ledger.tasks : []).map((task) => [task.taskId, task]));
+		const events = Array.isArray(options.eventLog?.events) ? options.eventLog.events : [];
+		targetTask = selectMainVerificationReadinessTask({
+			runbookTasks,
+			ledgerTasks,
+			nextAction: options.nextAction
+		});
+		goalId = firstNonEmptyString(options.runbook?.goalId, options.ledger?.goalId, options.eventLog?.goalId, options.nextAction?.goalId);
+		taskId = targetTask?.taskId;
+		ledgerTask = isNonEmptyString(taskId) ? ledgerTasks.get(taskId) ?? null : null;
+		const taskEvents = events.filter((event) => event?.taskId === taskId);
+		reviewEvent = latestEventOfTypes(taskEvents, ["reviewer.approved", "reviewer.needs-revision"]);
+		mainVerificationEvent = latestEventOfTypes(taskEvents, ["main.verification-passed", "main.verification-failed"]);
+		reviewerApproval = projectReviewerApprovalReadiness({
+			reviewEvent,
+			ledgerTask
+		});
+		adoptionState = projectMainVerificationAdoptionState({
+			operations,
+			adoptionInspectResult: null,
+			adoptionInspect: options.adoptionInspect,
+			goalId,
+			taskId
+		});
+	}
+	const verificationOperation = latestVerificationOperationForTask(operations, {
+		goalId,
+		taskId
+	});
+	const verificationRun = verificationOperation?.runResult ?? null;
+	const targetEvidenceRef = expectedMainVerificationEvidenceRef(targetTask);
+	const reviewEvidenceRef = firstNonEmptyString(reviewerApproval?.evidenceRef?.value, ledgerTask?.reviewEvidenceRef, firstGoalEvidenceRef(reviewEvent));
+	const workerEvidenceRef = firstNonEmptyString(ledgerTask?.workerEvidenceRef);
+	const commandResults = Array.isArray(verificationRun?.commandResults) ? verificationRun.commandResults : [];
+	const missingInputs = mainVerificationEvidenceDraftMissingInputs({
+		goalId,
+		taskId,
+		workerEvidenceRef,
+		reviewEvidenceRef,
+		reviewVerdict: reviewerApproval?.status?.value,
+		verificationOperation,
+		verificationRun,
+		commandResults
+	});
+	const available = missingInputs.length === 0;
+	const markdown = missingInputs.length === 0 ? buildMainVerificationEvidenceDraftMarkdown({
+		goalId,
+		taskId,
+		taskTitle: targetTask?.title,
+		draftPath: targetEvidenceRef,
+		verificationOperation,
+		commandResults,
+		workerEvidenceRef,
+		reviewEvidenceRef,
+		reviewVerdict: reviewerApproval?.status?.value,
+		adoptionRefs: {
+			adoptionPlanId: adoptionState?.adoptionPlanId?.value,
+			adoptionPlanOperationId: adoptionState?.planOperationId?.value,
+			adoptionConfirmOperationId: adoptionState?.confirmOperationId?.value,
+			adoptionConfirmStatus: adoptionState?.confirmOperationStatus?.value,
+			latestConfirmationRunId: adoptionState?.confirmationRunId?.value,
+			journalStatus: adoptionState?.journalStatus?.value
+		},
+		mainVerificationEvent
+	}) : MISSING_TEXT;
+	const adoptionRefs = {
+		adoptionPlanOperationId: adoptionState?.planOperationId?.value,
+		adoptionConfirmOperationId: adoptionState?.confirmOperationId?.value,
+		adoptionConfirmStatus: adoptionState?.confirmOperationStatus?.value,
+		latestConfirmationRunId: adoptionState?.confirmationRunId?.value,
+		journalStatus: adoptionState?.journalStatus?.value
+	};
+	const verificationOperationDraft = {
+		operationId: valueState(verificationOperation?.operationId),
+		status: valueState(verificationOperation?.status),
+		commandKind: valueState(verificationOperation?.commandKind),
+		suiteId: valueState(verificationRun?.suiteId),
+		runId: valueState(verificationRun?.runId),
+		runStatus: valueState(verificationRun?.status),
+		exitCode: valueState(verificationRun?.exitCode),
+		commandCount: valueState(verificationRun?.commandCount),
+		failedCommandCount: valueState(verificationRun?.failedCommandCount),
+		gatePassed: valueState(verificationRun?.gatePassed),
+		artifactRefs: projectOperationConsoleArtifactRefs(verificationOperation?.artifactRefs),
+		source: valueState(verificationOperation?.source),
+		updatedAt: valueState(verificationOperation?.timestamps?.updatedAt)
+	};
+	return {
+		state: !isNonEmptyString(goalId) || !isNonEmptyString(taskId) ? "missing" : verificationOperation === null ? "waiting-for-verification-run" : available ? "available" : "blocked",
+		modelName: valueState("MainVerificationEvidenceDraft"),
+		contractName: valueState("main-verification-evidence-draft.v1"),
+		contractVersion: valueState(1),
+		sourcePolicy: valueState("goal-operation-runs.v1 verification output + explicit goal/task/evidence/adoption refs"),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		title: valueState(targetTask?.title),
+		draftPath: valueState(targetEvidenceRef),
+		targetEvidenceRef: valueState(targetEvidenceRef),
+		status: valueState(available ? "draft-needs-operator-review" : "missing-inputs"),
+		missingInputs: projectTextItems(missingInputs),
+		workerEvidenceRef: valueState(workerEvidenceRef),
+		reviewEvidenceRef: valueState(reviewEvidenceRef),
+		reviewVerdict: valueState(reviewerApproval?.status?.value),
+		verification: {
+			operationId: valueState(verificationOperation?.operationId),
+			operationStatus: valueState(verificationOperation?.status),
+			source: valueState(verificationOperation?.source),
+			runId: valueState(verificationRun?.runId),
+			suiteId: valueState(verificationRun?.suiteId),
+			runStatus: valueState(verificationRun?.status),
+			exitCode: valueState(verificationRun?.exitCode),
+			commandCount: valueState(verificationRun?.commandCount),
+			failedCommandCount: valueState(verificationRun?.failedCommandCount),
+			gatePassed: valueState(verificationRun?.gatePassed),
+			planHash: valueState(verificationOperation?.planHash),
+			failureReason: valueState(verificationOperation?.failureReason)
+		},
+		verificationOperation: verificationOperationDraft,
+		refs: {
+			workerEvidenceRef: valueState(workerEvidenceRef),
+			reviewEvidenceRef: valueState(reviewEvidenceRef),
+			adoptionPlanOperationId: valueState(adoptionState?.planOperationId?.value),
+			adoptionConfirmOperationId: valueState(adoptionState?.confirmOperationId?.value),
+			latestRunId: valueState(latestRun?.runId),
+			existingMainVerificationRef: valueState(ledgerTask?.mainVerificationRef ?? firstGoalEvidenceRef(mainVerificationEvent)),
+			existingMainVerificationEventId: valueState(mainVerificationEvent?.eventId)
+		},
+		adoptionRefs: {
+			adoptionPlanOperationId: valueState(adoptionRefs.adoptionPlanOperationId),
+			adoptionConfirmOperationId: valueState(adoptionRefs.adoptionConfirmOperationId),
+			adoptionConfirmStatus: valueState(adoptionRefs.adoptionConfirmStatus),
+			latestConfirmationRunId: valueState(adoptionRefs.latestConfirmationRunId),
+			journalStatus: valueState(adoptionRefs.journalStatus)
+		},
+		commandResults: projectMainVerificationDraftCommandResults(commandResults),
+		markdown: textState(markdown),
+		draft: {
+			available: valueState(available),
+			text: textState(markdown === MISSING_TEXT ? "" : markdown),
+			needsOperatorReview: valueState(true),
+			declaresPassed: valueState(false),
+			registersGoalEvent: valueState(false),
+			writesFile: valueState(false)
+		},
+		copyOnlyGateDryRun: valueState(isNonEmptyString(goalId) && isNonEmptyString(taskId) ? `pnpm --silent symphony goal gate --goal ${goalId} --task ${taskId} --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref ${targetEvidenceRef ?? "<main-verification-evidence-ref>"} --dry-run --json` : void 0),
+		explicitStateSources: projectTextItems([
+			"goal-operation-runs.v1 latest verification operation for the active goal/task",
+			"goal-progress-ledger.v1 worker/review/main verification refs",
+			"goal-event-log.v1 reviewer and main-verification events",
+			"goal-operation-runs.v1 adoption operations and symphony.console-adoption-inspect fields when adoption exists",
+			"symphony.console-run latest run id/status when exposed"
+		]),
+		ignoredInferenceSources: projectTextItems([
+			"branch names",
+			"file names",
+			"commit messages",
+			"prompt text",
+			"task titles",
+			"command success as gate status",
+			"frontend component state"
+		]),
+		safety: {
+			draftOnly: valueState(true),
+			needsOperatorReview: valueState(true),
+			requiresOperatorReview: valueState(true),
+			readsEvidenceBodies: valueState(false),
+			writesFiles: valueState(false),
+			writesEvidenceFile: valueState(false),
+			registersGates: valueState(false),
+			declaresPassed: valueState(false),
+			successImpliesGatePassed: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			arbitraryShellAccepted: valueState(false),
+			opensLocalFiles: valueState(false),
+			downloadsArtifacts: valueState(false),
+			mergeAvailable: valueState(false),
+			pushAvailable: valueState(false),
+			tagAvailable: valueState(false),
+			selfApprovalAvailable: valueState(false)
+		},
+		note: "The draft is rendered from explicit Workbench contracts for operator/reviewer checking. Missing inputs are blockers, not inferred content. It does not write an evidence file, declare main verification passed, or register the main-verification gate."
+	};
+}
+function projectMainVerificationEvidenceDraftWriter({ runbook, ledger, eventLog, operations, adoptionInspectResult, adoptionInspect, nextAction, latestRun }) {
+	const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : [];
+	const ledgerTasks = new Map((Array.isArray(ledger?.tasks) ? ledger.tasks : []).map((task) => [task.taskId, task]));
+	const targetTask = selectMainVerificationReadinessTask({
+		runbookTasks,
+		ledgerTasks,
+		nextAction
+	});
+	const goalId = runbook?.goalId ?? ledger?.goalId ?? nextAction?.goalId;
+	const taskId = targetTask?.taskId;
+	const ledgerTask = isNonEmptyString(taskId) ? ledgerTasks.get(taskId) ?? null : null;
+	const taskEvents = (Array.isArray(eventLog?.events) ? eventLog.events : []).filter((event) => event?.taskId === taskId);
+	const reviewEvent = latestEventOfTypes(taskEvents, ["reviewer.approved", "reviewer.needs-revision"]);
+	const mainVerificationEvent = latestEventOfTypes(taskEvents, ["main.verification-passed", "main.verification-failed"]);
+	const reviewerApproval = projectReviewerApprovalReadiness({
+		reviewEvent,
+		ledgerTask
+	});
+	const adoptionState = projectMainVerificationAdoptionState({
+		operations,
+		adoptionInspectResult,
+		adoptionInspect,
+		goalId,
+		taskId
+	});
+	const draft = projectMainVerificationEvidenceDraft({
+		goalId,
+		taskId,
+		targetTask,
+		operations,
+		ledgerTask,
+		reviewerApproval,
+		reviewEvent,
+		adoptionState,
+		mainVerificationEvent,
+		latestRun
+	});
+	const draftPath = isNonEmptyString(taskId) ? `docs/plans/v31-${taskId}-main-verification-evidence-2026-06-01.md` : null;
+	return {
+		...draft,
+		state: draft.state === "available" ? "draft-ready" : draft.state,
+		modelName: valueState(MAIN_VERIFICATION_EVIDENCE_DRAFT_MODEL_NAME),
+		draftPath: valueState(draftPath),
+		workerEvidenceRef: draft.workerEvidenceRef,
+		reviewEvidenceRef: draft.reviewEvidenceRef,
+		verificationOperation: draft.verificationOperation,
+		verification: draft.verification,
+		refs: draft.refs,
+		adoptionRefs: {
+			...draft.adoptionRefs,
+			adoptionPlanId: valueState(adoptionState?.adoptionPlanId?.value),
+			adoptionPlanArtifactPath: valueState(void 0),
+			latestConfirmationEvidenceArtifactPath: valueState(void 0)
+		},
+		markdown: draft.markdown,
+		copyOnlyGateDryRun: draft.copyOnlyGateDryRun,
+		draft: {
+			available: valueState(draft.state === "available"),
+			text: draft.state === "available" ? draft.markdown : textState(""),
+			markdown: draft.markdown,
+			needsOperatorReview: valueState(true),
+			declaresPassed: valueState(false),
+			writesFile: valueState(false),
+			registersGoalEvent: valueState(false)
+		},
+		safety: {
+			...draft.safety,
+			writesEvidenceFile: valueState(false),
+			registersMainVerificationGate: valueState(false),
+			declaresPassed: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			arbitraryShellAccepted: valueState(false)
+		}
+	};
+}
+function projectMainVerificationGateRegistration({ runbook, ledger, eventLog, nextAction, latestRun, readiness, evidenceDraft }) {
+	const definition = GOAL_EVENT_FORM_DEFINITIONS.find((candidate) => candidate.eventType === "main.verification-passed");
+	const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : [];
+	const ledgerTasks = new Map((Array.isArray(ledger?.tasks) ? ledger.tasks : []).map((task) => [task.taskId, task]));
+	const targetTask = selectMainVerificationReadinessTask({
+		runbookTasks,
+		ledgerTasks,
+		nextAction
+	});
+	const goalId = firstNonEmptyString(firstValue(readiness?.goalId), runbook?.goalId, ledger?.goalId, nextAction?.goalId);
+	const taskId = firstNonEmptyString(firstValue(readiness?.taskId), targetTask?.taskId, nextAction?.next?.taskId);
+	const ledgerTask = isNonEmptyString(taskId) ? ledgerTasks.get(taskId) ?? null : null;
+	const mainVerificationEvent = latestEventOfTypes((Array.isArray(eventLog?.events) ? eventLog.events : []).filter((event) => event?.taskId === taskId), ["main.verification-passed", "main.verification-failed"]);
+	const targetEvidenceRef = firstValue(evidenceDraft?.targetEvidenceRef);
+	const verificationOperationId = firstValue(evidenceDraft?.verification?.operationId);
+	const verificationRunId = firstValue(evidenceDraft?.verification?.runId);
+	const existingMainVerificationRef = firstNonEmptyString(ledgerTask?.mainVerificationRef, firstValue(evidenceDraft?.refs?.existingMainVerificationRef), firstGoalEvidenceRef(mainVerificationEvent));
+	const missingInputs = mainVerificationGateRegistrationMissingInputs({
+		definition,
+		goalId,
+		taskId,
+		readiness,
+		evidenceDraft,
+		targetEvidenceRef,
+		existingMainVerificationRef
+	});
+	const available = missingInputs.length === 0;
+	const statement = isNonEmptyString(verificationOperationId) ? `Main verification gate registration uses confirmed verification operation ${verificationOperationId}.` : "Main verification gate registration uses explicit Workbench verification evidence.";
+	const form = definition === void 0 ? null : projectGoalEventFormSpec({
+		definition,
+		nextAction: {
+			goalId,
+			next: {
+				taskId,
+				role: "main-verifier",
+				phase: "main-verification"
+			}
+		},
+		recommended: available,
+		evidenceRefHelper: projectEvidenceRefHelper({
+			runbook,
+			ledger,
+			eventLog,
+			latestRun
+		}),
+		fieldOverrides: {
+			gateName: {
+				readOnly: true,
+				value: "main-verification",
+				source: "v31 main-verification gate registration",
+				options: ["main-verification"]
+			},
+			gateStatus: {
+				readOnly: true,
+				value: "passed",
+				source: "v31 main-verification gate registration",
+				options: ["passed"]
+			},
+			evidenceRef: {
+				value: targetEvidenceRef,
+				source: "main-verification-evidence-draft.v1 targetEvidenceRef"
+			},
+			statement: {
+				value: statement,
+				source: "goal-operation-runs.v1 verification operation"
+			}
+		}
+	});
+	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
+	const commandTaskId = isNonEmptyString(taskId) ? taskId : "<task-id>";
+	const commandEvidenceRef = isNonEmptyString(targetEvidenceRef) ? targetEvidenceRef : "<main-verification-evidence-ref>";
+	return {
+		state: definition === void 0 ? "missing" : isNonEmptyString(existingMainVerificationRef) ? "already-registered" : available ? "available" : "blocked",
+		modelName: valueState("MainVerificationGateRegistration"),
+		sourcePolicy: valueState("main-verification-evidence-draft.v1 + goal-operation-runs.v1 + goal-event-log.v1 + goal-update-plan.v1"),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		title: valueState(targetTask?.title),
+		targetEvidenceRef: valueState(targetEvidenceRef),
+		existingMainVerificationRef: valueState(existingMainVerificationRef),
+		existingMainVerificationEventId: valueState(mainVerificationEvent?.eventId),
+		verificationOperationId: valueState(verificationOperationId),
+		verificationRunId: valueState(verificationRunId),
+		readinessState: valueState(readiness?.state),
+		draftState: valueState(evidenceDraft?.state),
+		missingInputs: projectTextItems(missingInputs),
+		dryRunCommand: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --task ${commandTaskId} --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref ${commandEvidenceRef} --dry-run --json`),
+		confirmCommandPattern: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --task ${commandTaskId} --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref ${commandEvidenceRef} --confirm --plan-hash sha256:<PLAN_HASH>`),
+		form: available ? form : null,
+		safety: {
+			confirmRequiresPlanHash: valueState(true),
+			appendOnlyOnConfirm: valueState(true),
+			workbenchWriteAvailable: valueState(available),
+			usesGoalGateOnly: valueState(true),
+			requiresMainVerifierInput: valueState(true),
+			readsEvidenceBodies: valueState(false),
+			writesEvidenceFile: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			arbitraryShellAccepted: valueState(false),
+			mergeAvailable: valueState(false),
+			pushAvailable: valueState(false),
+			tagAvailable: valueState(false),
+			releaseReadyAvailable: valueState(false),
+			selfApprovalAvailable: valueState(false),
+			successImpliesGatePassed: valueState(false)
+		},
+		note: valueState("This path registers main-verification only through the existing goal gate dry-run and plan-hash confirm flow. It requires explicit verification evidence context and does not run commands, write evidence, merge, push, tag, declare release readiness, or self-approve.")
+	};
+}
+function mainVerificationGateRegistrationMissingInputs({ definition, goalId, taskId, readiness, evidenceDraft, targetEvidenceRef, existingMainVerificationRef }) {
+	const missing = [];
+	if (definition === void 0) missing.push("main.verification-passed goal gate form definition is missing");
+	if (isNonEmptyString(existingMainVerificationRef)) missing.push("main-verification is already registered for this task");
+	if (!isNonEmptyString(goalId)) missing.push("goal id is missing from explicit contracts");
+	if (!isNonEmptyString(taskId)) missing.push("task id is missing from explicit contracts");
+	if (readiness?.readiness?.canEnterMainVerification?.value !== true) missing.push("main verification readiness is not true");
+	if (evidenceDraft?.state !== "draft-ready") missing.push("main verification evidence draft is not ready");
+	if (!isNonEmptyString(targetEvidenceRef)) missing.push("main verification evidence ref is missing");
+	if (evidenceDraft?.verification?.runStatus?.value !== "passed") missing.push("controlled verification run did not pass");
+	if (evidenceDraft?.verification?.gatePassed?.value !== false) missing.push("verification operation must not already declare gate passed");
+	if ((evidenceDraft?.commandResults?.count?.value ?? 0) <= 0) missing.push("verification command results are missing");
+	return missing;
+}
+function mainVerificationEvidenceDraftMissingInputs({ goalId, taskId, workerEvidenceRef, reviewEvidenceRef, reviewVerdict, verificationOperation, commandResults }) {
+	const missing = [];
+	if (!isNonEmptyString(goalId)) missing.push("goal id is missing from explicit contracts");
+	if (!isNonEmptyString(taskId)) missing.push("task id is missing from explicit contracts");
+	if (!isNonEmptyString(workerEvidenceRef)) missing.push("worker evidence ref is missing");
+	if (!isNonEmptyString(reviewEvidenceRef)) missing.push("review evidence ref is missing");
+	if (reviewVerdict !== "approved") missing.push("reviewer.approved verdict is missing");
+	if (verificationOperation === null) missing.push("controlled verification operation is missing for this goal/task");
+	else {
+		if (verificationOperation.commandKind !== "verification") missing.push("latest operation is not a verification operation");
+		if (verificationOperation.status !== "confirmed") missing.push("controlled verification operation is not confirmed");
+		if (verificationOperation.runResult?.status !== "passed") missing.push("controlled verification command suite did not pass");
+		if (!Array.isArray(commandResults) || commandResults.length === 0) missing.push("verification command results are missing");
+	}
+	return missing;
+}
+function projectMainVerificationDraftCommandResults(commandResults) {
+	if (!Array.isArray(commandResults)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	return {
+		state: commandResults.length === 0 ? "empty" : "available",
+		count: valueState(commandResults.length),
+		items: commandResults.map((result) => ({
+			command: valueState(result?.command),
+			status: valueState(result?.status),
+			exitCode: valueState(result?.exitCode),
+			stdoutSummary: textState(result?.stdoutSummary ?? ""),
+			stderrSummary: textState(result?.stderrSummary ?? ""),
+			startedAt: valueState(result?.startedAt),
+			completedAt: valueState(result?.completedAt)
+		}))
+	};
+}
+function latestVerificationOperationForTask(operations, { goalId, taskId }) {
+	if (!Array.isArray(operations?.runs)) return null;
+	for (const run of [...operations.runs].reverse()) if (run?.commandKind === "verification" && (!isNonEmptyString(goalId) || run.goalId === goalId) && (!isNonEmptyString(taskId) || run.taskId === taskId)) return run;
+	return null;
+}
+function expectedMainVerificationEvidenceRef(task) {
+	return (Array.isArray(task?.acceptance) ? task.acceptance : []).map((line) => String(line ?? "").trim().match(/^Main verification evidence path:\s*(docs\/plans\/[^.\s]+\.md)\.?$/u)).find((candidate) => candidate !== null)?.[1] ?? null;
+}
+function buildMainVerificationEvidenceDraftMarkdown({ goalId, releaseName, taskId, taskTitle, draftPath, verificationOperation, commandResults, workerEvidenceRef, reviewEvidenceRef, reviewVerdict, adoptionRefs, mainVerificationEvent }) {
+	const lines = [
+		`# v31 ${taskId} main verification evidence draft`,
+		"",
+		"Draft status: needs operator/reviewer check before any goal gate registration.",
+		"",
+		`Date: 2026-06-01`,
+		`Goal id: \`${goalId}\``,
+		`Release name: \`${releaseName ?? "v31 Main Verification Runner + Evidence Writer"}\``,
+		`Task id: \`${taskId}\``,
+		`Task title: \`${taskTitle ?? "unknown"}\``,
+		`Draft evidence path: \`${draftPath ?? "unknown"}\``,
+		"",
+		"## Explicit refs used",
+		"",
+		`- Worker evidence: \`${workerEvidenceRef}\`.`,
+		`- Review evidence: \`${reviewEvidenceRef}\`.`,
+		`- Review verdict: \`${reviewVerdict}\`.`,
+		`- Verification operation: \`${verificationOperation.operationId}\`.`,
+		`- Verification run: \`${verificationOperation.runResult?.runId ?? "unknown"}\`.`,
+		`- Operation artifact refs: ${formatDraftArtifactRefs(verificationOperation.artifactRefs)}.`,
+		`- Existing main verification event: ${mainVerificationEvent?.eventId ?? "none"}.`,
+		"",
+		"## Verification command results",
+		""
+	];
+	for (const result of commandResults) lines.push(`- \`${result.command}\` -> status \`${result.status}\`, exit code \`${result.exitCode ?? "null"}\`.`);
+	lines.push("", "## Adoption refs", "", `- Adoption plan id: \`${adoptionRefs.adoptionPlanId ?? "not-present"}\`.`, `- Adoption plan operation: \`${adoptionRefs.adoptionPlanOperationId ?? "not-present"}\`.`, `- Adoption confirm operation: \`${adoptionRefs.adoptionConfirmOperationId ?? "not-present"}\`.`, `- Adoption confirm status: \`${adoptionRefs.adoptionConfirmStatus ?? "not-present"}\`.`, `- Adoption journal status: \`${adoptionRefs.journalStatus ?? "not-present"}\`.`, "", "## Boundary and recovery notes", "", "- This is a draft generated from explicit Workbench contracts only.", "- This draft does not declare main verification passed.", "- This draft does not register `main.verification-passed`, reviewer approval, release readiness, or any goal event/gate.", "- Operator/reviewer must check the refs, command results, and recovery notes before running any separate `symphony goal gate` dry-run/confirm.", "");
+	return lines.join("\n");
+}
+function formatDraftArtifactRefs(artifactRefs) {
+	const refs = Array.isArray(artifactRefs) ? artifactRefs : [];
+	if (refs.length === 0) return "`none`";
+	return refs.map((artifact) => `\`${artifact?.ref ?? artifact?.uri ?? artifact?.kind ?? "unknown"}\``).join(", ");
+}
+function commandsFromContract(commands) {
+	return Array.isArray(commands) ? commands.filter((command) => isNonEmptyString(command)) : [];
+}
+function uniqueStrings(values) {
+	return [...new Set(values.filter((value) => isNonEmptyString(value)))];
+}
+function isAllowlistedVerificationCommand(command, goalId) {
+	return MAIN_VERIFICATION_COMMAND_ALLOWLIST.includes(command) || isControlledVerificationContextCommand(command, goalId);
+}
+function isControlledVerificationContextCommand(command, goalId) {
+	if (!isNonEmptyString(goalId)) return false;
+	return CONTROLLED_VERIFICATION_CONTEXT_COMMANDS.some((definition) => command === definition.command(goalId));
+}
+function projectVerificationPlanCommandItems({ commands, goalId }) {
+	if (!Array.isArray(commands)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	return {
+		state: commands.length === 0 ? "empty" : "available",
+		count: valueState(commands.length),
+		items: commands.map((command, index) => ({
+			index: valueState(index + 1),
+			command: valueState(command),
+			kind: valueState(MAIN_VERIFICATION_COMMAND_ALLOWLIST.includes(command) ? "verification" : "controlled-context"),
+			source: valueState(MAIN_VERIFICATION_COMMAND_ALLOWLIST.includes(command) ? "fixed v31 verification allowlist" : controlledVerificationContextSource(command, goalId)),
+			copyOnly: valueState(true),
+			browserExecutionAvailable: valueState(false),
+			acceptsArbitraryInput: valueState(false)
+		}))
+	};
+}
+function controlledVerificationContextSource(command, goalId) {
+	return CONTROLLED_VERIFICATION_CONTEXT_COMMANDS.find((candidate) => isNonEmptyString(goalId) && command === candidate.command(goalId))?.contractName ?? "controlled contract command";
 }
 function selectMainVerificationReadinessTask({ runbookTasks, ledgerTasks, nextAction }) {
 	const nextTaskId = nextAction?.next?.taskId;
@@ -11605,47 +12859,77 @@ function projectReviewerApprovalReadiness({ reviewEvent, ledgerTask }) {
 		source: valueState(source)
 	};
 }
-function projectMainVerificationBranchState({ readiness, targetBranch }) {
-	const git = readiness?.tools?.git;
-	const currentBranch = git?.branch;
-	const dirty = git?.dirty;
+function projectMainVerificationAdoptionState({ operations, adoptionInspectResult, adoptionInspect, goalId, taskId }) {
+	const adoptionPlanOperation = latestAdoptionPlanFreezeOperationForTask(operations, {
+		goalId,
+		taskId
+	});
+	const adoptionConfirmOperation = latestAdoptionConfirmOperationForTask(operations, {
+		goalId,
+		taskId,
+		adoptionPlanId: adoptionPlanOperation?.runResult?.adoptionPlanId
+	});
+	const adoptionPlanId = firstNonEmptyString(adoptionConfirmOperation?.runResult?.adoptionPlanId, adoptionPlanOperation?.runResult?.adoptionPlanId);
+	const inspectMatchesPlan = isNonEmptyString(adoptionPlanId) && adoptionInspect?.adoptionPlanId === adoptionPlanId;
+	const inspectLatestRun = inspectMatchesPlan ? adoptionInspect?.latestConfirmationRun ?? null : null;
+	const confirmStatus = firstNonEmptyString(adoptionConfirmOperation?.runResult?.status, adoptionConfirmOperation?.status, inspectLatestRun?.status);
+	const hasAdoptionPlan = adoptionPlanOperation !== null || isNonEmptyString(adoptionPlanId);
+	const applied = confirmStatus === "passed" || confirmStatus === "confirmed";
+	const failed = [
+		"failed",
+		"error",
+		"blocked"
+	].includes(confirmStatus);
+	const required = hasAdoptionPlan && applied !== true;
 	return {
-		state: valueState(!isNonEmptyString(currentBranch) ? "missing" : currentBranch === targetBranch ? "on-task-branch" : currentBranch === "main" ? "on-main" : "on-other-branch"),
-		currentBranch: valueState(currentBranch),
-		currentHead: valueState(git?.head),
-		taskBranch: valueState(targetBranch),
-		mainBranch: valueState("main"),
-		gitStatus: valueState(git?.status),
-		worktreeDirty: valueState(dirty),
-		dirtyFilesCount: valueState(git?.dirtyFilesCount),
-		dirtyPaths: projectTextItems(git?.dirtyPaths),
-		ffOnlyAvailableAfterCheckoutMain: valueState(isNonEmptyString(targetBranch)),
-		source: valueState("symphony.console-readiness")
+		status: valueState(hasAdoptionPlan === false ? "not-required" : applied ? "applied" : failed ? "adoption-failed" : "needs-adoption"),
+		required: valueState(required),
+		applied: valueState(applied),
+		adoptionPlanId: valueState(adoptionPlanId),
+		planOperationId: valueState(adoptionPlanOperation?.operationId),
+		planOperationStatus: valueState(adoptionPlanOperation?.status),
+		confirmOperationId: valueState(adoptionConfirmOperation?.operationId),
+		confirmOperationStatus: valueState(adoptionConfirmOperation?.status),
+		confirmationRunStatus: valueState(confirmStatus),
+		inspectRouteState: valueState(adoptionInspectResult?.ok === true ? "ready" : adoptionInspectResult?.ok === false ? "unavailable" : "not-fetched"),
+		inspectStatus: valueState(inspectMatchesPlan ? adoptionInspect?.status : void 0),
+		journalStatus: valueState(inspectMatchesPlan ? adoptionInspect?.journal?.status ?? "missing" : void 0),
+		currentWorktreeMatchesAfterHash: valueState(inspectMatchesPlan ? adoptionInspect?.currentWorktreeMatchesAfterHash : void 0),
+		currentWorktreeMatchesJournalBeforeFiles: valueState(inspectMatchesPlan ? adoptionInspect?.currentWorktreeMatchesJournalBeforeFiles : void 0),
+		source: valueState(hasAdoptionPlan ? "goal-operation-runs.v1 + symphony.console-adoption-inspect" : "goal-operation-runs.v1"),
+		note: valueState(hasAdoptionPlan ? "A frozen adoption plan exists for this task; main verification waits until explicit adoption-confirm state is passed." : "No explicit adoption plan is registered for this task, so adoption does not block main verification readiness.")
 	};
 }
 function normalizedReviewVerdict(value) {
 	if (value === "APPROVED" || value === "approved") return "approved";
 	if (value === "NEEDS_REVISION" || value === "needs-revision") return "needs-revision";
 }
-function mainVerificationReadinessReason({ targetTask, reviewerApproval, mainVerificationEvent, missingCloseoutKinds }) {
+function mainVerificationReadinessReason({ targetTask, reviewerApproval, adoptionState, mainVerificationEvent, missingCloseoutKinds, blockerReasons }) {
 	if (targetTask === null || targetTask === void 0) return "No runbook task is available for main verification readiness.";
 	if (mainVerificationEvent?.eventType === "main.verification-passed") return `${targetTask.taskId} already has main.verification-passed.`;
-	if (reviewerApproval.status.value === "approved") return `${targetTask.taskId} has reviewer.approved; main verification can start after the ff-only main merge check.`;
+	if (blockerReasons.length > 0) return `${targetTask.taskId} is not ready: ${blockerReasons.join("; ")}.`;
+	if (reviewerApproval.status.value === "approved") return `${targetTask.taskId} has reviewer.approved${adoptionState.status.value === "applied" ? " and adoption-confirm passed" : ""}; main verification can start after the terminal ff-only main merge check.`;
 	if (reviewerApproval.status.value === "needs-revision") return `${targetTask.taskId} has reviewer.needs-revision; main verification must wait.`;
 	if (missingCloseoutKinds.includes("review-evidence")) return `${targetTask.taskId} is missing review evidence in goal closeout.`;
 	return `${targetTask.taskId} is waiting for explicit reviewer.approved evidence.`;
 }
-function ffOnlyMergeCommands(targetBranch) {
+function mainVerificationBlockerReasons({ reviewerApproval, adoptionState, mainVerificationEvent, missingCloseoutKinds }) {
+	const reasons = [];
+	if (mainVerificationEvent?.eventType === "main.verification-passed") reasons.push("main.verification-passed is already recorded");
+	if (mainVerificationEvent?.eventType === "main.verification-failed") reasons.push("latest main verification event failed; worker revision is required");
+	if (reviewerApproval.status.value === "needs-revision") reasons.push("latest reviewer verdict is needs-revision");
+	else if (reviewerApproval.approved.value !== true) reasons.push("reviewer.approved is missing");
+	if (adoptionState.status.value === "needs-adoption") reasons.push("a frozen adoption plan exists but adoption-confirm has not passed");
+	if (adoptionState.status.value === "adoption-failed") reasons.push("latest adoption-confirm state failed");
+	if (missingCloseoutKinds.includes("review-evidence") && reviewerApproval.approved.value !== true) reasons.push("goal closeout still reports missing review evidence");
+	return reasons;
+}
+function ffOnlyMergeCommands() {
 	return [
 		"git checkout main",
 		"git pull --ff-only",
-		`git merge --ff-only ${isNonEmptyString(targetBranch) ? targetBranch : "<task-branch>"}`
+		"git merge --ff-only <reviewed-task-branch>"
 	];
-}
-function evidenceFileForMainVerification({ goalId, taskId }) {
-	if (!isNonEmptyString(goalId) || !isNonEmptyString(taskId)) return;
-	const goalSegment = goalId.match(/^(v\d+)(?:-|$)/u)?.[1] ?? goalId;
-	return `docs/plans/${goalSegment}-${goalSegment === "v19" ? taskId.replaceAll("-", "") : taskId}-main-verification-evidence-2026-05-29.md`;
 }
 function projectGoalOperationConsole({ result, operations, nextAction }) {
 	const runs = Array.isArray(operations?.runs) ? operations.runs : null;
@@ -11717,22 +13001,29 @@ function projectOperationConsoleRun(run) {
 		status: valueState(void 0),
 		planHash: valueState(void 0),
 		eventIds: textState(MISSING_TEXT),
+		runResult: projectOperationConsoleRunResult(null),
+		artifactRefs: projectOperationConsoleArtifactRefs([]),
+		verifierSummary: projectOperationConsoleVerifierSummary(null),
+		failureReason: valueState(void 0),
 		updatedAt: valueState(void 0)
 	};
 	const eventIds = Array.isArray(run.eventIds) ? run.eventIds : [];
 	const commandPreview = operationRunCommandPreview(run);
-	const stdout = [
+	const fallbackStdout = [
 		`status=${run.status ?? MISSING_TEXT}`,
 		`planHash=${run.planHash ?? MISSING_TEXT}`,
 		eventIds.length > 0 ? `eventIds=${eventIds.join(",")}` : "eventIds=none"
 	].join("\n");
+	const stdout = isNonEmptyString(run.output?.stdout) ? run.output.stdout : fallbackStdout;
+	const stderr = typeof run.output?.stderr === "string" ? run.output.stderr : "";
+	const exitCode = Number.isInteger(run.output?.exitCode) ? run.output.exitCode : 0;
 	return {
 		state: "available",
 		operationId: valueState(run.operationId),
 		commandPreview: valueState(commandPreview),
 		stdout: textState(stdout),
-		stderr: textState(""),
-		exitCode: valueState(0),
+		stderr: textState(stderr),
+		exitCode: valueState(exitCode),
 		goalId: valueState(run.goalId),
 		taskId: valueState(run.taskId),
 		role: valueState(run.role),
@@ -11741,6 +13032,10 @@ function projectOperationConsoleRun(run) {
 		status: valueState(run.status),
 		planHash: valueState(run.planHash),
 		eventIds: textState(eventIds.length > 0 ? eventIds.join("、") : "无"),
+		runResult: projectOperationConsoleRunResult(run.runResult),
+		artifactRefs: projectOperationConsoleArtifactRefs(run.artifactRefs),
+		verifierSummary: projectOperationConsoleVerifierSummary(run.verifierSummary),
+		failureReason: valueState(run.failureReason),
 		source: valueState(run.source),
 		startedAt: valueState(run.timestamps?.startedAt),
 		updatedAt: valueState(run.timestamps?.updatedAt),
@@ -11748,6 +13043,8 @@ function projectOperationConsoleRun(run) {
 	};
 }
 function operationRunCommandPreview(run) {
+	if (run?.commandKind === "implementation") return `symphony do --confirm-plan ${firstNonEmptyString(run?.runResult?.executionPlanId, run?.runResult?.plannedRunId, "<plan-id>")} --json`;
+	if (run?.commandKind === "verification") return `controlled verification suite --goal ${run?.goalId ?? "<goal-id>"} --task ${run?.taskId ?? "<task-id>"}`;
 	const parts = [
 		isNonEmptyString(run?.commandName) ? run.commandName : `symphony goal ${run?.commandKind ?? "<command>"}`,
 		"--goal",
@@ -11758,6 +13055,50 @@ function operationRunCommandPreview(run) {
 	else parts.push("--dry-run");
 	if (isNonEmptyString(run?.planHash)) parts.push("--plan-hash", run.planHash);
 	return parts.join(" ");
+}
+function projectOperationConsoleRunResult(runResult) {
+	return {
+		runId: valueState(runResult?.runId),
+		suiteId: valueState(runResult?.suiteId),
+		plannedRunId: valueState(runResult?.plannedRunId),
+		executionPlanId: valueState(runResult?.executionPlanId),
+		status: valueState(runResult?.status),
+		exitCode: valueState(runResult?.exitCode),
+		commandCount: valueState(runResult?.commandCount),
+		failedCommandCount: valueState(runResult?.failedCommandCount),
+		gatePassed: valueState(runResult?.gatePassed),
+		verifierStatus: valueState(runResult?.verifierStatus),
+		writeBoundary: valueState(runResult?.writeBoundary),
+		mainWorktreeWrites: valueState(runResult?.mainWorktreeWrites),
+		workspaceWrites: valueState(runResult?.workspaceWrites),
+		sourceWorkspacePath: valueState(runResult?.sourceWorkspacePath),
+		sourceWorkspaceManifestPath: valueState(runResult?.sourceWorkspaceManifestPath),
+		evidenceArtifactPath: valueState(runResult?.evidenceArtifactPath)
+	};
+}
+function projectOperationConsoleArtifactRefs(artifactRefs) {
+	const refs = Array.isArray(artifactRefs) ? artifactRefs : [];
+	return {
+		count: valueState(refs.length),
+		text: textState(refs.length === 0 ? MISSING_TEXT : refs.map((artifact) => artifact.kind ?? artifact.path ?? artifact.ref).join("、")),
+		items: refs.map((artifact) => ({
+			kind: valueState(artifact?.kind),
+			path: valueState(artifact?.path),
+			ref: valueState(artifact?.ref),
+			uri: valueState(artifact?.uri),
+			status: valueState(artifact?.status)
+		}))
+	};
+}
+function projectOperationConsoleVerifierSummary(summary) {
+	return {
+		status: valueState(summary?.status),
+		runStatus: valueState(summary?.runStatus),
+		passed: valueState(summary?.passed),
+		changedFileCount: valueState(summary?.changedFileCount),
+		artifactCount: valueState(summary?.artifactCount),
+		failureReason: valueState(summary?.failureReason)
+	};
 }
 function projectOperationConsoleNextAction(nextAction) {
 	return {
@@ -12135,7 +13476,7 @@ function projectGoalRunbook({ result, runbook, ledger, eventLog, ledgerResult, e
 		note: "Task status、statusSource 和 evidence refs 来自 active goal progress/events routes；Workbench 不根据 prompt、branch、文件名或命令文本推断完成状态。"
 	};
 }
-function projectGoalNextAction({ result, nextAction, runbook, ledger, eventLog, latestRun }) {
+function projectGoalNextAction({ result, nextAction, runbook, ledger, eventLog, latestRun, operations }) {
 	if (result?.ok !== true) return {
 		state: "unavailable",
 		contractName: valueState(GOAL_NEXT_ACTION_CONTRACT_NAME),
@@ -12169,7 +13510,8 @@ function projectGoalNextAction({ result, nextAction, runbook, ledger, eventLog, 
 			runbook,
 			ledger,
 			eventLog,
-			latestRun
+			latestRun,
+			operations
 		}),
 		safety: projectGoalControlSafety(nextAction?.safety),
 		errorEnvelope: projectErrorEnvelope(null),
@@ -12239,9 +13581,19 @@ function projectRevisionPromptContext(revisionContext) {
 		acceptanceDeltaCount: valueState(Array.isArray(revisionContext?.acceptanceDelta) ? revisionContext.acceptanceDelta.length : void 0)
 	};
 }
-function projectGoalCloseoutGaps({ result, closeout, runbook, ledger, eventLog, latestRun }) {
+function projectGoalCloseoutGaps({ result, closeout, releaseBaselineResult, releaseBaseline, runbook, ledger, eventLog, latestRun, readiness }) {
 	const missing = Array.isArray(closeout?.missing) ? closeout.missing : null;
 	const goalId = firstNonEmptyString(closeout?.goalId, runbook?.goalId, ledger?.goalId);
+	const projectedReleaseBaseline = projectReleaseBaselineResolver({
+		result: releaseBaselineResult,
+		releaseBaseline,
+		readiness,
+		closeout,
+		goalId,
+		runbook,
+		ledger,
+		eventLog
+	});
 	if (result?.ok !== true) return {
 		state: "unavailable",
 		modelName: valueState(RELEASE_CLOSEOUT_WORKSPACE_MODEL_NAME),
@@ -12256,11 +13608,8 @@ function projectGoalCloseoutGaps({ result, closeout, runbook, ledger, eventLog, 
 			items: []
 		},
 		releaseGates: [],
+		releaseBaseline: projectedReleaseBaseline,
 		verificationChecklist: projectReleaseVerificationChecklist({
-			closeout: null,
-			goalId
-		}),
-		releaseReadyGate: projectReleaseReadyGateRegistration({
 			closeout: null,
 			goalId,
 			runbook,
@@ -12268,9 +13617,43 @@ function projectGoalCloseoutGaps({ result, closeout, runbook, ledger, eventLog, 
 			eventLog,
 			latestRun
 		}),
+		releaseReadyGate: projectReleaseReadyGateRegistration({
+			closeout: null,
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			latestRun,
+			releaseBaseline: projectedReleaseBaseline
+		}),
+		releaseEvidenceDraft: projectReleaseEvidenceDraft({
+			closeout: null,
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			releaseBaseline: projectedReleaseBaseline,
+			verificationChecklist: null
+		}),
 		tagEvidencePrompt: projectTagEvidencePrompt({
 			closeout: null,
-			goalId
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			releaseBaseline: projectedReleaseBaseline
+		}),
+		nextVersionHandoffDraft: projectNextVersionHandoffDraft({
+			closeout: null,
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			latestRun,
+			releaseBaseline: projectedReleaseBaseline,
+			releaseEvidenceDraft: null,
+			tagEvidencePrompt: null,
+			verificationChecklist: null
 		}),
 		nextAction: valueState(void 0),
 		safety: projectGoalCloseoutSafety(void 0),
@@ -12301,11 +13684,8 @@ function projectGoalCloseoutGaps({ result, closeout, runbook, ledger, eventLog, 
 			gate: valueState(gate),
 			status: valueState(status)
 		})),
+		releaseBaseline: projectedReleaseBaseline,
 		verificationChecklist: projectReleaseVerificationChecklist({
-			closeout,
-			goalId
-		}),
-		releaseReadyGate: projectReleaseReadyGateRegistration({
 			closeout,
 			goalId,
 			runbook,
@@ -12313,29 +13693,342 @@ function projectGoalCloseoutGaps({ result, closeout, runbook, ledger, eventLog, 
 			eventLog,
 			latestRun
 		}),
+		releaseReadyGate: projectReleaseReadyGateRegistration({
+			closeout,
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			latestRun,
+			releaseBaseline: projectedReleaseBaseline
+		}),
+		releaseEvidenceDraft: projectReleaseEvidenceDraft({
+			closeout,
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			releaseBaseline: projectedReleaseBaseline,
+			verificationChecklist: projectReleaseVerificationChecklist({
+				closeout,
+				goalId,
+				runbook,
+				ledger,
+				eventLog,
+				latestRun
+			})
+		}),
 		tagEvidencePrompt: projectTagEvidencePrompt({
 			closeout,
-			goalId
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			releaseBaseline: projectedReleaseBaseline
+		}),
+		nextVersionHandoffDraft: projectNextVersionHandoffDraft({
+			closeout,
+			goalId,
+			runbook,
+			ledger,
+			eventLog,
+			latestRun,
+			releaseBaseline: projectedReleaseBaseline,
+			verificationChecklist: projectReleaseVerificationChecklist({
+				closeout,
+				goalId,
+				runbook,
+				ledger,
+				eventLog,
+				latestRun
+			}),
+			releaseEvidenceDraft: projectReleaseEvidenceDraft({
+				closeout,
+				goalId,
+				runbook,
+				ledger,
+				eventLog,
+				releaseBaseline: projectedReleaseBaseline,
+				verificationChecklist: projectReleaseVerificationChecklist({
+					closeout,
+					goalId,
+					runbook,
+					ledger,
+					eventLog,
+					latestRun
+				})
+			}),
+			tagEvidencePrompt: projectTagEvidencePrompt({
+				closeout,
+				goalId,
+				runbook,
+				ledger,
+				eventLog,
+				releaseBaseline: projectedReleaseBaseline
+			})
 		}),
 		nextAction: valueState(closeout?.nextAction),
 		safety: projectGoalCloseoutSafety(closeout?.safety),
 		errorEnvelope: projectErrorEnvelope(null),
-		note: "Closeout Gaps 使用 goal-closeout-report.v1 的 missing items、releaseGates、verification checklist、release.ready registration form 和 tag evidence prompt；不从命令输出、prompt、branch 或路径推断 release 状态。"
+		note: "Closeout Gaps 使用 goal-closeout-report.v1 的 missing items、releaseGates、verification checklist、release.ready registration form、release evidence draft、tag evidence draft 和 next-version handoff draft；不从命令输出、prompt、branch 或路径推断 release 状态。"
 	};
 }
-function projectReleaseVerificationChecklist({ closeout, goalId }) {
+function projectReleaseBaselineResolver({ result, releaseBaseline, readiness, closeout, goalId, runbook, ledger, eventLog }) {
+	if (releaseBaseline !== null && releaseBaseline !== void 0) return projectCommandOutputReleaseBaselineResolver({
+		result,
+		releaseBaseline,
+		goalId,
+		ledger,
+		eventLog
+	});
+	const git = readiness?.tools?.git;
+	const github = readiness?.tools?.github;
+	const ciLatest = github?.ci?.latest;
+	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
+	const gitAvailable = git?.status === "available";
+	const currentBranch = git?.branch;
+	const worktreeDirty = git?.dirty === true;
+	const nonMainBranch = gitAvailable && currentBranch !== "main";
+	const refsDiverged = isNonEmptyString(git?.mainHead) && isNonEmptyString(git?.originMainHead) && git.mainHead !== git.originMainHead;
+	const stopReasons = releaseBaselineStopReasons({
+		gitAvailable,
+		currentBranch,
+		worktreeDirty,
+		refsDiverged,
+		git
+	});
+	const state = !gitAvailable ? git?.status === void 0 ? "missing" : "blocked" : stopReasons.length > 0 ? "blocked" : "ready";
+	const releaseReadinessAllowed = state === "ready";
+	const explicitEventCount = Array.isArray(eventLog?.events) ? eventLog.events.length : void 0;
+	const mainVerifiedCount = Array.isArray(ledger?.tasks) ? ledger.tasks.filter((task) => isNonEmptyString(task?.mainVerificationRef)).length : void 0;
+	return {
+		state,
+		modelName: valueState(RELEASE_BASELINE_RESOLVER_MODEL_NAME),
+		sourcePolicy: valueState("symphony.console-readiness git/GitHub command output + goal-closeout-report.v1 + goal-progress-ledger.v1"),
+		goalId: valueState(goalId),
+		closeoutState: valueState(closeout === null || closeout === void 0 ? void 0 : "available"),
+		currentBranch: valueState(currentBranch),
+		currentHead: valueState(git?.head),
+		currentHeadFull: valueState(git?.currentHead),
+		mainHead: valueState(git?.mainHead),
+		originMainHead: valueState(git?.originMainHead),
+		worktree: {
+			clean: valueState(gitAvailable ? worktreeDirty !== true : void 0),
+			dirty: valueState(git?.dirty),
+			dirtyFilesCount: valueState(git?.dirtyFilesCount),
+			dirtyPaths: projectTextItems(Array.isArray(git?.dirtyPaths) ? git.dirtyPaths : [])
+		},
+		prCiRef: {
+			status: valueState(github?.ci?.status),
+			workflowName: valueState(ciLatest?.workflowName),
+			displayTitle: valueState(ciLatest?.displayTitle),
+			headBranch: valueState(ciLatest?.headBranch),
+			headSha: valueState(ciLatest?.headSha),
+			conclusion: valueState(ciLatest?.conclusion),
+			createdAt: valueState(ciLatest?.createdAt),
+			source: valueState(github?.ci?.status === "available" ? "gh run list --limit 1 --json status,conclusion,workflowName,displayTitle,headBranch,headSha,createdAt,databaseId" : github?.ci?.reason ?? github?.ci?.message ?? github?.status)
+		},
+		judgment: {
+			releaseReadinessAllowed: valueState(releaseReadinessAllowed),
+			stopReason: valueState(stopReasons.length > 0 ? stopReasons.join("; ") : "clean main baseline is available"),
+			finalJudgmentFromFallbackCheckout: valueState(false),
+			explicitEventCount: valueState(explicitEventCount),
+			mainVerifiedTaskCount: valueState(mainVerifiedCount)
+		},
+		fixGuidance: projectTextItems(releaseBaselineFixGuidance({
+			gitAvailable,
+			worktreeDirty,
+			nonMainBranch,
+			refsDiverged,
+			commandGoalId
+		})),
+		copyOnlyCommands: projectTextItems(releaseBaselineCopyOnlyCommands({
+			gitAvailable,
+			worktreeDirty,
+			nonMainBranch,
+			refsDiverged,
+			commandGoalId
+		})),
+		safety: {
+			readOnly: valueState(true),
+			copyOnly: valueState(true),
+			browserExecutionAvailable: valueState(false),
+			genericShellRunner: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			releaseReadyBlockedWhenDirtyOrNonMain: valueState(true),
+			infersReadinessFromBranchName: valueState(false),
+			infersReadinessFromCommandText: valueState(false)
+		},
+		note: valueState("Release Baseline Resolver shows backend git/GitHub command outputs before release closeout. Dirty, non-main, unavailable git, or diverged main/origin refs block release-ready registration and show stop/fix guidance only.")
+	};
+}
+function projectCommandOutputReleaseBaselineResolver({ result, releaseBaseline, goalId, ledger, eventLog }) {
+	const baseline = releaseBaseline?.releaseBaseline ?? {};
+	const activeContext = releaseBaseline?.activeContext ?? {};
+	const blockers = Array.isArray(releaseBaseline?.blockers) ? releaseBaseline.blockers : [];
+	const commandOutputs = Array.isArray(releaseBaseline?.commandOutputs) ? releaseBaseline.commandOutputs : [];
+	const dirtyPaths = Array.isArray(baseline.dirtyPaths) ? baseline.dirtyPaths : [];
+	const explicitEventCount = Array.isArray(eventLog?.events) ? eventLog.events.length : void 0;
+	const mainVerifiedCount = Array.isArray(ledger?.tasks) ? ledger.tasks.filter((task) => isNonEmptyString(task?.mainVerificationRef)).length : void 0;
+	const releaseReadinessAllowed = releaseBaseline?.status === "ready";
+	const stopReason = blockers.length > 0 ? blockers.map((blocker) => blocker?.detail).filter(isNonEmptyString).join("; ") : releaseReadinessAllowed ? "clean main baseline is available" : releaseBaseline?.decision;
+	return {
+		state: releaseBaseline?.status === "ready" ? "ready" : releaseBaseline?.status === "stopped" ? "blocked" : result?.ok === true ? "available" : "missing",
+		modelName: valueState(RELEASE_BASELINE_RESOLVER_MODEL_NAME),
+		sourcePolicy: valueState("release-baseline-resolver.v1 fixed backend git command outputs + active goal context"),
+		contractName: valueState(releaseBaseline?.contractName),
+		contractVersion: valueState(releaseBaseline?.contractVersion),
+		goalId: valueState(releaseBaseline?.goalId ?? goalId),
+		taskId: valueState(releaseBaseline?.taskId),
+		role: valueState(releaseBaseline?.role),
+		phase: valueState(releaseBaseline?.phase),
+		reason: valueState(releaseBaseline?.reason),
+		activeTaskTitle: valueState(activeContext.activeTaskTitle),
+		activeTaskBranch: valueState(activeContext.activeTaskBranch),
+		activeTaskExpectedWorkerEvent: valueState(activeContext.activeTaskExpectedWorkerEvent),
+		currentWorkerEvidenceRef: valueState(activeContext.currentWorkerEvidenceRef),
+		currentReviewEvidenceRef: valueState(activeContext.currentReviewEvidenceRef),
+		currentMainVerificationRef: valueState(activeContext.currentMainVerificationRef),
+		currentBranch: valueState(baseline.currentBranch),
+		currentHead: valueState(baseline.currentHead),
+		currentHeadFull: valueState(baseline.currentHead),
+		mainHead: valueState(baseline.mainHead),
+		originMainHead: valueState(baseline.originMain),
+		worktree: {
+			clean: valueState(baseline.worktreeClean),
+			dirty: valueState(baseline.worktreeClean === void 0 ? void 0 : baseline.worktreeClean !== true),
+			dirtyFilesCount: valueState(baseline.dirtyFileCount),
+			dirtyPaths: projectTextItems(dirtyPaths)
+		},
+		prCiRef: {
+			status: valueState(baseline.prCiRef?.state),
+			workflowName: valueState(void 0),
+			displayTitle: valueState(baseline.prCiRef?.fullRef),
+			headBranch: valueState(baseline.prCiRef?.refName),
+			headSha: valueState(baseline.prCiRef?.sha),
+			conclusion: valueState(void 0),
+			createdAt: valueState(void 0),
+			source: valueState(baseline.prCiRef?.source)
+		},
+		judgment: {
+			releaseReadinessAllowed: valueState(releaseReadinessAllowed),
+			stopReason: valueState(stopReason),
+			finalJudgmentFromFallbackCheckout: valueState(false),
+			explicitEventCount: valueState(explicitEventCount),
+			mainVerifiedTaskCount: valueState(mainVerifiedCount)
+		},
+		blockers: {
+			state: blockers.length === 0 ? "empty" : "available",
+			count: valueState(blockers.length),
+			items: blockers.map((blocker) => ({
+				id: valueState(blocker?.id),
+				status: valueState(blocker?.status),
+				detail: valueState(blocker?.detail)
+			}))
+		},
+		commandOutputs: {
+			state: commandOutputs.length === 0 ? "empty" : "available",
+			count: valueState(commandOutputs.length),
+			items: commandOutputs.map((output) => ({
+				id: valueState(output?.id),
+				command: valueState(output?.command),
+				status: valueState(output?.status),
+				exitCode: valueState(output?.exitCode),
+				stdout: valueState(output?.stdout),
+				stderr: valueState(output?.stderr)
+			}))
+		},
+		fixGuidance: projectTextItems(releaseBaseline?.fixGuidance),
+		copyOnlyCommands: projectTextItems(activeContext.copyOnlyCommands),
+		safety: {
+			readOnly: valueState(releaseBaseline?.safety?.readOnly),
+			copyOnly: valueState(releaseBaseline?.safety?.copyOnly),
+			browserExecutionAvailable: valueState(releaseBaseline?.safety?.browserExecutionAvailable),
+			genericShellRunner: valueState(releaseBaseline?.safety?.genericShellRunner),
+			modelInvocationAvailable: valueState(releaseBaseline?.safety?.modelInvocationAvailable),
+			releaseReadyBlockedWhenDirtyOrNonMain: valueState(releaseBaseline?.safety?.dirtyOrNonMainIsFinalReadiness === false),
+			infersReadinessFromBranchName: valueState(false),
+			infersReadinessFromCommandText: valueState(false)
+		},
+		note: valueState(releaseBaseline?.note)
+	};
+}
+function releaseBaselineStopReasons({ gitAvailable, currentBranch, worktreeDirty, refsDiverged, git }) {
+	const reasons = [];
+	if (!gitAvailable) {
+		reasons.push("git baseline command output is unavailable");
+		return reasons;
+	}
+	if (currentBranch !== "main") reasons.push(`current branch is ${currentBranch ?? "missing"}, not main`);
+	if (worktreeDirty) reasons.push(`${git?.dirtyFilesCount ?? 0} dirty file(s) in worktree`);
+	if (refsDiverged) reasons.push(`main ${git.mainHead} differs from origin/main ${git.originMainHead}`);
+	return reasons;
+}
+function releaseBaselineFixGuidance({ gitAvailable, worktreeDirty, nonMainBranch, refsDiverged, commandGoalId }) {
+	if (!gitAvailable) return ["Stop release judgment until git baseline commands are available.", "Run `git rev-parse --is-inside-work-tree` from the repository checkout and restart Workbench if needed."];
+	const guidance = [];
+	if (worktreeDirty) guidance.push("Stop release judgment. Review uncommitted files and decide whether to commit, move, or discard them outside Workbench.");
+	if (nonMainBranch) guidance.push("Stop release judgment on this checkout. Switch to a clean `main` checkout and fast-forward before running release closeout.");
+	if (refsDiverged) guidance.push("Stop release judgment until `main` and `origin/main` resolve to the same release baseline ref.");
+	if (guidance.length === 0) guidance.push(`Clean main baseline is visible. Continue with \`pnpm --silent symphony goal closeout --goal ${commandGoalId} --markdown\` and explicit release gate evidence.`);
+	return guidance;
+}
+function releaseBaselineCopyOnlyCommands({ gitAvailable, worktreeDirty, nonMainBranch, refsDiverged, commandGoalId }) {
+	if (!gitAvailable) return ["git rev-parse --is-inside-work-tree"];
+	const commands = [
+		"git branch --show-current",
+		"git rev-parse --short HEAD",
+		"git rev-parse --short main",
+		"git rev-parse --short origin/main",
+		"git status --short"
+	];
+	if (worktreeDirty) commands.push("git diff --stat");
+	if (nonMainBranch || refsDiverged) {
+		commands.push("git fetch origin");
+		commands.push("git pull --ff-only origin main");
+	}
+	commands.push("gh run list --limit 1 --json status,conclusion,workflowName,displayTitle,headBranch,headSha,createdAt,databaseId");
+	commands.push(`pnpm --silent symphony goal closeout --goal ${commandGoalId} --markdown`);
+	return uniqueStrings(commands);
+}
+function projectReleaseVerificationChecklist({ closeout, goalId, runbook, ledger, eventLog, latestRun }) {
 	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
 	const releaseGates = closeout?.releaseGates ?? {};
+	const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+	const evidenceRefHelper = projectEvidenceRefHelper({
+		runbook,
+		ledger,
+		eventLog,
+		latestRun
+	});
 	const items = RELEASE_VERIFICATION_CHECKLIST.map((item) => {
 		const gateStatus = releaseGateStatusText(releaseGates[item.gateId]);
+		const latestGateEvent = latestReleaseGateEventForGate(events, item.gate);
+		const evidenceRefs = projectGoalEvidenceRefs(latestGateEvent?.evidenceRefs);
+		const registration = projectReleaseGateRegistration({
+			item,
+			goalId,
+			gateStatus,
+			latestGateEvent,
+			evidenceRefHelper
+		});
 		return {
 			id: valueState(item.id),
 			label: valueState(item.label),
 			gate: valueState(item.gate),
 			gateId: valueState(item.gateId),
 			status: valueState(gateStatus),
+			eventBackedStatus: valueState(latestGateEvent === null ? false : true),
+			latestEventId: valueState(latestGateEvent?.eventId),
+			latestEventType: valueState(latestGateEvent?.eventType),
+			latestRecordedAt: valueState(latestGateEvent?.recordedAt),
+			latestVerifier: valueState(latestGateEvent?.actor?.id),
+			evidenceRefs,
 			command: valueState(item.command),
-			registrationCommand: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate ${item.gate} --status passed --verifier <release-verifier-id> --evidence-ref <release-evidence-ref> --dry-run --json`),
+			registrationCommand: valueState(registration.dryRunCommand.value),
+			dryRunCommand: registration.dryRunCommand,
+			confirmCommandPattern: registration.confirmCommandPattern,
+			registration,
 			needsEvidence: valueState(gateStatus !== "passed")
 		};
 	});
@@ -12350,19 +14043,112 @@ function projectReleaseVerificationChecklist({ closeout, goalId }) {
 		items,
 		safety: {
 			copyOnlyCommands: valueState(true),
+			goalGatePreviewAvailable: valueState(true),
+			confirmRequiresPlanHash: valueState(true),
+			appendOnlyOnConfirm: valueState(true),
 			browserExecutionAvailable: valueState(false),
 			genericShellRunner: valueState(false),
+			modelInvocationAvailable: valueState(false),
 			releaseReadyInferredFromCommands: valueState(false)
 		},
-		note: valueState("Checklist rows show release gate status from goal-closeout-report.v1 and copy-only commands for the operator. Workbench does not run these commands or convert command text into release readiness.")
+		note: valueState("Checklist rows show release gate status from goal-closeout-report.v1, latest matching goal-event-log.v1 evidence refs, and controlled goal gate preview/confirm forms. Workbench does not run these commands or convert command text into release readiness.")
 	};
 }
-function projectReleaseReadyGateRegistration({ closeout, goalId, runbook, ledger, eventLog, latestRun }) {
+function projectReleaseGateRegistration({ item, goalId, gateStatus, latestGateEvent, evidenceRefHelper }) {
+	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
+	const evidenceRef = releaseEvidencePathForGoal(goalId);
+	const statement = `Release gate ${item.gate} recorded from explicit command output evidence.`;
+	const definitions = [GOAL_EVENT_FORM_DEFINITIONS.find((candidate) => candidate.eventType === "release.gate-passed"), GOAL_EVENT_FORM_DEFINITIONS.find((candidate) => candidate.eventType === "release.gate-failed")].filter((definition) => definition !== void 0);
+	const forms = definitions.map((definition) => projectGoalEventFormSpec({
+		definition,
+		nextAction: {
+			goalId,
+			next: {
+				taskId: null,
+				role: "release-verifier",
+				phase: "release-gate"
+			}
+		},
+		recommended: gateStatus !== "passed" && definition.eventType === "release.gate-passed",
+		evidenceRefHelper,
+		fieldOverrides: {
+			gateName: {
+				readOnly: true,
+				value: item.gate,
+				source: "release verification checklist",
+				options: [item.gate]
+			},
+			gateStatus: {
+				readOnly: true,
+				value: definition.gateStatus,
+				source: "release verification checklist",
+				options: [definition.gateStatus]
+			},
+			evidenceRef: {
+				value: evidenceRef,
+				source: "release gate evidence path"
+			},
+			statement: {
+				value: statement,
+				source: "release verification checklist"
+			}
+		}
+	}));
+	return {
+		state: definitions.length === 0 ? "missing" : "available",
+		sourcePolicy: valueState("goal-closeout-report.v1 + goal-event-log.v1 + goal-update-plan.v1 confirm flow"),
+		currentStatus: valueState(gateStatus),
+		latestEventId: valueState(latestGateEvent?.eventId),
+		latestEventType: valueState(latestGateEvent?.eventType),
+		latestEvidenceRefs: projectGoalEvidenceRefs(latestGateEvent?.evidenceRefs),
+		releaseGateEvidencePath: valueState(evidenceRef),
+		dryRunCommand: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate ${item.gate} --status passed --verifier <release-verifier-id> --evidence-ref ${evidenceRef} --dry-run --json`),
+		confirmCommandPattern: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate ${item.gate} --status passed --verifier <release-verifier-id> --evidence-ref ${evidenceRef} --confirm --plan-hash sha256:<PLAN_HASH>`),
+		forms: {
+			state: forms.length === 0 ? "empty" : "available",
+			count: valueState(forms.length),
+			items: forms
+		},
+		safety: {
+			confirmRequiresPlanHash: valueState(true),
+			appendOnlyOnConfirm: valueState(true),
+			workbenchWriteAvailable: valueState(isNonEmptyString(goalId)),
+			usesGoalGateOnly: valueState(true),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			arbitraryShellAccepted: valueState(false),
+			opensLocalFiles: valueState(false),
+			downloadsArtifacts: valueState(false),
+			mergeAvailable: valueState(false),
+			pushAvailable: valueState(false),
+			tagAvailable: valueState(false),
+			releaseReadyAvailable: valueState(false),
+			selfApprovalAvailable: valueState(false),
+			commandSuccessImpliesGatePassed: valueState(false)
+		},
+		note: valueState("This path records a single release.<gate> result only through existing goal gate dry-run and plan-hash confirm. The evidence ref must point to a controlled docs/plans or managed artifact ref.")
+	};
+}
+function latestReleaseGateEventForGate(events, gate) {
+	if (!Array.isArray(events) || !isNonEmptyString(gate)) return null;
+	return latestEventOfTypes(events.filter((event) => event?.gate?.id === gate || event?.gate?.name === gate), ["release.gate-passed", "release.gate-failed"]);
+}
+function projectReleaseReadyGateRegistration({ closeout, goalId, runbook, ledger, eventLog, latestRun, releaseBaseline }) {
 	const definition = GOAL_EVENT_FORM_DEFINITIONS.find((candidate) => candidate.eventType === "release.ready-declared");
 	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
 	const releaseEvidencePath = releaseEvidencePathForGoal(goalId);
+	const baselineBlocked = releaseBaseline?.state === "blocked";
+	const closeoutMissingItems = Array.isArray(closeout?.missing) ? closeout.missing : [];
 	const missingReleaseReady = Array.isArray(closeout?.missing) ? closeout.missing.some((item) => item?.kind === "release-ready" || item?.expectedEvent === "release.ready-declared") : false;
-	const form = definition === void 0 ? null : projectGoalEventFormSpec({
+	const closeoutBlockingGaps = closeoutMissingItems.filter((item) => item?.kind !== "release-ready" && item?.expectedEvent !== "release.ready-declared");
+	const pendingRequiredReleaseGateIds = pendingRequiredReleaseGateIdsForCloseout({
+		closeout,
+		runbook
+	});
+	const releaseReadyAlreadyDeclared = closeout?.summary?.releaseReady === true;
+	const closeoutReadyForReleaseReady = closeout !== null && closeout !== void 0 && missingReleaseReady && closeoutBlockingGaps.length === 0 && pendingRequiredReleaseGateIds.length === 0;
+	const readyFormAvailable = definition !== void 0 && !baselineBlocked && !releaseReadyAlreadyDeclared && closeoutReadyForReleaseReady;
+	const form = !readyFormAvailable ? null : projectGoalEventFormSpec({
 		definition,
 		nextAction: {
 			goalId,
@@ -12390,30 +14176,221 @@ function projectReleaseReadyGateRegistration({ closeout, goalId, runbook, ledger
 			}
 		}
 	});
+	const state = definition === void 0 ? "missing" : releaseReadyAlreadyDeclared ? "already-declared" : baselineBlocked || !closeoutReadyForReleaseReady ? "blocked" : "available";
 	return {
-		state: definition === void 0 ? "missing" : closeout?.summary?.releaseReady === true ? "already-declared" : "available",
-		sourcePolicy: valueState("goal-closeout-report.v1 + goal-update-plan.v1 confirm flow"),
+		state,
+		sourcePolicy: valueState("goal-closeout-report.v1 + release baseline resolver + goal-update-plan.v1 confirm flow"),
+		baselineState: valueState(releaseBaseline?.state),
+		baselineStopReason: valueState(releaseBaseline?.judgment?.stopReason?.value),
+		baselineReleaseReadinessAllowed: valueState(releaseBaseline?.judgment?.releaseReadinessAllowed?.value),
 		missingReleaseReady: valueState(missingReleaseReady),
+		closeoutMissingCount: valueState(closeout === null || closeout === void 0 ? void 0 : closeoutMissingItems.length),
+		closeoutBlockingGapCount: valueState(closeout === null || closeout === void 0 ? void 0 : closeoutBlockingGaps.length),
+		requiredReleaseGatesPassed: valueState(pendingRequiredReleaseGateIds.length === 0),
+		pendingRequiredReleaseGateIds: projectTextItems(pendingRequiredReleaseGateIds),
 		releaseEvidencePath: valueState(releaseEvidencePath),
 		dryRunCommand: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate release.ready --status declared --verifier <release-manager-id> --evidence-ref ${releaseEvidencePath} --dry-run --json`),
 		confirmCommandPattern: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate release.ready --status declared --verifier <release-manager-id> --evidence-ref ${releaseEvidencePath} --confirm --plan-hash sha256:<PLAN_HASH>`),
 		form,
+		stopGuidance: releaseReadyStopGuidance({
+			releaseBaseline,
+			closeout,
+			closeoutBlockingGaps,
+			pendingRequiredReleaseGateIds,
+			missingReleaseReady,
+			releaseReadyAlreadyDeclared,
+			commandGoalId
+		}),
 		safety: {
 			confirmRequiresPlanHash: valueState(true),
 			appendOnlyOnConfirm: valueState(true),
-			workbenchWriteAvailable: valueState(true),
+			workbenchWriteAvailable: valueState(readyFormAvailable),
 			browserExecutionAvailable: valueState(false),
 			modelInvocationAvailable: valueState(false),
-			declaresReleaseReadyOnlyOnConfirm: valueState(true)
+			declaresReleaseReadyOnlyOnConfirm: valueState(true),
+			dirtyOrNonMainBlocksFinalJudgment: valueState(true),
+			closeoutGapsBlockConfirm: valueState(true),
+			unknownOrMissingReleaseGatesBlockConfirm: valueState(true),
+			frontendInferenceAvailable: valueState(false)
 		},
-		note: valueState("The release.ready path is a controlled goal gate dry-run and plan-hash confirm. The form is available only as an explicit append path; it does not tag, merge, run checks, or infer readiness.")
+		note: valueState(state === "available" ? "The release.ready path is a controlled goal gate dry-run and plan-hash confirm. The form is available only because closeout has no blocking gaps and all required release gates are passed; it does not tag, merge, run checks, or infer readiness." : "Release.ready registration is blocked until the release baseline is clean, all required release gates are passed, and goal closeout has no missing items other than the explicit release.ready event.")
 	};
 }
-function projectTagEvidencePrompt({ closeout, goalId }) {
+function pendingRequiredReleaseGateIdsForCloseout({ closeout, runbook }) {
+	const closeoutReleaseGates = closeout?.releaseGates ?? {};
+	return uniqueStrings(Array.isArray(runbook?.releaseGates) && runbook.releaseGates.length > 0 ? runbook.releaseGates.map((gate) => RELEASE_VERIFICATION_CHECKLIST.find((item) => item.gate === gate)?.gateId).filter(isNonEmptyString) : Object.keys(closeoutReleaseGates)).filter((gateId) => releaseGateStatusText(closeoutReleaseGates[gateId]) !== "passed");
+}
+function releaseReadyStopGuidance({ releaseBaseline, closeout, closeoutBlockingGaps, pendingRequiredReleaseGateIds, missingReleaseReady, releaseReadyAlreadyDeclared, commandGoalId }) {
+	const guidance = [];
+	if (releaseBaseline?.state === "blocked") guidance.push(...(releaseBaseline.fixGuidance?.items ?? []).map((item) => item.value).filter(isNonEmptyString));
+	if (closeout === null || closeout === void 0) guidance.push(`Run \`pnpm --silent symphony goal closeout --goal ${commandGoalId} --markdown\` and wait for goal-closeout-report.v1 before declaring release.ready.`);
+	if (pendingRequiredReleaseGateIds.length > 0) guidance.push(`Record passed release gate events for: ${pendingRequiredReleaseGateIds.join(", ")}.`);
+	if (closeoutBlockingGaps.length > 0) guidance.push(`Resolve closeout gaps before release.ready: ${closeoutBlockingGaps.map(closeoutGapLabel).join(", ")}.`);
+	if (!missingReleaseReady && !releaseReadyAlreadyDeclared && closeout !== null && closeout !== void 0) guidance.push("Wait for closeout to report only the release.ready declaration as the remaining item before using this form.");
+	if (releaseReadyAlreadyDeclared) guidance.push("Release.ready is already declared by goal closeout; do not append another release.ready event.");
+	if (guidance.length === 0) guidance.push("Run the release.ready dry-run preview, check the plan hash, then confirm with the same fields.");
+	return projectTextItems(uniqueStrings(guidance));
+}
+function closeoutGapLabel(item) {
+	return [
+		item?.kind,
+		item?.taskId,
+		item?.gateId ?? item?.gate,
+		item?.status
+	].filter(isNonEmptyString).join(":") || "unknown";
+}
+function projectReleaseEvidenceDraft({ closeout, goalId, runbook, ledger, eventLog, releaseBaseline, verificationChecklist }) {
+	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
+	const releaseEvidencePath = releaseEvidencePathForGoal(goalId);
+	const tagEvidencePath = tagEvidencePathForGoal(goalId);
+	const releaseName = releaseDisplayName({
+		goalId,
+		runbook,
+		ledger
+	});
+	const target = releaseTargetCommitFromBaseline(releaseBaseline);
+	const commandResults = projectReleaseCommandResultFields(Array.isArray(verificationChecklist?.items) ? verificationChecklist.items : []);
+	const releaseNotesSummary = releaseNotesSummaryLines({
+		closeout,
+		goalId: commandGoalId,
+		releaseName,
+		targetCommit: target.commit,
+		commandResults
+	});
+	const missingItems = Array.isArray(closeout?.missing) ? closeout.missing : [];
+	const draftLines = [
+		`# ${releaseName} release evidence draft`,
+		"",
+		`Goal id: ${commandGoalId}`,
+		`Release evidence ref: ${releaseEvidencePath}`,
+		`Tag evidence ref: ${tagEvidencePath}`,
+		`Target commit: ${target.commit ?? "<target-commit-unavailable>"}`,
+		`Target commit source: ${target.source ?? "release baseline resolver unavailable"}`,
+		"",
+		"Release notes summary:",
+		...releaseNotesSummary.map((line) => `- ${line}`),
+		"",
+		"Command result fields:",
+		...commandResults.items.map((item) => `- ${item.gate.value}: command=${item.command.value}; result=${item.resultStatus.value}; latestEvent=${item.latestEventId.value ?? "missing"}; evidence=${item.latestEvidenceRef.value ?? "missing"}`),
+		"",
+		missingItems.length === 0 ? "Closeout gaps: none reported by goal-closeout-report.v1." : `Closeout gaps: ${missingItems.map((item) => item?.kind ?? "unknown").join(", ")}`,
+		"Boundary: this draft does not write evidence files, run commands, declare release.ready, merge, push, publish, or create a tag."
+	];
+	return {
+		state: closeout === null || closeout === void 0 ? "missing" : "available",
+		modelName: valueState(RELEASE_EVIDENCE_DRAFT_MODEL_NAME),
+		sourcePolicy: valueState("goal-closeout-report.v1 + release-baseline-resolver.v1 + goal-event-log.v1"),
+		goalId: valueState(commandGoalId),
+		releaseName: valueState(releaseName),
+		evidencePath: valueState(releaseEvidencePath),
+		tagEvidencePath: valueState(tagEvidencePath),
+		targetCommit: valueState(target.commit),
+		targetCommitSource: valueState(target.source),
+		releaseNotesSummary: projectTextItems(releaseNotesSummary),
+		commandResults,
+		markdown: valueState(draftLines.join("\n")),
+		safety: {
+			copyOnly: valueState(true),
+			writesEvidenceFile: valueState(false),
+			runsShell: valueState(false),
+			declaresReleaseReady: valueState(false),
+			createsTag: valueState(false),
+			pushesTag: valueState(false),
+			publishesRelease: valueState(false),
+			infersStatusFromFilenames: valueState(false)
+		},
+		boundaryText: valueState("Release evidence draft is display-only. Command results must be copied from explicit terminal output or existing release gate events before a release manager records gates.")
+	};
+}
+function projectReleaseCommandResultFields(gateItems) {
+	const items = gateItems.map((item) => {
+		const latestEvidenceRef = Array.isArray(item?.evidenceRefs?.items) && item.evidenceRefs.items.length > 0 ? item.evidenceRefs.items[0]?.ref?.value : void 0;
+		return {
+			gate: valueState(item?.gate?.value),
+			label: valueState(item?.label?.value),
+			command: valueState(item?.command?.value),
+			resultStatus: valueState(item?.status?.value),
+			latestEventId: valueState(item?.latestEventId?.value),
+			latestVerifier: valueState(item?.latestVerifier?.value),
+			latestEvidenceRef: valueState(latestEvidenceRef),
+			commandOutputRequired: valueState(item?.eventBackedStatus?.value !== true)
+		};
+	});
+	return {
+		state: items.length === 0 ? "empty" : "available",
+		count: valueState(items.length),
+		items
+	};
+}
+function releaseNotesSummaryLines({ closeout, goalId, releaseName, targetCommit, commandResults }) {
+	const lines = [`Release: ${releaseName}.`, `Goal: ${goalId}.`];
+	if (isNonEmptyString(targetCommit)) lines.push(`Target commit: ${targetCommit}.`);
+	if (closeout?.summary !== void 0 && closeout?.summary !== null) {
+		lines.push(`Task coverage: worker evidence ${String(closeout.summary.workerEvidenceComplete)}, review evidence ${String(closeout.summary.reviewEvidenceComplete)}, main verification ${String(closeout.summary.mainVerificationComplete)}.`);
+		lines.push(`Release ready: ${String(closeout.summary.releaseReady)} from ${closeout.summary.releaseReadySource ?? "no release.ready event"}.`);
+	}
+	if (Array.isArray(commandResults?.items) && commandResults.items.length > 0) lines.push(`Release gates: ${commandResults.items.map((item) => `${item.gate.value}=${item.resultStatus.value}`).join(", ")}.`);
+	return lines;
+}
+function releaseTargetCommitFromBaseline(releaseBaseline) {
+	const match = [
+		["release baseline current HEAD", releaseBaseline?.currentHeadFull?.value],
+		["release baseline current HEAD", releaseBaseline?.currentHead?.value],
+		["release baseline main HEAD", releaseBaseline?.mainHead?.value],
+		["release baseline origin/main", releaseBaseline?.originMainHead?.value]
+	].find(([, value]) => isNonEmptyString(value));
+	return {
+		commit: match?.[1],
+		source: match?.[0]
+	};
+}
+function releaseDisplayName({ goalId, runbook, ledger }) {
+	const version = releaseVersionPrefix(goalId);
+	const title = firstNonEmptyString(runbook?.goalTitle, ledger?.goalTitle, goalId);
+	if (version !== null && isNonEmptyString(title) && !title.startsWith(version)) return `${version} ${title}`;
+	return title ?? "<release-name>";
+}
+function tagNameForGoal(goalId) {
+	return releaseVersionPrefix(goalId) ?? "<release-tag>";
+}
+function tagCommandForDraft({ tagName, targetCommit, releaseName }) {
+	return `git tag -a ${tagName} ${isNonEmptyString(targetCommit) ? targetCommit : "<target-commit>"} -m "${String(releaseName ?? "<release-name>").replaceAll("\"", "\\\"")}"`;
+}
+function projectTagEvidencePrompt({ closeout, goalId, runbook, ledger, eventLog, releaseBaseline }) {
 	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
 	const tagEvidencePath = tagEvidencePathForGoal(goalId);
 	const releaseEvidencePath = releaseEvidencePathForGoal(goalId);
-	const checklistLines = RELEASE_VERIFICATION_CHECKLIST.map((item) => `- ${item.label}: ${item.command}; gate ${item.gate}`);
+	const releaseName = releaseDisplayName({
+		goalId,
+		runbook,
+		ledger
+	});
+	const tagRecommendation = tagNameForGoal(goalId);
+	const target = releaseTargetCommitFromBaseline(releaseBaseline);
+	const copyOnlyTagCommand = tagCommandForDraft({
+		tagName: tagRecommendation,
+		targetCommit: target.commit,
+		releaseName
+	});
+	const latestTagGateEvent = latestReleaseGateEventForGate(Array.isArray(eventLog?.events) ? eventLog.events : [], "release.tag-evidence");
+	const latestTagEvidenceRefs = projectGoalEvidenceRefs(latestTagGateEvent?.evidenceRefs);
+	const releaseNotesSummary = releaseNotesSummaryLines({
+		closeout,
+		goalId: commandGoalId,
+		releaseName,
+		targetCommit: target.commit,
+		commandResults: projectReleaseCommandResultFields(RELEASE_VERIFICATION_CHECKLIST.map((item) => ({
+			gate: valueState(item.gate),
+			label: valueState(item.label),
+			command: valueState(item.command),
+			status: valueState(releaseGateStatusText(closeout?.releaseGates?.[item.gateId])),
+			latestEventId: valueState(void 0),
+			latestVerifier: valueState(void 0),
+			evidenceRefs: projectGoalEvidenceRefs(void 0),
+			eventBackedStatus: valueState(false)
+		})))
+	});
+	const checklistLines = RELEASE_VERIFICATION_CHECKLIST.map((item) => `- ${item.label}: ${item.command}; gate ${item.gate}; closeout status ${releaseGateStatusText(closeout?.releaseGates?.[item.gateId])}`);
 	const promptLines = [
 		"/goal",
 		`Prepare tag evidence for ${commandGoalId}.`,
@@ -12421,27 +14398,304 @@ function projectTagEvidencePrompt({ closeout, goalId }) {
 		`Read closeout: pnpm --silent symphony goal closeout --goal ${commandGoalId} --markdown`,
 		`Release evidence path: ${releaseEvidencePath}`,
 		`Tag evidence path: ${tagEvidencePath}`,
+		`Tag recommendation: ${tagRecommendation}`,
+		`Target commit: ${target.commit ?? "<target-commit-unavailable>"}`,
+		`Copy-only tag command: ${copyOnlyTagCommand}`,
+		"",
+		"Release notes summary:",
+		...releaseNotesSummary.map((line) => `- ${line}`),
 		"",
 		"Check and record exact command results:",
 		...checklistLines,
 		"",
 		"Record remaining closeout gaps from goal-closeout-report.v1. If gaps remain, write blockers and stop.",
-		"Do not create a tag, merge branches, declare release.ready, or treat filenames, branches, commits, prompts, or command text as release proof."
+		"Do not create a tag, push tags, publish, merge branches, declare release.ready, or treat filenames, branches, commits, prompts, or command text as release proof."
 	];
 	return {
 		state: closeout === null || closeout === void 0 ? "missing" : "available",
+		modelName: valueState(TAG_EVIDENCE_DRAFT_MODEL_NAME),
 		sourceContract: valueState(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+		sourcePolicy: valueState("goal-closeout-report.v1 + release-baseline-resolver.v1 + goal-event-log.v1"),
 		evidencePath: valueState(tagEvidencePath),
 		releaseEvidencePath: valueState(releaseEvidencePath),
+		tagRecommendation: valueState(tagRecommendation),
+		targetCommit: valueState(target.commit),
+		targetCommitSource: valueState(target.source),
+		releaseNotesSummary: projectTextItems(releaseNotesSummary),
+		copyOnlyTagCommand: valueState(copyOnlyTagCommand),
+		commandResultFields: {
+			command: valueState(copyOnlyTagCommand),
+			result: valueState("not-run-by-workbench"),
+			exitCode: valueState("not-run-by-workbench"),
+			stdout: valueState("not-run-by-workbench"),
+			stderr: valueState("not-run-by-workbench"),
+			evidenceRef: valueState(tagEvidencePath)
+		},
+		latestTagGateEventId: valueState(latestTagGateEvent?.eventId),
+		latestTagGateStatus: valueState(latestTagGateEvent?.gate?.status),
+		latestTagEvidenceRefs,
 		promptFormat: valueState("markdown"),
 		text: valueState(promptLines.join("\n")),
+		boundaryText: valueState("The tag command is copy-only display text. Workbench does not run git tag, push tags, publish releases, or declare release.ready from this draft."),
 		safety: {
 			copyOnly: valueState(true),
 			createsTag: valueState(false),
+			tagExecutionAvailable: valueState(false),
+			pushesTag: valueState(false),
+			publishesRelease: valueState(false),
+			mergeAvailable: valueState(false),
 			declaresReleaseReady: valueState(false),
-			runsShell: valueState(false)
+			runsShell: valueState(false),
+			opensLocalFiles: valueState(false),
+			downloadsArtifacts: valueState(false)
 		}
 	};
+}
+function projectNextVersionHandoffDraft({ closeout, goalId, runbook, ledger, eventLog, latestRun, releaseBaseline, verificationChecklist, releaseEvidenceDraft, tagEvidencePrompt }) {
+	const commandGoalId = isNonEmptyString(goalId) ? goalId : "<goal-id>";
+	const releaseName = releaseDisplayName({
+		goalId,
+		runbook,
+		ledger
+	});
+	const currentVersion = releaseVersionPrefix(goalId);
+	const nextVersion = nextReleaseVersionPrefix(currentVersion);
+	const target = releaseTargetCommitFromBaseline(releaseBaseline);
+	const closeoutMissingItems = Array.isArray(closeout?.missing) ? closeout.missing : [];
+	const releaseReadyEvent = latestEventOfTypes(Array.isArray(eventLog?.events) ? eventLog.events : [], ["release.ready-declared"]);
+	const taskAnchors = projectNextVersionTaskAnchors({
+		ledger,
+		runbook
+	});
+	const releaseGateAnchors = projectNextVersionReleaseGateAnchors({
+		verificationChecklist,
+		closeout
+	});
+	const evidenceRefs = projectNextVersionEvidenceRefs({
+		taskAnchors,
+		releaseGateAnchors,
+		releaseReadyEvent,
+		releaseEvidenceDraft,
+		tagEvidencePrompt
+	});
+	const implementedCapabilities = projectNextVersionImplementedCapabilities({
+		releaseBaseline,
+		verificationChecklist,
+		releaseEvidenceDraft,
+		tagEvidencePrompt,
+		closeout
+	});
+	const copyOnlyCommands = [
+		`pnpm --silent symphony goal-status --goal ${commandGoalId} --json`,
+		`pnpm --silent symphony goal closeout --goal ${commandGoalId} --markdown`,
+		"pnpm --silent symphony next --goal latest --json"
+	];
+	const handoffLines = [
+		`# ${nextVersion ?? "<next-version>"} start context draft`,
+		"",
+		`Current release: ${releaseName}`,
+		`Current goal id: ${commandGoalId}`,
+		`Next version label: ${nextVersion ?? "<next-version>"}`,
+		`Target commit: ${target.commit ?? "<target-commit-unavailable>"}`,
+		`Target commit source: ${target.source ?? "release baseline resolver unavailable"}`,
+		`Latest run id: ${latestRun?.runId ?? "<latest-run-unavailable>"}`,
+		`Release ready: ${String(closeout?.summary?.releaseReady ?? false)} from ${closeout?.summary?.releaseReadySource ?? "no release.ready event"}`,
+		`Closeout missing count: ${closeoutMissingItems.length}`,
+		"",
+		"Evidence anchors:",
+		...evidenceRefs.items.map((item) => `- ${item.label.value}: ${item.ref.value}`),
+		"",
+		"Task anchors:",
+		...taskAnchors.items.map((item) => `- ${item.taskId.value}: status=${item.status.value}; worker=${item.workerEvidenceRef.value ?? "missing"}; review=${item.reviewEvidenceRef.value ?? "missing"}; main=${item.mainVerificationRef.value ?? "missing"}`),
+		"",
+		"Release gate anchors:",
+		...releaseGateAnchors.items.map((item) => `- ${item.gate.value}: status=${item.status.value}; event=${item.latestEventId.value ?? "missing"}; evidence=${item.latestEvidenceRef.value ?? "missing"}`),
+		"",
+		"Implemented Workbench capabilities:",
+		...implementedCapabilities.items.map((item) => `- ${item.name.value}: ${item.state.value}`),
+		"",
+		"Copy-only context commands:",
+		...copyOnlyCommands.map((command) => `- ${command}`),
+		"",
+		"Next-version starter notes:",
+		"- Use this draft as starting context only after the current release closeout and explicit event refs are checked.",
+		"- Do not create a managed next-version goal from Workbench. Run any future goal init manually through the existing dry-run and confirm flow.",
+		"- Do not treat filenames, branch names, commit messages, task titles, prompt text, or copied commands as approval, main verification, or release readiness.",
+		"",
+		"Boundary: this draft is display-only and copy-only. It does not create a goal, enter the next version, run commands, invoke models, read evidence bodies, open files, download artifacts, merge, push, tag, publish, self-approve, or declare release.ready."
+	];
+	return {
+		state: closeout === null || closeout === void 0 ? "missing" : "available",
+		modelName: valueState(NEXT_VERSION_HANDOFF_DRAFT_MODEL_NAME),
+		sourcePolicy: valueState("goal-closeout-report.v1 + release-baseline-resolver.v1 + release evidence draft + tag evidence draft + goal-event-log.v1 + goal-progress-ledger.v1 + Workbench operator-guide capabilities"),
+		goalId: valueState(commandGoalId),
+		releaseName: valueState(releaseName),
+		currentVersion: valueState(currentVersion),
+		nextVersion: valueState(nextVersion),
+		targetCommit: valueState(target.commit),
+		targetCommitSource: valueState(target.source),
+		latestRunId: valueState(latestRun?.runId),
+		releaseReady: valueState(closeout?.summary?.releaseReady),
+		releaseReadySource: valueState(closeout?.summary?.releaseReadySource),
+		releaseReadyEventId: valueState(releaseReadyEvent?.eventId),
+		closeoutMissingCount: valueState(closeout === null || closeout === void 0 ? void 0 : closeoutMissingItems.length),
+		sourceRefs: projectTextItems([
+			GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+			"release-baseline-resolver.v1",
+			"goal-event-log.v1",
+			"goal-progress-ledger.v1",
+			"goal-operation-runs.v1",
+			"docs/workbench-operator-guide.md",
+			"docs/symphony-product-contracts.md"
+		]),
+		evidenceRefs,
+		taskAnchors,
+		releaseGateAnchors,
+		implementedCapabilities,
+		copyOnlyCommands: projectTextItems(copyOnlyCommands),
+		markdown: valueState(handoffLines.join("\n")),
+		safety: {
+			copyOnly: valueState(true),
+			createsManagedGoal: valueState(false),
+			entersNextVersion: valueState(false),
+			runsShell: valueState(false),
+			invokesModel: valueState(false),
+			readsEvidenceBodies: valueState(false),
+			opensLocalFiles: valueState(false),
+			downloadsArtifacts: valueState(false),
+			mergesBranches: valueState(false),
+			pushesBranchesOrTags: valueState(false),
+			createsTag: valueState(false),
+			publishesRelease: valueState(false),
+			declaresReleaseReady: valueState(false),
+			selfApprovalAvailable: valueState(false),
+			v8TopLevelModel: valueState(false),
+			infersStateFromFilenames: valueState(false),
+			infersStateFromBranches: valueState(false),
+			infersStateFromPrompts: valueState(false)
+		},
+		boundaryText: valueState("Next-version handoff draft is a controlled preview generated from active goal closeout, release/event refs, run context, and implemented Workbench capability flags. It does not create v33 or move the operator into the next version.")
+	};
+}
+function projectNextVersionTaskAnchors({ ledger, runbook }) {
+	const items = (Array.isArray(ledger?.tasks) ? ledger.tasks : Array.isArray(runbook?.tasks) ? runbook.tasks : []).map((task) => ({
+		taskId: valueState(task?.taskId),
+		title: valueState(task?.title),
+		status: valueState(task?.status),
+		workerEvidenceRef: valueState(task?.workerEvidenceRef),
+		reviewEvidenceRef: valueState(task?.reviewEvidenceRef),
+		reviewVerdict: valueState(task?.reviewVerdict),
+		mainVerificationRef: valueState(task?.mainVerificationRef),
+		statusSource: valueState(task?.statusSource)
+	}));
+	return {
+		state: items.length === 0 ? "empty" : "available",
+		count: valueState(items.length),
+		items
+	};
+}
+function projectNextVersionReleaseGateAnchors({ verificationChecklist, closeout }) {
+	const checklistItems = Array.isArray(verificationChecklist?.items) ? verificationChecklist.items : [];
+	const fallbackItems = RELEASE_VERIFICATION_CHECKLIST.map((item) => ({
+		gate: valueState(item.gate),
+		label: valueState(item.label),
+		status: valueState(releaseGateStatusText(closeout?.releaseGates?.[item.gateId])),
+		latestEventId: valueState(void 0),
+		latestEvidenceRef: valueState(void 0)
+	}));
+	const items = (checklistItems.length > 0 ? checklistItems : fallbackItems).map((item) => {
+		const latestEvidenceRef = Array.isArray(item?.evidenceRefs?.items) && item.evidenceRefs.items.length > 0 ? item.evidenceRefs.items[0]?.ref?.value : firstValue(item?.latestEvidenceRef);
+		return {
+			gate: valueState(firstValue(item?.gate)),
+			label: valueState(firstValue(item?.label)),
+			status: valueState(firstValue(item?.status)),
+			latestEventId: valueState(firstValue(item?.latestEventId)),
+			latestEvidenceRef: valueState(latestEvidenceRef),
+			command: valueState(firstValue(item?.command))
+		};
+	});
+	return {
+		state: items.length === 0 ? "empty" : "available",
+		count: valueState(items.length),
+		items
+	};
+}
+function projectNextVersionEvidenceRefs({ taskAnchors, releaseGateAnchors, releaseReadyEvent, releaseEvidenceDraft, tagEvidencePrompt }) {
+	const refs = [];
+	addNextVersionEvidenceRef(refs, firstValue(releaseEvidenceDraft?.evidencePath, tagEvidencePrompt?.releaseEvidencePath), {
+		label: "release evidence ref",
+		source: RELEASE_EVIDENCE_DRAFT_MODEL_NAME
+	});
+	addNextVersionEvidenceRef(refs, firstValue(releaseEvidenceDraft?.tagEvidencePath, tagEvidencePrompt?.evidencePath), {
+		label: "tag evidence ref",
+		source: TAG_EVIDENCE_DRAFT_MODEL_NAME
+	});
+	for (const ref of releaseReadyEvent?.evidenceRefs ?? []) addNextVersionEvidenceRef(refs, ref?.ref, {
+		label: ref?.label ?? "release.ready evidence",
+		source: "release.ready-declared"
+	});
+	for (const task of taskAnchors?.items ?? []) {
+		addNextVersionEvidenceRef(refs, task.workerEvidenceRef, {
+			label: `${task.taskId.value ?? "task"} worker evidence`,
+			source: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+			taskId: task.taskId.value
+		});
+		addNextVersionEvidenceRef(refs, task.reviewEvidenceRef, {
+			label: `${task.taskId.value ?? "task"} review evidence`,
+			source: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+			taskId: task.taskId.value
+		});
+		addNextVersionEvidenceRef(refs, task.mainVerificationRef, {
+			label: `${task.taskId.value ?? "task"} main verification evidence`,
+			source: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+			taskId: task.taskId.value
+		});
+	}
+	for (const gate of releaseGateAnchors?.items ?? []) addNextVersionEvidenceRef(refs, gate.latestEvidenceRef, {
+		label: `${gate.gate.value ?? "release gate"} evidence`,
+		source: "release gate event"
+	});
+	return {
+		state: refs.length === 0 ? "empty" : "available",
+		count: valueState(refs.length),
+		items: refs.slice(0, 30)
+	};
+}
+function addNextVersionEvidenceRef(refs, refState, metadata = {}) {
+	const ref = firstValue(refState);
+	if (!isNonEmptyString(ref) || refs.some((item) => item.ref.value === ref)) return;
+	refs.push({
+		ref: valueState(ref),
+		kind: valueState(evidenceRefKindForInput(ref)),
+		label: valueState(metadata.label),
+		source: valueState(metadata.source),
+		taskId: valueState(metadata.taskId)
+	});
+}
+function projectNextVersionImplementedCapabilities({ releaseBaseline, verificationChecklist, releaseEvidenceDraft, tagEvidencePrompt, closeout }) {
+	const items = [
+		["ReleaseBaselineResolver", releaseBaseline?.state],
+		["Release gate checklist recorder", verificationChecklist?.state],
+		["ReleaseEvidenceDraftWriter", releaseEvidenceDraft?.state],
+		["TagEvidenceDraftWriter", tagEvidencePrompt?.state],
+		["release.ready controlled gate registration", closeout?.summary?.releaseReady === true ? "declared" : "controlled-form-or-blocked"],
+		["NextVersionHandoffDraft", closeout === null || closeout === void 0 ? "missing" : "available"]
+	].map(([name, state]) => ({
+		name: valueState(name),
+		state: valueState(state),
+		source: valueState("Workbench closeout projection")
+	}));
+	return {
+		state: items.length === 0 ? "empty" : "available",
+		count: valueState(items.length),
+		items
+	};
+}
+function nextReleaseVersionPrefix(version) {
+	const match = String(version ?? "").match(/^v(\d+)$/u);
+	if (match === null) return null;
+	const major = Number.parseInt(match[1], 10);
+	return Number.isInteger(major) ? `v${major + 1}` : null;
 }
 function releaseGateStatusText(status) {
 	return [
@@ -12455,16 +14709,21 @@ function releaseGateStatusText(status) {
 }
 function releaseEvidencePathForGoal(goalId) {
 	const version = releaseVersionPrefix(goalId);
-	if (version !== null) return `docs/plans/${version}-release-evidence-2026-05-29.md`;
+	if (version !== null) return `docs/plans/${version}-release-evidence-${releaseEvidenceDateForVersion(version)}.md`;
 	return isNonEmptyString(goalId) ? `docs/plans/${goalId}-release-evidence.md` : "docs/plans/<release-evidence>.md";
 }
 function tagEvidencePathForGoal(goalId) {
 	const version = releaseVersionPrefix(goalId);
-	if (version !== null) return `docs/plans/${version}-tag-evidence-2026-05-29.md`;
+	if (version !== null) return `docs/plans/${version}-tag-evidence-${releaseEvidenceDateForVersion(version)}.md`;
 	return isNonEmptyString(goalId) ? `docs/plans/${goalId}-tag-evidence.md` : "docs/plans/<tag-evidence>.md";
 }
 function releaseVersionPrefix(goalId) {
 	return String(goalId ?? "").match(/^(v\d+)-/u)?.[1] ?? null;
+}
+function releaseEvidenceDateForVersion(version) {
+	const match = String(version ?? "").match(/^v(\d+)$/u);
+	const major = match === null ? null : Number.parseInt(match[1], 10);
+	return Number.isInteger(major) && major >= 29 ? "2026-06-01" : "2026-05-29";
 }
 function projectGoalNextDetails(next) {
 	return {
@@ -12501,9 +14760,10 @@ function projectGoalEventFormModel(nextAction, evidenceRefContext = {}) {
 	const supportedDefinitions = GOAL_EVENT_FORM_DEFINITIONS.filter((definition) => definition.eventFamily !== "release");
 	const recommendedDefinitions = allowedEvents.map((eventType) => supportedDefinitions.find((definition) => definition.eventType === eventType)).filter((definition) => definition !== void 0);
 	const evidenceRefHelper = projectEvidenceRefHelper(evidenceRefContext);
-	const workerEvidenceHandoff = projectV25WorkerEvidenceHandoff({
+	const workerEvidenceHandoff = projectWorkerEvidenceHandoff({
 		nextAction,
 		latestRun: evidenceRefContext.latestRun,
+		operations: evidenceRefContext.operations,
 		evidenceRefHelper
 	});
 	const recommendedForms = recommendedDefinitions.map((definition) => projectGoalEventFormSpec({
@@ -12600,6 +14860,154 @@ function projectGoalEventFormSpec({ definition, nextAction, recommended, evidenc
 		}
 	};
 }
+function projectWorkerEvidenceHandoff({ nextAction, latestRun, operations, evidenceRefHelper }) {
+	const v29Handoff = projectV29WorkerEvidenceHandoff({
+		nextAction,
+		operations,
+		evidenceRefHelper
+	});
+	if (v29Handoff.state === "available") return v29Handoff;
+	return projectV25WorkerEvidenceHandoff({
+		nextAction,
+		latestRun,
+		evidenceRefHelper
+	});
+}
+function projectV29WorkerEvidenceHandoff({ nextAction, operations, evidenceRefHelper }) {
+	const goalId = nextAction?.goalId;
+	const taskId = nextAction?.next?.taskId;
+	const workerEvidenceDefinition = GOAL_EVENT_FORM_DEFINITIONS.find((definition) => definition.eventType === "worker.evidence-recorded");
+	const allowedEvents = Array.isArray(nextAction?.afterCompletion?.allowedEvents) ? nextAction.afterCompletion.allowedEvents : [];
+	const operation = latestConfirmedImplementationOperationForTask(operations, {
+		goalId,
+		taskId
+	});
+	const runResult = operation?.runResult ?? null;
+	const evidenceArtifactPath = firstNonEmptyString(runResult?.evidenceArtifactPath, latestRunArtifactPathByKind(runResult, "evidence"));
+	const sourceWorkspacePath = runResult?.sourceWorkspacePath;
+	const evidenceRef = latestRunEvidenceRefByKind(runResult, "evidence");
+	if (!(workerEvidenceDefinition !== void 0 && allowedEvents.includes("worker.evidence-recorded") && operationRunIsConfirmedIsolatedWorkspaceImplementation(operation) && isNonEmptyString(goalId) && isNonEmptyString(taskId) && isNonEmptyString(runResult?.runId) && isNonEmptyString(evidenceArtifactPath) && isNonEmptyString(evidenceRef))) return {
+		state: "empty",
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+		sourceOperationId: valueState(operation?.operationId),
+		sourceRunId: valueState(runResult?.runId),
+		executionPlanId: valueState(runResult?.executionPlanId),
+		evidenceArtifactPath: valueState(evidenceArtifactPath),
+		sourceWorkspacePath: valueState(sourceWorkspacePath),
+		evidenceRef: valueState(evidenceRef),
+		registrationForm: null,
+		promptHandoff: {
+			available: valueState(false),
+			format: valueState("markdown"),
+			text: textState(MISSING_TEXT)
+		},
+		safety: projectV29WorkerEvidenceHandoffSafety(),
+		note: "v29 worker evidence handoff appears after goal-operation-runs.v1 contains a confirmed implementation run for the active goal/task with a managed evidence artifact ref."
+	};
+	const actorId = `codex-v29-${taskId}-worker`;
+	const statement = `Confirmed implementation run ${runResult.runId} produced worker evidence for ${goalId} ${taskId}.`;
+	const registrationForm = projectGoalEventFormSpec({
+		definition: workerEvidenceDefinition,
+		nextAction,
+		recommended: true,
+		evidenceRefHelper,
+		fieldOverrides: {
+			workerActor: {
+				value: actorId,
+				source: "v29 worker evidence handoff"
+			},
+			evidenceRef: {
+				value: evidenceRef,
+				source: "goal-operation-runs.v1 implementation artifact"
+			},
+			statement: {
+				value: statement,
+				source: "v29 worker evidence handoff"
+			}
+		}
+	});
+	return {
+		state: "available",
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+		sourceOperationId: valueState(operation.operationId),
+		sourceRunId: valueState(runResult.runId),
+		executionPlanId: valueState(runResult.executionPlanId),
+		evidenceArtifactPath: valueState(evidenceArtifactPath),
+		sourceWorkspacePath: valueState(sourceWorkspacePath),
+		evidenceRef: valueState(evidenceRef),
+		runStatus: valueState(runResult.status),
+		verifierStatus: valueState(runResult.verifierStatus),
+		registrationForm,
+		promptHandoff: {
+			available: valueState(true),
+			format: valueState("markdown"),
+			text: textState(buildV29WorkerEvidencePrompt({
+				goalId,
+				taskId,
+				operation,
+				runResult,
+				evidenceArtifactPath,
+				sourceWorkspacePath,
+				evidenceRef,
+				actorId
+			}))
+		},
+		safety: projectV29WorkerEvidenceHandoffSafety(),
+		note: "This v29 handoff turns the confirmed implementation operation into a worker.evidence-recorded dry-run and plan-hash confirm path. It does not read evidence bodies, run shell commands, approve review, verify main, merge, push, tag, or infer readiness."
+	};
+}
+function latestConfirmedImplementationOperationForTask(operations, { goalId, taskId }) {
+	const operation = latestImplementationOperationForTask(operations, {
+		goalId,
+		taskId
+	});
+	return operation?.status === "confirmed" ? operation : null;
+}
+function operationRunIsConfirmedIsolatedWorkspaceImplementation(operation) {
+	const runResult = operation?.runResult ?? null;
+	return operation?.commandKind === "implementation" && operation?.status === "confirmed" && runResult?.mainWorktreeWrites === false && (runResult?.workspaceWrites === true || runResult?.writeBoundary === "isolated-workspace") && isNonEmptyString(runResult?.executionPlanId);
+}
+function projectV29WorkerEvidenceHandoffSafety() {
+	return {
+		v25Only: valueState(false),
+		genericShellRunner: valueState(false),
+		browserExecutionAvailable: valueState(false),
+		modelInvocationAvailable: valueState(false),
+		readsEvidenceBodies: valueState(false),
+		opensLocalFiles: valueState(false),
+		workerCanApproveOwnTask: valueState(false),
+		requiresGoalEventConfirm: valueState(true),
+		confirmRequiresPlanHash: valueState(true),
+		approvalReadinessSource: valueState("goal-event-log.v1 only")
+	};
+}
+function buildV29WorkerEvidencePrompt({ goalId, taskId, operation, runResult, evidenceArtifactPath, sourceWorkspacePath, evidenceRef, actorId }) {
+	return [
+		"/goal",
+		`Record worker evidence for ${goalId} ${taskId}.`,
+		"",
+		"Use this confirmed implementation operation:",
+		`- operationId: ${operation.operationId}`,
+		`- runId: ${runResult.runId}`,
+		`- executionPlanId: ${runResult.executionPlanId}`,
+		`- runStatus: ${runResult.status ?? MISSING_TEXT}`,
+		`- verifierStatus: ${runResult.verifierStatus ?? MISSING_TEXT}`,
+		`- evidenceArtifactPath: ${evidenceArtifactPath}`,
+		`- sourceWorkspacePath: ${sourceWorkspacePath ?? MISSING_TEXT}`,
+		"",
+		"Register this event through the controlled goal update flow:",
+		"- event: worker.evidence-recorded",
+		`- actor: ${actorId}`,
+		`- evidenceRef: ${evidenceRef}`,
+		"",
+		"Run the goal update dry-run first, then confirm with the returned plan hash.",
+		"Do not review, approve, run main verification, merge, push, tag, or treat this evidence ref as release readiness."
+	].join("\n");
+}
 function projectV25WorkerEvidenceHandoff({ nextAction, latestRun, evidenceRefHelper }) {
 	const goalId = nextAction?.goalId;
 	const taskId = nextAction?.next?.taskId;
@@ -12677,32 +15085,45 @@ function projectV25WorkerEvidenceHandoff({ nextAction, latestRun, evidenceRefHel
 function latestRunIsConfirmedIsolatedWorkspaceRun(latestRun) {
 	return latestRun?.workspaceWrites === true && latestRun?.mainWorktreeWrites === false && isNonEmptyString(latestRun?.executionPlanId) && Array.isArray(latestRun?.pipeline) && latestRun.pipeline.includes("implement");
 }
-function runIsAdoptionCandidate(run) {
-	const hasIsolatedWorkspace = run?.workspaceWrites === true || run?.writeBoundary === "isolated-workspace";
-	const keepsMainClean = run?.mainWorktreeWrites === false;
-	const hasImplementationSource = isNonEmptyString(run?.executionPlanId) || Array.isArray(run?.pipeline) && run.pipeline.includes("implement");
-	const evidenceArtifactPath = firstNonEmptyString(run?.evidenceArtifactPath, latestRunArtifactPathByKind(run, "evidence"));
-	return run?.status === "passed" && run?.verifierStatus === "passed" && hasIsolatedWorkspace && keepsMainClean && hasImplementationSource && isNonEmptyString(run?.runId) && isNonEmptyString(run?.sourceWorkspacePath) && isNonEmptyString(evidenceArtifactPath);
-}
-function projectAdoptionCandidates({ runsResult, runs, latestRun }) {
+function projectAdoptionCandidates({ runsResult, runs, latestRun, operationsResult, operations, activeGoal }) {
+	const normalizedSources = buildAdoptionCandidateSources({
+		runs,
+		latestRun,
+		operations
+	});
 	const routeRuns = Array.isArray(runs?.runs) ? runs.runs : null;
-	const candidateRuns = routeRuns === null ? [] : routeRuns.filter((run) => runIsAdoptionCandidate(run));
+	const operationRuns = Array.isArray(operations?.runs) ? operations.runs.filter((run) => run?.commandKind === "implementation") : null;
+	const candidateRuns = normalizedSources.filter((source) => source.decision.ready === true);
+	const blockedRuns = normalizedSources.filter((source) => source.decision.ready !== true);
 	const latestRunId = latestRun?.runId;
+	const sourceContract = operationRuns !== null && operationRuns.length > 0 ? GOAL_OPERATION_RUNS_CONTRACT_NAME : "symphony.console-runs";
+	const sourceRouteResult = sourceContract === GOAL_OPERATION_RUNS_CONTRACT_NAME ? operationsResult : runsResult;
 	return {
-		state: routeRuns === null ? "missing" : candidateRuns.length === 0 ? "empty" : "available",
-		sourceContract: valueState("symphony.console-runs"),
-		routeState: valueState(routeStateFromResult(runsResult)),
-		route: valueState(runsResult?.route),
-		count: valueState(routeRuns === null ? void 0 : candidateRuns.length),
-		totalRunsScanned: valueState(routeRuns === null ? void 0 : routeRuns.length),
+		state: normalizedSources.length === 0 ? routeRuns === null && operationRuns === null ? "missing" : "empty" : "available",
+		modelName: valueState("AdoptionCandidateProjectionV30"),
+		goalId: valueState(firstValue(activeGoal?.viewModel?.goalId, activeGoal?.runbook?.goalId, activeGoal?.nextAction?.goalId)),
+		taskId: valueState(firstValue(activeGoal?.nextAction?.next?.taskId, activeGoal?.taskQueue?.nextTaskId)),
+		sourceContract: valueState(sourceContract),
+		routeState: valueState(routeStateFromResult(sourceRouteResult)),
+		route: valueState(sourceRouteResult?.route),
+		fallbackSourceContract: valueState(sourceContract === GOAL_OPERATION_RUNS_CONTRACT_NAME ? "not-used" : "symphony.console-runs"),
+		count: valueState(candidateRuns.length),
+		blockedCount: valueState(blockedRuns.length),
+		totalRunsScanned: valueState(normalizedSources.length),
 		criteria: {
-			status: valueState("passed"),
-			verifierStatus: valueState("passed"),
-			workspace: valueState("isolated workspace with sourceWorkspacePath"),
+			status: valueState("run status is passed"),
+			verifierStatus: valueState("verifier status is passed"),
+			artifactRefs: valueState("managed artifactRefs include an evidence artifact or evidence ref"),
+			workspace: valueState("isolated workspace refs include sourceWorkspacePath and sourceWorkspaceManifestPath"),
+			fingerprint: valueState("sourceWorkspaceFingerprint is present"),
 			mainWorktreeWrites: valueState(false),
-			evidence: valueState("evidenceArtifactPath or managed evidence artifact ref")
+			sourcePolicy: valueState("passed run + artifact refs + workspace refs + fingerprints + verifier status")
 		},
 		items: candidateRuns.map((run) => projectAdoptionCandidateRun({
+			run,
+			latestRunId
+		})),
+		blockedItems: blockedRuns.map((run) => projectAdoptionCandidateRun({
 			run,
 			latestRunId
 		})),
@@ -12713,23 +15134,33 @@ function projectAdoptionCandidates({ runsResult, runs, latestRun }) {
 			genericShellRunner: valueState(false),
 			workerCanApproveOwnTask: valueState(false),
 			approvalReadinessSource: valueState("goal-event-log.v1 only"),
+			adoptionReadinessSource: valueState("backend operation/run fields only"),
 			unsupportedInferenceSources: arrayTextState([
 				"file-name",
 				"branch",
 				"commit-message",
+				"prompt-text",
+				"task-title",
 				"frontend-heuristic"
 			])
 		},
-		note: "Adoption Candidate Panel lists confirmed isolated workspace runs that already passed verifier checks. It does not plan adoption, inspect patches, confirm adoption, merge, tag, or infer reviewer/main/release status."
+		note: "Adoption Candidate Panel normalizes v29 implementation operations into adoptable and blocked rows from backend run status, artifact refs, workspace refs, fingerprints, and verifier status. It does not plan adoption, inspect patches, confirm adoption, merge, tag, or infer reviewer/main/release status."
 	};
 }
 function projectAdoptionCandidateRun({ run, latestRunId }) {
-	const evidenceArtifactPath = firstNonEmptyString(run?.evidenceArtifactPath, latestRunArtifactPathByKind(run, "evidence"));
-	const evidenceRef = latestRunEvidenceRefByKind(run, "evidence");
+	const evidenceArtifactPath = firstNonEmptyString(run?.evidenceArtifactPath, run?.evidenceArtifact?.path);
+	const evidenceRef = firstNonEmptyString(run?.evidenceRef, run?.evidenceArtifact?.ref);
 	const changedFiles = adoptionCandidateChangedFiles(run);
 	return {
 		sourceRunId: valueState(run?.runId),
+		sourceContract: valueState(run?.sourceContract),
+		operationId: valueState(run?.operationId),
+		operationStatus: valueState(run?.operationStatus),
+		goalId: valueState(run?.goalId),
+		taskId: valueState(run?.taskId),
 		isLatest: valueState(Boolean(latestRunId && run?.runId === latestRunId)),
+		adoptionStatus: valueState(run?.decision?.ready === true ? "candidate" : "blocked"),
+		blockingReasons: projectTextItems(run?.decision?.reasons),
 		status: valueState(run?.status),
 		verifierStatus: valueState(run?.verifierStatus),
 		workspace: {
@@ -12740,6 +15171,7 @@ function projectAdoptionCandidateRun({ run, latestRunId }) {
 		evidence: {
 			artifactPath: valueState(evidenceArtifactPath),
 			ref: valueState(evidenceRef),
+			artifactCount: valueState(run?.artifactRefs?.length),
 			verifierStatus: valueState(run?.verifierStatus)
 		},
 		changedFiles: {
@@ -12747,12 +15179,503 @@ function projectAdoptionCandidateRun({ run, latestRunId }) {
 			text: textState(changedFiles.length === 0 ? "未暴露" : changedFiles.join("、")),
 			items: changedFiles.map((file) => valueState(file))
 		},
+		verifier: {
+			status: valueState(run?.verifierStatus),
+			summaryStatus: valueState(run?.verifierSummary?.status),
+			passed: valueState(run?.verifierSummary?.passed === true)
+		},
 		executionPlanId: valueState(run?.executionPlanId),
 		writeBoundary: valueState(run?.writeBoundary),
 		workspaceWrites: valueState(run?.workspaceWrites),
 		mainWorktreeWrites: valueState(run?.mainWorktreeWrites),
 		updatedAt: valueState(run?.updatedAt)
 	};
+}
+function projectAdoptionPlanPreviewWorkspace({ candidates, operations, activeGoal }) {
+	const goalId = firstValue(candidates?.goalId, activeGoal?.viewModel?.goalId, activeGoal?.runbook?.goalId);
+	const taskId = firstValue(candidates?.taskId, activeGoal?.nextAction?.next?.taskId, activeGoal?.taskQueue?.nextTaskId);
+	const freezeRoute = isNonEmptyString(goalId) ? CONTROLLED_ADOPTION_PLAN_FREEZE_ROUTE_TEMPLATE.path.replace("<goal-id>", encodeURIComponent(goalId)) : null;
+	const latestFreeze = latestAdoptionPlanFreezeOperationForTask(operations, {
+		goalId,
+		taskId
+	});
+	const candidateItems = Array.isArray(candidates?.items) ? candidates.items : [];
+	return {
+		state: candidateItems.length === 0 && latestFreeze === null ? "waiting-for-candidate" : "available",
+		modelName: valueState("AdoptionPlanPreviewWorkspaceV30"),
+		contractName: valueState(CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		freezeEndpoint: {
+			route: valueState(freezeRoute),
+			method: valueState("POST"),
+			allowedBodyFields: arrayTextState([
+				"goalId",
+				"taskId",
+				"sourceRunId",
+				"operationId"
+			]),
+			requiresSameGoalTaskContext: valueState(true),
+			requiresAdoptableCandidate: valueState(true),
+			rejectsPromptInput: valueState(true),
+			rejectsPlanHashInput: valueState(true),
+			rejectsConfirmAdoptionInput: valueState(true)
+		},
+		candidates: {
+			count: valueState(candidateItems.length),
+			items: candidateItems.map((candidate) => projectAdoptionFreezeCandidate({
+				candidate,
+				goalId,
+				taskId,
+				freezeRoute
+			}))
+		},
+		frozenPlan: projectFrozenAdoptionPlan(latestFreeze),
+		safety: {
+			workbenchWriteAvailable: valueState(true),
+			writeScope: valueState("freeze adoption plan artifacts only"),
+			mappedToExistingAdoptRun: valueState(true),
+			mainWorktreeWrites: valueState(false),
+			adoptionConfirmAvailable: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			genericShellRunner: valueState(false),
+			arbitraryPathReadAvailable: valueState(false),
+			mergeAvailable: valueState(false),
+			pushAvailable: valueState(false),
+			tagAvailable: valueState(false),
+			selfApprovalAvailable: valueState(false),
+			unsupportedInferenceSources: arrayTextState([
+				"file-name",
+				"branch",
+				"commit-message",
+				"prompt-text",
+				"task-title",
+				"frontend-heuristic"
+			])
+		},
+		recoveryNotes: {
+			inspectCommandPattern: valueState("symphony adopt --inspect <adoption-id> --json"),
+			confirmCommandSource: valueState("frozen adoption plan confirmationCommand"),
+			failureRecovery: valueState("Inspect the frozen plan and journal before any confirm step.")
+		},
+		note: "Adoption plan preview workspace freezes an adoption plan from an explicit adoptable implementation run through the backend adopt --run path. It shows patch summary, fingerprints, affected files, and recovery notes; it does not confirm adoption or apply patches."
+	};
+}
+function projectAdoptionInspectRecoveryWorkspace({ planPreviewWorkspace, activeGoal, result, inspect }) {
+	const frozenPlan = planPreviewWorkspace?.frozenPlan;
+	const adoptionPlanId = frozenPlan?.adoptionPlanId?.value;
+	const goalId = firstValue(planPreviewWorkspace?.goalId, activeGoal?.viewModel?.goalId, activeGoal?.runbook?.goalId);
+	const taskId = firstValue(planPreviewWorkspace?.taskId, activeGoal?.nextAction?.next?.taskId, activeGoal?.taskQueue?.nextTaskId);
+	const inspectRoute = isNonEmptyString(adoptionPlanId) ? ADOPTION_INSPECT_ROUTE_TEMPLATE.path.replace("<adoption-id>", encodeURIComponent(adoptionPlanId)) : null;
+	const confirmRoute = isNonEmptyString(goalId) ? CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE.path.replace("<goal-id>", encodeURIComponent(goalId)) : null;
+	const confirmBodyAvailable = [
+		goalId,
+		taskId,
+		adoptionPlanId,
+		frozenPlan?.operationId?.value
+	].every(isNonEmptyString);
+	const inspectionAvailable = result?.ok === true && inspect?.adoptionPlanId === adoptionPlanId;
+	const inspection = inspectionAvailable ? inspect : null;
+	const latestConfirmationRun = inspection?.latestConfirmationRun ?? null;
+	return {
+		state: inspectionAvailable ? "inspected" : isNonEmptyString(inspectRoute) ? "available" : "waiting-for-frozen-plan",
+		modelName: valueState("AdoptionInspectRecoveryViewV30"),
+		contractName: valueState(CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		selectedFrozenPlan: {
+			sourceContract: frozenPlan?.sourceContract ?? valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+			operationId: frozenPlan?.operationId ?? valueState(void 0),
+			operationStatus: frozenPlan?.operationStatus ?? valueState(void 0),
+			adoptionPlanId: frozenPlan?.adoptionPlanId ?? valueState(void 0),
+			adoptionPlanArtifactPath: frozenPlan?.adoptionPlanArtifactPath ?? valueState(void 0),
+			patchArtifactPath: frozenPlan?.patchArtifactPath ?? valueState(void 0),
+			patchHash: frozenPlan?.patchHash ?? valueState(void 0),
+			sourceRunId: frozenPlan?.sourceRunId ?? valueState(void 0),
+			sourceOperationId: frozenPlan?.sourceOperationId ?? valueState(void 0),
+			sourceWorkspaceFingerprint: frozenPlan?.fingerprints?.sourceWorkspaceFingerprint ?? valueState(void 0),
+			changedFileCount: frozenPlan?.changedFiles?.count ?? valueState(0),
+			fileOperationCount: frozenPlan?.fileOperations?.count ?? valueState(0)
+		},
+		inspectEndpoint: {
+			route: valueState(inspectRoute),
+			method: valueState("GET"),
+			adoptionIdSource: valueState("goal-operation-runs.v1 adoption-plan runResult.adoptionPlanId"),
+			acceptsUserPathInput: valueState(false),
+			acceptsConfirmInput: valueState(false),
+			readOnly: valueState(true)
+		},
+		confirmEndpoint: {
+			route: valueState(confirmRoute),
+			method: valueState("POST"),
+			adoptionIdSource: valueState("goal-operation-runs.v1 adoption-plan runResult.adoptionPlanId"),
+			allowedBodyFields: arrayTextState([
+				"goalId",
+				"taskId",
+				"adoptionPlanId",
+				"operationId"
+			]),
+			requestPayload: confirmBodyAvailable ? {
+				goalId,
+				taskId,
+				adoptionPlanId,
+				operationId: frozenPlan.operationId.value
+			} : null,
+			requiresFrozenPlanOperation: valueState(true),
+			refreshesAfterConfirm: arrayTextState([
+				"goal-status",
+				"goal-events",
+				"goal-operation-runs",
+				"runs",
+				"goal-next-action"
+			]),
+			acceptsUserPathInput: valueState(false),
+			acceptsPlanHashInput: valueState(false),
+			acceptsShellCommandInput: valueState(false)
+		},
+		inspection: projectAdoptionInspectOutput(inspection, result),
+		patchRefs: {
+			adoptionPlanArtifactPath: frozenPlan?.adoptionPlanArtifactPath ?? valueState(void 0),
+			patchArtifactPath: frozenPlan?.patchArtifactPath ?? valueState(void 0),
+			patchHash: frozenPlan?.patchHash ?? valueState(void 0),
+			fileOperations: frozenPlan?.fileOperations ?? {
+				count: valueState(0),
+				items: []
+			}
+		},
+		evidenceContext: {
+			sourceRunId: frozenPlan?.sourceRunId ?? valueState(void 0),
+			sourceRunArtifactPath: frozenPlan?.sourceRunArtifactPath ?? valueState(void 0),
+			sourceEvidenceArtifactPath: frozenPlan?.sourceEvidenceArtifactPath ?? valueState(void 0),
+			sourceVerifierStatus: frozenPlan?.sourceVerifierStatus ?? valueState(void 0),
+			latestConfirmationEvidenceArtifactPath: valueState(latestConfirmationRun?.evidenceArtifactPath)
+		},
+		recoveryContext: {
+			journalStateSource: valueState("adoption inspect journal.status"),
+			beforeHashSource: valueState("adoption inspect currentWorktreeMatchesJournalBeforeFilesDetails.files[].expected.hash"),
+			afterHashSource: valueState("adoption inspect currentWorktreeMatchesAfterHashDetails.files[].expected.hash"),
+			currentWorktreeMatchSource: valueState("adoption inspect currentWorktreeMatchesAfterHash and currentWorktreeMatchesJournalBeforeFiles"),
+			copyOnlyInspectCommand: frozenPlan?.recoveryNotes?.inspectCommand ?? valueState(void 0)
+		},
+		safety: {
+			readOnly: valueState(false),
+			workbenchWriteAvailable: valueState(true),
+			writeScope: valueState("controlled symphony adopt --confirm <adoption-id> --json only"),
+			adoptionConfirmAvailable: valueState(confirmBodyAvailable && isNonEmptyString(confirmRoute)),
+			applyPatchAvailable: valueState(false),
+			browserExecutionAvailable: valueState(false),
+			modelInvocationAvailable: valueState(false),
+			genericShellRunner: valueState(false),
+			arbitraryPathReadAvailable: valueState(false),
+			mergeAvailable: valueState(false),
+			pushAvailable: valueState(false),
+			tagAvailable: valueState(false),
+			selfApprovalAvailable: valueState(false),
+			readinessInferenceAvailable: valueState(false),
+			unsupportedInferenceSources: arrayTextState([
+				"file-name",
+				"branch",
+				"commit-message",
+				"prompt-text",
+				"task-title",
+				"frontend-heuristic"
+			])
+		},
+		note: "Adoption inspect and recovery view reads the frozen adoption id from the scoped active-goal adoption-plan operation, displays journal and hash context, and exposes a controlled confirm request mapped to existing symphony adopt --confirm semantics. Confirm refreshes active goal, events, runs, operations, and next action; it does not merge, push, tag, publish, self-approve, or register review/main/release events."
+	};
+}
+function projectAdoptionInspectOutput(inspect, result) {
+	if (inspect === null || inspect === void 0) return {
+		state: result?.ok === false ? "unavailable" : "missing",
+		routeState: valueState(result?.ok === false ? "failed" : "not-fetched"),
+		httpStatus: valueState(result?.httpStatus),
+		error: valueState(result?.message),
+		contractName: valueState(void 0),
+		adoptionPlanId: valueState(void 0),
+		journal: {
+			status: valueState(void 0),
+			confirmationRunId: valueState(void 0),
+			artifactPath: valueState(void 0),
+			createdAt: valueState(void 0)
+		},
+		latestConfirmationRun: {
+			runId: valueState(void 0),
+			status: valueState(void 0),
+			failurePhase: valueState(void 0),
+			evidenceArtifactPath: valueState(void 0)
+		},
+		hashes: {
+			patchHash: valueState(void 0),
+			currentWorktreeMatchesAfterHash: valueState(void 0),
+			currentWorktreeMatchesJournalBeforeFiles: valueState(void 0)
+		},
+		afterHashFiles: projectAdoptionInspectHashFiles(null),
+		beforeJournalFiles: projectAdoptionInspectHashFiles(null),
+		recommendedCommands: {
+			count: valueState(0),
+			items: []
+		}
+	};
+	return {
+		state: "available",
+		routeState: valueState("ready"),
+		httpStatus: valueState(result?.httpStatus),
+		error: valueState(void 0),
+		contractName: valueState(inspect.contractName),
+		adoptionPlanId: valueState(inspect.adoptionPlanId),
+		status: valueState(inspect.status),
+		journal: {
+			status: valueState(inspect.journal?.status ?? "missing"),
+			confirmationRunId: valueState(inspect.journal?.confirmationRunId),
+			artifactPath: valueState(inspect.journal?.artifactPath),
+			createdAt: valueState(inspect.journal?.createdAt)
+		},
+		latestConfirmationRun: {
+			runId: valueState(inspect.latestConfirmationRun?.runId),
+			status: valueState(inspect.latestConfirmationRun?.status),
+			failurePhase: valueState(inspect.latestConfirmationRun?.failurePhase),
+			evidenceArtifactPath: valueState(inspect.latestConfirmationRun?.evidenceArtifactPath)
+		},
+		hashes: {
+			patchHash: valueState(inspect.patchHash),
+			currentWorktreeMatchesAfterHash: valueState(inspect.currentWorktreeMatchesAfterHash),
+			currentWorktreeMatchesJournalBeforeFiles: valueState(inspect.currentWorktreeMatchesJournalBeforeFiles)
+		},
+		afterHashFiles: projectAdoptionInspectHashFiles(inspect.currentWorktreeMatchesAfterHashDetails),
+		beforeJournalFiles: projectAdoptionInspectHashFiles(inspect.currentWorktreeMatchesJournalBeforeFilesDetails),
+		recommendedCommands: {
+			count: valueState(Array.isArray(inspect.recommendedCommands) ? inspect.recommendedCommands.length : 0),
+			items: Array.isArray(inspect.recommendedCommands) ? inspect.recommendedCommands.map((command) => ({
+				id: valueState(command?.id),
+				label: valueState(command?.label),
+				command: valueState(command?.command),
+				mode: valueState(command?.mode)
+			})) : []
+		}
+	};
+}
+function projectAdoptionInspectHashFiles(details) {
+	const files = Array.isArray(details?.files) ? details.files : [];
+	return {
+		matches: valueState(details?.matches),
+		reason: valueState(details?.reason),
+		count: valueState(files.length),
+		items: files.map((file) => ({
+			path: valueState(file?.path),
+			matches: valueState(file?.matches),
+			expectedHash: valueState(file?.expected?.hash),
+			actualHash: valueState(file?.actual?.hash),
+			expectedSize: valueState(file?.expected?.size),
+			actualSize: valueState(file?.actual?.size)
+		}))
+	};
+}
+function projectAdoptionFreezeCandidate({ candidate, goalId, taskId, freezeRoute }) {
+	const sourceRunId = candidate?.sourceRunId?.value;
+	const operationId = candidate?.operationId?.value;
+	const bodyAvailable = [
+		goalId,
+		taskId,
+		sourceRunId,
+		operationId
+	].every(isNonEmptyString);
+	return {
+		sourceRunId: candidate.sourceRunId,
+		operationId: candidate.operationId,
+		goalId: candidate.goalId,
+		taskId: candidate.taskId,
+		workspace: candidate.workspace,
+		evidence: candidate.evidence,
+		changedFiles: candidate.changedFiles,
+		verifierStatus: candidate.verifierStatus,
+		sourceWorkspaceFingerprint: candidate.workspace.fingerprint,
+		freeze: {
+			available: valueState(bodyAvailable && isNonEmptyString(freezeRoute)),
+			endpointRoute: valueState(freezeRoute),
+			requestPayload: bodyAvailable ? {
+				goalId,
+				taskId,
+				sourceRunId,
+				operationId
+			} : null
+		}
+	};
+}
+function projectFrozenAdoptionPlan(operation) {
+	if (operation === null) return {
+		state: "missing",
+		sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+		operationId: valueState(void 0),
+		adoptionPlanId: valueState(void 0),
+		patchHash: valueState(void 0),
+		changedFiles: {
+			count: valueState(0),
+			items: []
+		},
+		fileOperations: {
+			count: valueState(0),
+			items: []
+		},
+		fingerprints: {
+			sourceWorkspaceFingerprint: valueState(void 0),
+			projectFingerprint: valueState(void 0),
+			gitHead: valueState(void 0),
+			gitStatusFingerprint: valueState(void 0)
+		},
+		recoveryNotes: {
+			inspectCommand: valueState(void 0),
+			confirmCommand: valueState(void 0),
+			failureRecovery: valueState(void 0)
+		}
+	};
+	const run = operation.runResult ?? {};
+	const changedFiles = Array.isArray(run.changedFiles) ? run.changedFiles.filter(isNonEmptyString) : [];
+	const fileOperations = Array.isArray(run.fileOperations) ? run.fileOperations : [];
+	return {
+		state: "available",
+		sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+		operationId: valueState(operation.operationId),
+		operationStatus: valueState(operation.status),
+		commandKind: valueState(operation.commandKind),
+		adoptionPlanId: valueState(run.adoptionPlanId),
+		adoptionPlanArtifactPath: valueState(run.adoptionPlanArtifactPath),
+		patchArtifactPath: valueState(run.patchArtifactPath),
+		patchHash: valueState(run.patchHash),
+		sourceRunId: valueState(run.sourceRunId),
+		sourceRunArtifactPath: valueState(run.sourceRunArtifactPath),
+		sourceOperationId: valueState(run.sourceOperationId),
+		sourceEvidenceArtifactPath: valueState(run.sourceEvidenceArtifactPath),
+		sourceVerifierStatus: valueState(run.sourceVerifierStatus),
+		sourceWorkspacePath: valueState(run.sourceWorkspacePath),
+		sourceWorkspaceManifestPath: valueState(run.sourceWorkspaceManifestPath),
+		changedFiles: {
+			count: valueState(changedFiles.length),
+			items: changedFiles.map((file) => valueState(file))
+		},
+		fileOperations: {
+			count: valueState(fileOperations.length),
+			items: fileOperations.map((fileOperation) => ({
+				path: valueState(fileOperation?.path),
+				operation: valueState(fileOperation?.operation),
+				beforeHash: valueState(fileOperation?.beforeHash),
+				afterHash: valueState(fileOperation?.afterHash),
+				size: valueState(fileOperation?.size)
+			}))
+		},
+		fingerprints: {
+			sourceWorkspaceFingerprint: valueState(run.sourceWorkspaceFingerprint),
+			projectFingerprint: valueState(run.projectFingerprint),
+			gitHead: valueState(run.gitHead),
+			gitStatusFingerprint: valueState(run.gitStatusFingerprint),
+			patchHash: valueState(run.patchHash)
+		},
+		recoveryNotes: {
+			inspectCommand: valueState(isNonEmptyString(run.adoptionPlanId) ? `symphony adopt --inspect ${run.adoptionPlanId} --json` : void 0),
+			confirmCommand: valueState(run.confirmationCommand),
+			failureRecovery: valueState("Inspect the frozen plan and journal before any confirm step.")
+		},
+		outputSummary: {
+			stdout: textState(operation.output?.stdout ?? ""),
+			stderr: textState(operation.output?.stderr ?? "")
+		}
+	};
+}
+function latestAdoptionPlanFreezeOperationForTask(operations, { goalId, taskId }) {
+	if (!Array.isArray(operations?.runs)) return null;
+	for (const run of [...operations.runs].reverse()) if (run?.goalId === goalId && (taskId === null || taskId === void 0 || run?.taskId === taskId) && run?.commandKind === "adoption-plan" && run?.status === "confirmed") return run;
+	return null;
+}
+function latestAdoptionConfirmOperationForTask(operations, { goalId, taskId, adoptionPlanId }) {
+	if (!Array.isArray(operations?.runs)) return null;
+	for (const run of [...operations.runs].reverse()) {
+		if (run?.goalId !== goalId || run?.taskId !== taskId || run?.commandKind !== "adoption-confirm" || run?.status !== "confirmed") continue;
+		if (isNonEmptyString(adoptionPlanId) && run?.runResult?.adoptionPlanId !== adoptionPlanId) continue;
+		return run;
+	}
+	return null;
+}
+function buildAdoptionCandidateSources({ runs, latestRun, operations }) {
+	const operationRuns = Array.isArray(operations?.runs) ? operations.runs.filter((run) => run?.commandKind === "implementation") : [];
+	if (operationRuns.length > 0) return operationRuns.map((operation) => normalizeAdoptionCandidateFromOperation(operation));
+	const routeRuns = Array.isArray(runs?.runs) ? runs.runs : [];
+	return (routeRuns.length > 0 ? routeRuns : latestRun !== null && latestRun !== void 0 ? [latestRun] : []).map((run) => normalizeAdoptionCandidateFromRun(run));
+}
+function normalizeAdoptionCandidateFromOperation(operation) {
+	const runResult = operation?.runResult ?? {};
+	return {
+		...normalizeAdoptionCandidateRun({
+			run: runResult,
+			sourceContract: GOAL_OPERATION_RUNS_CONTRACT_NAME,
+			operation,
+			artifactRefs: Array.isArray(operation?.artifactRefs) ? operation.artifactRefs : Array.isArray(runResult?.artifactRefs) ? runResult.artifactRefs : [],
+			verifierSummary: operation?.verifierSummary ?? runResult?.verifierSummary
+		}),
+		goalId: operation?.goalId,
+		taskId: operation?.taskId,
+		operationId: operation?.operationId,
+		operationStatus: operation?.status,
+		updatedAt: firstNonEmptyString(operation?.timestamps?.updatedAt, runResult?.updatedAt)
+	};
+}
+function normalizeAdoptionCandidateFromRun(run) {
+	return normalizeAdoptionCandidateRun({
+		run,
+		sourceContract: "symphony.console-runs",
+		operation: null,
+		artifactRefs: Array.isArray(run?.artifactRefs) ? run.artifactRefs : [],
+		verifierSummary: run?.verifierSummary
+	});
+}
+function normalizeAdoptionCandidateRun({ run, sourceContract, operation, artifactRefs, verifierSummary }) {
+	const runId = firstNonEmptyString(run?.runId, run?.sourceRunId, operation?.runResult?.runId);
+	const evidenceArtifact = findEvidenceArtifactRef(artifactRefs);
+	const evidenceRef = normalizedManagedArtifactEvidenceRef(evidenceArtifact?.ref) ?? (isNonEmptyString(runId) && isNonEmptyString(evidenceArtifact?.kind) ? `artifact-ref:artifact:${runId}:${evidenceArtifact.kind}` : null);
+	const normalized = {
+		sourceContract,
+		runId,
+		status: run?.status,
+		verifierStatus: firstNonEmptyString(run?.verifierStatus, verifierSummary?.status),
+		verifierSummary,
+		executionPlanId: run?.executionPlanId,
+		writeBoundary: run?.writeBoundary,
+		workspaceWrites: run?.workspaceWrites,
+		mainWorktreeWrites: run?.mainWorktreeWrites,
+		sourceWorkspacePath: run?.sourceWorkspacePath,
+		sourceWorkspaceManifestPath: run?.sourceWorkspaceManifestPath,
+		sourceWorkspaceFingerprint: run?.sourceWorkspaceFingerprint,
+		evidenceArtifactPath: firstNonEmptyString(run?.evidenceArtifactPath, evidenceArtifact?.path),
+		evidenceRef,
+		evidenceArtifact,
+		artifactRefs,
+		changedFiles: Array.isArray(run?.changedFiles) ? run.changedFiles : [],
+		fileOperations: Array.isArray(run?.fileOperations) ? run.fileOperations : [],
+		updatedAt: run?.updatedAt,
+		decision: null
+	};
+	normalized.decision = buildAdoptionCandidateDecision(normalized);
+	return normalized;
+}
+function buildAdoptionCandidateDecision(run) {
+	const reasons = [];
+	const hasIsolatedWorkspace = run?.workspaceWrites === true || run?.writeBoundary === "isolated-workspace";
+	const verifierPassed = run?.verifierStatus === "passed" || run?.verifierSummary?.passed === true;
+	if (!isNonEmptyString(run?.runId)) reasons.push("missing source run id");
+	if (run?.status !== "passed") reasons.push("run status is not passed");
+	if (!verifierPassed) reasons.push("verifier status is not passed");
+	if (!hasIsolatedWorkspace) reasons.push("isolated workspace write boundary is not confirmed");
+	if (run?.mainWorktreeWrites !== false) reasons.push("mainWorktreeWrites is not false");
+	if (!isNonEmptyString(run?.sourceWorkspacePath) || !isNonEmptyString(run?.sourceWorkspaceManifestPath)) reasons.push("workspace refs are incomplete");
+	if (!isNonEmptyString(run?.sourceWorkspaceFingerprint)) reasons.push("source workspace fingerprint is missing");
+	if (!Array.isArray(run?.artifactRefs) || run.artifactRefs.length === 0 || !isNonEmptyString(run?.evidenceRef)) reasons.push("managed evidence artifact ref is missing");
+	return {
+		ready: reasons.length === 0,
+		reasons
+	};
+}
+function findEvidenceArtifactRef(artifactRefs) {
+	if (!Array.isArray(artifactRefs)) return null;
+	return artifactRefs.find((artifact) => artifact?.kind === "evidence" || artifact?.artifactKind === "evidence") ?? null;
 }
 function adoptionCandidateChangedFiles(run) {
 	if (Array.isArray(run?.changedFiles)) return run.changedFiles.filter((file) => isNonEmptyString(file));
@@ -12807,12 +15730,13 @@ function buildV25WorkerEvidencePrompt({ goalId, taskId, latestRun, evidenceArtif
 		"Do not review or approve this task from the worker role."
 	].join("\n");
 }
-function projectEvidenceRefHelper({ runbook, ledger, eventLog, latestRun }) {
+function projectEvidenceRefHelper({ runbook, ledger, eventLog, latestRun, operations }) {
 	const recentRefs = collectRecentEvidenceRefs({
 		runbook,
 		ledger,
 		eventLog,
-		latestRun
+		latestRun,
+		operations
 	});
 	return {
 		state: recentRefs.length === 0 ? "empty" : "available",
@@ -12833,8 +15757,23 @@ function projectEvidenceRefHelper({ runbook, ledger, eventLog, latestRun }) {
 		note: "Recent evidence refs are selectable identifiers from exposed runbook, ledger, events, and latest run artifact refs; they are not task status or approval signals."
 	};
 }
-function collectRecentEvidenceRefs({ runbook, ledger, eventLog, latestRun }) {
+function collectRecentEvidenceRefs({ runbook, ledger, eventLog, latestRun, operations }) {
 	const refs = [];
+	for (const run of [...Array.isArray(operations?.runs) ? operations.runs : []].reverse()) {
+		if (run?.commandKind !== "implementation" || run?.status !== "confirmed") continue;
+		const runResult = run.runResult ?? {};
+		const sourceRunId = firstNonEmptyString(runResult.runId, run.operationId);
+		const artifacts = Array.isArray(run.artifactRefs) ? run.artifactRefs : Array.isArray(runResult.artifactRefs) ? runResult.artifactRefs : [];
+		for (const artifact of artifacts) addRecentEvidenceRef(refs, {
+			ref: normalizedManagedArtifactEvidenceRef(artifact?.ref) ?? (isNonEmptyString(sourceRunId) && isNonEmptyString(artifact?.kind) ? `artifact-ref:artifact:${sourceRunId}:${artifact.kind}` : null),
+			displayRef: artifact?.ref ?? artifact?.path,
+			kind: "artifact-ref",
+			label: artifact?.kind,
+			source: "goal-operation-runs.v1 implementation artifactRefs",
+			taskId: run?.taskId,
+			artifactKind: artifact?.kind
+		});
+	}
 	for (const event of [...Array.isArray(eventLog?.events) ? eventLog.events : []].reverse()) {
 		if (!Array.isArray(event?.evidenceRefs)) continue;
 		for (const evidenceRef of event.evidenceRefs) addRecentEvidenceRef(refs, {
@@ -13164,11 +16103,16 @@ function projectTextItems(values) {
 	if (!Array.isArray(values)) return {
 		state: "missing",
 		count: valueState(void 0),
+		text: MISSING_TEXT,
+		value: null,
 		items: []
 	};
+	const summary = arrayTextState(values);
 	return {
 		state: values.length === 0 ? "empty" : "available",
 		count: valueState(values.length),
+		text: summary.text,
+		value: summary.value,
 		items: values.map((value) => valueState(value))
 	};
 }
@@ -13712,6 +16656,10 @@ function projectReadiness(readiness, summary) {
 		readOnly: valueState(readiness?.readOnly),
 		modelInvocation: valueState(readiness?.modelInvocation),
 		capabilities: objectState(readiness?.capabilities),
+		gitBranch: valueState(readiness?.tools?.git?.branch),
+		gitHead: valueState(readiness?.tools?.git?.head),
+		gitMainHead: valueState(readiness?.tools?.git?.mainHead),
+		gitOriginMainHead: valueState(readiness?.tools?.git?.originMainHead),
 		gitDirty: valueState(readiness?.tools?.git?.dirty),
 		dirtyFilesCount: valueState(readiness?.tools?.git?.dirtyFilesCount),
 		dirtyPaths: Array.isArray(readiness?.tools?.git?.dirtyPaths) ? readiness.tools.git.dirtyPaths.map((path) => valueState(path)) : [],
@@ -14152,6 +17100,11 @@ Object.freeze({
 var READONLY_ERROR_MESSAGE = "读取失败 / contract 未暴露 / 不可用";
 var GOAL_PLAN_PREVIEW_ERROR_MESSAGE = "dry-run plan preview 未返回可用 contract";
 var GOAL_PLAN_CONFIRM_ERROR_MESSAGE = "event confirm 未返回可用 contract";
+var CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE = "implementation confirm 未返回可用 contract";
+var CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE = "verification confirm 未返回可用 contract";
+var CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE = "adoption plan freeze 未返回可用 contract";
+var CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE = "adoption confirm 未返回可用 contract";
+var ADOPTION_INSPECT_ERROR_MESSAGE = "adoption inspect 未返回可用 contract";
 var PROMPT_WORKSPACE_ERROR_MESSAGE = "prompt workspace route 未返回可用 contract";
 async function fetchReadonlyRoute(route, { fetchImpl = globalThis.fetch } = {}) {
 	if (typeof fetchImpl !== "function") return readonlyError({
@@ -14209,7 +17162,9 @@ async function fetchWorkbenchContracts(options = {}) {
 	const activeGoalProgressRoute = createGoalProgressRoute(activeGoalId);
 	const activeGoalEventsRoute = createGoalEventsRoute(activeGoalId);
 	const activeGoalOperationsRoute = createGoalOperationsRoute(activeGoalId);
+	const activeReleaseBaselineRoute = createReleaseBaselineRoute(activeGoalId);
 	const goalReviewerPromptRoute = createGoalReviewerPromptRoute(activeGoalId, results.goalNextAction?.data);
+	const controlledImplementationPlanPreviewRoute = createControlledImplementationPlanPreviewRoute(activeGoalId, results.goalNextAction?.data);
 	const timelineRoute = createRunTimelineRoute(latestRunIdFromResults(results));
 	results.guidedGoalHandoff = guidedGoalHandoffRoute === null ? readonlySkipped({
 		route: GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
@@ -14239,6 +17194,19 @@ async function fetchWorkbenchContracts(options = {}) {
 		},
 		message: "active goal operations 未暴露 / 不可用"
 	}) : await fetchReadonlyRoute(activeGoalOperationsRoute, options);
+	results.activeReleaseBaseline = activeReleaseBaselineRoute === null ? readonlySkipped({
+		route: {
+			...RELEASE_BASELINE_ROUTE_TEMPLATE,
+			id: "activeReleaseBaseline",
+			label: "Active Release Baseline"
+		},
+		message: "release baseline 未暴露 / 不可用"
+	}) : await fetchReadonlyRoute(activeReleaseBaselineRoute, options);
+	const adoptionInspectRoute = createAdoptionInspectRoute(results.activeGoalOperations?.data);
+	results.adoptionInspect = adoptionInspectRoute === null ? readonlySkipped({
+		route: ADOPTION_INSPECT_ROUTE_TEMPLATE,
+		message: "adoption inspect 未暴露 / 不适用"
+	}) : await fetchReadonlyRoute(adoptionInspectRoute, options);
 	results.goalReviewerPromptPack = goalReviewerPromptRoute === null ? readonlySkipped({
 		route: {
 			...GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
@@ -14247,6 +17215,14 @@ async function fetchWorkbenchContracts(options = {}) {
 		},
 		message: "reviewer goal prompt 未暴露 / 不适用"
 	}) : await fetchReadonlyRoute(goalReviewerPromptRoute, options);
+	results.controlledImplementationPlanPreview = controlledImplementationPlanPreviewRoute === null ? readonlySkipped({
+		route: {
+			...CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
+			id: "controlledImplementationPlanPreview",
+			label: "Controlled Implementation Plan Preview"
+		},
+		message: "controlled implementation plan preview 未暴露 / 不适用"
+	}) : await fetchReadonlyRoute(controlledImplementationPlanPreviewRoute, options);
 	results.latestRunTimeline = timelineRoute === null ? readonlySkipped({
 		route: RUN_TIMELINE_ROUTE_TEMPLATE,
 		message: "暂无 timeline / 未暴露 / 不可用"
@@ -14353,6 +17329,277 @@ async function confirmGoalEventPlan(path, body, { fetchImpl = globalThis.fetch }
 		ok: false,
 		httpStatus: response.status,
 		message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
+async function confirmControlledImplementationRunPlan(path, body, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "POST",
+			cache: "no-store",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify(body)
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== "controlled-implementation-run-confirmation.v1") return {
+		ok: false,
+		httpStatus: response.status,
+		message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
+async function confirmControlledVerificationRun(path, body, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "POST",
+			cache: "no-store",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify(body)
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== "controlled-verification-run-confirmation.v1") return {
+		ok: false,
+		httpStatus: response.status,
+		message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
+async function confirmControlledAdoptionPlanFreeze(path, body, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "POST",
+			cache: "no-store",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify(body)
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== "controlled-adoption-plan-freeze.v1") return {
+		ok: false,
+		httpStatus: response.status,
+		message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
+async function confirmControlledAdoptionPlan(path, body, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "POST",
+			cache: "no-store",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify(body)
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE.contractName) return {
+		ok: false,
+		httpStatus: response.status,
+		message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
+async function fetchAdoptionInspection(path, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: ADOPTION_INSPECT_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "GET",
+			cache: "no-store",
+			headers: { Accept: "application/json" }
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: ADOPTION_INSPECT_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: ADOPTION_INSPECT_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== ADOPTION_INSPECT_ROUTE_TEMPLATE.contractName) return {
+		ok: false,
+		httpStatus: response.status,
+		message: ADOPTION_INSPECT_ERROR_MESSAGE,
 		errorEnvelope: null
 	};
 	return {
@@ -14611,6 +17858,11 @@ var WORKBENCH_NAV_ITEMS = Object.freeze([
 		targetId: "main-verification-readiness-panel"
 	}),
 	Object.freeze({
+		id: "release",
+		label: "Release",
+		targetId: "closeout-gaps-panel"
+	}),
+	Object.freeze({
 		id: "closeout",
 		label: "Closeout",
 		targetId: "closeout-gaps-panel"
@@ -14774,14 +18026,53 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					})]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "implementation-eligibility-grid",
+					"aria-label": "v29 active task implementation eligibility",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveTaskImplementationEligibilityPanel, { eligibility: model.activeGoal.activeTaskImplementationEligibility })
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "implementation-plan-preview-grid",
+					"aria-label": "v29 controlled implementation plan preview",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ControlledImplementationPlanPreviewPanel, {
+						preview: model.activeGoal.controlledImplementationPlanPreview,
+						onControlledImplementationConfirmed: onRefreshWorkbenchContracts
+					})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "main-verification-readiness-grid",
 					"aria-label": "v24 main verification readiness",
-					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MainVerificationReadinessPanel, { readiness: model.activeGoal.mainVerificationReadiness })
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MainVerificationReadinessPanel, {
+							readiness: model.activeGoal.mainVerificationReadiness,
+							onVerificationRunConfirmed: onRefreshWorkbenchContracts
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MainVerificationEvidenceDraftPanel, { draft: model.activeGoal.mainVerificationEvidenceDraft }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(MainVerificationGateRegistrationPanel, {
+							registration: model.activeGoal.mainVerificationGateRegistration,
+							onGoalEventConfirmed: onRefreshWorkbenchContracts
+						})
+					]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
 					className: "adoption-candidate-grid",
-					"aria-label": "v26 adoption candidates",
+					"aria-label": "v30 adoption candidate normalization",
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionCandidatePanel, { candidates: model.adoptionCandidates })
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "adoption-plan-preview-grid",
+					"aria-label": "v30 adoption plan preview workspace",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionPlanPreviewWorkspacePanel, {
+						workspace: model.adoptionPlanPreviewWorkspace,
+						onAdoptionPlanFrozen: onRefreshWorkbenchContracts
+					})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "adoption-inspect-grid",
+					"aria-label": "v30 adoption inspect and recovery view",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionInspectRecoveryPanel, {
+						workspace: model.adoptionInspectRecoveryWorkspace,
+						onAdoptionConfirmed: onRefreshWorkbenchContracts
+					})
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "active-goal-grid",
@@ -16009,10 +19300,10 @@ function ActiveGoalViewModelPanel({ viewModel }) {
 		]
 	});
 }
-function MainVerificationReadinessPanel({ readiness }) {
+function MainVerificationReadinessPanel({ readiness, onVerificationRunConfirmed = () => void 0 }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "main-verification-readiness-panel",
-		kicker: "v24 main verification",
+		kicker: "v31 main verification",
 		title: "Main Verification Readiness",
 		state: readiness.state,
 		route: null,
@@ -16028,6 +19319,10 @@ function MainVerificationReadinessPanel({ readiness }) {
 				["closeout missing", readiness.readiness.closeoutMissingKinds],
 				["source policy", readiness.sourcePolicy]
 			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+				items: readiness.readiness.blockers,
+				emptyCopy: "readiness blockers 未暴露。"
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "reviewer.approved",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
@@ -16041,23 +19336,26 @@ function MainVerificationReadinessPanel({ readiness }) {
 					["source", readiness.reviewerApproval.source]
 				] })
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
-				title: "branch / main state",
-				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-					["state", readiness.branchState.state],
-					["currentBranch", readiness.branchState.currentBranch],
-					["currentHead", readiness.branchState.currentHead],
-					["taskBranch", readiness.branchState.taskBranch],
-					["mainBranch", readiness.branchState.mainBranch],
-					["git.status", readiness.branchState.gitStatus],
-					["worktreeDirty", readiness.branchState.worktreeDirty],
-					["dirtyFilesCount", readiness.branchState.dirtyFilesCount],
-					["ffOnlyAvailableAfterCheckoutMain", readiness.branchState.ffOnlyAvailableAfterCheckoutMain],
-					["source", readiness.branchState.source]
-				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
-					items: readiness.branchState.dirtyPaths,
-					emptyCopy: "dirty paths 为空或未暴露。"
-				})]
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "adoption state",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["status", readiness.adoptionState.status],
+					["required", readiness.adoptionState.required],
+					["applied", readiness.adoptionState.applied],
+					["adoptionPlanId", readiness.adoptionState.adoptionPlanId],
+					["planOperationId", readiness.adoptionState.planOperationId],
+					["planOperationStatus", readiness.adoptionState.planOperationStatus],
+					["confirmOperationId", readiness.adoptionState.confirmOperationId],
+					["confirmOperationStatus", readiness.adoptionState.confirmOperationStatus],
+					["confirmationRunStatus", readiness.adoptionState.confirmationRunStatus],
+					["inspectRouteState", readiness.adoptionState.inspectRouteState],
+					["inspectStatus", readiness.adoptionState.inspectStatus],
+					["journalStatus", readiness.adoptionState.journalStatus],
+					["currentWorktreeMatchesAfterHash", readiness.adoptionState.currentWorktreeMatchesAfterHash],
+					["currentWorktreeMatchesJournalBeforeFiles", readiness.adoptionState.currentWorktreeMatchesJournalBeforeFiles],
+					["source", readiness.adoptionState.source],
+					["note", readiness.adoptionState.note]
+				] })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
 				title: "ff-only merge guidance",
@@ -16074,6 +19372,13 @@ function MainVerificationReadinessPanel({ readiness }) {
 				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "allowlisted verification plan preview",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AllowlistedVerificationPlanPreview, {
+					preview: readiness.verificationPlanPreview,
+					onVerificationRunConfirmed
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "evidence path",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 					["path", readiness.evidence.path],
@@ -16083,6 +19388,20 @@ function MainVerificationReadinessPanel({ readiness }) {
 				] })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "explicit state sources",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: readiness.explicitStateSources,
+					emptyCopy: "explicit state sources 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "ignored inference sources",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: readiness.ignoredInferenceSources,
+					emptyCopy: "ignored inference sources 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "safety",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 					["readOnly", readiness.safety.readOnly],
@@ -16090,12 +19409,385 @@ function MainVerificationReadinessPanel({ readiness }) {
 					["browserExecutionAvailable", readiness.safety.browserExecutionAvailable],
 					["modelInvocationAvailable", readiness.safety.modelInvocationAvailable],
 					["approvalReadinessSource", readiness.safety.approvalReadinessSource],
+					["adoptionReadinessSource", readiness.safety.adoptionReadinessSource],
 					["unsupportedInferenceSources", readiness.safety.unsupportedInferenceSources]
 				] })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: readiness.note
+			})
+		]
+	});
+}
+function AllowlistedVerificationPlanPreview({ preview, onVerificationRunConfirmed = () => void 0 }) {
+	const [runState, setRunState] = (0, import_react.useState)({
+		phase: "idle",
+		result: null,
+		error: null
+	});
+	if (preview?.state === "missing" || preview === void 0 || preview === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "allowlisted verification plan preview 未暴露。" });
+	const startRoute = preview.operationStart?.endpoint?.route?.value;
+	const startBody = buildControlledVerificationRunBody(preview);
+	const startAvailable = preview.operationStart?.available?.value === true && typeof startRoute === "string" && startRoute.trim() !== "" && startBody !== null;
+	async function handleConfirm() {
+		if (!startAvailable) {
+			setRunState({
+				phase: "failed",
+				result: null,
+				error: "verification run endpoint unavailable"
+			});
+			return;
+		}
+		setRunState({
+			phase: "loading",
+			result: null,
+			error: null
+		});
+		const result = await confirmControlledVerificationRun(startRoute, startBody);
+		if (result.ok) {
+			setRunState({
+				phase: "ready",
+				result: result.data,
+				error: null
+			});
+			if (typeof onVerificationRunConfirmed === "function") await onVerificationRunConfirmed(result.data);
+			return;
+		}
+		setRunState({
+			phase: "failed",
+			result: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "verification-plan-preview",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", preview.modelName],
+				["goalId", preview.goalId],
+				["taskId", preview.taskId],
+				["title", preview.title],
+				["command count", preview.commandCount],
+				["rejected task command count", preview.rejectedTaskCommandCount],
+				["source policy", preview.sourcePolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "active goal/task/run/evidence context",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["context source", preview.context.sourcePolicy],
+					["activeGoalId", preview.context.activeGoalId],
+					["activeTaskId", preview.context.activeTaskId],
+					["latestRunId", preview.context.latestRunId],
+					["latestRunStatus", preview.context.latestRunStatus],
+					["workerEvidenceRef", preview.context.workerEvidenceRef],
+					["reviewEvidenceRef", preview.context.reviewEvidenceRef],
+					["adoptionPlanOperationId", preview.context.adoptionPlanOperationId],
+					["adoptionConfirmOperationId", preview.context.adoptionConfirmOperationId],
+					["existingMainVerificationRef", preview.context.existingMainVerificationRef],
+					["existingMainVerificationEventId", preview.context.existingMainVerificationEventId]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(VerificationPlanCommandList, { commands: preview.commands }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "controlled verification operation",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["available", preview.operationStart?.available],
+						["suiteId", preview.operationStart?.suiteId],
+						["endpoint.method", preview.operationStart?.endpoint?.method],
+						["endpoint.route", preview.operationStart?.endpoint?.route],
+						["endpoint.allowedBodyFields", preview.operationStart?.endpoint?.allowedBodyFields],
+						["resultContract", preview.operationStart?.resultContract],
+						["operationKind", preview.operationStart?.operationKind],
+						["operationRegistryContract", preview.operationStart?.operationRegistryContract]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "goal-event-confirm-actions",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: handleConfirm,
+							disabled: !startAvailable || runState.phase === "loading",
+							children: "Start controlled verification run"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: startRoute ?? "verification run route unavailable" })]
+					}),
+					runState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "error-copy",
+						children: ["verification 错误摘要：", runState.error]
+					}) : null,
+					runState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "empty-copy",
+						children: "正在运行固定 verification command suite。Operation Console 会从 registry 刷新状态和输出摘要。"
+					}) : null,
+					runState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "goal-event-confirm-result",
+						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+							["contractName", textValue(runState.result.contractName)],
+							["status", textValue(runState.result.status)],
+							["suiteId", textValue(runState.result.suiteId)],
+							["operationId", textValue(runState.result.operationRun?.operationId)],
+							["operationStatus", textValue(runState.result.operationRun?.status)],
+							["exitCode", textValue(runState.result.output?.exitCode)],
+							["commandCount", textValue(runState.result.runResult?.commandCount)],
+							["failedCommandCount", textValue(runState.result.runResult?.failedCommandCount)],
+							["successImpliesGatePassed", textValue(runState.result.safety?.successImpliesGatePassed)]
+						] })
+					}) : null
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "fixed verification allowlist",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: preview.requiredVerificationCommands,
+					emptyCopy: "fixed verification allowlist 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "task-scoped controlled commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: preview.taskScopedControlledCommands,
+					emptyCopy: "task-scoped controlled commands 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["copyOnly", preview.safety.copyOnly],
+					["commandInputAccepted", preview.safety.commandInputAccepted],
+					["arbitraryShellAccepted", preview.safety.arbitraryShellAccepted],
+					["browserExecutionAvailable", preview.safety.browserExecutionAvailable],
+					["modelInvocationAvailable", preview.safety.modelInvocationAvailable],
+					["genericShellRunner", preview.safety.genericShellRunner],
+					["controlledOperationStartAvailable", preview.safety.controlledOperationStartAvailable],
+					["writesGoalEvents", preview.safety.writesGoalEvents],
+					["registersGates", preview.safety.registersGates]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "explicit contracts",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: preview.explicitContracts,
+					emptyCopy: "explicit contracts 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "ignored inference sources",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: preview.ignoredInferenceSources,
+					emptyCopy: "ignored inference sources 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: preview.note
+			})
+		]
+	});
+}
+function VerificationPlanCommandList({ commands }) {
+	if (commands?.state === "missing" || commands === void 0 || commands === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "verification plan commands 未暴露。" });
+	if (!Array.isArray(commands.items) || commands.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "verification plan commands 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
+		className: "verification-plan-command-list",
+		"aria-label": "allowlisted verification commands",
+		children: commands.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.command.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["kind", item.kind],
+			["source", item.source],
+			["copyOnly", item.copyOnly],
+			["browserExecutionAvailable", item.browserExecutionAvailable],
+			["acceptsArbitraryInput", item.acceptsArbitraryInput]
+		] })] }, `${item.index.text}-${item.command.text}`))
+	});
+}
+function MainVerificationEvidenceDraftPanel({ draft }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "main-verification-evidence-draft-panel",
+		kicker: "v31 main verification",
+		title: "Main Verification Evidence Draft",
+		state: draft?.state ?? "missing",
+		route: null,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", draft?.modelName],
+				["goalId", draft?.goalId],
+				["taskId", draft?.taskId],
+				["title", draft?.title],
+				["targetEvidenceRef", draft?.targetEvidenceRef],
+				["status", draft?.status],
+				["copy-only gate dry-run", draft?.copyOnlyGateDryRun],
+				["sourcePolicy", draft?.sourcePolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "missing inputs / blockers",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: draft?.missingInputs,
+					emptyCopy: "draft blocker 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "verification operation refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["operationId", draft?.verification?.operationId],
+					["operationStatus", draft?.verification?.operationStatus],
+					["source", draft?.verification?.source],
+					["runId", draft?.verification?.runId],
+					["suiteId", draft?.verification?.suiteId],
+					["runStatus", draft?.verification?.runStatus],
+					["exitCode", draft?.verification?.exitCode],
+					["commandCount", draft?.verification?.commandCount],
+					["failedCommandCount", draft?.verification?.failedCommandCount],
+					["gatePassed", draft?.verification?.gatePassed],
+					["planHash", draft?.verification?.planHash],
+					["failureReason", draft?.verification?.failureReason]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "verification command results",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MainVerificationDraftCommandResultList, { commandResults: draft?.commandResults })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "review evidence and run refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["workerEvidenceRef", draft?.refs?.workerEvidenceRef],
+					["reviewEvidenceRef", draft?.refs?.reviewEvidenceRef],
+					["latestRunId", draft?.refs?.latestRunId],
+					["existingMainVerificationRef", draft?.refs?.existingMainVerificationRef],
+					["existingMainVerificationEventId", draft?.refs?.existingMainVerificationEventId]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "adoption refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["adoptionPlanId", draft?.adoptionRefs?.adoptionPlanId],
+					["adoptionPlanOperationId", draft?.adoptionRefs?.adoptionPlanOperationId],
+					["adoptionPlanArtifactPath", draft?.adoptionRefs?.adoptionPlanArtifactPath],
+					["adoptionConfirmOperationId", draft?.adoptionRefs?.adoptionConfirmOperationId],
+					["adoptionConfirmStatus", draft?.adoptionRefs?.adoptionConfirmStatus],
+					["latestConfirmationRunId", draft?.adoptionRefs?.latestConfirmationRunId],
+					["latestConfirmationEvidenceArtifactPath", draft?.adoptionRefs?.latestConfirmationEvidenceArtifactPath],
+					["journalStatus", draft?.adoptionRefs?.journalStatus]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "draft needing operator / reviewer check",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["draft markdown", draft?.markdown],
+					["draftOnly", draft?.safety?.draftOnly],
+					["needsOperatorReview", draft?.safety?.needsOperatorReview],
+					["requiresOperatorReview", draft?.safety?.requiresOperatorReview],
+					["declaresPassed", draft?.safety?.declaresPassed],
+					["registersGates", draft?.safety?.registersGates],
+					["writesEvidenceFile", draft?.safety?.writesEvidenceFile],
+					["writesFiles", draft?.safety?.writesFiles]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+					className: "prompt-preview-text",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: draft?.markdown?.text ?? "" })
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readsEvidenceBodies", draft?.safety?.readsEvidenceBodies],
+					["writesFiles", draft?.safety?.writesFiles],
+					["registersGates", draft?.safety?.registersGates],
+					["browserExecutionAvailable", draft?.safety?.browserExecutionAvailable],
+					["arbitraryShellAccepted", draft?.safety?.arbitraryShellAccepted],
+					["modelInvocationAvailable", draft?.safety?.modelInvocationAvailable],
+					["declaresPassed", draft?.safety?.declaresPassed],
+					["successImpliesGatePassed", draft?.safety?.successImpliesGatePassed],
+					["selfApprovalAvailable", draft?.safety?.selfApprovalAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: draft?.note ?? "Main verification evidence draft is unavailable until explicit goal and verification contracts load."
+			})
+		]
+	});
+}
+function MainVerificationDraftCommandResultList({ commandResults }) {
+	const items = commandResults?.items ?? [];
+	if (items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "verification command results 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
+		className: "verification-plan-command-list",
+		"aria-label": "main verification evidence draft command results",
+		children: items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.command.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["status", item.status],
+			["exitCode", item.exitCode],
+			["stdoutSummary", item.stdoutSummary],
+			["stderrSummary", item.stderrSummary],
+			["startedAt", item.startedAt],
+			["completedAt", item.completedAt]
+		] })] }, `${item.command.text}-${index}`))
+	});
+}
+function MainVerificationGateRegistrationPanel({ registration, onGoalEventConfirmed }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "main-verification-gate-registration-panel",
+		kicker: "v31 main verification",
+		title: "Main Verification Gate Registration",
+		state: registration?.state ?? "missing",
+		route: null,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", registration?.modelName],
+				["goalId", registration?.goalId],
+				["taskId", registration?.taskId],
+				["title", registration?.title],
+				["targetEvidenceRef", registration?.targetEvidenceRef],
+				["existingMainVerificationRef", registration?.existingMainVerificationRef],
+				["existingMainVerificationEventId", registration?.existingMainVerificationEventId],
+				["verificationOperationId", registration?.verificationOperationId],
+				["verificationRunId", registration?.verificationRunId],
+				["readinessState", registration?.readinessState],
+				["draftState", registration?.draftState],
+				["dryRunCommand", registration?.dryRunCommand],
+				["confirmCommandPattern", registration?.confirmCommandPattern],
+				["sourcePolicy", registration?.sourcePolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "registration blockers",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: registration?.missingInputs,
+					emptyCopy: "registration blockers 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "main-verification gate form",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
+					forms: {
+						state: registration?.form === null || registration?.form === void 0 ? "empty" : "available",
+						count: textValue(registration?.form === null || registration?.form === void 0 ? 0 : 1),
+						items: registration?.form === null || registration?.form === void 0 ? [] : [registration.form]
+					},
+					emptyCopy: "main-verification gate form 不可用。",
+					onGoalEventConfirmed
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["confirmRequiresPlanHash", registration?.safety?.confirmRequiresPlanHash],
+					["appendOnlyOnConfirm", registration?.safety?.appendOnlyOnConfirm],
+					["workbenchWriteAvailable", registration?.safety?.workbenchWriteAvailable],
+					["usesGoalGateOnly", registration?.safety?.usesGoalGateOnly],
+					["requiresMainVerifierInput", registration?.safety?.requiresMainVerifierInput],
+					["readsEvidenceBodies", registration?.safety?.readsEvidenceBodies],
+					["writesEvidenceFile", registration?.safety?.writesEvidenceFile],
+					["browserExecutionAvailable", registration?.safety?.browserExecutionAvailable],
+					["arbitraryShellAccepted", registration?.safety?.arbitraryShellAccepted],
+					["modelInvocationAvailable", registration?.safety?.modelInvocationAvailable],
+					["mergeAvailable", registration?.safety?.mergeAvailable],
+					["pushAvailable", registration?.safety?.pushAvailable],
+					["tagAvailable", registration?.safety?.tagAvailable],
+					["releaseReadyAvailable", registration?.safety?.releaseReadyAvailable],
+					["selfApprovalAvailable", registration?.safety?.selfApprovalAvailable],
+					["successImpliesGatePassed", registration?.safety?.successImpliesGatePassed]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: registration?.note?.text ?? registration?.note
 			})
 		]
 	});
@@ -16195,6 +19887,429 @@ function ActiveGoalTaskQueuePanel({ taskQueue, route, progressRoute, eventsRoute
 			})
 		]
 	});
+}
+function ActiveTaskImplementationEligibilityPanel({ eligibility }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "active-task-implementation-eligibility-panel",
+		kicker: "v29 active task",
+		title: "Active Task Implementation Eligibility",
+		state: implementationEligibilityStateText(eligibility),
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", eligibility.modelName],
+				["goalId", eligibility.goalId],
+				["taskId", eligibility.taskId],
+				["title", eligibility.title],
+				["canEnterControlledImplementation", eligibility.canEnterControlledImplementation],
+				["decision.status", eligibility.decision.status],
+				["decision.reason", eligibility.decision.reason],
+				["currentNextRole", eligibility.decision.currentNextRole],
+				["currentNextPhase", eligibility.decision.currentNextPhase],
+				["currentNextStatus", eligibility.decision.currentNextStatus],
+				["currentNextBlocked", eligibility.decision.currentNextBlocked],
+				["sourcePolicy", eligibility.sourcePolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "route context",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["route.goalId", eligibility.routeContext.goalId],
+					["route.taskId", eligibility.routeContext.taskId],
+					["route.activeRole", eligibility.routeContext.activeRole],
+					["route.activePhase", eligibility.routeContext.activePhase],
+					["route.operationId", eligibility.routeContext.operationId],
+					["route.goalMatches", eligibility.routeContext.goalMatches],
+					["route.taskMatches", eligibility.routeContext.taskMatches]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "required contracts",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["goal-status route", eligibility.requiredContracts.goalStatusRoute],
+					["goal next route", eligibility.requiredContracts.goalNextRoute],
+					["runbook route", eligibility.requiredContracts.runbookRoute],
+					["events route", eligibility.requiredContracts.eventsRoute],
+					["operations route", eligibility.requiredContracts.operationsRoute],
+					["goalStatusTaskPresent", eligibility.requiredContracts.goalStatusTaskPresent],
+					["runbookTaskPresent", eligibility.requiredContracts.runbookTaskPresent],
+					["scopedEventLogPresent", eligibility.requiredContracts.scopedEventLogPresent]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "goal-status task",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["status", eligibility.goalStatusTask.status],
+					["statusSource", eligibility.goalStatusTask.statusSource],
+					["eventBacked", eligibility.goalStatusTask.eventBacked],
+					["workerEvidenceRef", eligibility.goalStatusTask.workerEvidenceRef],
+					["reviewEvidenceRef", eligibility.goalStatusTask.reviewEvidenceRef],
+					["reviewVerdict", eligibility.goalStatusTask.reviewVerdict],
+					["mainVerificationRef", eligibility.goalStatusTask.mainVerificationRef]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "explicit events",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["task event count", eligibility.explicitEvents.count],
+					["hasOpenBlocker", eligibility.explicitEvents.hasOpenBlocker],
+					["workerStarted.eventId", eligibility.explicitEvents.latestWorkerStarted.eventId],
+					["workerEvidence.eventId", eligibility.explicitEvents.latestWorkerEvidence.eventId],
+					["workerEvidence.evidenceRef", eligibility.explicitEvents.latestWorkerEvidence.evidenceRef],
+					["review.eventId", eligibility.explicitEvents.latestReview.eventId],
+					["review.eventType", eligibility.explicitEvents.latestReview.eventType],
+					["mainVerification.eventId", eligibility.explicitEvents.latestMainVerification.eventId],
+					["blockerOpened.eventId", eligibility.explicitEvents.latestBlockerOpened.eventId],
+					["blockerResolved.eventId", eligibility.explicitEvents.latestBlockerResolved.eventId]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "runbook task",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["branch", eligibility.runbookTask.branch],
+						["roleOrder", eligibility.runbookTask.roleOrder],
+						["expectedWorker", eligibility.runbookTask.expectedWorker]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "acceptance" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+						items: eligibility.runbookTask.acceptance,
+						emptyCopy: "acceptance 未暴露。"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "copy-only commands" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+						items: eligibility.runbookTask.copyOnlyCommands,
+						emptyCopy: "copy-only commands 未暴露。"
+					})
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "next action",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["reason", eligibility.nextAction.reason],
+					["registerWith", eligibility.nextAction.registerWith],
+					["allowedEvents", eligibility.nextAction.allowedEvents],
+					["copyOnlyPromptAvailable", eligibility.nextAction.copyOnlyPromptAvailable],
+					["workerEvidenceRef", eligibility.nextAction.workerEvidenceRef]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "operation context",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["operations route", eligibility.operationContext.routeState],
+					["latestOperationId", eligibility.operationContext.latestOperationId],
+					["latestStatus", eligibility.operationContext.latestStatus],
+					["latestSource", eligibility.operationContext.latestSource],
+					["latestCommandKind", eligibility.operationContext.latestCommandKind],
+					["latestPlanHash", eligibility.operationContext.latestPlanHash]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "blocking reasons",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: eligibility.decision.blockingReasons,
+					emptyCopy: "blocking reasons 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "recovery steps",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: eligibility.recoverySteps,
+					emptyCopy: "recovery steps 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", eligibility.safety.readOnly],
+					["copyOnly", eligibility.safety.copyOnly],
+					["workbenchWriteAvailable", eligibility.safety.workbenchWriteAvailable],
+					["controlledImplementationStartsRun", eligibility.safety.controlledImplementationStartsRun],
+					["browserExecutionAvailable", eligibility.safety.browserExecutionAvailable],
+					["modelInvocationAvailable", eligibility.safety.modelInvocationAvailable],
+					["genericShellRunner", eligibility.safety.genericShellRunner],
+					["approvalReadinessSource", eligibility.safety.approvalReadinessSource],
+					["unsupportedInferenceSources", eligibility.safety.unsupportedInferenceSources]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: eligibility.note
+			})
+		]
+	});
+}
+function ControlledImplementationPlanPreviewPanel({ preview, onControlledImplementationConfirmed = () => void 0 }) {
+	const [confirmState, setConfirmState] = (0, import_react.useState)({
+		phase: "idle",
+		result: null,
+		error: null
+	});
+	const confirmRoute = preview?.confirm?.endpoint?.route?.value;
+	const confirmBody = buildControlledImplementationConfirmBody(preview);
+	const confirmAvailable = preview?.state === "preview-ready" && preview?.confirm?.available?.value === true && typeof confirmRoute === "string" && confirmRoute.trim() !== "" && confirmBody !== null;
+	async function handleConfirm() {
+		if (!confirmAvailable) {
+			setConfirmState({
+				phase: "failed",
+				result: null,
+				error: "confirm route unavailable"
+			});
+			return;
+		}
+		setConfirmState({
+			phase: "loading",
+			result: null,
+			error: null
+		});
+		const result = await confirmControlledImplementationRunPlan(confirmRoute, confirmBody);
+		if (result.ok) {
+			setConfirmState({
+				phase: "ready",
+				result: result.data,
+				error: null
+			});
+			if (typeof onControlledImplementationConfirmed === "function") await onControlledImplementationConfirmed(result.data);
+			return;
+		}
+		setConfirmState({
+			phase: "failed",
+			result: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "controlled-implementation-plan-preview-panel",
+		kicker: "v29 active task",
+		title: "Controlled Implementation Plan Preview",
+		state: preview?.state ?? "unavailable",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", preview?.modelName],
+				["routeState", preview?.routeState],
+				["goalId", preview?.goalId],
+				["taskId", preview?.taskId],
+				["canPreview", preview?.canPreview],
+				["reason", preview?.reason],
+				["planId", preview?.plan?.planId],
+				["planHash", preview?.plan?.planHash],
+				["mode", preview?.plan?.mode],
+				["status", preview?.plan?.status],
+				["commandName", preview?.plan?.commandName],
+				["previewOf", preview?.plan?.previewOf],
+				["confirmRequired", preview?.plan?.confirmRequired]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "write semantics",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["safetyMode", preview?.writeSemantics?.safetyMode],
+					["writeBoundary", preview?.writeSemantics?.writeBoundary],
+					["mainWorktreeWrites", preview?.writeSemantics?.mainWorktreeWrites],
+					["workspaceWrites", preview?.writeSemantics?.workspaceWrites],
+					["runtimeWrites", preview?.writeSemantics?.runtimeWrites],
+					["destructiveWrites", preview?.writeSemantics?.destructiveWrites]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "active task constraints",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["title", preview?.activeTaskConstraints?.title],
+						["branch", preview?.activeTaskConstraints?.branch],
+						["roleOrder", preview?.activeTaskConstraints?.roleOrder],
+						["expectedWorkerEvidence", preview?.activeTaskConstraints?.expectedWorkerEvidence]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "acceptance" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+						items: preview?.activeTaskConstraints?.acceptance,
+						emptyCopy: "acceptance 未暴露。"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "copy-only commands" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+						items: preview?.activeTaskConstraints?.copyOnlyCommands,
+						emptyCopy: "copy-only commands 未暴露。"
+					})
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "worker prompt",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["available", preview?.workerPrompt?.available],
+					["copyOnly", preview?.workerPrompt?.copyOnly],
+					["format", preview?.workerPrompt?.format],
+					["role", preview?.workerPrompt?.role]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CopyBlock, {
+					value: preview?.workerPrompt?.text?.value,
+					emptyCopy: "worker prompt 未暴露。"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "goal/task/evidence refs",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["currentWorkerEvidenceRef", preview?.evidenceRefs?.currentWorkerEvidenceRef],
+					["currentReviewEvidenceRef", preview?.evidenceRefs?.currentReviewEvidenceRef],
+					["currentMainVerificationRef", preview?.evidenceRefs?.currentMainVerificationRef]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefItemList, { refs: preview?.evidenceRefs?.explicitEventEvidenceRefs })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "confirm handoff",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["available", preview?.confirm?.available],
+						["enabledByTask", preview?.confirm?.enabledByTask],
+						["requiredContext", preview?.confirm?.requiredContext],
+						["copyOnlyCommand", preview?.confirm?.copyOnlyCommand],
+						["endpoint.method", preview?.confirm?.endpoint?.method],
+						["endpoint.route", preview?.confirm?.endpoint?.route],
+						["endpoint.allowedBodyFields", preview?.confirm?.endpoint?.allowedBodyFields],
+						["endpoint.requiresSameGoalTaskContext", preview?.confirm?.endpoint?.requiresSameGoalTaskContext],
+						["endpoint.confirmUsesPlanHash", preview?.confirm?.endpoint?.confirmUsesPlanHash]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "goal-event-confirm-actions",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: handleConfirm,
+							disabled: !confirmAvailable || confirmState.phase === "loading",
+							children: "Confirm isolated workspace run"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: confirmRoute ?? "confirm route unavailable" })]
+					}),
+					confirmState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "error-copy",
+						children: ["confirm 错误摘要：", confirmState.error]
+					}) : null,
+					confirmState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "empty-copy",
+						children: "正在确认 frozen implementation plan，并启动 isolated workspace run path。"
+					}) : null,
+					confirmState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "goal-event-confirm-result",
+						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+							["contractName", textValue(confirmState.result.contractName)],
+							["status", textValue(confirmState.result.status)],
+							["planId", textValue(confirmState.result.planId)],
+							["planHash", textValue(confirmState.result.planHash)],
+							["runId", textValue(confirmState.result.confirmedRun?.runId)],
+							["executionPlanId", textValue(confirmState.result.confirmedRun?.executionPlanId)],
+							["writeBoundary", textValue(confirmState.result.confirmedRun?.writeBoundary)],
+							["mainWorktreeWrites", textValue(confirmState.result.confirmedRun?.mainWorktreeWrites)],
+							["workspaceWrites", textValue(confirmState.result.confirmedRun?.workspaceWrites)],
+							["verifierStatus", textValue(confirmState.result.confirmedRun?.verifierStatus)]
+						] })
+					}) : null
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "run result bridge",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["state", textValue(preview?.runResultBridge?.state)],
+						["sourceContract", preview?.runResultBridge?.sourceContract],
+						["operationId", preview?.runResultBridge?.operationId],
+						["operationStatus", preview?.runResultBridge?.operationStatus],
+						["commandKind", preview?.runResultBridge?.commandKind],
+						["runId", preview?.runResultBridge?.run?.runId],
+						["executionPlanId", preview?.runResultBridge?.run?.executionPlanId],
+						["run.status", preview?.runResultBridge?.run?.status],
+						["run.exitCode", preview?.runResultBridge?.run?.exitCode],
+						["verifierStatus", preview?.runResultBridge?.run?.verifierStatus],
+						["writeBoundary", preview?.runResultBridge?.run?.writeBoundary],
+						["mainWorktreeWrites", preview?.runResultBridge?.run?.mainWorktreeWrites],
+						["workspaceWrites", preview?.runResultBridge?.run?.workspaceWrites],
+						["evidenceArtifactPath", preview?.runResultBridge?.run?.evidenceArtifactPath],
+						["sourceWorkspacePath", preview?.runResultBridge?.run?.sourceWorkspacePath],
+						["artifact count", preview?.runResultBridge?.artifactRefs?.count],
+						["changed files", textValue(preview?.runResultBridge?.changedFiles?.items?.length ?? 0)],
+						["failureReason", preview?.runResultBridge?.run?.failureReason]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "artifact refs" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OperationArtifactRefList, { artifactRefs: preview?.runResultBridge?.artifactRefs }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "verifier summary" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["status", preview?.runResultBridge?.verifierSummary?.status],
+						["runStatus", preview?.runResultBridge?.verifierSummary?.runStatus],
+						["passed", preview?.runResultBridge?.verifierSummary?.passed],
+						["changedFileCount", preview?.runResultBridge?.verifierSummary?.changedFileCount],
+						["artifactCount", preview?.runResultBridge?.verifierSummary?.artifactCount],
+						["failureReason", preview?.runResultBridge?.verifierSummary?.failureReason]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "output summary" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "operation-console-streams",
+						"aria-label": "implementation run output summary",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "stdout" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: preview?.runResultBridge?.outputSummary?.stdout?.text }) })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "stderr" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: preview?.runResultBridge?.outputSummary?.stderr?.text }) })] })]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "panel-note",
+						children: preview?.runResultBridge?.note
+					})
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "endpoint",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["method", preview?.endpoint?.method],
+					["route", preview?.endpoint?.route],
+					["allowedQueryFields", preview?.endpoint?.allowedQueryFields],
+					["rejectsPromptInput", preview?.endpoint?.rejectsPromptInput],
+					["rejectsPlanHashInput", preview?.endpoint?.rejectsPlanHashInput],
+					["rejectsConfirmInput", preview?.endpoint?.rejectsConfirmInput],
+					["writesInDryRun", preview?.endpoint?.writesInDryRun],
+					["genericShellRunner", preview?.endpoint?.genericShellRunner]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", preview?.safety?.readOnly],
+					["copyOnly", preview?.safety?.copyOnly],
+					["workbenchWriteAvailable", preview?.safety?.workbenchWriteAvailable],
+					["browserExecutionAvailable", preview?.safety?.browserExecutionAvailable],
+					["modelInvocationAvailable", preview?.safety?.modelInvocationAvailable],
+					["genericShellRunner", preview?.safety?.genericShellRunner],
+					["arbitraryPathReadAvailable", preview?.safety?.arbitraryPathReadAvailable],
+					["implementationRunStarted", preview?.safety?.implementationRunStarted],
+					["approvalReadinessSource", preview?.safety?.approvalReadinessSource],
+					["unsupportedInferenceSources", preview?.safety?.unsupportedInferenceSources]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: preview?.note
+			})
+		]
+	});
+}
+function buildControlledImplementationConfirmBody(preview) {
+	const goalId = preview?.goalId?.value;
+	const taskId = preview?.taskId?.value;
+	const planId = preview?.plan?.planId?.value;
+	const planHash = preview?.plan?.planHash?.value;
+	if (![
+		goalId,
+		taskId,
+		planId,
+		planHash
+	].every((value) => typeof value === "string" && value.trim() !== "")) return null;
+	return {
+		goalId,
+		taskId,
+		planId,
+		planHash
+	};
+}
+function buildControlledVerificationRunBody(preview) {
+	const goalId = preview?.goalId?.value;
+	const taskId = preview?.taskId?.value;
+	const suiteId = preview?.operationStart?.suiteId?.value;
+	if (![
+		goalId,
+		taskId,
+		suiteId
+	].every((value) => typeof value === "string" && value.trim() !== "")) return null;
+	return {
+		goalId,
+		taskId,
+		suiteId
+	};
 }
 function NextActionCard({ nextAction, route, onGoalEventConfirmed }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
@@ -16580,6 +20695,10 @@ function CloseoutGapsPanel({ closeoutGaps, route, onGoalEventConfirmed = () => v
 				["nextAction", closeoutGaps.nextAction]
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "release baseline resolver",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseBaselineResolver, { baseline: closeoutGaps.releaseBaseline })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "missing evidence and gates",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CloseoutMissingList, { missing: closeoutGaps.missing })
 			}),
@@ -16594,7 +20713,10 @@ function CloseoutGapsPanel({ closeoutGaps, route, onGoalEventConfirmed = () => v
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "release verification checklist",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseVerificationChecklist, { checklist: closeoutGaps.verificationChecklist })
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseVerificationChecklist, {
+					checklist: closeoutGaps.verificationChecklist,
+					onGoalEventConfirmed
+				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "release.ready gate registration",
@@ -16604,8 +20726,16 @@ function CloseoutGapsPanel({ closeoutGaps, route, onGoalEventConfirmed = () => v
 				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "tag evidence prompt",
+				title: "release evidence draft",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseEvidenceDraft, { draft: closeoutGaps.releaseEvidenceDraft })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "tag evidence draft / prompt",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TagEvidencePrompt, { prompt: closeoutGaps.tagEvidencePrompt })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "next-version handoff draft",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextVersionHandoffDraft, { draft: closeoutGaps.nextVersionHandoffDraft })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "safety",
@@ -16627,7 +20757,111 @@ function CloseoutGapsPanel({ closeoutGaps, route, onGoalEventConfirmed = () => v
 		]
 	});
 }
-function ReleaseVerificationChecklist({ checklist }) {
+function ReleaseBaselineResolver({ baseline }) {
+	if (baseline?.state === "missing" || baseline === void 0 || baseline === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release baseline resolver 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "release-baseline-resolver",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", baseline.modelName],
+				["state", textValue(baseline.state)],
+				["sourcePolicy", baseline.sourcePolicy],
+				["goalId", baseline.goalId],
+				["taskId", baseline.taskId],
+				["role", baseline.role],
+				["phase", baseline.phase],
+				["reason", baseline.reason],
+				["activeTaskTitle", baseline.activeTaskTitle],
+				["activeTaskBranch", baseline.activeTaskBranch],
+				["expectedWorkerEvent", baseline.activeTaskExpectedWorkerEvent],
+				["workerEvidenceRef", baseline.currentWorkerEvidenceRef],
+				["currentBranch", baseline.currentBranch],
+				["currentHead", baseline.currentHead],
+				["mainHead", baseline.mainHead],
+				["originMainHead", baseline.originMainHead],
+				["worktree.clean", baseline.worktree?.clean],
+				["worktree.dirty", baseline.worktree?.dirty],
+				["worktree.dirtyFilesCount", baseline.worktree?.dirtyFilesCount],
+				["releaseReadinessAllowed", baseline.judgment?.releaseReadinessAllowed],
+				["stopReason", baseline.judgment?.stopReason],
+				["finalJudgmentFromFallbackCheckout", baseline.judgment?.finalJudgmentFromFallbackCheckout],
+				["mainVerifiedTaskCount", baseline.judgment?.mainVerifiedTaskCount],
+				["explicitEventCount", baseline.judgment?.explicitEventCount]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "PR / CI ref",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["status", baseline.prCiRef?.status],
+					["workflowName", baseline.prCiRef?.workflowName],
+					["displayTitle", baseline.prCiRef?.displayTitle],
+					["headBranch", baseline.prCiRef?.headBranch],
+					["headSha", baseline.prCiRef?.headSha],
+					["conclusion", baseline.prCiRef?.conclusion],
+					["createdAt", baseline.prCiRef?.createdAt],
+					["source", baseline.prCiRef?.source]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "dirty paths",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: baseline.worktree?.dirtyPaths,
+					emptyCopy: "dirty paths 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "stop / fix guidance",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: baseline.fixGuidance,
+					emptyCopy: "stop / fix guidance 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "fixed command outputs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseBaselineCommandOutputList, { outputs: baseline.commandOutputs })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "copy-only baseline commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: baseline.copyOnlyCommands,
+					emptyCopy: "baseline commands 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", baseline.safety?.readOnly],
+					["copyOnly", baseline.safety?.copyOnly],
+					["browserExecutionAvailable", baseline.safety?.browserExecutionAvailable],
+					["genericShellRunner", baseline.safety?.genericShellRunner],
+					["modelInvocationAvailable", baseline.safety?.modelInvocationAvailable],
+					["releaseReadyBlockedWhenDirtyOrNonMain", baseline.safety?.releaseReadyBlockedWhenDirtyOrNonMain],
+					["infersReadinessFromBranchName", baseline.safety?.infersReadinessFromBranchName],
+					["infersReadinessFromCommandText", baseline.safety?.infersReadinessFromCommandText]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: baseline.note?.text
+			})
+		]
+	});
+}
+function ReleaseBaselineCommandOutputList({ outputs }) {
+	if (outputs?.state === "missing" || outputs === void 0 || outputs === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "fixed command outputs 未暴露。" });
+	if (!Array.isArray(outputs.items) || outputs.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "fixed command outputs 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "release-baseline-command-output-list",
+		children: outputs.items.map((output, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["id", output.id],
+			["command", output.command],
+			["status", output.status],
+			["exitCode", output.exitCode],
+			["stdout", output.stdout],
+			["stderr", output.stderr]
+		] }) }, `${output.id.text}-${index}`))
+	});
+}
+function ReleaseVerificationChecklist({ checklist, onGoalEventConfirmed }) {
 	if (checklist?.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release verification checklist 未暴露。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "release-verification-checklist",
@@ -16639,20 +20873,44 @@ function ReleaseVerificationChecklist({ checklist }) {
 				["passedCount", checklist.passedCount],
 				["pendingCount", checklist.pendingCount],
 				["copyOnlyCommands", checklist.safety.copyOnlyCommands],
+				["goalGatePreviewAvailable", checklist.safety.goalGatePreviewAvailable],
+				["confirmRequiresPlanHash", checklist.safety.confirmRequiresPlanHash],
+				["appendOnlyOnConfirm", checklist.safety.appendOnlyOnConfirm],
 				["genericShellRunner", checklist.safety.genericShellRunner],
+				["modelInvocationAvailable", checklist.safety.modelInvocationAvailable],
 				["releaseReadyInferredFromCommands", checklist.safety.releaseReadyInferredFromCommands]
 			] }),
 			checklist.items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release checklist rows 为空。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 				className: "release-checklist-list",
-				children: checklist.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-					["label", item.label],
-					["gate", item.gate],
-					["gateId", item.gateId],
-					["status", item.status],
-					["command", item.command],
-					["registrationCommand", item.registrationCommand],
-					["needsEvidence", item.needsEvidence]
-				] }) }, item.id.text))
+				children: checklist.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["label", item.label],
+						["gate", item.gate],
+						["gateId", item.gateId],
+						["status", item.status],
+						["eventBackedStatus", item.eventBackedStatus],
+						["latestEventId", item.latestEventId],
+						["latestEventType", item.latestEventType],
+						["latestRecordedAt", item.latestRecordedAt],
+						["latestVerifier", item.latestVerifier],
+						["command", item.command],
+						["registrationCommand", item.registrationCommand],
+						["dryRunCommand", item.dryRunCommand],
+						["confirmCommandPattern", item.confirmCommandPattern],
+						["needsEvidence", item.needsEvidence]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+						title: "release gate evidence refs",
+						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefList, { evidenceRefs: item.evidenceRefs })
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+						title: "release gate registration",
+						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseGateRegistration, {
+							registration: item.registration,
+							onGoalEventConfirmed
+						})
+					})
+				] }, item.id.text))
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
@@ -16661,24 +20919,84 @@ function ReleaseVerificationChecklist({ checklist }) {
 		]
 	});
 }
+function ReleaseGateRegistration({ registration, onGoalEventConfirmed }) {
+	if (registration?.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release gate registration form 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "release-gate-registration",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["state", textValue(registration.state)],
+				["sourcePolicy", registration.sourcePolicy],
+				["currentStatus", registration.currentStatus],
+				["latestEventId", registration.latestEventId],
+				["latestEventType", registration.latestEventType],
+				["releaseGateEvidencePath", registration.releaseGateEvidencePath],
+				["dryRunCommand", registration.dryRunCommand],
+				["confirmCommandPattern", registration.confirmCommandPattern],
+				["confirmRequiresPlanHash", registration.safety.confirmRequiresPlanHash],
+				["appendOnlyOnConfirm", registration.safety.appendOnlyOnConfirm],
+				["workbenchWriteAvailable", registration.safety.workbenchWriteAvailable],
+				["usesGoalGateOnly", registration.safety.usesGoalGateOnly],
+				["browserExecutionAvailable", registration.safety.browserExecutionAvailable],
+				["modelInvocationAvailable", registration.safety.modelInvocationAvailable],
+				["arbitraryShellAccepted", registration.safety.arbitraryShellAccepted],
+				["releaseReadyAvailable", registration.safety.releaseReadyAvailable],
+				["commandSuccessImpliesGatePassed", registration.safety.commandSuccessImpliesGatePassed]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefList, { evidenceRefs: registration.latestEvidenceRefs }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
+				forms: registration.forms,
+				emptyCopy: "release gate forms 不可用。",
+				onGoalEventConfirmed
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: registration.note.text
+			})
+		]
+	});
+}
 function ReleaseReadyGateRegistration({ registration, onGoalEventConfirmed }) {
-	if (registration?.state === "missing" || registration?.form === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release.ready gate registration form 未暴露。" });
+	if (registration?.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release.ready gate registration form 未暴露。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "release-ready-registration",
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 				["state", textValue(registration.state)],
 				["sourcePolicy", registration.sourcePolicy],
+				["baselineState", registration.baselineState],
+				["baselineStopReason", registration.baselineStopReason],
+				["baselineReleaseReadinessAllowed", registration.baselineReleaseReadinessAllowed],
 				["missingReleaseReady", registration.missingReleaseReady],
+				["closeoutMissingCount", registration.closeoutMissingCount],
+				["closeoutBlockingGapCount", registration.closeoutBlockingGapCount],
+				["requiredReleaseGatesPassed", registration.requiredReleaseGatesPassed],
 				["releaseEvidencePath", registration.releaseEvidencePath],
 				["dryRunCommand", registration.dryRunCommand],
 				["confirmCommandPattern", registration.confirmCommandPattern],
 				["confirmRequiresPlanHash", registration.safety.confirmRequiresPlanHash],
 				["appendOnlyOnConfirm", registration.safety.appendOnlyOnConfirm],
 				["workbenchWriteAvailable", registration.safety.workbenchWriteAvailable],
-				["declaresReleaseReadyOnlyOnConfirm", registration.safety.declaresReleaseReadyOnlyOnConfirm]
+				["declaresReleaseReadyOnlyOnConfirm", registration.safety.declaresReleaseReadyOnlyOnConfirm],
+				["dirtyOrNonMainBlocksFinalJudgment", registration.safety.dirtyOrNonMainBlocksFinalJudgment],
+				["closeoutGapsBlockConfirm", registration.safety.closeoutGapsBlockConfirm],
+				["unknownOrMissingReleaseGatesBlockConfirm", registration.safety.unknownOrMissingReleaseGatesBlockConfirm],
+				["frontendInferenceAvailable", registration.safety.frontendInferenceAvailable]
 			] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "pending required release gates",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: registration.pendingRequiredReleaseGateIds,
+					emptyCopy: "required release gates 已全部 passed。"
+				})
+			}),
+			registration.form === null ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "stop / fix guidance",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: registration.stopGuidance,
+					emptyCopy: "stop / fix guidance 未暴露。"
+				})
+			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalEventFormList, {
 				forms: {
 					state: "available",
 					items: [registration.form]
@@ -16693,23 +21011,256 @@ function ReleaseReadyGateRegistration({ registration, onGoalEventConfirmed }) {
 		]
 	});
 }
+function ReleaseEvidenceDraft({ draft }) {
+	if (draft?.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release evidence draft 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "release-evidence-draft",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", draft.modelName],
+				["sourcePolicy", draft.sourcePolicy],
+				["goalId", draft.goalId],
+				["releaseName", draft.releaseName],
+				["evidencePath", draft.evidencePath],
+				["tagEvidencePath", draft.tagEvidencePath],
+				["targetCommit", draft.targetCommit],
+				["targetCommitSource", draft.targetCommitSource],
+				["copyOnly", draft.safety.copyOnly],
+				["writesEvidenceFile", draft.safety.writesEvidenceFile],
+				["runsShell", draft.safety.runsShell],
+				["declaresReleaseReady", draft.safety.declaresReleaseReady],
+				["createsTag", draft.safety.createsTag],
+				["pushesTag", draft.safety.pushesTag],
+				["publishesRelease", draft.safety.publishesRelease],
+				["infersStatusFromFilenames", draft.safety.infersStatusFromFilenames]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "release notes summary",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: draft.releaseNotesSummary,
+					emptyCopy: "release notes summary 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "command result fields",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseEvidenceCommandResultList, { commandResults: draft.commandResults })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+				className: "prompt-preview-text",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: draft.markdown.text })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: draft.boundaryText.text
+			})
+		]
+	});
+}
+function ReleaseEvidenceCommandResultList({ commandResults }) {
+	if (commandResults?.state === "missing" || commandResults === void 0 || commandResults === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "command result fields 未暴露。" });
+	if (!Array.isArray(commandResults.items) || commandResults.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "command result fields 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "release-command-result-list",
+		children: commandResults.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["gate", item.gate],
+			["label", item.label],
+			["command", item.command],
+			["resultStatus", item.resultStatus],
+			["latestEventId", item.latestEventId],
+			["latestVerifier", item.latestVerifier],
+			["latestEvidenceRef", item.latestEvidenceRef],
+			["commandOutputRequired", item.commandOutputRequired]
+		] }) }, `${item.gate.text}-${index}`))
+	});
+}
 function TagEvidencePrompt({ prompt }) {
-	if (prompt?.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "tag evidence prompt 未暴露。" });
+	if (prompt?.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "tag evidence draft 未暴露。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "tag-evidence-prompt",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["sourceContract", prompt.sourceContract],
-			["evidencePath", prompt.evidencePath],
-			["releaseEvidencePath", prompt.releaseEvidencePath],
-			["promptFormat", prompt.promptFormat],
-			["copyOnly", prompt.safety.copyOnly],
-			["createsTag", prompt.safety.createsTag],
-			["declaresReleaseReady", prompt.safety.declaresReleaseReady],
-			["runsShell", prompt.safety.runsShell]
-		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
-			className: "prompt-preview-text",
-			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: prompt.text.text })
-		})]
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", prompt.modelName],
+				["sourceContract", prompt.sourceContract],
+				["sourcePolicy", prompt.sourcePolicy],
+				["evidencePath", prompt.evidencePath],
+				["releaseEvidencePath", prompt.releaseEvidencePath],
+				["tagRecommendation", prompt.tagRecommendation],
+				["targetCommit", prompt.targetCommit],
+				["targetCommitSource", prompt.targetCommitSource],
+				["copyOnlyTagCommand", prompt.copyOnlyTagCommand],
+				["latestTagGateEventId", prompt.latestTagGateEventId],
+				["latestTagGateStatus", prompt.latestTagGateStatus],
+				["promptFormat", prompt.promptFormat],
+				["copyOnly", prompt.safety.copyOnly],
+				["createsTag", prompt.safety.createsTag],
+				["tagExecutionAvailable", prompt.safety.tagExecutionAvailable],
+				["pushesTag", prompt.safety.pushesTag],
+				["publishesRelease", prompt.safety.publishesRelease],
+				["mergeAvailable", prompt.safety.mergeAvailable],
+				["declaresReleaseReady", prompt.safety.declaresReleaseReady],
+				["runsShell", prompt.safety.runsShell],
+				["opensLocalFiles", prompt.safety.opensLocalFiles],
+				["downloadsArtifacts", prompt.safety.downloadsArtifacts]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "release notes summary",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: prompt.releaseNotesSummary,
+					emptyCopy: "release notes summary 为空。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "tag command result fields",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["command", prompt.commandResultFields?.command],
+					["result", prompt.commandResultFields?.result],
+					["exitCode", prompt.commandResultFields?.exitCode],
+					["stdout", prompt.commandResultFields?.stdout],
+					["stderr", prompt.commandResultFields?.stderr],
+					["evidenceRef", prompt.commandResultFields?.evidenceRef]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "tag evidence gate refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefList, { evidenceRefs: prompt.latestTagEvidenceRefs })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+				className: "prompt-preview-text",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: prompt.text.text })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: prompt.boundaryText.text
+			})
+		]
+	});
+}
+function NextVersionHandoffDraft({ draft }) {
+	if (draft?.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "next-version handoff draft 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "next-version-handoff-draft",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", draft.modelName],
+				["sourcePolicy", draft.sourcePolicy],
+				["goalId", draft.goalId],
+				["releaseName", draft.releaseName],
+				["currentVersion", draft.currentVersion],
+				["nextVersion", draft.nextVersion],
+				["targetCommit", draft.targetCommit],
+				["targetCommitSource", draft.targetCommitSource],
+				["latestRunId", draft.latestRunId],
+				["releaseReady", draft.releaseReady],
+				["releaseReadySource", draft.releaseReadySource],
+				["releaseReadyEventId", draft.releaseReadyEventId],
+				["closeoutMissingCount", draft.closeoutMissingCount]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "source refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: draft.sourceRefs,
+					emptyCopy: "source refs 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "evidence anchors",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefList, { evidenceRefs: draft.evidenceRefs })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "task anchors",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextVersionTaskAnchorList, { anchors: draft.taskAnchors })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "release gate anchors",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextVersionReleaseGateAnchorList, { anchors: draft.releaseGateAnchors })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "implemented capabilities",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextVersionCapabilityList, { capabilities: draft.implementedCapabilities })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "copy-only context commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: draft.copyOnlyCommands,
+					emptyCopy: "copy-only context commands 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["copyOnly", draft.safety.copyOnly],
+					["createsManagedGoal", draft.safety.createsManagedGoal],
+					["entersNextVersion", draft.safety.entersNextVersion],
+					["runsShell", draft.safety.runsShell],
+					["invokesModel", draft.safety.invokesModel],
+					["readsEvidenceBodies", draft.safety.readsEvidenceBodies],
+					["opensLocalFiles", draft.safety.opensLocalFiles],
+					["downloadsArtifacts", draft.safety.downloadsArtifacts],
+					["mergesBranches", draft.safety.mergesBranches],
+					["pushesBranchesOrTags", draft.safety.pushesBranchesOrTags],
+					["createsTag", draft.safety.createsTag],
+					["publishesRelease", draft.safety.publishesRelease],
+					["declaresReleaseReady", draft.safety.declaresReleaseReady],
+					["selfApprovalAvailable", draft.safety.selfApprovalAvailable],
+					["v8TopLevelModel", draft.safety.v8TopLevelModel],
+					["infersStateFromFilenames", draft.safety.infersStateFromFilenames],
+					["infersStateFromBranches", draft.safety.infersStateFromBranches],
+					["infersStateFromPrompts", draft.safety.infersStateFromPrompts]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+				className: "prompt-preview-text",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: draft.markdown.text })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: draft.boundaryText.text
+			})
+		]
+	});
+}
+function NextVersionTaskAnchorList({ anchors }) {
+	if (anchors?.state === "missing" || anchors === void 0 || anchors === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "task anchors 未暴露。" });
+	if (!Array.isArray(anchors.items) || anchors.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "task anchors 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "next-version-anchor-list",
+		children: anchors.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["taskId", item.taskId],
+			["title", item.title],
+			["status", item.status],
+			["workerEvidenceRef", item.workerEvidenceRef],
+			["reviewEvidenceRef", item.reviewEvidenceRef],
+			["reviewVerdict", item.reviewVerdict],
+			["mainVerificationRef", item.mainVerificationRef],
+			["statusSource", item.statusSource]
+		] }) }, `${item.taskId.text}-${index}`))
+	});
+}
+function NextVersionReleaseGateAnchorList({ anchors }) {
+	if (anchors?.state === "missing" || anchors === void 0 || anchors === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release gate anchors 未暴露。" });
+	if (!Array.isArray(anchors.items) || anchors.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "release gate anchors 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "next-version-anchor-list",
+		children: anchors.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["gate", item.gate],
+			["label", item.label],
+			["status", item.status],
+			["latestEventId", item.latestEventId],
+			["latestEvidenceRef", item.latestEvidenceRef],
+			["command", item.command]
+		] }) }, `${item.gate.text}-${index}`))
+	});
+}
+function NextVersionCapabilityList({ capabilities }) {
+	if (capabilities?.state === "missing" || capabilities === void 0 || capabilities === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "implemented capabilities 未暴露。" });
+	if (!Array.isArray(capabilities.items) || capabilities.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "implemented capabilities 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "next-version-capability-list",
+		children: capabilities.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["name", item.name],
+			["state", item.state],
+			["source", item.source]
+		] }) }, `${item.name.text}-${index}`))
 	});
 }
 function GoalOperationConsolePanel({ operationConsole, route }) {
@@ -16767,28 +21318,79 @@ function OperationConsoleRunCard({ run }) {
 	if (run.state !== "available") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前没有 Workbench goal operation run。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "operation-console-run",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["operationId", run.operationId],
-			["status", run.status],
-			["commandName", run.commandName],
-			["commandKind", run.commandKind],
-			["taskId", run.taskId],
-			["role", run.role],
-			["exitCode", run.exitCode],
-			["planHash", run.planHash],
-			["eventIds", run.eventIds],
-			["startedAt", run.startedAt],
-			["updatedAt", run.updatedAt],
-			["completedAt", run.completedAt]
-		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "operation-console-streams",
-			"aria-label": "operation console output",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "command preview" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: run.commandPreview.text }) })] }),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "stdout" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: run.stdout.text }) })] }),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "stderr" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: run.stderr.text }) })] })
-			]
-		})]
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["operationId", run.operationId],
+				["status", run.status],
+				["commandName", run.commandName],
+				["commandKind", run.commandKind],
+				["taskId", run.taskId],
+				["role", run.role],
+				["exitCode", run.exitCode],
+				["planHash", run.planHash],
+				["eventIds", run.eventIds],
+				["runId", run.runResult.runId],
+				["suiteId", run.runResult.suiteId],
+				["run.status", run.runResult.status],
+				["commandCount", run.runResult.commandCount],
+				["failedCommandCount", run.runResult.failedCommandCount],
+				["gatePassed", run.runResult.gatePassed],
+				["verifierStatus", run.runResult.verifierStatus],
+				["artifact count", run.artifactRefs.count],
+				["failureReason", run.failureReason],
+				["startedAt", run.startedAt],
+				["updatedAt", run.updatedAt],
+				["completedAt", run.completedAt]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "run result",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["plannedRunId", run.runResult.plannedRunId],
+					["executionPlanId", run.runResult.executionPlanId],
+					["exitCode", run.runResult.exitCode],
+					["writeBoundary", run.runResult.writeBoundary],
+					["mainWorktreeWrites", run.runResult.mainWorktreeWrites],
+					["workspaceWrites", run.runResult.workspaceWrites],
+					["sourceWorkspacePath", run.runResult.sourceWorkspacePath],
+					["sourceWorkspaceManifestPath", run.runResult.sourceWorkspaceManifestPath],
+					["evidenceArtifactPath", run.runResult.evidenceArtifactPath]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "artifact refs / verifier summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OperationArtifactRefList, { artifactRefs: run.artifactRefs }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["verifier.status", run.verifierSummary.status],
+					["verifier.runStatus", run.verifierSummary.runStatus],
+					["verifier.passed", run.verifierSummary.passed],
+					["verifier.changedFileCount", run.verifierSummary.changedFileCount],
+					["verifier.artifactCount", run.verifierSummary.artifactCount],
+					["verifier.failureReason", run.verifierSummary.failureReason]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "operation-console-streams",
+				"aria-label": "operation console output",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "command preview" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: run.commandPreview.text }) })] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "stdout" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: run.stdout.text }) })] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "stderr" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: run.stderr.text }) })] })
+				]
+			})
+		]
+	});
+}
+function OperationArtifactRefList({ artifactRefs }) {
+	const items = Array.isArray(artifactRefs?.items) ? artifactRefs.items : [];
+	if (items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "artifact refs 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "operation-artifact-ref-list",
+		children: items.map((artifact, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["kind", artifact.kind],
+			["path", artifact.path],
+			["ref", artifact.ref],
+			["uri", artifact.uri],
+			["status", artifact.status]
+		] }) }, `${artifact.kind.text}-${artifact.path.text}-${index}`))
 	});
 }
 function OperationConsoleRunList({ runs }) {
@@ -17102,27 +21704,43 @@ function AdoptionSummaryPanel({ adoption }) {
 function AdoptionCandidatePanel({ candidates }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "adoption-candidate-panel",
-		kicker: "v26 adoption candidates",
-		title: "Adoption candidate runs",
-		state: candidates.state === "available" ? `${candidates.count.text} candidates` : candidates.state,
+		kicker: "v30 adoption candidates",
+		title: "Adoption candidate normalization",
+		state: candidates.state === "available" ? `${candidates.count.text} candidates / ${candidates.blockedCount.text} blocked` : candidates.state,
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["goalId", candidates.goalId],
+				["taskId", candidates.taskId],
 				["sourceContract", candidates.sourceContract],
 				["routeState", candidates.routeState],
 				["route", candidates.route],
 				["candidate count", candidates.count],
+				["blocked count", candidates.blockedCount],
 				["total runs scanned", candidates.totalRunsScanned],
 				["status criterion", candidates.criteria.status],
 				["verifier criterion", candidates.criteria.verifierStatus],
+				["artifactRefs criterion", candidates.criteria.artifactRefs],
 				["workspace criterion", candidates.criteria.workspace],
+				["fingerprint criterion", candidates.criteria.fingerprint],
 				["mainWorktreeWrites criterion", candidates.criteria.mainWorktreeWrites],
-				["evidence criterion", candidates.criteria.evidence],
 				["genericShellRunner", candidates.safety.genericShellRunner],
 				["workerCanApproveOwnTask", candidates.safety.workerCanApproveOwnTask]
 			] }),
-			candidates.state === "missing" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "runs contract 未暴露，无法列出 adoption candidates。" }) : null,
-			candidates.state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前没有 passed verifier 的 isolated workspace run 可采纳。" }) : null,
-			candidates.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionCandidateList, { candidates: candidates.items }) : null,
+			candidates.state === "missing" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "operation/runs contract 未暴露，无法列出 adoption candidates。" }) : null,
+			candidates.state === "empty" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前没有 implementation run 可归一化。" }) : null,
+			candidates.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "adoptable runs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionCandidateList, {
+					candidates: candidates.items,
+					emptyCopy: "当前没有满足条件的 adoption candidate。"
+				})
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "blocked runs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionCandidateList, {
+					candidates: candidates.blockedItems,
+					emptyCopy: "当前没有 blocked implementation run。"
+				})
+			})] }) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: candidates.note
@@ -17130,32 +21748,625 @@ function AdoptionCandidatePanel({ candidates }) {
 		]
 	});
 }
-function AdoptionCandidateList({ candidates }) {
+function AdoptionCandidateList({ candidates, emptyCopy }) {
+	if (!Array.isArray(candidates) || candidates.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "adoption-candidate-list",
 		children: candidates.map((candidate) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "run-row-header",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: candidate.sourceRunId.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 				className: "state-pill",
-				children: candidate.isLatest.value === true ? "latest" : "history"
+				children: candidate.adoptionStatus.text
 			})]
 		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["adoption status", candidate.adoptionStatus],
+			["blocking reasons", candidate.blockingReasons],
 			["source run", candidate.sourceRunId],
+			["source contract", candidate.sourceContract],
+			["operationId", candidate.operationId],
+			["operationStatus", candidate.operationStatus],
+			["goalId", candidate.goalId],
+			["taskId", candidate.taskId],
 			["workspace", candidate.workspace.path],
 			["workspace manifest", candidate.workspace.manifestPath],
+			["workspace fingerprint", candidate.workspace.fingerprint],
 			["evidenceArtifactPath", candidate.evidence.artifactPath],
 			["evidenceRef", candidate.evidence.ref],
+			["artifact count", candidate.evidence.artifactCount],
 			["changed file count", candidate.changedFiles.count],
 			["changed files", candidate.changedFiles.text],
 			["verifierStatus", candidate.verifierStatus],
+			["verifier passed", candidate.verifier.passed],
 			["status", candidate.status],
-			["executionPlanId", candidate.executionPlanId],
 			["writeBoundary", candidate.writeBoundary],
 			["workspaceWrites", candidate.workspaceWrites],
 			["mainWorktreeWrites", candidate.mainWorktreeWrites],
 			["updatedAt", candidate.updatedAt]
-		] })] }, candidate.sourceRunId.text))
+		] })] }, `${candidate.sourceRunId.text}-${candidate.operationId.text}`))
 	});
+}
+function AdoptionPlanPreviewWorkspacePanel({ workspace, onAdoptionPlanFrozen = () => void 0 }) {
+	const [freezeState, setFreezeState] = (0, import_react.useState)({
+		phase: "idle",
+		result: null,
+		error: null
+	});
+	async function handleConfirm(event) {
+		const candidateIndex = Number.parseInt(event.currentTarget.dataset.freezeIndex ?? "-1", 10);
+		const candidate = Array.isArray(workspace?.candidates?.items) ? workspace.candidates.items[candidateIndex] : null;
+		const route = candidate?.freeze?.endpointRoute?.value;
+		const body = candidate?.freeze?.requestPayload;
+		if (candidate?.freeze?.available?.value !== true || typeof route !== "string" || body === null) {
+			setFreezeState({
+				phase: "failed",
+				result: null,
+				error: "freeze route unavailable"
+			});
+			return;
+		}
+		setFreezeState({
+			phase: "loading",
+			result: null,
+			error: null
+		});
+		const result = await confirmControlledAdoptionPlanFreeze(route, body);
+		if (result.ok) {
+			setFreezeState({
+				phase: "ready",
+				result: result.data,
+				error: null
+			});
+			if (typeof onAdoptionPlanFrozen === "function") await onAdoptionPlanFrozen(result.data);
+			return;
+		}
+		setFreezeState({
+			phase: "failed",
+			result: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "adoption-plan-preview-workspace-panel",
+		kicker: "v30 adoption plan",
+		title: "Adoption plan preview workspace",
+		state: workspace?.state ?? "unavailable",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", workspace?.modelName],
+				["contractName", workspace?.contractName],
+				["goalId", workspace?.goalId],
+				["taskId", workspace?.taskId],
+				["freeze route", workspace?.freezeEndpoint?.route],
+				["method", workspace?.freezeEndpoint?.method],
+				["allowedBodyFields", workspace?.freezeEndpoint?.allowedBodyFields],
+				["requiresSameGoalTaskContext", workspace?.freezeEndpoint?.requiresSameGoalTaskContext],
+				["requiresAdoptableCandidate", workspace?.freezeEndpoint?.requiresAdoptableCandidate],
+				["rejectsPromptInput", workspace?.freezeEndpoint?.rejectsPromptInput],
+				["rejectsConfirmAdoptionInput", workspace?.freezeEndpoint?.rejectsConfirmAdoptionInput]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "freeze candidates",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionFreezeCandidateList, {
+					candidates: workspace?.candidates?.items,
+					busy: freezeState.phase === "loading",
+					handleConfirm
+				})
+			}),
+			freezeState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: ["freeze 错误摘要：", freezeState.error]
+			}) : null,
+			freezeState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "empty-copy",
+				children: "正在冻结 adoption plan，main worktree 保持不变。"
+			}) : null,
+			freezeState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "latest freeze result",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionFreezeResult, { result: freezeState.result })
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "frozen plan from operations",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FrozenAdoptionPlanView, { plan: workspace?.frozenPlan })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "recovery notes",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["inspect command pattern", workspace?.recoveryNotes?.inspectCommandPattern],
+					["confirm command source", workspace?.recoveryNotes?.confirmCommandSource],
+					["failure recovery", workspace?.recoveryNotes?.failureRecovery]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["workbenchWriteAvailable", workspace?.safety?.workbenchWriteAvailable],
+					["writeScope", workspace?.safety?.writeScope],
+					["mappedToExistingAdoptRun", workspace?.safety?.mappedToExistingAdoptRun],
+					["mainWorktreeWrites", workspace?.safety?.mainWorktreeWrites],
+					["adoptionConfirmAvailable", workspace?.safety?.adoptionConfirmAvailable],
+					["browserExecutionAvailable", workspace?.safety?.browserExecutionAvailable],
+					["modelInvocationAvailable", workspace?.safety?.modelInvocationAvailable],
+					["genericShellRunner", workspace?.safety?.genericShellRunner],
+					["arbitraryPathReadAvailable", workspace?.safety?.arbitraryPathReadAvailable],
+					["mergeAvailable", workspace?.safety?.mergeAvailable],
+					["pushAvailable", workspace?.safety?.pushAvailable],
+					["tagAvailable", workspace?.safety?.tagAvailable],
+					["selfApprovalAvailable", workspace?.safety?.selfApprovalAvailable],
+					["unsupportedInferenceSources", workspace?.safety?.unsupportedInferenceSources]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: workspace?.note
+			})
+		]
+	});
+}
+function AdoptionFreezeCandidateList({ candidates, busy, handleConfirm }) {
+	if (!Array.isArray(candidates) || candidates.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "当前没有可冻结的 adoption candidate。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "adoption-candidate-list",
+		children: candidates.map((candidate, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "run-row-header",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: candidate.sourceRunId.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				"data-freeze-index": index,
+				onClick: handleConfirm,
+				disabled: busy || candidate.freeze.available.value !== true,
+				children: "Freeze adoption plan"
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["operationId", candidate.operationId],
+			["workspace fingerprint", candidate.sourceWorkspaceFingerprint],
+			["changed files", candidate.changedFiles.text],
+			["verifierStatus", candidate.verifierStatus],
+			["evidenceRef", candidate.evidence.ref],
+			["freeze route", candidate.freeze.endpointRoute]
+		] })] }, `${candidate.sourceRunId.text}-${candidate.operationId.text}-freeze`))
+	});
+}
+function AdoptionFreezeResult({ result }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["contractName", textValue(result?.contractName)],
+			["status", textValue(result?.status)],
+			["sourceRunId", textValue(result?.sourceRunId)],
+			["sourceOperationId", textValue(result?.sourceOperationId)],
+			["adoptionPlanId", textValue(result?.adoptionPlan?.adoptionPlanId)],
+			["adoptionPlanArtifactPath", textValue(result?.adoptionPlan?.adoptionPlanArtifactPath)],
+			["patchArtifactPath", textValue(result?.adoptionPlan?.patchArtifactPath)],
+			["patchHash", textValue(result?.adoptionPlan?.patchHash)],
+			["changedFileCount", textValue(result?.patchSummary?.changedFileCount)],
+			["fileOperationCount", textValue(result?.patchSummary?.fileOperationCount)],
+			["sourceWorkspaceFingerprint", textValue(result?.fingerprints?.sourceWorkspaceFingerprint)],
+			["projectFingerprint", textValue(result?.fingerprints?.projectFingerprint)],
+			["gitHead", textValue(result?.fingerprints?.gitHead)],
+			["gitStatusFingerprint", textValue(result?.fingerprints?.gitStatusFingerprint)],
+			["inspectCommand", textValue(result?.recoveryNotes?.inspectCommand)],
+			["confirmCommand", textValue(result?.recoveryNotes?.confirmCommand)],
+			["mainWorktreeUnchanged", textValue(result?.recoveryNotes?.mainWorktreeUnchanged)]
+		] }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "affected files" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+			items: {
+				state: "available",
+				items: (result?.patchSummary?.changedFiles ?? []).map((file) => textValue(file))
+			},
+			emptyCopy: "affected files 未暴露。"
+		})
+	] });
+}
+function FrozenAdoptionPlanView({ plan }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["state", textValue(plan?.state)],
+			["sourceContract", plan?.sourceContract],
+			["operationId", plan?.operationId],
+			["operationStatus", plan?.operationStatus],
+			["commandKind", plan?.commandKind],
+			["adoptionPlanId", plan?.adoptionPlanId],
+			["adoptionPlanArtifactPath", plan?.adoptionPlanArtifactPath],
+			["patchArtifactPath", plan?.patchArtifactPath],
+			["patchHash", plan?.patchHash],
+			["sourceRunId", plan?.sourceRunId],
+			["sourceOperationId", plan?.sourceOperationId],
+			["sourceWorkspacePath", plan?.sourceWorkspacePath],
+			["sourceWorkspaceManifestPath", plan?.sourceWorkspaceManifestPath],
+			["changedFileCount", plan?.changedFiles?.count],
+			["fileOperationCount", plan?.fileOperations?.count],
+			["sourceWorkspaceFingerprint", plan?.fingerprints?.sourceWorkspaceFingerprint],
+			["projectFingerprint", plan?.fingerprints?.projectFingerprint],
+			["gitHead", plan?.fingerprints?.gitHead],
+			["gitStatusFingerprint", plan?.fingerprints?.gitStatusFingerprint],
+			["inspectCommand", plan?.recoveryNotes?.inspectCommand],
+			["confirmCommand", plan?.recoveryNotes?.confirmCommand],
+			["failureRecovery", plan?.recoveryNotes?.failureRecovery]
+		] }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "affected files" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+			items: plan?.changedFiles?.items,
+			emptyCopy: "affected files 未暴露。"
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "file operations" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+			rows: plan?.fileOperations?.items ?? [],
+			nameKey: "path",
+			valueKey: "operation",
+			emptyCopy: "file operations 未暴露。"
+		})
+	] });
+}
+function AdoptionInspectRecoveryPanel({ workspace, onAdoptionConfirmed = () => void 0 }) {
+	const [inspectState, setInspectState] = (0, import_react.useState)({
+		phase: "idle",
+		result: null,
+		error: null
+	});
+	const [confirmState, setConfirmState] = (0, import_react.useState)({
+		phase: "idle",
+		result: null,
+		error: null
+	});
+	const projectedInspection = inspectState.phase === "ready" ? null : workspace?.inspection;
+	async function handlePreview() {
+		const route = workspace?.inspectEndpoint?.route?.value;
+		if (!["available", "inspected"].includes(workspace?.state) || typeof route !== "string" || route.trim() === "") {
+			setInspectState({
+				phase: "failed",
+				result: null,
+				error: "inspect route unavailable"
+			});
+			return;
+		}
+		setInspectState({
+			phase: "loading",
+			result: null,
+			error: null
+		});
+		const result = await fetchAdoptionInspection(route);
+		if (result.ok) {
+			setInspectState({
+				phase: "ready",
+				result: result.data,
+				error: null
+			});
+			return;
+		}
+		setInspectState({
+			phase: "failed",
+			result: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+		});
+	}
+	async function handleConfirm() {
+		const route = workspace?.confirmEndpoint?.route?.value;
+		const body = workspace?.confirmEndpoint?.requestPayload;
+		if (workspace?.safety?.adoptionConfirmAvailable?.value !== true || typeof route !== "string" || body === null) {
+			setConfirmState({
+				phase: "failed",
+				result: null,
+				error: "adoption confirm route unavailable"
+			});
+			return;
+		}
+		setConfirmState({
+			phase: "loading",
+			result: null,
+			error: null
+		});
+		const result = await confirmControlledAdoptionPlan(route, body);
+		if (result.ok) {
+			setConfirmState({
+				phase: "ready",
+				result: result.data,
+				error: null
+			});
+			if (typeof onAdoptionConfirmed === "function") await onAdoptionConfirmed(result.data);
+			return;
+		}
+		setConfirmState({
+			phase: "failed",
+			result: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "adoption-inspect-recovery-panel",
+		kicker: "v30 adoption inspect",
+		title: "Adoption inspect and recovery view",
+		state: workspace?.state ?? "unavailable",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", workspace?.modelName],
+				["contractName", workspace?.contractName],
+				["goalId", workspace?.goalId],
+				["taskId", workspace?.taskId],
+				["adoptionPlanId", workspace?.selectedFrozenPlan?.adoptionPlanId],
+				["operationId", workspace?.selectedFrozenPlan?.operationId],
+				["patchHash", workspace?.selectedFrozenPlan?.patchHash],
+				["inspect route", workspace?.inspectEndpoint?.route],
+				["method", workspace?.inspectEndpoint?.method],
+				["adoptionIdSource", workspace?.inspectEndpoint?.adoptionIdSource],
+				["acceptsUserPathInput", workspace?.inspectEndpoint?.acceptsUserPathInput],
+				["acceptsConfirmInput", workspace?.inspectEndpoint?.acceptsConfirmInput]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "panel-actions",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					onClick: handlePreview,
+					disabled: inspectState.phase === "loading" || !["available", "inspected"].includes(workspace?.state),
+					children: "Inspect recovery state"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					onClick: handleConfirm,
+					disabled: confirmState.phase === "loading" || workspace?.safety?.adoptionConfirmAvailable?.value !== true,
+					children: "Confirm adoption"
+				})]
+			}),
+			inspectState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: ["inspect 错误摘要：", inspectState.error]
+			}) : null,
+			inspectState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "empty-copy",
+				children: "正在读取 adoption inspect 输出，不确认采纳也不应用 patch。"
+			}) : null,
+			inspectState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "inspect output",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionInspectResult, { result: inspectState.result })
+			}) : null,
+			inspectState.phase !== "ready" && projectedInspection?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "inspect output",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProjectedAdoptionInspectResult, { inspection: projectedInspection })
+			}) : null,
+			inspectState.phase !== "ready" && workspace?.inspection?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "inspect output from route",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProjectedAdoptionInspectOutput, { inspection: workspace.inspection })
+			}) : null,
+			confirmState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "error-copy",
+				children: ["confirm 错误摘要：", confirmState.error]
+			}) : null,
+			confirmState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "empty-copy",
+				children: "正在确认 frozen adoption plan。不会 merge、push、tag、publish 或登记审批事件。"
+			}) : null,
+			confirmState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "confirm result",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionConfirmResult, { result: confirmState.result })
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "confirm endpoint",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["route", workspace?.confirmEndpoint?.route],
+					["method", workspace?.confirmEndpoint?.method],
+					["adoptionIdSource", workspace?.confirmEndpoint?.adoptionIdSource],
+					["allowedBodyFields", workspace?.confirmEndpoint?.allowedBodyFields],
+					["requiresFrozenPlanOperation", workspace?.confirmEndpoint?.requiresFrozenPlanOperation],
+					["refreshesAfterConfirm", workspace?.confirmEndpoint?.refreshesAfterConfirm],
+					["acceptsUserPathInput", workspace?.confirmEndpoint?.acceptsUserPathInput],
+					["acceptsPlanHashInput", workspace?.confirmEndpoint?.acceptsPlanHashInput],
+					["acceptsShellCommandInput", workspace?.confirmEndpoint?.acceptsShellCommandInput]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "patch refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["adoptionPlanArtifactPath", workspace?.patchRefs?.adoptionPlanArtifactPath],
+					["patchArtifactPath", workspace?.patchRefs?.patchArtifactPath],
+					["patchHash", workspace?.patchRefs?.patchHash],
+					["fileOperationCount", workspace?.patchRefs?.fileOperations?.count]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "evidence context",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["sourceRunId", workspace?.evidenceContext?.sourceRunId],
+					["sourceRunArtifactPath", workspace?.evidenceContext?.sourceRunArtifactPath],
+					["sourceEvidenceArtifactPath", workspace?.evidenceContext?.sourceEvidenceArtifactPath],
+					["sourceVerifierStatus", workspace?.evidenceContext?.sourceVerifierStatus],
+					["latestConfirmationEvidenceArtifactPath", workspace?.evidenceContext?.latestConfirmationEvidenceArtifactPath]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "recovery context",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["journalStateSource", workspace?.recoveryContext?.journalStateSource],
+					["beforeHashSource", workspace?.recoveryContext?.beforeHashSource],
+					["afterHashSource", workspace?.recoveryContext?.afterHashSource],
+					["currentWorktreeMatchSource", workspace?.recoveryContext?.currentWorktreeMatchSource],
+					["copyOnlyInspectCommand", workspace?.recoveryContext?.copyOnlyInspectCommand]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", workspace?.safety?.readOnly],
+					["workbenchWriteAvailable", workspace?.safety?.workbenchWriteAvailable],
+					["writeScope", workspace?.safety?.writeScope],
+					["adoptionConfirmAvailable", workspace?.safety?.adoptionConfirmAvailable],
+					["applyPatchAvailable", workspace?.safety?.applyPatchAvailable],
+					["browserExecutionAvailable", workspace?.safety?.browserExecutionAvailable],
+					["modelInvocationAvailable", workspace?.safety?.modelInvocationAvailable],
+					["genericShellRunner", workspace?.safety?.genericShellRunner],
+					["arbitraryPathReadAvailable", workspace?.safety?.arbitraryPathReadAvailable],
+					["mergeAvailable", workspace?.safety?.mergeAvailable],
+					["pushAvailable", workspace?.safety?.pushAvailable],
+					["tagAvailable", workspace?.safety?.tagAvailable],
+					["selfApprovalAvailable", workspace?.safety?.selfApprovalAvailable],
+					["readinessInferenceAvailable", workspace?.safety?.readinessInferenceAvailable],
+					["unsupportedInferenceSources", workspace?.safety?.unsupportedInferenceSources]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: workspace?.note
+			})
+		]
+	});
+}
+function AdoptionConfirmResult({ result }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["contractName", textValue(result?.contractName)],
+			["status", textValue(result?.status)],
+			["goalId", textValue(result?.goalId)],
+			["taskId", textValue(result?.taskId)],
+			["adoptionPlanId", textValue(result?.adoptionPlanId)],
+			["confirmationRunId", textValue(result?.confirmedRun?.runId)],
+			["confirmationStatus", textValue(result?.confirmedRun?.status)],
+			["verifierStatus", textValue(result?.confirmedRun?.verifierStatus)],
+			["mainWorktreeWrites", textValue(result?.confirmedRun?.mainWorktreeWrites)],
+			["adoptionJournalArtifactPath", textValue(result?.confirmedRun?.adoptionJournalArtifactPath)],
+			["evidenceArtifactPath", textValue(result?.confirmedRun?.evidenceArtifactPath)],
+			["operationId", textValue(result?.operationRun?.operationId)],
+			["operationStatus", textValue(result?.operationRun?.status)],
+			["nextActionStatus", textValue(result?.refreshed?.nextAction?.status)],
+			["nextTask", textValue(result?.refreshed?.nextAction?.next?.taskId)],
+			["nextRole", textValue(result?.refreshed?.nextAction?.next?.role)],
+			["genericShellRunner", textValue(result?.safety?.genericShellRunner)],
+			["modelInvocationAvailable", textValue(result?.safety?.modelInvocationAvailable)],
+			["reviewerEventRegistered", textValue(result?.safety?.reviewerEventRegistered)],
+			["mainVerificationEventRegistered", textValue(result?.safety?.mainVerificationEventRegistered)],
+			["releaseReadinessRegistered", textValue(result?.safety?.releaseReadinessRegistered)],
+			["mergeAvailable", textValue(result?.safety?.mergeAvailable)],
+			["pushAvailable", textValue(result?.safety?.pushAvailable)],
+			["tagAvailable", textValue(result?.safety?.tagAvailable)],
+			["publishAvailable", textValue(result?.safety?.publishAvailable)]
+		] }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "changed files" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+			items: {
+				state: "available",
+				items: (result?.confirmedRun?.changedFiles ?? []).map((file) => textValue(file))
+			},
+			emptyCopy: "confirmed changed files 未暴露。"
+		})
+	] });
+}
+function ProjectedAdoptionInspectOutput({ inspection }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["contractName", inspection?.contractName],
+			["status", inspection?.status],
+			["adoptionPlanId", inspection?.adoptionPlanId],
+			["journalStatus", inspection?.journal?.status],
+			["journalArtifactPath", inspection?.journal?.artifactPath],
+			["latestConfirmationRunId", inspection?.latestConfirmationRun?.runId],
+			["latestConfirmationStatus", inspection?.latestConfirmationRun?.status],
+			["latestConfirmationEvidenceArtifactPath", inspection?.latestConfirmationRun?.evidenceArtifactPath],
+			["patchHash", inspection?.hashes?.patchHash],
+			["currentWorktreeMatchesAfterHash", inspection?.hashes?.currentWorktreeMatchesAfterHash],
+			["currentWorktreeMatchesJournalBeforeFiles", inspection?.hashes?.currentWorktreeMatchesJournalBeforeFiles],
+			["recommendedCommandCount", inspection?.recommendedCommands?.count]
+		] }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "after hash match" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionInspectProjectedHashFiles, { files: inspection?.afterHashFiles }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "before journal match" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionInspectProjectedHashFiles, { files: inspection?.beforeJournalFiles })
+	] });
+}
+function AdoptionInspectProjectedHashFiles({ files }) {
+	if (!Array.isArray(files?.items) || files.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["matches", files?.matches], ["reason", files?.reason]] });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+		rows: files.items.map((file) => ({
+			path: file.path,
+			state: textValue(`matches ${file.matches.text} / expected ${file.expectedHash.text} / actual ${file.actualHash.text}`)
+		})),
+		nameKey: "path",
+		valueKey: "state",
+		emptyCopy: "match file details 未暴露。"
+	});
+}
+function ProjectedAdoptionInspectResult({ inspection }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["routeState", inspection?.routeState],
+			["httpStatus", inspection?.httpStatus],
+			["contractName", inspection?.contractName],
+			["status", inspection?.status],
+			["adoptionPlanId", inspection?.adoptionPlanId],
+			["journalStatus", inspection?.journal?.status],
+			["journalArtifactPath", inspection?.journal?.artifactPath],
+			["latestConfirmationRunId", inspection?.latestConfirmationRun?.runId],
+			["latestConfirmationStatus", inspection?.latestConfirmationRun?.status],
+			["latestConfirmationEvidenceArtifactPath", inspection?.latestConfirmationRun?.evidenceArtifactPath],
+			["patchHash", inspection?.hashes?.patchHash],
+			["currentWorktreeMatchesAfterHash", inspection?.hashes?.currentWorktreeMatchesAfterHash],
+			["currentWorktreeMatchesJournalBeforeFiles", inspection?.hashes?.currentWorktreeMatchesJournalBeforeFiles],
+			["recommendedCommandCount", inspection?.recommendedCommands?.count]
+		] }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "after hash match" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+			rows: (inspection?.afterHashFiles?.items ?? []).map((file) => ({
+				path: file.path,
+				state: textValue(`matches ${file.matches.text} / expected ${file.expectedHash.text} / actual ${file.actualHash.text}`)
+			})),
+			nameKey: "path",
+			valueKey: "state",
+			emptyCopy: "after hash match details 未暴露。"
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "before journal match" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+			rows: (inspection?.beforeJournalFiles?.items ?? []).map((file) => ({
+				path: file.path,
+				state: textValue(`matches ${file.matches.text} / expected ${file.expectedHash.text} / actual ${file.actualHash.text}`)
+			})),
+			nameKey: "path",
+			valueKey: "state",
+			emptyCopy: "before journal match details 未暴露。"
+		})
+	] });
+}
+function AdoptionInspectResult({ result }) {
+	const afterDetails = result?.currentWorktreeMatchesAfterHashDetails;
+	const beforeDetails = result?.currentWorktreeMatchesJournalBeforeFilesDetails;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["contractName", textValue(result?.contractName)],
+			["status", textValue(result?.status)],
+			["adoptionPlanId", textValue(result?.adoptionPlanId)],
+			["sourceRunId", textValue(result?.sourceRunId)],
+			["journalStatus", textValue(result?.journal?.status ?? "missing")],
+			["journalArtifactPath", textValue(result?.journal?.artifactPath)],
+			["latestConfirmationRunId", textValue(result?.latestConfirmationRun?.runId)],
+			["latestConfirmationStatus", textValue(result?.latestConfirmationRun?.status)],
+			["latestConfirmationEvidenceArtifactPath", textValue(result?.latestConfirmationRun?.evidenceArtifactPath)],
+			["patchArtifactPath", textValue(result?.adoptionPlanRefs?.patchArtifactPath)],
+			["patchHash", textValue(result?.patchHash)],
+			["currentWorktreeMatchesAfterHash", textValue(result?.currentWorktreeMatchesAfterHash)],
+			["currentWorktreeMatchesJournalBeforeFiles", textValue(result?.currentWorktreeMatchesJournalBeforeFiles)],
+			["nextAction", textValue(result?.nextAction)]
+		] }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "file operation hashes" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+			rows: (result?.fileOperations ?? []).map((operation) => ({
+				path: textValue(operation?.path),
+				operation: textValue(`${operation?.operation ?? "unknown"} / before ${operation?.beforeHash ?? "missing"} / after ${operation?.afterHash ?? "missing"}`)
+			})),
+			nameKey: "path",
+			valueKey: "operation",
+			emptyCopy: "file operation hash 未暴露。"
+		}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "after hash match" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionInspectMatchDetails, { details: afterDetails }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: "before journal match" }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionInspectMatchDetails, { details: beforeDetails })
+	] });
+}
+function AdoptionInspectMatchDetails({ details }) {
+	if (details === null || details === void 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "match details 未暴露。" });
+	if (Array.isArray(details.files) && details.files.length > 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+		rows: details.files.map((file) => ({
+			path: textValue(file?.path),
+			state: textValue(`matches ${String(file?.matches)} / expected ${file?.expected?.hash ?? "missing"} / actual ${file?.actual?.hash ?? "missing"}`)
+		})),
+		nameKey: "path",
+		valueKey: "state",
+		emptyCopy: "match file details 未暴露。"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["matches", textValue(details.matches)], ["reason", textValue(details.reason)]] });
 }
 function HandoffPanel({ handoff, indexRoute, route }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
@@ -17664,8 +22875,12 @@ function WorkerEvidenceHandoffView({ handoff, onGoalEventConfirmed }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 				["goalId", handoff.goalId],
 				["taskId", handoff.taskId],
+				["sourceContract", handoff.sourceContract],
+				["sourceOperationId", handoff.sourceOperationId],
 				["sourceRunId", handoff.sourceRunId],
 				["executionPlanId", handoff.executionPlanId],
+				["runStatus", handoff.runStatus],
+				["verifierStatus", handoff.verifierStatus],
 				["evidenceArtifactPath", handoff.evidenceArtifactPath],
 				["sourceWorkspacePath", handoff.sourceWorkspacePath],
 				["evidenceRef", handoff.evidenceRef],
@@ -17923,7 +23138,7 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 			}) : null,
 			confirmState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "empty-copy",
-				children: "正在确认 event append，并刷新 goal-status / events / next action。"
+				children: "正在确认 event append，并刷新 goal-status / events / next action / closeout。"
 			}) : null,
 			confirmState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 				className: "goal-event-confirm-result",
@@ -17939,7 +23154,10 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
 					["operationCompletedAt", textValue(confirmState.result.operationRun?.timestamps?.completedAt)],
 					["refreshed.progress", textValue(confirmState.result.refreshed.progress?.contractName)],
 					["refreshed.events", textValue(confirmState.result.refreshed.events?.contractName)],
-					["refreshed.nextAction", textValue(confirmState.result.refreshed.nextAction?.contractName)]
+					["refreshed.nextAction", textValue(confirmState.result.refreshed.nextAction?.contractName)],
+					["refreshed.closeout", textValue(confirmState.result.refreshed.closeout?.contractName)],
+					["refreshed.closeout.missingCount", textValue(confirmState.result.refreshed.closeout?.missing?.length)],
+					["refreshed.closeout.releaseReady", textValue(confirmState.result.refreshed.closeout?.summary?.releaseReady)]
 				] })
 			}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalOperationInlineConsole, {
@@ -18393,12 +23611,34 @@ function GoalEventFormFieldOptions({ options }) {
 	});
 }
 function TextItemList({ items, emptyCopy }) {
-	if (items.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
-	if (items.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
+	if (items?.state === "missing" || items === void 0 || items === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
+	const normalizedItems = Array.isArray(items) ? items : items.items;
+	if (!Array.isArray(normalizedItems) || normalizedItems.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "command-text-list",
 		"aria-label": "copy-only text list",
-		children: items.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.text }) }, `${item.text}-${index}`))
+		children: normalizedItems.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.text }) }, `${item.text}-${index}`))
+	});
+}
+function CopyBlock({ value, emptyCopy }) {
+	if (typeof value !== "string" || value.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+		className: "copy-block",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: value })
+	});
+}
+function EvidenceRefItemList({ refs }) {
+	const items = refs?.items ?? [];
+	if (items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "explicit event evidence refs 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "evidence-ref-list",
+		children: items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["kind", item.kind],
+			["ref", item.ref],
+			["label", item.label],
+			["eventId", item.eventId],
+			["eventType", item.eventType]
+		] }) }, `${item.ref.text}-${index}`))
 	});
 }
 function PromptPreviewList({ prompts }) {
@@ -18691,6 +23931,13 @@ function activeGoalStateText(value, route) {
 function activeGoalTaskQueueStateText(taskQueue, route) {
 	if (taskQueue.state === "empty") return "无任务";
 	return activeGoalStateText(taskQueue, route);
+}
+function implementationEligibilityStateText(eligibility) {
+	if (eligibility?.state === "eligible") return "可进入 controlled implementation";
+	if (eligibility?.state === "blocked") return "被显式 blocker 阻止";
+	if (eligibility?.state === "waiting") return "等待 goal next";
+	if (eligibility?.state === "unavailable") return "不可用";
+	return "未暴露";
 }
 function goalOperationConsoleStateText(operationConsole, route) {
 	if (operationConsole.state === "empty") return "暂无 operation";

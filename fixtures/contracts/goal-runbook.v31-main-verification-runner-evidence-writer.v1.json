@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v31-main-verification-runner-evidence-writer",
+  "goalTitle": "v31 Main Verification Runner + Evidence Writer",
+  "baseline": {
+    "tag": "v30",
+    "commit": null,
+    "evidenceRef": "docs/plans/v30-release-evidence-2026-06-01.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Main verification readiness from explicit state",
+      "branch": "v31-task-1-main-verification-readiness-from-explicit-state",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户知道什么时候可以进入 main verification，什么时候必须先 review/revision/adoption。",
+        "建立 readiness model：只读取 goal-status、events、adoption inspect/run state 和 reviewer verdict，不从前端/文件名推断。",
+        "Worker evidence path: docs/plans/v31-task-1-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v31-task-1-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v31-task-1-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v31-main-verification-runner-evidence-writer --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Allowlisted verification plan preview",
+      "branch": "v31-task-2-allowlisted-verification-plan-preview",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能看清楚将要跑哪些验证命令，不能输入任意 shell。",
+        "增加 allowlisted verification plan preview：`pnpm check`、`pnpm test`、`pnpm workbench:build`、`git diff --check`，可按 task scope 增加受控命令，不接受任意 command。",
+        "Worker evidence path: docs/plans/v31-task-2-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v31-task-2-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v31-task-2-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v31-main-verification-runner-evidence-writer --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Verification operation console",
+      "branch": "v31-task-3-verification-operation-console",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "长时间验证不会黑盒；用户能看到状态、stdout/stderr 摘要、exit code 和 artifact refs。",
+        "把 verification command suite 接进 operation registry 和 Workbench console；保存 command result contract，不把运行成功自动等于 gate passed。",
+        "Worker evidence path: docs/plans/v31-task-3-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v31-task-3-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v31-task-3-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v31-main-verification-runner-evidence-writer --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Main verification evidence writer",
+      "branch": "v31-task-4-main-verification-evidence-writer",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户不用手写 main verification evidence。",
+        "根据验证结果、goal/task/run refs、review evidence、adoption refs 生成 evidence draft；draft 需要 operator/reviewer 检查，不自动 declare passed。",
+        "Worker evidence path: docs/plans/v31-task-4-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v31-task-4-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v31-task-4-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v31-main-verification-runner-evidence-writer --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Main-verification gate registration flow",
+      "branch": "v31-task-5-main-verification-gate-registration-flow",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "验证 evidence 完整后，Workbench 能通过 dry-run/confirm 登记 main-verification gate。",
+        "接入 existing `goal gate --gate main-verification --status passed` preview/confirm；补测试、docs、release evidence。",
+        "Worker evidence path: docs/plans/v31-task-5-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v31-task-5-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v31-task-5-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v31-main-verification-runner-evidence-writer --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

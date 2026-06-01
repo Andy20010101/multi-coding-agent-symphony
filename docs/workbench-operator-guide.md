@@ -8,7 +8,7 @@ Workbench 消费 console server 暴露的本地 API，用于查看 active goal r
 
 `symphony` CLI 是高级/脚本入口。需要 JSON 输出、CI 命令、dry-run/confirm 事件登记、兼容命令或低层诊断时，在终端运行 CLI；Workbench 只显示受控状态、表单和可复制命令。
 
-Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受控例外：浏览器可以请求 `symphony goal update/review/gate` 的 dry-run plan preview；确认时只能带同一组字段和 dry-run 返回的 `planHash` 调用匹配的 confirm path，向 managed goal event journal append 一个 event。v23 另外记录 Workbench goal operation registry，用于追踪 preview 和 confirm 的 operation id、status 与 timestamps，不把 registry 当成任务完成或审批证据。
+Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受控例外：浏览器可以请求 `symphony goal update/review/gate` 的 dry-run plan preview；确认时只能带同一组字段和 dry-run 返回的 `planHash` 调用匹配的 confirm path，向 managed goal event journal append 一个 event。v23 另外记录 Workbench goal operation registry，用于追踪 preview 和 confirm 的 operation id、status 与 timestamps，不把 registry 当成任务完成或审批证据。v29 的 implementation confirm 只接受 preview 返回的 plan context，确认后把 isolated workspace run 的结果、artifact refs、verifier summary 和失败原因写回同一个 operation registry。task-5 的 worker evidence handoff 从同一个 registry 读取已确认的 implementation run，预填 `worker.evidence-recorded` dry-run 表单和 prompt handoff，仍通过 `event-plan-preview` 与 `event-plan-confirm` 登记 worker evidence。v31 的 verification confirm 只接受 active goal/task 的固定 verification suite，运行结果写入 operation registry，显示状态、stdout/stderr 摘要、exit code 和 artifact refs；命令成功只是 operation evidence，不会自动登记 `main-verification` gate。Workbench 同页生成 main verification evidence draft，来源是 verification operation、goal/task/run refs、worker/review evidence refs 和 adoption refs；draft 只供 operator/reviewer 检查，不写文件、不读 evidence 正文、不登记 gate、不宣称 passed。draft ready 后，Workbench 会预填 `main.verification-passed` 的 `goal gate` 表单，仍必须先 dry-run，再用返回的 plan hash confirm。v32 的 release baseline resolver 读取 `/api/readiness` 暴露的 git/GitHub 命令输出，显示 current branch、main HEAD、origin/main、worktree cleanliness 和 PR/CI ref；dirty、非 main 或 main/origin 不一致时只显示 stop/fix guidance，并阻止 `release.ready` 表单。v32 的 release checklist 逐项列出 required release gates、copy-only validation command、latest explicit gate evidence ref，并为每个 gate 提供受控 `goal gate` dry-run / plan-hash confirm 表单。v32 的 release evidence draft 和 tag evidence draft 显示 release evidence ref、tag evidence ref、target commit、release notes summary、逐项 command/result 字段、tag recommendation 和 copy-only `git tag` command；这些字段只来自 closeout、release baseline resolver 和 event log，不写 evidence 文件，不运行 tag/push/publish。v32 的 next-version handoff draft 继续在 release closeout 内显示，从 closeout、release/tag evidence draft、event log、ledger、latest run 和 Workbench capability flags 生成 copy-only v33 起步上下文；它不创建 v33 goal，不进入下一版本，不读取 evidence 正文，不运行命令，不登记 release.ready。
 
 - 浏览器只展示状态、contract 字段和可复制的命令文本。
 - 浏览器不执行 shell 命令，不写文件，不触发模型，不触发 agent。
@@ -141,6 +141,12 @@ GET /api/goals/latest/event-plan-preview
 GET /api/goals/<goal-id>/event-plan-preview
 POST /api/goals/latest/event-plan-confirm
 POST /api/goals/<goal-id>/event-plan-confirm
+GET /api/goals/latest/implementation-plan-preview
+GET /api/goals/<goal-id>/implementation-plan-preview
+POST /api/goals/latest/implementation-run-confirm
+POST /api/goals/<goal-id>/implementation-run-confirm
+POST /api/goals/latest/verification-run-confirm
+POST /api/goals/<goal-id>/verification-run-confirm
 GET /api/goals/latest/runbook
 GET /api/goals/<goal-id>/runbook
 GET /api/goals/latest/next
@@ -153,7 +159,7 @@ GET /api/capabilities
 GET /api/diagnostics
 ```
 
-除 `POST /api/goals/<goal-id|latest>/event-plan-confirm` 外，所有非 `GET` 请求都必须返回 `405`，并使用 `error-envelope.v1`。`/api/goals/<goal-id>/event-plan-preview` 是 dry-run 预览 GET route，只接受受控 query 字段，不接受任意 `path`、`confirm`、`planHash` 或未登记命令。confirm route 只接受 JSON body 中的 `command=update|review|gate`、该 command 的字段和 `planHash`，不接受任意 command、path 或 shell 输入。`/api/handoff` 只暴露 registered handoff ref，当前为 `guided-goal-handoff.v1`。safe preview route 只接受 run state 已登记的 artifact kind，不接受 `path` query、encoded traversal 或任意本地路径。
+除 `POST /api/goals/<goal-id|latest>/event-plan-confirm`、`POST /api/goals/<goal-id|latest>/implementation-run-confirm`、`POST /api/goals/<goal-id|latest>/verification-run-confirm`、`POST /api/goals/<goal-id|latest>/adoption-plan-freeze` 和 `POST /api/goals/<goal-id|latest>/adoption-confirm` 外，所有非 `GET` 请求都必须返回 `405`，并使用 `error-envelope.v1`。`/api/goals/<goal-id>/event-plan-preview` 是 dry-run 预览 GET route，只接受受控 query 字段，不接受任意 `path`、`confirm`、`planHash` 或未登记命令。event confirm route 只接受 JSON body 中的 `command=update|review|gate`、该 command 的字段和 `planHash`，不接受任意 command、path 或 shell 输入。implementation confirm route 只接受 implementation preview 返回的 `goalId`、`taskId`、`planId` 和 `planHash`，并重新读取同一 goal/task context 后才映射到 `symphony do --confirm-plan <plan-id> --json`。verification confirm route 只接受 `goalId`、`taskId` 和固定 `suiteId=v31-main-verification-command-suite`，后端重新读取 managed runbook task，只运行 `pnpm check`、`pnpm test`、`pnpm workbench:build`、`git diff --check` 和已允许的 active-goal JSON read commands。adoption confirm route 只接受 frozen adoption operation 返回的 `goalId`、`taskId`、`adoptionPlanId` 和 `operationId`，并重新读取同一 goal/task adoption-plan operation 后才映射到 `symphony adopt --confirm <adoption-id> --json`。`/api/handoff` 只暴露 registered handoff ref，当前为 `guided-goal-handoff.v1`。safe preview route 只接受 run state 已登记的 artifact kind，不接受 `path` query、encoded traversal 或任意本地路径。
 
 `/workbench` 的静态资源服务只允许读取 `src/symphony/workbench-static/` 中的构建产物。`/workbench/api/*` 只会落到 Workbench HTML fallback，不返回 API JSON contract；`/workbench/docs/stages/*.html`、`/workbench/docs/stages/*.stage.json`、`/workbench/src/*`、`/workbench/package.json` 和 lockfile 路径不能暴露仓库文件内容。
 
@@ -218,9 +224,43 @@ GET /api/goals/<goal-id>/event-plan-preview?command=gate&task=task-2&gate=main-v
 
 Confirm 阶段必须使用 dry-run 生成的 `planHash`。Workbench confirm route 会调用匹配的 `goal update`、`goal review` 或 `goal gate` confirm function，只向受控 managed-goal-event-journal append event，并把同一个 `operationRun.operationId` 更新为 `confirmed`。confirm 成功后，Workbench 重新读取 goal-status、events 和 next action。这个流程不会触发 shell、模型、merge 或 tag。
 
-`GET /api/goals/<goal-id|latest>/operations` 返回 `goal-operation-runs.v1`。这个 registry 只描述 Workbench goal operation 本身，不是 approval、main verification 或 release-ready 证据；dry-run 写入 operation registry 不等于写入 goal event journal。
+v29 的 controlled implementation plan preview route：
 
-Goal Operation Console 会对当前 active goal 的 operations route 做近实时轮询，刷新 command preview、stdout/stderr 风格输出、status、plan hash、event ids 和 next action。轮询只重新读取受控 `GET /api/goals/<goal-id>/operations` 及既有 active goal contracts，不执行 shell、不提供终端模拟器、不追加 goal event，也不根据前端状态判断任务完成。
+```text
+GET /api/goals/<goal-id|latest>/implementation-plan-preview?task=<task-id>
+```
+
+该 route 只接受 `task` query 字段。后端从 registered runbook、`goal next`、`goal prompt --role worker` 和 scoped event log 生成 `controlled-implementation-plan-preview.v1`，显示与 `symphony do --write --json` 对齐的 isolated-workspace write semantics、plan id/hash、active task constraints、worker prompt、goal/task/evidence refs 和 safety flags。它不接受浏览器传入 prompt、path、command、confirm、planHash 或任意 shell 字段；不运行 `symphony do`、不调用模型、不创建 workspace run、不合并、不推送、不打 tag，也不登记 worker/reviewer/main-verification 状态。
+
+v29 的 controlled implementation confirm route：
+
+```text
+POST /api/goals/<goal-id|latest>/implementation-run-confirm
+```
+
+该 route 只接受 JSON body 中的 `goalId`、`taskId`、`planId` 和 `planHash`。后端重新生成同一 active goal/task 的 `controlled-implementation-plan-preview.v1`，要求 plan id/hash 与 preview 完全一致，然后物化受控 execution plan，并调用既有 `symphony do --confirm-plan <plan-id> --json` 确认路径。失败的 context/hash/body 校验不会启动 run。确认成功后，响应包含 `controlled-implementation-run-confirmation.v1`、`operationRun` 和刷新后的 `goal-operation-runs.v1`；Operation Console 与 Implementation 面板从该 registry entry 显示 run status、stdout/stderr 摘要、artifact refs、verifier summary、changed-file count 和 failure reason。该 route 不接受 prompt、path、command、shell 字段、模型字段、merge/push/tag 字段，也不登记 reviewer、main verification 或 release readiness。
+
+v29 的 worker evidence handoff 位于 Next Action 的 event registration forms 下。它只在 active task 仍由 worker 接手、afterCompletion 允许 `worker.evidence-recorded`，且 `goal-operation-runs.v1` 中同一 goal/task 存在 confirmed implementation operation 时出现。面板展示 operation id、run id、execution plan id、evidence artifact path、managed evidence ref，以及 confirmed run 暴露的 source workspace path，并预填 `symphony goal update --event worker.evidence-recorded` 表单。用户先运行 dry-run preview，检查 `goal-update-plan.v1` 和 plan hash，再用同一字段 confirm。这个 handoff 不读取 evidence 正文，不打开 source workspace，不运行 shell，不启动模型或 agent，不登记 reviewer/main verification/release 事件。
+
+v31 的 controlled verification confirm route：
+
+```text
+POST /api/goals/<goal-id|latest>/verification-run-confirm
+```
+
+该 route 只接受 JSON body 中的 `goalId`、`taskId` 和 `suiteId=v31-main-verification-command-suite`。后端重新读取同一 managed runbook task，固定运行 `pnpm check`、`pnpm test`、`pnpm workbench:build`、`git diff --check`，并且只附加已经 allowlist 的 active-goal JSON read commands，例如 `goal-status` 和 `goal next`。响应是 `controlled-verification-run-confirmation.v1`，每条命令都有 status、stdout/stderr 摘要、exit code、开始/结束时间；同一个 operation registry entry 从 `running` 更新为 `confirmed` 或 `failed`。即使所有命令 exit code 都是 0，`runResult.gatePassed` 和 `safety.successImpliesGatePassed` 也必须是 false；main verification 仍要单独用 `goal gate --gate main-verification` dry-run/confirm 登记。
+
+`GET /api/goals/<goal-id|latest>/operations` 返回 `goal-operation-runs.v1`。这个 registry 只描述 Workbench goal operation 本身，不是 approval、main verification 或 release-ready 证据；dry-run 写入 operation registry 不等于写入 goal event journal。v29 implementation entries 使用 `commandKind: "implementation"`，结果来自受控 `symphony do --confirm-plan`，不是浏览器 shell runner。v31 verification entries 使用 `commandKind: "verification"`，结果来自固定 verification suite，不接受用户输入的 shell command。
+
+Goal Operation Console 会对当前 active goal 的 operations route 做近实时轮询，刷新 command preview、stdout/stderr 风格输出、status、plan hash、event ids、implementation/verification run result、artifact refs、verifier summary 和 next action。轮询只重新读取受控 `GET /api/goals/<goal-id>/operations` 及既有 active goal contracts，不执行 shell、不提供终端模拟器、不追加 goal event，也不根据前端状态判断任务完成。
+
+v31 的 Main Verification Evidence Draft 位于 Verification 路径下。Workbench 从 `goal-progress-ledger.v1`、`goal-event-log.v1`、`goal-next-action.v1`、`goal-operation-runs.v1`、review evidence ref、worker evidence ref、verification operation command results，以及存在时的 adoption refs 生成 copy-only markdown draft。面板只读取 active `mainVerificationEvidenceDraft` model 的显式字段：`verification`、`refs`、`adoptionRefs`、`copyOnlyGateDryRun` 和 `markdown`。缺少 reviewer approved、worker/review evidence ref、confirmed passed verification operation、command results 或 goal/task refs 时，面板显示 missing inputs/blockers，不补写正文。draft 明确需要 operator/reviewer 检查；它不写 evidence 文件、不读取 evidence 正文、不登记 `main.verification-passed`、不登记 reviewer approval、release readiness 或任何 gate。
+
+v31 的 Main Verification Gate Registration 面板也在 Verification 路径下。它只在 readiness 为 true、draft 为 `draft-ready`、存在 target evidence ref、controlled verification run 已通过且 command results 存在时，把 `main.verification-passed` 表单预填为 `symphony goal gate --gate main-verification --status passed`。面板里的 gate 和 status 是固定字段，不提供任意 gate 名称、任意 status 或 shell command 输入。用户输入 verifier id 后，Workbench 先调用 event-plan-preview 生成 dry-run plan，再用同一字段和返回的 `planHash` 调用 event-plan-confirm。confirm 成功后只追加后端 event，并刷新 goal-status、events 和 next action；页面不运行验证命令、不写 evidence 文件、不读取 evidence 正文、不合并、不推送、不打 tag、不声明 release readiness，也不把 verification operation 成功当成 gate passed。
+
+v32 的 Release Evidence Draft 位于 Closeout Gaps 路径下。Workbench 从 `goal-closeout-report.v1`、`ReleaseBaselineResolver`、`goal-event-log.v1` 和 release checklist projection 生成 copy-only markdown，显示 release name、goal id、release evidence ref、tag evidence ref、target commit、target commit source、release notes summary 和每个 release gate 的 command/result 字段。字段缺失时保持缺失状态，不从 README、branch、文件名、commit message 或前端状态补推断。这个 draft 不写文件、不运行 shell、不登记 release gate 或 `release.ready`。
+
+v32 的 Tag Evidence Draft 同样位于 Closeout Gaps 路径下。Workbench 显示 tag recommendation、target commit、release notes summary、latest `release.tag-evidence` event/ref、copy-only `git tag -a <tag> <commit> -m "<release>"` command，以及 command/result 字段中的 `not-run-by-workbench` 状态。页面没有执行 tag、push tag、publish release、merge、下载 artifact、打开本地文件或登记 release.ready 的入口。
 
 Workbench 不保存“前端状态”。用户看到的 worker、reviewer 和 main verification 状态都来自 confirm 后刷新的后端 contract：
 
@@ -234,7 +274,37 @@ v23 的 console API 回归覆盖最新 goal workflow 的常用路径：成功 dr
 
 v25 的 worker evidence handoff 只服务 `v25-controlled-implementation-lane`。当 latest run 是 confirmed isolated workspace implementation，且暴露 `evidenceArtifactPath` 和 `sourceWorkspacePath` 时，Workbench 会显示 worker evidence registration form 和 prompt handoff。表单默认使用 `artifact-ref:artifact:<run-id>:evidence` 这类 managed artifact ref，仍然走 event-plan-preview 和 event-plan-confirm；页面不读取 evidence 正文，不打开 source workspace，不运行 shell，不让 worker 角色登记 reviewer approval 或 main verification。
 
-v26 的 Adoption Candidate Panel 从 `/api/runs` 返回的 `symphony.console-runs` 里筛选可采纳的 confirmed isolated workspace run。候选必须已经 `status=passed`、`verifierStatus=passed`，并暴露 source run、source workspace、worker evidence、changed files 和 `mainWorktreeWrites=false`。面板只展示这些候选，不调用 `symphony adopt --run`，不冻结 patch，不检查 recovery state，不确认采纳，不合并、不打 tag，也不根据文件名、分支名、commit message 或前端状态推断 reviewer approved、main verified 或 release ready。
+v30 的 Adoption Candidate Panel 优先读取 `/api/goals/<goal-id>/operations` 暴露的 `goal-operation-runs.v1` implementation operation，缺失时回退到 `/api/runs` 的 `symphony.console-runs`。面板把记录分成 adoptable 和 blocked：adoptable 必须来自 passed run、passed verifier status、managed evidence artifact ref、isolated workspace refs、source workspace fingerprint，并且 `mainWorktreeWrites=false`。blocked 行保留在列表里并显示哪个显式字段不满足。面板不调用 `symphony adopt --run`，不冻结 patch，不检查 recovery state，不确认采纳，不合并、不打 tag，也不根据文件名、分支名、commit message、prompt text、task title 或前端状态推断 reviewer approved、main verified 或 release ready。
+
+v30 的 Adoption Plan Preview Workspace 位于同一 Adoption 路径下。用户从 adoptable implementation run 点击 freeze 后，浏览器只提交 `goalId`、`taskId`、`sourceRunId` 和 `operationId` 到：
+
+```text
+POST /api/goals/<goal-id|latest>/adoption-plan-freeze
+```
+
+后端重新读取 scoped operation registry，确认该 run 仍是同一 active goal/task 的 adoptable implementation result，然后复用现有 `symphony adopt --run <confirmed-run-id> --json` 冻结 adoption plan。页面显示 `adoptionPlanId`、patch artifact、patch hash、file operations、affected files、source workspace fingerprint、project/git fingerprints、inspect command 和 frozen confirmation command。该路径不接受 prompt、path、shell command、planHash、adoption confirm 字段，也不运行 `symphony adopt --confirm`，不 apply patch，不合并、不 push、不 tag、不登记 reviewer/main/release 事件。
+
+v30 的 Adoption Inspect and Recovery View 位于 freeze 面板后面。Workbench 从同一个 active goal scoped `goal-operation-runs.v1` 中读取最近的 `commandKind: "adoption-plan"` operation，只用其中的 frozen `adoptionPlanId` 生成：
+
+```text
+GET /api/adoptions/<adoption-id>/inspect
+```
+
+该 route 复用既有 `symphony adopt --inspect <adoption-id> --json` 的只读 builder。页面显示 journal status、adoption plan/patch refs、patch hash、file operation before/after hash、current worktree 是否匹配 after hash、current worktree 是否仍匹配 journal before files、latest confirmation run、source run/evidence context 和 copy-only recovery command。页面不接受用户输入 adoption id、path、shell command、confirm/apply 字段，不登记 reviewer/main/release 事件，也不从文件名、branch、commit message、prompt text、task title 或前端状态推断 readiness。
+
+v30 的 controlled adoption confirm 位于 inspect/recovery 面板同一路径。用户确认前，Workbench 只从 scoped `goal-operation-runs.v1` 里的 frozen `commandKind: "adoption-plan"` operation 生成请求体：
+
+```text
+POST /api/goals/<goal-id|latest>/adoption-confirm
+```
+
+JSON body 只允许 `goalId`、`taskId`、`adoptionPlanId` 和 `operationId`。后端重新读取同一 active goal/task 的 frozen adoption-plan operation，确认 adoption id、operation id、patch refs 和 goal/task context 匹配后，复用既有 `symphony adopt --confirm <adoption-id> --json`。成功后返回 `controlled-adoption-confirmation.v1`、新的 `commandKind: "adoption-confirm"` operation、刷新后的 active goal progress、events、runs、operations 和 next action。这个 confirm 会让既有 adoption CLI 把 frozen patch 应用到 main worktree，但不会 merge、push、tag、publish，也不会登记 reviewer、main verification 或 release readiness。
+
+v30 adoption evidence bridge 用 task worker evidence、route tests、Workbench build 和 release evidence 文档把这条路径接到 verified workflow。worker evidence 只说明 task-5 实现和验收命令结果；release evidence 只列出待 release manager 核验的 gate 输入。两者都不是 reviewer approval、main verification 或 release readiness。Workbench 页面可以显示 adoption confirm 的 `mainWorktreeWrites=true` 结果和 `reviewerEventRegistered=false`、`mainVerificationEventRegistered=false`、`releaseReadinessRegistered=false` safety 字段，但不能把它们变成审批、main verification 或 release gate。
+
+v31 的 Main Verification Readiness 位于 Verification 路径下。面板只读取 active goal 的 `goal-progress-ledger.v1`、`goal-event-log.v1`、`goal-next-action.v1`、`goal-closeout-report.v1`、`goal-operation-runs.v1`，以及有 frozen adoption plan 时的 `symphony.console-adoption-inspect`。它展示当前 task、reviewer verdict、adoption state、blockers、验证命令、copy-only gate dry-run 命令、显式状态来源和被忽略的 inference source。进入 main verification 需要显式 `reviewer.approved` 或 event-backed goal-status verdict；如果同一 goal/task 有 confirmed `adoption-plan` operation，还要等 confirmed `adoption-confirm` run state passed。`reviewer.needs-revision`、`main.verification-failed`、未通过的 adoption confirm、缺失 review evidence 都会显示为 blocker。面板不读取 evidence 正文，不打开本地文件，不运行 merge 或验证命令，不写 main verification evidence，不登记 `goal gate`，也不从 branch、文件名、commit message、prompt text、task title、copy-only command 或前端状态判断 ready。
+
+v31 的 allowlisted verification plan preview 挂在同一个 Main Verification Readiness 面板内。预览固定列出 `pnpm check`、`pnpm test`、`pnpm workbench:build`、`git diff --check`，并且只允许从 active goal/task contract 中带入受控上下文命令，例如当前 goal 的 `goal-status` 和 `goal next` JSON 读取命令。面板显示 goal id、task id、latest run id/status、worker/review evidence refs、adoption operation refs 和已有 main verification ref；这些字段只用于定位即将验证的上下文，不会被前端改写成通过状态。任意 shell 文本、浏览器输入、路径、prompt、branch 和 task title 都不会进入命令列表。浏览器只展示 copy-only 命令，不运行验证命令，不打开终端，不写 event，不登记 main-verification gate。
 
 v27 的 Review Workspace 位于 active goal 主路径。它从既有 contract 组合当前 task 的审查上下文：changed files、source run、source workspace 字段、worker evidence ref、copy-only reviewer prompt、runbook/prompt checklist、expected `reviewer.approved` / `reviewer.needs-revision` verdict event 和 dry-run review registration command。Reviewer handoff 区块显示由 `symphony goal prompt --role reviewer` 生成 prompt 的 route/command、review evidence path、最近 worker actor，以及 reviewer id 必须不同于 worker actor 的约束。Review verdict registration 区块复用 `symphony goal review` dry-run preview 和 plan-hash confirm，只允许登记 `approved` 或 `needs-revision`，confirm 成功后重新读取 goal progress、events、next action 和 operation state。面板不读取 evidence 正文，不打开 workspace，不运行 shell，不启动 subagent，也不从 source run、文件名、branch、commit message 或前端状态推断 approval。
 
@@ -275,7 +345,7 @@ Workbench active goal 面板：
 - Prompt Preview：展示 `goal-prompt-pack.v1` 或 next action 中的 copy-only `/goal` 文本。这里没有执行按钮、agent 启动、模型调用、终端写入或 event confirm。
 - Review Workspace：展示 active task 的 changed files、source run、worker evidence、review prompt、review checklist 和 expected verdict event；review verdict 只能通过 `goal review` dry-run preview 和 plan-hash confirm 写入。这里没有 evidence 正文读取、workspace 打开、shell 执行、agent 启动或前端状态推断。
 - ActiveGoalViewModel：展示 goal-status、goal next、goal prompt 和 goal closeout 这些 command-backed source 的 contract 与 route 状态，不回到旧的 scan/do/review/verify/status/continue/artifacts 顶层动作列表。
-- Closeout Gaps：展示 `goal-closeout-report.v1` 的 missing worker evidence、review evidence、main verification、release gates 和 release-ready source。v28 同一面板增加 release verification checklist、`release.ready` gate dry-run/confirm 表单和 tag evidence prompt；这些内容只给出收口路径，不运行命令、不打 tag、不从命令文本推断 release-ready。
+- Closeout Gaps：展示 `goal-closeout-report.v1` 的 missing worker evidence、review evidence、main verification、release gates 和 release-ready source。v28 同一面板增加 release verification checklist、`release.ready` gate dry-run/confirm 表单和 tag evidence prompt；v32 同一面板增加 release baseline resolver、release evidence draft、tag evidence draft 和 next-version handoff draft，显示 current branch、main HEAD、origin/main、worktree cleanliness、PR/CI ref、tag recommendation、target commit、release notes summary、task/release gate evidence anchors 和 v33 起步上下文。dirty、非 main 或 main/origin 不一致时，该面板只给 stop/fix guidance，不显示可确认的 `release.ready` 表单。release checklist 中的每个 gate 只显示 copy-only validation command，并通过固定的 `release.gate-passed` / `release.gate-failed` 表单登记 explicit gate event；tag command 和 next-version context commands 只作为 copy-only 文本展示，页面不运行 `pnpm`、`audit`、`mcas doctor`、`git diff`、`git tag`、push 或 publish，也不创建 v33 goal。
 
 Active Goal API 只接受 `GET`：
 
@@ -296,8 +366,9 @@ release-ready 边界：
 
 - `pnpm check`、`pnpm test`、`pnpm workbench:build`、`pnpm test:mutation:gate`、`pnpm audit --audit-level high`、`git diff --check` 和 `pnpm mcas doctor` 通过，只是命令证据。
 - 对应 release gate 需要用 `symphony goal gate --gate release.<gate> --status passed` dry-run / confirm 登记。
+- Release baseline 必须来自 `/api/readiness` 的后端 git/GitHub 命令输出。dirty worktree、当前分支不是 `main`、或 `main` 与 `origin/main` 不一致时，Workbench 不提供最终 release-ready 判断入口。
 - 最终 release-ready 需要 `symphony goal gate --gate release.ready --status declared` dry-run / confirm，产生 `release.ready-declared` event。
-- Workbench 只展示 `summary.releaseReady`、`releaseReadySource`、closeout gaps、release checklist 状态、copy-only gate commands 和 tag evidence prompt，不能从命令文本、分支、文件名、prompt preview 或 closeout 文案推断 release-ready。
+- Workbench 只展示 `summary.releaseReady`、`releaseReadySource`、closeout gaps、release checklist 状态、release evidence draft、tag evidence draft、copy-only gate commands 和 copy-only tag command，不能从命令文本、分支、文件名、prompt preview 或 closeout 文案推断 release-ready。
 
 ## Capabilities 和 Diagnostics
 

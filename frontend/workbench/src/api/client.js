@@ -8,12 +8,19 @@ import {
   GOAL_EVENTS_ROUTE_TEMPLATE,
   GOAL_PROGRESS_ROUTE_TEMPLATE,
   GOAL_CLOSEOUT_ROUTE_TEMPLATE,
+  RELEASE_BASELINE_ROUTE_TEMPLATE,
   GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
+  CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
+  ADOPTION_INSPECT_ROUTE_TEMPLATE,
+  CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
+  createAdoptionInspectRoute,
+  createControlledImplementationPlanPreviewRoute,
   createGoalEventsRoute,
   createGoalOperationsRoute,
   createGoalProgressRoute,
   createGoalReviewerPromptRoute,
+  createReleaseBaselineRoute,
   createRunTimelineRoute,
   createSafeArtifactPreviewRoutes,
   projectSubagentHandoffBoard,
@@ -23,6 +30,11 @@ import {
 const READONLY_ERROR_MESSAGE = '读取失败 / contract 未暴露 / 不可用';
 const GOAL_PLAN_PREVIEW_ERROR_MESSAGE = 'dry-run plan preview 未返回可用 contract';
 const GOAL_PLAN_CONFIRM_ERROR_MESSAGE = 'event confirm 未返回可用 contract';
+const CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE = 'implementation confirm 未返回可用 contract';
+const CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE = 'verification confirm 未返回可用 contract';
+const CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE = 'adoption plan freeze 未返回可用 contract';
+const CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE = 'adoption confirm 未返回可用 contract';
+const ADOPTION_INSPECT_ERROR_MESSAGE = 'adoption inspect 未返回可用 contract';
 const PROMPT_WORKSPACE_ERROR_MESSAGE = 'prompt workspace route 未返回可用 contract';
 
 export async function fetchReadonlyRoute(route, {
@@ -105,7 +117,9 @@ export async function fetchWorkbenchContracts(options = {}) {
   const activeGoalProgressRoute = createGoalProgressRoute(activeGoalId);
   const activeGoalEventsRoute = createGoalEventsRoute(activeGoalId);
   const activeGoalOperationsRoute = createGoalOperationsRoute(activeGoalId);
+  const activeReleaseBaselineRoute = createReleaseBaselineRoute(activeGoalId);
   const goalReviewerPromptRoute = createGoalReviewerPromptRoute(activeGoalId, results.goalNextAction?.data);
+  const controlledImplementationPlanPreviewRoute = createControlledImplementationPlanPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
 
@@ -146,8 +160,28 @@ export async function fetchWorkbenchContracts(options = {}) {
           label: 'Active Goal Operations'
         },
         message: 'active goal operations 未暴露 / 不可用'
-      })
+    })
     : await fetchReadonlyRoute(activeGoalOperationsRoute, options);
+
+  results.activeReleaseBaseline = activeReleaseBaselineRoute === null
+    ? readonlySkipped({
+        route: {
+          ...RELEASE_BASELINE_ROUTE_TEMPLATE,
+          id: 'activeReleaseBaseline',
+          label: 'Active Release Baseline'
+        },
+        message: 'release baseline 未暴露 / 不可用'
+      })
+    : await fetchReadonlyRoute(activeReleaseBaselineRoute, options);
+
+  const adoptionInspectRoute = createAdoptionInspectRoute(results.activeGoalOperations?.data);
+
+  results.adoptionInspect = adoptionInspectRoute === null
+    ? readonlySkipped({
+        route: ADOPTION_INSPECT_ROUTE_TEMPLATE,
+        message: 'adoption inspect 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(adoptionInspectRoute, options);
 
   results.goalReviewerPromptPack = goalReviewerPromptRoute === null
     ? readonlySkipped({
@@ -159,6 +193,17 @@ export async function fetchWorkbenchContracts(options = {}) {
         message: 'reviewer goal prompt 未暴露 / 不适用'
       })
     : await fetchReadonlyRoute(goalReviewerPromptRoute, options);
+
+  results.controlledImplementationPlanPreview = controlledImplementationPlanPreviewRoute === null
+    ? readonlySkipped({
+        route: {
+          ...CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
+          id: 'controlledImplementationPlanPreview',
+          label: 'Controlled Implementation Plan Preview'
+        },
+        message: 'controlled implementation plan preview 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(controlledImplementationPlanPreviewRoute, options);
 
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({
@@ -305,6 +350,359 @@ export async function confirmGoalEventPlan(path, body, {
       ok: false,
       httpStatus: response.status,
       message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmControlledImplementationRunPlan(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'controlled-implementation-run-confirmation.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmControlledVerificationRun(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'controlled-verification-run-confirmation.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmControlledAdoptionPlanFreeze(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'controlled-adoption-plan-freeze.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmControlledAdoptionPlan(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE.contractName) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function fetchAdoptionInspection(path, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: ADOPTION_INSPECT_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json'
+      }
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: ADOPTION_INSPECT_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: ADOPTION_INSPECT_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== ADOPTION_INSPECT_ROUTE_TEMPLATE.contractName) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: ADOPTION_INSPECT_ERROR_MESSAGE,
       errorEnvelope: null
     };
   }

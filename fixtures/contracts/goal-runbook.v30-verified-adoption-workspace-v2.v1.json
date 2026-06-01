@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v30-verified-adoption-workspace-v2",
+  "goalTitle": "v30 Verified Adoption Workspace v2",
+  "baseline": {
+    "tag": "v29",
+    "commit": null,
+    "evidenceRef": "docs/plans/v29-release-evidence-2026-06-01.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Adoption candidate normalization",
+      "branch": "v30-task-1-adoption-candidate-normalization",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户知道哪些 v29 implementation run 可以采纳，哪些不能采纳。",
+        "建立 adoption candidate projection：只从 passed run、artifact refs、workspace refs、fingerprints 和 verifier status 判断，不从 branch/file names 猜。",
+        "Worker evidence path: docs/plans/v30-task-1-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v30-task-1-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v30-task-1-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v30-verified-adoption-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Adoption plan preview workspace",
+      "branch": "v30-task-2-adoption-plan-preview-workspace",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能在 Workbench 里冻结 adoption plan，而不是直接 git apply。",
+        "接入 existing `symphony adopt --run <confirmed-run-id> --json` 计划语义，展示 patch summary、fingerprints、affected files、recovery notes。",
+        "Worker evidence path: docs/plans/v30-task-2-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v30-task-2-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v30-task-2-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v30-verified-adoption-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Adoption inspect and recovery view",
+      "branch": "v30-task-3-adoption-inspect-and-recovery-view",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "采纳失败或中断后，用户能在 Workbench 里看清楚恢复状态。",
+        "接入 `symphony adopt --inspect <adoption-id> --json` 的 read-only 输出，展示 journal state、before/after hash、current worktree matches。",
+        "Worker evidence path: docs/plans/v30-task-3-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v30-task-3-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v30-task-3-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v30-verified-adoption-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Confirm adoption and post-apply next action",
+      "branch": "v30-task-4-confirm-adoption-and-post-apply-next-action",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户确认 frozen adoption plan 后，结果能进入 main worktree 并出现下一步 review/verification。",
+        "接入 `symphony adopt --confirm <adoption-id> --json` 的受控 confirm 语义；confirm 后刷新 active goal、events、runs、next action。",
+        "Worker evidence path: docs/plans/v30-task-4-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v30-task-4-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v30-task-4-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v30-verified-adoption-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Adoption tests, docs, and evidence bridge",
+      "branch": "v30-task-5-adoption-tests-docs-and-evidence-bridge",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "adoption 是 verified workflow，不是直接 patch/apply 按钮。",
+        "补 Workbench UI/API tests、route-safety tests、operator guide、release evidence；明确不运行模型、不触发任意 shell、不声明 main verification。",
+        "Worker evidence path: docs/plans/v30-task-5-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v30-task-5-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v30-task-5-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v30-verified-adoption-workspace-v2 --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

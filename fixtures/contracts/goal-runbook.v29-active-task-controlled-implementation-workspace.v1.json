@@ -1,0 +1,204 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v29-active-task-controlled-implementation-workspace",
+  "goalTitle": "v29 Active Task Controlled Implementation Workspace",
+  "baseline": {
+    "tag": "v28",
+    "commit": null,
+    "evidenceRef": "docs/plans/v28-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Active task implementation eligibility",
+      "branch": "v29-task-1-active-task-implementation-eligibility",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户知道当前 task 是否可以进入受控实现，而不是盲点 implementation。",
+        "建立 ActiveTaskImplementationEligibility 模型：读取 goal-status、goal next、runbook、events 和 route context，只从 explicit events 判断 task 是否可实现。",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v29-active-task-controlled-implementation-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Controlled implementation plan preview",
+      "branch": "v29-task-2-controlled-implementation-plan-preview",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能在 Workbench 里看到 frozen implementation plan 预览，而不是把自然语言任务直接交给浏览器执行。",
+        "增加受控 plan preview API/UI，映射到 `symphony do --write --json` 的计划生成语义；只允许 active task 约束、worker prompt、goal/task/evidence refs 和 existing allowlist 字段。",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v29-active-task-controlled-implementation-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Confirm isolated workspace execution",
+      "branch": "v29-task-3-confirm-isolated-workspace-execution",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户确认 plan hash 后能启动 isolated workspace run，main worktree 不被写入。",
+        "接入 existing `symphony do --confirm-plan <plan-id> --json` 语义；Workbench confirm 只接受 preview 返回的 plan id/hash 和相同 task context。",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v29-active-task-controlled-implementation-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Operation console and run-result bridge",
+      "branch": "v29-task-4-operation-console-and-run-result-bridge",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能看到 implementation run 的状态、输出摘要、artifact refs 和失败原因。",
+        "把 implementation run 写入/读取 goal operation registry，把 run result、artifact refs、verifier summary 接到 Active Goal / Operations / Implementation 路径。",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v29-active-task-controlled-implementation-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Worker evidence handoff after implementation run",
+      "branch": "v29-task-5-worker-evidence-handoff-after-implementation-run",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "实现结果能自然回到 worker evidence，不靠用户手工拼 evidence ref。",
+        "基于 confirmed implementation run 生成 worker evidence draft/handoff，连接 `goal update worker.evidence-recorded` dry-run + plan-hash confirm；补测试、docs、release evidence。",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v29-active-task-controlled-implementation-workspace --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}
