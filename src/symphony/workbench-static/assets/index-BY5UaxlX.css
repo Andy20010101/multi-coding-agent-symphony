@@ -33,8 +33,11 @@ body {
 .workbench-route-context,
 .golden-path-grid,
 .primary-active-goal-grid,
+.implementation-eligibility-grid,
 .main-verification-readiness-grid,
 .adoption-candidate-grid,
+.adoption-plan-preview-grid,
+.adoption-inspect-grid,
 .panel-grid,
 .detail-grid,
 .handoff-grid,
@@ -291,8 +294,12 @@ h4 {
 .panel-grid,
 .primary-active-goal-grid,
 .golden-path-grid,
+.implementation-eligibility-grid,
+.implementation-plan-preview-grid,
 .main-verification-readiness-grid,
 .adoption-candidate-grid,
+.adoption-plan-preview-grid,
+.adoption-inspect-grid,
 .detail-grid,
 .handoff-grid,
 .goal-grid,
@@ -316,12 +323,32 @@ h4 {
   margin-top: 16px;
 }
 
+.implementation-eligibility-grid {
+  grid-template-columns: 1fr;
+  margin-top: 16px;
+}
+
+.implementation-plan-preview-grid {
+  grid-template-columns: 1fr;
+  margin-top: 16px;
+}
+
 .main-verification-readiness-grid {
   grid-template-columns: 1fr;
   margin-top: 16px;
 }
 
 .adoption-candidate-grid {
+  grid-template-columns: 1fr;
+  margin-top: 16px;
+}
+
+.adoption-plan-preview-grid {
+  grid-template-columns: 1fr;
+  margin-top: 16px;
+}
+
+.adoption-inspect-grid {
   grid-template-columns: 1fr;
   margin-top: 16px;
 }
@@ -605,6 +632,17 @@ h4 {
   color: #506066;
 }
 
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.panel-actions button {
+  min-height: 36px;
+}
+
 .compact-list,
 .artifact-list,
 .gap-list,
@@ -772,6 +810,25 @@ h4 {
   padding-top: 12px;
 }
 
+.copy-block {
+  max-height: 280px;
+  overflow: auto;
+  margin: 8px 0 0;
+  border: 1px solid #d8e0e2;
+  border-radius: 6px;
+  padding: 10px;
+  background: #f8faf9;
+  white-space: pre-wrap;
+}
+
+.evidence-ref-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
 .goal-event-preview-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -902,6 +959,21 @@ h4 {
   background: #fbfcfb;
 }
 
+.operation-artifact-ref-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operation-artifact-ref-list > li {
+  border: 1px solid #d8e0e2;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fbfcfb;
+}
+
 .operation-console-streams {
   display: grid;
   gap: 10px;
@@ -983,6 +1055,62 @@ h4 {
   user-select: text;
 }
 
+.verification-plan-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.main-verification-evidence-draft {
+  display: grid;
+  gap: 12px;
+}
+
+.main-verification-evidence-draft pre {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #f7f8f5;
+  color: #18232a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.main-verification-draft-command-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.verification-plan-command-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.verification-plan-command-list li {
+  display: grid;
+  gap: 8px;
+}
+
+.verification-plan-command-list code {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #f3f6f6;
+  color: #18232a;
+  overflow-wrap: anywhere;
+}
+
 .safe-preview-block {
   display: grid;
   gap: 10px;
@@ -1041,8 +1169,12 @@ h4 {
   .workbench-route-context,
   .golden-path-grid,
   .primary-active-goal-grid,
+  .implementation-eligibility-grid,
+  .implementation-plan-preview-grid,
   .main-verification-readiness-grid,
   .adoption-candidate-grid,
+  .adoption-plan-preview-grid,
+  .adoption-inspect-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,
@@ -1079,8 +1211,12 @@ h4 {
   .workbench-route-context,
   .golden-path-grid,
   .primary-active-goal-grid,
+  .implementation-eligibility-grid,
+  .implementation-plan-preview-grid,
   .main-verification-readiness-grid,
   .adoption-candidate-grid,
+  .adoption-plan-preview-grid,
+  .adoption-inspect-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,

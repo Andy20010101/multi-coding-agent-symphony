@@ -9,7 +9,7 @@ export const GOAL_OPERATION_RUNS_CONTRACT_NAME = 'goal-operation-runs.v1';
 export const GOAL_OPERATION_RUNS_CONTRACT_VERSION = 1;
 export const MANAGED_GOAL_OPERATION_RUN_STORAGE = 'managed-goal-operation-run-registry';
 
-const COMMAND_KINDS = Object.freeze(['update', 'review', 'gate']);
+const COMMAND_KINDS = Object.freeze(['update', 'review', 'gate', 'implementation', 'adoption-plan', 'adoption-confirm', 'verification']);
 const ACTOR_ROLES = Object.freeze([
   'worker',
   'reviewer',
@@ -19,7 +19,9 @@ const ACTOR_ROLES = Object.freeze([
 ]);
 const STATUSES = Object.freeze([
   'dry-run-planned',
-  'confirmed'
+  'running',
+  'confirmed',
+  'failed'
 ]);
 const HASH_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const registryWriteChains = new Map();
@@ -145,23 +147,29 @@ function normalizeOperationRun(options) {
     status: normalizeStatus(options.status),
     planHash,
     eventIds: normalizeEventIds(options.eventIds),
+    output: normalizeOptionalJsonObject(options.output, 'output'),
+    runResult: normalizeOptionalJsonObject(options.runResult, 'runResult'),
+    artifactRefs: normalizeArtifactRefs(options.artifactRefs),
+    verifierSummary: normalizeOptionalJsonObject(options.verifierSummary, 'verifierSummary'),
+    failureReason: normalizeOptionalString(options.failureReason, 'failureReason'),
     source: normalizeOptionalString(options.source, 'source') ?? 'workbench',
     recordedAt: normalizeOptionalTimestamp(options.recordedAt) ?? new Date().toISOString()
   };
 }
 
 function buildOperationRunRecord({ normalized, existing }) {
-  const status = existing?.status === 'confirmed' && normalized.status === 'dry-run-planned'
-    ? 'confirmed'
+  const existingIsTerminal = existing?.status === 'confirmed' || existing?.status === 'failed';
+  const status = existingIsTerminal && normalized.status === 'dry-run-planned'
+    ? existing.status
     : normalized.status;
   const startedAt = existing?.timestamps?.startedAt ?? normalized.recordedAt;
-  const completedAt = status === 'confirmed' && normalized.status === 'confirmed'
+  const completedAt = (status === 'confirmed' || status === 'failed') && normalized.status === status
     ? normalized.recordedAt
     : existing?.timestamps?.completedAt ?? null;
   const eventIds = normalized.eventIds.length > 0
     ? normalized.eventIds
     : existing?.eventIds ?? normalized.eventIds;
-  const source = status === 'confirmed' && normalized.status === 'dry-run-planned'
+  const source = existingIsTerminal && normalized.status === 'dry-run-planned'
     ? existing?.source ?? normalized.source
     : normalized.source;
 
@@ -175,6 +183,13 @@ function buildOperationRunRecord({ normalized, existing }) {
     status,
     planHash: normalized.planHash,
     eventIds,
+    output: normalized.output ?? existing?.output,
+    runResult: normalized.runResult ?? existing?.runResult,
+    artifactRefs: normalized.artifactRefs.length > 0
+      ? normalized.artifactRefs
+      : existing?.artifactRefs ?? normalized.artifactRefs,
+    verifierSummary: normalized.verifierSummary ?? existing?.verifierSummary,
+    failureReason: normalized.failureReason ?? existing?.failureReason,
     source,
     timestamps: {
       startedAt,
@@ -239,6 +254,11 @@ function normalizeExistingRun(run, goalId) {
     status: normalizeStatus(run.status),
     planHash: normalizePlanHash(run.planHash),
     eventIds: normalizeEventIds(run.eventIds),
+    output: normalizeOptionalJsonObject(run.output, 'output'),
+    runResult: normalizeOptionalJsonObject(run.runResult, 'runResult'),
+    artifactRefs: normalizeArtifactRefs(run.artifactRefs),
+    verifierSummary: normalizeOptionalJsonObject(run.verifierSummary, 'verifierSummary'),
+    failureReason: normalizeOptionalString(run.failureReason, 'failureReason'),
     source: normalizeOptionalString(run.source, 'source') ?? 'workbench',
     timestamps: {
       startedAt: normalizeRequiredTimestamp(run.timestamps?.startedAt, 'timestamps.startedAt'),
@@ -363,6 +383,56 @@ function normalizeEventIds(value) {
   }
 
   return value.map((eventId, index) => normalizeSafeToken(eventId, `eventIds[${index}]`));
+}
+
+function normalizeArtifactRefs(value) {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new GoalOperationRunRegistryError(
+      'invalid-goal-operation-run',
+      'artifactRefs must be an array.'
+    );
+  }
+
+  return value.map((entry, index) => {
+    if (!isPlainObject(entry)) {
+      throw new GoalOperationRunRegistryError(
+        'invalid-goal-operation-run',
+        `artifactRefs[${index}] must be an object.`
+      );
+    }
+
+    return stripUndefined({
+      kind: normalizeOptionalString(entry.kind, `artifactRefs[${index}].kind`),
+      path: normalizeOptionalString(entry.path, `artifactRefs[${index}].path`),
+      ref: normalizeOptionalString(entry.ref, `artifactRefs[${index}].ref`),
+      uri: normalizeOptionalString(entry.uri, `artifactRefs[${index}].uri`),
+      title: normalizeOptionalString(entry.title, `artifactRefs[${index}].title`),
+      displayTitle: normalizeOptionalString(entry.displayTitle, `artifactRefs[${index}].displayTitle`),
+      sourceRunId: normalizeOptionalString(entry.sourceRunId, `artifactRefs[${index}].sourceRunId`),
+      artifactKind: normalizeOptionalString(entry.artifactKind, `artifactRefs[${index}].artifactKind`),
+      mime: normalizeOptionalString(entry.mime, `artifactRefs[${index}].mime`),
+      status: normalizeOptionalString(entry.status, `artifactRefs[${index}].status`)
+    });
+  });
+}
+
+function normalizeOptionalJsonObject(value, field) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!isPlainObject(value)) {
+    throw new GoalOperationRunRegistryError(
+      'invalid-goal-operation-run',
+      `${field} must be an object when provided.`
+    );
+  }
+
+  return stripUndefined(structuredClone(value));
 }
 
 function normalizeOptionalString(value, field) {

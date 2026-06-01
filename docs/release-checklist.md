@@ -18,6 +18,8 @@ pnpm mcas doctor
 
 Expected result: every command exits with code `0`. The Workbench build must refresh `src/symphony/workbench-static/` from the React/Vite source. The mutation gate runs Stryker against the hardened core modules and must stay above its configured break threshold. Passing these commands is local command evidence; release-ready still requires explicit goal gate events.
 
+Workbench release closeout records these command results as explicit release gate events. Use the release checklist row for each gate, attach the release evidence ref, preview the `symphony goal gate` dry-run plan, then confirm with the returned plan hash. The docs-updated and tag-evidence gates still require written evidence refs; Workbench does not infer them from changed filenames.
+
 For a scoped closeout, an operator may explicitly approve an incremental Stryker gate. Record the exact mutation ranges, test files, score, and break threshold. Before tagging a release, prefer the full `pnpm test:mutation:gate` unless the release owner accepts the recorded incremental gate as sufficient evidence.
 
 ## Required Harness Dry-Run Proof

@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { lstat, open, readFile, realpath, stat } from 'node:fs/promises';
-import { dirname, extname, resolve, sep } from 'node:path';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { NodeProcessRunner } from '../process-runner.js';
@@ -9,13 +10,17 @@ import { REAL_CLI_DOCTOR_ADAPTERS } from '../real-cli-doctor.js';
 import {
   listAdoptionJournals,
   listAdoptionPlans,
+  atomicWriteJson,
+  buildProjectFingerprint,
   listRunStates,
   readLatestContext,
   readLatestRun,
-  readRunState
+  readRunState,
+  writeExecutionPlan
 } from './state.js';
 import {
   PRODUCT_JSON_CONTRACT,
+  buildArtifactRefs,
   compactRunState
 } from './contract.js';
 import {
@@ -122,6 +127,21 @@ const SAFE_PREVIEW_TEXT_MIME_TYPES = Object.freeze([
   'text/x-patch'
 ]);
 const GOAL_EVENT_CONFIRM_MAX_BODY_BYTES = 32 * 1024;
+const CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME = 'controlled-implementation-plan-preview.v1';
+const CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_VERSION = 1;
+const CONTROLLED_IMPLEMENTATION_RUN_CONFIRMATION_CONTRACT_NAME = 'controlled-implementation-run-confirmation.v1';
+const CONTROLLED_IMPLEMENTATION_RUN_CONFIRMATION_CONTRACT_VERSION = 1;
+const CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = 'controlled-adoption-plan-freeze.v1';
+const CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_VERSION = 1;
+const CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = 'controlled-adoption-confirmation.v1';
+const CONTROLLED_ADOPTION_CONFIRM_CONTRACT_VERSION = 1;
+const CONTROLLED_VERIFICATION_RUN_CONFIRMATION_CONTRACT_NAME = 'controlled-verification-run-confirmation.v1';
+const CONTROLLED_VERIFICATION_RUN_CONFIRMATION_CONTRACT_VERSION = 1;
+const RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = 'release-baseline-resolver.v1';
+const RELEASE_BASELINE_RESOLVER_CONTRACT_VERSION = 1;
+const CONTROLLED_VERIFICATION_SUITE_ID = 'v31-main-verification-command-suite';
+const CONTROLLED_VERIFICATION_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
+const RELEASE_BASELINE_GIT_TIMEOUT_MS = 10 * 1000;
 const SAFE_PREVIEW_ARTIFACT_KIND_BY_REGISTERED_KIND = Object.freeze({
   context: 'project-context',
   summary: 'intake-summary',
@@ -784,6 +804,7 @@ export function createSymphonyConsoleServer({
   cwd = process.cwd(),
   env = process.env,
   runner = new NodeProcessRunner(),
+  mcasRunner,
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS
 } = {}) {
   return createServer(async (request, response) => {
@@ -792,6 +813,71 @@ export function createSymphonyConsoleServer({
 
     try {
       if (method === 'POST') {
+        const controlledVerificationRunConfirmRequest = parseControlledVerificationRunConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (controlledVerificationRunConfirmRequest !== null) {
+          await writeControlledVerificationRunConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            cwd,
+            env,
+            runner,
+            request: controlledVerificationRunConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const controlledAdoptionConfirmRequest = parseControlledAdoptionConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (controlledAdoptionConfirmRequest !== null) {
+          await writeControlledAdoptionConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            runner,
+            request: controlledAdoptionConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const controlledAdoptionPlanFreezeRequest = parseControlledAdoptionPlanFreezeRequestPath(url.pathname, url.searchParams);
+
+        if (controlledAdoptionPlanFreezeRequest !== null) {
+          await writeControlledAdoptionPlanFreezeResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            runner,
+            request: controlledAdoptionPlanFreezeRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const controlledImplementationRunConfirmRequest = parseControlledImplementationRunConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (controlledImplementationRunConfirmRequest !== null) {
+          await writeControlledImplementationRunConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            cwd,
+            env,
+            runner,
+            mcasRunner,
+            request: controlledImplementationRunConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
         const confirmRequest = parseGoalEventPlanConfirmRequestPath(url.pathname, url.searchParams);
 
         if (confirmRequest !== null) {
@@ -809,7 +895,7 @@ export function createSymphonyConsoleServer({
         writeApiErrorResponse(response, {
           status: 405,
           code: 'method-not-allowed',
-          message: 'Console API is read-only except controlled goal event plan confirm.',
+          message: 'Console API is read-only except controlled goal event plan confirm, controlled implementation run confirm, controlled verification run confirm, controlled adoption plan freeze, and controlled adoption confirm.',
           route: url.pathname,
           method
         });
@@ -929,6 +1015,35 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      const controlledImplementationPlanPreviewRequest = parseControlledImplementationPlanPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (controlledImplementationPlanPreviewRequest !== null) {
+        await writeControlledImplementationPlanPreviewResponse({
+          response,
+          stateDir,
+          request: controlledImplementationPlanPreviewRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const releaseBaselineRequest = parseReleaseBaselineRequestPath(url.pathname, url.searchParams);
+
+      if (releaseBaselineRequest !== null) {
+        await writeReleaseBaselineResponse({
+          response,
+          stateDir,
+          cwd,
+          env,
+          runner,
+          request: releaseBaselineRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
       const goalRunbookRequest = parseGoalRunbookRequestPath(url.pathname, url.searchParams);
 
       if (goalRunbookRequest !== null) {
@@ -1025,9 +1140,23 @@ export function createSymphonyConsoleServer({
         return;
       }
 
-      const adoptionInspectRequest = parseAdoptionInspectRequestPath(url.pathname);
+      const adoptionInspectRequest = parseAdoptionInspectRequestPath(url.pathname, url.searchParams);
 
       if (adoptionInspectRequest !== null) {
+        if (adoptionInspectRequest.kind === 'invalid') {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-adoption-inspect-ref',
+            message: 'Adoption inspect ref is invalid.',
+            route: url.pathname,
+            method,
+            safeDetails: {
+              reason: adoptionInspectRequest.reason
+            }
+          });
+          return;
+        }
+
         await writeAdoptionInspectResponse({
           response,
           stateDir,
@@ -1134,6 +1263,7 @@ export async function startSymphonyConsoleServer({
   cwd = process.cwd(),
   env = process.env,
   runner = new NodeProcessRunner(),
+  mcasRunner,
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS
 } = {}) {
   const server = createSymphonyConsoleServer({
@@ -1141,6 +1271,7 @@ export async function startSymphonyConsoleServer({
     cwd,
     env,
     runner,
+    mcasRunner,
     readinessTimeoutMs
   });
 
@@ -1512,6 +1643,491 @@ async function writeGoalEventPlanConfirmResponse({
   }
 }
 
+async function writeControlledImplementationPlanPreviewResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-controlled-implementation-preview-request',
+      message: 'Controlled implementation plan preview request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for controlled implementation plan preview was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, await buildControlledImplementationPlanPreview({
+      stateDir,
+      goalId: resolvedGoalId,
+      searchParams: request.searchParams
+    }));
+  } catch (error) {
+    if (
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalRunbookContextError ||
+      error instanceof GoalPromptPackError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeControlledImplementationRunConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  cwd,
+  env,
+  runner,
+  mcasRunner,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-controlled-implementation-confirm-request',
+      message: 'Controlled implementation run confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for controlled implementation run confirm was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const body = await readControlledImplementationRunConfirmRequestBody(requestMessage);
+    const confirmation = await confirmControlledImplementationRunPlan({
+      stateDir,
+      cwd,
+      env,
+      runner,
+      mcasRunner,
+      routeGoalId: resolvedGoalId,
+      body
+    });
+    const operationRun = await recordControlledImplementationOperationRunFromConfirmation({
+      stateDir,
+      goalId: resolvedGoalId,
+      confirmation
+    });
+
+    writeJsonResponse(response, 200, {
+      ...confirmation,
+      operationRun,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalRunbookContextError ||
+      error instanceof GoalPromptPackError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeControlledVerificationRunConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  cwd,
+  env,
+  runner,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-controlled-verification-confirm-request',
+      message: 'Controlled verification run confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for controlled verification run confirm was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const body = await readControlledVerificationRunConfirmRequestBody(requestMessage);
+    const confirmation = await confirmControlledVerificationRunPlan({
+      stateDir,
+      cwd,
+      env,
+      runner,
+      routeGoalId: resolvedGoalId,
+      body
+    });
+
+    writeJsonResponse(response, 200, {
+      ...confirmation,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalRunbookContextError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeControlledAdoptionPlanFreezeResponse({
+  requestMessage,
+  response,
+  stateDir,
+  runner,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-controlled-adoption-freeze-request',
+      message: 'Controlled adoption plan freeze request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for controlled adoption plan freeze was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const body = await readControlledAdoptionPlanFreezeRequestBody(requestMessage);
+    const freeze = await confirmControlledAdoptionPlanFreeze({
+      stateDir,
+      runner,
+      routeGoalId: resolvedGoalId,
+      body
+    });
+    const operationRun = await recordControlledAdoptionOperationRunFromFreeze({
+      stateDir,
+      goalId: resolvedGoalId,
+      freeze
+    });
+
+    writeJsonResponse(response, 200, {
+      ...freeze,
+      operationRun,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalRunbookContextError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeControlledAdoptionConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  runner,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-controlled-adoption-confirm-request',
+      message: 'Controlled adoption confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for controlled adoption confirm was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const body = await readControlledAdoptionConfirmRequestBody(requestMessage);
+    const confirmation = await confirmControlledAdoptionPlan({
+      stateDir,
+      runner,
+      routeGoalId: resolvedGoalId,
+      body
+    });
+    const operationRun = await recordControlledAdoptionOperationRunFromConfirmation({
+      stateDir,
+      goalId: resolvedGoalId,
+      confirmation
+    });
+
+    writeJsonResponse(response, 200, await buildControlledAdoptionConfirmResponse({
+      stateDir,
+      goalId: resolvedGoalId,
+      confirmation,
+      operationRun
+    }));
+  } catch (error) {
+    if (
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalRunbookContextError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function writeGoalRunbookResponse({ response, stateDir, request, route, method }) {
   if (request.kind === 'invalid') {
     writeInvalidGoalRunbookControlResponse({ response, route, method });
@@ -1629,6 +2245,316 @@ async function writeGoalCloseoutResponse({ response, stateDir, request, route, m
 
     throw error;
   }
+}
+
+async function writeReleaseBaselineResponse({ response, stateDir, cwd, env, runner, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalRunbookGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (!isNonEmptyString(resolvedGoalId)) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-runbook-not-found',
+      message: 'Release baseline resolver requires a managed goal runbook.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, await buildReleaseBaselineResolver({
+      stateDir,
+      goalId: resolvedGoalId,
+      cwd,
+      env,
+      runner
+    }));
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function buildReleaseBaselineResolver({
+  stateDir,
+  goalId,
+  cwd,
+  env,
+  runner
+}) {
+  const [context, nextAction] = await Promise.all([
+    loadGoalRunbookContext({
+      stateDir,
+      goalId,
+      allowControlledFixtureFallback: false
+    }),
+    buildGoalNextAction({
+      stateDir,
+      goalId
+    })
+  ]);
+
+  if (context === null) {
+    throw new GoalRunbookContextError(
+      'goal-runbook-not-found',
+      'Release baseline resolver requires a managed goal runbook.',
+      { goalId }
+    );
+  }
+
+  const activeTaskId = nextAction.next?.taskId ?? null;
+  const activeTask = isNonEmptyString(activeTaskId)
+    ? context.runbook.tasks.find((task) => task?.taskId === activeTaskId) ?? null
+    : null;
+  const [
+    currentBranchResult,
+    currentHeadResult,
+    mainHeadResult,
+    originMainResult,
+    worktreeResult
+  ] = await Promise.all([
+    runReleaseBaselineGitCommand({ runner, cwd, id: 'current-branch', args: ['rev-parse', '--abbrev-ref', 'HEAD'] }),
+    runReleaseBaselineGitCommand({ runner, cwd, id: 'current-head', args: ['rev-parse', 'HEAD'] }),
+    runReleaseBaselineGitCommand({ runner, cwd, id: 'main-head', args: ['rev-parse', 'main'] }),
+    runReleaseBaselineGitCommand({ runner, cwd, id: 'origin-main', args: ['rev-parse', 'origin/main'] }),
+    runReleaseBaselineGitCommand({ runner, cwd, id: 'worktree-status', args: ['status', '--porcelain=v1'] })
+  ]);
+  const currentBranch = releaseBaselineTrimmedStdout(currentBranchResult);
+  const currentHead = releaseBaselineTrimmedStdout(currentHeadResult);
+  const mainHead = releaseBaselineTrimmedStdout(mainHeadResult);
+  const originMain = releaseBaselineTrimmedStdout(originMainResult);
+  const dirtyPaths = worktreeResult.exitCode === 0
+    ? worktreeResult.stdout.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== '')
+    : [];
+  const worktreeClean = worktreeResult.exitCode === 0 && dirtyPaths.length === 0;
+  const blockers = buildReleaseBaselineBlockers({
+    currentBranch,
+    mainHead,
+    originMain,
+    worktreeClean,
+    commandResults: [
+      currentBranchResult,
+      currentHeadResult,
+      mainHeadResult,
+      originMainResult,
+      worktreeResult
+    ]
+  });
+  const status = blockers.length === 0 ? 'ready' : 'stopped';
+
+  return {
+    contractName: RELEASE_BASELINE_RESOLVER_CONTRACT_NAME,
+    contractVersion: RELEASE_BASELINE_RESOLVER_CONTRACT_VERSION,
+    generatedAt: new Date().toISOString(),
+    goalId,
+    taskId: activeTaskId,
+    role: nextAction.next?.role ?? null,
+    phase: nextAction.next?.phase ?? null,
+    reason: nextAction.reason ?? nextAction.next?.reason ?? null,
+    status,
+    decision: status === 'ready'
+      ? 'clean-main-baseline'
+      : 'stop-fix-guidance-only',
+    releaseBaseline: {
+      currentBranch,
+      currentHead,
+      mainHead,
+      originMain,
+      worktreeClean,
+      dirtyFileCount: dirtyPaths.length,
+      dirtyPaths,
+      prCiRef: buildReleaseBaselineCiRef(env)
+    },
+    activeContext: stripUndefined({
+      goalTitle: context.runbook.goalTitle,
+      baselineTag: context.runbook.baseline?.tag,
+      baselineCommit: context.runbook.baseline?.commit,
+      baselineEvidenceRef: context.runbook.baseline?.evidenceRef,
+      activeTaskTitle: activeTask?.title,
+      activeTaskBranch: activeTask?.branch,
+      activeTaskExpectedWorkerEvent: activeTask?.expectedEvidence?.worker,
+      currentWorkerEvidenceRef: nextAction.evidenceState?.workerEvidenceRef,
+      currentReviewEvidenceRef: nextAction.evidenceState?.reviewEvidenceRef,
+      currentMainVerificationRef: nextAction.evidenceState?.mainVerificationRef,
+      copyOnlyCommands: nextAction.copyOnlyCommands
+    }),
+    commandOutputs: [
+      currentBranchResult,
+      currentHeadResult,
+      mainHeadResult,
+      originMainResult,
+      worktreeResult
+    ],
+    blockers,
+    fixGuidance: releaseBaselineFixGuidance(blockers),
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      fixedGitCommandsOnly: true,
+      genericShellRunner: false,
+      arbitraryCommandInputAccepted: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      arbitraryPathReadAvailable: false,
+      mergeAvailable: false,
+      pushAvailable: false,
+      tagAvailable: false,
+      releaseReadyDeclared: false,
+      dirtyOrNonMainIsFinalReadiness: false
+    },
+    note: status === 'ready'
+      ? 'Release baseline resolver found a clean main checkout with matching main and origin/main refs. Release gates still require explicit evidence and release.ready remains separate.'
+      : 'Release baseline resolver is stopped. Dirty, non-main, missing, or mismatched refs are guidance-only and must not be treated as final release readiness.'
+  };
+}
+
+async function runReleaseBaselineGitCommand({ runner, cwd, id, args }) {
+  const command = `git ${args.join(' ')}`;
+
+  try {
+    const result = await runner.run({
+      executable: 'git',
+      args,
+      cwd,
+      timeoutMs: RELEASE_BASELINE_GIT_TIMEOUT_MS
+    });
+
+    return {
+      id,
+      command,
+      exitCode: Number.isInteger(result.exitCode) ? result.exitCode : null,
+      status: result.exitCode === 0 ? 'passed' : 'failed',
+      stdout: summarizeCommandOutput(result.stdout ?? ''),
+      stderr: summarizeCommandOutput(result.stderr ?? '')
+    };
+  } catch (error) {
+    return {
+      id,
+      command,
+      exitCode: null,
+      status: 'failed',
+      stdout: '',
+      stderr: summarizeCommandOutput(error.message)
+    };
+  }
+}
+
+function releaseBaselineTrimmedStdout(result) {
+  return result.exitCode === 0 && isNonEmptyString(result.stdout)
+    ? result.stdout.trim()
+    : null;
+}
+
+function buildReleaseBaselineBlockers({
+  currentBranch,
+  mainHead,
+  originMain,
+  worktreeClean,
+  commandResults
+}) {
+  const blockers = [];
+  const failedCommand = commandResults.find((result) => result.status !== 'passed');
+
+  if (failedCommand !== undefined) {
+    blockers.push({
+      id: 'git-command-failed',
+      status: 'stop',
+      detail: `${failedCommand.command} exited ${failedCommand.exitCode ?? 'without exit code'}`
+    });
+  }
+
+  if (currentBranch !== 'main') {
+    blockers.push({
+      id: 'non-main-branch',
+      status: 'stop',
+      detail: `current branch is ${currentBranch ?? 'unknown'}, not main`
+    });
+  }
+
+  if (worktreeClean !== true) {
+    blockers.push({
+      id: 'dirty-worktree',
+      status: 'stop',
+      detail: 'worktree has uncommitted or untracked changes'
+    });
+  }
+
+  if (isNonEmptyString(mainHead) && isNonEmptyString(originMain) && mainHead !== originMain) {
+    blockers.push({
+      id: 'main-origin-mismatch',
+      status: 'stop',
+      detail: 'main HEAD differs from origin/main'
+    });
+  }
+
+  return blockers;
+}
+
+function releaseBaselineFixGuidance(blockers) {
+  if (blockers.length === 0) {
+    return [
+      'Continue with release checklist recording from explicit release gate evidence.',
+      'Do not declare release.ready until the release manager records the controlled gate with evidence.'
+    ];
+  }
+
+  return [
+    'Stop release readiness judgment in Workbench for this checkout.',
+    'Use terminal Git commands outside Workbench to inspect the branch, update refs, and resolve or set aside dirty files.',
+    'Rerun the release baseline resolver after the checkout is clean on main and main matches origin/main.',
+    'Do not merge, push, tag, publish, or declare release.ready from this stopped baseline.'
+  ];
+}
+
+function buildReleaseBaselineCiRef(env) {
+  const refName = firstNonEmptyString(env?.GITHUB_HEAD_REF, env?.GITHUB_REF_NAME, env?.CI_COMMIT_REF_NAME, env?.BRANCH_NAME);
+  const fullRef = firstNonEmptyString(env?.GITHUB_REF, env?.CI_COMMIT_REF, env?.BUILD_SOURCEBRANCH);
+  const sha = firstNonEmptyString(env?.GITHUB_SHA, env?.CI_COMMIT_SHA, env?.BUILD_SOURCEVERSION);
+
+  return {
+    state: isNonEmptyString(refName) || isNonEmptyString(fullRef) || isNonEmptyString(sha) ? 'available' : 'missing',
+    refName: refName ?? null,
+    fullRef: fullRef ?? null,
+    sha: sha ?? null,
+    source: 'environment'
+  };
 }
 
 function writeInvalidGoalRunbookControlResponse({ response, route, method }) {
@@ -2406,6 +3332,179 @@ function parseGoalEventPlanConfirmRequestPath(pathname, searchParams = new URLSe
   };
 }
 
+function parseControlledImplementationPlanPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/implementation-plan-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'controlled-implementation-plan-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/implementation-plan-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'controlled-implementation-plan-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
+function parseControlledImplementationRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/implementation-run-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-implementation-run-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/implementation-run-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-implementation-run-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
+function parseControlledVerificationRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/verification-run-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-verification-run-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/verification-run-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-verification-run-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
+function parseControlledAdoptionPlanFreezeRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/adoption-plan-freeze';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-adoption-plan-freeze',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/adoption-plan-freeze$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-adoption-plan-freeze',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
+function parseControlledAdoptionConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/adoption-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-adoption-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/adoption-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-adoption-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
 function parseGoalRunbookRequestPath(pathname, searchParams = new URLSearchParams()) {
   return parseGoalRunbookControlRequestPath({
     pathname,
@@ -2489,6 +3588,14 @@ function parseGoalCloseoutRequestPath(pathname, searchParams = new URLSearchPara
     pathname,
     searchParams,
     suffix: 'closeout'
+  });
+}
+
+function parseReleaseBaselineRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseGoalRunbookControlRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'release-baseline'
   });
 }
 
@@ -2722,6 +3829,2047 @@ async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
   }
 }
 
+async function buildControlledImplementationPlanPreview({ stateDir, goalId, searchParams }) {
+  assertOnlyControlledImplementationPreviewSearchParams(searchParams);
+
+  const taskId = requiredSingleSearchParam(searchParams, 'task');
+  const [context, nextAction, promptPack, eventLog] = await Promise.all([
+    loadGoalRunbookContext({
+      stateDir,
+      goalId,
+      allowControlledFixtureFallback: false
+    }),
+    buildGoalNextAction({
+      stateDir,
+      goalId
+    }),
+    buildGoalPromptPack({
+      stateDir,
+      goalId,
+      taskId,
+      role: 'worker',
+      promptFormat: 'markdown'
+    }),
+    readGoalEventJournal({
+      stateDir,
+      goalId
+    })
+  ]);
+
+  if (context === null) {
+    throw new GoalEventPlanPreviewError(
+      'goal-not-found',
+      'Controlled implementation plan preview requires a managed goal runbook.',
+      { goalId }
+    );
+  }
+
+  const task = context.runbook.tasks.find((candidate) => candidate?.taskId === taskId);
+
+  if (task === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-implementation-preview-request',
+      'Controlled implementation plan preview task must exist in the active goal runbook.',
+      { taskId }
+    );
+  }
+
+  const next = nextAction.next ?? {};
+
+  if (nextAction.status !== 'action-required' || next.taskId !== taskId || next.role !== 'worker' || !['implement', 'implementation', 'revision'].includes(next.phase) || next.blocked === true) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-implementation-preview-not-eligible',
+      'Controlled implementation plan preview requires goal next to assign the same task to the worker implementation role.',
+      {
+        taskId,
+        nextTaskId: next.taskId,
+        nextRole: next.role,
+        nextPhase: next.phase
+      }
+    );
+  }
+
+  const taskEvents = Array.isArray(eventLog.events)
+    ? eventLog.events.filter((event) => event?.taskId === taskId)
+    : [];
+  const latestBlockerOpened = latestGoalEventOfTypes(taskEvents, ['blocker.opened']);
+  const latestBlockerResolved = latestGoalEventOfTypes(taskEvents, ['blocker.resolved']);
+  const hasOpenBlocker = latestBlockerOpened !== null && !goalEventRecordIsAfter(latestBlockerResolved, latestBlockerOpened);
+
+  if (hasOpenBlocker) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-implementation-preview-blocked',
+      'Controlled implementation plan preview is blocked by an unresolved explicit blocker event.',
+      {
+        taskId,
+        blockerEventId: latestBlockerOpened.eventId
+      }
+    );
+  }
+
+  const workerPrompt = promptPack.prompts[0] ?? null;
+  const allowedPreview = buildControlledImplementationAllowedPreview({
+    runbook: context.runbook,
+    task,
+    nextAction,
+    prompt: workerPrompt,
+    eventLog
+  });
+  const planHash = computeControlledImplementationPlanHash(allowedPreview);
+  const planId = `controlled-implementation-plan-${safeIdPart(`${goalId}-${taskId}`)}-${shortHash(planHash)}`;
+
+  return {
+    contractName: CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME,
+    contractVersion: CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_VERSION,
+    goalId,
+    taskId,
+    mode: 'dry-run',
+    status: 'planned',
+    planId,
+    planHash,
+    command: {
+      name: 'symphony do',
+      semanticCommand: 'do',
+      previewOf: 'symphony do --write --json',
+      intent: 'work',
+      confirmRequired: true
+    },
+    writeSemantics: {
+      safetyMode: 'write',
+      writeBoundary: 'isolated-workspace',
+      projectWrites: true,
+      mainWorktreeWrites: false,
+      workspaceWrites: true,
+      runtimeWrites: true,
+      destructiveWrites: false
+    },
+    allowedPreview,
+    confirm: {
+      available: true,
+      enabledByTask: 'task-3',
+      requiredContext: ['goalId', 'taskId', 'planId', 'planHash'],
+      copyOnlyCommand: `symphony do --confirm-plan ${planId} --json`,
+      endpoint: {
+        route: `/api/goals/${goalId}/implementation-run-confirm`,
+        method: 'POST',
+        allowedBodyFields: ['goalId', 'taskId', 'planId', 'planHash'],
+        requiresSameGoalTaskContext: true,
+        confirmUsesPlanHash: true
+      }
+    },
+    previewEndpoint: {
+      route: `/api/goals/${goalId}/implementation-plan-preview?task=${encodeURIComponent(taskId)}`,
+      method: 'GET',
+      allowedQueryFields: ['task'],
+      rejectsPromptInput: true,
+      rejectsPlanHashInput: true,
+      rejectsConfirmInput: true,
+      genericShellRunner: false,
+      dryRunOnly: true,
+      writesInDryRun: false
+    },
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      workbenchWriteAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      genericShellRunner: false,
+      arbitraryPathReadAvailable: false,
+      implementationRunStarted: false,
+      mergeAvailable: false,
+      pushAvailable: false,
+      tagAvailable: false,
+      approvalReadinessSource: 'explicit goal events only',
+      unsupportedInferenceSources: ['branch', 'filename', 'commit-message', 'prompt-text', 'task-title', 'frontend-heuristic']
+    }
+  };
+}
+
+function buildControlledImplementationAllowedPreview({ runbook, task, nextAction, prompt, eventLog }) {
+  const taskEvents = Array.isArray(eventLog?.events)
+    ? eventLog.events.filter((event) => event?.taskId === task.taskId)
+    : [];
+  const evidenceRefs = taskEvents.flatMap((event) => (
+    Array.isArray(event?.evidenceRefs)
+      ? event.evidenceRefs.map((entry) => stripUndefined({
+          kind: entry.kind,
+          ref: entry.ref,
+          label: entry.label,
+          eventId: event.eventId,
+          eventType: event.eventType
+        }))
+      : []
+  ));
+
+  return {
+    goal: stripUndefined({
+      goalId: runbook.goalId,
+      goalTitle: runbook.goalTitle,
+      baselineTag: runbook.baseline?.tag,
+      baselineEvidenceRef: runbook.baseline?.evidenceRef
+    }),
+    task: stripUndefined({
+      taskId: task.taskId,
+      title: task.title,
+      branch: task.branch,
+      roleOrder: Array.isArray(task.roleOrder) ? [...task.roleOrder] : undefined,
+      acceptance: Array.isArray(task.acceptance) ? [...task.acceptance] : [],
+      expectedWorkerEvidence: task.expectedEvidence?.worker,
+      copyOnlyCommands: Array.isArray(task.copyOnlyCommands) ? [...task.copyOnlyCommands] : []
+    }),
+    nextAction: stripUndefined({
+      status: nextAction.status,
+      role: nextAction.next?.role,
+      phase: nextAction.next?.phase,
+      reason: nextAction.reason ?? nextAction.next?.reason,
+      blocked: nextAction.next?.blocked === true,
+      registerWith: nextAction.afterCompletion?.registerWith,
+      allowedEvents: Array.isArray(nextAction.afterCompletion?.allowedEvents)
+        ? [...nextAction.afterCompletion.allowedEvents]
+        : undefined
+    }),
+    workerPrompt: stripUndefined({
+      available: prompt?.copyOnly === true || isNonEmptyString(prompt?.text),
+      format: prompt?.format,
+      role: prompt?.role,
+      taskId: prompt?.taskId,
+      copyOnly: prompt?.copyOnly === true,
+      text: prompt?.text
+    }),
+    evidenceRefs: {
+      currentWorkerEvidenceRef: nextAction.evidenceState?.workerEvidenceRef ?? null,
+      currentReviewEvidenceRef: nextAction.evidenceState?.reviewEvidenceRef ?? null,
+      currentMainVerificationRef: nextAction.evidenceState?.mainVerificationRef ?? null,
+      explicitEventEvidenceRefs: evidenceRefs
+    }
+  };
+}
+
+function computeControlledImplementationPlanHash(allowedPreview) {
+  return `sha256:${createHash('sha256')
+    .update(JSON.stringify(allowedPreview))
+    .digest('hex')}`;
+}
+
+async function readControlledImplementationRunConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-implementation-confirm-request',
+      'Controlled implementation run confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-controlled-implementation-confirm-request',
+        'Controlled implementation run confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  let body;
+
+  try {
+    body = JSON.parse(content);
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-implementation-confirm-request',
+      'Controlled implementation run confirm requires a valid JSON object.',
+      { reason: 'invalid-json' }
+    );
+  }
+
+  if (!isPlainObject(body)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-implementation-confirm-request',
+      'Controlled implementation run confirm requires a valid JSON object.',
+      { reason: 'invalid-json-body' }
+    );
+  }
+
+  return body;
+}
+
+async function confirmControlledImplementationRunPlan({
+  stateDir,
+  cwd,
+  env,
+  runner,
+  mcasRunner,
+  routeGoalId,
+  body
+}) {
+  assertOnlyControlledImplementationConfirmBodyKeys(body);
+
+  const goalId = requiredControlledImplementationConfirmBodyString(body, 'goalId');
+  const taskId = requiredControlledImplementationConfirmBodyString(body, 'taskId');
+  const planId = requiredControlledImplementationConfirmBodyString(body, 'planId');
+  const planHash = requiredControlledImplementationConfirmBodyString(body, 'planHash');
+
+  if (goalId !== routeGoalId) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-implementation-confirm-context-mismatch',
+      'Controlled implementation run confirm requires the same goal context returned by preview.',
+      { routeGoalId, bodyGoalId: goalId }
+    );
+  }
+
+  const searchParams = new URLSearchParams();
+  searchParams.set('task', taskId);
+
+  const preview = await buildControlledImplementationPlanPreview({
+    stateDir,
+    goalId,
+    searchParams
+  });
+
+  if (preview.planId !== planId || preview.planHash !== planHash) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-implementation-confirm-plan-mismatch',
+      'Controlled implementation run confirm requires the exact plan id and plan hash returned by preview.',
+      {
+        taskId,
+        planIdMatches: preview.planId === planId,
+        planHashMatches: preview.planHash === planHash
+      }
+    );
+  }
+
+  await materializeControlledImplementationExecutionPlan({
+    stateDir,
+    cwd,
+    preview
+  });
+
+  const confirmedResult = await runExistingConfirmPlanCommand({
+    stateDir,
+    planId,
+    env,
+    runner,
+    mcasRunner
+  });
+  const confirmed = confirmedResult.summary;
+
+  return {
+    contractName: CONTROLLED_IMPLEMENTATION_RUN_CONFIRMATION_CONTRACT_NAME,
+    contractVersion: CONTROLLED_IMPLEMENTATION_RUN_CONFIRMATION_CONTRACT_VERSION,
+    goalId,
+    taskId,
+    mode: 'confirm',
+    status: confirmed.status,
+    planId,
+    planHash,
+    command: {
+      name: 'symphony do',
+      confirmedCommand: 'symphony do --confirm-plan <plan-id> --json',
+      semanticCommand: 'do',
+      intent: 'work'
+    },
+    confirmedRun: stripUndefined({
+      runId: confirmed.runId,
+      plannedRunId: confirmed.plannedRunId,
+      executionPlanId: confirmed.executionPlanId,
+      status: confirmed.status,
+      exitCode: confirmed.exitCode,
+      verifierStatus: confirmed.verifierStatus,
+      writeBoundary: confirmed.writeBoundary,
+      mainWorktreeWrites: confirmed.mainWorktreeWrites,
+      workspaceWrites: confirmed.workspaceWrites,
+      runtimeWrites: confirmed.runtimeWrites,
+      destructiveWrites: confirmed.destructiveWrites,
+      sourceWorkspacePath: confirmed.sourceWorkspacePath,
+      sourceWorkspaceManifestPath: confirmed.sourceWorkspaceManifestPath,
+      evidenceArtifactPath: confirmed.evidenceArtifactPath,
+      harnessOutputPath: confirmed.harnessOutputPath,
+      taskPacketPath: confirmed.taskPacketPath,
+      artifactRefs: Array.isArray(confirmed.artifactRefs) ? confirmed.artifactRefs : buildArtifactRefs(confirmed),
+      changedFiles: confirmed.changedFiles,
+      failurePhase: confirmed.failurePhase,
+      failureMessage: confirmed.failureMessage
+    }),
+    output: stripUndefined({
+      stdout: buildControlledImplementationOutputSummary(confirmed),
+      stderr: confirmedResult.stderr,
+      exitCode: confirmedResult.exitCode
+    }),
+    confirmContext: {
+      acceptedBodyFields: ['goalId', 'taskId', 'planId', 'planHash'],
+      sameGoalTaskContextRequired: true,
+      acceptedPlanIdFromPreview: true,
+      acceptedPlanHashFromPreview: true
+    },
+    safety: {
+      mappedToExistingConfirmPlan: true,
+      genericShellRunner: false,
+      arbitraryPathReadAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      mainWorktreeWrites: confirmed.mainWorktreeWrites === true,
+      workspaceWrites: confirmed.workspaceWrites === true,
+      mergeAvailable: false,
+      pushAvailable: false,
+      tagAvailable: false,
+      selfApprovalAvailable: false,
+      readinessInferenceAvailable: false
+    }
+  };
+}
+
+async function recordControlledImplementationOperationRunFromConfirmation({
+  stateDir,
+  goalId,
+  confirmation
+}) {
+  const confirmedRun = confirmation.confirmedRun ?? {};
+  const status = confirmedRun.status === 'failed' || confirmedRun.verifierStatus === 'failed'
+    ? 'failed'
+    : 'confirmed';
+
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: confirmation.operationId,
+    goalId,
+    taskId: confirmation.taskId,
+    role: 'worker',
+    commandKind: 'implementation',
+    commandName: 'symphony do --confirm-plan',
+    status,
+    planHash: confirmation.planHash,
+    source: 'workbench.implementation-run-confirm',
+    output: confirmation.output,
+    runResult: confirmedRun,
+    artifactRefs: Array.isArray(confirmedRun.artifactRefs)
+      ? confirmedRun.artifactRefs
+      : buildArtifactRefs(confirmedRun),
+    verifierSummary: buildControlledImplementationVerifierSummary(confirmedRun),
+    failureReason: controlledImplementationFailureReason(confirmedRun)
+  });
+}
+
+function buildControlledImplementationVerifierSummary(run) {
+  const verifierStatus = run?.verifierStatus;
+  const runStatus = run?.status;
+  const failureReason = controlledImplementationFailureReason(run);
+
+  return stripUndefined({
+    status: verifierStatus ?? runStatus,
+    runStatus,
+    passed: verifierStatus === 'passed' || runStatus === 'passed',
+    sourceRunId: run?.runId,
+    executionPlanId: run?.executionPlanId,
+    changedFileCount: Array.isArray(run?.changedFiles) ? run.changedFiles.length : undefined,
+    artifactCount: Array.isArray(run?.artifactRefs) ? run.artifactRefs.length : undefined,
+    failureReason
+  });
+}
+
+function buildControlledImplementationOutputSummary(run) {
+  const lines = [
+    `runId=${run?.runId ?? 'unknown'}`,
+    `status=${run?.status ?? 'unknown'}`,
+    `verifierStatus=${run?.verifierStatus ?? 'unknown'}`,
+    `exitCode=${run?.exitCode ?? 'unknown'}`,
+    `executionPlanId=${run?.executionPlanId ?? 'unknown'}`,
+    `writeBoundary=${run?.writeBoundary ?? 'unknown'}`,
+    `mainWorktreeWrites=${String(run?.mainWorktreeWrites === true)}`,
+    `workspaceWrites=${String(run?.workspaceWrites === true)}`,
+    `artifactRefs=${Array.isArray(run?.artifactRefs) ? run.artifactRefs.length : buildArtifactRefs(run).length}`,
+    `changedFiles=${Array.isArray(run?.changedFiles) ? run.changedFiles.length : 0}`
+  ];
+  const failureReason = controlledImplementationFailureReason(run);
+
+  if (failureReason !== null) {
+    lines.push(`failureReason=${failureReason}`);
+  }
+
+  return lines.join('\n');
+}
+
+function controlledImplementationFailureReason(run) {
+  const message = firstNonEmptyString(run?.failureMessage, run?.reason);
+  const phase = firstNonEmptyString(run?.failurePhase);
+
+  if (!isNonEmptyString(message) && !isNonEmptyString(phase)) {
+    return null;
+  }
+
+  return [phase, message].filter(isNonEmptyString).join(': ');
+}
+
+async function materializeControlledImplementationExecutionPlan({ stateDir, cwd, preview }) {
+  const projectRoot = resolve(cwd);
+  const workDir = 'tmp/symphony-work';
+  const now = new Date().toISOString();
+  const contextArtifactPath = join(stateDir, 'controlled-implementation-context', `${preview.planId}-project-context.json`);
+  const summaryArtifactPath = join(stateDir, 'controlled-implementation-context', `${preview.planId}-intake-summary.json`);
+  const projectFingerprint = await buildProjectFingerprint({
+    projectDir: projectRoot,
+    ignoredPaths: [stateDir, workDir]
+  });
+  const verificationCommands = Array.isArray(preview.allowedPreview?.task?.copyOnlyCommands)
+    ? preview.allowedPreview.task.copyOnlyCommands.filter((command) => typeof command === 'string' && command.trim() !== '')
+    : [];
+  const prompt = preview.allowedPreview?.workerPrompt?.text ?? preview.allowedPreview?.task?.title ?? `${preview.goalId} ${preview.taskId}`;
+
+  await atomicWriteJson(contextArtifactPath, {
+    version: '1',
+    kind: 'project-context',
+    schema: 'project-context.v1',
+    generatedAt: now,
+    project: {
+      root: projectRoot,
+      name: safeIdPart(preview.goalId),
+      git: {
+        isRepository: true
+      }
+    },
+    inventory: {
+      docs: [],
+      configFiles: [],
+      ciFiles: [],
+      sourceRoots: [],
+      ignoredRoots: [stateDir, workDir]
+    },
+    documentation: {
+      readme: {
+        path: 'README.md',
+        present: false
+      },
+      agents: [],
+      adrCount: 0,
+      planCount: 0,
+      hasContributing: false,
+      hasTroubleshooting: false,
+      hasLicense: false
+    },
+    runtime: {
+      packageManager: 'pnpm',
+      scripts: {},
+      bins: ['symphony'],
+      verificationCommands
+    },
+    ci: {
+      providers: [],
+      workflows: []
+    },
+    constraints: [{
+      id: 'controlled-implementation-plan-context',
+      source: 'controlled-implementation-plan-preview.v1',
+      path: `/api/goals/${preview.goalId}/implementation-plan-preview?task=${encodeURIComponent(preview.taskId)}`,
+      line: 1,
+      text: 'Execute only the frozen active goal/task implementation plan in an isolated workspace.',
+      confidence: 'high'
+    }],
+    risks: [],
+    openQuestions: [],
+    workflowHints: {
+      recommendedMode: 'writer-reviewer',
+      recommendedAdapter: 'codex',
+      verificationCommands: verificationCommands.length > 0 ? verificationCommands : ['pnpm test'],
+      writeSetHints: [],
+      preflightSummary: 'Controlled implementation confirm from Workbench task context.'
+    },
+    provider: {
+      name: 'workbench-controlled-implementation',
+      status: 'completed',
+      modelInvocation: false
+    }
+  });
+
+  await atomicWriteJson(summaryArtifactPath, {
+    version: '1',
+    kind: 'intake-summary',
+    schema: 'intake-summary.v1',
+    status: 'completed',
+    riskCounts: {
+      high: 0,
+      medium: 0,
+      low: 0
+    },
+    openQuestionCount: 0,
+    recommendedWorkflow: 'writer-reviewer',
+    verificationCommands: verificationCommands.length > 0 ? verificationCommands : ['pnpm test'],
+    modelInvocation: false,
+    providerStatus: 'completed'
+  });
+
+  await writeExecutionPlan({
+    stateDir,
+    plan: {
+      version: '1',
+      kind: 'symphony.execution-plan',
+      contractVersion: '1',
+      contractName: 'symphony.execution-plan',
+      planId: preview.planId,
+      command: 'symphony do',
+      intent: 'work',
+      semanticCommand: 'do',
+      prompt,
+      pipeline: ['scan-if-needed', 'do'],
+      routeDecision: {
+        intent: 'work',
+        safetyMode: 'write',
+        adapter: 'codex',
+        requiresGate: null,
+        requiresConfirmation: true,
+        pipeline: ['scan-if-needed', 'do'],
+        matchedSignals: ['workbench-controlled-implementation-confirm']
+      },
+      matchedSignals: ['workbench-controlled-implementation-confirm'],
+      safetyMode: 'write',
+      projectWrites: true,
+      mainWorktreeWrites: false,
+      workspaceWrites: true,
+      runtimeWrites: true,
+      externalCalls: false,
+      destructiveWrites: false,
+      writeBoundary: 'isolated-workspace',
+      projectRoot,
+      projectFingerprint,
+      contextReused: false,
+      contextArtifactPath,
+      summaryArtifactPath,
+      workflowMode: 'writer-reviewer',
+      adapter: 'codex',
+      executionMode: 'dry-run',
+      workDir,
+      requiresGate: null,
+      confirmationCommand: `symphony do --confirm-plan ${preview.planId} --json`,
+      controlledImplementationContext: {
+        goalId: preview.goalId,
+        taskId: preview.taskId,
+        planHash: preview.planHash,
+        previewContract: CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME
+      },
+      createdAt: now
+    }
+  });
+}
+
+async function runExistingConfirmPlanCommand({ stateDir, planId, env, runner, mcasRunner }) {
+  const { runSymphonyCli } = await import('../../scripts/symphony.js');
+  const stdout = createConsoleBuffer();
+  const stderr = createConsoleBuffer();
+  const exitCode = await runSymphonyCli({
+    argv: ['do', '--state-dir', stateDir, '--confirm-plan', planId, '--json'],
+    stdout,
+    stderr,
+    runner,
+    env,
+    ...(typeof mcasRunner === 'function' ? { mcasRunner } : {})
+  });
+
+  let summary;
+
+  try {
+    summary = JSON.parse(stdout.text());
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'controlled-implementation-confirm-failed',
+      'Existing symphony do confirm-plan command did not return JSON.',
+      { exitCode }
+    );
+  }
+
+  if (exitCode !== 0 && summary?.runId === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-implementation-confirm-failed',
+      'Existing symphony do confirm-plan command failed before a controlled run was confirmed.',
+      { exitCode }
+    );
+  }
+
+  return {
+    summary,
+    stdout: stdout.text(),
+    stderr: stderr.text(),
+    exitCode
+  };
+}
+
+async function readControlledVerificationRunConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-verification-confirm-request',
+      'Controlled verification run confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let text = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-controlled-verification-confirm-request',
+        'Controlled verification run confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    text += chunk.toString('utf8');
+  }
+
+  let body;
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-verification-confirm-request',
+      'Controlled verification run confirm requires a valid JSON object.',
+      { reason: 'invalid-json' }
+    );
+  }
+
+  if (!isPlainObject(body)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-verification-confirm-request',
+      'Controlled verification run confirm requires a valid JSON object.',
+      { reason: 'invalid-json-body' }
+    );
+  }
+
+  return body;
+}
+
+async function confirmControlledVerificationRunPlan({
+  stateDir,
+  cwd,
+  env,
+  runner,
+  routeGoalId,
+  body
+}) {
+  assertOnlyControlledVerificationConfirmBodyKeys(body);
+
+  const goalId = requiredControlledVerificationConfirmBodyString(body, 'goalId');
+  const taskId = requiredControlledVerificationConfirmBodyString(body, 'taskId');
+  const suiteId = requiredControlledVerificationConfirmBodyString(body, 'suiteId');
+
+  if (goalId !== routeGoalId) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-verification-confirm-context-mismatch',
+      'Controlled verification run confirm requires the same goal context shown in Workbench.',
+      { routeGoalId, bodyGoalId: goalId }
+    );
+  }
+
+  if (suiteId !== CONTROLLED_VERIFICATION_SUITE_ID) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-verification-confirm-request',
+      'Controlled verification run confirm accepts only the fixed main verification suite.',
+      { suiteId }
+    );
+  }
+
+  const suite = await buildControlledVerificationCommandSuite({
+    stateDir,
+    goalId,
+    taskId
+  });
+  const operationRun = await recordGoalOperationRun({
+    stateDir,
+    operationId: suite.operationId,
+    goalId,
+    taskId,
+    role: 'main-verifier',
+    commandKind: 'verification',
+    commandName: 'controlled main verification suite',
+    status: 'running',
+    planHash: suite.planHash,
+    source: 'workbench.verification-run-confirm',
+    output: {
+      stdout: `status=running\nsuiteId=${suite.suiteId}\ncommandCount=${suite.commands.length}`,
+      stderr: '',
+      exitCode: null
+    },
+    runResult: {
+      runId: suite.runId,
+      suiteId: suite.suiteId,
+      status: 'running',
+      commandCount: suite.commands.length,
+      gatePassed: false
+    },
+    artifactRefs: controlledVerificationArtifactRefs({ goalId, operationId: suite.operationId })
+  });
+  const completed = await runControlledVerificationCommandSuite({
+    cwd,
+    env,
+    runner,
+    suite: {
+      ...suite,
+      operationId: operationRun.operationId
+    }
+  });
+  const completedOperationRun = await recordControlledVerificationOperationRunFromConfirmation({
+    stateDir,
+    goalId,
+    confirmation: completed
+  });
+
+  return {
+    ...completed,
+    operationRun: completedOperationRun
+  };
+}
+
+async function buildControlledVerificationCommandSuite({ stateDir, goalId, taskId }) {
+  const context = await loadGoalRunbookContext({
+    stateDir,
+    goalId,
+    allowControlledFixtureFallback: false
+  });
+
+  if (context === null) {
+    throw new GoalEventPlanPreviewError(
+      'goal-not-found',
+      'Controlled verification run confirm requires a managed goal runbook.',
+      { goalId }
+    );
+  }
+
+  const task = context.runbook.tasks.find((candidate) => candidate?.taskId === taskId);
+
+  if (task === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-verification-confirm-request',
+      'Controlled verification run confirm task must exist in the active goal runbook.',
+      { taskId }
+    );
+  }
+
+  const commands = controlledVerificationCommandsForTask({
+    goalId,
+    copyOnlyCommands: task.copyOnlyCommands
+  });
+  const planHash = computeControlledVerificationPlanHash({
+    goalId,
+    taskId,
+    suiteId: CONTROLLED_VERIFICATION_SUITE_ID,
+    commands
+  });
+  const operationId = `op_${shortHash({
+    goalId,
+    taskId,
+    suiteId: CONTROLLED_VERIFICATION_SUITE_ID,
+    planHash
+  })}`;
+
+  return {
+    goalId,
+    taskId,
+    suiteId: CONTROLLED_VERIFICATION_SUITE_ID,
+    runId: `verification-${safeIdPart(`${goalId}-${taskId}`)}-${shortHash(planHash)}`,
+    operationId,
+    planHash,
+    commands
+  };
+}
+
+function controlledVerificationCommandsForTask({ goalId, copyOnlyCommands }) {
+  const fixedCommands = [
+    'pnpm check',
+    'pnpm test',
+    'pnpm workbench:build',
+    'git diff --check'
+  ];
+  const taskCommands = Array.isArray(copyOnlyCommands)
+    ? copyOnlyCommands.filter((command) => typeof command === 'string' && command.trim() !== '')
+    : [];
+  const controlledContextCommands = taskCommands.filter((command) => (
+    command === `pnpm --silent symphony goal-status --goal ${goalId} --json` ||
+    command === `pnpm --silent symphony goal next --goal ${goalId} --json`
+  ));
+
+  return [...new Set([...fixedCommands, ...controlledContextCommands])]
+    .map((command, index) => ({
+      id: `verification-command-${index + 1}`,
+      command,
+      ...controlledVerificationInvocation(command, goalId)
+    }));
+}
+
+function controlledVerificationInvocation(command, goalId) {
+  switch (command) {
+    case 'pnpm check':
+      return { executable: 'pnpm', args: ['check'] };
+    case 'pnpm test':
+      return { executable: 'pnpm', args: ['test'] };
+    case 'pnpm workbench:build':
+      return { executable: 'pnpm', args: ['workbench:build'] };
+    case 'git diff --check':
+      return { executable: 'git', args: ['diff', '--check'] };
+    case `pnpm --silent symphony goal-status --goal ${goalId} --json`:
+      return { executable: 'pnpm', args: ['--silent', 'symphony', 'goal-status', '--goal', goalId, '--json'] };
+    case `pnpm --silent symphony goal next --goal ${goalId} --json`:
+      return { executable: 'pnpm', args: ['--silent', 'symphony', 'goal', 'next', '--goal', goalId, '--json'] };
+    default:
+      throw new GoalEventPlanPreviewError(
+        'invalid-controlled-verification-command',
+        'Controlled verification suite contains a command outside the fixed allowlist.',
+        { command }
+      );
+  }
+}
+
+function computeControlledVerificationPlanHash(plan) {
+  return `sha256:${createHash('sha256')
+    .update(JSON.stringify(plan))
+    .digest('hex')}`;
+}
+
+async function runControlledVerificationCommandSuite({
+  cwd,
+  env,
+  runner,
+  suite
+}) {
+  const commandResults = [];
+
+  for (const command of suite.commands) {
+    const startedAt = new Date().toISOString();
+    let result;
+
+    try {
+      result = await runner.run({
+        executable: command.executable,
+        args: command.args,
+        cwd,
+        env,
+        timeoutMs: CONTROLLED_VERIFICATION_COMMAND_TIMEOUT_MS
+      });
+    } catch (error) {
+      result = {
+        exitCode: null,
+        stdout: '',
+        stderr: error.message,
+        durationMs: null,
+        error: {
+          code: error.code,
+          message: error.message
+        }
+      };
+    }
+
+    const completedAt = new Date().toISOString();
+    const exitCode = Number.isInteger(result.exitCode) ? result.exitCode : null;
+    const status = exitCode === 0 ? 'passed' : 'failed';
+
+    commandResults.push(stripUndefined({
+      id: command.id,
+      command: command.command,
+      executable: command.executable,
+      args: command.args,
+      status,
+      exitCode,
+      signal: result.signal,
+      durationMs: result.durationMs,
+      timedOut: result.timedOut === true,
+      stalled: result.stalled === true,
+      stdoutSummary: summarizeCommandOutput(result.stdout ?? ''),
+      stderrSummary: summarizeCommandOutput(result.stderr ?? ''),
+      startedAt,
+      completedAt
+    }));
+  }
+
+  const failedCommands = commandResults.filter((result) => result.status !== 'passed');
+  const status = failedCommands.length === 0 ? 'passed' : 'failed';
+  const exitCode = failedCommands.length === 0
+    ? 0
+    : failedCommands.find((result) => Number.isInteger(result.exitCode))?.exitCode ?? 1;
+  const runResult = {
+    runId: suite.runId,
+    operationId: suite.operationId,
+    suiteId: suite.suiteId,
+    status,
+    exitCode,
+    commandCount: commandResults.length,
+    failedCommandCount: failedCommands.length,
+    gatePassed: false,
+    commandResults
+  };
+
+  return {
+    contractName: CONTROLLED_VERIFICATION_RUN_CONFIRMATION_CONTRACT_NAME,
+    contractVersion: CONTROLLED_VERIFICATION_RUN_CONFIRMATION_CONTRACT_VERSION,
+    goalId: suite.goalId,
+    taskId: suite.taskId,
+    mode: 'confirm',
+    status,
+    suiteId: suite.suiteId,
+    operationId: suite.operationId,
+    planHash: suite.planHash,
+    command: {
+      name: 'controlled main verification suite',
+      semanticCommand: 'verification',
+      intent: 'main-verification-command-suite'
+    },
+    commandResults,
+    runResult,
+    output: {
+      stdout: buildControlledVerificationOutputSummary(commandResults),
+      stderr: buildControlledVerificationErrorSummary(commandResults),
+      exitCode
+    },
+    artifactRefs: controlledVerificationArtifactRefs({
+      goalId: suite.goalId,
+      operationId: suite.operationId
+    }),
+    safety: {
+      fixedCommandSuite: true,
+      genericShellRunner: false,
+      arbitraryCommandInputAccepted: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      mergeAvailable: false,
+      pushAvailable: false,
+      tagAvailable: false,
+      selfApprovalAvailable: false,
+      registersGates: false,
+      successImpliesGatePassed: false
+    }
+  };
+}
+
+async function recordControlledVerificationOperationRunFromConfirmation({
+  stateDir,
+  goalId,
+  confirmation
+}) {
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: confirmation.operationId,
+    goalId,
+    taskId: confirmation.taskId,
+    role: 'main-verifier',
+    commandKind: 'verification',
+    commandName: 'controlled main verification suite',
+    status: confirmation.status === 'passed' ? 'confirmed' : 'failed',
+    planHash: confirmation.planHash,
+    source: 'workbench.verification-run-confirm',
+    output: confirmation.output,
+    runResult: confirmation.runResult,
+    artifactRefs: confirmation.artifactRefs,
+    verifierSummary: buildControlledVerificationVerifierSummary(confirmation),
+    failureReason: controlledVerificationFailureReason(confirmation)
+  });
+}
+
+function buildControlledVerificationVerifierSummary(confirmation) {
+  return {
+    status: confirmation.status,
+    runStatus: confirmation.runResult?.status,
+    passed: confirmation.status === 'passed',
+    commandCount: confirmation.commandResults.length,
+    failedCommandCount: confirmation.commandResults.filter((result) => result.status !== 'passed').length,
+    artifactCount: confirmation.artifactRefs.length,
+    failureReason: controlledVerificationFailureReason(confirmation),
+    gatePassed: false
+  };
+}
+
+function controlledVerificationFailureReason(confirmation) {
+  const failed = confirmation.commandResults.find((result) => result.status !== 'passed');
+
+  if (failed === undefined) {
+    return null;
+  }
+
+  return `${failed.command} exited ${failed.exitCode ?? 'without exit code'}`;
+}
+
+function controlledVerificationArtifactRefs({ goalId, operationId }) {
+  return [{
+    kind: 'operation-registry',
+    ref: `goal-operation-runs:${operationId}`,
+    uri: `/api/goals/${goalId}/operations`,
+    title: 'Goal operation registry entry',
+    status: 'available'
+  }];
+}
+
+function buildControlledVerificationOutputSummary(commandResults) {
+  return commandResults.map((result) => [
+    `command=${result.command}`,
+    `status=${result.status}`,
+    `exitCode=${result.exitCode ?? 'null'}`,
+    `stdout=${result.stdoutSummary || ''}`
+  ].join('\n')).join('\n---\n');
+}
+
+function buildControlledVerificationErrorSummary(commandResults) {
+  return commandResults
+    .filter((result) => result.stderrSummary)
+    .map((result) => `${result.command}\n${result.stderrSummary}`)
+    .join('\n---\n');
+}
+
+function summarizeCommandOutput(output) {
+  const redacted = redactSecrets(String(output ?? ''));
+  const lines = redacted.split(/\r?\n/u)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== '');
+  const selected = lines.length > 24
+    ? [...lines.slice(0, 12), '[truncated]', ...lines.slice(-12)]
+    : lines;
+
+  return selected.join('\n').slice(0, 4000);
+}
+
+function assertOnlyControlledVerificationConfirmBodyKeys(body) {
+  const allowed = new Set(['goalId', 'taskId', 'suiteId']);
+  const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-verification-confirm-request',
+      'Controlled verification run confirm body contains unsupported fields.',
+      { unsupportedFields: unsupported.join(',') }
+    );
+  }
+}
+
+function requiredControlledVerificationConfirmBodyString(body, field) {
+  const value = body[field];
+
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-verification-confirm-request',
+      `Controlled verification run confirm requires body.${field}.`,
+      { field }
+    );
+  }
+
+  return value.trim();
+}
+
+async function readControlledAdoptionPlanFreezeRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-freeze-request',
+      'Controlled adoption plan freeze requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let text = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-controlled-adoption-freeze-request',
+        'Controlled adoption plan freeze request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    text += chunk.toString('utf8');
+  }
+  let body;
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-freeze-request',
+      'Controlled adoption plan freeze body must be valid JSON.',
+      { reason: 'invalid-json' }
+    );
+  }
+
+  if (!isPlainObject(body)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-freeze-request',
+      'Controlled adoption plan freeze body must be an object.',
+      { reason: 'invalid-body' }
+    );
+  }
+
+  return body;
+}
+
+async function readControlledAdoptionConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-confirm-request',
+      'Controlled adoption confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let text = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-controlled-adoption-confirm-request',
+        'Controlled adoption confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    text += chunk.toString('utf8');
+  }
+  let body;
+
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-confirm-request',
+      'Controlled adoption confirm body must be valid JSON.',
+      { reason: 'invalid-json' }
+    );
+  }
+
+  if (!isPlainObject(body)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-confirm-request',
+      'Controlled adoption confirm body must be an object.',
+      { reason: 'invalid-body' }
+    );
+  }
+
+  return body;
+}
+
+async function confirmControlledAdoptionPlanFreeze({
+  stateDir,
+  runner,
+  routeGoalId,
+  body
+}) {
+  assertOnlyControlledAdoptionFreezeBodyKeys(body);
+
+  const goalId = requiredControlledAdoptionFreezeBodyString(body, 'goalId');
+  const taskId = requiredControlledAdoptionFreezeBodyString(body, 'taskId');
+  const sourceRunId = requiredControlledAdoptionFreezeBodyString(body, 'sourceRunId');
+  const operationId = requiredControlledAdoptionFreezeBodyString(body, 'operationId');
+
+  if (goalId !== routeGoalId) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-freeze-context-mismatch',
+      'Controlled adoption plan freeze requires the same goal context returned by Workbench.',
+      { routeGoalId, bodyGoalId: goalId }
+    );
+  }
+
+  const sourceOperation = await findAdoptableImplementationOperation({
+    stateDir,
+    goalId,
+    taskId,
+    sourceRunId,
+    operationId
+  });
+  const plannedResult = await runExistingAdoptionPlanCommand({
+    stateDir,
+    sourceRunId,
+    runner
+  });
+  const planned = plannedResult.summary;
+  const planHash = computeControlledAdoptionFreezeHash({
+    goalId,
+    taskId,
+    sourceRunId,
+    operationId,
+    planned
+  });
+
+  return {
+    contractName: CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME,
+    contractVersion: CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_VERSION,
+    goalId,
+    taskId,
+    mode: 'freeze',
+    status: planned.status,
+    sourceRunId,
+    sourceOperationId: operationId,
+    planHash,
+    command: {
+      name: 'symphony adopt',
+      confirmedCommand: 'symphony adopt --run <confirmed-run-id> --json',
+      semanticCommand: 'adopt',
+      intent: 'adopt'
+    },
+    adoptionPlan: stripUndefined({
+      adoptionPlanId: planned.adoptionPlanId,
+      adoptionPlanArtifactPath: planned.adoptionPlanArtifactPath,
+      patchArtifactPath: planned.patchArtifactPath,
+      patchHash: planned.patchHash,
+      confirmationCommand: planned.confirmationCommand,
+      status: planned.status,
+      sourceRunId: planned.sourceRunId,
+      sourceRunArtifactPath: planned.sourceRunArtifactPath,
+      sourceOperationId: operationId,
+      executionPlanId: planned.executionPlanId,
+      sourceWorkspacePath: planned.sourceWorkspacePath,
+      sourceWorkspaceManifestPath: planned.sourceWorkspaceManifestPath,
+      sourceWorkspaceFingerprint: planned.sourceWorkspaceFingerprint,
+      sourceEvidenceArtifactPath: planned.sourceEvidenceArtifactPath,
+      sourceVerifierStatus: planned.sourceVerifierStatus,
+      projectFingerprint: planned.projectFingerprint,
+      gitHead: planned.gitHead,
+      gitStatusFingerprint: planned.gitStatusFingerprint,
+      changedFiles: planned.changedFiles,
+      fileOperations: planned.fileOperations,
+      mainWorktreeWrites: planned.mainWorktreeWrites,
+      workspaceWrites: planned.workspaceWrites,
+      runtimeWrites: planned.runtimeWrites,
+      writeBoundary: planned.writeBoundary
+    }),
+    patchSummary: {
+      changedFileCount: Array.isArray(planned.changedFiles) ? planned.changedFiles.length : 0,
+      fileOperationCount: Array.isArray(planned.fileOperations) ? planned.fileOperations.length : 0,
+      changedFiles: Array.isArray(planned.changedFiles) ? planned.changedFiles : [],
+      fileOperations: Array.isArray(planned.fileOperations) ? planned.fileOperations : []
+    },
+    fingerprints: stripUndefined({
+      patchHash: planned.patchHash,
+      sourceWorkspaceFingerprint: planned.sourceWorkspaceFingerprint,
+      projectFingerprint: planned.projectFingerprint,
+      gitHead: planned.gitHead,
+      gitStatusFingerprint: planned.gitStatusFingerprint
+    }),
+    recoveryNotes: {
+      planFrozen: true,
+      mainWorktreeUnchanged: planned.mainWorktreeWrites === false,
+      inspectCommand: isNonEmptyString(planned.adoptionPlanId)
+        ? `symphony adopt --inspect ${planned.adoptionPlanId} --json`
+        : null,
+      confirmCommand: planned.confirmationCommand ?? null,
+      failureRecovery: 'Use adopt inspect to read plan and journal state before any confirm step.'
+    },
+    sourceCandidate: stripUndefined({
+      operationId: sourceOperation.operationId,
+      operationStatus: sourceOperation.status,
+      commandKind: sourceOperation.commandKind,
+      runStatus: sourceOperation.runResult?.status,
+      verifierStatus: sourceOperation.runResult?.verifierStatus ?? sourceOperation.verifierSummary?.status,
+      sourceWorkspaceFingerprint: sourceOperation.runResult?.sourceWorkspaceFingerprint
+    }),
+    output: stripUndefined({
+      stdout: buildControlledAdoptionOutputSummary(planned),
+      stderr: plannedResult.stderr,
+      exitCode: plannedResult.exitCode
+    }),
+    confirmContext: {
+      acceptedBodyFields: ['goalId', 'taskId', 'sourceRunId', 'operationId'],
+      sameGoalTaskContextRequired: true,
+      sourceRunMustBeAdoptableCandidate: true
+    },
+    safety: {
+      mappedToExistingAdoptRun: true,
+      genericShellRunner: false,
+      arbitraryPathReadAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      mainWorktreeWrites: planned.mainWorktreeWrites === true,
+      workspaceWrites: planned.workspaceWrites === true,
+      adoptionConfirmAvailable: false,
+      mergeAvailable: false,
+      pushAvailable: false,
+      tagAvailable: false,
+      selfApprovalAvailable: false,
+      readinessInferenceAvailable: false
+    }
+  };
+}
+
+async function findAdoptableImplementationOperation({
+  stateDir,
+  goalId,
+  taskId,
+  sourceRunId,
+  operationId
+}) {
+  const operations = await readGoalOperationRuns({
+    stateDir,
+    goalId
+  });
+  const operation = operations.runs.find((candidate) => (
+    candidate.operationId === operationId
+    && candidate.goalId === goalId
+    && candidate.taskId === taskId
+    && candidate.commandKind === 'implementation'
+    && candidate.runResult?.runId === sourceRunId
+  ));
+
+  if (operation === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-source-run-not-found',
+      'Controlled adoption plan freeze requires a selected implementation operation for the same goal and task.',
+      { goalId, taskId, sourceRunId, operationId }
+    );
+  }
+
+  const reasons = implementationOperationAdoptionBlockers(operation);
+
+  if (reasons.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-source-run-blocked',
+      'Controlled adoption plan freeze requires an adoptable implementation run.',
+      { goalId, taskId, sourceRunId, operationId, reasons }
+    );
+  }
+
+  return operation;
+}
+
+function implementationOperationAdoptionBlockers(operation) {
+  const run = operation?.runResult ?? {};
+  const verifierStatus = run.verifierStatus ?? operation?.verifierSummary?.status;
+  const verifierPassed = verifierStatus === 'passed' || operation?.verifierSummary?.passed === true;
+  const reasons = [];
+
+  if (operation?.status !== 'confirmed') {
+    reasons.push('implementation operation is not confirmed');
+  }
+
+  if (run.status !== 'passed') {
+    reasons.push('run status is not passed');
+  }
+
+  if (!verifierPassed) {
+    reasons.push('verifier status is not passed');
+  }
+
+  if (!(run.workspaceWrites === true || run.writeBoundary === 'isolated-workspace')) {
+    reasons.push('isolated workspace write boundary is not confirmed');
+  }
+
+  if (run.mainWorktreeWrites !== false) {
+    reasons.push('mainWorktreeWrites is not false');
+  }
+
+  if (!isNonEmptyString(run.sourceWorkspacePath) || !isNonEmptyString(run.sourceWorkspaceManifestPath)) {
+    reasons.push('workspace refs are incomplete');
+  }
+
+  if (!isNonEmptyString(run.sourceWorkspaceFingerprint)) {
+    reasons.push('source workspace fingerprint is missing');
+  }
+
+  const artifactRefs = Array.isArray(operation?.artifactRefs)
+    ? operation.artifactRefs
+    : Array.isArray(run.artifactRefs) ? run.artifactRefs : [];
+  const hasEvidenceRef = artifactRefs.some((artifact) => artifact?.kind === 'evidence' || artifact?.artifactKind === 'evidence')
+    || isNonEmptyString(run.evidenceArtifactPath);
+
+  if (!hasEvidenceRef) {
+    reasons.push('managed evidence artifact ref is missing');
+  }
+
+  return reasons;
+}
+
+async function runExistingAdoptionPlanCommand({ stateDir, sourceRunId, runner }) {
+  const { runSymphonyCli } = await import('../../scripts/symphony.js');
+  const stdout = createConsoleBuffer();
+  const stderr = createConsoleBuffer();
+  const exitCode = await runSymphonyCli({
+    argv: ['adopt', '--state-dir', stateDir, '--run', sourceRunId, '--json'],
+    stdout,
+    stderr,
+    runner
+  });
+
+  let summary;
+
+  try {
+    summary = JSON.parse(stdout.text());
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-freeze-failed',
+      'Existing symphony adopt --run command did not return JSON.',
+      { exitCode }
+    );
+  }
+
+  if (exitCode !== 0 || summary?.status !== 'adoption-planned') {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-freeze-failed',
+      'Existing symphony adopt --run command failed before freezing an adoption plan.',
+      { exitCode, status: summary?.status }
+    );
+  }
+
+  return {
+    summary,
+    stdout: stdout.text(),
+    stderr: stderr.text(),
+    exitCode
+  };
+}
+
+async function recordControlledAdoptionOperationRunFromFreeze({
+  stateDir,
+  goalId,
+  freeze
+}) {
+  const adoptionPlan = freeze.adoptionPlan ?? {};
+
+  return await recordGoalOperationRun({
+    stateDir,
+    goalId,
+    taskId: freeze.taskId,
+    role: 'worker',
+    commandKind: 'adoption-plan',
+    commandName: 'symphony adopt --run',
+    status: 'confirmed',
+    planHash: freeze.planHash,
+    source: 'workbench.adoption-plan-freeze',
+    output: freeze.output,
+    runResult: adoptionPlan,
+    artifactRefs: buildArtifactRefs({
+      adoptionPlanArtifactPath: adoptionPlan.adoptionPlanArtifactPath,
+      patchArtifactPath: adoptionPlan.patchArtifactPath
+    }),
+    verifierSummary: {
+      status: adoptionPlan.sourceVerifierStatus,
+      passed: adoptionPlan.sourceVerifierStatus === 'passed',
+      sourceRunId: freeze.sourceRunId,
+      changedFileCount: freeze.patchSummary.changedFileCount,
+      artifactCount: 2
+    }
+  });
+}
+
+async function confirmControlledAdoptionPlan({
+  stateDir,
+  runner,
+  routeGoalId,
+  body
+}) {
+  assertOnlyControlledAdoptionConfirmBodyKeys(body);
+
+  const goalId = requiredControlledAdoptionConfirmBodyString(body, 'goalId');
+  const taskId = requiredControlledAdoptionConfirmBodyString(body, 'taskId');
+  const adoptionPlanId = requiredControlledAdoptionConfirmBodyString(body, 'adoptionPlanId');
+  const operationId = requiredControlledAdoptionConfirmBodyString(body, 'operationId');
+
+  if (goalId !== routeGoalId) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-confirm-context-mismatch',
+      'Controlled adoption confirm requires the same goal context returned by Workbench.',
+      { routeGoalId, bodyGoalId: goalId }
+    );
+  }
+
+  const frozenOperation = await findFrozenAdoptionPlanOperation({
+    stateDir,
+    goalId,
+    taskId,
+    adoptionPlanId,
+    operationId
+  });
+  const confirmedResult = await runExistingAdoptionConfirmCommand({
+    stateDir,
+    adoptionPlanId,
+    runner
+  });
+  const confirmed = confirmedResult.summary;
+
+  return {
+    contractName: CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME,
+    contractVersion: CONTROLLED_ADOPTION_CONFIRM_CONTRACT_VERSION,
+    goalId,
+    taskId,
+    mode: 'confirm',
+    status: confirmed.status,
+    adoptionPlanId,
+    sourceOperationId: operationId,
+    command: {
+      name: 'symphony adopt',
+      confirmedCommand: 'symphony adopt --confirm <adoption-id> --json',
+      semanticCommand: 'adopt',
+      intent: 'adopt'
+    },
+    confirmedRun: stripUndefined({
+      runId: confirmed.runId,
+      status: confirmed.status,
+      exitCode: confirmed.exitCode,
+      verifierStatus: confirmed.verifierStatus,
+      adoptionPlanId: confirmed.adoptionPlanId,
+      adoptionPlanArtifactPath: confirmed.adoptionPlanArtifactPath,
+      adoptionJournalArtifactPath: confirmed.adoptionJournalArtifactPath,
+      evidenceArtifactPath: confirmed.evidenceArtifactPath,
+      sourceRunId: confirmed.sourceRunId,
+      sourceRunArtifactPath: confirmed.sourceRunArtifactPath,
+      executionPlanId: confirmed.executionPlanId,
+      executionPlanArtifactPath: confirmed.executionPlanArtifactPath,
+      patchArtifactPath: confirmed.patchArtifactPath,
+      patchHash: confirmed.patchHash,
+      changedFiles: confirmed.changedFiles,
+      fileOperations: confirmed.fileOperations,
+      projectRoot: confirmed.projectRoot,
+      projectFingerprint: confirmed.projectFingerprint,
+      sourceWorkspacePath: confirmed.sourceWorkspacePath,
+      sourceWorkspaceManifestPath: confirmed.sourceWorkspaceManifestPath,
+      sourceWorkspaceFingerprint: confirmed.sourceWorkspaceFingerprint,
+      sourceEvidenceArtifactPath: confirmed.sourceEvidenceArtifactPath,
+      sourceVerifierStatus: confirmed.sourceVerifierStatus,
+      gitHead: confirmed.gitHead,
+      gitStatusFingerprint: confirmed.gitStatusFingerprint,
+      mainWorktreeWrites: confirmed.mainWorktreeWrites,
+      workspaceWrites: confirmed.workspaceWrites,
+      runtimeWrites: confirmed.runtimeWrites,
+      writeBoundary: confirmed.writeBoundary,
+      nextAction: confirmed.nextAction
+    }),
+    frozenPlan: stripUndefined({
+      operationId: frozenOperation.operationId,
+      operationStatus: frozenOperation.status,
+      adoptionPlanId: frozenOperation.runResult?.adoptionPlanId,
+      patchHash: frozenOperation.runResult?.patchHash,
+      sourceRunId: frozenOperation.runResult?.sourceRunId,
+      sourceWorkspaceFingerprint: frozenOperation.runResult?.sourceWorkspaceFingerprint
+    }),
+    output: stripUndefined({
+      stdout: buildControlledAdoptionConfirmOutputSummary(confirmed),
+      stderr: confirmedResult.stderr,
+      exitCode: confirmedResult.exitCode
+    }),
+    confirmContext: {
+      acceptedBodyFields: ['goalId', 'taskId', 'adoptionPlanId', 'operationId'],
+      sameGoalTaskContextRequired: true,
+      frozenPlanOperationRequired: true
+    },
+    safety: {
+      mappedToExistingAdoptConfirm: true,
+      genericShellRunner: false,
+      arbitraryPathReadAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      mainWorktreeWrites: confirmed.mainWorktreeWrites === true,
+      workspaceWrites: confirmed.workspaceWrites === true,
+      mergeAvailable: false,
+      pushAvailable: false,
+      tagAvailable: false,
+      publishAvailable: false,
+      selfApprovalAvailable: false,
+      reviewerEventRegistered: false,
+      mainVerificationEventRegistered: false,
+      releaseReadinessRegistered: false
+    }
+  };
+}
+
+async function findFrozenAdoptionPlanOperation({
+  stateDir,
+  goalId,
+  taskId,
+  adoptionPlanId,
+  operationId
+}) {
+  const operations = await readGoalOperationRuns({
+    stateDir,
+    goalId
+  });
+  const operation = operations.runs.find((candidate) => (
+    candidate.operationId === operationId
+    && candidate.goalId === goalId
+    && candidate.taskId === taskId
+    && candidate.commandKind === 'adoption-plan'
+    && candidate.status === 'confirmed'
+    && candidate.runResult?.adoptionPlanId === adoptionPlanId
+  ));
+
+  if (operation === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-plan-not-found',
+      'Controlled adoption confirm requires a frozen adoption plan operation for the same goal and task.',
+      { goalId, taskId, adoptionPlanId, operationId }
+    );
+  }
+
+  if (!isNonEmptyString(operation.runResult?.patchHash)
+    || !isNonEmptyString(operation.runResult?.adoptionPlanArtifactPath)
+    || !isNonEmptyString(operation.runResult?.patchArtifactPath)) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-plan-incomplete',
+      'Controlled adoption confirm requires frozen adoption patch and plan refs.',
+      { goalId, taskId, adoptionPlanId, operationId }
+    );
+  }
+
+  return operation;
+}
+
+async function runExistingAdoptionConfirmCommand({ stateDir, adoptionPlanId, runner }) {
+  const { runSymphonyCli } = await import('../../scripts/symphony.js');
+  const stdout = createConsoleBuffer();
+  const stderr = createConsoleBuffer();
+  const exitCode = await runSymphonyCli({
+    argv: ['adopt', '--state-dir', stateDir, '--confirm', adoptionPlanId, '--json'],
+    stdout,
+    stderr,
+    runner
+  });
+
+  let summary;
+
+  try {
+    summary = JSON.parse(stdout.text());
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-confirm-failed',
+      'Existing symphony adopt --confirm command did not return JSON.',
+      { exitCode }
+    );
+  }
+
+  if (exitCode !== 0 || summary?.status !== 'passed' || summary?.adoptionPlanId !== adoptionPlanId) {
+    throw new GoalEventPlanPreviewError(
+      'controlled-adoption-confirm-failed',
+      'Existing symphony adopt --confirm command failed before completing adoption.',
+      { exitCode, status: summary?.status, adoptionPlanId: summary?.adoptionPlanId }
+    );
+  }
+
+  return {
+    summary,
+    stdout: stdout.text(),
+    stderr: stderr.text(),
+    exitCode
+  };
+}
+
+async function recordControlledAdoptionOperationRunFromConfirmation({
+  stateDir,
+  goalId,
+  confirmation
+}) {
+  const confirmedRun = confirmation.confirmedRun ?? {};
+
+  return await recordGoalOperationRun({
+    stateDir,
+    goalId,
+    taskId: confirmation.taskId,
+    role: 'worker',
+    commandKind: 'adoption-confirm',
+    commandName: 'symphony adopt --confirm',
+    status: 'confirmed',
+    planHash: confirmedRun.patchHash,
+    source: 'workbench.adoption-confirm',
+    output: confirmation.output,
+    runResult: confirmedRun,
+    artifactRefs: buildArtifactRefs({
+      adoptionPlanArtifactPath: confirmedRun.adoptionPlanArtifactPath,
+      adoptionJournalArtifactPath: confirmedRun.adoptionJournalArtifactPath,
+      evidenceArtifactPath: confirmedRun.evidenceArtifactPath,
+      patchArtifactPath: confirmedRun.patchArtifactPath
+    }),
+    verifierSummary: {
+      status: confirmedRun.verifierStatus,
+      passed: confirmedRun.verifierStatus === 'passed',
+      sourceRunId: confirmedRun.sourceRunId,
+      changedFileCount: Array.isArray(confirmedRun.changedFiles) ? confirmedRun.changedFiles.length : 0,
+      artifactCount: 3
+    }
+  });
+}
+
+async function buildControlledAdoptionConfirmResponse({
+  stateDir,
+  goalId,
+  confirmation,
+  operationRun
+}) {
+  const runs = await decorateConsoleRuns(
+    (await listRunStates({ stateDir })).map((run) => compactRunState(run)),
+    { stateDir }
+  );
+
+  return {
+    ...confirmation,
+    operationRun,
+    refreshed: {
+      activeGoal: await buildGoalProgressLedger({
+        stateDir,
+        goalId
+      }),
+      events: await readGoalEventJournal({
+        stateDir,
+        goalId
+      }),
+      operations: await readGoalOperationRuns({
+        stateDir,
+        goalId
+      }),
+      runs: {
+        contractVersion: PRODUCT_JSON_CONTRACT.version,
+        contractName: 'symphony.console-runs',
+        filter: 'all',
+        availableFilters: [...RUN_FILTERS],
+        runs
+      },
+      nextAction: await buildGoalNextAction({
+        stateDir,
+        goalId
+      })
+    }
+  };
+}
+
+function computeControlledAdoptionFreezeHash({ goalId, taskId, sourceRunId, operationId, planned }) {
+  return `sha256:${createHash('sha256')
+    .update(JSON.stringify({
+      goalId,
+      taskId,
+      sourceRunId,
+      operationId,
+      adoptionPlanId: planned?.adoptionPlanId,
+      patchHash: planned?.patchHash,
+      sourceWorkspaceFingerprint: planned?.sourceWorkspaceFingerprint
+    }))
+    .digest('hex')}`;
+}
+
+function buildControlledAdoptionConfirmOutputSummary(run) {
+  return [
+    `adoptionPlanId=${run?.adoptionPlanId ?? 'unknown'}`,
+    `runId=${run?.runId ?? 'unknown'}`,
+    `status=${run?.status ?? 'unknown'}`,
+    `verifierStatus=${run?.verifierStatus ?? 'unknown'}`,
+    `patchHash=${run?.patchHash ?? 'unknown'}`,
+    `changedFiles=${Array.isArray(run?.changedFiles) ? run.changedFiles.length : 0}`,
+    `mainWorktreeWrites=${String(run?.mainWorktreeWrites === true)}`,
+    `nextAction=${run?.nextAction ?? 'unknown'}`
+  ].join('\n');
+}
+
+function buildControlledAdoptionOutputSummary(plan) {
+  return [
+    `adoptionPlanId=${plan?.adoptionPlanId ?? 'unknown'}`,
+    `status=${plan?.status ?? 'unknown'}`,
+    `sourceRunId=${plan?.sourceRunId ?? 'unknown'}`,
+    `patchHash=${plan?.patchHash ?? 'unknown'}`,
+    `changedFiles=${Array.isArray(plan?.changedFiles) ? plan.changedFiles.length : 0}`,
+    `fileOperations=${Array.isArray(plan?.fileOperations) ? plan.fileOperations.length : 0}`,
+    `sourceWorkspaceFingerprint=${plan?.sourceWorkspaceFingerprint ?? 'unknown'}`,
+    `mainWorktreeWrites=${String(plan?.mainWorktreeWrites === true)}`,
+    `workspaceWrites=${String(plan?.workspaceWrites === true)}`
+  ].join('\n');
+}
+
+function assertOnlyControlledAdoptionConfirmBodyKeys(body) {
+  const allowed = new Set(['goalId', 'taskId', 'adoptionPlanId', 'operationId']);
+  const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-confirm-request',
+      'Controlled adoption confirm received unsupported fields.',
+      { field: unsupported[0] }
+    );
+  }
+}
+
+function requiredControlledAdoptionConfirmBodyString(body, key) {
+  const value = body?.[key];
+
+  if (!isNonEmptyString(value)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-confirm-request',
+      `Controlled adoption confirm requires ${key}.`,
+      { field: key }
+    );
+  }
+
+  if (isUnsafeGoalRouteSegment(value)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-confirm-request',
+      `Controlled adoption confirm ${key} must be a safe token.`,
+      { field: key }
+    );
+  }
+
+  return value;
+}
+
+function assertOnlyControlledAdoptionFreezeBodyKeys(body) {
+  const allowed = new Set(['goalId', 'taskId', 'sourceRunId', 'operationId']);
+  const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-freeze-request',
+      'Controlled adoption plan freeze received unsupported fields.',
+      { field: unsupported[0] }
+    );
+  }
+}
+
+function requiredControlledAdoptionFreezeBodyString(body, key) {
+  const value = body?.[key];
+
+  if (!isNonEmptyString(value)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-freeze-request',
+      `Controlled adoption plan freeze requires ${key}.`,
+      { field: key }
+    );
+  }
+
+  if (isUnsafeGoalRouteSegment(value)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-adoption-freeze-request',
+      `Controlled adoption plan freeze ${key} must be a safe token.`,
+      { field: key }
+    );
+  }
+
+  return value;
+}
+
+function createConsoleBuffer() {
+  const chunks = [];
+
+  return {
+    write(chunk) {
+      chunks.push(String(chunk));
+    },
+    text() {
+      return chunks.join('');
+    }
+  };
+}
+
+function assertOnlyControlledImplementationConfirmBodyKeys(body) {
+  const allowed = new Set(['goalId', 'taskId', 'planId', 'planHash']);
+  const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-implementation-confirm-request',
+      'Controlled implementation run confirm received unsupported fields.',
+      { field: unsupported[0] }
+    );
+  }
+}
+
+function requiredControlledImplementationConfirmBodyString(body, key) {
+  const value = body[key];
+
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-implementation-confirm-request',
+      'Controlled implementation run confirm fields must be non-empty strings.',
+      { field: key }
+    );
+  }
+
+  return value.trim();
+}
+
+function latestGoalEventOfTypes(events, types) {
+  const wantedTypes = new Set(types);
+
+  return events
+    .filter((event) => wantedTypes.has(event?.eventType))
+    .sort(compareGoalEventRecords)
+    .at(-1) ?? null;
+}
+
+function goalEventRecordIsAfter(candidate, reference) {
+  if (candidate === null || reference === null) {
+    return false;
+  }
+
+  return compareGoalEventRecords(candidate, reference) > 0;
+}
+
+function compareGoalEventRecords(left, right) {
+  const leftSequence = Number.isInteger(left?.sequence) ? left.sequence : null;
+  const rightSequence = Number.isInteger(right?.sequence) ? right.sequence : null;
+
+  if (leftSequence !== null && rightSequence !== null && leftSequence !== rightSequence) {
+    return leftSequence - rightSequence;
+  }
+
+  const leftTime = Date.parse(left?.recordedAt ?? left?.occurredAt ?? '');
+  const rightTime = Date.parse(right?.recordedAt ?? right?.occurredAt ?? '');
+
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+    return leftTime - rightTime;
+  }
+
+  return String(left?.eventId ?? '').localeCompare(String(right?.eventId ?? ''));
+}
+
+function assertOnlyControlledImplementationPreviewSearchParams(searchParams) {
+  const allowed = new Set(['task']);
+  const unsupported = Array.from(searchParams.keys()).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-controlled-implementation-preview-request',
+      'Controlled implementation plan preview received unsupported query parameters.',
+      { parameter: unsupported[0] }
+    );
+  }
+
+  for (const [key, values] of groupSearchParamValues(searchParams)) {
+    if (values.length > 1) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-controlled-implementation-preview-request',
+        'Controlled implementation plan preview accepts only single-value query parameters.',
+        { parameter: key }
+      );
+    }
+  }
+
+  for (const blockedKey of ['prompt', 'path', 'command', 'confirm', 'planHash', 'plan-hash', 'dryRun', 'dry-run']) {
+    if (searchParams.has(blockedKey)) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-controlled-implementation-preview-request',
+        'Controlled implementation plan preview does not accept prompt, path, command, confirm, or plan hash parameters.',
+        { parameter: blockedKey }
+      );
+    }
+  }
+}
+
+function safeIdPart(value) {
+  const normalized = String(value).toLowerCase().replace(/[^a-z0-9_-]+/gu, '-').replace(/^-+|-+$/gu, '');
+
+  return normalized === '' ? 'item' : normalized.slice(0, 80);
+}
+
+function shortHash(value) {
+  return createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
+}
+
 async function readGoalEventConfirmRequestBody(request) {
   const contentType = request.headers['content-type'] ?? '';
 
@@ -2892,7 +6040,7 @@ async function confirmGoalEventPlan({ stateDir, goalId, body }) {
 }
 
 async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result, operationRun }) {
-  const [progress, events, nextAction] = await Promise.all([
+  const [progress, events, nextAction, closeout] = await Promise.all([
     buildGoalProgressLedger({
       stateDir,
       goalId
@@ -2902,6 +6050,10 @@ async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result, ope
       goalId
     }),
     buildGoalNextAction({
+      stateDir,
+      goalId
+    }),
+    buildGoalCloseoutReport({
       stateDir,
       goalId
     })
@@ -2937,7 +6089,8 @@ async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result, ope
     refreshed: {
       progress,
       events,
-      nextAction
+      nextAction,
+      closeout
     },
     confirmEndpoint: {
       constrainedCommands: ['update', 'review', 'gate'],
@@ -2946,7 +6099,8 @@ async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result, ope
       refreshes: [
         'goal-progress-ledger.v1',
         'goal-event-log.v1',
-        'goal-next-action.v1'
+        'goal-next-action.v1',
+        'goal-closeout-report.v1'
       ]
     },
     safety: {
@@ -3402,15 +6556,34 @@ function parseHandoffRequestPath(pathname, searchParams = new URLSearchParams())
   };
 }
 
-function parseAdoptionInspectRequestPath(pathname) {
+function parseAdoptionInspectRequestPath(pathname, searchParams = new URLSearchParams()) {
   const match = /^\/api\/adoptions\/([^/]+)\/inspect$/u.exec(pathname);
 
   if (match === null) {
     return null;
   }
 
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (hasSearchParams(searchParams)) {
+    return {
+      kind: 'invalid',
+      adoptionId: null,
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      adoptionId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
   return {
-    adoptionId: decodeURIComponent(match[1])
+    kind: 'inspect',
+    adoptionId: decoded.value
   };
 }
 
@@ -4805,7 +7978,7 @@ async function buildGitReadiness({ runner, cwd, timeoutMs }) {
     };
   }
 
-  const [branch, head, status] = await Promise.all([
+  const [branch, head, currentHead, mainHead, originMainHead, status] = await Promise.all([
     runReadinessCommand({
       runner,
       executable: 'git',
@@ -4817,6 +7990,27 @@ async function buildGitReadiness({ runner, cwd, timeoutMs }) {
       runner,
       executable: 'git',
       args: ['rev-parse', '--short', 'HEAD'],
+      cwd,
+      timeoutMs
+    }),
+    runReadinessCommand({
+      runner,
+      executable: 'git',
+      args: ['rev-parse', 'HEAD'],
+      cwd,
+      timeoutMs
+    }),
+    runReadinessCommand({
+      runner,
+      executable: 'git',
+      args: ['rev-parse', '--short', 'main'],
+      cwd,
+      timeoutMs
+    }),
+    runReadinessCommand({
+      runner,
+      executable: 'git',
+      args: ['rev-parse', '--short', 'origin/main'],
       cwd,
       timeoutMs
     }),
@@ -4835,10 +8029,21 @@ async function buildGitReadiness({ runner, cwd, timeoutMs }) {
     status: 'available',
     branch: firstOutputLine(branch) || 'detached',
     head: firstOutputLine(head) || undefined,
+    currentHead: firstPassedOutputLine(currentHead),
+    mainHead: firstPassedOutputLine(mainHead),
+    originMainHead: firstPassedOutputLine(originMainHead),
     dirty: dirtyFilesCount > 0,
     dirtyFilesCount,
     dirtyPaths,
-    command: 'git status --short'
+    command: 'git status --short',
+    commands: {
+      branch: 'git branch --show-current',
+      head: 'git rev-parse --short HEAD',
+      currentHead: 'git rev-parse HEAD',
+      mainHead: 'git rev-parse --short main',
+      originMainHead: 'git rev-parse --short origin/main',
+      worktreeStatus: 'git status --short'
+    }
   });
 }
 
@@ -5221,6 +8426,12 @@ function firstOutputLine(check) {
   return checkOutputLines(check)[0] ?? '';
 }
 
+function firstPassedOutputLine(check) {
+  return check?.status === 'passed'
+    ? firstOutputLine(check) || undefined
+    : undefined;
+}
+
 function checkOutputLines(check) {
   return commandOutput(check)
     .split('\n')
@@ -5472,6 +8683,10 @@ function stripUndefined(value) {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+function firstNonEmptyString(...values) {
+  return values.find((value) => isNonEmptyString(value)) ?? null;
 }
 
 function isPlainObject(value) {

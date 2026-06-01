@@ -1,0 +1,223 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v32-release-manager-workspace-v2",
+  "goalTitle": "v32 Release Manager Workspace v2",
+  "baseline": {
+    "tag": "v31",
+    "commit": null,
+    "evidenceRef": "docs/plans/v31-release-evidence-2026-06-01.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Clean release baseline resolver",
+      "branch": "v32-task-1-clean-release-baseline-resolver",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "release manager 不再在 dirty fallback checkout 上做最终判断。",
+        "Implementation scope: 建立 release baseline resolver：显示 current branch、main HEAD、origin/main、worktree cleanliness、PR/CI ref；dirty 或非 main 状态时只给 stop/fix guidance。",
+        "Worker evidence path: docs/plans/v32-task-1-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v32-task-1-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v32-task-1-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v32-release-manager-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Release gate checklist recorder",
+      "branch": "v32-task-2-release-gate-checklist-recorder",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "release gates 的结果能在 Workbench 里逐项记录，不靠 closeout 文案推断。",
+        "Implementation scope: 把 `pnpm check/test/workbench:build/test:mutation:gate/audit/mcas doctor/diff/docsUpdated` 作为 release gate checklist；支持 evidence refs 和 explicit goal gate preview/confirm。",
+        "Worker evidence path: docs/plans/v32-task-2-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v32-task-2-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v32-task-2-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v32-release-manager-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Release and tag evidence workspace",
+      "branch": "v32-task-3-release-and-tag-evidence-workspace",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "tag evidence 有明确 ref、commit、命令结果和边界，不自动打 tag。",
+        "Implementation scope: 生成 release evidence 和 tag evidence draft；显示 tag recommendation、target commit、release notes summary；copy-only tag command，不执行 tag/push/publish。",
+        "Worker evidence path: docs/plans/v32-task-3-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v32-task-3-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v32-task-3-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v32-release-manager-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Release.ready closeout confirm",
+      "branch": "v32-task-4-release-ready-closeout-confirm",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "所有 release gates passed 后，用户能受控声明 `release.ready`。",
+        "Implementation scope: 接入 `goal gate --gate release.ready --status declared` dry-run + plan-hash confirm；confirm 后 closeout 必须无缺口。",
+        "Worker evidence path: docs/plans/v32-task-4-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v32-task-4-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v32-task-4-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v32-release-manager-workspace-v2 --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Next-version handoff generator",
+      "branch": "v32-task-5-next-version-handoff-generator",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "v32 结束后能自然生成 v33 起步上下文，不重新读散乱历史。",
+        "Implementation scope: 根据 final closeout、release evidence、operator guide 和 implemented capabilities 生成 next-version handoff draft；不自动创建新 goal，不自动进入 v33。",
+        "Worker evidence path: docs/plans/v32-task-5-worker-evidence-2026-06-01.md.",
+        "Review evidence path: docs/plans/v32-task-5-review-evidence-2026-06-01.md.",
+        "Main verification evidence path: docs/plans/v32-task-5-main-verification-evidence-2026-06-01.md.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v32-release-manager-workspace-v2 --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

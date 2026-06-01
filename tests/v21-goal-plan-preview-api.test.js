@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createSymphonyConsoleServer } from '../src/symphony/console.js';
+import { appendGoalEvent } from '../src/symphony/goal-event-journal.js';
 import { validateErrorEnvelopeContract } from '../src/symphony/error-envelope.js';
 import { validateGoalUpdatePlanContract } from '../src/symphony/goal-event-contracts.js';
 import {
@@ -14,6 +15,17 @@ import {
 
 const GOAL_ID = 'v21-goal-event-registration-workbench';
 const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v21-goal-event-registration-workbench.v1.json';
+const TASK_IDS = Object.freeze(['task-1', 'task-2', 'task-3', 'task-4', 'task-5']);
+const RELEASE_GATES_WITHOUT_TAG = Object.freeze([
+  'release.pnpm-check',
+  'release.pnpm-test',
+  'release.workbench-build',
+  'release.mutation-gate',
+  'release.audit-high',
+  'release.diff-check',
+  'release.mcas-doctor',
+  'release.docs-updated'
+]);
 
 describe('v21 Workbench goal event dry-run plan preview API', () => {
   it('serves a latest goal update dry-run preview with plan hash, event summary, and operation tracking without writing goal event state', async () => {
@@ -662,6 +674,70 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
     }
   });
 
+  it('refreshes closeout after controlled release.ready dry-run and plan-hash confirm', async () => {
+    const context = await startPreviewConsoleServer();
+
+    try {
+      await appendCompleteV21EvidenceExceptReleaseReady({
+        stateDir: context.stateDir
+      });
+
+      const previewResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-preview?${new URLSearchParams({
+        command: 'gate',
+        gate: 'release.ready',
+        status: 'declared',
+        verifier: 'codex-v21-release-manager',
+        evidenceRef: 'docs/plans/v21-release-evidence-2026-05-29.md'
+      })}`);
+      const preview = await previewResponse.json();
+
+      assert.equal(previewResponse.status, 200);
+      assert.equal(preview.command.name, 'symphony goal gate');
+      assert.equal(preview.eventSummary.eventType, 'release.ready-declared');
+      assert.equal(preview.eventSummary.gate, 'release.ready');
+      assert.equal(preview.eventSummary.gateStatus, 'declared');
+      assert.match(preview.confirm.copyOnlyCommand, /--gate release\.ready --status declared/u);
+      assert.match(preview.confirm.copyOnlyCommand, /--confirm --plan-hash sha256:[a-f0-9]{64}/u);
+
+      const confirmResponse = await fetch(`${context.baseUrl}/api/goals/${GOAL_ID}/event-plan-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          command: 'gate',
+          gate: 'release.ready',
+          status: 'declared',
+          verifier: 'codex-v21-release-manager',
+          evidenceRef: ['docs/plans/v21-release-evidence-2026-05-29.md'],
+          planHash: preview.planHash
+        })
+      });
+      const confirmation = await confirmResponse.json();
+
+      assert.equal(confirmResponse.status, 200);
+      assert.equal(confirmation.contractName, 'goal-event-confirmation.v1');
+      assert.equal(confirmation.eventSummary.eventType, 'release.ready-declared');
+      assert.equal(confirmation.refreshed.closeout.contractName, 'goal-closeout-report.v1');
+      assert.equal(confirmation.refreshed.closeout.summary.releaseReady, true);
+      assert.equal(confirmation.refreshed.closeout.missing.length, 0);
+      assert.deepEqual(
+        confirmation.confirmEndpoint.refreshes,
+        [
+          'goal-progress-ledger.v1',
+          'goal-event-log.v1',
+          'goal-next-action.v1',
+          'goal-closeout-report.v1'
+        ]
+      );
+      assert.equal(confirmation.safety.genericShellRunner, false);
+      assert.equal(confirmation.safety.browserExecutionAvailable, false);
+    } finally {
+      await cleanupPreviewConsoleServer(context);
+    }
+  });
+
   it('rejects mismatched plan hashes, unsupported confirm commands, unknown fields, and unsafe goal refs without appending', async () => {
     const context = await startPreviewConsoleServer();
 
@@ -782,6 +858,122 @@ async function startPreviewConsoleServer() {
     server,
     baseUrl: `http://127.0.0.1:${address.port}`
   };
+}
+
+async function appendCompleteV21EvidenceExceptReleaseReady({ stateDir }) {
+  for (const taskId of TASK_IDS) {
+    await appendCompleteTaskLifecycle({
+      stateDir,
+      taskId
+    });
+  }
+
+  for (const gateName of RELEASE_GATES_WITHOUT_TAG) {
+    await appendPassedReleaseGate({
+      stateDir,
+      gateName
+    });
+  }
+}
+
+async function appendCompleteTaskLifecycle({ stateDir, taskId }) {
+  const safeTaskId = taskId.replaceAll('-', '_');
+  const events = [{
+    eventId: `evt_v21_${safeTaskId}_worker_evidence`,
+    eventType: 'worker.evidence-recorded',
+    phase: 'implement',
+    actor: {
+      role: 'worker',
+      id: `codex-v21-${taskId}-worker`
+    },
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: `docs/plans/v21-${taskId}-worker-evidence-2026-05-29.md`,
+      label: `${taskId} worker evidence`
+    }],
+    statement: `${taskId} worker evidence recorded.`
+  }, {
+    eventId: `evt_v21_${safeTaskId}_reviewer_approved`,
+    eventType: 'reviewer.approved',
+    phase: 'review',
+    actor: {
+      role: 'reviewer',
+      id: `codex-v21-${taskId}-reviewer`
+    },
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: `docs/plans/v21-${taskId}-review-evidence-2026-05-29.md`,
+      label: `${taskId} review evidence`
+    }],
+    statement: `${taskId} reviewer approved.`,
+    review: {
+      verdict: 'APPROVED'
+    }
+  }, {
+    eventId: `evt_v21_${safeTaskId}_main_verified`,
+    eventType: 'main.verification-passed',
+    phase: 'main-verification',
+    actor: {
+      role: 'main-verifier',
+      id: `codex-v21-${taskId}-main-verifier`
+    },
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: `docs/plans/v21-${taskId}-main-verification-evidence-2026-05-29.md`,
+      label: `${taskId} main verification evidence`
+    }],
+    statement: `${taskId} main verification passed.`,
+    gate: {
+      name: 'main-verification',
+      status: 'passed'
+    }
+  }];
+
+  for (const event of events) {
+    await appendGoalEvent({
+      stateDir,
+      mode: 'confirm',
+      event: {
+        goalId: GOAL_ID,
+        taskId,
+        occurredAt: '2026-05-31T00:06:32.754Z',
+        branch: null,
+        commit: null,
+        ...event
+      }
+    });
+  }
+}
+
+async function appendPassedReleaseGate({ stateDir, gateName }) {
+  await appendGoalEvent({
+    stateDir,
+    mode: 'confirm',
+    event: {
+      eventId: `evt_v21_${gateName.replaceAll('.', '_').replaceAll('-', '_')}_passed`,
+      goalId: GOAL_ID,
+      taskId: null,
+      eventType: 'release.gate-passed',
+      phase: 'release-gate',
+      actor: {
+        role: 'release-verifier',
+        id: 'codex-v21-release-manager'
+      },
+      occurredAt: '2026-05-31T00:06:32.754Z',
+      branch: null,
+      commit: null,
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/v21-release-evidence-2026-05-29.md',
+        label: `${gateName} evidence`
+      }],
+      statement: `Release gate ${gateName} passed.`,
+      gate: {
+        name: gateName,
+        status: 'passed'
+      }
+    }
+  });
 }
 
 async function previewAndConfirmGoalEvent(context, { previewParams, confirmBody }) {

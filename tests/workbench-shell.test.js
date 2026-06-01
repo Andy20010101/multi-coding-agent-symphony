@@ -83,6 +83,7 @@ describe('v15 Workbench React/Vite shell', () => {
       'OperationConsoleRunCard',
       'OperationConsoleRunList',
       'GoalOperationInlineConsole',
+      'OperationArtifactRefList',
       'PromptRoleGuidance',
       'CloseoutGapsPanel',
       'GoalEventsTimelinePanel',
@@ -125,6 +126,8 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /stdout/u);
     assert.match(app, /stderr/u);
     assert.match(app, /exitCode/u);
+    assert.match(app, /run result bridge/u);
+    assert.match(app, /artifact refs \/ verifier summary/u);
     assert.match(app, /afterCompletion\.registrationCommand/u);
     assert.match(app, /Prompt Preview Drawer/u);
     assert.match(app, /copy-only prompt drawer/u);
@@ -329,6 +332,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(reviewWorkspaceSignature, /onGoalEventConfirmed/u);
     assert.doesNotMatch(viewModelSignature, /onGoalEventConfirmed/u);
     assert.match(nextActionBody, /<GoalEventFormModelView[\s\S]*onGoalEventConfirmed=\{onGoalEventConfirmed\}/u);
+    assert.match(app, /goal-status \/ events \/ next action \/ closeout/u);
   });
 
   it('polls the scoped Goal Operation Console route without adding a terminal runner', async () => {
@@ -352,24 +356,77 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app, /child_process|exec\(|spawn\(|terminal emulator|generic shell runner|WebSocket|EventSource/u);
   });
 
-  it('wires the v24 main verification readiness panel as copy-only display', async () => {
+  it('wires the v31 main verification readiness panel as explicit-state copy-only display', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
     const panelBody = app.slice(
       app.indexOf('function MainVerificationReadinessPanel'),
       app.indexOf('function ActiveGoalRunbookPanel')
     );
+    const draftPanelBody = app.slice(
+      app.indexOf('function MainVerificationEvidenceDraftPanel'),
+      app.indexOf('function ActiveGoalRunbookPanel')
+    );
 
-    assert.match(app, /<MainVerificationReadinessPanel readiness=\{model\.activeGoal\.mainVerificationReadiness\}/u);
+    assert.match(app, /<MainVerificationReadinessPanel[\s\S]*readiness=\{model\.activeGoal\.mainVerificationReadiness\}[\s\S]*onVerificationRunConfirmed=\{onRefreshWorkbenchContracts\}/u);
+    assert.match(app, /<MainVerificationGateRegistrationPanel[\s\S]*registration=\{model\.activeGoal\.mainVerificationGateRegistration\}[\s\S]*onGoalEventConfirmed=\{onRefreshWorkbenchContracts\}/u);
     assert.match(panelBody, /reviewer\.approved/u);
-    assert.match(panelBody, /branch \/ main state/u);
+    assert.match(panelBody, /adoption state/u);
+    assert.match(panelBody, /explicit state sources/u);
+    assert.match(panelBody, /ignored inference sources/u);
     assert.match(panelBody, /ff-only merge guidance/u);
     assert.match(panelBody, /required verification commands/u);
+    assert.match(panelBody, /allowlisted verification plan preview/u);
+    assert.match(panelBody, /AllowlistedVerificationPlanPreview/u);
+    assert.match(panelBody, /VerificationPlanCommandList/u);
+    assert.match(panelBody, /active goal\/task\/run\/evidence context/u);
+    assert.match(panelBody, /fixed verification allowlist/u);
+    assert.match(panelBody, /controlled verification operation/u);
+    assert.match(panelBody, /Start controlled verification run/u);
+    assert.match(panelBody, /confirmControlledVerificationRun/u);
+    assert.match(panelBody, /successImpliesGatePassed/u);
+    assert.match(app, /mainVerificationEvidenceDraft/u);
+    assert.match(draftPanelBody, /main verification evidence draft/u);
+    assert.match(draftPanelBody, /MainVerificationEvidenceDraftPanel/u);
+    assert.match(draftPanelBody, /draft\?\.verification\?\.operationId/u);
+    assert.match(draftPanelBody, /draft\?\.refs\?\.workerEvidenceRef/u);
+    assert.match(draftPanelBody, /draft\?\.refs\?\.reviewEvidenceRef/u);
+    assert.match(draftPanelBody, /draft\?\.adoptionRefs\?\.adoptionConfirmStatus/u);
+    assert.match(draftPanelBody, /draft\?\.copyOnlyGateDryRun/u);
+    assert.match(draftPanelBody, /draft\?\.markdown\?\.text/u);
+    assert.match(draftPanelBody, /draft needing operator \/ reviewer check/u);
+    assert.match(draftPanelBody, /needsOperatorReview/u);
+    assert.match(draftPanelBody, /writesEvidenceFile/u);
+    assert.match(draftPanelBody, /declaresPassed/u);
+    assert.match(draftPanelBody, /MainVerificationGateRegistrationPanel/u);
+    assert.match(draftPanelBody, /main-verification gate form/u);
+    assert.match(draftPanelBody, /registration\?\.targetEvidenceRef/u);
+    assert.match(draftPanelBody, /registration\?\.verificationOperationId/u);
+    assert.match(draftPanelBody, /registration\?\.confirmCommandPattern/u);
+    assert.match(draftPanelBody, /registration\?\.safety\?\.confirmRequiresPlanHash/u);
+    assert.match(draftPanelBody, /registration\?\.safety\?\.arbitraryShellAccepted/u);
+    assert.match(draftPanelBody, /<GoalEventFormList[\s\S]*items:\s*registration\?\.form === null/u);
+    assert.match(panelBody, /commandInputAccepted/u);
+    assert.match(panelBody, /arbitraryShellAccepted/u);
     assert.match(panelBody, /evidence path/u);
     assert.match(contracts, /projectMainVerificationReadiness/u);
+    assert.match(contracts, /projectAllowlistedVerificationPlanPreview/u);
+    assert.match(contracts, /projectMainVerificationEvidenceDraft/u);
+    assert.match(contracts, /projectMainVerificationGateRegistration/u);
+    assert.match(contracts, /MainVerificationGateRegistration/u);
+    assert.match(contracts, /gateStatus:\s*\{[\s\S]*readOnly:\s*true[\s\S]*options:\s*\['passed'\]/u);
+    assert.match(contracts, /form:\s*available \? form : null/u);
+    assert.match(contracts, /latestVerificationOperationForTask/u);
+    assert.match(contracts, /Draft status: needs operator\/reviewer check/u);
+    assert.match(contracts, /verification-run-confirm/u);
+    assert.match(contracts, /MAIN_VERIFICATION_COMMAND_ALLOWLIST/u);
+    assert.match(contracts, /CONTROLLED_VERIFICATION_CONTEXT_COMMANDS/u);
+    assert.match(contracts, /projectMainVerificationAdoptionState/u);
+    assert.match(contracts, /goal-operation-runs\.v1 \+ symphony\.console-adoption-inspect/u);
     assert.match(contracts, /git merge --ff-only/u);
-    assert.match(contracts, /main-verification-evidence-2026-05-29/u);
-    assert.doesNotMatch(panelBody, /fetchGoalEventPlanPreview|confirmGoalEventPlan|window\.open|navigator\.clipboard/u);
+    assert.match(contracts, /<main-verification-evidence-ref>/u);
+    assert.doesNotMatch(contracts, /projectMainVerificationBranchState/u);
+    assert.doesNotMatch(panelBody, /fetchGoalEventPlanPreview|confirmGoalEventPlan|window\.open|navigator\.clipboard|<textarea|<input/u);
   });
 
   it('shows copy-only failure recovery shortcuts for failed goal operations', async () => {
@@ -437,7 +494,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(handoffBody, /child_process|exec\(|spawn\(|window\.open|navigator\.clipboard|reviewer\.approved|main\.verification-passed/u);
   });
 
-  it('exposes the v26 adoption candidate panel as read-only run inspection', async () => {
+  it('exposes the v30 adoption candidate panel as read-only operation/run inspection', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
     const panelBody = app.slice(
@@ -455,11 +512,93 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(panelBody, /evidenceArtifactPath/u);
     assert.match(panelBody, /changed files/u);
     assert.match(panelBody, /verifierStatus/u);
+    assert.match(projectionBody, /AdoptionCandidateProjectionV30/u);
+    assert.match(projectionBody, /GOAL_OPERATION_RUNS_CONTRACT_NAME/u);
     assert.match(projectionBody, /symphony\.console-runs/u);
-    assert.match(projectionBody, /runIsAdoptionCandidate/u);
+    assert.match(projectionBody, /backend operation\/run fields only/u);
     assert.match(projectionBody, /genericShellRunner:\s*valueState\(false\)/u);
     assert.match(projectionBody, /workerCanApproveOwnTask:\s*valueState\(false\)/u);
     assert.doesNotMatch(panelBody, /GoalEventPlanPreview|confirmGoalEventPlan|fetchGoalEventPlanPreview|symphony goal review|symphony goal gate|release\.ready|reviewer\.approved|main\.verification-passed|git merge|git tag|child_process|exec\(|spawn\(|window\.open|navigator\.clipboard/u);
+  });
+
+  it('exposes the v30 adoption confirm path through frozen operation context', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const panelBody = app.slice(
+      app.indexOf('function AdoptionInspectRecoveryPanel'),
+      app.indexOf('function HandoffPanel')
+    );
+    const projectionBody = contracts.slice(
+      contracts.indexOf('function projectAdoptionInspectRecoveryWorkspace'),
+      contracts.indexOf('function projectAdoptionFreezeCandidate')
+    );
+
+    assert.match(app, /<AdoptionInspectRecoveryPanel[\s\S]*workspace=\{model\.adoptionInspectRecoveryWorkspace\}[\s\S]*onAdoptionConfirmed=\{onRefreshWorkbenchContracts\}/u);
+    assert.match(contracts, /ADOPTION_INSPECT_ROUTE_TEMPLATE/u);
+    assert.match(contracts, /CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE/u);
+    assert.match(projectionBody, /AdoptionInspectRecoveryViewV30/u);
+    assert.match(projectionBody, /goal-operation-runs\.v1 adoption-plan runResult\.adoptionPlanId/u);
+    assert.match(projectionBody, /adoption inspect journal\.status/u);
+    assert.match(projectionBody, /symphony adopt --confirm/u);
+    assert.match(projectionBody, /refreshesAfterConfirm:\s*arrayTextState\(\['goal-status', 'goal-events', 'goal-operation-runs', 'runs', 'goal-next-action'\]\)/u);
+    assert.match(projectionBody, /currentWorktreeMatchesAfterHash/u);
+    assert.match(panelBody, /Inspect recovery state/u);
+    assert.match(panelBody, /Confirm adoption/u);
+    assert.match(panelBody, /confirm endpoint/u);
+    assert.match(panelBody, /journalStatus/u);
+    assert.match(panelBody, /currentWorktreeMatchesAfterHash/u);
+    assert.match(panelBody, /currentWorktreeMatchesJournalBeforeFiles/u);
+    assert.match(panelBody, /file operation hashes/u);
+    assert.match(panelBody, /latestConfirmationEvidenceArtifactPath/u);
+    assert.match(projectionBody, /genericShellRunner:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /adoptionConfirmAvailable:\s*valueState\(confirmBodyAvailable && isNonEmptyString\(confirmRoute\)\)/u);
+    assert.match(projectionBody, /applyPatchAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /mergeAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /pushAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /tagAvailable:\s*valueState\(false\)/u);
+    assert.doesNotMatch(panelBody, /confirmControlledAdoptionPlanFreeze|confirmGoalEventPlan|fetchGoalEventPlanPreview|symphony goal review|symphony goal gate|release\.ready|reviewer\.approved|main\.verification-passed|git merge|git tag|git push|child_process|exec\(|spawn\(|window\.open|navigator\.clipboard/u);
+  });
+
+  it('keeps the v30 adoption path as verified workflow evidence instead of direct patch or readiness controls', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const guide = await readFile('docs/workbench-operator-guide.md', 'utf8');
+    const productContracts = await readFile('docs/symphony-product-contracts.md', 'utf8');
+    const adoptionPanels = app.slice(
+      app.indexOf('function AdoptionCandidatePanel'),
+      app.indexOf('function HandoffPanel')
+    );
+    const confirmResultBody = app.slice(
+      app.indexOf('function AdoptionConfirmResult'),
+      app.indexOf('function ProjectedAdoptionInspectOutput')
+    );
+    const adoptionProjection = contracts.slice(
+      contracts.indexOf('function projectAdoptionCandidates'),
+      contracts.indexOf('function projectGoalEventForms')
+    );
+
+    assert.match(adoptionPanels, /Adoption candidate normalization/u);
+    assert.match(adoptionPanels, /Freeze adoption plan/u);
+    assert.match(adoptionPanels, /Inspect recovery state/u);
+    assert.match(adoptionPanels, /Confirm adoption/u);
+    assert.match(adoptionProjection, /goal-operation-runs\.v1/u);
+    assert.match(adoptionProjection, /backend operation\/run fields only/u);
+    assert.match(adoptionProjection, /mappedToExistingAdoptRun:\s*valueState\(true\)/u);
+    assert.match(adoptionProjection, /refreshesAfterConfirm:\s*arrayTextState\(\['goal-status', 'goal-events', 'goal-operation-runs', 'runs', 'goal-next-action'\]\)/u);
+    assert.match(confirmResultBody, /mainWorktreeWrites/u);
+    assert.match(confirmResultBody, /genericShellRunner/u);
+    assert.match(confirmResultBody, /modelInvocationAvailable/u);
+    assert.match(confirmResultBody, /reviewerEventRegistered/u);
+    assert.match(confirmResultBody, /mainVerificationEventRegistered/u);
+    assert.match(confirmResultBody, /releaseReadinessRegistered/u);
+    assert.match(confirmResultBody, /mergeAvailable/u);
+    assert.match(confirmResultBody, /pushAvailable/u);
+    assert.match(confirmResultBody, /tagAvailable/u);
+    assert.match(confirmResultBody, /publishAvailable/u);
+    assert.match(guide, /v30 adoption evidence bridge/u);
+    assert.match(productContracts, /v30 adoption evidence bridge/u);
+    assert.doesNotMatch(adoptionPanels, />Apply patch<|>Run model<|>Open local file<|>Download artifact<|>Merge<|>Push<|>Tag<|>Publish<|>Declare release ready</u);
+    assert.doesNotMatch(adoptionPanels, /release\.ready|main\.verification-passed|reviewer\.approved|child_process|exec\(|spawn\(|window\.open|navigator\.clipboard/u);
   });
 
   it('exposes the v27 Review Workspace with controlled review verdict registration', async () => {
@@ -513,20 +652,45 @@ describe('v15 Workbench React/Vite shell', () => {
 
     assert.match(app, /<CloseoutGapsPanel[\s\S]*closeoutGaps=\{model\.activeGoal\.closeoutGaps\}[\s\S]*onGoalEventConfirmed=\{onRefreshWorkbenchContracts\}/u);
     assert.match(contracts, /RELEASE_CLOSEOUT_WORKSPACE_MODEL_NAME = 'ReleaseCloseoutWorkspaceModel'/u);
+    assert.match(contracts, /RELEASE_EVIDENCE_DRAFT_MODEL_NAME = 'ReleaseEvidenceDraftWriter'/u);
+    assert.match(contracts, /TAG_EVIDENCE_DRAFT_MODEL_NAME = 'TagEvidenceDraftWriter'/u);
     assert.match(contracts, /RELEASE_VERIFICATION_CHECKLIST/u);
     assert.match(contracts, /release\.pnpm-check/u);
     assert.match(contracts, /release\.workbench-build/u);
     assert.match(contracts, /release\.tag-evidence/u);
+    assert.match(contracts, /RELEASE_BASELINE_RESOLVER_MODEL_NAME = 'ReleaseBaselineResolver'/u);
+    assert.match(contracts, /projectReleaseBaselineResolver/u);
+    assert.match(contracts, /projectReleaseEvidenceDraft/u);
+    assert.match(contracts, /NEXT_VERSION_HANDOFF_DRAFT_MODEL_NAME = 'NextVersionHandoffDraft'/u);
+    assert.match(contracts, /projectNextVersionHandoffDraft/u);
+    assert.match(contracts, /copyOnlyTagCommand/u);
+    assert.match(contracts, /tagExecutionAvailable:\s*valueState\(false\)/u);
+    assert.match(contracts, /currentBranch/u);
+    assert.match(contracts, /originMainHead/u);
+    assert.match(contracts, /releaseReadyBlockedWhenDirtyOrNonMain/u);
+    assert.match(contracts, /finalJudgmentFromFallbackCheckout/u);
     assert.match(contracts, /goal-gate-release-ready-declared/u);
     assert.match(contracts, /release\.ready-declared/u);
     assert.match(contracts, /gate:\s*'release\.ready'/u);
     assert.match(contracts, /gateStatus:\s*'declared'/u);
+    assert.match(panelBody, /release baseline resolver/u);
+    assert.match(panelBody, /ReleaseBaselineResolver/u);
+    assert.match(panelBody, /PR \/ CI ref/u);
+    assert.match(panelBody, /stop \/ fix guidance/u);
     assert.match(panelBody, /release verification checklist/u);
     assert.match(panelBody, /release\.ready gate registration/u);
-    assert.match(panelBody, /tag evidence prompt/u);
+    assert.match(panelBody, /release evidence draft/u);
+    assert.match(panelBody, /tag evidence draft \/ prompt/u);
+    assert.match(panelBody, /next-version handoff draft/u);
     assert.match(panelBody, /ReleaseVerificationChecklist/u);
     assert.match(panelBody, /ReleaseReadyGateRegistration/u);
+    assert.match(panelBody, /ReleaseEvidenceDraft/u);
     assert.match(panelBody, /TagEvidencePrompt/u);
+    assert.match(panelBody, /NextVersionHandoffDraft/u);
+    assert.match(panelBody, /copyOnlyTagCommand/u);
+    assert.match(panelBody, /tag command result fields/u);
+    assert.match(panelBody, /createsManagedGoal/u);
+    assert.match(panelBody, /entersNextVersion/u);
     assert.match(panelBody, /<GoalEventFormList[\s\S]*forms=\{\{[\s\S]*items:\s*\[registration\.form\]/u);
     assert.doesNotMatch(panelBody, /child_process|exec\(|spawn\(|window\.open|navigator\.clipboard|git merge|git tag/u);
   });
@@ -571,17 +735,23 @@ describe('v15 Workbench React/Vite shell', () => {
       .sort();
 
     assert.deepEqual(apiPaths, [
+      '/api/adoptions/<adoption-id>/inspect',
       '/api/capabilities',
       '/api/diagnostics',
       '/api/goals',
+      '/api/goals/${goalId}/verification-run-confirm',
+      '/api/goals/<goal-id>/adoption-confirm',
+      '/api/goals/<goal-id>/adoption-plan-freeze',
       '/api/goals/<goal-id>/closeout',
       '/api/goals/<goal-id>/event-plan-confirm',
       '/api/goals/<goal-id>/event-plan-preview',
       '/api/goals/<goal-id>/events',
+      '/api/goals/<goal-id>/implementation-plan-preview',
       '/api/goals/<goal-id>/next',
       '/api/goals/<goal-id>/operations',
       '/api/goals/<goal-id>/progress',
       '/api/goals/<goal-id>/prompt',
+      '/api/goals/<goal-id>/release-baseline',
       '/api/goals/<goal-id>/runbook',
       '/api/goals/latest/closeout',
       '/api/goals/latest/events',
@@ -589,6 +759,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/goals/latest/operations',
       '/api/goals/latest/progress',
       '/api/goals/latest/prompt',
+      '/api/goals/latest/release-baseline',
       '/api/goals/latest/runbook',
       '/api/handoff',
       '/api/handoff/<ref>',
