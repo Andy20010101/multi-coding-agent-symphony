@@ -1,0 +1,179 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v22-goal-prompt-handoff-workspace",
+  "goalTitle": "v22 Prompt Handoff Workspace",
+  "baseline": {
+    "tag": "v21",
+    "commit": null,
+    "evidenceRef": "docs/plans/v21-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Prompt Workspace route",
+      "branch": "v22-task-1-prompt-workspace-route",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能从 UI 生成某个 task 的 worker/reviewer/main-verifier prompt。",
+        "新增 /workbench/prompts 或等价路由，左侧选 goal/task/role，右侧展示由 goal prompt 生成的 prompt pack。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v22-goal-prompt-handoff-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Role-specific prompt renderer",
+      "branch": "v22-task-2-role-specific-prompt-renderer",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "不同 subagent 拿到的是角色明确、边界清楚、证据要求完整的 prompt。",
+        "支持 worker、independent reviewer、main verifier、release manager 四种 prompt 渲染和 copy。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v22-goal-prompt-handoff-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Subagent handoff board",
+      "branch": "v22-task-3-subagent-handoff-board",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能知道哪个 subagent 该接手，而不是自己记。",
+        "为每个 task 展示 worker started、evidence recorded、reviewer verdict、main verification 的 handoff 状态。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v22-goal-prompt-handoff-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Prompt-to-event shortcuts",
+      "branch": "v22-task-4-prompt-to-event-shortcuts",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户从复制 prompt 到登记 evidence 的路径连起来。",
+        "从 Prompt Workspace 直接生成 worker.started / worker.evidence-recorded 的事件登记表单，并复用 v21 dry-run/confirm flow。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v22-goal-prompt-handoff-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Prompt workspace tests and docs",
+      "branch": "v22-task-5-prompt-workspace-tests-and-docs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "确保 prompt handoff 是工作台功能，不是另一个静态 dashboard。",
+        "测试 role prompt、copy、event shortcut、reviewer 独立性提示和 unsupported goal state。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "pnpm test:mutation:gate",
+        "pnpm audit --audit-level high",
+        "git diff --check",
+        "pnpm --silent symphony goal closeout --goal v22-goal-prompt-handoff-workspace --markdown",
+        "pnpm --silent symphony goal-status --goal v22-goal-prompt-handoff-workspace --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

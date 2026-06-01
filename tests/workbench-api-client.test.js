@@ -12,6 +12,11 @@ import {
 } from '../src/symphony/goal-runbook-registry.js';
 import {
   READONLY_API_ROUTES,
+  confirmGoalEventPlan,
+  fetchGoalEventPlanPreview,
+  fetchPromptWorkspaceHandoffBoard,
+  fetchPromptWorkspacePromptPack,
+  fetchPromptWorkspaceRunbook,
   fetchReadonlyRoute,
   fetchWorkbenchContracts
 } from '../frontend/workbench/src/api/client.js';
@@ -21,11 +26,16 @@ import {
   createSafeArtifactPreviewRoutes,
   createRunTimelineRoute,
   projectArtifactRefs,
+  projectSubagentHandoffBoard,
   projectWorkbenchContracts
 } from '../frontend/workbench/src/api/contracts.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
 const V19_GOAL_ID = 'v19-goal-runbook-next-action';
+const V25_GOAL_ID = 'v25-controlled-implementation-lane';
+const V26_GOAL_ID = 'v26-verified-adoption-workbench';
+const V28_GOAL_ID = 'v28-workbench-v1-release';
+const V28_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v28-workbench-v1-release.v1.json';
 const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
 const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
 const BACKEND_ACTIVE_GOAL_ID = 'v20-workbench-backend-event-test';
@@ -44,6 +54,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals', 'symphony.goals-index'],
         ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/goals/latest/events', 'goal-event-log.v1'],
+        ['GET', '/api/goals/latest/operations', 'goal-operation-runs.v1'],
         ['GET', '/api/goals/latest/runbook', 'goal-runbook.v1'],
         ['GET', '/api/goals/latest/next', 'goal-next-action.v1'],
         ['GET', '/api/goals/latest/prompt', 'goal-prompt-pack.v1'],
@@ -63,6 +74,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals', 'symphony.goals-index'],
         ['GET', '/api/goals/latest/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/goals/latest/events', 'goal-event-log.v1'],
+        ['GET', '/api/goals/latest/operations', 'goal-operation-runs.v1'],
         ['GET', '/api/goals/latest/runbook', 'goal-runbook.v1'],
         ['GET', '/api/goals/latest/next', 'goal-next-action.v1'],
         ['GET', '/api/goals/latest/prompt', 'goal-prompt-pack.v1'],
@@ -70,6 +82,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/capabilities', 'capabilities.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
+        ['GET', '/api/goals/<goal-id>/operations', 'goal-operation-runs.v1'],
         ['GET', '/api/goals/<goal-id>/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/goals/<goal-id>/runbook', 'goal-runbook.v1'],
         ['GET', '/api/goals/<goal-id>/next', 'goal-next-action.v1'],
@@ -165,6 +178,259 @@ describe('v15 Workbench read-only API client', () => {
         ['/api/runs/run-1/artifacts/summary/preview', 'GET', 'no-store', 'application/json', false]
       ]
     );
+  });
+
+  it('gets controlled goal event dry-run previews before confirm requests write event state', async () => {
+    const calls = [];
+    const result = await fetchGoalEventPlanPreview('/api/goals/latest/event-plan-preview?command=update&task=task-3&event=worker.evidence-recorded&actor=codex-v22-task-3-worker&evidenceRef=docs/plans/v22-task-3-worker-evidence-2026-05-29.md', {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'goal-update-plan.v1',
+              contractVersion: 1,
+              planHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+              command: 'goal update',
+              writesInDryRun: false
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.writesInDryRun, false);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      Object.hasOwn(init, 'body')
+    ]), [[
+      '/api/goals/latest/event-plan-preview?command=update&task=task-3&event=worker.evidence-recorded&actor=codex-v22-task-3-worker&evidenceRef=docs/plans/v22-task-3-worker-evidence-2026-05-29.md',
+      'GET',
+      'no-store',
+      'application/json',
+      false
+    ]]);
+  });
+
+  it('posts controlled goal event confirm requests with a JSON body and validates the confirmation contract', async () => {
+    const calls = [];
+    const result = await confirmGoalEventPlan('/api/goals/latest/event-plan-confirm', {
+      command: 'update',
+      task: 'task-3',
+      event: 'worker.evidence-recorded',
+      actor: 'codex-v21-task-3-worker',
+      evidenceRef: ['docs/plans/v21-task-3-worker-evidence-2026-05-29.md'],
+      planHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111'
+    }, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'goal-event-confirmation.v1',
+              contractVersion: 1,
+              status: 'appended'
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      init.headers['Content-Type'],
+      JSON.parse(init.body).planHash
+    ]), [[
+      '/api/goals/latest/event-plan-confirm',
+      'POST',
+      'no-store',
+      'application/json',
+      'application/json',
+      'sha256:1111111111111111111111111111111111111111111111111111111111111111'
+    ]]);
+  });
+
+  it('fetches Prompt Workspace runbook and explicit role prompt pack through controlled GET routes', async () => {
+    const calls = [];
+    const fetchImpl = async (path, init) => {
+      calls.push([path, init]);
+
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          if (path.endsWith('/runbook')) {
+            return {
+              contractName: 'goal-runbook.v1',
+              contractVersion: 1,
+              goalId: 'v22-goal-prompt-handoff-workspace',
+              tasks: []
+            };
+          }
+
+          return {
+            contractName: 'goal-prompt-pack.v1',
+            contractVersion: 1,
+            goalId: 'v22-goal-prompt-handoff-workspace',
+            prompts: [{
+              taskId: 'task-1',
+              role: 'main-verifier',
+              copyOnly: true,
+              text: '/goal'
+            }]
+          };
+        }
+      };
+    };
+
+    const runbookResult = await fetchPromptWorkspaceRunbook('v22-goal-prompt-handoff-workspace', { fetchImpl });
+    const promptResult = await fetchPromptWorkspacePromptPack({
+      goalId: 'v22-goal-prompt-handoff-workspace',
+      taskId: 'task-1',
+      role: 'main-verifier'
+    }, { fetchImpl });
+
+    assert.equal(runbookResult.ok, true);
+    assert.equal(promptResult.ok, true);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      Object.hasOwn(init, 'body')
+    ]), [
+      [
+        '/api/goals/v22-goal-prompt-handoff-workspace/runbook',
+        'GET',
+        'no-store',
+        'application/json',
+        false
+      ],
+      [
+        '/api/goals/v22-goal-prompt-handoff-workspace/prompt?task=task-1&role=main-verifier',
+        'GET',
+        'no-store',
+        'application/json',
+        false
+      ]
+    ]);
+  });
+
+  it('keeps unsupported Prompt Workspace goal state local and read-only', async () => {
+    const calls = [];
+    const fetchImpl = async (path, init) => {
+      calls.push([path, init]);
+
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {};
+        }
+      };
+    };
+
+    const runbookResult = await fetchPromptWorkspaceRunbook('../unsafe-goal', { fetchImpl });
+    const promptResult = await fetchPromptWorkspacePromptPack({
+      goalId: 'v22-goal-prompt-handoff-workspace',
+      taskId: 'task/5',
+      role: 'worker'
+    }, { fetchImpl });
+    const handoffResult = await fetchPromptWorkspaceHandoffBoard('unsupported goal', { fetchImpl });
+
+    assert.equal(runbookResult.ok, false);
+    assert.equal(runbookResult.readonly, true);
+    assert.equal(promptResult.ok, false);
+    assert.equal(promptResult.readonly, true);
+    assert.equal(handoffResult.ok, false);
+    assert.equal(handoffResult.board.state, 'missing');
+    assert.equal(handoffResult.board.sourcePolicy.value, 'goal-event-log.v1 + goal-progress-ledger.v1 + goal-next-action.v1 + goal-closeout-report.v1');
+    assert.equal(handoffResult.board.routeStates.goalStatus.value, 'unavailable');
+    assert.equal(handoffResult.board.routeStates.eventLog.value, 'unavailable');
+    assert.equal(handoffResult.board.routeStates.goalNext.value, 'unavailable');
+    assert.equal(handoffResult.board.routeStates.goalCloseout.value, 'unavailable');
+    assert.deepEqual(calls, []);
+  });
+
+  it('fetches the Prompt Workspace subagent handoff board from controlled goal source routes', async () => {
+    const calls = [];
+    const progress = createV19ProgressPayload();
+    const events = createV19EventsPayload();
+    const nextAction = createV19NextActionPayload();
+    const closeout = createV19CloseoutPayload();
+
+    events.events = [{
+      eventId: 'evt_task6_worker_started',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.started',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T10:00:00.000Z',
+      evidenceRefs: []
+    }];
+    progress.tasks[0] = {
+      ...progress.tasks[0],
+      status: 'in-progress',
+      statusSource: 'goal-event-log.v1:evt_task6_worker_started'
+    };
+
+    const payloadByPath = new Map([
+      [`/api/goals/${V19_GOAL_ID}/progress`, progress],
+      [`/api/goals/${V19_GOAL_ID}/events`, events],
+      [`/api/goals/${V19_GOAL_ID}/next`, nextAction],
+      [`/api/goals/${V19_GOAL_ID}/closeout`, closeout]
+    ]);
+
+    const result = await fetchPromptWorkspaceHandoffBoard(V19_GOAL_ID, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return payloadByPath.get(path);
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.board.goalId.value, V19_GOAL_ID);
+    assert.equal(result.board.items[0].workerStarted.status.value, 'started');
+    assert.equal(result.board.items[0].currentHandoff.role.value, 'worker');
+    assert.equal(result.board.items[0].workerEvidence.status.value, 'missing-closeout');
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      Object.hasOwn(init, 'body')
+    ]), [
+      [`/api/goals/${V19_GOAL_ID}/progress`, 'GET', 'no-store', 'application/json', false],
+      [`/api/goals/${V19_GOAL_ID}/events`, 'GET', 'no-store', 'application/json', false],
+      [`/api/goals/${V19_GOAL_ID}/next`, 'GET', 'no-store', 'application/json', false],
+      [`/api/goals/${V19_GOAL_ID}/closeout`, 'GET', 'no-store', 'application/json', false]
+    ]);
   });
 
   it('returns read-only error state for non-OK responses', async () => {
@@ -372,7 +638,9 @@ describe('v15 Workbench read-only API client', () => {
         ...READONLY_API_ROUTES.map((route) => [route.path, 'GET', false]),
         [GUIDED_HANDOFF_PATH, 'GET', false],
         [ACTIVE_GOAL_PROGRESS_PATH, 'GET', false],
-        [ACTIVE_GOAL_EVENTS_PATH, 'GET', false]
+        [ACTIVE_GOAL_EVENTS_PATH, 'GET', false],
+        [`/api/goals/${V19_GOAL_ID}/operations`, 'GET', false],
+        [`/api/goals/${V19_GOAL_ID}/prompt?task=task-6&role=reviewer`, 'GET', false]
       ]
     );
     assert.equal(calls.some(([path]) => path.includes('docs/plans/')), false);
@@ -515,6 +783,164 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(eventBackedTask.workerEvidenceRef.value, 'docs/plans/v19-task6-worker-evidence-2026-05-29.md');
   });
 
+  it('projects the Subagent Handoff Board only from goal events, goal-status, goal next, and closeout', () => {
+    const progress = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+    const nextAction = createV19NextActionPayload();
+    const closeout = createV19CloseoutPayload();
+
+    progress.tasks[0] = {
+      ...progress.tasks[0],
+      title: 'reviewer.approved in title is not a verdict',
+      branch: 'main-verification-looking-branch',
+      status: 'needs-review',
+      statusSource: 'goal-event-log.v1:evt_task6_worker_evidence',
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      reviewEvidenceRef: null,
+      reviewVerdict: null,
+      mainVerificationRef: null
+    };
+    nextAction.next = {
+      taskId: 'task-6',
+      role: 'reviewer',
+      phase: 'review',
+      reason: 'Worker evidence exists for task-6 but reviewer verdict is missing.',
+      blocked: false
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_worker_started',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.started',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T10:00:00.000Z',
+      evidenceRefs: []
+    }, {
+      eventId: 'evt_task6_worker_evidence',
+      sequence: 2,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T10:05:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/event-log-worker-evidence.md',
+        label: 'Worker evidence'
+      }]
+    }];
+    closeout.missing = [{
+      kind: 'review-evidence',
+      taskId: 'task-6',
+      expectedEvent: 'reviewer.approved'
+    }, {
+      kind: 'main-verification',
+      taskId: 'task-6',
+      expectedEvent: 'main.verification-passed'
+    }];
+
+    const board = projectSubagentHandoffBoard({
+      progressResult: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', progress),
+      progress,
+      eventsResult: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog),
+      eventLog,
+      nextResult: createWorkbenchResult('goalNextAction', nextAction),
+      nextAction,
+      closeoutResult: createWorkbenchResult('goalCloseout', closeout),
+      closeout
+    });
+    const task = board.items[0];
+
+    assert.equal(board.sourcePolicy.value, 'goal-event-log.v1 + goal-progress-ledger.v1 + goal-next-action.v1 + goal-closeout-report.v1');
+    assert.equal(task.title.value, 'reviewer.approved in title is not a verdict');
+    assert.equal(task.workerStarted.status.value, 'started');
+    assert.equal(task.workerStarted.source.value, 'goal-event-log.v1');
+    assert.equal(task.workerEvidence.status.value, 'recorded');
+    assert.equal(task.workerEvidence.evidenceRef.value, 'docs/plans/v19-task6-worker-evidence-2026-05-29.md');
+    assert.equal(task.workerEvidence.source.value, 'goal-progress-ledger.v1');
+    assert.equal(task.currentHandoff.active.value, true);
+    assert.equal(task.currentHandoff.role.value, 'reviewer');
+    assert.equal(task.currentHandoff.source.value, 'goal-next-action.v1');
+    assert.equal(task.reviewerVerdict.status.value, 'missing-closeout');
+    assert.equal(task.reviewerVerdict.source.value, 'goal-closeout-report.v1');
+    assert.equal(task.mainVerification.status.value, 'missing-closeout');
+    assert.equal(task.mainVerification.source.value, 'goal-closeout-report.v1');
+    assert.equal(task.closeoutMissingKinds.value, 'review-evidence、main-verification');
+
+    const verifiedProgress = createV19ProgressPayload();
+    const verifiedEventLog = createV19EventsPayload();
+    const verifiedCloseout = createV19CloseoutPayload();
+    const mainEvidenceRef = 'docs/plans/v19-task6-main-verification-evidence-2026-05-29.md';
+
+    verifiedProgress.tasks[0] = {
+      ...verifiedProgress.tasks[0],
+      status: 'main-verified',
+      statusSource: 'goal-event-log.v1:evt_task6_main_passed',
+      mainVerificationRef: mainEvidenceRef
+    };
+    verifiedEventLog.events = [{
+      eventId: 'evt_task6_main_passed',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'main.verification-passed',
+      phase: 'main-verification',
+      actor: {
+        role: 'main-verifier',
+        id: 'codex-main-verifier'
+      },
+      recordedAt: '2026-05-29T10:20:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/event-log-main-verification-evidence.md',
+        label: 'Main verification event evidence'
+      }]
+    }];
+    verifiedCloseout.missing = [];
+
+    const verifiedBoard = projectSubagentHandoffBoard({
+      progressResult: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', verifiedProgress),
+      progress: verifiedProgress,
+      eventsResult: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', verifiedEventLog),
+      eventLog: verifiedEventLog,
+      nextResult: createWorkbenchResult('goalNextAction', nextAction),
+      nextAction,
+      closeoutResult: createWorkbenchResult('goalCloseout', verifiedCloseout),
+      closeout: verifiedCloseout
+    });
+    const verifiedTask = verifiedBoard.items[0];
+
+    assert.equal(verifiedTask.mainVerification.status.value, 'passed');
+    assert.equal(verifiedTask.mainVerification.evidenceRef.value, mainEvidenceRef);
+    assert.equal(verifiedTask.mainVerification.eventType.value, 'main.verification-passed');
+    assert.equal(verifiedTask.mainVerification.source.value, 'goal-event-log.v1');
+
+    const recordedBoard = projectSubagentHandoffBoard({
+      progressResult: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', verifiedProgress),
+      progress: verifiedProgress,
+      eventsResult: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', createV19EventsPayload()),
+      eventLog: createV19EventsPayload(),
+      nextResult: createWorkbenchResult('goalNextAction', nextAction),
+      nextAction,
+      closeoutResult: createWorkbenchResult('goalCloseout', verifiedCloseout),
+      closeout: verifiedCloseout
+    });
+    const recordedTask = recordedBoard.items[0];
+
+    assert.equal(recordedTask.mainVerification.status.value, 'recorded');
+    assert.equal(recordedTask.mainVerification.evidenceRef.value, mainEvidenceRef);
+    assert.equal(recordedTask.mainVerification.source.value, 'goal-progress-ledger.v1');
+  });
+
   it('projects the Next Action card and Prompt Preview drawer from explicit copy-only contracts', () => {
     const runbook = createV19RunbookPayload();
     const nextAction = createV19NextActionPayload();
@@ -582,12 +1008,32 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.activeGoal.nextAction.afterCompletion.registrationCommand.value, 'symphony goal review');
     assert.equal(model.activeGoal.nextAction.afterCompletion.registerWith.value, 'symphony goal review');
     assert.equal(model.activeGoal.nextAction.afterCompletion.allowedEvents.value, 'reviewer.approved、reviewer.needs-revision');
+    assert.equal(model.activeGoal.nextAction.eventForms.modelName.value, 'GoalEventRegistrationFormModel');
+    assert.equal(model.activeGoal.nextAction.eventForms.sourceContract.value, 'goal-next-action.v1');
+    assert.equal(model.activeGoal.nextAction.eventForms.goalId.value, V19_GOAL_ID);
+    assert.equal(model.activeGoal.nextAction.eventForms.taskId.value, 'task-3');
+    assert.equal(model.activeGoal.nextAction.eventForms.registerWith.value, 'symphony goal review');
+    assert.equal(model.activeGoal.nextAction.eventForms.defaultFormId.value, 'goal-review-approved');
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.count.value, 2);
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].eventType.value, 'reviewer.approved');
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].commandName.value, 'symphony goal review');
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].requiresEvidence.value, true);
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].fields.items.some((field) => field.id.value === 'reviewerId' && field.required.value === true), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[0].fields.items.some((field) => field.id.value === 'verdict' && field.value.value === 'approved'), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.recommendedForms.items[1].fields.items.some((field) => field.id.value === 'failedCommand' && field.flag.value === '--failed-command'), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.supportedForms.items.some((form) => form.eventType.value === 'worker.started'), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.supportedForms.items.some((form) => form.eventType.value === 'blocker.opened'), true);
+    assert.equal(model.activeGoal.nextAction.eventForms.policy.workerCannotApproveOwnTask.value, true);
+    assert.equal(model.activeGoal.nextAction.eventForms.safety.confirmAvailableInTask1.value, false);
+    assert.equal(model.activeGoal.nextAction.eventForms.safety.confirmAvailableInTask3.value, true);
+    assert.equal(model.activeGoal.nextAction.eventForms.safety.workbenchWriteAvailable.value, true);
 
     assert.equal(model.activeGoal.promptPreview.contractName.value, 'goal-prompt-pack.v1');
     assert.equal(model.activeGoal.promptPreview.visibleCount.value, 1);
     assert.equal(model.activeGoal.promptPreview.hiddenCount.value, 1);
     assert.equal(model.activeGoal.promptPreview.items[0].taskId.value, 'task-3');
     assert.equal(model.activeGoal.promptPreview.items[0].role.value, 'reviewer');
+    assert.equal(model.activeGoal.promptPreview.items[0].phase.text, CONTRACT_TEXT.missing);
     assert.equal(model.activeGoal.promptPreview.items[0].text.value, '/goal\ncopy-only reviewer prompt text');
     assert.equal(Object.hasOwn(model.activeGoal.promptPreview.items[0], 'registration'), false);
     assert.equal(Object.hasOwn(model.activeGoal.promptPreview.items[0], 'dryRunCommand'), false);
@@ -596,6 +1042,891 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.activeGoal.promptPreview.safety.workbenchWriteAvailable.value, false);
     assert.equal(model.activeGoal.promptPreview.safety.browserExecutionAvailable.value, false);
     assert.equal(model.activeGoal.promptPreview.safety.modelInvocationAvailable.value, false);
+  });
+
+  it('projects worker, blocker, reviewer, and main-verification event form specs without approving from Workbench heuristics', () => {
+    const runbook = createV19RunbookPayload();
+    const workerNext = createV19NextActionPayload();
+
+    workerNext.afterCompletion = {
+      registerWith: 'symphony goal update',
+      allowedEvents: ['worker.evidence-recorded', 'worker.self-check-passed', 'worker.self-check-failed']
+    };
+
+    const workerModel = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', workerNext)
+    });
+    const workerForms = workerModel.activeGoal.nextAction.eventForms;
+    const workerEvidenceForm = workerForms.recommendedForms.items.find((form) => form.eventType.value === 'worker.evidence-recorded');
+    const workerStartedForm = workerForms.supportedForms.items.find((form) => form.eventType.value === 'worker.started');
+    const blockerOpenedForm = workerForms.supportedForms.items.find((form) => form.eventType.value === 'blocker.opened');
+    const blockerResolvedForm = workerForms.supportedForms.items.find((form) => form.eventType.value === 'blocker.resolved');
+
+    assert.equal(workerForms.recommendedForms.count.value, 3);
+    assert.equal(workerEvidenceForm.commandName.value, 'symphony goal update');
+    assert.equal(workerEvidenceForm.fields.items.some((field) => field.id.value === 'evidenceRef' && field.required.value === true), true);
+    assert.equal(workerStartedForm.requiresEvidence.value, false);
+    assert.equal(blockerOpenedForm.fields.items.some((field) => field.id.value === 'blockerReason' && field.required.value === true), true);
+    assert.equal(blockerResolvedForm.fields.items.some((field) => field.id.value === 'blockerId' && field.required.value === true), true);
+    assert.equal(blockerOpenedForm.availableForCurrentNextAction.value, false);
+
+    const mainNext = createV19NextActionPayload();
+    mainNext.next = {
+      taskId: 'task-6',
+      role: 'main-verifier',
+      phase: 'main-verification',
+      reason: 'Reviewer approved task-6 but main verification is missing.',
+      blocked: false
+    };
+    mainNext.afterCompletion = {
+      registerWith: 'symphony goal gate --gate main-verification',
+      allowedEvents: ['main.verification-passed', 'main.verification-failed']
+    };
+
+    const mainModel = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', mainNext)
+    });
+    const mainForms = mainModel.activeGoal.nextAction.eventForms;
+    const passedForm = mainForms.recommendedForms.items.find((form) => form.eventType.value === 'main.verification-passed');
+    const failedForm = mainForms.recommendedForms.items.find((form) => form.eventType.value === 'main.verification-failed');
+
+    assert.equal(mainForms.defaultFormId.value, 'goal-gate-main-verification-passed');
+    assert.equal(passedForm.commandName.value, 'symphony goal gate');
+    assert.equal(passedForm.fields.items.some((field) => field.id.value === 'gateName' && field.value.value === 'main-verification'), true);
+    assert.equal(passedForm.fields.items.some((field) => field.id.value === 'gateStatus' && field.value.value === 'passed'), true);
+    assert.equal(failedForm.fields.items.some((field) => field.id.value === 'gateStatus' && field.value.value === 'failed'), true);
+    assert.equal(failedForm.fields.items.some((field) => field.id.value === 'failedCommand' && field.flag.value === '--failed-command'), true);
+    assert.equal(mainForms.policy.approvalReadinessSource.value, 'explicit goal events only');
+    assert.equal(mainForms.policy.unsupportedInferenceSources.value, 'file-name、branch、commit-message、frontend-heuristic');
+    assert.equal(mainForms.safety.browserExecutionAvailable.value, false);
+  });
+
+  it('projects main verification readiness from explicit reviewer approval, git readiness, runbook commands, and evidence path', () => {
+    const runbook = createV19RunbookPayload();
+    const ledger = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+    const nextAction = createV19NextActionPayload();
+    const closeout = createV19CloseoutPayload();
+    const reviewEvidenceRef = 'docs/plans/v19-task6-review-evidence-2026-05-29.md';
+
+    ledger.tasks[0] = {
+      ...ledger.tasks[0],
+      status: 'approved',
+      statusSource: 'goal-event-log.v1:evt_task6_review_approved',
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      reviewEvidenceRef,
+      reviewVerdict: 'APPROVED'
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_review_approved',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'reviewer.approved',
+      phase: 'review',
+      actor: {
+        role: 'reviewer',
+        id: 'codex-reviewer-task-6'
+      },
+      recordedAt: '2026-05-29T10:10:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: reviewEvidenceRef,
+        label: 'review evidence'
+      }]
+    }];
+    nextAction.next = {
+      taskId: 'task-6',
+      role: 'main-verifier',
+      phase: 'main-verification',
+      reason: 'Reviewer approved task-6 but main verification is missing.',
+      blocked: false
+    };
+    nextAction.afterCompletion = {
+      registerWith: 'symphony goal gate --gate main-verification',
+      allowedEvents: ['main.verification-passed', 'main.verification-failed']
+    };
+
+    const model = projectWorkbenchContracts({
+      readiness: createWorkbenchResult('readiness', createReadinessPayload({
+        branch: 'v19-task6-workbench-active-goal',
+        dirty: false,
+        dirtyPaths: []
+      })),
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      goalCloseout: createWorkbenchResult('goalCloseout', closeout),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog)
+    });
+    const readiness = model.activeGoal.mainVerificationReadiness;
+
+    assert.equal(readiness.state, 'ready');
+    assert.equal(readiness.readiness.canEnterMainVerification.value, true);
+    assert.equal(readiness.reviewerApproval.status.value, 'approved');
+    assert.equal(readiness.reviewerApproval.eventType.value, 'reviewer.approved');
+    assert.equal(readiness.reviewerApproval.evidenceRef.value, reviewEvidenceRef);
+    assert.equal(readiness.reviewerApproval.source.value, 'goal-event-log.v1');
+    assert.equal(readiness.branchState.state.value, 'on-task-branch');
+    assert.equal(readiness.branchState.currentBranch.value, 'v19-task6-workbench-active-goal');
+    assert.equal(readiness.ffOnlyMerge.commands.items.map((item) => item.value).includes('git merge --ff-only v19-task6-workbench-active-goal'), true);
+    assert.equal(readiness.verificationCommands.items.map((item) => item.value).includes('pnpm workbench:build'), true);
+    assert.equal(readiness.evidence.path.value, 'docs/plans/v19-task6-main-verification-evidence-2026-05-29.md');
+    assert.match(readiness.evidence.gateCommand.value, /symphony goal gate --goal v19-goal-runbook-next-action --task task-6 --gate main-verification/u);
+    assert.equal(readiness.safety.browserExecutionAvailable.value, false);
+
+    const heuristicRunbook = createV19RunbookPayload();
+    heuristicRunbook.tasks[0] = {
+      ...heuristicRunbook.tasks[0],
+      title: 'reviewer.approved in title is display text',
+      branch: 'reviewer-approved-looking-branch',
+      copyOnlyCommands: ['symphony goal review --verdict approved']
+    };
+    const heuristicModel = projectWorkbenchContracts({
+      readiness: createWorkbenchResult('readiness', createReadinessPayload({
+        branch: 'reviewer-approved-looking-branch',
+        dirty: false,
+        dirtyPaths: []
+      })),
+      goalRunbook: createWorkbenchResult('goalRunbook', heuristicRunbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', createV19NextActionPayload()),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', createV19ProgressPayload()),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', createV19EventsPayload())
+    }).activeGoal.mainVerificationReadiness;
+
+    assert.equal(heuristicModel.state, 'waiting');
+    assert.equal(heuristicModel.readiness.canEnterMainVerification.value, false);
+    assert.equal(heuristicModel.reviewerApproval.status.value, 'missing');
+    assert.equal(heuristicModel.safety.unsupportedInferenceSources.value, 'file-name、branch、commit-message、frontend-heuristic');
+  });
+
+  it('projects the Goal Operation Console from operation registry and goal next only', () => {
+    const operations = {
+      contractName: 'goal-operation-runs.v1',
+      contractVersion: 1,
+      goalId: V19_GOAL_ID,
+      storage: 'managed-goal-operation-run-registry',
+      appendOnly: false,
+      operationCount: 1,
+      latestOperationId: 'op_1111111111111111',
+      runs: [{
+        operationId: 'op_1111111111111111',
+        goalId: V19_GOAL_ID,
+        taskId: 'task-6',
+        role: 'worker',
+        commandKind: 'update',
+        commandName: 'symphony goal update',
+        status: 'confirmed',
+        planHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+        eventIds: ['evt_task6_worker_evidence'],
+        source: 'workbench.event-plan-confirm',
+        timestamps: {
+          startedAt: '2026-05-31T00:00:00.000Z',
+          updatedAt: '2026-05-31T00:01:00.000Z',
+          completedAt: '2026-05-31T00:01:00.000Z'
+        }
+      }]
+    };
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', createV19RunbookPayload()),
+      goalNextAction: createWorkbenchResult('goalNextAction', createV19NextActionPayload()),
+      goalOperations: createWorkbenchResult('goalOperations', operations),
+      activeGoalOperations: createActiveGoalResult('activeGoalOperations', 'operations', 'goal-operation-runs.v1', operations)
+    });
+
+    assert.equal(model.goalOperations.contractName.value, 'goal-operation-runs.v1');
+    assert.equal(model.activeGoal.operationConsole.operationCount.value, 1);
+    assert.equal(model.activeGoal.operationConsole.latest.operationId.value, 'op_1111111111111111');
+    assert.equal(model.activeGoal.operationConsole.latest.commandPreview.value.includes('symphony goal update --goal'), true);
+    assert.equal(model.activeGoal.operationConsole.latest.stdout.value.includes('eventIds=evt_task6_worker_evidence'), true);
+    assert.equal(model.activeGoal.operationConsole.latest.stderr.value, '');
+    assert.equal(model.activeGoal.operationConsole.latest.exitCode.value, 0);
+    assert.equal(model.activeGoal.operationConsole.latest.planHash.value, 'sha256:1111111111111111111111111111111111111111111111111111111111111111');
+    assert.equal(model.activeGoal.operationConsole.latest.eventIds.value, 'evt_task6_worker_evidence');
+    assert.equal(model.activeGoal.operationConsole.polling.enabled.value, true);
+    assert.equal(model.activeGoal.operationConsole.polling.intervalMs.value, 2500);
+    assert.equal(model.activeGoal.operationConsole.polling.route.value, `/api/goals/${V19_GOAL_ID}/operations`);
+    assert.equal(model.activeGoal.operationConsole.polling.source.value, 'GET goal-operation-runs.v1');
+    assert.equal(model.activeGoal.operationConsole.polling.latestStatus.value, 'confirmed');
+    assert.equal(model.activeGoal.operationConsole.nextAction.taskId.value, 'task-6');
+    assert.equal(model.activeGoal.operationConsole.note.includes('not a generic shell runner'), true);
+  });
+
+  it('projects v28 route context across goal, task, operation, run, and evidence refs', () => {
+    const runbook = createV19RunbookPayload();
+    const nextAction = createV19NextActionPayload();
+    const ledger = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+    const workerEvidenceRef = 'docs/plans/v19-task6-worker-evidence-2026-05-29.md';
+    const reviewEvidenceRef = 'docs/plans/v19-task6-review-evidence-2026-05-29.md';
+
+    nextAction.evidenceState = {
+      workerEvidenceRef,
+      reviewEvidenceRef,
+      mainVerificationRef: null
+    };
+    ledger.tasks[0] = {
+      ...ledger.tasks[0],
+      workerEvidenceRef,
+      reviewEvidenceRef
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_worker_evidence',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T11:00:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: workerEvidenceRef,
+        label: 'Worker evidence'
+      }]
+    }];
+
+    const model = projectWorkbenchContracts({
+      latestRun: createWorkbenchResult('latestRun', {
+        contractName: 'symphony.console-run',
+        contractVersion: '1',
+        run: {
+          runId: 'run-v28-context',
+          status: 'passed',
+          verifierStatus: 'passed',
+          artifactRefs: [{
+            kind: 'evidence',
+            path: '/tmp/symphony/run-v28-context/evidence.json',
+            ref: 'artifact:run-v28-context:evidence'
+          }]
+        }
+      }),
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog),
+      activeGoalOperations: createActiveGoalResult('activeGoalOperations', 'operations', 'goal-operation-runs.v1', {
+        contractName: 'goal-operation-runs.v1',
+        contractVersion: 1,
+        goalId: V19_GOAL_ID,
+        operationCount: 1,
+        latestOperationId: 'op_v28_context',
+        runs: [{
+          operationId: 'op_v28_context',
+          goalId: V19_GOAL_ID,
+          taskId: 'task-6',
+          role: 'worker',
+          commandKind: 'update',
+          commandName: 'symphony goal update',
+          status: 'dry-run-planned',
+          planHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+          eventIds: [],
+          timestamps: {
+            startedAt: '2026-05-29T12:00:00.000Z',
+            updatedAt: '2026-05-29T12:00:00.000Z'
+          }
+        }]
+      })
+    });
+
+    const refs = model.routeContext.evidenceRefs.items.map((item) => item.ref.value);
+
+    assert.equal(model.routeContext.state, 'available');
+    assert.equal(model.routeContext.goalId.value, V19_GOAL_ID);
+    assert.equal(model.routeContext.taskId.value, 'task-6');
+    assert.equal(model.routeContext.activeRole.value, 'worker');
+    assert.equal(model.routeContext.operationId.value, 'op_v28_context');
+    assert.equal(model.routeContext.runId.value, 'run-v28-context');
+    assert.equal(refs.includes(workerEvidenceRef), true);
+    assert.equal(refs.includes(reviewEvidenceRef), true);
+    assert.equal(refs.includes('artifact-ref:artifact:run-v28-context:evidence'), true);
+    assert.equal(model.routeContext.safety.readsEvidenceBodies.value, false);
+    assert.equal(model.routeContext.safety.infersStatusFromEvidenceRef.value, false);
+  });
+
+  it('runs the v28 golden path through managed goal routes and controlled event registration', async () => {
+    const context = await startGoldenPathWorkbenchServer();
+
+    try {
+      const initialModel = await fetchWorkbenchContracts({
+        fetchImpl: (path, init) => fetch(`${context.baseUrl}${path}`, init)
+      });
+      const initialSteps = goldenPathStepsById(initialModel);
+
+      assert.equal(initialModel.goldenPath.goalId.value, V28_GOAL_ID);
+      assert.equal(initialModel.goldenPath.taskId.value, 'task-3');
+      assert.equal(initialModel.goldenPath.role.value, 'worker');
+      assert.equal(initialSteps.get('goal-init-status').status.value, 'ready');
+      assert.equal(initialSteps.get('next-action').detail.value, 'task-3 / worker');
+      assert.equal(initialSteps.get('prompt-handoff').status.value, 'ready');
+      assert.equal(initialSteps.get('worker-event').status.value, 'actionable');
+      assert.equal(initialSteps.get('review').status.value, 'actionable');
+      assert.equal(initialSteps.get('closeout-gaps').status.value, 'ready');
+
+      const workerConfirm = await previewAndConfirmGoalEvent({
+        baseUrl: context.baseUrl,
+        goalId: V28_GOAL_ID,
+        previewQuery: 'command=update&task=task-3&event=worker.evidence-recorded&actor=codex-v28-task-3-worker&evidenceRef=docs%2Fplans%2Fv28-task-3-worker-evidence-2026-05-29.md',
+        confirmBody(planHash) {
+          return {
+            command: 'update',
+            task: 'task-3',
+            event: 'worker.evidence-recorded',
+            actor: 'codex-v28-task-3-worker',
+            evidenceRef: ['docs/plans/v28-task-3-worker-evidence-2026-05-29.md'],
+            planHash
+          };
+        }
+      });
+
+      assert.equal(workerConfirm.status, 'appended');
+      assert.equal(workerConfirm.eventSummary.eventType, 'worker.evidence-recorded');
+      assert.equal(workerConfirm.refreshed.nextAction.next.role, 'reviewer');
+
+      const afterWorkerModel = await fetchWorkbenchContracts({
+        fetchImpl: (path, init) => fetch(`${context.baseUrl}${path}`, init)
+      });
+      const afterWorkerSteps = goldenPathStepsById(afterWorkerModel);
+
+      assert.equal(afterWorkerModel.goldenPath.role.value, 'reviewer');
+      assert.equal(afterWorkerSteps.get('worker-event').status.value, 'recorded');
+      assert.equal(afterWorkerSteps.get('review').status.value, 'actionable');
+      assert.equal(afterWorkerModel.activeGoal.reviewWorkspace.reviewVerdictRegistration.forms.count.value, 2);
+      assert.equal(afterWorkerModel.activeGoal.reviewWorkspace.reviewVerdictRegistration.policy.workerCanApproveOwnTask.value, false);
+
+      const reviewConfirm = await previewAndConfirmGoalEvent({
+        baseUrl: context.baseUrl,
+        goalId: V28_GOAL_ID,
+        previewQuery: 'command=review&task=task-3&reviewer=codex-v28-task-3-reviewer&verdict=approved&evidenceRef=docs%2Fplans%2Fv28-task-3-review-evidence-2026-05-29.md',
+        confirmBody(planHash) {
+          return {
+            command: 'review',
+            task: 'task-3',
+            reviewer: 'codex-v28-task-3-reviewer',
+            verdict: 'approved',
+            evidenceRef: ['docs/plans/v28-task-3-review-evidence-2026-05-29.md'],
+            planHash
+          };
+        }
+      });
+
+      assert.equal(reviewConfirm.status, 'appended');
+      assert.equal(reviewConfirm.eventSummary.eventType, 'reviewer.approved');
+      assert.equal(reviewConfirm.refreshed.nextAction.next.role, 'main-verifier');
+
+      const afterReviewModel = await fetchWorkbenchContracts({
+        fetchImpl: (path, init) => fetch(`${context.baseUrl}${path}`, init)
+      });
+      const afterReviewSteps = goldenPathStepsById(afterReviewModel);
+
+      assert.equal(afterReviewModel.goldenPath.role.value, 'main-verifier');
+      assert.equal(afterReviewSteps.get('review').status.value, 'recorded');
+      assert.equal(afterReviewSteps.get('main-verification').status.value, 'ready');
+      assert.match(afterReviewSteps.get('main-verification').command.value, /symphony goal gate --goal v28-workbench-v1-release --task task-3 --gate main-verification/u);
+      assert.equal(afterReviewSteps.get('closeout-gaps').status.value, 'gaps');
+      assert.equal(afterReviewModel.activeGoal.mainVerificationReadiness.readiness.canEnterMainVerification.value, true);
+      assert.equal(afterReviewModel.activeGoal.closeoutGaps.missing.items.some((item) => item.kind.value === 'main-verification' && item.taskId.value === 'task-3'), true);
+      assert.equal(afterReviewModel.goldenPath.safety.genericShellRunner.value, false);
+      assert.equal(afterReviewModel.goldenPath.safety.workerCanApproveOwnTask.value, false);
+      assert.equal(afterReviewModel.goldenPath.safety.infersReadinessFromFilename.value, false);
+    } finally {
+      await cleanupManagedActiveGoalWorkbenchServer(context);
+    }
+  });
+
+  it('projects recent controlled evidence refs for the event form helper without status inference', () => {
+    const runbook = createV19RunbookPayload();
+    const nextAction = createV19NextActionPayload();
+    const ledger = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+
+    nextAction.afterCompletion = {
+      registerWith: 'symphony goal update',
+      allowedEvents: ['worker.evidence-recorded']
+    };
+    ledger.tasks[0] = {
+      ...ledger.tasks[0],
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      reviewEvidenceRef: 'docs/plans/v19-task6-review-evidence-2026-05-29.md'
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_artifact_worker',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      occurredAt: '2026-05-29T10:00:00.000Z',
+      recordedAt: '2026-05-29T10:00:00.000Z',
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:run-1:evidence',
+        label: 'Managed artifact evidence'
+      }],
+      previousEventHash: null,
+      eventHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    }];
+
+    const model = projectWorkbenchContracts({
+      latestRun: createWorkbenchResult('latestRun', {
+        contractName: 'symphony.console-run',
+        contractVersion: '1',
+        run: {
+          runId: 'run-1',
+          status: 'passed',
+          verifierStatus: 'passed',
+          modelInvocation: false,
+          artifactRefs: [{
+            kind: 'evidence',
+            path: '/tmp/example/evidence.json',
+            ref: 'artifact:run-1:evidence'
+          }]
+        }
+      }),
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog)
+    });
+
+    const helper = model.activeGoal.nextAction.eventForms.evidenceRefHelper;
+    const workerEvidenceForm = model.activeGoal.nextAction.eventForms.recommendedForms.items[0];
+    const helperRefs = helper.recentRefs.items.map((item) => item.ref.value);
+
+    assert.equal(helper.helperName.value, 'EvidenceRefHelper');
+    assert.equal(helper.acceptedPatterns.value.includes('docs/plans/<file>'), true);
+    assert.equal(helper.acceptedPatterns.value.includes('artifact-ref:<managed-artifact-ref>'), true);
+    assert.equal(helperRefs.includes('artifact-ref:artifact:run-1:evidence'), true);
+    assert.equal(helperRefs.includes('docs/plans/v19-task6-worker-evidence-2026-05-29.md'), true);
+    assert.equal(helperRefs.includes('docs/plans/v18-tag-release-evidence-2026-05-29.md'), true);
+    assert.equal(workerEvidenceForm.evidenceRefHelper.recentRefs.items[0].ref.value, 'artifact-ref:artifact:run-1:evidence');
+    assert.equal(helper.safety.readsEvidenceBodies.value, false);
+    assert.equal(helper.safety.infersStatusFromFilename.value, false);
+    assert.equal(model.activeGoal.nextAction.eventForms.policy.approvalReadinessSource.value, 'explicit goal events only');
+  });
+
+  it('projects the v25 post-run worker evidence handoff from confirmed isolated workspace output', () => {
+    const nextAction = {
+      ...createV19NextActionPayload(),
+      goalId: V25_GOAL_ID,
+      next: {
+        ...createV19NextActionPayload().next,
+        taskId: 'task-4',
+        role: 'worker',
+        phase: 'implement'
+      },
+      afterCompletion: {
+        registerWith: 'symphony goal update',
+        allowedEvents: ['worker.evidence-recorded']
+      }
+    };
+    const latestRun = {
+      contractName: 'symphony.console-run',
+      contractVersion: '1',
+      run: {
+        runId: 'run-v25-4',
+        status: 'passed',
+        verifierStatus: 'passed',
+        pipeline: ['plan', 'implement'],
+        workspaceWrites: true,
+        mainWorktreeWrites: false,
+        modelInvocation: false,
+        executionPlanId: 'run-v25-4',
+        evidenceArtifactPath: '/tmp/symphony/run-v25-4/runtime/artifacts/symphony.work.run-v25-4/implement-evidence.json',
+        sourceWorkspacePath: '/tmp/symphony/run-v25-4/workspaces/worker',
+        artifactRefs: [{
+          kind: 'evidence',
+          path: '/tmp/symphony/run-v25-4/runtime/artifacts/symphony.work.run-v25-4/implement-evidence.json'
+        }]
+      }
+    };
+
+    const model = projectWorkbenchContracts({
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      latestRun: createWorkbenchResult('latestRun', latestRun)
+    });
+
+    const handoff = model.activeGoal.nextAction.eventForms.workerEvidenceHandoff;
+
+    assert.equal(model.latestRun.evidenceArtifactPath.value, latestRun.run.evidenceArtifactPath);
+    assert.equal(model.latestRun.sourceWorkspacePath.value, latestRun.run.sourceWorkspacePath);
+    assert.equal(handoff.state, 'available');
+    assert.equal(handoff.goalId.value, V25_GOAL_ID);
+    assert.equal(handoff.taskId.value, 'task-4');
+    assert.equal(handoff.evidenceArtifactPath.value, latestRun.run.evidenceArtifactPath);
+    assert.equal(handoff.sourceWorkspacePath.value, latestRun.run.sourceWorkspacePath);
+    assert.equal(handoff.evidenceRef.value, 'artifact-ref:artifact:run-v25-4:evidence');
+    assert.equal(handoff.registrationForm.eventType.value, 'worker.evidence-recorded');
+    assert.equal(
+      handoff.registrationForm.fields.items.find((field) => field.id.value === 'evidenceRef').value.value,
+      'artifact-ref:artifact:run-v25-4:evidence'
+    );
+    assert.equal(
+      handoff.registrationForm.fields.items.find((field) => field.id.value === 'actorId').value.value,
+      'codex-v25-task-4-worker'
+    );
+    assert.equal(handoff.promptHandoff.text.value.includes('sourceWorkspacePath: /tmp/symphony/run-v25-4/workspaces/worker'), true);
+    assert.equal(handoff.safety.genericShellRunner.value, false);
+    assert.equal(handoff.safety.workerCanApproveOwnTask.value, false);
+    assert.equal(
+      model.activeGoal.nextAction.eventForms.evidenceRefHelper.recentRefs.items[0].ref.value,
+      'artifact-ref:artifact:run-v25-4:evidence'
+    );
+  });
+
+  it('projects v26 adoption candidate runs from confirmed isolated workspace run fields only', () => {
+    const model = projectWorkbenchContracts({
+      runs: createWorkbenchResult('runs', {
+        contractName: 'symphony.console-runs',
+        contractVersion: '1',
+        filter: 'all',
+        availableFilters: ['all', 'adoption'],
+        runs: [
+          {
+            runId: 'run-v26-adoptable',
+            status: 'passed',
+            verifierStatus: 'passed',
+            pipeline: ['plan', 'implement'],
+            workspaceWrites: true,
+            mainWorktreeWrites: false,
+            writeBoundary: 'isolated-workspace',
+            executionPlanId: 'plan-v26-adoptable',
+            evidenceArtifactPath: '/tmp/symphony/run-v26-adoptable/evidence.json',
+            sourceWorkspacePath: '/tmp/symphony/run-v26-adoptable/workspaces/worker',
+            sourceWorkspaceManifestPath: '/tmp/symphony/run-v26-adoptable/workspaces/manifest.json',
+            changedFiles: ['src/example.js', 'tests/example.test.js'],
+            artifactRefs: [{
+              kind: 'evidence',
+              path: '/tmp/symphony/run-v26-adoptable/evidence.json',
+              ref: 'artifact:run-v26-adoptable:evidence'
+            }],
+            updatedAt: '2026-05-29T12:00:00.000Z'
+          },
+          {
+            runId: 'run-v26-not-verified',
+            status: 'passed',
+            verifierStatus: 'failed',
+            pipeline: ['plan', 'implement'],
+            workspaceWrites: true,
+            mainWorktreeWrites: false,
+            executionPlanId: 'plan-v26-not-verified',
+            evidenceArtifactPath: '/tmp/symphony/run-v26-not-verified/evidence.json',
+            sourceWorkspacePath: '/tmp/symphony/run-v26-not-verified/workspaces/worker',
+            changedFiles: ['src/unsafe.js']
+          },
+          {
+            runId: 'run-v26-main-written',
+            status: 'passed',
+            verifierStatus: 'passed',
+            pipeline: ['plan', 'implement'],
+            workspaceWrites: false,
+            mainWorktreeWrites: true,
+            executionPlanId: 'plan-v26-main-written',
+            evidenceArtifactPath: '/tmp/symphony/run-v26-main-written/evidence.json',
+            sourceWorkspacePath: '/tmp/symphony/run-v26-main-written/workspaces/worker',
+            changedFiles: ['src/main-written.js']
+          }
+        ]
+      }),
+      goalRunbook: createWorkbenchResult('goalRunbook', {
+        ...createV19RunbookPayload(),
+        goalId: V26_GOAL_ID
+      })
+    });
+
+    const candidates = model.adoptionCandidates;
+    const candidate = candidates.items[0];
+
+    assert.equal(candidates.state, 'available');
+    assert.equal(candidates.count.value, 1);
+    assert.equal(candidates.totalRunsScanned.value, 3);
+    assert.equal(candidates.sourceContract.value, 'symphony.console-runs');
+    assert.equal(candidate.sourceRunId.value, 'run-v26-adoptable');
+    assert.equal(candidate.workspace.path.value, '/tmp/symphony/run-v26-adoptable/workspaces/worker');
+    assert.equal(candidate.evidence.artifactPath.value, '/tmp/symphony/run-v26-adoptable/evidence.json');
+    assert.equal(candidate.evidence.ref.value, 'artifact-ref:artifact:run-v26-adoptable:evidence');
+    assert.equal(candidate.changedFiles.count.value, 2);
+    assert.equal(candidate.changedFiles.text.value, 'src/example.js、tests/example.test.js');
+    assert.equal(candidate.verifierStatus.value, 'passed');
+    assert.equal(candidate.mainWorktreeWrites.value, false);
+    assert.equal(candidates.safety.genericShellRunner.value, false);
+    assert.equal(candidates.safety.workerCanApproveOwnTask.value, false);
+    assert.equal(candidates.note.includes('does not plan adoption'), true);
+  });
+
+  it('projects v27 revision prompt context in the copy-only Prompt Preview drawer', () => {
+    const runbook = createV19RunbookPayload();
+    const nextAction = createV19NextActionPayload();
+    const promptPack = createV19PromptPackPayload();
+
+    nextAction.next = {
+      taskId: 'task-6',
+      role: 'worker',
+      phase: 'revision',
+      reason: 'Latest reviewer verdict for task-6 is reviewer.needs-revision.',
+      blocked: false
+    };
+    nextAction.afterCompletion = {
+      registerWith: 'symphony goal update',
+      allowedEvents: ['worker.evidence-recorded', 'worker.self-check-passed', 'worker.self-check-failed']
+    };
+    promptPack.prompts = [{
+      ...promptPack.prompts[0],
+      taskId: 'task-6',
+      role: 'worker',
+      phase: 'revision',
+      title: 'revision worker prompt for task-6',
+      copyOnly: true,
+      text: [
+        '/goal',
+        'Revision context:',
+        'Blockers to address:',
+        'Failed commands recorded by the failure event:',
+        'Changed files from latest exposed run:',
+        'Acceptance delta to close:'
+      ].join('\n'),
+      revisionContext: {
+        state: 'available',
+        trigger: {
+          eventType: 'reviewer.needs-revision',
+          eventId: 'evt_task6_needs_revision'
+        },
+        blockers: [{
+          id: 'blocker-review',
+          reason: 'Review blocker.',
+          severity: 'error'
+        }],
+        failedCommands: {
+          recorded: ['pnpm test'],
+          rerun: ['pnpm test', 'git diff --check']
+        },
+        changedFiles: {
+          sourceRunId: 'run-task6-review',
+          items: ['frontend/workbench/src/api/contracts.js']
+        },
+        acceptanceDelta: [{
+          status: 'recheck-after-reviewer.needs-revision',
+          acceptance: 'Revision prompt contains blockers and failed commands.'
+        }]
+      }
+    }];
+
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      goalPromptPack: createWorkbenchResult('goalPromptPack', promptPack)
+    });
+    const prompt = model.activeGoal.promptPreview.items[0];
+
+    assert.equal(model.activeGoal.promptPreview.state, 'available');
+    assert.equal(prompt.role.value, 'worker');
+    assert.equal(prompt.phase.value, 'revision');
+    assert.equal(prompt.revisionContext.state.value, 'available');
+    assert.equal(prompt.revisionContext.triggerEventType.value, 'reviewer.needs-revision');
+    assert.equal(prompt.revisionContext.triggerEventId.value, 'evt_task6_needs_revision');
+    assert.equal(prompt.revisionContext.blockerCount.value, 1);
+    assert.equal(prompt.revisionContext.recordedFailedCommandCount.value, 1);
+    assert.equal(prompt.revisionContext.rerunCommandCount.value, 2);
+    assert.equal(prompt.revisionContext.changedFileCount.value, 1);
+    assert.equal(prompt.revisionContext.acceptanceDeltaCount.value, 1);
+    assert.match(prompt.text.value, /Acceptance delta to close/u);
+  });
+
+  it('projects v27 review workspace context for the active reviewer task', () => {
+    const runbook = createV19RunbookPayload();
+    const nextAction = createV19NextActionPayload();
+    const promptPack = createV19PromptPackPayload();
+    const ledger = createV19ProgressPayload();
+    const eventLog = createV19EventsPayload();
+
+    nextAction.next = {
+      taskId: 'task-6',
+      role: 'reviewer',
+      phase: 'review',
+      reason: 'Worker evidence exists for task-6 but reviewer verdict is missing.',
+      blocked: false
+    };
+    nextAction.evidenceState = {
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+      reviewEvidenceRef: null,
+      mainVerificationRef: null
+    };
+    nextAction.afterCompletion = {
+      registerWith: 'symphony goal review',
+      allowedEvents: ['reviewer.approved', 'reviewer.needs-revision']
+    };
+    ledger.tasks[0] = {
+      ...ledger.tasks[0],
+      status: 'needs-review',
+      statusSource: 'goal-event-log.v1:evt_task6_worker_evidence',
+      workerEvidenceRef: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md'
+    };
+    eventLog.events = [{
+      eventId: 'evt_task6_worker_evidence',
+      sequence: 1,
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      eventType: 'worker.evidence-recorded',
+      phase: 'implement',
+      actor: {
+        role: 'worker',
+        id: 'codex-worker-task-6'
+      },
+      recordedAt: '2026-05-29T11:00:00.000Z',
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: 'docs/plans/v19-task6-worker-evidence-2026-05-29.md',
+        label: 'Worker evidence'
+      }]
+    }];
+    promptPack.prompts = [{
+      taskId: 'task-6',
+      role: 'reviewer',
+      title: 'reviewer prompt for task-6: Workbench Active Goal Control Center',
+      copyOnly: true,
+      format: 'markdown',
+      text: '/goal\nReview task-6 from worker evidence and changed files.',
+      validationCommands: ['pnpm check', 'pnpm test', 'pnpm workbench:build', 'git diff --check'],
+      evidenceFile: 'docs/plans/v19-task6-review-evidence-2026-05-29.md',
+      roleGuidance: {
+        label: 'independent reviewer',
+        phase: 'review',
+        boundary: ['Do not self-review.'],
+        evidenceRequirements: ['Read worker evidence before verdict.'],
+        handoffChecklist: ['Verdict is APPROVED or NEEDS_REVISION.']
+      }
+    }];
+
+    const model = projectWorkbenchContracts({
+      latestRun: createWorkbenchResult('latestRun', {
+        contractName: 'symphony.console-run',
+        contractVersion: '1',
+        run: {
+          runId: 'run-v27-review-source',
+          status: 'passed',
+          verifierStatus: 'passed',
+          pipeline: ['plan', 'implement'],
+          workspaceWrites: true,
+          mainWorktreeWrites: false,
+          writeBoundary: 'isolated-workspace',
+          executionPlanId: 'plan-v27-review-source',
+          evidenceArtifactPath: '/tmp/symphony/run-v27-review-source/evidence.json',
+          sourceWorkspacePath: '/tmp/symphony/run-v27-review-source/workspaces/worker',
+          sourceWorkspaceManifestPath: '/tmp/symphony/run-v27-review-source/workspaces/manifest.json',
+          changedFiles: ['frontend/workbench/src/App.jsx', 'frontend/workbench/src/api/contracts.js'],
+          artifactRefs: [{
+            kind: 'evidence',
+            path: '/tmp/symphony/run-v27-review-source/evidence.json',
+            ref: 'artifact:run-v27-review-source:evidence'
+          }],
+          updatedAt: '2026-05-29T12:30:00.000Z'
+        }
+      }),
+      goalRunbook: createWorkbenchResult('goalRunbook', runbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', nextAction),
+      goalPromptPack: createWorkbenchResult('goalPromptPack', promptPack),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', ledger),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', eventLog)
+    });
+
+    const workspace = model.activeGoal.reviewWorkspace;
+
+    assert.equal(workspace.modelName.value, 'ReviewWorkspaceContextModel');
+    assert.equal(workspace.state, 'available');
+    assert.equal(workspace.taskId.value, 'task-6');
+    assert.equal(workspace.activeNext.role.value, 'reviewer');
+    assert.equal(workspace.sourceRun.runId.value, 'run-v27-review-source');
+    assert.equal(workspace.sourceRun.evidenceRef.value, 'artifact-ref:artifact:run-v27-review-source:evidence');
+    assert.equal(workspace.changedFiles.count.value, 2);
+    assert.equal(workspace.changedFiles.items[0].value, 'frontend/workbench/src/App.jsx');
+    assert.equal(workspace.workerEvidence.ref.value, 'docs/plans/v19-task6-worker-evidence-2026-05-29.md');
+    assert.equal(workspace.reviewPrompt.sourceContract.value, 'goal-prompt-pack.v1');
+    assert.equal(workspace.reviewPrompt.text.value, '/goal\nReview task-6 from worker evidence and changed files.');
+    assert.equal(workspace.reviewerHandoff.state.value, 'ready');
+    assert.equal(workspace.reviewerHandoff.promptGeneratedFrom.value, 'symphony goal prompt');
+    assert.equal(workspace.reviewerHandoff.promptRoute.value, '/api/goals/v19-goal-runbook-next-action/prompt?task=task-6&role=reviewer');
+    assert.equal(workspace.reviewerHandoff.promptCommand.value, 'pnpm --silent symphony goal prompt --goal v19-goal-runbook-next-action --task task-6 --role reviewer --markdown');
+    assert.equal(workspace.reviewerHandoff.reviewerEvidencePath.value, 'docs/plans/v19-task6-review-evidence-2026-05-29.md');
+    assert.equal(workspace.reviewerHandoff.latestWorkerActor.value, 'codex-worker-task-6');
+    assert.equal(workspace.reviewerHandoff.reviewerActorMustDifferFromLatestWorker.value, true);
+    assert.equal(workspace.reviewerHandoff.workerCanReviewOwnTask.value, false);
+    assert.equal(workspace.reviewerHandoff.enforcedBy.items.some((item) => item.value === 'symphony goal review reviewer-is-not-worker precondition'), true);
+    assert.equal(workspace.reviewChecklist.acceptance.count.value, 2);
+    assert.equal(workspace.reviewChecklist.validationCommands.count.value, 4);
+    assert.equal(workspace.reviewChecklist.handoffChecklist.items[0].value, 'Verdict is APPROVED or NEEDS_REVISION.');
+    assert.equal(workspace.expectedVerdict.registerWith.value, 'symphony goal review');
+    assert.equal(workspace.expectedVerdict.allowedEvents.items.map((item) => item.value).join(','), 'reviewer.approved,reviewer.needs-revision');
+    assert.match(workspace.expectedVerdict.dryRunCommand.value, /symphony goal review --goal v19-goal-runbook-next-action --task task-6/u);
+    assert.equal(workspace.reviewVerdictRegistration.state, 'available');
+    assert.equal(workspace.reviewVerdictRegistration.registerWith.value, 'symphony goal review');
+    assert.equal(workspace.reviewVerdictRegistration.allowedEvents.items.map((item) => item.value).join(','), 'reviewer.approved,reviewer.needs-revision');
+    assert.equal(workspace.reviewVerdictRegistration.forms.count.value, 2);
+    assert.equal(workspace.reviewVerdictRegistration.defaultFormId.value, 'goal-review-approved');
+    assert.equal(workspace.reviewVerdictRegistration.latestWorkerActor.value, 'codex-worker-task-6');
+    assert.equal(workspace.reviewVerdictRegistration.reviewerEvidenceRef.value, 'docs/plans/v19-task6-review-evidence-2026-05-29.md');
+    assert.equal(workspace.reviewVerdictRegistration.safety.workbenchWriteAvailable.value, true);
+    assert.equal(workspace.reviewVerdictRegistration.safety.confirmRequiresPlanHash.value, true);
+    const approvedForm = workspace.reviewVerdictRegistration.forms.items[0];
+    assert.equal(approvedForm.commandName.value, 'symphony goal review');
+    assert.equal(approvedForm.eventType.value, 'reviewer.approved');
+    assert.equal(approvedForm.fields.items.some((field) => field.id.value === 'reviewerId' && field.placeholder.value === 'reviewer id, not codex-worker-task-6'), true);
+    assert.equal(approvedForm.fields.items.some((field) => field.id.value === 'evidenceRef' && field.value.value === 'docs/plans/v19-task6-review-evidence-2026-05-29.md'), true);
+    assert.equal(workspace.safety.genericShellRunner.value, false);
+    assert.equal(workspace.safety.workerCanApproveOwnTask.value, false);
+    assert.equal(workspace.safety.reviewerActorMustDifferFromLatestWorker.value, true);
+    assert.equal(workspace.safety.workbenchWriteAvailable.value, true);
+    assert.equal(workspace.note.includes('does not read evidence bodies'), true);
+  });
+
+  it('projects v27 reviewer handoff from an explicit goal prompt route before the next role changes', () => {
+    const reviewerPromptPack = createV19PromptPackPayload();
+
+    reviewerPromptPack.prompts = [{
+      taskId: 'task-6',
+      role: 'reviewer',
+      title: 'reviewer prompt for task-6: Workbench Active Goal Control Center',
+      copyOnly: true,
+      format: 'markdown',
+      text: '/goal\nIndependent reviewer handoff prompt.',
+      validationCommands: ['pnpm check', 'pnpm test', 'pnpm workbench:build', 'git diff --check'],
+      evidenceFile: 'docs/plans/v19-task6-review-evidence-2026-05-29.md',
+      roleGuidance: {
+        label: 'independent reviewer',
+        phase: 'review',
+        boundary: ['Reviewer id must differ from the latest worker actor.'],
+        evidenceRequirements: ['Review evidence file must be recorded before verdict.'],
+        handoffChecklist: ['Independent reviewer can take over from the prompt.']
+      }
+    }];
+
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', createV19RunbookPayload()),
+      goalNextAction: createWorkbenchResult('goalNextAction', createV19NextActionPayload()),
+      goalPromptPack: createWorkbenchResult('goalPromptPack', createV19PromptPackPayload()),
+      goalReviewerPromptPack: createGoalReviewerPromptResult(reviewerPromptPack),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', createV19ProgressPayload()),
+      activeGoalEvents: createActiveGoalResult('activeGoalEvents', 'events', 'goal-event-log.v1', createV19EventsPayload())
+    });
+    const workspace = model.activeGoal.reviewWorkspace;
+
+    assert.equal(workspace.state, 'waiting-worker-evidence');
+    assert.equal(workspace.reviewPrompt.text.value, '/goal\nIndependent reviewer handoff prompt.');
+    assert.equal(workspace.reviewPrompt.evidenceFile.value, 'docs/plans/v19-task6-review-evidence-2026-05-29.md');
+    assert.equal(workspace.reviewerHandoff.state.value, 'ready');
+    assert.equal(workspace.reviewerHandoff.promptRoute.value, '/api/goals/v19-goal-runbook-next-action/prompt?task=task-6&role=reviewer');
+    assert.equal(workspace.reviewerHandoff.promptCommand.value, 'pnpm --silent symphony goal prompt --goal v19-goal-runbook-next-action --task task-6 --role reviewer --markdown');
+    assert.equal(workspace.reviewerHandoff.reviewerEvidencePath.value, 'docs/plans/v19-task6-review-evidence-2026-05-29.md');
+    assert.equal(workspace.reviewerHandoff.reviewerActorMustDifferFromLatestWorker.value, true);
+    assert.equal(workspace.reviewerHandoff.workerCanApproveOwnTask.value, false);
   });
 
   it('projects the Closeout Gaps panel only from goal-closeout-report.v1', () => {
@@ -620,6 +1951,20 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.activeGoal.closeoutGaps.missing.items[0].kind.value, 'worker-evidence');
     assert.equal(model.activeGoal.closeoutGaps.missing.items[1].gate.value, 'release.pnpm-test');
     assert.equal(model.activeGoal.closeoutGaps.releaseGates.find((gate) => gate.gate.value === 'pnpmTest').status.value, 'unknown');
+    assert.equal(model.activeGoal.closeoutGaps.modelName.value, 'ReleaseCloseoutWorkspaceModel');
+    assert.equal(model.activeGoal.closeoutGaps.verificationChecklist.items.find((item) => item.gate.value === 'release.pnpm-test').command.value, 'pnpm test');
+    assert.equal(model.activeGoal.closeoutGaps.verificationChecklist.items.find((item) => item.gate.value === 'release.tag-evidence').status.value, 'missing');
+    assert.equal(model.activeGoal.closeoutGaps.verificationChecklist.pendingCount.value, 9);
+    assert.equal(model.activeGoal.closeoutGaps.releaseReadyGate.form.eventType.value, 'release.ready-declared');
+    assert.equal(model.activeGoal.closeoutGaps.releaseReadyGate.form.requiresTask.value, false);
+    assert.equal(model.activeGoal.closeoutGaps.releaseReadyGate.form.fields.items.some((field) => field.id.value === 'taskId'), false);
+    assert.equal(model.activeGoal.closeoutGaps.releaseReadyGate.form.fields.items.find((field) => field.id.value === 'gateName').value.value, 'release.ready');
+    assert.equal(model.activeGoal.closeoutGaps.releaseReadyGate.form.fields.items.find((field) => field.id.value === 'gateStatus').value.value, 'declared');
+    assert.equal(model.activeGoal.closeoutGaps.releaseReadyGate.releaseEvidencePath.value, 'docs/plans/v19-release-evidence-2026-05-29.md');
+    assert.match(model.activeGoal.closeoutGaps.releaseReadyGate.dryRunCommand.value, /--gate release\.ready --status declared/u);
+    assert.equal(model.activeGoal.closeoutGaps.tagEvidencePrompt.evidencePath.value, 'docs/plans/v19-tag-evidence-2026-05-29.md');
+    assert.match(model.activeGoal.closeoutGaps.tagEvidencePrompt.text.value, /release\.tag-evidence/u);
+    assert.equal(model.activeGoal.closeoutGaps.tagEvidencePrompt.safety.createsTag.value, false);
 
     const readyCloseout = {
       ...closeout,
@@ -1118,6 +2463,33 @@ describe('v15 Workbench read-only API client', () => {
   });
 });
 
+function goldenPathStepsById(model) {
+  return new Map(model.goldenPath.steps.items.map((step) => [step.id.value, step]));
+}
+
+async function previewAndConfirmGoalEvent({
+  baseUrl,
+  goalId,
+  previewQuery,
+  confirmBody
+}) {
+  const preview = await fetchGoalEventPlanPreview(`/api/goals/${goalId}/event-plan-preview?${previewQuery}`, {
+    fetchImpl: (path, init) => fetch(`${baseUrl}${path}`, init)
+  });
+
+  assert.equal(preview.ok, true);
+  assert.equal(preview.data.eventSummary.writesInDryRun, false);
+
+  const confirm = await confirmGoalEventPlan(`/api/goals/${goalId}/event-plan-confirm`, confirmBody(preview.data.planHash), {
+    fetchImpl: (path, init) => fetch(`${baseUrl}${path}`, init)
+  });
+
+  assert.equal(confirm.ok, true);
+  assert.equal(confirm.data.safety.genericShellRunner, false);
+
+  return confirm.data;
+}
+
 function createWorkbenchResult(routeId, data) {
   const route = READONLY_API_ROUTES.find((candidate) => candidate.id === routeId);
 
@@ -1130,6 +2502,173 @@ function createWorkbenchResult(routeId, data) {
     routeDescriptor: route,
     httpStatus: 200,
     data
+  };
+}
+
+async function startGoldenPathWorkbenchServer() {
+  const root = await mkdtemp(join(tmpdir(), 'symphony-workbench-golden-path-'));
+  const stateDir = join(root, '.symphony');
+  const plan = await buildGoalRunbookInitPlan({
+    stateDir,
+    goalId: V28_GOAL_ID,
+    fromJson: V28_RUNBOOK_FIXTURE
+  });
+
+  await confirmGoalRunbookInit({
+    stateDir,
+    goalId: V28_GOAL_ID,
+    fromJson: V28_RUNBOOK_FIXTURE,
+    planHash: plan.planHash
+  });
+  await seedCompletedGoldenPathTask({ stateDir, taskId: 'task-1' });
+  await seedCompletedGoldenPathTask({ stateDir, taskId: 'task-2' });
+
+  const server = createSymphonyConsoleServer({
+    stateDir,
+    cwd: root,
+    env: { HOME: root },
+    runner: new WorkbenchApiReadinessRunner()
+  });
+  const baseUrl = await listenOnRandomPort(server);
+
+  return {
+    root,
+    stateDir,
+    server,
+    baseUrl
+  };
+}
+
+async function seedCompletedGoldenPathTask({ stateDir, taskId }) {
+  await appendGoldenPathEvent({
+    stateDir,
+    taskId,
+    eventType: 'worker.evidence-recorded',
+    phase: 'implement',
+    actorRole: 'worker',
+    actorId: `codex-v28-${taskId}-worker`,
+    evidenceRef: `docs/plans/v28-${taskId}-worker-evidence-2026-05-29.md`,
+    label: 'Worker evidence'
+  });
+  await appendGoldenPathEvent({
+    stateDir,
+    taskId,
+    eventType: 'reviewer.approved',
+    phase: 'review',
+    actorRole: 'reviewer',
+    actorId: `codex-v28-${taskId}-reviewer`,
+    evidenceRef: `docs/plans/v28-${taskId}-review-evidence-2026-05-29.md`,
+    label: 'Review evidence',
+    review: {
+      verdict: 'APPROVED'
+    }
+  });
+  await appendGoldenPathEvent({
+    stateDir,
+    taskId,
+    eventType: 'main.verification-passed',
+    phase: 'main-verification',
+    actorRole: 'main-verifier',
+    actorId: `codex-v28-${taskId}-main-verifier`,
+    evidenceRef: `docs/plans/v28-${taskId}-main-verification-evidence-2026-05-29.md`,
+    label: 'Main verification evidence',
+    gate: {
+      id: 'main-verification',
+      status: 'passed'
+    }
+  });
+}
+
+async function appendGoldenPathEvent({
+  stateDir,
+  taskId,
+  eventType,
+  phase,
+  actorRole,
+  actorId,
+  evidenceRef,
+  label,
+  review,
+  gate
+}) {
+  await appendGoalEvent({
+    stateDir,
+    mode: 'confirm',
+    recordedAt: '2026-05-29T12:00:00.000Z',
+    event: {
+      eventId: `evt_${taskId.replaceAll('-', '_')}_${eventType.replaceAll('.', '_')}`,
+      goalId: V28_GOAL_ID,
+      taskId,
+      eventType,
+      phase,
+      actor: {
+        role: actorRole,
+        id: actorId
+      },
+      occurredAt: '2026-05-29T12:00:00.000Z',
+      branch: `v28-${taskId}-fixture`,
+      commit: null,
+      evidenceRefs: [{
+        kind: 'repo-doc',
+        ref: evidenceRef,
+        label
+      }],
+      statement: `${eventType} fixture event for ${taskId}.`,
+      review,
+      gate
+    }
+  });
+}
+
+function createGoalReviewerPromptResult(data) {
+  const route = {
+    id: 'goalReviewerPromptPack',
+    label: 'Goal Reviewer Prompt Pack',
+    path: `/api/goals/${V19_GOAL_ID}/prompt?task=task-6&role=reviewer`,
+    method: 'GET',
+    contractName: 'goal-prompt-pack.v1'
+  };
+
+  return {
+    ok: true,
+    route: route.path,
+    method: route.method,
+    routeDescriptor: route,
+    httpStatus: 200,
+    data
+  };
+}
+
+function createReadinessPayload({
+  branch = 'main',
+  dirty = false,
+  dirtyPaths = []
+} = {}) {
+  return {
+    contractName: 'symphony.console-readiness',
+    contractVersion: '1',
+    status: dirty ? 'attention' : 'ready',
+    readOnly: true,
+    modelInvocation: false,
+    tools: {
+      git: {
+        status: 'available',
+        branch,
+        head: 'abc1234',
+        dirty,
+        dirtyFilesCount: dirtyPaths.length,
+        dirtyPaths
+      },
+      packageManager: {
+        status: 'available'
+      }
+    },
+    checks: [],
+    riskSummary: {
+      status: dirty ? 'attention' : 'ok',
+      total: 0,
+      items: []
+    }
   };
 }
 

@@ -140,10 +140,10 @@ export function resolveGoalNextAction({
       .map((task) => [task.taskId, task])
   );
 
-  if (isReleaseComplete({ eventLog, ledger })) {
+  if (isReleaseComplete({ runbook, eventLog, ledger, ledgerTasks })) {
     return buildCompleteNextAction({
       goalId: runbook.goalId,
-      reason: 'release.ready-declared is recorded and release.tag-evidence has passed.'
+      reason: 'release.ready-declared is recorded and all runbook release gates have passed.'
     });
   }
 
@@ -152,6 +152,20 @@ export function resolveGoalNextAction({
     .find((task) => Array.isArray(task?.blockers) && task.blockers.length > 0);
 
   if (blockedTask !== undefined) {
+    const blockedRunbookTask = runbook.tasks.find((task) => task.taskId === blockedTask.taskId);
+    const blockedTaskRevisionAction = blockedRunbookTask === undefined
+      ? null
+      : resolveTaskNextAction({
+          runbook,
+          runbookTask: blockedRunbookTask,
+          ledgerTask: blockedTask,
+          taskEvents: taskEventState(eventLog.events, blockedRunbookTask.taskId)
+        });
+
+    if (blockedTaskRevisionAction?.next?.role === 'worker' && blockedTaskRevisionAction.next.phase === 'revision') {
+      return blockedTaskRevisionAction;
+    }
+
     return buildBlockedNextAction({
       goalId: runbook.goalId,
       reason: `${blockedTask.taskId} has an open blocker in goal-progress-ledger.v1.`
@@ -250,6 +264,20 @@ function resolveTaskNextAction({
     });
   }
 
+  if (taskEvents.latestMainVerification?.eventType === 'main.verification-failed' &&
+    isEventAfter(taskEvents.latestMainVerification, taskEvents.latestWorkerEvidence)) {
+    return buildTaskNextAction({
+      goalId: runbook.goalId,
+      runbookTask,
+      ledgerTask,
+      role: 'worker',
+      phase: 'revision',
+      reason: `Latest main verification failed for ${runbookTask.taskId}.`,
+      allowedEvents: workerAllowedEvents(),
+      registerWith: 'symphony goal update'
+    });
+  }
+
   if (taskEvents.latestReviewVerdict === null ||
     isEventAfter(taskEvents.latestWorkerEvidence, taskEvents.latestReviewVerdict)) {
     return buildTaskNextAction({
@@ -341,9 +369,15 @@ function firstMissingReleaseGate({ runbook, ledger }) {
   return null;
 }
 
-function isReleaseComplete({ eventLog, ledger }) {
+function isReleaseComplete({ runbook, eventLog, ledger, ledgerTasks }) {
   return eventLog.events.some((event) => event.eventType === 'release.ready-declared') &&
-    ledger.releaseGates.tagEvidence === 'passed';
+    runbook.releaseGates.every((gate) => {
+      const ledgerGateId = RELEASE_GATE_TO_LEDGER_ID[gate];
+
+      return GOAL_PROGRESS_RELEASE_GATE_IDS.includes(ledgerGateId) &&
+        ledger.releaseGates?.[ledgerGateId] === 'passed';
+    }) &&
+    runbook.tasks.every((task) => ['main-verified', 'release-ready'].includes(ledgerTasks.get(task.taskId)?.status));
 }
 
 function buildTaskNextAction({

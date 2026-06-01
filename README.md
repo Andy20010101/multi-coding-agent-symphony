@@ -1,18 +1,21 @@
 # Multi Coding Agent Symphony
 
-Multi Coding Agent Symphony is a prompt-driven orchestration CLI for scanning projects, routing work, recording evidence, and running multiple coding CLIs through stable task contracts.
+Multi Coding Agent Symphony is a local Workbench for goal/runbook-driven coding-agent operations, with CLI commands for scripted flows, compatibility paths, and low-level diagnostics.
 
-Start with the product CLI:
+Start with Workbench v1 for daily operator work:
 
 ```sh
-symphony doctor
-symphony scan
-symphony do "inspect README"
-symphony "修复失败的测试"
-symphony status
-symphony goal-status
-symphony diagnose
+pnpm workbench:build
+symphony console
 ```
+
+Open `http://127.0.0.1:8765/workbench/`. The daily path is active goal, next action, prompt handoff, event registration, review/revision, main verification, and closeout. The Workbench path follows the current goal/runbook spine:
+
+```text
+goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal closeout -> symphony next --goal latest
+```
+
+Use the `symphony` CLI as the advanced/script entry point when you need repeatable terminal output, JSON contracts, dry-run/confirm event registration, CI checks, or compatibility commands such as `scan`, `do`, `verify`, `status`, `continue`, and `artifacts`.
 
 The target CLIs are:
 
@@ -87,20 +90,21 @@ Implemented:
 - Contract validation for task, command, adapter, model, evidence, policy, and routing objects.
 - Durable artifacts, session events, queue state, workspace allocation, and workflow run records.
 - Real adapter paths for Codex, Claude Code, and Kiro CLI with opt-in model smokes.
-- User-facing `symphony` commands for doctor, dry-run work, native agent passthrough proof capture, Harness passthrough, and eval replay dispatch.
+- Workbench v1 daily operator path for active goal, prompt handoff, event registration, controlled implementation/adoption context, review/revision, main verification, and release closeout.
+- User-facing `symphony` commands for advanced/script use, including doctor, goal status, goal next, goal prompt, goal closeout, dry-run work, native agent passthrough proof capture, Harness passthrough, and eval replay dispatch.
 - User-facing `symphony intake` for read-only project scans that write reusable `project-context` and `intake-summary` artifacts without invoking real models.
-- v8 product commands: `symphony scan`, `symphony do`, `symphony verify`, `symphony status`, `symphony artifacts`, `symphony continue`, `symphony new`, and deterministic prompt routing through `symphony "<prompt>"`.
+- v8 compatibility commands: `symphony scan`, `symphony do`, `symphony verify`, `symphony status`, `symphony artifacts`, `symphony continue`, `symphony new`, and deterministic prompt routing through `symphony "<prompt>"`. These remain available for scripts and legacy workflows, but they are not the Workbench v1 top-level action model.
 - Product state pointers under `.symphony/context/latest.json`, `.symphony/runs/latest.json`, and `.symphony/runs/<run-id>.json`; canonical evidence and artifacts remain in `ArtifactStore` runtime directories.
 - Stable product JSON contract fields for automation: `contractVersion`, `contractName`, `contract`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`.
-- Read-only local `symphony console` workbench for browsing latest runs, verifier status, readiness checks, copy-only next commands, guided handoff details, timelines, risk summaries, run filters, recent-run diagnostics, artifact pointers, and safe artifact preview contracts from `.symphony` state.
+- Local `symphony console` Workbench for daily goal operations. The React/Vite app under `/workbench/` shows active goal runbooks, task queue, next action, prompt preview, operation registry, review workspace, closeout gaps, latest runs, diagnostics, artifact pointers, and safe artifact preview contracts from `.symphony` state.
 - Controlled diagnostics CLI `symphony diagnose` for terminal summaries, stable JSON reports, and redirectable static HTML reports without starting a browser server.
 - v17 read-only goal progress ledger: `symphony goal-status`, `goal-progress-ledger.v1`, `/api/goals`, `/api/goals/latest/progress`, `/api/goals/<goal-id>/progress`, and Workbench Goal Progress display for task status, evidence refs, blockers, release gates, and next copy-only commands.
 - v17 console contract hardening: `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` are exposed through read-only API routes and Workbench panels without adding browser execution, Workbench writes, artifact download, arbitrary path preview, or frontend safety inference.
 - v18 goal event journal candidate: `goal-event-log.v1`, `goal-update-plan.v1`, `symphony goal update`, `symphony goal review`, and `symphony goal gate` provide dry-run / confirm event registration. Confirm writes append-only events to the managed journal; dry-run produces a reviewable plan and writes nothing.
 - v18 event-backed goal progress: the resolver reads `goal-event-log.v1` into the existing `goal-progress-ledger.v1`. With no events, it keeps the v17 planned/unknown template instead of guessing status.
 - v18 read-only goal events API and Workbench display: `GET /api/goals/latest/events`, `GET /api/goals/<goal-id>/events`, Workbench Goal Events Timeline, and Workbench Evidence Matrix expose registered events and evidence refs without reading evidence document bodies.
-- v19 implemented/draft goal runbook workflow: `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, `goal-closeout-report.v1`, `symphony goal init`, `symphony goal next`, `symphony goal prompt`, `symphony goal closeout`, `symphony next`, and the read-only Workbench Active Goal Control Center are present for Goal Runbook + Next Action Control Center work.
-- v19 remains unreleased in this checkout. Current released repository tag is still `v18`; v19 release-ready still requires explicit `symphony goal gate --gate release.ready --status declared` evidence after the remaining task, review, main verification, and release gate evidence exists.
+- v19 implemented/draft goal runbook workflow: `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, `goal-closeout-report.v1`, `symphony goal init`, `symphony goal next`, `symphony goal prompt`, `symphony goal closeout`, `symphony next`, and the Workbench Active Goal Control Center are present for Goal Runbook + Next Action Control Center work.
+- v28 draft work positions Workbench v1 as the daily entry point and keeps `symphony` CLI as the advanced/script surface. This checkout does not treat v28 as release-ready until the release manager records explicit `release.ready` gate evidence.
 - v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan with the exact confirm command, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
 - v12 verified adoption: `symphony adopt --run <run-id>` freezes verifier-passing isolated workspace changes as a text-only patch plan, and `symphony adopt --confirm <adoption-id>` applies only that frozen patch after fingerprint and `git apply --check` validation.
 - v12 adoption recovery visibility: confirmation writes a registered journal before `git apply`, and `symphony adopt --inspect <adoption-id> --json` reports plan refs, journal refs, latest confirmation state, and current worktree hash matches without writing files.
@@ -114,9 +118,9 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Latest completed mainline release: `v18`. Current released repository tag: `v18`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite read-only Workbench migration on mainline, v16 adds guided handoff and safe artifact preview contracts across the read-only API and Workbench, v17 adds the read-only goal progress ledger plus console capability, diagnostics, and error-envelope contracts, and v18 adds controlled goal event registration plus read-only event display. v19 is an implemented draft for Goal Runbook + Next Action Control Center and is not the latest released or tagged version. The `v7` tag remains available for historical installs.
+Latest completed mainline release: `v18`. Current released repository tag: `v18`. The `v8` tag remains the stable installer baseline, `v8.2` adds stable product JSON contracts and the local read-only console, `v9` adds the local read-only Workbench entry with readiness, timeline, and copy-only command guidance, v9.1 adds Workbench diagnostics and evidence polish, v10 adds the controlled diagnostics CLI, v11 adds controlled kernel execution plans, v12 adds verified adoption with confirmation recovery visibility, v13 adds the Workbench information architecture cut, v13.1 adds the Workbench Chinese presentation layer, v14 adds the Stage Kernel Refactor wrapper around Stage Charter, Stage CLI, Stage-aware flows, and Stage blocker recovery, v15 completes the React/Vite Workbench migration on mainline, v16 adds guided handoff and safe artifact preview contracts across the API and Workbench, v17 adds the goal progress ledger plus console capability, diagnostics, and error-envelope contracts, and v18 adds controlled goal event registration plus event display. v19 through v28 are draft goal/runbook Workbench work in this checkout and are not tagged releases by this README. The `v7` tag remains available for historical installs.
 
-v18 and the current v19 draft do not include Autopilot, Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation, automatic merge, or automatic tag. Workbench remains read-only / display-only / copy-only, and browser views do not execute the CLI commands shown as text.
+Current draft Workbench work does not include Autopilot, Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation, automatic merge, automatic tag, or release-ready inference. Browser views do not execute CLI commands shown as text. Controlled goal event registration is limited to the existing dry-run/plan-hash confirm paths.
 
 ## Design Center
 
@@ -195,46 +199,46 @@ pnpm install
 pnpm symphony doctor
 ```
 
-Run the user CLI:
+Run Workbench v1:
+
+```sh
+pnpm workbench:build
+symphony console
+```
+
+Then open `http://127.0.0.1:8765/workbench/`.
+
+Advanced/script CLI entry:
 
 ```sh
 symphony doctor
-symphony scan
-symphony do --dry-run "inspect README"
-symphony do --write "inspect README"
-symphony do --confirm-plan <plan-id>
-symphony adopt --run <confirmed-run-id>
-symphony adopt --inspect <adoption-id> --json
-symphony adopt --confirm <adoption-id>
-symphony verify --dry-run "inspect README"
-symphony "扫描这个仓库"
-symphony "审查当前改动"
-symphony "修复失败的测试"
-symphony status
-symphony goal-status
-symphony artifacts
-symphony console
+symphony goal-status --goal <goal-id> --json
+symphony goal next --goal <goal-id> --json
+symphony goal prompt --goal <goal-id> --next --markdown
+symphony goal closeout --goal <goal-id> --json
 symphony console --snapshot --json
-symphony diagnose
 symphony diagnose --json
 symphony diagnose --html > report.html
-symphony "创建一个新的 React 看板项目" --dry-run --json
-symphony "创建一个新的 node cli 项目" --dry-run
+symphony scan
+symphony do --dry-run "inspect README"
+symphony verify --dry-run "inspect README"
+symphony status
+symphony artifacts
 ```
 
-`symphony scan` is the product name for the v7 intake/grill-me-docs capability. In default `auto` mode it tries optional `grill-me-docs` first, records provider attempts in JSON output, and falls back to the built-in provider when grill-me-docs is unavailable. Use `--builtin` for built-in-only scans and `--require-grill` for a hard failure when grill-me-docs is unavailable.
-`symphony do` uses the latest scan context when its project fingerprint is fresh, and reruns scan when the context is missing or stale. `symphony review`, `symphony qa`, and `symphony verify` use the v8 product work path with qa-swarm workflow mode; `qa` is a product command alias for the `verify` semantic command. Prompt routing is deterministic and model-free; it matches rules for scan, work, review, verify, status, artifacts, continue, and new-project intents.
+`symphony scan` is the compatibility name for the v7 intake/grill-me-docs capability. In default `auto` mode it tries optional `grill-me-docs` first, records provider attempts in JSON output, and falls back to the built-in provider when grill-me-docs is unavailable. Use `--builtin` for built-in-only scans and `--require-grill` for a hard failure when grill-me-docs is unavailable.
+`symphony do`, `symphony review`, `symphony qa`, `symphony verify`, `symphony status`, `symphony continue`, and `symphony artifacts` remain advanced/script and compatibility commands. They are not the Workbench v1 top-level action list. Prompt routing remains deterministic and model-free for these CLI flows.
 `symphony do --write` is controlled in v11: without `--confirm-plan` it only writes a `symphony.execution-plan` artifact under `.symphony/plans/` and records a planned run. The confirm command reloads that frozen plan, rejects prompt drift, verifies the project fingerprint, checks any required real-agent gate, and then runs the existing kernel workflow in a materialized isolated workspace. It does not apply patches to the main worktree; `mainWorktreeWrites` remains `false`.
 `symphony adopt` is controlled in v12: `symphony adopt --run <confirmed-run-id>` only reads a passed v11 isolated-workspace run, verifies source evidence/workspace refs, rejects dirty non-Symphony main worktree changes, and writes `.symphony/adoptions/<adoption-id>.json` plus a registered patch artifact. `symphony adopt --confirm <adoption-id>` accepts no prompt text or execution flags; it rechecks project/git/source/patch fingerprints, runs `git apply --check`, writes `.symphony/adoptions/<adoption-id>-journal.json` plus an `applying` confirmation state, and then applies only the frozen text add/modify patch to the main worktree. `symphony adopt --inspect <adoption-id> --json` is read-only and reports plan refs, journal refs, latest confirmation state, and current worktree matches against `afterHash` and journal `beforeFiles`. Adoption does not invoke adapters, models, package installers, or external services.
 New-project prompts produce a `scaffoldPlan` and a separate `scaffold-manifest` artifact. Framework-shaped requests such as React or Vite are reported as unsupported generator requests; Symphony does not run npm installs, framework generators, or dependency installation, and `--write` is still required before any files are created.
 Every product `--json` response keeps its legacy top-level fields and adds a stable machine-readable envelope: `contractVersion`, `contractName`, `identity`, `safety`, `workflow`, `artifactRefs`, `action`, and `timestamps`. `symphony console --snapshot --json` returns the same read-only run model without starting a server; see [Symphony Product JSON Contracts](docs/symphony-product-contracts.md) for v8.2 and v9 contract examples.
-`symphony console` starts a local read-only workbench on `127.0.0.1:8765` by default. The React/Vite Workbench build is served under `/workbench/` after `pnpm workbench:build`, while `/` remains the existing console HTML. The console serves `/api/summary`, `/api/readiness`, `/api/handoff`, `/api/handoff/<ref>`, `/api/runs`, `/api/runs/latest`, `/api/runs/<run-id>`, `/api/runs/<run-id>/timeline`, `/api/runs/<run-id>/artifacts/<kind>`, and `/api/runs/<run-id>/artifacts/<kind>/preview`; all non-GET requests return `405`. The workbench shows readiness, latest run health, recent run diagnostics, run filters for `all`, `passed`, `failed`, `dry-run`, `real`, `scan`, and `verify`, a guided handoff panel, a risk panel, run detail sections, registered artifacts, safe preview status, adoption plan refs, patch refs, changed files, and grouped copy-only commands. It does not add browser write, execute, retry, adopt, apply, rollback, delete, install, mutation, audit, model invocation, or arbitrary path-read controls. Safe artifact preview only reads registered artifact refs, never accepts a user path, and renders inline text only when the backend returns `safe-artifact-preview.v1` with `safeToRenderInline === true` and bounded text content. The React Workbench must not infer missing preview fields such as `safeToRenderInline`, `mime`, `previewAvailable`, `artifactKind`, `uri`, or `ref`. See the [Workbench Operator Guide](docs/workbench-operator-guide.md) for the current operator boundary and troubleshooting notes.
+`symphony console` starts the local Workbench server on `127.0.0.1:8765` by default. The React/Vite Workbench build is served under `/workbench/` after `pnpm workbench:build`, while `/` remains the existing console HTML. Workbench v1 uses the active goal APIs for runbook, next action, prompt pack, events, operations, review workspace, closeout gaps, and release closeout. The legacy run APIs remain available for latest-run context, diagnostics, artifact refs, and safe previews. It does not add browser shell execution, generic write controls, retry, adopt, apply, rollback, delete, install, audit, model invocation, automatic merge, automatic tag, or arbitrary path-read controls. Safe artifact preview only reads registered artifact refs, never accepts a user path, and renders inline text only when the backend returns `safe-artifact-preview.v1` with `safeToRenderInline === true` and bounded text content. The React Workbench must not infer missing preview fields such as `safeToRenderInline`, `mime`, `previewAvailable`, `artifactKind`, `uri`, or `ref`. See the [Workbench Operator Guide](docs/workbench-operator-guide.md) for the current operator boundary and troubleshooting notes.
 v18 extends the same console with `GET /api/goals/latest/events` and `GET /api/goals/<goal-id>/events`. Workbench adds Goal Events Timeline and Evidence Matrix panels that display `goal-event-log.v1` and `goal-progress-ledger.v1` fields only. Evidence refs remain references; the browser does not download, open, preview arbitrary paths, or read evidence documents to decide whether a task is approved, main-verified, or release-ready.
 `symphony diagnose` reads the same `.symphony` state and readiness probes without starting the Workbench. The default output is a compact terminal summary; `--json` emits the stable `symphony.diagnostics-report` contract; `--html` writes a single static, script-free HTML document to stdout so it can be redirected with `symphony diagnose --html > report.html`. `--json` and `--html` are mutually exclusive, `--state-dir <path>` selects an alternate state directory, and all suggested commands remain copy-only text. v12 diagnostics surface pending/stale adoption plans, unsupported adoption changes, dirty-worktree blockers with dirty path details, applying adoption journals, and post-apply evidence failures.
 
 `.symphony/` stores local user-facing pointers and summaries. Add it to your local ignore rules if you do not want run pointers in source control. Full evidence, TaskPackets, Harness output, scaffold manifests, and intake artifacts stay in the runtime artifact directories written through `ArtifactStore`.
 
-Advanced compatibility commands:
+Advanced/script and compatibility commands:
 
 ```sh
 symphony intake
@@ -278,13 +282,13 @@ Command hierarchy:
 
 ```text
 symphony intake   read-only project context scan
-symphony work     user workflow entry
+symphony work     advanced workflow entry
 symphony scan     product project scan alias
 symphony do       product work alias
 symphony verify   product verification alias
 symphony status   latest run state
 symphony artifacts artifact and evidence pointers
-symphony console  read-only local workbench
+symphony console  local Workbench v1 server
 symphony diagnose read-only diagnostics report
 symphony adopt    controlled verified adoption
 symphony new      limited dry-run/write project bootstrap

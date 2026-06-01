@@ -4,10 +4,16 @@ import { fileURLToPath } from 'node:url';
 
 import { isSafeGoalEventToken } from './goal-event-contracts.js';
 import { buildGoalNextAction } from './goal-next-action-resolver.js';
+import { compactRunState } from './contract.js';
+import { readLatestRun } from './state.js';
 import {
   readManagedActiveGoalPointer,
   readManagedGoalRunbookState
 } from './goal-runbook-registry.js';
+import {
+  buildGoalLedgerForRunbook,
+  readGoalEventLogForRunbook
+} from './goal-runbook-context.js';
 import {
   GOAL_PROMPT_PACK_CONTRACT_NAME,
   GOAL_PROMPT_PACK_CONTRACT_VERSION,
@@ -39,6 +45,10 @@ const RELEASE_GATE_COMMANDS = Object.freeze({
   'release.docs-updated': 'pnpm check',
   'release.tag-evidence': null
 });
+const REVISION_FAILURE_EVENTS = Object.freeze([
+  'reviewer.needs-revision',
+  'main.verification-failed'
+]);
 
 export class GoalPromptPackError extends Error {
   constructor(code, message, safeDetails) {
@@ -132,6 +142,7 @@ async function buildExplicitPromptContext({ stateDir, goalId, taskId, role }) {
     role: normalizedRole,
     phase: rolePhase(normalizedRole),
     reason: null,
+    revisionContext: null,
     validationCommands: validationCommandsFor({
       runbook,
       runbookTask,
@@ -164,6 +175,16 @@ async function buildNextPromptContext({ stateDir, goalId, generatedAt }) {
     taskId: nextAction.next.taskId,
     role: nextAction.next.role
   });
+  const revisionContext = await buildRevisionContext({
+    stateDir,
+    runbook,
+    runbookTask,
+    taskId: nextAction.next.taskId,
+    role: nextAction.next.role,
+    phase: nextAction.next.phase,
+    nextAction,
+    generatedAt
+  });
 
   return {
     runbook,
@@ -172,12 +193,295 @@ async function buildNextPromptContext({ stateDir, goalId, generatedAt }) {
     role: nextAction.next.role,
     phase: nextAction.next.phase,
     reason: nextAction.next.reason,
+    revisionContext,
     validationCommands: validationCommandsFor({
       runbook,
       runbookTask,
       role: nextAction.next.role
     })
   };
+}
+
+async function buildRevisionContext({
+  stateDir,
+  runbook,
+  runbookTask,
+  taskId,
+  role,
+  phase,
+  nextAction,
+  generatedAt
+}) {
+  if (role !== 'worker' || phase !== 'revision') {
+    return null;
+  }
+
+  const [eventState, latestRunState] = await Promise.all([
+    readRevisionEventState({
+      stateDir,
+      runbook,
+      taskId,
+      generatedAt
+    }),
+    readRevisionLatestRunState({ stateDir })
+  ]);
+  const trigger = revisionTriggerFromEvents({
+    taskEvents: eventState.taskEvents,
+    latestWorkerEvidence: eventState.latestWorkerEvidence,
+    reason: nextAction.next.reason
+  });
+  const ledgerTask = eventState.ledgerTask;
+  const changedFiles = changedFilesFromRun(latestRunState.latestRun);
+  const recordedFailedCommands = failedCommandsFromEvent(trigger.event);
+  const rerunCommands = revisionRerunCommands({
+    recordedFailedCommands,
+    latestRun: latestRunState.latestRun,
+    runbookTask
+  });
+
+  return {
+    state: eventState.state === 'available' ? 'available' : 'partial',
+    sourcePolicy: 'goal-event-log.v1 + goal-progress-ledger.v1 + goal-runbook.v1 + symphony.console-run',
+    trigger: {
+      eventType: trigger.event?.eventType ?? trigger.eventType,
+      eventId: trigger.event?.eventId ?? null,
+      sequence: trigger.event?.sequence ?? null,
+      statement: trigger.event?.statement ?? nextAction.next.reason,
+      evidenceRefs: evidenceRefStrings(trigger.event),
+      actor: actorText(trigger.event?.actor),
+      branch: trigger.event?.branch ?? null,
+      commit: trigger.event?.commit ?? null
+    },
+    blockers: blockersFromLedgerTask(ledgerTask),
+    failedCommands: {
+      recorded: recordedFailedCommands,
+      rerun: rerunCommands
+    },
+    changedFiles: {
+      source: latestRunState.latestRun === null ? 'missing' : 'symphony.console-run',
+      sourceRunId: latestRunState.latestRun?.runId ?? null,
+      items: changedFiles
+    },
+    acceptanceDelta: acceptanceDeltaForRevision({
+      runbookTask,
+      trigger
+    }),
+    diagnostics: eventState.error === null && latestRunState.error === null
+      ? []
+      : uniqueNonEmptyStrings([eventState.error, latestRunState.error])
+  };
+}
+
+async function readRevisionEventState({ stateDir, runbook, taskId, generatedAt }) {
+  try {
+    const eventLog = await readGoalEventLogForRunbook({
+      stateDir,
+      runbook
+    });
+    const ledger = await buildGoalLedgerForRunbook({
+      stateDir,
+      runbook,
+      eventLog,
+      generatedAt
+    });
+    const taskEvents = Array.isArray(eventLog?.events)
+      ? eventLog.events.filter((event) => event?.taskId === taskId)
+      : [];
+
+    return {
+      state: 'available',
+      error: null,
+      taskEvents,
+      latestWorkerEvidence: latestEventOfTypes(taskEvents, TASK_WORKER_EVIDENCE_EVENTS),
+      ledgerTask: Array.isArray(ledger?.tasks)
+        ? ledger.tasks.find((task) => task?.taskId === taskId) ?? null
+        : null
+    };
+  } catch (error) {
+    return {
+      state: 'unavailable',
+      error: `Revision event context unavailable: ${safeErrorMessage(error)}`,
+      taskEvents: [],
+      latestWorkerEvidence: null,
+      ledgerTask: null
+    };
+  }
+}
+
+async function readRevisionLatestRunState({ stateDir }) {
+  try {
+    return {
+      latestRun: compactRunState(await readLatestRun({ stateDir })),
+      error: null
+    };
+  } catch (error) {
+    return {
+      latestRun: null,
+      error: `Latest run context unavailable: ${safeErrorMessage(error)}`
+    };
+  }
+}
+
+function revisionTriggerFromEvents({ taskEvents, latestWorkerEvidence, reason }) {
+  const candidates = taskEvents
+    .filter((event) => REVISION_FAILURE_EVENTS.includes(event?.eventType))
+    .filter((event) => latestWorkerEvidence === null || isEventAfter(event, latestWorkerEvidence));
+  const event = latestEvent(candidates);
+
+  if (event !== null) {
+    return {
+      event,
+      eventType: event.eventType
+    };
+  }
+
+  return {
+    event: null,
+    eventType: reason?.includes('main verification failed')
+      ? 'main.verification-failed'
+      : reason?.includes('reviewer.needs-revision')
+        ? 'reviewer.needs-revision'
+        : 'revision-required'
+  };
+}
+
+const TASK_WORKER_EVIDENCE_EVENTS = Object.freeze([
+  'worker.evidence-recorded',
+  'worker.self-check-passed',
+  'worker.self-check-failed'
+]);
+
+function latestEventOfTypes(events, eventTypes) {
+  return latestEvent(events.filter((event) => eventTypes.includes(event?.eventType)));
+}
+
+function latestEvent(events) {
+  return events
+    .filter((event) => Number.isInteger(event?.sequence))
+    .sort((left, right) => left.sequence - right.sequence)
+    .at(-1) ?? null;
+}
+
+function isEventAfter(left, right) {
+  if (left === null || right === null) {
+    return false;
+  }
+
+  return left.sequence > right.sequence;
+}
+
+function evidenceRefStrings(event) {
+  if (!Array.isArray(event?.evidenceRefs)) {
+    return [];
+  }
+
+  return uniqueNonEmptyStrings(event.evidenceRefs.map((evidenceRef) => {
+    if (typeof evidenceRef?.ref !== 'string' || evidenceRef.ref.trim() === '') {
+      return null;
+    }
+
+    return evidenceRef.kind === 'repo-doc'
+      ? evidenceRef.ref
+      : `${evidenceRef.kind ?? 'artifact-ref'}:${evidenceRef.ref}`;
+  }));
+}
+
+function blockersFromLedgerTask(ledgerTask) {
+  if (!Array.isArray(ledgerTask?.blockers)) {
+    return [];
+  }
+
+  return ledgerTask.blockers
+    .filter((blocker) => typeof blocker?.reason === 'string' && blocker.reason.trim() !== '')
+    .map((blocker, index) => ({
+      id: typeof blocker.id === 'string' && blocker.id.trim() !== ''
+        ? blocker.id
+        : `blocker.${index + 1}`,
+      reason: blocker.reason,
+      severity: typeof blocker.severity === 'string' && blocker.severity.trim() !== ''
+        ? blocker.severity
+        : 'warning'
+    }));
+}
+
+function failedCommandsFromEvent(event) {
+  if (event === null || event === undefined) {
+    return [];
+  }
+
+  return uniqueNonEmptyStrings([
+    ...commandStringsFromUnknown(event.failedCommands),
+    ...commandStringsFromUnknown(event.metadata?.failedCommands),
+    ...commandStringsFromUnknown(event.metadata?.failedCommand),
+    ...failedCommandResultsFromUnknown(event.commandResults),
+    ...failedCommandResultsFromUnknown(event.metadata?.commandResults)
+  ]);
+}
+
+function failedCommandResultsFromUnknown(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((result) => result?.status === 'failed' || result?.exitCode > 0)
+    .flatMap((result) => commandStringsFromUnknown(result.command));
+}
+
+function commandStringsFromUnknown(value) {
+  if (typeof value === 'string' && value.trim() !== '') {
+    return [value.trim()];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => commandStringsFromUnknown(entry));
+  }
+
+  if (value !== null && typeof value === 'object' && typeof value.command === 'string') {
+    return commandStringsFromUnknown(value.command);
+  }
+
+  return [];
+}
+
+function revisionRerunCommands({ recordedFailedCommands, latestRun, runbookTask }) {
+  const sourceRunCommands = latestRun?.status === 'failed' || latestRun?.verifierStatus === 'failed'
+    ? [
+        latestRun.command,
+        ...(Array.isArray(latestRun.verificationCommands) ? latestRun.verificationCommands : [])
+      ]
+    : [];
+
+  return uniqueNonEmptyStrings([
+    ...recordedFailedCommands,
+    ...sourceRunCommands,
+    ...(Array.isArray(runbookTask?.copyOnlyCommands) ? runbookTask.copyOnlyCommands : [])
+  ]);
+}
+
+function changedFilesFromRun(latestRun) {
+  return uniqueNonEmptyStrings([
+    ...(Array.isArray(latestRun?.changedFiles) ? latestRun.changedFiles : []),
+    ...(Array.isArray(latestRun?.createdFiles) ? latestRun.createdFiles : [])
+  ]);
+}
+
+function acceptanceDeltaForRevision({ runbookTask, trigger }) {
+  const triggerType = trigger.event?.eventType ?? trigger.eventType;
+
+  return (Array.isArray(runbookTask?.acceptance) ? runbookTask.acceptance : [])
+    .map((acceptance) => ({
+      acceptance,
+      status: `recheck-after-${triggerType}`
+    }));
+}
+
+function actorText(actor) {
+  if (typeof actor?.role === 'string' && typeof actor?.id === 'string') {
+    return `${actor.role}:${actor.id}`;
+  }
+
+  return null;
 }
 
 async function normalizeGoalId({ stateDir, goalId }) {
@@ -310,6 +614,10 @@ function resolveRunbookTask({ runbook, taskId, role }) {
 
 function buildPrompt(context) {
   const evidenceFile = evidenceFileFor(context);
+  const roleGuidance = roleGuidanceFor({
+    ...context,
+    evidenceFile
+  });
   const registration = registrationFor({
     goalId: context.runbook.goalId,
     taskId: context.taskId,
@@ -320,23 +628,31 @@ function buildPrompt(context) {
   return {
     taskId: context.taskId,
     role: context.role,
+    phase: context.phase,
     title: promptTitle(context),
     copyOnly: true,
     format: context.promptFormat,
     text: promptTextFor({
       ...context,
       evidenceFile,
+      roleGuidance,
       registration
     }),
     validationCommands: context.validationCommands,
     evidenceFile,
-    registration
+    roleGuidance,
+    registration,
+    revisionContext: context.revisionContext
   };
 }
 
-function promptTitle({ role, runbookTask, taskId }) {
+function promptTitle({ role, runbookTask, taskId, phase }) {
   if (role === 'release-manager') {
     return 'Prepare release closeout evidence';
+  }
+
+  if (role === 'worker' && phase === 'revision') {
+    return `revision worker prompt for ${taskId}: ${runbookTask.title}`;
   }
 
   return `${ROLE_LABELS[role]} prompt for ${taskId}: ${runbookTask.title}`;
@@ -359,16 +675,17 @@ function promptTextFor(context) {
 }
 
 function workerPromptText(context) {
+  if (context.phase === 'revision') {
+    return workerRevisionPromptText(context);
+  }
+
   return [
     `/goal`,
     `执行 ${context.runbook.goalId} ${context.taskId} worker implement：${context.runbookTask.title}。`,
     '',
     commonTaskScope(context),
     '',
-    'Role boundary:',
-    '- 只做 worker implementation 和自测记录；不要 reviewer approval、main verification 或 release readiness。',
-    '- 禁止 self-review：worker 不能审查、批准或合并自己的 task。',
-    '- 不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -389,6 +706,38 @@ function workerPromptText(context) {
   ].join('\n');
 }
 
+function workerRevisionPromptText(context) {
+  return [
+    '/goal',
+    `执行 ${context.runbook.goalId} ${context.taskId} revision worker：${context.runbookTask.title}。`,
+    '',
+    commonTaskScope(context),
+    '',
+    revisionContextSection(context.revisionContext),
+    '',
+    roleGuidanceSection(context.roleGuidance),
+    '',
+    validationSection(context.validationCommands),
+    '',
+    evidenceSection(context),
+    '',
+    registrationSection({
+      heading: 'Event registration guidance after revision worker evidence exists:',
+      registration: context.registration,
+      allowedEvents: ['worker.evidence-recorded', 'worker.self-check-passed', 'worker.self-check-failed']
+    }),
+    '',
+    'Return:',
+    '- Revision summary',
+    '- Blockers fixed and any blockers still open',
+    '- Changed files',
+    '- Acceptance delta closed',
+    '- Tests run with exact results',
+    `- Updated worker evidence file path: ${context.evidenceFile}`,
+    '- Reviewer handoff; do not claim reviewer approval, main verification, or release ready.'
+  ].join('\n');
+}
+
 function reviewerPromptText(context) {
   return [
     '/goal',
@@ -396,10 +745,7 @@ function reviewerPromptText(context) {
     '',
     commonTaskScope(context),
     '',
-    'Role boundary:',
-    '- 你是 independent reviewer；如果你参与过本 task 的 worker implementation，先停止并说明，不能 self-review。',
-    '- 只根据 diff、tests、contract output 和 evidence 判断，不复述 worker 总结当作结论。',
-    '- 不做 implementation、不登记 main verification、不声明 release ready。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -429,11 +775,7 @@ function mainVerifierPromptText(context) {
     '',
     commonTaskScope(context),
     '',
-    'Role boundary:',
-    '- 先确认 reviewer.approved evidence 明确存在；没有 reviewer approval 就停止。',
-    '- 禁止 self-review：main verification 不能替代 independent reviewer approval。',
-    '- 只登记 main verification gate；不要登记 worker 或 reviewer event。',
-    '- 不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -472,10 +814,7 @@ function releaseManagerPromptText(context) {
     releaseGates,
     context.reason === null ? '' : `- Next-action reason: ${context.reason}`,
     '',
-    'Role boundary:',
-    '- 禁止 self-review：release-manager 不能补做缺失的 worker/reviewer/main-verifier approval。',
-    '- 不执行 prompt，不调用模型，不把 prompt 文本当 evidence。',
-    '- 只根据明确 event log 和 gate evidence 判断；不从文件名、branch 或命令文本推断 release-ready。',
+    roleGuidanceSection(context.roleGuidance),
     '',
     validationSection(context.validationCommands),
     '',
@@ -529,10 +868,78 @@ function validationSection(commands) {
 
 function evidenceSection({ evidenceFile }) {
   return [
-    'Evidence file naming:',
+    'Evidence requirements:',
     `- Suggested path: ${evidenceFile}`,
+    '- Include goal id, task id, branch, changed files, exact command results, and boundary notes.',
     '- Record exact command results, relevant files changed, and any blockers.',
     '- Do not claim reviewer approval, main verification, or release ready unless the matching event is explicitly registered.'
+  ].join('\n');
+}
+
+function revisionContextSection(revisionContext) {
+  if (revisionContext === null || revisionContext === undefined) {
+    return [
+      'Revision context:',
+      '- Revision trigger is unavailable from goal-next-action context.',
+      '- Re-read goal events and goal-status before editing; record the missing context in worker evidence.'
+    ].join('\n');
+  }
+
+  const trigger = revisionContext.trigger;
+  const triggerLines = [
+    `- Event: ${trigger.eventType ?? 'unknown'}`,
+    `- Event id: ${trigger.eventId ?? 'unknown'}`,
+    `- Statement: ${trigger.statement ?? 'not recorded'}`,
+    `- Evidence refs: ${formatInlineList(trigger.evidenceRefs)}`
+  ];
+  const blockerLines = revisionContext.blockers.length === 0
+    ? ['- No open blocker is recorded in goal-progress-ledger.v1; use the failure evidence and statement above as the revision source.']
+    : revisionContext.blockers.map((blocker) => `- ${blocker.id}: ${blocker.reason} (${blocker.severity})`);
+  const recordedFailedCommandLines = revisionContext.failedCommands.recorded.length === 0
+    ? ['- No failed command is encoded in the goal event; check the failure evidence refs before changing code.']
+    : revisionContext.failedCommands.recorded.map((command) => `- ${command}`);
+  const rerunCommandLines = revisionContext.failedCommands.rerun.length === 0
+    ? ['- No rerun command is recorded; use the runbook acceptance commands if applicable.']
+    : revisionContext.failedCommands.rerun.map((command) => `- ${command}`);
+  const changedFileLines = revisionContext.changedFiles.items.length === 0
+    ? ['- No changed files are recorded in the latest exposed run; record the actual changed files in worker evidence.']
+    : revisionContext.changedFiles.items.map((file) => `- ${file}`);
+  const acceptanceDeltaLines = revisionContext.acceptanceDelta.length === 0
+    ? ['- No acceptance items are recorded for this task.']
+    : revisionContext.acceptanceDelta.map((item) => `- ${item.status}: ${item.acceptance}`);
+
+  return [
+    'Revision context:',
+    ...triggerLines,
+    `- Source policy: ${revisionContext.sourcePolicy}`,
+    '',
+    'Blockers to address:',
+    ...blockerLines,
+    '',
+    'Failed commands recorded by the failure event:',
+    ...recordedFailedCommandLines,
+    '',
+    'Commands to rerun before reviewer handoff:',
+    ...rerunCommandLines,
+    '',
+    `Changed files from latest exposed run (${revisionContext.changedFiles.sourceRunId ?? 'no source run'}):`,
+    ...changedFileLines,
+    '',
+    'Acceptance delta to close:',
+    ...acceptanceDeltaLines
+  ].join('\n');
+}
+
+function roleGuidanceSection(roleGuidance) {
+  return [
+    'Role boundary:',
+    ...roleGuidance.boundary.map((item) => `- ${item}`),
+    '',
+    'Role evidence checklist:',
+    ...roleGuidance.evidenceRequirements.map((item) => `- ${item}`),
+    '',
+    'Handoff checklist:',
+    ...roleGuidance.handoffChecklist.map((item) => `- ${item}`)
   ].join('\n');
 }
 
@@ -724,25 +1131,162 @@ function outcomeRegistrationLines(entries) {
 
 function validationCommandsFor({ runbook, runbookTask, role }) {
   if (role === 'release-manager') {
-    return uniqueNonEmptyStrings(runbook.releaseGates.map((gate) => RELEASE_GATE_COMMANDS[gate]));
+    return uniqueNonEmptyStrings([
+      ...runbook.releaseGates.map((gate) => RELEASE_GATE_COMMANDS[gate]),
+      `pnpm --silent symphony goal closeout --goal ${runbook.goalId} --markdown`,
+      `pnpm --silent symphony goal-status --goal ${runbook.goalId} --json`
+    ]);
   }
 
   return uniqueNonEmptyStrings(runbookTask.copyOnlyCommands);
 }
 
-function evidenceFileFor({ taskId, role }) {
-  if (role === 'release-manager') {
-    return `docs/plans/v19-closeout-evidence-${EVIDENCE_DATE}.md`;
+function roleGuidanceFor({ role, phase, runbook, runbookTask, evidenceFile, revisionContext }) {
+  if (role === 'worker') {
+    if (phase === 'revision') {
+      const triggerEventType = revisionContext?.trigger?.eventType ?? 'revision failure';
+
+      return {
+        label: 'worker revision',
+        phase: 'revision',
+        boundary: [
+          `只修复 ${triggerEventType} 暴露的 blockers、失败命令和 acceptance delta；不要扩大到其他 tasks。`,
+          '禁止 self-review：worker 不能审查、批准或合并自己的 task。',
+          '不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。'
+        ],
+        evidenceRequirements: [
+          `Worker evidence file: ${evidenceFile}`,
+          'Record revision summary, blockers fixed, changed files, failed commands rerun with exact results, acceptance delta closed, and boundary notes.',
+          'If a blocker remains, record the blocker and do not register approval events.'
+        ],
+        handoffChecklist: [
+          'Updated worker evidence exists at the suggested path.',
+          'Failure evidence refs, failed commands, changed files, and acceptance delta have been addressed or explicitly left blocked.',
+          'Independent reviewer can inspect the revised diff and evidence without relying on worker self-approval.'
+        ]
+      };
+    }
+
+    return {
+      label: 'worker implementation',
+      phase: 'implement',
+      boundary: [
+        '只做 worker implementation 和自测记录；不要 reviewer approval、main verification 或 release readiness。',
+        '禁止 self-review：worker 不能审查、批准或合并自己的 task。',
+        '不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。'
+      ],
+      evidenceRequirements: [
+        `Worker evidence file: ${evidenceFile}`,
+        'Record implementation summary, files changed, exact validation command results, boundary notes, and reviewer handoff checklist.',
+        'If a blocker remains, record the blocker and do not register approval events.'
+      ],
+      handoffChecklist: [
+        'Worker evidence exists at the suggested path.',
+        'All required validation commands have exact results.',
+        'Independent reviewer can inspect the diff and evidence without relying on worker self-approval.'
+      ]
+    };
   }
 
-  const taskSegment = taskId.replaceAll('-', '');
+  if (role === 'reviewer') {
+    return {
+      label: 'independent reviewer',
+      phase: 'review',
+      boundary: [
+        '你是 independent reviewer；如果你参与过本 task 的 worker implementation，先停止并说明，不能 self-review。',
+        'goal review 使用的 reviewer id 必须不同于该 task 最近一次 worker actor id。',
+        '只根据 diff、tests、contract output 和 evidence 判断，不复述 worker 总结当作结论。',
+        '不做 implementation、不登记 main verification、不声明 release ready。'
+      ],
+      evidenceRequirements: [
+        `Review evidence file: ${evidenceFile}`,
+        `Read worker evidence expected for ${runbookTask.taskId} before giving a verdict.`,
+        'Record findings first, verdict, exact tests checked, and whether the task goes to main-verifier or back to worker.'
+      ],
+      handoffChecklist: [
+        'Verdict is APPROVED or NEEDS_REVISION.',
+        'Review evidence cites the diff, evidence refs, and command results checked.',
+        'No main verification or release gate is registered from this role.'
+      ]
+    };
+  }
+
+  if (role === 'main-verifier') {
+    return {
+      label: 'main verifier',
+      phase: 'main-verification',
+      boundary: [
+        '先确认 reviewer.approved evidence 明确存在；没有 reviewer approval 就停止。',
+        '禁止 self-review：main verification 不能替代 independent reviewer approval。',
+        '只登记 main verification gate；不要登记 worker 或 reviewer event。',
+        '不从 prompt 文本、branch 名、commit message 或 command text 推断完成状态。'
+      ],
+      evidenceRequirements: [
+        `Main verification evidence file: ${evidenceFile}`,
+        'Record reviewer approval evidence checked, main or checked commit, exact validation command results, and remaining blockers.',
+        'Use goal gate main-verification only after the reviewer-approved evidence is explicit.'
+      ],
+      handoffChecklist: [
+        'Reviewer approval evidence is named and checked.',
+        'Main verification result is passed or failed with exact commands.',
+        'Release manager receives only explicit main verification evidence, not branch or filename assumptions.'
+      ]
+    };
+  }
+
+  return {
+    label: 'release manager',
+    phase: 'release-gate',
+    boundary: [
+      '禁止 self-review：release-manager 不能补做缺失的 worker/reviewer/main-verifier approval。',
+      '不执行 prompt，不调用模型，不把 prompt 文本当 evidence。',
+      '只根据明确 event log 和 gate evidence 判断；不从文件名、branch 或命令文本推断 release-ready。'
+    ],
+    evidenceRequirements: [
+      `Release evidence file: ${evidenceFile}`,
+      `Check every task in ${runbook.goalId} has worker evidence, reviewer approval, and main verification before release.ready.`,
+      'Record each release gate command result, gate evidence refs, remaining blockers, and the next gate to register.'
+    ],
+    handoffChecklist: [
+      'Every release gate has explicit evidence before a gate-passed event.',
+      'release.ready is declared only after required task and gate evidence exists.',
+      'No worker, reviewer, or main-verifier evidence is backfilled by the release-manager role.'
+    ]
+  };
+}
+
+function evidenceFileFor({ runbook, taskId, role }) {
+  const goalSegment = evidenceGoalSegment(runbook.goalId);
+
+  if (role === 'release-manager') {
+    return `docs/plans/${goalSegment}-release-evidence-${EVIDENCE_DATE}.md`;
+  }
+
+  const taskSegment = evidenceTaskSegment({
+    goalSegment,
+    taskId
+  });
   const roleSegment = role === 'main-verifier'
     ? 'main-verification'
     : role === 'reviewer'
       ? 'review'
       : 'worker';
 
-  return `docs/plans/v19-${taskSegment}-${roleSegment}-evidence-${EVIDENCE_DATE}.md`;
+  return `docs/plans/${goalSegment}-${taskSegment}-${roleSegment}-evidence-${EVIDENCE_DATE}.md`;
+}
+
+function evidenceGoalSegment(goalId) {
+  const match = /^(v\d+)(?:-|$)/u.exec(goalId);
+
+  return match?.[1] ?? goalId;
+}
+
+function evidenceTaskSegment({ goalSegment, taskId }) {
+  if (goalSegment === 'v19') {
+    return taskId.replaceAll('-', '');
+  }
+
+  return taskId;
 }
 
 function registrationFor({
@@ -862,6 +1406,12 @@ function shellQuote(value) {
   }
 
   return `'${value.replaceAll("'", "'\"'\"'")}'`;
+}
+
+function formatInlineList(values) {
+  return Array.isArray(values) && values.length > 0
+    ? values.join(', ')
+    : 'none recorded';
 }
 
 function safeErrorMessage(error) {

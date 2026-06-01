@@ -72,6 +72,7 @@ describe('v16 Workbench route smoke and server parity', () => {
       const jsResponse = await fetch(`${context.baseUrl}${assetPaths.script}`);
       const cssResponse = await fetch(`${context.baseUrl}${assetPaths.style}`);
       const fallbackResponse = await fetch(`${context.baseUrl}/workbench/runs/${ROUTE_SMOKE_RUN_ID}`);
+      const promptWorkspaceResponse = await fetch(`${context.baseUrl}/workbench/prompts`);
       const missingAssetResponse = await fetch(`${context.baseUrl}/workbench/assets/missing.js`);
       const extensionRouteResponse = await fetch(`${context.baseUrl}/workbench/missing.css`);
       const rootAssetResponse = await fetch(`${context.baseUrl}${assetPaths.script.replace('/workbench', '')}`);
@@ -100,6 +101,8 @@ describe('v16 Workbench route smoke and server parity', () => {
 
       assert.equal(fallbackResponse.status, 200);
       assert.match(await fallbackResponse.text(), /<div id="root"><\/div>/u);
+      assert.equal(promptWorkspaceResponse.status, 200);
+      assert.match(await promptWorkspaceResponse.text(), /<div id="root"><\/div>/u);
 
       assert.equal(missingAssetResponse.status, 404);
       assert.doesNotMatch(await missingAssetResponse.text(), /<div id="root"><\/div>/u);
@@ -353,6 +356,23 @@ describe('v16 Workbench route smoke and server parity', () => {
               errors: []
             });
             assert.equal(payload.goalId, V20_GOAL_ID);
+          }
+        },
+        {
+          path: `/api/goals/${V20_GOAL_ID}/prompt?task=task-1&role=reviewer`,
+          contractName: 'goal-prompt-pack.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalPromptPackContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.goalId, V20_GOAL_ID);
+            assert.equal(payload.prompts[0].taskId, 'task-1');
+            assert.equal(payload.prompts[0].role, 'reviewer');
+            assert.equal(payload.prompts[0].roleGuidance.label, 'independent reviewer');
+            assert.equal(payload.prompts[0].evidenceFile, 'docs/plans/v20-task-1-review-evidence-2026-05-29.md');
+            assert.match(payload.prompts[0].text, /independent reviewer/u);
+            assert.match(payload.prompts[0].text, /Role evidence checklist:/u);
           }
         },
         {
@@ -701,7 +721,10 @@ describe('v16 Workbench route smoke and server parity', () => {
 
         assert.equal(response.status, 400, path);
         assert.equal(envelope.contractName, 'error-envelope.v1');
-        assert.equal(envelope.error.code, 'invalid-goal-ref');
+        assert.equal(
+          envelope.error.code,
+          path.includes('/prompt?') ? 'invalid-goal-prompt-request' : 'invalid-goal-ref'
+        );
         assert.deepEqual(validateErrorEnvelopeContract(envelope), {
           ok: true,
           errors: []
@@ -800,11 +823,11 @@ describe('v16 Workbench route smoke and server parity', () => {
     const forbiddenEntrypoints = [
       {
         label: 'mutation controls',
-        pattern: /<(?:button|form)\b|<a\b[^>]*(?:href|download)\s*=/iu
+        pattern: /<form\b|<a\b[^>]*download\s*=/iu
       },
       {
         label: 'mutation event handlers',
-        pattern: /\bon(?:Click|Submit)\s*=/u
+        pattern: /\bonSubmit\s*=/u
       },
       {
         label: 'raw HTML rendering',
@@ -836,18 +859,34 @@ describe('v16 Workbench route smoke and server parity', () => {
       for (const forbidden of forbiddenEntrypoints) {
         assert.doesNotMatch(source, forbidden.pattern, `${relativePath} exposes ${forbidden.label}`);
       }
+      if (relativePath === 'App.jsx') {
+        assert.match(source, /Preview dry-run plan/u, 'App.jsx exposes the v21 dry-run preview control');
+        assert.match(source, /Confirm event append/u, 'App.jsx exposes the v21 controlled confirm control');
+        assert.match(source, /function workbenchNavHref/u, 'App.jsx keeps anchors scoped to Workbench navigation');
+        assert.match(source, /return `\/workbench\/\$\{query\}#\$\{item\.targetId\}`/u, 'App.jsx section anchors stay under /workbench/');
+        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:handlePreview|handleConfirm)\})/u, 'App.jsx exposes a non-preview/non-confirm click handler');
+      } else {
+        assert.doesNotMatch(source, /\bonClick\s*=/u, `${relativePath} exposes a click handler`);
+      }
       assert.doesNotMatch(source, /\bfetch\s*\(/u, `${relativePath} should use the read-only fetch wrapper only`);
-      assert.doesNotMatch(source, /\bbody\s*:/u, `${relativePath} should not attach request bodies`);
-      assert.doesNotMatch(
-        source,
-        /\bmethod\s*:\s*['"`](?:POST|PUT|PATCH|DELETE|HEAD)['"`]/u,
-        `${relativePath} should not declare non-GET Workbench requests`
-      );
+      if (relativePath === 'api/client.js') {
+        assert.match(source, /confirmGoalEventPlan/u, 'api/client.js exposes the controlled confirm wrapper');
+        assert.match(source, /\bmethod\s*:\s*'POST'[\s\S]*body:\s*JSON\.stringify\(body\)/u);
+        assert.doesNotMatch(source, /\bmethod\s*:\s*['"`](?:PUT|PATCH|DELETE|HEAD)['"`]/u);
+      } else {
+        assert.doesNotMatch(source, /\bbody\s*:/u, `${relativePath} should not attach request bodies`);
+        assert.doesNotMatch(
+          source,
+          /\bmethod\s*:\s*['"`](?:POST|PUT|PATCH|DELETE|HEAD)['"`]/u,
+          `${relativePath} should not declare non-GET Workbench requests`
+        );
+      }
     }
 
     const clientSource = files.find(([relativePath]) => relativePath === 'api/client.js')?.[1] ?? '';
 
     assert.match(clientSource, /fetchImpl\(route\.path,\s*\{\s*method:\s*'GET'/su);
+    assert.match(clientSource, /fetchImpl\(path,\s*\{\s*method:\s*'POST'/su);
   });
 });
 

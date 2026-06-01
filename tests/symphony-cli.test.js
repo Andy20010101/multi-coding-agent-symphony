@@ -3970,6 +3970,7 @@ describe('v8 prompt-driven symphony CLI', () => {
               'commandGroups',
               'createdAt',
               'destructiveWrites',
+              'evidenceArtifactPath',
               'executionMode',
               'externalCalls',
               'intent',
@@ -3997,6 +3998,7 @@ describe('v8 prompt-driven symphony CLI', () => {
             safetyMode: 'dry-run',
             executionMode: 'dry-run',
             modelInvocation: false,
+            evidenceArtifactPath: '<ROOT>/artifacts/evidence-dir',
             hasCapabilities: false,
             artifactRefs: [
               ['context', '<ROOT>/artifacts/missing-context.json'],
@@ -4980,6 +4982,7 @@ function consoleRunProjection(run, normalize) {
     safetyMode: run.safetyMode,
     executionMode: run.executionMode,
     modelInvocation: run.modelInvocation,
+    evidenceArtifactPath: normalize(run.evidenceArtifactPath),
     hasCapabilities: Object.hasOwn(run, 'capabilities'),
     artifactRefs: run.artifactRefs.map((artifact) => [artifact.kind, normalize(artifact.path)]),
     artifactHealth: run.artifactHealth,

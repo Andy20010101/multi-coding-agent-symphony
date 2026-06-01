@@ -1,6 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 adds the implemented/draft `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract family for Goal Runbook + Next Action Control Center work. v19 is not released or tagged by this document. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 adds the implemented/draft `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract family for Goal Runbook + Next Action Control Center work. v21 adds a Workbench dry-run preview route for the existing `goal-update-plan.v1` contract. v23 adds `goal-operation-runs.v1` for Workbench-started goal operation tracking. v25 adds a Workbench-only worker evidence handoff for `v25-controlled-implementation-lane`, derived from the latest confirmed isolated workspace run. v26 adds a read-only Adoption Candidate Panel derived from confirmed isolated workspace runs in `symphony.console-runs`. v27 adds Review Workspace projection and controlled review verdict registration from existing Workbench contracts. v28 adds Release Closeout Workspace projection with release verification checklist rows, a controlled `release.ready` gate registration form, and a copy-only tag evidence prompt derived from closeout/runbook/event contracts. v19, v21, v23, v25, v26, v27, and v28 are not released or tagged by this document. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -8,7 +8,7 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - `contractName` identifies the response shape.
 - Legacy top-level fields remain in product command JSON responses.
 - `artifactRefs` is the only artifact path source used by `symphony console` previews.
-- The console is local and read-only; non-GET HTTP requests return `405`.
+- The console is local and read-only except the v21 controlled goal event confirm route and the v23 Workbench operation registry writes performed by goal event preview/confirm routes; unsupported non-GET HTTP requests return `405`.
 - File previews are capped at 200 KiB and return `truncated: true` when capped.
 - v9 workbench commands are copy-only recommendations. The browser UI does not execute commands or write files.
 - v9 readiness checks may inspect local CLI availability, git state, GitHub auth/CI visibility, and real CLI gate status; they do not invoke models and must not expose token values.
@@ -37,6 +37,9 @@ v8.2 made the product CLI JSON surface stable for scripts and local UI consumers
 - v19 goal status must come from explicit `goal-event-log.v1` evidence. Branch names, filenames, task titles, command text, and path strings are never approval, main verification, or release-ready proof.
 - v19 prompt and command fields are copy-only text. Dry-run and confirm fields must stay explicit and consistent; dry-run fields must not imply writes.
 - v19 release-ready requires an explicit `symphony goal gate --gate release.ready --status declared` confirm flow, which records `release.ready-declared`. Passing `pnpm check`, `pnpm test`, `pnpm workbench:build`, mutation, audit, doctor, or diff commands is command evidence only until the matching release gate events are registered.
+- v21 Workbench dry-run preview uses `GET /api/goals/<goal-id|latest>/event-plan-preview`. It accepts only `command=update`, `command=review`, or `command=gate` plus that command's required goal event fields. It returns `goal-update-plan.v1` with an additive `eventSummary`; it does not run shell commands, accept arbitrary commands, append events, infer approval, or declare release readiness. v21 confirm uses `POST /api/goals/<goal-id|latest>/event-plan-confirm`; it accepts only JSON for the same three commands with the dry-run `planHash`, calls the matching goal command confirm implementation, appends one managed event, and returns refreshed goal progress/events/next-action contracts.
+- v23 Workbench goal operation tracking records operation id, goal id, task id, role, command kind, status, and timestamps in `goal-operation-runs.v1`. Preview writes `dry-run-planned` to the operation registry, not to the goal event journal. Confirm appends the explicit goal event and updates the same operation id to `confirmed`; this registry is not evidence for approval, main verification, or release readiness.
+- v27 Review Workspace is a frontend projection with one controlled write path. It combines active runbook task data, event-backed worker evidence refs, latest run source metadata, changed files, reviewer prompt text, reviewer handoff details, review checklist items, expected reviewer verdict events, and `symphony goal review` verdict registration forms. Reviewer handoff details come from the goal prompt route/command for `role=reviewer`, record the review evidence path, and mark that reviewer id must differ from the latest worker actor. Verdict registration may append only `reviewer.approved` or `reviewer.needs-revision` through the existing dry-run preview and plan-hash confirm endpoint. It does not read evidence bodies, open source workspaces, run shell commands, start agents, or infer approval from source run, file names, branch names, commit messages, or frontend state.
 
 ## `goal-event-log.v1`
 
@@ -73,9 +76,59 @@ Routes:
 ```text
 GET /api/goals/latest/events
 GET /api/goals/<goal-id>/events
+GET /api/goals/latest/operations
+GET /api/goals/<goal-id>/operations
+GET /api/goals/latest/event-plan-preview
+GET /api/goals/<goal-id>/event-plan-preview
+POST /api/goals/latest/event-plan-confirm
+POST /api/goals/<goal-id>/event-plan-confirm
 ```
 
-These routes accept only `GET`. Unknown goals and unsafe path segments return `error-envelope.v1`. Query path, absolute paths, `file://`, `~/`, and encoded traversal do not trigger filesystem reads. Evidence refs are identifiers only; the API, resolver, and Workbench do not read evidence document bodies.
+Preview routes accept only `GET`. Confirm routes accept only `POST` with `application/json`. Unknown goals and unsafe path segments return `error-envelope.v1`. Event plan preview query parameters are limited to the selected command shape; `path`, `confirm`, `planHash`, arbitrary command names, absolute paths, `file://`, `~/`, and encoded traversal do not trigger filesystem reads or shell execution. Confirm bodies are limited to the selected command shape plus `planHash`; unsupported fields are rejected. Evidence refs are identifiers only; the API, resolver, and Workbench do not read evidence document bodies.
+
+## `goal-operation-runs.v1`
+
+`goal-operation-runs.v1` records Workbench-started goal operation runs. It is a run-control registry for tracing a dry-run and confirm pair; it is not the evidence source for task approval, main verification, release gates, or release readiness.
+
+```json
+{
+  "contractName": "goal-operation-runs.v1",
+  "contractVersion": 1,
+  "goalId": "v23-goal-operation-run-console",
+  "storage": "managed-goal-operation-run-registry",
+  "appendOnly": false,
+  "operationCount": 1,
+  "latestOperationId": "op_0000000000000000",
+  "runs": [{
+    "operationId": "op_0000000000000000",
+    "goalId": "v23-goal-operation-run-console",
+    "taskId": "task-1",
+    "role": "worker",
+    "commandKind": "update",
+    "commandName": "symphony goal update",
+    "status": "confirmed",
+    "planHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "eventIds": ["evt_task1_worker_evidence"],
+    "source": "workbench.event-plan-confirm",
+    "timestamps": {
+      "startedAt": "2026-05-31T01:00:00.000Z",
+      "updatedAt": "2026-05-31T01:01:00.000Z",
+      "completedAt": "2026-05-31T01:01:00.000Z"
+    }
+  }]
+}
+```
+
+Routes:
+
+```text
+GET /api/goals/latest/operations
+GET /api/goals/<goal-id>/operations
+```
+
+Successful Workbench preview responses include `operationRun` with `status: "dry-run-planned"`. Successful confirm responses include `operationRun` with `status: "confirmed"` and the appended event id. The operation registry is managed state under `.symphony/goals/operations/` and is not a generic shell runner.
+
+Workbench may poll the scoped operations route for the active goal to keep the operation console output current while a goal operation is in progress or just completed. This polling is a read-only refresh of managed operation and active-goal contracts; it does not execute commands, stream a terminal, append goal events, or infer approval/main-verification/release-ready state.
 
 ## `goal-update-plan.v1`
 
@@ -125,6 +178,50 @@ symphony goal gate --goal v18-goal-event-journal-evidence-recorder --gate releas
 ```
 
 Confirm recalculates the plan hash from the current CLI input and refuses mismatches. Confirm does not run tests, audit, mutation, doctor, package installs, shell commands, model calls, merge, or tag operations. It only appends the explicit event to the managed goal event journal.
+
+Workbench dry-run preview route:
+
+```text
+GET /api/goals/<goal-id|latest>/event-plan-preview?command=update&task=<task-id>&event=<worker-or-blocker-event>&actor=<actor-id>[&evidenceRef=<ref>]
+GET /api/goals/<goal-id|latest>/event-plan-preview?command=review&task=<task-id>&reviewer=<reviewer-id>&verdict=approved|needs-revision&evidenceRef=<ref>
+GET /api/goals/<goal-id|latest>/event-plan-preview?command=gate&gate=main-verification|release.ready|release.<gate>&status=passed|failed|declared&verifier=<verifier-id>&evidenceRef=<ref>[&task=<task-id>]
+```
+
+The route calls the same controlled plan builders used by `symphony goal update`, `symphony goal review`, and `symphony goal gate`. The response keeps `mode: "dry-run"`, `wouldAppend.writesInDryRun: false`, and `confirm.available: true` as copy-only text. The additive `eventSummary` repeats the event that would be appended and the returned `planHash`; it is display data, not completion state. v23 also adds `operationRun`, which identifies the Workbench operation and records the dry-run status without appending a goal event.
+
+Workbench confirm route:
+
+```text
+POST /api/goals/<goal-id|latest>/event-plan-confirm
+```
+
+The JSON body must include `command`, `planHash`, and the same controlled fields used for the matching preview command. Confirm recalculates the plan hash through `confirmGoalUpdate`, `confirmGoalReview`, or `confirmGoalGate`; mismatches are rejected and do not append. A successful response uses `goal-event-confirmation.v1` and includes `operationRun`, refreshed `goal-progress-ledger.v1`, `goal-event-log.v1`, and `goal-next-action.v1` payloads.
+
+Workbench event registration tests cover the operator paths that can change goal evidence:
+
+- `command=update` confirms worker success and failure events, including `worker.self-check-passed` and `worker.self-check-failed`. The refreshed ledger decides the displayed task status from the appended event.
+- `command=review` confirms `approved` and `needs-revision` verdicts. The same route rejects a reviewer id that matches the latest worker id for the task.
+- `command=gate&gate=main-verification` confirms `status=passed` and `status=failed`. Missing task input is rejected before any append.
+- Rejected preview or confirm requests return `error-envelope.v1` and leave the managed journal unchanged.
+
+v23 console API tests cover the operation console paths for the latest goal workflow: successful dry-run preview with `operationRun.status: "dry-run-planned"`, successful plan-hash confirm with `operationRun.status: "confirmed"`, missing `planHash`, unknown goal refs, and unsupported subcommands. Rejected requests do not append goal events, do not create generic operation runs, and do not expose stack traces or local repository paths.
+
+v25 worker evidence handoff appears only when the active goal id is `v25-controlled-implementation-lane` and the latest run is a confirmed isolated implementation run with `evidenceArtifactPath`, `sourceWorkspacePath`, `workspaceWrites: true`, and `mainWorktreeWrites: false`. The form uses a managed artifact evidence ref such as `artifact-ref:artifact:<run-id>:evidence`, shows both source paths as context, and routes preview/confirm through the existing goal update dry-run and plan-hash confirm APIs. It does not run shell commands, merge, tag, or expose reviewer approval from the worker role.
+
+v26 Adoption Candidate Panel lists adoptable source runs from `symphony.console-runs` when a run has `status: "passed"`, `verifierStatus: "passed"`, isolated workspace writes, `mainWorktreeWrites: false`, `sourceWorkspacePath`, implementation source metadata, and worker evidence. Each candidate displays source run id, workspace path, evidence artifact/ref, changed files, and verifier status. The panel does not call `symphony adopt`, freeze a patch, inspect recovery state, confirm adoption, merge, tag, or infer reviewer approval, main verification, or release readiness from file names, branch names, commit messages, or frontend state.
+
+v27 Review Workspace appears inside the active goal Workbench path. It uses the selected active task from `goal-next-action.v1` when present, then displays source run id, source workspace fields, worker evidence ref, changed files, copy-only reviewer prompt, reviewer handoff details, checklist items from runbook/prompt guidance, and the expected `reviewer.approved` / `reviewer.needs-revision` verdict events. The reviewer handoff details come from the goal prompt route/command for `role=reviewer`, include the review evidence path, and expose the reviewer/worker separation requirement. The expected verdict command is display text for terminal dry-run review registration. It is not a browser review approval path and does not replace the controlled `goal review` preview/confirm flow.
+
+The browser may render the returned `eventSummary`, refreshed progress, refreshed events, and refreshed next action. It must not create a local approval, verification, or release-ready state from form selections, evidence filenames, branch names, commit messages, or copied commands.
+
+v27 closes the review/revision loop through `goal-next-action.v1` and `goal-prompt-pack.v1`:
+
+- `reviewer.approved` makes the next task action `role: "main-verifier"` with `phase: "main-verification"`.
+- `reviewer.needs-revision` makes the next task action `role: "worker"` with `phase: "revision"` and lets `goal prompt --next` render the revision prompt from the failure event, evidence refs, failed commands, latest run changed files, and runbook acceptance.
+- `main.verification-failed` follows the same revision prompt path, with failed commands from the gate event or latest failed run.
+- A newer revision `worker.evidence-recorded` event supersedes the earlier failed review or failed main verification for next-action routing. The task returns to `role: "reviewer"` for a second independent review; prior approval, branch names, file names, commit messages, and prompt text do not move it to main verification.
+
+The loop does not add a shell runner, permission framework, goal framework, artifact framework, automatic merge, automatic tag, or release-ready inference.
 
 ## `goal-runbook.v1`
 
@@ -309,6 +406,7 @@ CLI and route boundary:
 
 - `symphony goal closeout --goal <goal-id> --json|--markdown` reports gaps. It does not run tests, audit, mutation, doctor, or Workbench build, and it does not write release evidence files.
 - `GET /api/goals/latest/closeout` and `GET /api/goals/<goal-id>/closeout` return `goal-closeout-report.v1` when a managed runbook exists.
+- v28 Workbench derives `ReleaseCloseoutWorkspaceModel` from `goal-closeout-report.v1`, runbook, ledger, event log, and latest run identifiers. The model can show release verification checklist rows, copy-only release gate registration commands, a `release.ready` dry-run/confirm form, and a tag evidence prompt. It does not execute checklist commands, create evidence files, merge, tag, or infer release-ready from command text.
 - `summary.releaseReady` can be true only after task worker evidence, reviewer approval, main verification, all required release gate events, and the explicit `release.ready-declared` event are present. A passed command line by itself is not release-ready evidence.
 
 ## `goal-progress-ledger.v1`

@@ -64,8 +64,29 @@ import {
 } from './goal-closeout-report.js';
 import {
   GoalRunbookContextError,
-  loadGoalRunbookContext
+  loadGoalRunbookContext,
+  resolveGoalRunbookGoalId
 } from './goal-runbook-context.js';
+import {
+  GoalUpdateError,
+  buildGoalUpdatePlan,
+  confirmGoalUpdate
+} from './goal-update.js';
+import {
+  GoalReviewError,
+  buildGoalReviewPlan,
+  confirmGoalReview
+} from './goal-review.js';
+import {
+  GoalGateError,
+  buildGoalGatePlan,
+  confirmGoalGate
+} from './goal-gate.js';
+import {
+  GoalOperationRunRegistryError,
+  readGoalOperationRuns,
+  recordGoalOperationRun
+} from './goal-operation-run-registry.js';
 import {
   buildStageCommandSummary
 } from './stage.js';
@@ -100,6 +121,7 @@ const SAFE_PREVIEW_TEXT_MIME_TYPES = Object.freeze([
   'text/x-diff',
   'text/x-patch'
 ]);
+const GOAL_EVENT_CONFIRM_MAX_BODY_BYTES = 32 * 1024;
 const SAFE_PREVIEW_ARTIFACT_KIND_BY_REGISTERED_KIND = Object.freeze({
   context: 'project-context',
   summary: 'intake-summary',
@@ -769,6 +791,31 @@ export function createSymphonyConsoleServer({
     const method = request.method ?? 'UNKNOWN';
 
     try {
+      if (method === 'POST') {
+        const confirmRequest = parseGoalEventPlanConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (confirmRequest !== null) {
+          await writeGoalEventPlanConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            request: confirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeApiErrorResponse(response, {
+          status: 405,
+          code: 'method-not-allowed',
+          message: 'Console API is read-only except controlled goal event plan confirm.',
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
       if (method !== 'GET') {
         writeApiErrorResponse(response, {
           status: 405,
@@ -850,6 +897,32 @@ export function createSymphonyConsoleServer({
           response,
           stateDir,
           request: goalEventsRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const goalOperationsRequest = parseGoalOperationsRequestPath(url.pathname, url.searchParams);
+
+      if (goalOperationsRequest !== null) {
+        await writeGoalOperationsResponse({
+          response,
+          stateDir,
+          request: goalOperationsRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const goalEventPlanPreviewRequest = parseGoalEventPlanPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (goalEventPlanPreviewRequest !== null) {
+        await writeGoalEventPlanPreviewResponse({
+          response,
+          stateDir,
+          request: goalEventPlanPreviewRequest,
           route: url.pathname,
           method
         });
@@ -1183,6 +1256,262 @@ async function writeGoalEventsResponse({ response, stateDir, request, route, met
   writeJsonResponse(response, 200, eventLog);
 }
 
+async function writeGoalOperationsResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-goal-ref',
+      message: 'Goal operation runs ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: 'invalid-route-segment'
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal operation run registry was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, await readGoalOperationRuns({
+      stateDir,
+      goalId: resolvedGoalId
+    }));
+  } catch (error) {
+    if (error instanceof GoalOperationRunRegistryError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeGoalEventPlanPreviewResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-goal-ref',
+      message: 'Goal event plan preview ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for event plan preview was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const plan = await buildGoalEventPlanPreview({
+      stateDir,
+      goalId: resolvedGoalId,
+      searchParams: request.searchParams
+    });
+    const operationRun = await recordGoalOperationRunFromPlan({
+      stateDir,
+      goalId: resolvedGoalId,
+      plan,
+      status: 'dry-run-planned',
+      source: 'workbench.event-plan-preview'
+    });
+
+    writeJsonResponse(response, 200, addGoalEventPlanPreviewSummary(plan, operationRun));
+  } catch (error) {
+    if (
+      error instanceof GoalUpdateError ||
+      error instanceof GoalReviewError ||
+      error instanceof GoalGateError ||
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeGoalEventPlanConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-goal-ref',
+      message: 'Goal event plan confirm ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for event plan confirm was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const body = await readGoalEventConfirmRequestBody(requestMessage);
+    const result = await confirmGoalEventPlan({
+      stateDir,
+      goalId: resolvedGoalId,
+      body
+    });
+    const operationRun = await recordGoalOperationRunFromConfirmResult({
+      stateDir,
+      goalId: resolvedGoalId,
+      result
+    });
+
+    writeJsonResponse(response, 200, await buildGoalEventPlanConfirmResponse({
+      stateDir,
+      goalId: resolvedGoalId,
+      result,
+      operationRun
+    }));
+  } catch (error) {
+    if (
+      error instanceof GoalUpdateError ||
+      error instanceof GoalReviewError ||
+      error instanceof GoalGateError ||
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function writeGoalRunbookResponse({ response, stateDir, request, route, method }) {
   if (request.kind === 'invalid') {
     writeInvalidGoalRunbookControlResponse({ response, route, method });
@@ -1239,7 +1568,12 @@ async function writeGoalNextActionResponse({ response, stateDir, request, route,
 
 async function writeGoalPromptPackResponse({ response, stateDir, request, route, method }) {
   if (request.kind === 'invalid') {
-    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    if (request.reason === 'invalid-route-segment') {
+      writeInvalidGoalRunbookControlResponse({ response, route, method });
+      return;
+    }
+
+    writeInvalidGoalPromptPackRequestResponse({ response, route, method, reason: request.reason });
     return;
   }
 
@@ -1247,7 +1581,9 @@ async function writeGoalPromptPackResponse({ response, stateDir, request, route,
     writeJsonResponse(response, 200, await buildGoalPromptPack({
       stateDir,
       goalId: request.goalId,
-      next: true,
+      taskId: request.taskId,
+      role: request.role,
+      next: request.next,
       promptFormat: 'markdown'
     }));
   } catch (error) {
@@ -1304,6 +1640,19 @@ function writeInvalidGoalRunbookControlResponse({ response, route, method }) {
     method,
     safeDetails: {
       reason: 'invalid-route-segment'
+    }
+  });
+}
+
+function writeInvalidGoalPromptPackRequestResponse({ response, route, method, reason = 'invalid-route-segment' }) {
+  writeApiErrorResponse(response, {
+    status: 400,
+    code: 'invalid-goal-prompt-request',
+    message: 'Goal prompt request is invalid.',
+    route,
+    method,
+    safeDetails: {
+      reason
     }
   });
 }
@@ -1946,6 +2295,117 @@ function parseGoalEventsRequestPath(pathname, searchParams = new URLSearchParams
   };
 }
 
+function parseGoalOperationsRequestPath(pathname, searchParams = new URLSearchParams()) {
+  if (hasSearchParams(searchParams)) {
+    if (pathname === '/api/goals/latest/operations' || /^\/api\/goals\/[^/]+\/operations$/u.test(pathname)) {
+      return {
+        kind: 'invalid',
+        goalId: null
+      };
+    }
+
+    return null;
+  }
+
+  if (pathname === '/api/goals/latest/operations') {
+    return {
+      kind: 'goal-operations',
+      goalId: 'latest'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/operations$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null
+    };
+  }
+
+  return {
+    kind: 'goal-operations',
+    goalId: decoded.value
+  };
+}
+
+function parseGoalEventPlanPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/event-plan-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'goal-event-plan-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/event-plan-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'goal-event-plan-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
+function parseGoalEventPlanConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/event-plan-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'goal-event-plan-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/event-plan-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'goal-event-plan-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
 function parseGoalRunbookRequestPath(pathname, searchParams = new URLSearchParams()) {
   return parseGoalRunbookControlRequestPath({
     pathname,
@@ -1963,11 +2423,65 @@ function parseGoalNextActionRequestPath(pathname, searchParams = new URLSearchPa
 }
 
 function parseGoalPromptPackRequestPath(pathname, searchParams = new URLSearchParams()) {
-  return parseGoalRunbookControlRequestPath({
-    pathname,
-    searchParams,
-    suffix: 'prompt'
-  });
+  const latestPath = '/api/goals/latest/prompt';
+  const explicitPattern = /^\/api\/goals\/([^/]+)\/prompt$/u;
+  const routeMatches = pathname === latestPath || explicitPattern.test(pathname);
+
+  if (!routeMatches) {
+    return null;
+  }
+
+  const goalId = pathname === latestPath
+    ? 'latest'
+    : safeGoalIdFromPromptPath(pathname, explicitPattern);
+
+  if (goalId === null) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  if (!hasSearchParams(searchParams)) {
+    return {
+      kind: 'goal-prompt-pack',
+      goalId,
+      next: true,
+      taskId: undefined,
+      role: undefined
+    };
+  }
+
+  const unsupported = Array.from(searchParams.keys())
+    .filter((key) => key !== 'task' && key !== 'role');
+
+  if (unsupported.length > 0) {
+    return {
+      kind: 'invalid',
+      goalId,
+      reason: 'unsupported-query-parameter'
+    };
+  }
+
+  const taskId = singlePromptPackSearchParam(searchParams, 'task');
+  const role = singlePromptPackSearchParam(searchParams, 'role');
+
+  if (taskId === null || role === null) {
+    return {
+      kind: 'invalid',
+      goalId,
+      reason: 'missing-or-repeated-query-parameter'
+    };
+  }
+
+  return {
+    kind: 'goal-prompt-pack',
+    goalId,
+    next: false,
+    taskId,
+    role
+  };
 }
 
 function parseGoalCloseoutRequestPath(pathname, searchParams = new URLSearchParams()) {
@@ -2021,6 +2535,34 @@ function parseGoalRunbookControlRequestPath({ pathname, searchParams, suffix }) 
   };
 }
 
+function safeGoalIdFromPromptPath(pathname, explicitPattern) {
+  const match = explicitPattern.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return null;
+  }
+
+  return decoded.value;
+}
+
+function singlePromptPackSearchParam(searchParams, key) {
+  const values = searchParams.getAll(key);
+
+  if (values.length !== 1) {
+    return null;
+  }
+
+  const trimmed = values[0].trim();
+
+  return trimmed === '' ? null : trimmed;
+}
+
 async function resolveGoalEventsGoal({ stateDir, goalId }) {
   const resolvedGoalId = goalId === undefined || goalId === null || goalId === 'latest'
     ? V18_GOAL_EVENT_JOURNAL_GOAL_ID
@@ -2053,6 +2595,760 @@ async function resolveGoalEventsGoal({ stateDir, goalId }) {
     goalTitle: template.goalTitle,
     baseline: template.baseline
   };
+}
+
+async function resolveGoalEventPlanPreviewGoalId({ stateDir, goalId }) {
+  if (goalId === 'latest') {
+    return await resolveGoalRunbookGoalId({
+      stateDir,
+      goalId: 'latest'
+    });
+  }
+
+  const managedContext = await loadGoalRunbookContext({
+    stateDir,
+    goalId,
+    allowControlledFixtureFallback: false
+  });
+
+  if (managedContext !== null) {
+    return managedContext.runbook.goalId;
+  }
+
+  return getGoalProgressTemplate(goalId) === null ? null : goalId;
+}
+
+class GoalEventPlanPreviewError extends Error {
+  constructor(code, message, safeDetails) {
+    super(message);
+    this.name = 'GoalEventPlanPreviewError';
+    this.code = code;
+
+    if (safeDetails !== undefined) {
+      this.safeDetails = safeDetails;
+    }
+  }
+}
+
+async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
+  const command = requiredSingleSearchParam(searchParams, 'command');
+
+  switch (command) {
+    case 'update':
+      assertOnlySearchParams(searchParams, [
+        'command',
+        'task',
+        'event',
+        'actor',
+        'evidenceRef',
+        'statement',
+        'branch',
+        'commit',
+        'blockerId',
+        'blockerReason',
+        'blockerSeverity'
+      ]);
+
+      return buildGoalUpdatePlan({
+        stateDir,
+        goalId,
+        taskId: requiredSingleSearchParam(searchParams, 'task'),
+        eventType: requiredSingleSearchParam(searchParams, 'event'),
+        actorId: requiredSingleSearchParam(searchParams, 'actor'),
+        evidenceRefs: searchParams.getAll('evidenceRef'),
+        statement: optionalSingleSearchParam(searchParams, 'statement'),
+        branch: optionalSingleSearchParam(searchParams, 'branch'),
+        commit: optionalSingleSearchParam(searchParams, 'commit'),
+        blocker: buildPreviewBlocker(searchParams)
+      });
+    case 'review':
+      assertOnlySearchParams(searchParams, [
+        'command',
+        'task',
+        'reviewer',
+        'verdict',
+        'evidenceRef',
+        'failedCommand',
+        'statement',
+        'branch',
+        'commit'
+      ]);
+
+      return await buildGoalReviewPlan({
+        stateDir,
+        goalId,
+        taskId: requiredSingleSearchParam(searchParams, 'task'),
+        reviewerId: requiredSingleSearchParam(searchParams, 'reviewer'),
+        verdict: requiredSingleSearchParam(searchParams, 'verdict'),
+        evidenceRefs: searchParams.getAll('evidenceRef'),
+        failedCommands: searchParams.getAll('failedCommand'),
+        statement: optionalSingleSearchParam(searchParams, 'statement'),
+        branch: optionalSingleSearchParam(searchParams, 'branch'),
+        commit: optionalSingleSearchParam(searchParams, 'commit')
+      });
+    case 'gate':
+      assertOnlySearchParams(searchParams, [
+        'command',
+        'task',
+        'gate',
+        'status',
+        'verifier',
+        'evidenceRef',
+        'failedCommand',
+        'statement',
+        'branch',
+        'commit'
+      ]);
+
+      return buildGoalGatePlan({
+        stateDir,
+        goalId,
+        taskId: optionalSingleSearchParam(searchParams, 'task'),
+        gateName: requiredSingleSearchParam(searchParams, 'gate'),
+        status: requiredSingleSearchParam(searchParams, 'status'),
+        verifierId: requiredSingleSearchParam(searchParams, 'verifier'),
+        evidenceRefs: searchParams.getAll('evidenceRef'),
+        failedCommands: searchParams.getAll('failedCommand'),
+        statement: optionalSingleSearchParam(searchParams, 'statement'),
+        branch: optionalSingleSearchParam(searchParams, 'branch'),
+        commit: optionalSingleSearchParam(searchParams, 'commit')
+      });
+    default:
+      throw new GoalEventPlanPreviewError(
+        'unsupported-goal-preview-command',
+        'Goal event plan preview supports only update, review, or gate dry-runs.',
+        { command }
+      );
+  }
+}
+
+async function readGoalEventConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-confirm-request',
+      'Goal event plan confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  let body;
+
+  try {
+    body = JSON.parse(content);
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-confirm-request',
+      'Goal event plan confirm requires a valid JSON object.',
+      { reason: 'invalid-json' }
+    );
+  }
+
+  if (!isPlainObject(body)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-confirm-request',
+      'Goal event plan confirm requires a valid JSON object.',
+      { reason: 'invalid-json-body' }
+    );
+  }
+
+  return body;
+}
+
+async function confirmGoalEventPlan({ stateDir, goalId, body }) {
+  const command = requiredBodyString(body, 'command');
+
+  switch (command) {
+    case 'update':
+      assertOnlyBodyKeys(body, [
+        'command',
+        'planHash',
+        'task',
+        'event',
+        'actor',
+        'evidenceRef',
+        'evidenceRefs',
+        'statement',
+        'branch',
+        'commit',
+        'blockerId',
+        'blockerReason',
+        'blockerSeverity'
+      ]);
+
+      const updatePlanHash = requiredBodyString(body, 'planHash');
+
+      return {
+        ...await confirmGoalUpdate({
+          stateDir,
+          goalId,
+          taskId: requiredBodyString(body, 'task'),
+          eventType: requiredBodyString(body, 'event'),
+          actorId: requiredBodyString(body, 'actor'),
+          evidenceRefs: bodyEvidenceRefs(body),
+          statement: optionalBodyString(body, 'statement'),
+          branch: optionalBodyString(body, 'branch'),
+          commit: optionalBodyString(body, 'commit'),
+          blocker: buildConfirmBlocker(body),
+          planHash: updatePlanHash
+        }),
+        planHash: updatePlanHash
+      };
+    case 'review':
+      assertOnlyBodyKeys(body, [
+        'command',
+        'planHash',
+        'task',
+        'reviewer',
+        'verdict',
+        'evidenceRef',
+        'evidenceRefs',
+        'failedCommand',
+        'failedCommands',
+        'statement',
+        'branch',
+        'commit'
+      ]);
+
+      const reviewPlanHash = requiredBodyString(body, 'planHash');
+
+      return {
+        ...await confirmGoalReview({
+          stateDir,
+          goalId,
+          taskId: requiredBodyString(body, 'task'),
+          reviewerId: requiredBodyString(body, 'reviewer'),
+          verdict: requiredBodyString(body, 'verdict'),
+          evidenceRefs: bodyEvidenceRefs(body),
+          failedCommands: bodyFailedCommands(body),
+          statement: optionalBodyString(body, 'statement'),
+          branch: optionalBodyString(body, 'branch'),
+          commit: optionalBodyString(body, 'commit'),
+          planHash: reviewPlanHash
+        }),
+        planHash: reviewPlanHash
+      };
+    case 'gate':
+      assertOnlyBodyKeys(body, [
+        'command',
+        'planHash',
+        'task',
+        'gate',
+        'status',
+        'verifier',
+        'evidenceRef',
+        'evidenceRefs',
+        'failedCommand',
+        'failedCommands',
+        'statement',
+        'branch',
+        'commit'
+      ]);
+
+      const gatePlanHash = requiredBodyString(body, 'planHash');
+
+      return {
+        ...await confirmGoalGate({
+          stateDir,
+          goalId,
+          taskId: optionalBodyString(body, 'task'),
+          gateName: requiredBodyString(body, 'gate'),
+          status: requiredBodyString(body, 'status'),
+          verifierId: requiredBodyString(body, 'verifier'),
+          evidenceRefs: bodyEvidenceRefs(body),
+          failedCommands: bodyFailedCommands(body),
+          statement: optionalBodyString(body, 'statement'),
+          branch: optionalBodyString(body, 'branch'),
+          commit: optionalBodyString(body, 'commit'),
+          planHash: gatePlanHash
+        }),
+        planHash: gatePlanHash
+      };
+    default:
+      throw new GoalEventPlanPreviewError(
+        'unsupported-goal-confirm-command',
+        'Goal event plan confirm supports only update, review, or gate confirms.',
+        { command }
+      );
+  }
+}
+
+async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result, operationRun }) {
+  const [progress, events, nextAction] = await Promise.all([
+    buildGoalProgressLedger({
+      stateDir,
+      goalId
+    }),
+    buildRefreshedGoalEventLog({
+      stateDir,
+      goalId
+    }),
+    buildGoalNextAction({
+      stateDir,
+      goalId
+    })
+  ]);
+
+  return {
+    contractName: 'goal-event-confirmation.v1',
+    contractVersion: 1,
+    goalId,
+    mode: 'confirm',
+    status: result.status,
+    written: result.written,
+    appendOnly: result.appendOnly,
+    planHash: result.planHash,
+    command: commandKeyFromConfirmResult(result),
+    operationRun,
+    eventSummary: stripUndefined({
+      eventId: result.event?.eventId,
+      sequence: result.event?.sequence,
+      eventType: result.eventType,
+      taskId: result.taskId ?? null,
+      actorRole: result.event?.actor?.role,
+      actorId: result.event?.actor?.id,
+      evidenceRefs: result.event?.evidenceRefs ?? [],
+      verdict: result.event?.review?.verdict,
+      gate: result.gate,
+      gateStatus: result.gateStatus,
+      failedCommands: Array.isArray(result.event?.metadata?.failedCommands)
+        ? [...result.event.metadata.failedCommands]
+        : undefined,
+      eventHash: result.event?.eventHash
+    }),
+    refreshed: {
+      progress,
+      events,
+      nextAction
+    },
+    confirmEndpoint: {
+      constrainedCommands: ['update', 'review', 'gate'],
+      genericShellRunner: false,
+      confirmUsesPlanHash: true,
+      refreshes: [
+        'goal-progress-ledger.v1',
+        'goal-event-log.v1',
+        'goal-next-action.v1'
+      ]
+    },
+    safety: {
+      confirmWritesAppendOnly: true,
+      genericShellRunner: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      arbitraryPathReadAvailable: false
+    }
+  };
+}
+
+async function recordGoalOperationRunFromPlan({
+  stateDir,
+  goalId,
+  plan,
+  status,
+  source
+}) {
+  const proposedEvent = plan.proposedEvents[0] ?? {};
+
+  return await recordGoalOperationRun({
+    stateDir,
+    goalId,
+    taskId: proposedEvent.taskId ?? null,
+    role: plan.actor.role,
+    commandKind: commandKeyFromPlan(plan),
+    commandName: plan.command.name,
+    status,
+    planHash: plan.planHash,
+    eventIds: [],
+    source
+  });
+}
+
+async function recordGoalOperationRunFromConfirmResult({
+  stateDir,
+  goalId,
+  result
+}) {
+  return await recordGoalOperationRun({
+    stateDir,
+    goalId,
+    taskId: result.taskId ?? null,
+    role: result.event.actor.role,
+    commandKind: commandKeyFromConfirmResult(result),
+    commandName: result.event.metadata?.sourceCommand,
+    status: 'confirmed',
+    planHash: result.planHash,
+    eventIds: [result.event.eventId],
+    source: 'workbench.event-plan-confirm'
+  });
+}
+
+async function buildRefreshedGoalEventLog({ stateDir, goalId }) {
+  const goal = await resolveGoalEventsGoal({
+    stateDir,
+    goalId
+  });
+
+  if (goal === null) {
+    return null;
+  }
+
+  return await readGoalEventJournal({
+    stateDir,
+    goalId: goal.goalId,
+    goalTitle: goal.goalTitle,
+    baseline: goal.baseline
+  });
+}
+
+function commandKeyFromConfirmResult(result) {
+  if (typeof result.verdict === 'string') {
+    return 'review';
+  }
+
+  if (typeof result.gate === 'string') {
+    return 'gate';
+  }
+
+  return 'update';
+}
+
+function commandKeyFromPlan(plan) {
+  if (plan.command.name === 'symphony goal review') {
+    return 'review';
+  }
+
+  if (plan.command.name === 'symphony goal gate') {
+    return 'gate';
+  }
+
+  return 'update';
+}
+
+function assertOnlyBodyKeys(body, allowedKeys) {
+  const allowed = new Set(allowedKeys);
+  const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-confirm-request',
+      'Goal event plan confirm received unsupported fields.',
+      { field: unsupported[0] }
+    );
+  }
+}
+
+function requiredBodyString(body, key) {
+  const value = optionalBodyString(body, key);
+
+  if (value === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-confirm-request',
+      `Goal event plan confirm requires ${key}.`,
+      { field: key }
+    );
+  }
+
+  return value;
+}
+
+function optionalBodyString(body, key) {
+  const value = body[key];
+
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-confirm-request',
+      'Goal event plan confirm fields must be strings.',
+      { field: key }
+    );
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed === '') {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-confirm-request',
+      'Goal event plan confirm fields must be non-empty.',
+      { field: key }
+    );
+  }
+
+  return trimmed;
+}
+
+function bodyEvidenceRefs(body) {
+  const refs = [];
+
+  if (body.evidenceRef !== undefined) {
+    if (typeof body.evidenceRef === 'string') {
+      refs.push(body.evidenceRef);
+    } else if (Array.isArray(body.evidenceRef)) {
+      refs.push(...body.evidenceRef);
+    } else {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm evidenceRef must be a string or string array.',
+        { field: 'evidenceRef' }
+      );
+    }
+  }
+
+  if (body.evidenceRefs !== undefined) {
+    if (!Array.isArray(body.evidenceRefs)) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm evidenceRefs must be a string array.',
+        { field: 'evidenceRefs' }
+      );
+    }
+
+    refs.push(...body.evidenceRefs);
+  }
+
+  return refs.map((entry, index) => {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm evidence refs must be non-empty strings.',
+        { field: `evidenceRef[${index}]` }
+      );
+    }
+
+    return entry.trim();
+  });
+}
+
+function bodyFailedCommands(body) {
+  const commands = [];
+
+  if (body.failedCommand !== undefined) {
+    if (typeof body.failedCommand === 'string') {
+      commands.push(body.failedCommand);
+    } else if (Array.isArray(body.failedCommand)) {
+      commands.push(...body.failedCommand);
+    } else {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm failedCommand must be a string or string array.',
+        { field: 'failedCommand' }
+      );
+    }
+  }
+
+  if (body.failedCommands !== undefined) {
+    if (!Array.isArray(body.failedCommands)) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm failedCommands must be a string array.',
+        { field: 'failedCommands' }
+      );
+    }
+
+    commands.push(...body.failedCommands);
+  }
+
+  const normalized = [];
+
+  commands.forEach((entry, index) => {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm failed commands must be non-empty strings.',
+        { field: `failedCommand[${index}]` }
+      );
+    }
+
+    const command = entry.trim();
+
+    if (!normalized.includes(command)) {
+      normalized.push(command);
+    }
+  });
+
+  return normalized;
+}
+
+function buildConfirmBlocker(body) {
+  const blockerId = optionalBodyString(body, 'blockerId');
+  const reason = optionalBodyString(body, 'blockerReason');
+  const severity = optionalBodyString(body, 'blockerSeverity');
+
+  if (blockerId === undefined && reason === undefined && severity === undefined) {
+    return undefined;
+  }
+
+  return stripUndefined({
+    blockerId,
+    reason,
+    severity
+  });
+}
+
+function addGoalEventPlanPreviewSummary(plan, operationRun) {
+  const proposedEvent = plan.proposedEvents[0] ?? {};
+
+  return {
+    ...plan,
+    operationRun,
+    eventSummary: stripUndefined({
+      commandName: plan.command.name,
+      commandIntent: plan.command.intent,
+      eventType: proposedEvent.eventType,
+      taskId: proposedEvent.taskId ?? null,
+      phase: proposedEvent.phase,
+      actorRole: plan.actor.role,
+      actorId: plan.actor.id,
+      evidenceRefs: Array.isArray(proposedEvent.evidenceRefs)
+        ? proposedEvent.evidenceRefs.map((entry) => stripUndefined({
+            kind: entry.kind,
+            ref: entry.ref,
+            label: entry.label
+          }))
+        : [],
+      statement: proposedEvent.statement ?? null,
+      verdict: proposedEvent.review?.verdict,
+      gate: proposedEvent.gate?.name,
+      gateStatus: proposedEvent.gate?.status,
+      failedCommands: Array.isArray(proposedEvent.metadata?.failedCommands)
+        ? [...proposedEvent.metadata.failedCommands]
+        : undefined,
+      branch: proposedEvent.branch ?? null,
+      commit: proposedEvent.commit ?? null,
+      blocker: proposedEvent.blocker,
+      planHash: plan.planHash,
+      wouldAppendTo: plan.wouldAppend.target,
+      writesInDryRun: plan.wouldAppend.writesInDryRun
+    }),
+    previewEndpoint: {
+      dryRunOnly: true,
+      constrainedCommands: ['update', 'review', 'gate'],
+      genericShellRunner: false,
+      confirmAvailable: false
+    }
+  };
+}
+
+function assertOnlySearchParams(searchParams, allowedKeys) {
+  const allowed = new Set(allowedKeys);
+  const unsupported = Array.from(searchParams.keys()).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      'Goal event plan preview received unsupported query parameters.',
+      { parameter: unsupported[0] }
+    );
+  }
+
+  for (const [key, values] of groupSearchParamValues(searchParams)) {
+    if (key !== 'evidenceRef' && values.length > 1) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-preview-request',
+        'Goal event plan preview accepts repeated values only for evidenceRef.',
+        { parameter: key }
+      );
+    }
+  }
+
+  for (const blockedKey of ['confirm', 'planHash', 'plan-hash', 'dryRun', 'dry-run']) {
+    if (searchParams.has(blockedKey)) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-preview-request',
+        'Goal event plan preview is dry-run only and does not accept confirm or plan hash parameters.',
+        { parameter: blockedKey }
+      );
+    }
+  }
+}
+
+function requiredSingleSearchParam(searchParams, key) {
+  const value = optionalSingleSearchParam(searchParams, key);
+
+  if (value === undefined) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      `Goal event plan preview requires ${key}.`,
+      { parameter: key }
+    );
+  }
+
+  return value;
+}
+
+function optionalSingleSearchParam(searchParams, key) {
+  const values = searchParams.getAll(key);
+
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  if (values.length > 1) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      'Goal event plan preview received repeated single-value query parameters.',
+      { parameter: key }
+    );
+  }
+
+  const trimmed = values[0].trim();
+
+  if (trimmed === '') {
+    throw new GoalEventPlanPreviewError(
+      'invalid-goal-preview-request',
+      'Goal event plan preview query parameters must be non-empty.',
+      { parameter: key }
+    );
+  }
+
+  return trimmed;
+}
+
+function groupSearchParamValues(searchParams) {
+  const groups = new Map();
+
+  for (const [key, value] of searchParams.entries()) {
+    groups.set(key, [...(groups.get(key) ?? []), value]);
+  }
+
+  return groups.entries();
+}
+
+function buildPreviewBlocker(searchParams) {
+  const blockerId = optionalSingleSearchParam(searchParams, 'blockerId');
+  const reason = optionalSingleSearchParam(searchParams, 'blockerReason');
+  const severity = optionalSingleSearchParam(searchParams, 'blockerSeverity');
+
+  if (blockerId === undefined && reason === undefined && severity === undefined) {
+    return undefined;
+  }
+
+  return stripUndefined({
+    blockerId,
+    reason,
+    severity
+  });
 }
 
 function isUnsafeGoalRouteSegment(value) {
@@ -4176,6 +5472,10 @@ function stripUndefined(value) {
 
 function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function buildDiagnosticsCommands({ snapshot, readiness }) {

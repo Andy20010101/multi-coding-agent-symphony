@@ -1,18 +1,29 @@
 import {
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
+  GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+  GOAL_RUNBOOK_ROUTE_TEMPLATE,
+  GOAL_OPERATIONS_ROUTE_TEMPLATE,
   READONLY_API_ROUTES,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   GOAL_EVENTS_ROUTE_TEMPLATE,
   GOAL_PROGRESS_ROUTE_TEMPLATE,
+  GOAL_CLOSEOUT_ROUTE_TEMPLATE,
+  GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
   createGoalEventsRoute,
+  createGoalOperationsRoute,
   createGoalProgressRoute,
+  createGoalReviewerPromptRoute,
   createRunTimelineRoute,
   createSafeArtifactPreviewRoutes,
+  projectSubagentHandoffBoard,
   projectWorkbenchContracts
 } from './contracts.js';
 
 const READONLY_ERROR_MESSAGE = '读取失败 / contract 未暴露 / 不可用';
+const GOAL_PLAN_PREVIEW_ERROR_MESSAGE = 'dry-run plan preview 未返回可用 contract';
+const GOAL_PLAN_CONFIRM_ERROR_MESSAGE = 'event confirm 未返回可用 contract';
+const PROMPT_WORKSPACE_ERROR_MESSAGE = 'prompt workspace route 未返回可用 contract';
 
 export async function fetchReadonlyRoute(route, {
   fetchImpl = globalThis.fetch
@@ -93,6 +104,8 @@ export async function fetchWorkbenchContracts(options = {}) {
   const activeGoalId = activeGoalIdFromResults(results);
   const activeGoalProgressRoute = createGoalProgressRoute(activeGoalId);
   const activeGoalEventsRoute = createGoalEventsRoute(activeGoalId);
+  const activeGoalOperationsRoute = createGoalOperationsRoute(activeGoalId);
+  const goalReviewerPromptRoute = createGoalReviewerPromptRoute(activeGoalId, results.goalNextAction?.data);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
 
@@ -125,6 +138,28 @@ export async function fetchWorkbenchContracts(options = {}) {
       })
     : await fetchReadonlyRoute(activeGoalEventsRoute, options);
 
+  results.activeGoalOperations = activeGoalOperationsRoute === null
+    ? readonlySkipped({
+        route: {
+          ...GOAL_OPERATIONS_ROUTE_TEMPLATE,
+          id: 'activeGoalOperations',
+          label: 'Active Goal Operations'
+        },
+        message: 'active goal operations 未暴露 / 不可用'
+      })
+    : await fetchReadonlyRoute(activeGoalOperationsRoute, options);
+
+  results.goalReviewerPromptPack = goalReviewerPromptRoute === null
+    ? readonlySkipped({
+        route: {
+          ...GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+          id: 'goalReviewerPromptPack',
+          label: 'Goal Reviewer Prompt Pack'
+        },
+        message: 'reviewer goal prompt 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(goalReviewerPromptRoute, options);
+
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({
         route: RUN_TIMELINE_ROUTE_TEMPLATE,
@@ -139,6 +174,273 @@ export async function fetchWorkbenchContracts(options = {}) {
   );
 
   return projectWorkbenchContracts(results);
+}
+
+export async function fetchGoalEventPlanPreview(path, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json'
+      }
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'goal-update-plan.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: GOAL_PLAN_PREVIEW_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmGoalEventPlan(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'goal-event-confirmation.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: GOAL_PLAN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function fetchPromptWorkspaceRunbook(goalId, options = {}) {
+  const route = createGoalWorkspaceRoute({
+    template: GOAL_RUNBOOK_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'runbook'
+  });
+
+  if (route === null) {
+    return readonlyError({
+      route: {
+        ...GOAL_RUNBOOK_ROUTE_TEMPLATE,
+        path: GOAL_RUNBOOK_ROUTE_TEMPLATE.path
+      },
+      message: PROMPT_WORKSPACE_ERROR_MESSAGE
+    });
+  }
+
+  return fetchReadonlyRoute(route, options);
+}
+
+export async function fetchPromptWorkspacePromptPack({ goalId, taskId, role }, options = {}) {
+  const route = createGoalWorkspaceRoute({
+    template: GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'prompt'
+  });
+
+  if (route === null || !isSafeWorkspaceQueryToken(taskId) || !isSafeWorkspaceQueryToken(role)) {
+    return readonlyError({
+      route: {
+        ...GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+        path: GOAL_PROMPT_PACK_ROUTE_TEMPLATE.path
+      },
+      message: PROMPT_WORKSPACE_ERROR_MESSAGE
+    });
+  }
+
+  const searchParams = new URLSearchParams();
+  searchParams.set('task', taskId);
+  searchParams.set('role', role);
+
+  return fetchReadonlyRoute({
+    ...route,
+    path: `${route.path}?${searchParams.toString()}`
+  }, options);
+}
+
+export async function fetchPromptWorkspaceHandoffBoard(goalId, options = {}) {
+  const progressRoute = createGoalWorkspaceRoute({
+    template: GOAL_PROGRESS_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'progress'
+  });
+  const eventsRoute = createGoalWorkspaceRoute({
+    template: GOAL_EVENTS_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'events'
+  });
+  const nextRoute = createGoalWorkspaceRoute({
+    template: GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'next'
+  });
+  const closeoutRoute = createGoalWorkspaceRoute({
+    template: GOAL_CLOSEOUT_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'closeout'
+  });
+
+  if (progressRoute === null || eventsRoute === null || nextRoute === null || closeoutRoute === null) {
+    const errorResult = readonlyError({
+      route: {
+        ...GOAL_PROGRESS_ROUTE_TEMPLATE,
+        path: GOAL_PROGRESS_ROUTE_TEMPLATE.path
+      },
+      message: PROMPT_WORKSPACE_ERROR_MESSAGE
+    });
+
+    return {
+      ok: false,
+      board: projectSubagentHandoffBoard({
+        progressResult: errorResult,
+        progress: null,
+        eventsResult: errorResult,
+        eventLog: null,
+        nextResult: errorResult,
+        nextAction: null,
+        closeoutResult: errorResult,
+        closeout: null
+      }),
+      routes: {
+        progress: errorResult,
+        events: errorResult,
+        next: errorResult,
+        closeout: errorResult
+      }
+    };
+  }
+
+  const [progressResult, eventsResult, nextResult, closeoutResult] = await Promise.all([
+    fetchReadonlyRoute(progressRoute, options),
+    fetchReadonlyRoute(eventsRoute, options),
+    fetchReadonlyRoute(nextRoute, options),
+    fetchReadonlyRoute(closeoutRoute, options)
+  ]);
+
+  return {
+    ok: progressResult.ok === true && eventsResult.ok === true && nextResult.ok === true && closeoutResult.ok === true,
+    board: projectSubagentHandoffBoard({
+      progressResult,
+      progress: progressResult.ok === true ? progressResult.data : null,
+      eventsResult,
+      eventLog: eventsResult.ok === true ? eventsResult.data : null,
+      nextResult,
+      nextAction: nextResult.ok === true ? nextResult.data : null,
+      closeoutResult,
+      closeout: closeoutResult.ok === true ? closeoutResult.data : null
+    }),
+    routes: {
+      progress: progressResult,
+      events: eventsResult,
+      next: nextResult,
+      closeout: closeoutResult
+    }
+  };
 }
 
 function readonlyError({ route, httpStatus = null, message, errorEnvelope = null }) {
@@ -185,6 +487,22 @@ function activeGoalIdFromResults(results) {
   const goalId = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
 
   return goalId === 'latest' ? null : goalId ?? null;
+}
+
+function createGoalWorkspaceRoute({ template, goalId, suffix }) {
+  if (!isSafeWorkspaceQueryToken(goalId)) {
+    return null;
+  }
+
+  return {
+    ...template,
+    path: ['', 'api', 'goals', encodeURIComponent(goalId), suffix].join('/'),
+    goalId
+  };
+}
+
+function isSafeWorkspaceQueryToken(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value);
 }
 
 function errorMessageFromEnvelope(data) {

@@ -1,0 +1,180 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v21-goal-event-registration-workbench",
+  "goalTitle": "v21 Workbench Goal Event Registration",
+  "baseline": {
+    "tag": "v20",
+    "commit": null,
+    "evidenceRef": "docs/plans/v20-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Goal event form model",
+      "branch": "v21-task-1-goal-event-form-model",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench users can enter the correct event form from the current next action.",
+        "The form/view model covers worker.started, worker.evidence-recorded, worker.self-check-*, blocker.*, reviewer verdict, and main-verification gate events."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Dry-run plan preview endpoint",
+      "branch": "v21-task-2-dry-run-plan-preview-endpoint",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench users can preview an event registration plan in the UI instead of copying a command to a terminal first.",
+        "The backend preview endpoint is limited to symphony goal update, review, and gate dry-runs and returns the plan hash plus the event summary that would be appended."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Confirm event append flow",
+      "branch": "v21-task-3-confirm-event-append-flow",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench users can complete an evidence event registration from the Workbench.",
+        "The confirm flow uses the plan hash from dry-run to call the matching goal command confirm path, then refreshes goal-status and events."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Evidence ref helper",
+      "branch": "v21-task-4-evidence-ref-helper",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench provides evidence ref input for docs/plans or managed artifact refs, recent evidence ref choices, and error display.",
+        "The helper reduces manual evidence path copying without inferring status from file names."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Event registration tests and docs",
+      "branch": "v21-task-5-event-registration-tests-and-docs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench tests cover success and failure paths for worker events, review approved and needs-revision verdicts, and the main verification gate.",
+        "Workbench writes controlled goal events instead of frontend-created status."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "pnpm test:mutation:gate",
+        "pnpm audit --audit-level high",
+        "git diff --check",
+        "pnpm mcas doctor",
+        "pnpm --silent symphony goal-status --goal v21-goal-event-registration-workbench --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

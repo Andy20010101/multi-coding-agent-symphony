@@ -1,10 +1,15 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runSymphonyCli } from '../scripts/symphony.js';
+import { appendGoalEvent } from '../src/symphony/goal-event-journal.js';
+import {
+  buildGoalUpdatePlan,
+  confirmGoalUpdate
+} from '../src/symphony/goal-update.js';
 import {
   buildGoalPromptPack,
   renderGoalPromptPackMarkdown,
@@ -18,9 +23,11 @@ import {
 import { validateGoalPromptPackContract } from '../src/symphony/goal-runbook-contracts.js';
 
 const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.valid.v1.json';
+const V22_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v22-goal-prompt-handoff-workspace.v1.json';
 const FIXTURE_GOAL_ID = 'v19-fixture';
 const MANAGED_GOAL_ID = 'v19-prompt-managed';
 const NEXT_GOAL_ID = 'v19-goal-runbook-next-action';
+const V22_GOAL_ID = 'v22-goal-prompt-handoff-workspace';
 const GENERATED_AT = '2026-05-29T10:00:00.000Z';
 
 describe('v19 goal prompt pack generator and CLI', () => {
@@ -162,6 +169,95 @@ describe('v19 goal prompt pack generator and CLI', () => {
     }
   });
 
+  it('renders v22 role-specific prompts with goal-specific evidence paths and structured role guidance', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v22-goal-prompt-roles-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook({
+        stateDir,
+        goalId: V22_GOAL_ID,
+        fromJson: V22_RUNBOOK_FIXTURE
+      });
+
+      const cases = [
+        {
+          taskId: 'task-2',
+          role: 'worker',
+          evidenceFile: 'docs/plans/v22-task-2-worker-evidence-2026-05-29.md',
+          label: 'worker implementation',
+          phase: 'implement',
+          text: [/worker implementation/u, /Reviewer handoff/u]
+        },
+        {
+          taskId: 'task-2',
+          role: 'reviewer',
+          evidenceFile: 'docs/plans/v22-task-2-review-evidence-2026-05-29.md',
+          label: 'independent reviewer',
+          phase: 'review',
+          text: [
+            /independent reviewer/u,
+            /如果你参与过本 task 的 worker implementation，先停止并说明，不能 self-review/u,
+            /reviewer id 必须不同于该 task 最近一次 worker actor id/u,
+            /不复述 worker 总结当作结论/u,
+            /Verdict: APPROVED or NEEDS_REVISION/u
+          ]
+        },
+        {
+          taskId: 'task-2',
+          role: 'main-verifier',
+          evidenceFile: 'docs/plans/v22-task-2-main-verification-evidence-2026-05-29.md',
+          label: 'main verifier',
+          phase: 'main-verification',
+          text: [/reviewer\.approved evidence/u, /--gate main-verification/u]
+        },
+        {
+          taskId: 'release',
+          role: 'release-manager',
+          evidenceFile: 'docs/plans/v22-release-evidence-2026-05-29.md',
+          label: 'release manager',
+          phase: 'release-gate',
+          text: [/Release scope:/u, /release\.ready --status declared/u]
+        }
+      ];
+
+      for (const testCase of cases) {
+        const promptPack = await buildGoalPromptPack({
+          stateDir,
+          goalId: V22_GOAL_ID,
+          taskId: testCase.taskId,
+          role: testCase.role,
+          generatedAt: GENERATED_AT
+        });
+        const [prompt] = promptPack.prompts;
+
+        assert.deepEqual(validateGoalPromptPackContract(promptPack), {
+          ok: true,
+          errors: []
+        });
+        assert.equal(prompt.evidenceFile, testCase.evidenceFile);
+        assert.equal(prompt.roleGuidance.label, testCase.label);
+        assert.equal(prompt.roleGuidance.phase, testCase.phase);
+        assert.equal(Array.isArray(prompt.roleGuidance.boundary), true);
+        assert.equal(Array.isArray(prompt.roleGuidance.evidenceRequirements), true);
+        assert.equal(Array.isArray(prompt.roleGuidance.handoffChecklist), true);
+        assert.match(prompt.text, /Role boundary:/u);
+        assert.match(prompt.text, /Role evidence checklist:/u);
+        assert.match(prompt.text, /Handoff checklist:/u);
+        assert.match(prompt.text, new RegExp(testCase.evidenceFile.replaceAll('.', '\\.'), 'u'));
+        assert.doesNotMatch(prompt.text, /docs\/plans\/v19-/u);
+        assert.match(prompt.text, /pnpm workbench:build/u);
+        assert.match(prompt.text, /pnpm --silent symphony goal-status --goal v22-goal-prompt-handoff-workspace --json/u);
+
+        for (const expectedText of testCase.text) {
+          assert.match(prompt.text, expectedText);
+        }
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('prints copy-only text output and can generate text-format prompt packs', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-prompt-text-'));
     const stateDir = join(root, '.symphony');
@@ -249,6 +345,365 @@ describe('v19 goal prompt pack generator and CLI', () => {
     }
   });
 
+  it('renders revision worker context from needs-revision events without manual prompt assembly', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-prompt-revision-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook({ stateDir, goalId: NEXT_GOAL_ID });
+      await appendPromptTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_worker_evidence',
+        taskId: 'task-1',
+        eventType: 'worker.evidence-recorded',
+        evidenceRefs: [workerEvidence('task-1')]
+      });
+      await appendPromptTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_blocker_opened',
+        taskId: 'task-1',
+        eventType: 'blocker.opened',
+        statement: 'Contract fixture blocker remains open.',
+        blocker: {
+          id: 'blocker-contract-fixture',
+          reason: 'Contract fixture blocker remains open.',
+          severity: 'error'
+        }
+      });
+      await appendPromptTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_needs_revision',
+        taskId: 'task-1',
+        eventType: 'reviewer.needs-revision',
+        phase: 'review',
+        actor: { role: 'reviewer', id: 'codex-reviewer-task-1' },
+        evidenceRefs: [reviewEvidence('task-1')],
+        statement: 'Reviewer found the invalid fixture acceptance delta still open.',
+        review: { verdict: 'NEEDS_REVISION' }
+      });
+      await writeLatestPromptRun({
+        stateDir,
+        run: {
+          runId: 'run-revision-source',
+          status: 'passed',
+          verifierStatus: 'passed',
+          command: 'symphony do --dry-run "task-1"',
+          changedFiles: [
+            'src/symphony/goal-prompt-pack.js',
+            'tests/v19-goal-prompt-pack.test.js'
+          ],
+          createdFiles: []
+        }
+      });
+
+      const promptPack = await buildGoalPromptPack({
+        stateDir,
+        goalId: 'latest',
+        next: true,
+        generatedAt: GENERATED_AT
+      });
+      const [prompt] = promptPack.prompts;
+
+      assert.deepEqual(validateGoalPromptPackContract(promptPack), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(prompt.role, 'worker');
+      assert.equal(prompt.phase, 'revision');
+      assert.equal(prompt.roleGuidance.phase, 'revision');
+      assert.equal(prompt.revisionContext.trigger.eventType, 'reviewer.needs-revision');
+      assert.equal(prompt.revisionContext.blockers[0].id, 'blocker-contract-fixture');
+      assert.equal(prompt.revisionContext.changedFiles.items.includes('src/symphony/goal-prompt-pack.js'), true);
+      assert.equal(prompt.revisionContext.acceptanceDelta.length, 2);
+      assert.match(prompt.text, /revision worker/u);
+      assert.match(prompt.text, /Blockers to address:/u);
+      assert.match(prompt.text, /Contract fixture blocker remains open/u);
+      assert.match(prompt.text, /Failed commands recorded by the failure event:/u);
+      assert.match(prompt.text, /Commands to rerun before reviewer handoff:/u);
+      assert.match(prompt.text, /pnpm check/u);
+      assert.match(prompt.text, /Changed files from latest exposed run \(run-revision-source\):/u);
+      assert.match(prompt.text, /src\/symphony\/goal-prompt-pack\.js/u);
+      assert.match(prompt.text, /Acceptance delta to close:/u);
+      assert.match(prompt.text, /recheck-after-reviewer\.needs-revision: Valid fixtures pass all v19 contract validators\./u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('renders failed main verification as a worker revision prompt with command evidence', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-prompt-main-failed-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook({ stateDir, goalId: NEXT_GOAL_ID });
+      await appendPromptTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_worker_evidence',
+        taskId: 'task-1',
+        eventType: 'worker.evidence-recorded',
+        evidenceRefs: [workerEvidence('task-1')]
+      });
+      await appendPromptTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_review_approved',
+        taskId: 'task-1',
+        eventType: 'reviewer.approved',
+        phase: 'review',
+        actor: { role: 'reviewer', id: 'codex-reviewer-task-1' },
+        evidenceRefs: [reviewEvidence('task-1')],
+        review: { verdict: 'APPROVED' }
+      });
+      await appendPromptTaskEvent({
+        stateDir,
+        eventId: 'evt_task1_main_failed',
+        taskId: 'task-1',
+        eventType: 'main.verification-failed',
+        phase: 'main-verification',
+        actor: { role: 'main-verifier', id: 'codex-main-verifier-task-1' },
+        evidenceRefs: [mainEvidence('task-1')],
+        statement: 'Main verification failed after pnpm test.',
+        metadata: {
+          commandResults: [{
+            command: 'pnpm test',
+            status: 'failed',
+            exitCode: 1
+          }]
+        }
+      });
+
+      const promptPack = await buildGoalPromptPack({
+        stateDir,
+        goalId: 'latest',
+        next: true,
+        generatedAt: GENERATED_AT
+      });
+      const [prompt] = promptPack.prompts;
+
+      assert.equal(prompt.role, 'worker');
+      assert.equal(prompt.phase, 'revision');
+      assert.equal(prompt.revisionContext.trigger.eventType, 'main.verification-failed');
+      assert.deepEqual(prompt.revisionContext.failedCommands.recorded, ['pnpm test']);
+      assert.equal(prompt.revisionContext.failedCommands.rerun.includes('pnpm test'), true);
+      assert.match(prompt.text, /Latest main verification failed for task-1/u);
+      assert.match(prompt.text, /main\.verification-failed/u);
+      assert.match(prompt.text, /pnpm test/u);
+      assert.match(prompt.text, /docs\/plans\/v19-task-1-main-verification-evidence-2026-05-29\.md/u);
+      assert.doesNotMatch(prompt.text, /执行 .* main verification/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('prints revision prompt with failed commands after controlled needs-revision registration', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-prompt-review-user-path-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook({ stateDir, goalId: NEXT_GOAL_ID });
+      await confirmGoalCli([
+        'goal',
+        'update',
+        '--state-dir',
+        stateDir,
+        '--goal',
+        NEXT_GOAL_ID,
+        '--task',
+        'task-1',
+        '--event',
+        'worker.evidence-recorded',
+        '--actor',
+        'codex-worker-task-1',
+        '--evidence-ref',
+        workerEvidence('task-1').ref
+      ]);
+      await confirmControlledGoalUpdate({
+        stateDir,
+        goalId: NEXT_GOAL_ID,
+        taskId: 'task-1',
+        eventType: 'blocker.opened',
+        actorId: 'codex-worker-task-1',
+        statement: 'Contract fixture blocker remains open.',
+        blocker: {
+          id: 'blocker-contract-fixture',
+          reason: 'Contract fixture blocker remains open.',
+          severity: 'error'
+        }
+      });
+      await writeLatestPromptRun({
+        stateDir,
+        run: {
+          runId: 'run-review-user-path',
+          status: 'passed',
+          verifierStatus: 'passed',
+          command: 'symphony do --dry-run "task-1"',
+          changedFiles: [
+            'src/symphony/goal-review.js',
+            'tests/v19-goal-prompt-pack.test.js'
+          ],
+          createdFiles: []
+        }
+      });
+      await confirmGoalCli([
+        'goal',
+        'review',
+        '--state-dir',
+        stateDir,
+        '--goal',
+        NEXT_GOAL_ID,
+        '--task',
+        'task-1',
+        '--reviewer',
+        'codex-reviewer-task-1',
+        '--verdict',
+        'needs-revision',
+        '--evidence-ref',
+        reviewEvidence('task-1').ref,
+        '--failed-command',
+        'pnpm test -- --runInBand',
+        '--statement',
+        'Reviewer found the invalid fixture acceptance delta still open.'
+      ]);
+
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'prompt',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          'latest',
+          '--next',
+          '--markdown'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+      const markdown = output.stdoutText();
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.match(markdown, /revision worker/u);
+      assert.match(markdown, /reviewer\.needs-revision/u);
+      assert.match(markdown, /Blockers to address:/u);
+      assert.match(markdown, /blocker-contract-fixture: Contract fixture blocker remains open\. \(error\)/u);
+      assert.match(markdown, /Failed commands recorded by the failure event:\n- pnpm test -- --runInBand/u);
+      assert.match(markdown, /Changed files from latest exposed run \(run-review-user-path\):/u);
+      assert.match(markdown, /src\/symphony\/goal-review\.js/u);
+      assert.match(markdown, /Acceptance delta to close:/u);
+      assert.match(markdown, /recheck-after-reviewer\.needs-revision: Valid fixtures pass all v19 contract validators\./u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('prints revision prompt with failed commands after controlled main gate registration', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v19-goal-prompt-main-user-path-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      await registerRunbook({ stateDir, goalId: NEXT_GOAL_ID });
+      await confirmGoalCli([
+        'goal',
+        'update',
+        '--state-dir',
+        stateDir,
+        '--goal',
+        NEXT_GOAL_ID,
+        '--task',
+        'task-1',
+        '--event',
+        'worker.evidence-recorded',
+        '--actor',
+        'codex-worker-task-1',
+        '--evidence-ref',
+        workerEvidence('task-1').ref
+      ]);
+      await confirmGoalCli([
+        'goal',
+        'review',
+        '--state-dir',
+        stateDir,
+        '--goal',
+        NEXT_GOAL_ID,
+        '--task',
+        'task-1',
+        '--reviewer',
+        'codex-reviewer-task-1',
+        '--verdict',
+        'approved',
+        '--evidence-ref',
+        reviewEvidence('task-1').ref
+      ]);
+      await writeLatestPromptRun({
+        stateDir,
+        run: {
+          runId: 'run-main-user-path',
+          status: 'failed',
+          verifierStatus: 'failed',
+          command: 'pnpm workbench:build',
+          changedFiles: [
+            'src/symphony/goal-gate.js',
+            'frontend/workbench/src/App.jsx'
+          ],
+          createdFiles: []
+        }
+      });
+      await confirmGoalCli([
+        'goal',
+        'gate',
+        '--state-dir',
+        stateDir,
+        '--goal',
+        NEXT_GOAL_ID,
+        '--task',
+        'task-1',
+        '--gate',
+        'main-verification',
+        '--status',
+        'failed',
+        '--verifier',
+        'codex-main-verifier-task-1',
+        '--evidence-ref',
+        mainEvidence('task-1').ref,
+        '--failed-command',
+        'pnpm workbench:build',
+        '--statement',
+        'Main verification failed after the Workbench build.'
+      ]);
+
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'prompt',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          'latest',
+          '--next',
+          '--markdown'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+      const markdown = output.stdoutText();
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+      assert.match(markdown, /revision worker/u);
+      assert.match(markdown, /main\.verification-failed/u);
+      assert.match(markdown, /Failed commands recorded by the failure event:\n- pnpm workbench:build/u);
+      assert.match(markdown, /Commands to rerun before reviewer handoff:\n- pnpm workbench:build/u);
+      assert.match(markdown, /Changed files from latest exposed run \(run-main-user-path\):/u);
+      assert.match(markdown, /src\/symphony\/goal-gate\.js/u);
+      assert.match(markdown, /Acceptance delta to close:/u);
+      assert.match(markdown, /recheck-after-main\.verification-failed: Valid fixtures pass all v19 contract validators\./u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects ambiguous next prompts and write-flow flags', async () => {
     const cases = [
       {
@@ -280,19 +735,138 @@ describe('v19 goal prompt pack generator and CLI', () => {
   });
 });
 
-async function registerRunbook({ stateDir, goalId }) {
+async function registerRunbook({ stateDir, goalId, fromJson = RUNBOOK_FIXTURE }) {
   const plan = await buildGoalRunbookInitPlan({
     stateDir,
     goalId,
-    fromJson: RUNBOOK_FIXTURE
+    fromJson
   });
 
   await confirmGoalRunbookInit({
     stateDir,
     goalId,
-    fromJson: RUNBOOK_FIXTURE,
+    fromJson,
     planHash: plan.planHash
   });
+}
+
+async function confirmGoalCli(baseArgv) {
+  const plan = await runCliJson([
+    ...baseArgv,
+    '--dry-run',
+    '--json'
+  ]);
+
+  const result = await runCliJson([
+    ...baseArgv,
+    '--confirm',
+    '--plan-hash',
+    plan.planHash,
+    '--json'
+  ]);
+
+  return {
+    plan,
+    result
+  };
+}
+
+async function runCliJson(argv) {
+  const output = createOutput();
+  const exitCode = await runSymphonyCli({
+    argv,
+    stdout: output.stdout,
+    stderr: output.stderr
+  });
+
+  assert.equal(exitCode, 0, output.stderrText());
+  assert.equal(output.stderrText(), '');
+
+  return JSON.parse(output.stdoutText());
+}
+
+async function confirmControlledGoalUpdate(options) {
+  const plan = buildGoalUpdatePlan(options);
+
+  return await confirmGoalUpdate({
+    ...options,
+    planHash: plan.planHash
+  });
+}
+
+async function appendPromptTaskEvent({
+  stateDir,
+  eventId,
+  taskId,
+  eventType,
+  phase = 'implement',
+  actor = { role: 'worker', id: `codex-worker-${taskId}` },
+  evidenceRefs = [],
+  statement = `${eventType} recorded for ${taskId}.`,
+  review,
+  blocker,
+  metadata
+}) {
+  await appendGoalEvent({
+    stateDir,
+    mode: 'confirm',
+    recordedAt: '2026-05-29T10:00:00.000Z',
+    event: stripUndefined({
+      eventId,
+      goalId: NEXT_GOAL_ID,
+      taskId,
+      eventType,
+      phase,
+      actor,
+      occurredAt: '2026-05-29T10:00:00.000Z',
+      branch: `codex/v19-${taskId}`,
+      commit: null,
+      evidenceRefs,
+      statement,
+      review,
+      blocker,
+      metadata
+    })
+  });
+}
+
+async function writeLatestPromptRun({ stateDir, run }) {
+  const runsDir = join(stateDir, 'runs');
+
+  await mkdir(runsDir, {
+    recursive: true
+  });
+  await writeFile(join(runsDir, 'latest.json'), JSON.stringify(run, null, 2), 'utf8');
+}
+
+function workerEvidence(taskId) {
+  return {
+    kind: 'repo-doc',
+    ref: `docs/plans/v19-${taskId}-worker-evidence-2026-05-29.md`,
+    label: `${taskId} worker evidence`
+  };
+}
+
+function reviewEvidence(taskId) {
+  return {
+    kind: 'repo-doc',
+    ref: `docs/plans/v19-${taskId}-review-evidence-2026-05-29.md`,
+    label: `${taskId} review evidence`
+  };
+}
+
+function mainEvidence(taskId) {
+  return {
+    kind: 'repo-doc',
+    ref: `docs/plans/v19-${taskId}-main-verification-evidence-2026-05-29.md`,
+    label: `${taskId} main verification evidence`
+  };
+}
+
+function stripUndefined(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined)
+  );
 }
 
 function createOutput() {

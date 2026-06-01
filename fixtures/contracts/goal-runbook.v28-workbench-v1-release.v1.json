@@ -1,0 +1,192 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v28-workbench-v1-release",
+  "goalTitle": "v28 Workbench v1 Release",
+  "baseline": {
+    "tag": "v27",
+    "commit": null,
+    "evidenceRef": "docs/plans/v27-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Workbench app navigation and state header",
+      "branch": "v28-task-1-workbench-app-navigation-and-state-header",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "统一导航包含 Active Goal、Prompt Handoff、Operations、Implementation、Adoption、Review、Verification、Closeout。",
+        "顶部状态显示 goal、task、next action、latest operation。",
+        "用户一打开就是工作台，而不是信息面板集合。",
+        "Workbench 主路径围绕 latest goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v28-workbench-v1-release --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Unified goal/task/run/evidence routes",
+      "branch": "v28-task-2-unified-goal-task-run-evidence-routes",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "统一路由和数据流，所有页面都以 goal id、task id、operation id、evidence refs 串联。",
+        "用户在各模块之间不会丢上下文。",
+        "Workbench 主路径围绕 latest goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v28-workbench-v1-release --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Golden path E2E",
+      "branch": "v28-task-3-golden-path-e2e",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "实现并测试完整路径：goal init/status -> next -> prompt -> worker event -> review -> main verification -> closeout gaps。",
+        "Workbench v1 有可验收的主路径。",
+        "Workbench 主路径围绕 latest goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v28-workbench-v1-release --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Release closeout workspace",
+      "branch": "v28-task-4-release-closeout-workspace",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "接入 goal closeout，运行 release verification checklist，登记 release.ready gate，并生成 tag evidence prompt。",
+        "release 前能在 Workbench 里看到明确缺口和收口动作。",
+        "Workbench 主路径围绕 latest goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v28-workbench-v1-release --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "README/operator guide/release evidence",
+      "branch": "v28-task-5-readme-operator-guide-release-evidence",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "更新 README，把 Workbench v1 作为日常入口，把 symphony CLI 作为高级/脚本入口，写 release evidence。",
+        "项目定位正式从 dashboard 变成 Workbench。",
+        "Workbench 主路径围绕 latest goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "pnpm test:mutation:gate",
+        "pnpm audit --audit-level high",
+        "pnpm mcas doctor",
+        "git diff --check",
+        "pnpm --silent symphony goal closeout --goal v28-workbench-v1-release --markdown"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

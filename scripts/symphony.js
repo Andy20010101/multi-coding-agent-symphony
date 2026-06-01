@@ -4179,6 +4179,7 @@ function parseGoalReviewArgs(args) {
     reviewerId: null,
     verdict: null,
     evidenceRefs: [],
+    failedCommands: [],
     statement: undefined,
     branch: undefined,
     commit: undefined,
@@ -4236,6 +4237,12 @@ function parseGoalReviewArgs(args) {
 
     if (value === '--evidence-ref') {
       options.evidenceRefs.push(readRequiredValue(args, index, '--evidence-ref'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--failed-command') {
+      options.failedCommands.push(readRequiredValue(args, index, '--failed-command'));
       index += 1;
       continue;
     }
@@ -4313,8 +4320,8 @@ function parseGoalReviewArgs(args) {
 
 function goalReviewHelpText() {
   return [
-    'Usage: symphony goal review --goal <goal-id> --task <task-id> --reviewer <reviewer-id> --verdict <approved|needs-revision> --evidence-ref <ref> [--dry-run]',
-    '       symphony goal review --goal <goal-id> --task <task-id> --reviewer <reviewer-id> --verdict <approved|needs-revision> --evidence-ref <ref> --confirm --plan-hash <hash>',
+    'Usage: symphony goal review --goal <goal-id> --task <task-id> --reviewer <reviewer-id> --verdict <approved|needs-revision> --evidence-ref <ref> [--failed-command <cmd>] [--dry-run]',
+    '       symphony goal review --goal <goal-id> --task <task-id> --reviewer <reviewer-id> --verdict <approved|needs-revision> --evidence-ref <ref> [--failed-command <cmd>] --confirm --plan-hash <hash>',
     '',
     'Dry-run is the default and prints goal-update-plan.v1 without writing.',
     'Confirm appends one reviewer verdict event only after the current input matches --plan-hash.',
@@ -4331,6 +4338,7 @@ function parseGoalGateArgs(args) {
     status: null,
     verifierId: null,
     evidenceRefs: [],
+    failedCommands: [],
     statement: undefined,
     branch: undefined,
     commit: undefined,
@@ -4394,6 +4402,12 @@ function parseGoalGateArgs(args) {
 
     if (value === '--evidence-ref') {
       options.evidenceRefs.push(readRequiredValue(args, index, '--evidence-ref'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--failed-command') {
+      options.failedCommands.push(readRequiredValue(args, index, '--failed-command'));
       index += 1;
       continue;
     }
@@ -4471,8 +4485,8 @@ function parseGoalGateArgs(args) {
 
 function goalGateHelpText() {
   return [
-    'Usage: symphony goal gate --goal <goal-id> --gate <main-verification|release.gate|release.ready> --status <passed|failed|declared> --verifier <verifier-id> --evidence-ref <ref> [--task <task-id>] [--dry-run]',
-    '       symphony goal gate --goal <goal-id> --gate <main-verification|release.gate|release.ready> --status <passed|failed|declared> --verifier <verifier-id> --evidence-ref <ref> [--task <task-id>] --confirm --plan-hash <hash>',
+    'Usage: symphony goal gate --goal <goal-id> --gate <main-verification|release.gate|release.ready> --status <passed|failed|declared> --verifier <verifier-id> --evidence-ref <ref> [--failed-command <cmd>] [--task <task-id>] [--dry-run]',
+    '       symphony goal gate --goal <goal-id> --gate <main-verification|release.gate|release.ready> --status <passed|failed|declared> --verifier <verifier-id> --evidence-ref <ref> [--failed-command <cmd>] [--task <task-id>] --confirm --plan-hash <hash>',
     '',
     'Dry-run is the default and prints goal-update-plan.v1 without writing.',
     'Confirm appends one main verification, release gate, or release readiness event only after the current input matches --plan-hash.',

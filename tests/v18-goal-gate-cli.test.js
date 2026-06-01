@@ -73,6 +73,51 @@ describe('v18 symphony goal gate CLI', () => {
     }
   });
 
+  it('accepts only controlled docs/plans and managed artifact gate evidence refs', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v18-goal-gate-controlled-evidence-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'goal',
+          'gate',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          GOAL_ID,
+          '--gate',
+          'release.pnpm-check',
+          '--status',
+          'passed',
+          '--verifier',
+          'codex-release-verifier',
+          '--evidence-ref',
+          'repo-doc:docs/plans/v18-release-evidence-2026-05-28.md',
+          '--evidence-ref',
+          'artifact-ref:artifact:run-1:gate',
+          '--dry-run'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const plan = JSON.parse(output.stdoutText());
+
+      assert.deepEqual(plan.proposedEvents[0].evidenceRefs.map((ref) => [ref.kind, ref.ref]), [
+        ['repo-doc', 'docs/plans/v18-release-evidence-2026-05-28.md'],
+        ['artifact-ref', 'artifact:run-1:gate']
+      ]);
+      assert.equal(await pathExists(getManagedGoalEventJournalPath({ stateDir, goalId: GOAL_ID })), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('confirms only when the plan hash matches and appends a release gate event', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v18-goal-gate-release-confirm-'));
     const stateDir = join(root, '.symphony');
@@ -239,6 +284,48 @@ describe('v18 symphony goal gate CLI', () => {
           RELEASE_EVIDENCE
         ],
         message: /status declared is only valid for release.ready/u
+      },
+      {
+        name: 'command evidence ref',
+        args: [
+          '--gate',
+          'release.pnpm-check',
+          '--status',
+          'passed',
+          '--verifier',
+          'codex-release-verifier',
+          '--evidence-ref',
+          'command-evidence:approved-looking-note'
+        ],
+        message: /controlled docs\/plans or managed artifact reference/u
+      },
+      {
+        name: 'external note ref',
+        args: [
+          '--gate',
+          'release.pnpm-check',
+          '--status',
+          'passed',
+          '--verifier',
+          'codex-release-verifier',
+          '--evidence-ref',
+          'external-note:approved'
+        ],
+        message: /controlled docs\/plans or managed artifact reference/u
+      },
+      {
+        name: 'commit evidence ref',
+        args: [
+          '--gate',
+          'release.pnpm-check',
+          '--status',
+          'passed',
+          '--verifier',
+          'codex-release-verifier',
+          '--evidence-ref',
+          'commit:abc1234'
+        ],
+        message: /controlled docs\/plans or managed artifact reference/u
       }
     ];
 
