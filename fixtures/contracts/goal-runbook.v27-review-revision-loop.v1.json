@@ -1,0 +1,188 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v27-review-revision-loop",
+  "goalTitle": "v27 Review Revision Loop",
+  "baseline": {
+    "tag": "v26",
+    "commit": null,
+    "evidenceRef": "docs/plans/v26-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Review workspace for active task",
+      "branch": "v27-task-1-review-workspace-for-active-task",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "reviewer 能从 UI 获取完整审查上下文。",
+        "展示 changed files、source run、worker evidence、review prompt、review checklist、expected verdict event。",
+        "Workbench 主路径必须围绕 latest/v19 goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v27-review-revision-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Independent reviewer handoff",
+      "branch": "v27-task-2-independent-reviewer-handoff",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "独立 reviewer/subagent 可以直接接手。",
+        "从 goal prompt 生成 reviewer prompt，强制标记 reviewer 与 worker 分离，并记录 reviewer evidence path。",
+        "Workbench 主路径必须围绕 latest/v19 goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v27-review-revision-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Review verdict registration",
+      "branch": "v27-task-3-review-verdict-registration",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "review 结果能真实推进 ledger。",
+        "复用 goal review dry-run/confirm 登记 approved 或 needs-revision，并刷新 task state。",
+        "Workbench 主路径必须围绕 latest/v19 goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v27-review-revision-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Revision prompt generator",
+      "branch": "v27-task-4-revision-prompt-generator",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "失败后不再手工整理返工 prompt。",
+        "当 needs-revision 或 verification failed 时，生成 worker revision prompt，包含 blockers、失败命令、changed files、acceptance delta。",
+        "Workbench 主路径必须围绕 latest/v19 goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v27-review-revision-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Review/revision tests/docs",
+      "branch": "v27-task-5-review-revision-tests-docs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "实现完整 review -> revision -> verify loop。",
+        "覆盖 approved、needs-revision、failed verification、revision prompt、二次 worker handoff。",
+        "Workbench 主路径必须围绕 latest/v19 goal/runbook/next-action 命令面，不把 v8 scan/do/review/verify/status/continue/artifacts 作为主按钮模型。",
+        "不新增 generic safety layer、generic shell runner、权限系统、goal framework 或 artifact framework；不从 file names、branch names、commit messages 或 frontend heuristics 推断 task approval 或 release readiness；worker 不能 self-approve；不 auto-merge 或 auto-tag。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v27-review-revision-loop --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

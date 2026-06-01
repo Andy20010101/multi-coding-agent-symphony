@@ -152,6 +152,20 @@ export function resolveGoalNextAction({
     .find((task) => Array.isArray(task?.blockers) && task.blockers.length > 0);
 
   if (blockedTask !== undefined) {
+    const blockedRunbookTask = runbook.tasks.find((task) => task.taskId === blockedTask.taskId);
+    const blockedTaskRevisionAction = blockedRunbookTask === undefined
+      ? null
+      : resolveTaskNextAction({
+          runbook,
+          runbookTask: blockedRunbookTask,
+          ledgerTask: blockedTask,
+          taskEvents: taskEventState(eventLog.events, blockedRunbookTask.taskId)
+        });
+
+    if (blockedTaskRevisionAction?.next?.role === 'worker' && blockedTaskRevisionAction.next.phase === 'revision') {
+      return blockedTaskRevisionAction;
+    }
+
     return buildBlockedNextAction({
       goalId: runbook.goalId,
       reason: `${blockedTask.taskId} has an open blocker in goal-progress-ledger.v1.`
@@ -245,6 +259,20 @@ function resolveTaskNextAction({
       role: 'worker',
       phase: 'revision',
       reason: `Latest reviewer verdict for ${runbookTask.taskId} is reviewer.needs-revision.`,
+      allowedEvents: workerAllowedEvents(),
+      registerWith: 'symphony goal update'
+    });
+  }
+
+  if (taskEvents.latestMainVerification?.eventType === 'main.verification-failed' &&
+    isEventAfter(taskEvents.latestMainVerification, taskEvents.latestWorkerEvidence)) {
+    return buildTaskNextAction({
+      goalId: runbook.goalId,
+      runbookTask,
+      ledgerTask,
+      role: 'worker',
+      phase: 'revision',
+      reason: `Latest main verification failed for ${runbookTask.taskId}.`,
       allowedEvents: workerAllowedEvents(),
       registerWith: 'symphony goal update'
     });

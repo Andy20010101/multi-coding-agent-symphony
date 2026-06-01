@@ -1,0 +1,181 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v23-goal-operation-run-console",
+  "goalTitle": "v23 Goal Operation Run Console",
+  "baseline": {
+    "tag": "v22",
+    "commit": null,
+    "evidenceRef": "docs/plans/v22-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Goal operation run registry",
+      "branch": "v23-task-1-goal-operation-run-registry",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能追踪一次 goal 操作，不只看最终状态。",
+        "为 Workbench 发起的 goal operations 记录 operation id、goal id、task id、role、command kind、status、timestamps。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v23-goal-operation-run-console --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Goal operation console UI",
+      "branch": "v23-task-2-goal-operation-console-ui",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能定位 goal command 失败在哪。",
+        "新增 goal operation console，展示 command preview、stdout/stderr、exit code、plan hash、event id、next action。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v23-goal-operation-run-console --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Near-live log polling",
+      "branch": "v23-task-3-near-live-log-polling",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "长一点的 goal/closeout 操作不会让用户盲等。",
+        "给 goal operations 增加 polling 或等价的 near-live 输出刷新，不要求完整 terminal emulator。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v23-goal-operation-run-console --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Failure recovery shortcuts",
+      "branch": "v23-task-4-failure-recovery-shortcuts",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能从失败直接进入下一步，而不是回终端重查。",
+        "失败时显示 retry dry-run、copy command、copy reviewer prompt、copy issue prompt。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v23-goal-operation-run-console --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Goal operation console tests/docs",
+      "branch": "v23-task-5-goal-operation-console-tests-docs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "确保 console 服务最新 goal workflow。",
+        "覆盖成功 dry-run、confirm、missing plan hash、goal not found、unsupported subcommand 等路径。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "pnpm test:mutation:gate",
+        "pnpm audit --audit-level high",
+        "pnpm mcas doctor",
+        "git diff --check",
+        "pnpm --silent symphony goal closeout --goal v23-goal-operation-run-console --markdown",
+        "pnpm --silent symphony goal-status --goal v23-goal-operation-run-console --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

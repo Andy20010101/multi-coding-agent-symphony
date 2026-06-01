@@ -108,6 +108,7 @@ function normalizeGoalGateInput(options) {
     statement: normalizeOptionalString(options.statement, '--statement'),
     branch: normalizeNullableString(options.branch, '--branch'),
     commit: normalizeNullableString(options.commit, '--commit'),
+    failedCommands: normalizeFailedCommands(options.failedCommands),
     planHash: options.planHash
   };
   const gateMapping = mapGateEvent(base);
@@ -120,6 +121,13 @@ function normalizeGoalGateInput(options) {
     throw new GoalGateError(
       'missing-gate-evidence',
       'gate evidence ref is required.'
+    );
+  }
+
+  if (normalized.failedCommands.length > 0 && normalized.eventType !== 'main.verification-failed') {
+    throw new GoalGateError(
+      'failed-command-not-applicable',
+      '--failed-command is allowed only with --gate main-verification --status failed.'
     );
   }
 
@@ -410,6 +418,47 @@ function normalizeNullableString(value, field) {
   return value;
 }
 
+function normalizeFailedCommands(value) {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new GoalGateError(
+      'invalid-failed-command',
+      '--failed-command must be provided as one or more values.'
+    );
+  }
+
+  const commands = [];
+
+  value.forEach((entry, index) => {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      throw new GoalGateError(
+        'invalid-failed-command',
+        '--failed-command must be a non-empty command line.',
+        { field: `failedCommands[${index}]` }
+      );
+    }
+
+    const command = entry.trim();
+
+    if (/[\r\n]/u.test(command)) {
+      throw new GoalGateError(
+        'invalid-failed-command',
+        '--failed-command must be a single command line.',
+        { field: `failedCommands[${index}]` }
+      );
+    }
+
+    if (!commands.includes(command)) {
+      commands.push(command);
+    }
+  });
+
+  return commands;
+}
+
 function defaultStatement(normalized) {
   if (normalized.eventType === 'main.verification-passed') {
     return `Main verification passed for ${normalized.taskId}.`;
@@ -431,7 +480,7 @@ function defaultStatement(normalized) {
 }
 
 function buildProposedEvent(normalized) {
-  return {
+  return stripUndefined({
     eventType: normalized.eventType,
     taskId: normalized.taskId,
     phase: normalized.phase,
@@ -443,8 +492,13 @@ function buildProposedEvent(normalized) {
     gate: {
       name: normalized.gateName,
       status: normalized.status
-    }
-  };
+    },
+    metadata: normalized.failedCommands.length === 0
+      ? undefined
+      : {
+          failedCommands: [...normalized.failedCommands]
+        }
+  });
 }
 
 function buildAppendEvent(normalized) {
@@ -466,9 +520,12 @@ function buildAppendEvent(normalized) {
       name: normalized.gateName,
       status: normalized.status
     },
-    metadata: {
-      sourceCommand: 'symphony goal gate'
-    }
+    metadata: stripUndefined({
+      sourceCommand: 'symphony goal gate',
+      failedCommands: normalized.failedCommands.length === 0
+        ? undefined
+        : [...normalized.failedCommands]
+    })
   };
 }
 
@@ -544,7 +601,8 @@ function stableInputForHash(normalized) {
     evidenceRefs: normalized.evidenceRefs,
     statement: normalized.statement,
     branch: normalized.branch,
-    commit: normalized.commit
+    commit: normalized.commit,
+    failedCommands: normalized.failedCommands
   };
 }
 
@@ -585,9 +643,19 @@ function buildConfirmCommand({ normalized, planHash }) {
     args.push('--commit', normalized.commit);
   }
 
+  for (const failedCommand of normalized.failedCommands) {
+    args.push('--failed-command', failedCommand);
+  }
+
   args.push('--confirm', '--plan-hash', planHash);
 
   return args.map(shellQuote).join(' ');
+}
+
+function stripUndefined(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)
+  );
 }
 
 function shellQuote(value) {

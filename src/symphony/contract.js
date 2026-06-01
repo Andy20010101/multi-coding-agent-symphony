@@ -87,6 +87,7 @@ export function compactRunState(runState) {
     writeBoundary: runState.writeBoundary,
     executionPlanId: runState.executionPlanId,
     executionPlanArtifactPath: runState.executionPlanArtifactPath,
+    evidenceArtifactPath: runState.evidenceArtifactPath,
     plannedRunId: runState.plannedRunId,
     plannedAdoptionRunId: runState.plannedAdoptionRunId,
     adoptionPlanId: runState.adoptionPlanId,

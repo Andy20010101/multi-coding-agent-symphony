@@ -120,8 +120,16 @@ async function normalizeGoalReviewInput(options) {
     statement: normalizeOptionalString(options.statement, '--statement') ?? defaultStatement(options),
     branch: normalizeNullableString(options.branch, '--branch'),
     commit: normalizeNullableString(options.commit, '--commit'),
+    failedCommands: normalizeFailedCommands(options.failedCommands),
     planHash: options.planHash
   };
+
+  if (base.failedCommands.length > 0 && base.verdictName !== 'needs-revision') {
+    throw new GoalReviewError(
+      'failed-command-not-applicable',
+      '--failed-command is allowed only with --verdict needs-revision.'
+    );
+  }
 
   if (base.evidenceRefs.length === 0) {
     throw new GoalReviewError(
@@ -381,6 +389,47 @@ function normalizeNullableString(value, field) {
   return value;
 }
 
+function normalizeFailedCommands(value) {
+  if (value === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new GoalReviewError(
+      'invalid-failed-command',
+      '--failed-command must be provided as one or more values.'
+    );
+  }
+
+  const commands = [];
+
+  value.forEach((entry, index) => {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      throw new GoalReviewError(
+        'invalid-failed-command',
+        '--failed-command must be a non-empty command line.',
+        { field: `failedCommands[${index}]` }
+      );
+    }
+
+    const command = entry.trim();
+
+    if (/[\r\n]/u.test(command)) {
+      throw new GoalReviewError(
+        'invalid-failed-command',
+        '--failed-command must be a single command line.',
+        { field: `failedCommands[${index}]` }
+      );
+    }
+
+    if (!commands.includes(command)) {
+      commands.push(command);
+    }
+  });
+
+  return commands;
+}
+
 function defaultStatement(options) {
   const taskId = typeof options.taskId === 'string' ? options.taskId : 'task';
   const verdictName = typeof options.verdict === 'string' ? options.verdict : options.verdictName;
@@ -393,7 +442,7 @@ function defaultStatement(options) {
 }
 
 function buildProposedEvent(normalized) {
-  return {
+  return stripUndefined({
     eventType: normalized.verdict.eventType,
     taskId: normalized.taskId,
     phase: 'review',
@@ -404,8 +453,13 @@ function buildProposedEvent(normalized) {
     commit: normalized.commit,
     review: {
       verdict: normalized.verdict.reviewVerdict
-    }
-  };
+    },
+    metadata: normalized.failedCommands.length === 0
+      ? undefined
+      : {
+          failedCommands: [...normalized.failedCommands]
+        }
+  });
 }
 
 function buildAppendEvent(normalized) {
@@ -426,9 +480,12 @@ function buildAppendEvent(normalized) {
     review: {
       verdict: normalized.verdict.reviewVerdict
     },
-    metadata: {
-      sourceCommand: 'symphony goal review'
-    }
+    metadata: stripUndefined({
+      sourceCommand: 'symphony goal review',
+      failedCommands: normalized.failedCommands.length === 0
+        ? undefined
+        : [...normalized.failedCommands]
+    })
   };
 }
 
@@ -504,7 +561,8 @@ function stableInputForHash(normalized) {
     evidenceRefs: normalized.evidenceRefs,
     statement: normalized.statement,
     branch: normalized.branch,
-    commit: normalized.commit
+    commit: normalized.commit,
+    failedCommands: normalized.failedCommands
   };
 }
 
@@ -543,9 +601,19 @@ function buildConfirmCommand({ normalized, planHash }) {
     args.push('--commit', normalized.commit);
   }
 
+  for (const failedCommand of normalized.failedCommands) {
+    args.push('--failed-command', failedCommand);
+  }
+
   args.push('--confirm', '--plan-hash', planHash);
 
   return args.map(shellQuote).join(' ');
+}
+
+function stripUndefined(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)
+  );
 }
 
 function shellQuote(value) {

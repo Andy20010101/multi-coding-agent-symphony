@@ -6,6 +6,7 @@ const GUIDED_GOAL_HANDOFF_CONTRACT_NAME = 'guided-goal-handoff.v1';
 const SAFE_ARTIFACT_PREVIEW_CONTRACT_NAME = 'safe-artifact-preview.v1';
 const GOAL_PROGRESS_LEDGER_CONTRACT_NAME = 'goal-progress-ledger.v1';
 const GOAL_EVENT_LOG_CONTRACT_NAME = 'goal-event-log.v1';
+const GOAL_OPERATION_RUNS_CONTRACT_NAME = 'goal-operation-runs.v1';
 const GOAL_UPDATE_PLAN_CONTRACT_NAME = 'goal-update-plan.v1';
 const GOAL_RUNBOOK_CONTRACT_NAME = 'goal-runbook.v1';
 const GOAL_NEXT_ACTION_CONTRACT_NAME = 'goal-next-action.v1';
@@ -18,7 +19,10 @@ const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
 const ACTIVE_GOAL_VIEW_MODEL_NAME = 'ActiveGoalViewModel';
 const GOAL_EVENT_FORM_MODEL_NAME = 'GoalEventRegistrationFormModel';
+const REVIEW_WORKSPACE_MODEL_NAME = 'ReviewWorkspaceContextModel';
+const RELEASE_CLOSEOUT_WORKSPACE_MODEL_NAME = 'ReleaseCloseoutWorkspaceModel';
 const EVIDENCE_REF_HELPER_NAME = 'EvidenceRefHelper';
+const V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = 'v25-controlled-implementation-lane';
 const EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
 const EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
   'docs/plans/<file>',
@@ -126,7 +130,7 @@ const GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
     phase: 'review',
     requiresEvidence: true,
     verdict: 'needs-revision',
-    fields: ['goalId', 'taskId', 'reviewerId', 'verdict', 'evidenceRef', 'statement', 'branch', 'commit']
+    fields: ['goalId', 'taskId', 'reviewerId', 'verdict', 'evidenceRef', 'failedCommand', 'statement', 'branch', 'commit']
   }),
   Object.freeze({
     eventType: 'main.verification-passed',
@@ -154,7 +158,21 @@ const GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
     requiresEvidence: true,
     gate: 'main-verification',
     gateStatus: 'failed',
-    fields: ['goalId', 'taskId', 'gateName', 'gateStatus', 'verifierId', 'evidenceRef', 'statement', 'branch', 'commit']
+    fields: ['goalId', 'taskId', 'gateName', 'gateStatus', 'verifierId', 'evidenceRef', 'failedCommand', 'statement', 'branch', 'commit']
+  }),
+  Object.freeze({
+    eventType: 'release.ready-declared',
+    formId: 'goal-gate-release-ready-declared',
+    eventFamily: 'release',
+    commandName: 'symphony goal gate',
+    commandIntent: 'record-release-ready-gate',
+    actorFlag: '--verifier',
+    actorRole: 'release-manager',
+    phase: 'release-prep',
+    requiresEvidence: true,
+    gate: 'release.ready',
+    gateStatus: 'declared',
+    fields: ['goalId', 'gateName', 'gateStatus', 'verifierId', 'evidenceRef', 'statement', 'branch', 'commit']
   })
 ]);
 
@@ -186,6 +204,72 @@ const ACTIVE_GOAL_COMMAND_BASELINE = Object.freeze([
     contractName: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
     routeId: 'goalCloseout',
     command: 'pnpm --silent symphony goal closeout --goal <goal-id> --markdown'
+  })
+]);
+
+const RELEASE_VERIFICATION_CHECKLIST = Object.freeze([
+  Object.freeze({
+    id: 'pnpm-check',
+    label: 'pnpm check',
+    gate: 'release.pnpm-check',
+    gateId: 'pnpmCheck',
+    command: 'pnpm check'
+  }),
+  Object.freeze({
+    id: 'pnpm-test',
+    label: 'pnpm test',
+    gate: 'release.pnpm-test',
+    gateId: 'pnpmTest',
+    command: 'pnpm test'
+  }),
+  Object.freeze({
+    id: 'workbench-build',
+    label: 'Workbench build',
+    gate: 'release.workbench-build',
+    gateId: 'workbenchBuild',
+    command: 'pnpm workbench:build'
+  }),
+  Object.freeze({
+    id: 'mutation-gate',
+    label: 'mutation gate',
+    gate: 'release.mutation-gate',
+    gateId: 'mutationGate',
+    command: 'pnpm test:mutation:gate'
+  }),
+  Object.freeze({
+    id: 'audit-high',
+    label: 'high audit',
+    gate: 'release.audit-high',
+    gateId: 'auditHigh',
+    command: 'pnpm audit --audit-level high'
+  }),
+  Object.freeze({
+    id: 'diff-check',
+    label: 'diff check',
+    gate: 'release.diff-check',
+    gateId: 'diffCheck',
+    command: 'git diff --check'
+  }),
+  Object.freeze({
+    id: 'mcas-doctor',
+    label: 'mcas doctor',
+    gate: 'release.mcas-doctor',
+    gateId: 'mcasDoctor',
+    command: 'pnpm mcas doctor'
+  }),
+  Object.freeze({
+    id: 'docs-updated',
+    label: 'docs updated',
+    gate: 'release.docs-updated',
+    gateId: 'docsUpdated',
+    command: 'review docs/workbench-operator-guide.md docs/symphony-product-contracts.md docs/release-checklist.md'
+  }),
+  Object.freeze({
+    id: 'tag-evidence',
+    label: 'tag evidence',
+    gate: 'release.tag-evidence',
+    gateId: 'tagEvidence',
+    command: 'write tag evidence prompt output before any tag is created'
   })
 ]);
 
@@ -245,6 +329,14 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/goals/latest/events',
     method: 'GET',
     contractName: GOAL_EVENT_LOG_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'goalOperations',
+    label: 'Goal Operations',
+    path: '/api/goals/latest/operations',
+    method: 'GET',
+    contractName: GOAL_OPERATION_RUNS_CONTRACT_NAME,
+    acceptErrorContract: true
   }),
   Object.freeze({
     id: 'goalRunbook',
@@ -336,6 +428,15 @@ export const GOAL_EVENTS_ROUTE_TEMPLATE = Object.freeze({
   acceptErrorContract: true
 });
 
+export const GOAL_OPERATIONS_ROUTE_TEMPLATE = Object.freeze({
+  id: 'goalOperationsById',
+  label: 'Goal Operations By Id',
+  path: '/api/goals/<goal-id>/operations',
+  method: 'GET',
+  contractName: GOAL_OPERATION_RUNS_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
 export const GOAL_RUNBOOK_ROUTE_TEMPLATE = Object.freeze({
   id: 'goalRunbookById',
   label: 'Goal Runbook By Id',
@@ -375,6 +476,7 @@ export const GOAL_CLOSEOUT_ROUTE_TEMPLATE = Object.freeze({
 export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   ...READONLY_API_ROUTES,
   GOAL_EVENTS_ROUTE_TEMPLATE,
+  GOAL_OPERATIONS_ROUTE_TEMPLATE,
   GOAL_PROGRESS_ROUTE_TEMPLATE,
   GOAL_RUNBOOK_ROUTE_TEMPLATE,
   GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
@@ -397,9 +499,11 @@ const OPTIONAL_ROUTE_IDS = new Set([
   'goalRunbook',
   'goalNextAction',
   'goalPromptPack',
+  'goalReviewerPromptPack',
   'goalCloseout',
   'activeGoalProgress',
-  'activeGoalEvents'
+  'activeGoalEvents',
+  'activeGoalOperations'
 ]);
 
 export const DEFERRED_CONTRACT_GAPS = Object.freeze([
@@ -451,12 +555,15 @@ export function projectWorkbenchContracts(results) {
   const goalsData = dataFrom(results.goals);
   const goalProgressData = dataFrom(results.goalProgress);
   const goalEventsData = dataFrom(results.goalEvents);
+  const goalOperationsData = dataFrom(results.goalOperations);
   const goalRunbookData = dataFrom(results.goalRunbook);
   const goalNextActionData = dataFrom(results.goalNextAction);
   const goalPromptPackData = dataFrom(results.goalPromptPack);
+  const goalReviewerPromptPackData = dataFrom(results.goalReviewerPromptPack);
   const goalCloseoutData = dataFrom(results.goalCloseout);
   const activeGoalProgressData = dataFrom(results.activeGoalProgress);
   const activeGoalEventsData = dataFrom(results.activeGoalEvents);
+  const activeGoalOperationsData = dataFrom(results.activeGoalOperations);
   const capabilitiesData = dataFrom(results.capabilities);
   const diagnosticsData = dataFrom(results.diagnostics);
   const latestRun = latestRunData?.run ?? null;
@@ -481,6 +588,14 @@ export function projectWorkbenchContracts(results) {
       results.activeGoalEvents?.routeDescriptor ?? GOAL_EVENTS_ROUTE_TEMPLATE,
       results.activeGoalEvents
     ),
+    projectRouteState(
+      results.activeGoalOperations?.routeDescriptor ?? GOAL_OPERATIONS_ROUTE_TEMPLATE,
+      results.activeGoalOperations
+    ),
+    projectRouteState(
+      results.goalReviewerPromptPack?.routeDescriptor ?? GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+      results.goalReviewerPromptPack
+    ),
     ...safeArtifactPreviewResults.map((result) => projectRouteState(
       result?.routeDescriptor ?? SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE,
       result
@@ -496,10 +611,40 @@ export function projectWorkbenchContracts(results) {
     hasNoRuns,
     safeArtifactPreviewResults
   });
+  const activeGoalControl = projectActiveGoalControl({
+    statusResult: results.goalProgress,
+    status: goalProgressData,
+    readiness: readinessData,
+    runbookResult: results.goalRunbook,
+    runbook: goalRunbookData,
+    nextActionResult: results.goalNextAction,
+    nextAction: goalNextActionData,
+    promptPackResult: results.goalPromptPack,
+    promptPack: goalPromptPackData,
+    reviewerPromptPackResult: results.goalReviewerPromptPack,
+    reviewerPromptPack: goalReviewerPromptPackData,
+    closeoutResult: results.goalCloseout,
+    closeout: goalCloseoutData,
+    activeLedgerResult: results.activeGoalProgress,
+    activeLedger: activeGoalProgressData,
+    activeEventLogResult: results.activeGoalEvents,
+    activeEventLog: activeGoalEventsData,
+    activeOperationsResult: results.activeGoalOperations,
+    activeOperations: activeGoalOperationsData,
+    latestRun
+  });
 
   return {
     state: failedRequiredRoutes.length > 0 ? 'partial' : 'ready',
     routeStates,
+    routeContext: projectWorkbenchRouteContext({
+      activeGoal: activeGoalControl,
+      latestRun: projectedLatestRun
+    }),
+    goldenPath: projectWorkbenchGoldenPath({
+      activeGoal: activeGoalControl,
+      routeStates
+    }),
     summary: projectSummary(summaryData),
     readiness: projectReadiness(readinessData, summaryData),
     runs: projectRuns(runsData, summaryData),
@@ -518,6 +663,11 @@ export function projectWorkbenchContracts(results) {
       summary: summaryData,
       readiness: readinessData
     }),
+    adoptionCandidates: projectAdoptionCandidates({
+      runsResult: results.runs,
+      runs: runsData,
+      latestRun
+    }),
     artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus, safeArtifactPreviewResults),
     goals: projectGoals(goalsData),
     goalProgress: projectGoalProgress({
@@ -529,24 +679,12 @@ export function projectWorkbenchContracts(results) {
       eventLog: goalEventsData,
       ledger: goalProgressData
     }),
-    activeGoal: projectActiveGoalControl({
-      statusResult: results.goalProgress,
-      status: goalProgressData,
-      readiness: readinessData,
-      runbookResult: results.goalRunbook,
-      runbook: goalRunbookData,
-      nextActionResult: results.goalNextAction,
-      nextAction: goalNextActionData,
-      promptPackResult: results.goalPromptPack,
-      promptPack: goalPromptPackData,
-      closeoutResult: results.goalCloseout,
-      closeout: goalCloseoutData,
-      activeLedgerResult: results.activeGoalProgress,
-      activeLedger: activeGoalProgressData,
-      activeEventLogResult: results.activeGoalEvents,
-      activeEventLog: activeGoalEventsData,
-      latestRun
+    goalOperations: projectGoalOperationConsole({
+      result: results.goalOperations,
+      operations: goalOperationsData,
+      nextAction: goalNextActionData
     }),
+    activeGoal: activeGoalControl,
     capabilities: projectCapabilities(capabilitiesData),
     diagnosticsV1: projectDiagnostics(diagnosticsData),
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
@@ -554,6 +692,202 @@ export function projectWorkbenchContracts(results) {
       status: MISSING_TEXT
     }))
   };
+}
+
+function projectWorkbenchGoldenPath({ activeGoal, routeStates }) {
+  const goalId = firstValue(
+    activeGoal?.viewModel?.goalId,
+    activeGoal?.runbook?.goalId,
+    activeGoal?.nextAction?.goalId,
+    activeGoal?.closeoutGaps?.goalId
+  );
+  const commandGoalId = isNonEmptyString(goalId) ? goalId : '<goal-id>';
+  const nextTaskId = firstValue(
+    activeGoal?.nextAction?.next?.taskId,
+    activeGoal?.taskQueue?.nextTaskId,
+    activeGoal?.reviewWorkspace?.taskId,
+    activeGoal?.mainVerificationReadiness?.taskId
+  );
+  const nextRole = firstValue(
+    activeGoal?.nextAction?.next?.role,
+    activeGoal?.taskQueue?.nextRole,
+    activeGoal?.reviewWorkspace?.activeNext?.role,
+    activeGoal?.mainVerificationReadiness?.readiness?.currentNextRole
+  );
+  const workerEvidenceRef = firstValue(
+    activeGoal?.nextAction?.evidenceState?.workerEvidenceRef,
+    activeGoal?.reviewWorkspace?.workerEvidence?.ref
+  );
+  const reviewEvidenceRef = firstValue(
+    activeGoal?.nextAction?.evidenceState?.reviewEvidenceRef,
+    activeGoal?.reviewWorkspace?.existingReview?.evidenceRef,
+    activeGoal?.mainVerificationReadiness?.reviewerApproval?.evidenceRef
+  );
+  const mainVerificationRef = firstValue(
+    activeGoal?.nextAction?.evidenceState?.mainVerificationRef,
+    activeGoal?.mainVerificationReadiness?.evidence?.existingMainVerificationRef
+  );
+  const missingCount = firstValue(activeGoal?.closeoutGaps?.missing?.count);
+  const releaseReady = firstValue(activeGoal?.closeoutGaps?.summary?.releaseReady);
+  const hasMainVerificationGap = activeGoal?.mainVerificationReadiness?.readiness?.canEnterMainVerification?.value === true &&
+    !isNonEmptyString(mainVerificationRef);
+  const goalStatusRoute = findProjectedRoute(routeStates, 'activeGoalProgress') ?? findProjectedRoute(routeStates, 'goalProgress');
+  const nextRoute = findProjectedRoute(routeStates, 'goalNextAction');
+  const promptRoute = findProjectedRoute(routeStates, 'goalPromptPack');
+  const operationsRoute = findProjectedRoute(routeStates, 'activeGoalOperations') ?? findProjectedRoute(routeStates, 'goalOperations');
+  const closeoutRoute = findProjectedRoute(routeStates, 'goalCloseout');
+  const reviewForms = activeGoal?.reviewWorkspace?.reviewVerdictRegistration?.forms;
+  const nextForms = activeGoal?.nextAction?.eventForms?.recommendedForms;
+
+  const steps = [
+    projectGoldenPathStep({
+      id: 'goal-init-status',
+      label: 'goal init/status',
+      status: activeGoal?.runbook?.state === 'available' && routeValueStateReady(goalStatusRoute) ? 'ready' : 'needs-attention',
+      source: 'goal-runbook.v1 + goal-progress-ledger.v1',
+      route: goalStatusRoute,
+      command: `pnpm --silent symphony goal-status --goal ${commandGoalId} --json`,
+      detail: activeGoal?.runbook?.state === 'available'
+        ? 'Managed runbook and active goal-status route are available.'
+        : 'Register or expose the managed runbook before continuing.'
+    }),
+    projectGoldenPathStep({
+      id: 'next-action',
+      label: 'goal next',
+      status: activeGoal?.nextAction?.state === 'available' ? 'ready' : 'needs-attention',
+      source: GOAL_NEXT_ACTION_CONTRACT_NAME,
+      route: nextRoute,
+      command: `pnpm --silent symphony goal next --goal ${commandGoalId} --json`,
+      detail: isNonEmptyString(nextTaskId)
+        ? `${nextTaskId} / ${nextRole ?? MISSING_TEXT}`
+        : 'No next task is exposed.'
+    }),
+    projectGoldenPathStep({
+      id: 'prompt-handoff',
+      label: 'goal prompt',
+      status: activeGoal?.promptPreview?.state === 'available' || activeGoal?.reviewWorkspace?.reviewPrompt?.textAvailable?.value === true ? 'ready' : 'needs-attention',
+      source: GOAL_PROMPT_PACK_CONTRACT_NAME,
+      route: promptRoute,
+      command: isNonEmptyString(nextTaskId) && isNonEmptyString(nextRole)
+        ? `pnpm --silent symphony goal prompt --goal ${commandGoalId} --task ${nextTaskId} --role ${nextRole} --markdown`
+        : `pnpm --silent symphony goal prompt --goal ${commandGoalId} --next --markdown`,
+      detail: activeGoal?.promptPreview?.visibleCount?.value > 0
+        ? `${activeGoal.promptPreview.visibleCount.value} copy-only prompt(s) available.`
+        : 'Prompt must come from goal-prompt-pack.v1 or goal-next-action.v1 copy-only text.'
+    }),
+    projectGoldenPathStep({
+      id: 'worker-event',
+      label: 'worker event',
+      status: isNonEmptyString(workerEvidenceRef)
+        ? 'recorded'
+        : nextForms?.items?.some((form) => form.eventType.value?.startsWith('worker.')) === true ? 'actionable' : 'waiting',
+      source: 'goal-event-log.v1 + goal-update-plan.v1',
+      route: operationsRoute,
+      command: isNonEmptyString(nextTaskId)
+        ? `pnpm --silent symphony goal update --goal ${commandGoalId} --task ${nextTaskId} --event worker.evidence-recorded --actor <worker-id> --evidence-ref <worker-evidence-ref> --dry-run --json`
+        : `pnpm --silent symphony goal update --goal ${commandGoalId} --task <task-id> --event worker.evidence-recorded --actor <worker-id> --evidence-ref <worker-evidence-ref> --dry-run --json`,
+      detail: isNonEmptyString(workerEvidenceRef)
+        ? workerEvidenceRef
+        : 'Workbench can preview and confirm worker events only through controlled goal update.'
+    }),
+    projectGoldenPathStep({
+      id: 'review',
+      label: 'review',
+      status: isNonEmptyString(reviewEvidenceRef)
+        ? 'recorded'
+        : reviewForms?.state === 'available' ? 'actionable' : 'waiting',
+      source: REVIEW_WORKSPACE_MODEL_NAME,
+      route: promptRoute,
+      command: isNonEmptyString(activeGoal?.reviewWorkspace?.taskId?.value)
+        ? `pnpm --silent symphony goal review --goal ${commandGoalId} --task ${activeGoal.reviewWorkspace.taskId.value} --reviewer <reviewer-id> --verdict approved|needs-revision --evidence-ref <review-evidence-ref> --dry-run --json`
+        : `pnpm --silent symphony goal review --goal ${commandGoalId} --task <task-id> --reviewer <reviewer-id> --verdict approved|needs-revision --evidence-ref <review-evidence-ref> --dry-run --json`,
+      detail: isNonEmptyString(reviewEvidenceRef)
+        ? reviewEvidenceRef
+        : 'Reviewer verdict must be registered by a reviewer id that differs from the worker actor.'
+    }),
+    projectGoldenPathStep({
+      id: 'main-verification',
+      label: 'main verification',
+      status: isNonEmptyString(mainVerificationRef)
+        ? 'recorded'
+        : activeGoal?.mainVerificationReadiness?.readiness?.canEnterMainVerification?.value === true ? 'ready' : 'waiting',
+      source: 'goal-event-log.v1 + main-verification readiness',
+      route: goalStatusRoute,
+      command: activeGoal?.mainVerificationReadiness?.evidence?.gateCommand?.value
+        ?? `pnpm --silent symphony goal gate --goal ${commandGoalId} --task <task-id> --gate main-verification --status passed --verifier <main-verifier-id> --evidence-ref <main-verification-evidence-ref> --dry-run --json`,
+      detail: isNonEmptyString(mainVerificationRef)
+        ? mainVerificationRef
+        : activeGoal?.mainVerificationReadiness?.readiness?.reason?.value
+    }),
+    projectGoldenPathStep({
+      id: 'closeout-gaps',
+      label: 'closeout gaps',
+      status: releaseReady === true
+        ? 'clear'
+        : Number(missingCount) > 0 || hasMainVerificationGap ? 'gaps' : activeGoal?.closeoutGaps?.state === 'available' ? 'ready' : 'needs-attention',
+      source: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+      route: closeoutRoute,
+      command: `pnpm --silent symphony goal closeout --goal ${commandGoalId} --json`,
+      detail: releaseReady === true
+        ? 'Explicit closeout source reports releaseReady=true.'
+        : hasMainVerificationGap
+          ? 'Main verification is ready but not recorded; closeout remains open.'
+          : `${missingCount ?? MISSING_TEXT} closeout gap(s) exposed.`
+    })
+  ];
+
+  return {
+    state: steps.some((step) => step.status.value === 'needs-attention') ? 'partial' : 'available',
+    goalId: valueState(goalId),
+    taskId: valueState(nextTaskId),
+    role: valueState(nextRole),
+    sourcePolicy: valueState('goal-runbook.v1 + goal-progress-ledger.v1 + goal-next-action.v1 + goal-prompt-pack.v1 + goal-event-log.v1 + goal-update-plan.v1 + goal-closeout-report.v1'),
+    steps: {
+      state: steps.length === 0 ? 'empty' : 'available',
+      count: valueState(steps.length),
+      items: steps
+    },
+    safety: {
+      copyOnlyCommands: valueState(true),
+      controlledConfirmOnly: valueState(true),
+      browserExecutionAvailable: valueState(false),
+      genericShellRunner: valueState(false),
+      workerCanApproveOwnTask: valueState(false),
+      infersReadinessFromFilename: valueState(false)
+    },
+    note: 'Golden Path stitches the existing Workbench contracts into one acceptance path. It shows commands and controlled forms, but it does not execute shell commands, self-approve, main-verify, or declare release readiness.'
+  };
+}
+
+function projectGoldenPathStep({
+  id,
+  label,
+  status,
+  source,
+  route,
+  command,
+  detail
+}) {
+  return {
+    id: valueState(id),
+    label: valueState(label),
+    status: valueState(status),
+    source: valueState(source),
+    route: valueState(route?.path),
+    routeState: valueState(route?.state),
+    command: valueState(command),
+    detail: valueState(detail)
+  };
+}
+
+function findProjectedRoute(routeStates, id) {
+  return Array.isArray(routeStates)
+    ? routeStates.find((route) => route?.id === id) ?? null
+    : null;
+}
+
+function routeValueStateReady(route) {
+  return route?.state === 'ready';
 }
 
 export function createGuidedGoalHandoffRoute(handoffIndex) {
@@ -606,6 +940,34 @@ export function createGoalEventsRoute(goalId) {
     suffix: 'events',
     id: 'activeGoalEvents',
     label: 'Active Goal Events'
+  });
+}
+
+export function createGoalOperationsRoute(goalId) {
+  return createGoalScopedRoute({
+    template: GOAL_OPERATIONS_ROUTE_TEMPLATE,
+    goalId,
+    suffix: 'operations',
+    id: 'activeGoalOperations',
+    label: 'Active Goal Operations'
+  });
+}
+
+export function createGoalReviewerPromptRoute(goalId, nextAction) {
+  const taskId = nextAction?.next?.taskId;
+
+  if (!isSafeGoalRouteSegment(goalId) || !isSafeGoalRouteSegment(taskId) || taskId === 'release') {
+    return null;
+  }
+
+  return Object.freeze({
+    ...GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+    id: 'goalReviewerPromptPack',
+    label: 'Goal Reviewer Prompt Pack',
+    path: `${GOAL_PROMPT_PACK_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}&role=reviewer`,
+    goalId,
+    taskId,
+    role: 'reviewer'
   });
 }
 
@@ -837,6 +1199,161 @@ function projectGoals(goals) {
   };
 }
 
+function projectWorkbenchRouteContext({ activeGoal, latestRun }) {
+  const goalId = firstValue(
+    activeGoal?.viewModel?.goalId,
+    activeGoal?.runbook?.goalId,
+    activeGoal?.nextAction?.goalId,
+    activeGoal?.taskQueue?.goalId,
+    activeGoal?.reviewWorkspace?.goalId,
+    activeGoal?.mainVerificationReadiness?.goalId,
+    activeGoal?.closeoutGaps?.goalId
+  );
+  const taskId = firstValue(
+    activeGoal?.nextAction?.next?.taskId,
+    activeGoal?.taskQueue?.nextTaskId,
+    activeGoal?.reviewWorkspace?.taskId,
+    activeGoal?.mainVerificationReadiness?.taskId
+  );
+  const operationId = firstValue(
+    activeGoal?.operationConsole?.latest?.operationId,
+    activeGoal?.operationConsole?.latestOperationId
+  );
+  const activeRole = firstValue(
+    activeGoal?.nextAction?.next?.role,
+    activeGoal?.taskQueue?.nextRole,
+    activeGoal?.reviewWorkspace?.activeNext?.role,
+    activeGoal?.mainVerificationReadiness?.readiness?.currentNextRole
+  );
+  const activePhase = firstValue(
+    activeGoal?.nextAction?.next?.phase,
+    activeGoal?.taskQueue?.nextPhase,
+    activeGoal?.reviewWorkspace?.activeNext?.phase,
+    activeGoal?.mainVerificationReadiness?.readiness?.currentNextPhase
+  );
+  const runId = firstValue(
+    latestRun?.runId,
+    activeGoal?.reviewWorkspace?.sourceRun?.runId,
+    activeGoal?.nextAction?.eventForms?.workerEvidenceHandoff?.sourceRunId
+  );
+  const evidenceRefs = collectWorkbenchContextEvidenceRefs(activeGoal);
+
+  return {
+    state: goalId === undefined && taskId === undefined && operationId === undefined && evidenceRefs.length === 0
+      ? 'missing'
+      : 'available',
+    goalId: valueState(goalId),
+    taskId: valueState(taskId),
+    activeRole: valueState(activeRole),
+    activePhase: valueState(activePhase),
+    operationId: valueState(operationId),
+    runId: valueState(runId),
+    evidenceRefs: {
+      state: evidenceRefs.length === 0 ? 'empty' : 'available',
+      count: valueState(evidenceRefs.length),
+      items: evidenceRefs
+    },
+    sourcePolicy: valueState('goal-runbook.v1 + goal-next-action.v1 + goal-operation-runs.v1 + goal-event-log.v1 + symphony.console-run'),
+    safety: {
+      readsEvidenceBodies: valueState(false),
+      infersStatusFromEvidenceRef: valueState(false),
+      infersApprovalFromRoute: valueState(false),
+      browserExecutionAvailable: valueState(false)
+    },
+    note: 'Route context carries identifiers across Workbench modules. Evidence refs remain identifiers only and do not imply approval, main verification, or release readiness.'
+  };
+}
+
+function collectWorkbenchContextEvidenceRefs(activeGoal) {
+  const refs = [];
+
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.nextAction?.evidenceState?.workerEvidenceRef, {
+    source: GOAL_NEXT_ACTION_CONTRACT_NAME,
+    label: 'next worker evidence',
+    taskId: firstValue(activeGoal?.nextAction?.next?.taskId)
+  });
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.nextAction?.evidenceState?.reviewEvidenceRef, {
+    source: GOAL_NEXT_ACTION_CONTRACT_NAME,
+    label: 'next review evidence',
+    taskId: firstValue(activeGoal?.nextAction?.next?.taskId)
+  });
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.nextAction?.evidenceState?.mainVerificationRef, {
+    source: GOAL_NEXT_ACTION_CONTRACT_NAME,
+    label: 'next main verification evidence',
+    taskId: firstValue(activeGoal?.nextAction?.next?.taskId)
+  });
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.reviewWorkspace?.workerEvidence?.ref, {
+    source: REVIEW_WORKSPACE_MODEL_NAME,
+    label: 'review worker evidence',
+    taskId: firstValue(activeGoal?.reviewWorkspace?.taskId)
+  });
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.reviewWorkspace?.reviewPrompt?.evidenceFile, {
+    source: GOAL_PROMPT_PACK_CONTRACT_NAME,
+    label: 'review evidence path',
+    taskId: firstValue(activeGoal?.reviewWorkspace?.taskId)
+  });
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.reviewWorkspace?.sourceRun?.evidenceRef, {
+    source: 'symphony.console-run',
+    label: 'source run evidence',
+    taskId: firstValue(activeGoal?.reviewWorkspace?.taskId)
+  });
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.mainVerificationReadiness?.evidence?.path, {
+    source: 'main-verification readiness',
+    label: 'main verification evidence path',
+    taskId: firstValue(activeGoal?.mainVerificationReadiness?.taskId)
+  });
+  addWorkbenchContextEvidenceRef(refs, activeGoal?.mainVerificationReadiness?.evidence?.existingMainVerificationRef, {
+    source: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+    label: 'existing main verification evidence',
+    taskId: firstValue(activeGoal?.mainVerificationReadiness?.taskId)
+  });
+
+  for (const task of activeGoal?.taskQueue?.items ?? []) {
+    addWorkbenchContextEvidenceRef(refs, task?.workerEvidenceRef, {
+      source: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+      label: 'task worker evidence',
+      taskId: firstValue(task?.taskId)
+    });
+    addWorkbenchContextEvidenceRef(refs, task?.reviewEvidenceRef, {
+      source: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+      label: 'task review evidence',
+      taskId: firstValue(task?.taskId)
+    });
+    addWorkbenchContextEvidenceRef(refs, task?.mainVerificationRef, {
+      source: GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
+      label: 'task main verification evidence',
+      taskId: firstValue(task?.taskId)
+    });
+  }
+
+  for (const candidate of activeGoal?.nextAction?.eventForms?.evidenceRefHelper?.recentRefs?.items ?? []) {
+    addWorkbenchContextEvidenceRef(refs, candidate?.ref, {
+      source: firstValue(candidate?.source) ?? EVIDENCE_REF_HELPER_NAME,
+      label: firstValue(candidate?.label),
+      taskId: firstValue(candidate?.taskId),
+      kind: firstValue(candidate?.kind)
+    });
+  }
+
+  return refs.slice(0, 10);
+}
+
+function addWorkbenchContextEvidenceRef(refs, refState, metadata = {}) {
+  const ref = firstValue(refState);
+
+  if (!isNonEmptyString(ref) || refs.some((item) => item.ref.value === ref)) {
+    return;
+  }
+
+  refs.push({
+    ref: valueState(ref),
+    kind: valueState(metadata.kind ?? evidenceRefKindForInput(ref)),
+    label: valueState(metadata.label),
+    source: valueState(metadata.source),
+    taskId: valueState(metadata.taskId)
+  });
+}
+
 function projectActiveGoalControl({
   statusResult,
   status,
@@ -847,12 +1364,16 @@ function projectActiveGoalControl({
   nextAction,
   promptPackResult,
   promptPack,
+  reviewerPromptPackResult,
+  reviewerPromptPack,
   closeoutResult,
   closeout,
   activeLedgerResult,
   activeLedger,
   activeEventLogResult,
   activeEventLog,
+  activeOperationsResult,
+  activeOperations,
   latestRun
 }) {
   const ledger = activeLedger?.goalId === runbook?.goalId ? activeLedger : null;
@@ -894,6 +1415,15 @@ function projectActiveGoalControl({
       closeout,
       readiness
     }),
+    reviewWorkspace: projectReviewWorkspace({
+      runbook,
+      ledger: goalStatusLedger,
+      eventLog,
+      nextAction,
+      promptPack,
+      reviewerPromptPack,
+      latestRun
+    }),
     subagentHandoffBoard: projectSubagentHandoffBoard({
       progressResult: ledger === null ? statusResult : activeLedgerResult,
       progress: goalStatusLedger,
@@ -919,9 +1449,451 @@ function projectActiveGoalControl({
     }),
     closeoutGaps: projectGoalCloseoutGaps({
       result: closeoutResult,
-      closeout
+      closeout,
+      runbook,
+      ledger: goalStatusLedger,
+      eventLog,
+      latestRun
+    }),
+    operationConsole: projectGoalOperationConsole({
+      result: activeOperationsResult,
+      operations: activeOperations?.goalId === runbook?.goalId ? activeOperations : null,
+      nextAction
     })
   };
+}
+
+function projectReviewWorkspace({
+  runbook,
+  ledger,
+  eventLog,
+  nextAction,
+  promptPack,
+  reviewerPromptPack,
+  latestRun
+}) {
+  const runbookTasks = Array.isArray(runbook?.tasks) ? runbook.tasks : [];
+  const ledgerTasks = new Map(
+    (Array.isArray(ledger?.tasks) ? ledger.tasks : [])
+      .map((task) => [task.taskId, task])
+  );
+  const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+  const targetTask = selectReviewWorkspaceTask({
+    runbookTasks,
+    ledgerTasks,
+    events,
+    nextAction
+  });
+  const taskId = targetTask?.taskId;
+  const ledgerTask = isNonEmptyString(taskId) ? ledgerTasks.get(taskId) ?? null : null;
+  const taskEvents = events.filter((event) => event?.taskId === taskId);
+  const workerEvidenceEvent = latestEventOfTypes(taskEvents, [
+    'worker.evidence-recorded',
+    'worker.self-check-passed',
+    'worker.self-check-failed'
+  ]);
+  const reviewEvent = latestEventOfTypes(taskEvents, ['reviewer.approved', 'reviewer.needs-revision']);
+  const workerEvidenceRef = firstNonEmptyString(
+    nextAction?.evidenceState?.workerEvidenceRef,
+    ledgerTask?.workerEvidenceRef,
+    firstGoalEvidenceRef(workerEvidenceEvent),
+    latestRunEvidenceRefByKind(latestRun, 'evidence')
+  );
+  const reviewPrompt = projectReviewWorkspacePrompt({
+    promptPack,
+    reviewerPromptPack,
+    nextAction,
+    taskId
+  });
+  const changedFiles = adoptionCandidateChangedFiles(latestRun);
+  const validationCommands = reviewPrompt.validationCommands.state === 'available'
+    ? reviewPrompt.validationCommands.items.map((item) => item.value)
+    : Array.isArray(targetTask?.copyOnlyCommands)
+      ? targetTask.copyOnlyCommands
+      : Array.isArray(nextAction?.copyOnlyCommands) ? nextAction.copyOnlyCommands : [];
+  const expectedVerdict = projectReviewWorkspaceExpectedVerdict({
+    goalId: runbook?.goalId ?? nextAction?.goalId ?? ledger?.goalId,
+    taskId,
+    targetTask,
+    nextAction
+  });
+  const hasWorkerEvidence = isNonEmptyString(workerEvidenceRef);
+  const state = targetTask === null || targetTask === undefined
+    ? 'missing'
+    : hasWorkerEvidence && reviewPrompt.textAvailable.value === true
+      ? 'available'
+      : hasWorkerEvidence ? 'partial' : 'waiting-worker-evidence';
+
+  return {
+    state,
+    modelName: valueState(REVIEW_WORKSPACE_MODEL_NAME),
+    sourcePolicy: valueState('goal-runbook.v1 + goal-progress-ledger.v1 + goal-event-log.v1 + goal-next-action.v1 + goal-prompt-pack.v1 + symphony.console-run'),
+    goalId: valueState(runbook?.goalId ?? nextAction?.goalId ?? ledger?.goalId),
+    taskId: valueState(taskId),
+    title: valueState(targetTask?.title ?? ledgerTask?.title),
+    activeNext: {
+      taskId: valueState(nextAction?.next?.taskId),
+      role: valueState(nextAction?.next?.role),
+      phase: valueState(nextAction?.next?.phase),
+      reason: valueState(nextAction?.reason ?? nextAction?.next?.reason)
+    },
+    sourceRun: projectReviewWorkspaceSourceRun(latestRun),
+    changedFiles: projectTextItems(changedFiles),
+    workerEvidence: {
+      ref: valueState(workerEvidenceRef),
+      ledgerRef: valueState(ledgerTask?.workerEvidenceRef),
+      eventRef: valueState(firstGoalEvidenceRef(workerEvidenceEvent)),
+      eventId: valueState(workerEvidenceEvent?.eventId),
+      eventType: valueState(workerEvidenceEvent?.eventType),
+      source: valueState(isNonEmptyString(ledgerTask?.workerEvidenceRef)
+        ? GOAL_PROGRESS_LEDGER_CONTRACT_NAME
+        : workerEvidenceEvent !== null
+          ? GOAL_EVENT_LOG_CONTRACT_NAME
+          : isNonEmptyString(latestRun?.runId) ? 'symphony.console-run' : GOAL_PROGRESS_LEDGER_CONTRACT_NAME)
+    },
+    reviewPrompt,
+    reviewerHandoff: projectReviewerHandoff({
+      goalId: runbook?.goalId ?? nextAction?.goalId ?? ledger?.goalId,
+      taskId,
+      reviewPrompt,
+      workerEvidenceEvent
+    }),
+    reviewChecklist: {
+      acceptance: projectTextItems(targetTask?.acceptance),
+      validationCommands: projectTextItems(validationCommands),
+      roleBoundary: reviewPrompt.roleGuidance.boundary,
+      evidenceRequirements: reviewPrompt.roleGuidance.evidenceRequirements,
+      handoffChecklist: reviewPrompt.roleGuidance.handoffChecklist,
+      requiredContext: projectTextItems([
+        'changed files from latest exposed run',
+        'source run id and workspace fields from symphony.console-run',
+        'worker evidence ref from goal-status/events/latest run',
+        'copy-only reviewer prompt from goal-prompt-pack.v1',
+        'expected reviewer.approved or reviewer.needs-revision event'
+      ])
+    },
+    expectedVerdict,
+    reviewVerdictRegistration: projectReviewVerdictRegistration({
+      goalId: runbook?.goalId ?? nextAction?.goalId ?? ledger?.goalId,
+      taskId,
+      expectedVerdict,
+      reviewPrompt,
+      workerEvidenceEvent,
+      runbook,
+      ledger,
+      eventLog,
+      latestRun
+    }),
+    existingReview: {
+      verdict: valueState(normalizedReviewVerdict(ledgerTask?.reviewVerdict) ?? explicitReviewVerdictState(reviewEvent).value),
+      evidenceRef: valueState(ledgerTask?.reviewEvidenceRef ?? firstGoalEvidenceRef(reviewEvent)),
+      eventId: valueState(reviewEvent?.eventId),
+      eventType: valueState(reviewEvent?.eventType),
+      source: valueState(reviewEvent !== null ? GOAL_EVENT_LOG_CONTRACT_NAME : GOAL_PROGRESS_LEDGER_CONTRACT_NAME)
+    },
+    safety: {
+      readOnly: valueState(true),
+      copyOnly: valueState(true),
+      workbenchWriteAvailable: valueState(true),
+      browserExecutionAvailable: valueState(false),
+      modelInvocationAvailable: valueState(false),
+      genericShellRunner: valueState(false),
+      workerCanApproveOwnTask: valueState(false),
+      reviewerActorMustDifferFromLatestWorker: valueState(true),
+      approvalReadinessSource: valueState('explicit goal review event only'),
+      unsupportedInferenceSources: arrayTextState(['file-name', 'branch', 'commit-message', 'frontend-heuristic'])
+    },
+    note: 'Review Workspace gives the independent reviewer the active task context already exposed by Workbench. It can register reviewer verdicts only through the controlled goal review dry-run and plan-hash confirm path; it does not read evidence bodies, open workspaces, run shell commands, start agents, or infer approval from source run metadata.'
+  };
+}
+
+function projectReviewerHandoff({
+  goalId,
+  taskId,
+  reviewPrompt,
+  workerEvidenceEvent
+}) {
+  const promptAvailable = reviewPrompt?.textAvailable?.value === true;
+  const reviewerEvidencePath = reviewPrompt?.evidenceFile?.value;
+  const latestWorkerActor = isNonEmptyString(workerEvidenceEvent?.actor?.id)
+    ? workerEvidenceEvent.actor.id
+    : undefined;
+  const promptRoute = isNonEmptyString(goalId) && isNonEmptyString(taskId)
+    ? `${GOAL_PROMPT_PACK_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}&role=reviewer`
+    : undefined;
+  const promptCommand = isNonEmptyString(goalId) && isNonEmptyString(taskId)
+    ? `pnpm --silent symphony goal prompt --goal ${goalId} --task ${taskId} --role reviewer --markdown`
+    : undefined;
+  const ready = promptAvailable && isNonEmptyString(reviewerEvidencePath);
+
+  return {
+    state: valueState(ready ? 'ready' : promptAvailable ? 'missing-reviewer-evidence-path' : 'missing-reviewer-prompt'),
+    sourceContract: reviewPrompt?.sourceContract ?? valueState(GOAL_PROMPT_PACK_CONTRACT_NAME),
+    promptGeneratedFrom: valueState('symphony goal prompt'),
+    promptRoute: valueState(promptRoute),
+    promptCommand: valueState(promptCommand),
+    reviewerEvidencePath: valueState(reviewerEvidencePath),
+    latestWorkerActor: valueState(latestWorkerActor),
+    separationRequired: valueState(true),
+    reviewerActorMustDifferFromLatestWorker: valueState(true),
+    workerCanReviewOwnTask: valueState(false),
+    workerCanApproveOwnTask: valueState(false),
+    enforcedBy: projectTextItems([
+      'goal-prompt-pack.v1 reviewer role boundary',
+      'symphony goal review reviewer-is-not-worker precondition',
+      'Workbench display does not register reviewer verdicts from prompt text'
+    ]),
+    handoffChecklist: projectTextItems([
+      'Generate the reviewer prompt with goal prompt for this task and role.',
+      'Use a reviewer id that differs from the latest worker actor id.',
+      'Write review evidence at the reviewer evidence path before registering a verdict.'
+    ])
+  };
+}
+
+function selectReviewWorkspaceTask({
+  runbookTasks,
+  ledgerTasks,
+  events,
+  nextAction
+}) {
+  const nextTaskId = nextAction?.next?.taskId;
+  const activeTask = isNonEmptyString(nextTaskId)
+    ? runbookTasks.find((task) => task?.taskId === nextTaskId)
+    : undefined;
+
+  if (activeTask !== undefined) {
+    return activeTask;
+  }
+
+  const taskWithWorkerEvidence = runbookTasks.find((task) => {
+    const ledgerTask = ledgerTasks.get(task?.taskId);
+    const taskEvents = events.filter((event) => event?.taskId === task?.taskId);
+    const latestWorkerEvidence = latestEventOfTypes(taskEvents, ['worker.evidence-recorded']);
+    const latestReview = latestEventOfTypes(taskEvents, ['reviewer.approved', 'reviewer.needs-revision']);
+
+    return (isNonEmptyString(ledgerTask?.workerEvidenceRef) || latestWorkerEvidence !== null) &&
+      (latestReview === null || goalEventIsAfter(latestWorkerEvidence, latestReview));
+  });
+
+  return taskWithWorkerEvidence ?? runbookTasks[0] ?? null;
+}
+
+function projectReviewWorkspaceSourceRun(latestRun) {
+  const evidenceArtifactPath = firstNonEmptyString(
+    latestRun?.evidenceArtifactPath,
+    latestRunArtifactPathByKind(latestRun, 'evidence')
+  );
+
+  return {
+    state: latestRun === null || latestRun === undefined ? 'missing' : 'available',
+    runId: valueState(latestRun?.runId),
+    status: valueState(latestRun?.status),
+    verifierStatus: valueState(latestRun?.verifierStatus),
+    executionPlanId: valueState(latestRun?.executionPlanId),
+    sourceWorkspacePath: valueState(latestRun?.sourceWorkspacePath),
+    sourceWorkspaceManifestPath: valueState(latestRun?.sourceWorkspaceManifestPath),
+    evidenceArtifactPath: valueState(evidenceArtifactPath),
+    evidenceRef: valueState(latestRunEvidenceRefByKind(latestRun, 'evidence')),
+    writeBoundary: valueState(latestRun?.writeBoundary),
+    workspaceWrites: valueState(latestRun?.workspaceWrites),
+    mainWorktreeWrites: valueState(latestRun?.mainWorktreeWrites),
+    updatedAt: valueState(latestRun?.updatedAt)
+  };
+}
+
+function projectReviewWorkspacePrompt({
+  promptPack,
+  reviewerPromptPack,
+  nextAction,
+  taskId
+}) {
+  const reviewerPrompts = Array.isArray(reviewerPromptPack?.prompts) ? reviewerPromptPack.prompts : [];
+  const prompts = Array.isArray(promptPack?.prompts) ? promptPack.prompts : [];
+  const reviewerPrompt = prompts.find((prompt) => (
+    prompt?.taskId === taskId &&
+    prompt?.role === 'reviewer' &&
+    prompt?.copyOnly === true &&
+    isNonEmptyString(prompt?.text)
+  )) ?? reviewerPrompts.find((prompt) => (
+    prompt?.taskId === taskId &&
+    prompt?.role === 'reviewer' &&
+    prompt?.copyOnly === true &&
+    isNonEmptyString(prompt?.text)
+  )) ?? null;
+  const fallbackText = nextAction?.next?.taskId === taskId &&
+    nextAction?.next?.role === 'reviewer' &&
+    nextAction?.copyOnlyPrompt?.available === true &&
+    isNonEmptyString(nextAction?.copyOnlyPrompt?.text)
+      ? nextAction.copyOnlyPrompt.text
+      : undefined;
+  const text = reviewerPrompt?.text ?? fallbackText;
+  const roleGuidance = reviewerPrompt?.roleGuidance;
+
+  return {
+    state: isNonEmptyString(text) ? 'available' : 'missing',
+    sourceContract: valueState(reviewerPrompt === null && isNonEmptyString(fallbackText)
+      ? GOAL_NEXT_ACTION_CONTRACT_NAME
+      : GOAL_PROMPT_PACK_CONTRACT_NAME),
+    taskId: valueState(reviewerPrompt?.taskId ?? taskId),
+    role: valueState(reviewerPrompt?.role ?? 'reviewer'),
+    title: valueState(reviewerPrompt?.title),
+    evidenceFile: valueState(reviewerPrompt?.evidenceFile),
+    format: valueState(reviewerPrompt?.format ?? nextAction?.copyOnlyPrompt?.format),
+    textAvailable: valueState(isNonEmptyString(text)),
+    text: valueState(text),
+    validationCommands: projectTextItems(reviewerPrompt?.validationCommands),
+    roleGuidance: {
+      label: valueState(roleGuidance?.label),
+      phase: valueState(roleGuidance?.phase),
+      boundary: projectTextItems(roleGuidance?.boundary),
+      evidenceRequirements: projectTextItems(roleGuidance?.evidenceRequirements),
+      handoffChecklist: projectTextItems(roleGuidance?.handoffChecklist)
+    }
+  };
+}
+
+function projectReviewWorkspaceExpectedVerdict({
+  goalId,
+  taskId,
+  targetTask,
+  nextAction
+}) {
+  const nextIsReviewer = nextAction?.next?.taskId === taskId && nextAction?.next?.role === 'reviewer';
+  const runbookReviewerEvents = Array.isArray(targetTask?.expectedEvidence?.reviewer)
+    ? targetTask.expectedEvidence.reviewer
+    : isNonEmptyString(targetTask?.expectedEvidence?.reviewer) ? [targetTask.expectedEvidence.reviewer] : [];
+  const nextAllowedEvents = nextIsReviewer && Array.isArray(nextAction?.afterCompletion?.allowedEvents)
+    ? nextAction.afterCompletion.allowedEvents
+    : [];
+  const allowedEvents = (nextAllowedEvents.length > 0 ? nextAllowedEvents : runbookReviewerEvents)
+    .filter((eventType) => eventType === 'reviewer.approved' || eventType === 'reviewer.needs-revision');
+
+  return {
+    registerWith: valueState(nextIsReviewer ? nextAction?.afterCompletion?.registerWith : 'symphony goal review'),
+    allowedEvents: projectTextItems(allowedEvents),
+    expectedEvidence: expectedEvidenceState(targetTask?.expectedEvidence?.reviewer),
+    verdicts: projectTextItems(['approved', 'needs-revision']),
+    dryRunCommand: valueState(isNonEmptyString(goalId) && isNonEmptyString(taskId)
+      ? `pnpm --silent symphony goal review --goal ${goalId} --task ${taskId} --reviewer <reviewer-id> --verdict approved|needs-revision --evidence-ref <review-evidence-ref> --dry-run --json`
+      : undefined),
+    confirmRequiresPlanHash: valueState(true),
+    writesInDryRun: valueState(false)
+  };
+}
+
+function projectReviewVerdictRegistration({
+  goalId,
+  taskId,
+  expectedVerdict,
+  reviewPrompt,
+  workerEvidenceEvent,
+  runbook,
+  ledger,
+  eventLog,
+  latestRun
+}) {
+  const allowedEvents = (expectedVerdict?.allowedEvents?.items ?? [])
+    .map((item) => item.value)
+    .filter((eventType) => eventType === 'reviewer.approved' || eventType === 'reviewer.needs-revision');
+  const definitions = allowedEvents
+    .map((eventType) => GOAL_EVENT_FORM_DEFINITIONS.find((definition) => definition.eventType === eventType))
+    .filter((definition) => definition !== undefined);
+  const evidenceRef = controlledReviewEvidenceRef(reviewPrompt?.evidenceFile?.value);
+  const latestWorkerActor = isNonEmptyString(workerEvidenceEvent?.actor?.id)
+    ? workerEvidenceEvent.actor.id
+    : undefined;
+  const evidenceRefHelper = projectEvidenceRefHelper({
+    runbook,
+    ledger,
+    eventLog,
+    latestRun
+  });
+  const nextActionForReview = isNonEmptyString(goalId) && isNonEmptyString(taskId)
+    ? {
+        goalId,
+        next: {
+          taskId,
+          role: 'reviewer',
+          phase: 'review'
+        },
+        afterCompletion: {
+          registerWith: 'symphony goal review',
+          allowedEvents
+        }
+      }
+    : null;
+  const fieldOverrides = {
+    goalId: {
+      source: REVIEW_WORKSPACE_MODEL_NAME
+    },
+    taskId: {
+      source: REVIEW_WORKSPACE_MODEL_NAME
+    },
+    reviewerId: {
+      placeholder: isNonEmptyString(latestWorkerActor)
+        ? `reviewer id, not ${latestWorkerActor}`
+        : 'codex-reviewer-task-id'
+    },
+    evidenceRef: isNonEmptyString(evidenceRef)
+      ? {
+          value: evidenceRef,
+          source: 'goal-prompt-pack.v1 evidenceFile'
+        }
+      : {
+          placeholder: 'docs/plans/<review-evidence>.md or artifact:run:review'
+        }
+  };
+  const forms = nextActionForReview === null
+    ? []
+    : definitions.map((definition) => projectGoalEventFormSpec({
+        definition,
+        nextAction: nextActionForReview,
+        recommended: true,
+        evidenceRefHelper,
+        fieldOverrides
+      }));
+
+  return {
+    state: nextActionForReview === null ? 'missing' : forms.length === 0 ? 'empty' : 'available',
+    modelName: valueState(GOAL_EVENT_FORM_MODEL_NAME),
+    sourceContract: valueState(`${REVIEW_WORKSPACE_MODEL_NAME} + ${GOAL_UPDATE_PLAN_CONTRACT_NAME}`),
+    goalId: valueState(goalId),
+    taskId: valueState(taskId),
+    registerWith: valueState('symphony goal review'),
+    allowedEvents: projectTextItems(allowedEvents),
+    defaultFormId: valueState(forms[0]?.formId.value),
+    latestWorkerActor: valueState(latestWorkerActor),
+    reviewerEvidenceRef: valueState(evidenceRef),
+    forms: {
+      state: forms.length === 0 ? 'empty' : 'available',
+      count: valueState(forms.length),
+      items: forms
+    },
+    policy: {
+      reviewerActorMustDifferFromLatestWorker: valueState(true),
+      workerCanApproveOwnTask: valueState(false),
+      approvalReadinessSource: valueState('explicit goal review event only'),
+      unsupportedInferenceSources: arrayTextState(['file-name', 'branch', 'commit-message', 'frontend-heuristic'])
+    },
+    safety: {
+      dryRunWrites: valueState(false),
+      confirmRequiresPlanHash: valueState(true),
+      workbenchWriteAvailable: valueState(true),
+      browserExecutionAvailable: valueState(false),
+      modelInvocationAvailable: valueState(false),
+      genericShellRunner: valueState(false)
+    },
+    note: 'Review verdict registration reuses symphony goal review dry-run preview and plan-hash confirm for approved or needs-revision. Successful confirm refreshes goal progress, events, next action, and operation state.'
+  };
+}
+
+function controlledReviewEvidenceRef(value) {
+  if (!isControlledEvidenceRefInput(value)) {
+    return undefined;
+  }
+
+  return normalizeEvidenceRefInput(value);
 }
 
 function projectMainVerificationReadiness({
@@ -1164,6 +2136,160 @@ function evidenceFileForMainVerification({ goalId, taskId }) {
   const taskSegment = goalSegment === 'v19' ? taskId.replaceAll('-', '') : taskId;
 
   return `docs/plans/${goalSegment}-${taskSegment}-main-verification-evidence-2026-05-29.md`;
+}
+
+function projectGoalOperationConsole({ result, operations, nextAction }) {
+  const runs = Array.isArray(operations?.runs) ? operations.runs : null;
+  const latestRun = runs === null || runs.length === 0 ? null : runs.at(-1);
+  const next = nextAction?.next;
+  const polling = projectOperationConsolePolling({
+    result,
+    operations,
+    latestRun
+  });
+
+  if (result?.ok !== true && operations === null) {
+    return {
+      state: 'unavailable',
+      contractName: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+      contractVersion: valueState(undefined),
+      goalId: valueState(undefined),
+      storage: valueState(undefined),
+      operationCount: valueState(undefined),
+      latestOperationId: valueState(undefined),
+      nextAction: projectOperationConsoleNextAction(nextAction),
+      latest: projectOperationConsoleRun(null),
+      items: [],
+      polling,
+      note: 'Goal Operation Console displays the managed operation registry and controlled goal command API results. It does not run shell commands, infer approvals, or mark release readiness.'
+    };
+  }
+
+  return {
+    state: runs === null ? 'missing' : runs.length === 0 ? 'empty' : 'available',
+    contractName: valueState(operations?.contractName ?? GOAL_OPERATION_RUNS_CONTRACT_NAME),
+    contractVersion: valueState(operations?.contractVersion),
+    goalId: valueState(operations?.goalId),
+    storage: valueState(operations?.storage),
+    operationCount: valueState(operations?.operationCount ?? runs?.length),
+    latestOperationId: valueState(operations?.latestOperationId),
+    nextAction: {
+      taskId: valueState(next?.taskId),
+      role: valueState(next?.role),
+      phase: valueState(next?.phase),
+      status: valueState(nextAction?.status),
+      reason: valueState(nextAction?.reason ?? next?.reason)
+    },
+    latest: projectOperationConsoleRun(latestRun),
+    items: runs === null ? [] : runs.map((run) => projectOperationConsoleRun(run)),
+    polling,
+    note: 'Goal Operation Console shows command preview, controlled API stdout/stderr, exit code, plan hash, event ids, and the current goal next action. The output is derived from Workbench goal operation contracts and goal next; it is not a generic shell runner.'
+  };
+}
+
+function projectOperationConsolePolling({ result, operations, latestRun }) {
+  const routePath = isNonEmptyString(result?.routeDescriptor?.path)
+    ? result.routeDescriptor.path
+    : isNonEmptyString(result?.route)
+      ? result.route
+      : undefined;
+  const routeReady = result?.ok === true && isNonEmptyString(routePath);
+  const latestStatus = latestRun?.status;
+  const reason = routeReady
+    ? latestRun === null || latestRun === undefined
+      ? 'near-live polling keeps the operation console ready for the next Workbench goal operation'
+      : `near-live polling refreshes managed operation output after status ${latestStatus ?? MISSING_TEXT}`
+    : 'operation polling waits until the scoped operations route is available';
+
+  return {
+    enabled: valueState(routeReady),
+    route: valueState(routePath),
+    intervalMs: valueState(routeReady ? 2500 : undefined),
+    source: valueState('GET goal-operation-runs.v1'),
+    latestStatus: valueState(latestStatus),
+    operationCount: valueState(operations?.operationCount),
+    reason: valueState(reason)
+  };
+}
+
+function projectOperationConsoleRun(run) {
+  if (run === null || run === undefined) {
+    return {
+      state: 'missing',
+      operationId: valueState(undefined),
+      commandPreview: valueState(undefined),
+      stdout: textState(MISSING_TEXT),
+      stderr: textState(MISSING_TEXT),
+      exitCode: valueState(undefined),
+      status: valueState(undefined),
+      planHash: valueState(undefined),
+      eventIds: textState(MISSING_TEXT),
+      updatedAt: valueState(undefined)
+    };
+  }
+
+  const eventIds = Array.isArray(run.eventIds) ? run.eventIds : [];
+  const commandPreview = operationRunCommandPreview(run);
+  const stdout = [
+    `status=${run.status ?? MISSING_TEXT}`,
+    `planHash=${run.planHash ?? MISSING_TEXT}`,
+    eventIds.length > 0 ? `eventIds=${eventIds.join(',')}` : 'eventIds=none'
+  ].join('\n');
+
+  return {
+    state: 'available',
+    operationId: valueState(run.operationId),
+    commandPreview: valueState(commandPreview),
+    stdout: textState(stdout),
+    stderr: textState(''),
+    exitCode: valueState(0),
+    goalId: valueState(run.goalId),
+    taskId: valueState(run.taskId),
+    role: valueState(run.role),
+    commandKind: valueState(run.commandKind),
+    commandName: valueState(run.commandName),
+    status: valueState(run.status),
+    planHash: valueState(run.planHash),
+    eventIds: textState(eventIds.length > 0 ? eventIds.join('、') : '无'),
+    source: valueState(run.source),
+    startedAt: valueState(run.timestamps?.startedAt),
+    updatedAt: valueState(run.timestamps?.updatedAt),
+    completedAt: valueState(run.timestamps?.completedAt)
+  };
+}
+
+function operationRunCommandPreview(run) {
+  const parts = [
+    isNonEmptyString(run?.commandName) ? run.commandName : `symphony goal ${run?.commandKind ?? '<command>'}`,
+    '--goal',
+    run?.goalId ?? '<goal-id>'
+  ];
+
+  if (isNonEmptyString(run?.taskId)) {
+    parts.push('--task', run.taskId);
+  }
+
+  if (run?.status === 'confirmed') {
+    parts.push('--confirm');
+  } else {
+    parts.push('--dry-run');
+  }
+
+  if (isNonEmptyString(run?.planHash)) {
+    parts.push('--plan-hash', run.planHash);
+  }
+
+  return parts.join(' ');
+}
+
+function projectOperationConsoleNextAction(nextAction) {
+  return {
+    taskId: valueState(nextAction?.next?.taskId),
+    role: valueState(nextAction?.next?.role),
+    phase: valueState(nextAction?.next?.phase),
+    status: valueState(nextAction?.status),
+    reason: valueState(nextAction?.reason ?? nextAction?.next?.reason)
+  };
 }
 
 function projectActiveGoalViewModel({
@@ -1790,22 +2916,48 @@ function projectGoalPromptPreview({ result, promptPack, nextAction }) {
     items: visiblePrompts.map((prompt) => ({
       taskId: valueState(prompt?.taskId),
       role: valueState(prompt?.role),
+      phase: valueState(prompt?.phase ?? prompt?.roleGuidance?.phase),
       title: valueState(prompt?.title),
       format: valueState(prompt?.format),
       sourceContract: valueState(prompt?.sourceContract),
-      text: valueState(prompt?.text)
+      text: valueState(prompt?.text),
+      revisionContext: projectRevisionPromptContext(prompt?.revisionContext)
     })),
     errorEnvelope: projectErrorEnvelope(null),
     note: 'Prompt Preview 只把 copy-only text 放进可选择文本块；没有执行、confirm、下载、打开文件或模型调用入口。'
   };
 }
 
-function projectGoalCloseoutGaps({ result, closeout }) {
+function projectRevisionPromptContext(revisionContext) {
+  const available = revisionContext !== null && typeof revisionContext === 'object';
+
+  return {
+    state: valueState(available ? revisionContext.state ?? 'available' : 'missing'),
+    triggerEventType: valueState(revisionContext?.trigger?.eventType),
+    triggerEventId: valueState(revisionContext?.trigger?.eventId),
+    blockerCount: valueState(Array.isArray(revisionContext?.blockers) ? revisionContext.blockers.length : undefined),
+    recordedFailedCommandCount: valueState(Array.isArray(revisionContext?.failedCommands?.recorded) ? revisionContext.failedCommands.recorded.length : undefined),
+    rerunCommandCount: valueState(Array.isArray(revisionContext?.failedCommands?.rerun) ? revisionContext.failedCommands.rerun.length : undefined),
+    changedFileCount: valueState(Array.isArray(revisionContext?.changedFiles?.items) ? revisionContext.changedFiles.items.length : undefined),
+    acceptanceDeltaCount: valueState(Array.isArray(revisionContext?.acceptanceDelta) ? revisionContext.acceptanceDelta.length : undefined)
+  };
+}
+
+function projectGoalCloseoutGaps({
+  result,
+  closeout,
+  runbook,
+  ledger,
+  eventLog,
+  latestRun
+}) {
   const missing = Array.isArray(closeout?.missing) ? closeout.missing : null;
+  const goalId = firstNonEmptyString(closeout?.goalId, runbook?.goalId, ledger?.goalId);
 
   if (result?.ok !== true) {
     return {
       state: 'unavailable',
+      modelName: valueState(RELEASE_CLOSEOUT_WORKSPACE_MODEL_NAME),
       contractName: valueState(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
       contractVersion: valueState(undefined),
       goalId: valueState(undefined),
@@ -1817,6 +2969,22 @@ function projectGoalCloseoutGaps({ result, closeout }) {
         items: []
       },
       releaseGates: [],
+      verificationChecklist: projectReleaseVerificationChecklist({
+        closeout: null,
+        goalId
+      }),
+      releaseReadyGate: projectReleaseReadyGateRegistration({
+        closeout: null,
+        goalId,
+        runbook,
+        ledger,
+        eventLog,
+        latestRun
+      }),
+      tagEvidencePrompt: projectTagEvidencePrompt({
+        closeout: null,
+        goalId
+      }),
       nextAction: valueState(undefined),
       safety: projectGoalCloseoutSafety(undefined),
       errorEnvelope: projectErrorEnvelope(result?.errorEnvelope),
@@ -1826,6 +2994,7 @@ function projectGoalCloseoutGaps({ result, closeout }) {
 
   return {
     state: closeout === null || closeout === undefined ? 'missing' : 'available',
+    modelName: valueState(RELEASE_CLOSEOUT_WORKSPACE_MODEL_NAME),
     contractName: valueState(closeout?.contractName),
     contractVersion: valueState(closeout?.contractVersion),
     goalId: valueState(closeout?.goalId),
@@ -1847,11 +3016,205 @@ function projectGoalCloseoutGaps({ result, closeout }) {
       gate: valueState(gate),
       status: valueState(status)
     })),
+    verificationChecklist: projectReleaseVerificationChecklist({
+      closeout,
+      goalId
+    }),
+    releaseReadyGate: projectReleaseReadyGateRegistration({
+      closeout,
+      goalId,
+      runbook,
+      ledger,
+      eventLog,
+      latestRun
+    }),
+    tagEvidencePrompt: projectTagEvidencePrompt({
+      closeout,
+      goalId
+    }),
     nextAction: valueState(closeout?.nextAction),
     safety: projectGoalCloseoutSafety(closeout?.safety),
     errorEnvelope: projectErrorEnvelope(null),
-    note: 'Closeout Gaps 使用 goal-closeout-report.v1 的 missing items、releaseGates 和 releaseReadySource；不从命令输出、prompt、branch 或路径推断 release 状态。'
+    note: 'Closeout Gaps 使用 goal-closeout-report.v1 的 missing items、releaseGates、verification checklist、release.ready registration form 和 tag evidence prompt；不从命令输出、prompt、branch 或路径推断 release 状态。'
   };
+}
+
+function projectReleaseVerificationChecklist({ closeout, goalId }) {
+  const commandGoalId = isNonEmptyString(goalId) ? goalId : '<goal-id>';
+  const releaseGates = closeout?.releaseGates ?? {};
+  const items = RELEASE_VERIFICATION_CHECKLIST.map((item) => {
+    const gateStatus = releaseGateStatusText(releaseGates[item.gateId]);
+
+    return {
+      id: valueState(item.id),
+      label: valueState(item.label),
+      gate: valueState(item.gate),
+      gateId: valueState(item.gateId),
+      status: valueState(gateStatus),
+      command: valueState(item.command),
+      registrationCommand: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate ${item.gate} --status passed --verifier <release-verifier-id> --evidence-ref <release-evidence-ref> --dry-run --json`),
+      needsEvidence: valueState(gateStatus !== 'passed')
+    };
+  });
+  const pendingCount = items.filter((item) => item.status.value !== 'passed').length;
+
+  return {
+    state: closeout === null || closeout === undefined ? 'missing' : 'available',
+    sourceContract: valueState(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+    closeoutCommand: valueState(`pnpm --silent symphony goal closeout --goal ${commandGoalId} --markdown`),
+    totalCount: valueState(items.length),
+    pendingCount: valueState(pendingCount),
+    passedCount: valueState(items.length - pendingCount),
+    items,
+    safety: {
+      copyOnlyCommands: valueState(true),
+      browserExecutionAvailable: valueState(false),
+      genericShellRunner: valueState(false),
+      releaseReadyInferredFromCommands: valueState(false)
+    },
+    note: valueState('Checklist rows show release gate status from goal-closeout-report.v1 and copy-only commands for the operator. Workbench does not run these commands or convert command text into release readiness.')
+  };
+}
+
+function projectReleaseReadyGateRegistration({
+  closeout,
+  goalId,
+  runbook,
+  ledger,
+  eventLog,
+  latestRun
+}) {
+  const definition = GOAL_EVENT_FORM_DEFINITIONS.find((candidate) => (
+    candidate.eventType === 'release.ready-declared'
+  ));
+  const commandGoalId = isNonEmptyString(goalId) ? goalId : '<goal-id>';
+  const releaseEvidencePath = releaseEvidencePathForGoal(goalId);
+  const missingReleaseReady = Array.isArray(closeout?.missing)
+    ? closeout.missing.some((item) => item?.kind === 'release-ready' || item?.expectedEvent === 'release.ready-declared')
+    : false;
+  const form = definition === undefined
+    ? null
+    : projectGoalEventFormSpec({
+        definition,
+        nextAction: {
+          goalId,
+          next: {
+            taskId: null,
+            role: 'release-manager',
+            phase: 'release-prep'
+          }
+        },
+        recommended: closeout?.summary?.releaseReady !== true && missingReleaseReady,
+        evidenceRefHelper: projectEvidenceRefHelper({
+          runbook,
+          ledger,
+          eventLog,
+          latestRun
+        }),
+        fieldOverrides: {
+          evidenceRef: {
+            value: releaseEvidencePath,
+            source: 'release evidence path'
+          },
+          statement: {
+            value: 'Release readiness declared from explicit closeout evidence.',
+            source: 'release closeout workspace'
+          }
+        }
+      });
+
+  return {
+    state: definition === undefined ? 'missing' : closeout?.summary?.releaseReady === true ? 'already-declared' : 'available',
+    sourcePolicy: valueState('goal-closeout-report.v1 + goal-update-plan.v1 confirm flow'),
+    missingReleaseReady: valueState(missingReleaseReady),
+    releaseEvidencePath: valueState(releaseEvidencePath),
+    dryRunCommand: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate release.ready --status declared --verifier <release-manager-id> --evidence-ref ${releaseEvidencePath} --dry-run --json`),
+    confirmCommandPattern: valueState(`pnpm --silent symphony goal gate --goal ${commandGoalId} --gate release.ready --status declared --verifier <release-manager-id> --evidence-ref ${releaseEvidencePath} --confirm --plan-hash sha256:<PLAN_HASH>`),
+    form,
+    safety: {
+      confirmRequiresPlanHash: valueState(true),
+      appendOnlyOnConfirm: valueState(true),
+      workbenchWriteAvailable: valueState(true),
+      browserExecutionAvailable: valueState(false),
+      modelInvocationAvailable: valueState(false),
+      declaresReleaseReadyOnlyOnConfirm: valueState(true)
+    },
+    note: valueState('The release.ready path is a controlled goal gate dry-run and plan-hash confirm. The form is available only as an explicit append path; it does not tag, merge, run checks, or infer readiness.')
+  };
+}
+
+function projectTagEvidencePrompt({ closeout, goalId }) {
+  const commandGoalId = isNonEmptyString(goalId) ? goalId : '<goal-id>';
+  const tagEvidencePath = tagEvidencePathForGoal(goalId);
+  const releaseEvidencePath = releaseEvidencePathForGoal(goalId);
+  const checklistLines = RELEASE_VERIFICATION_CHECKLIST.map((item) => (
+    `- ${item.label}: ${item.command}; gate ${item.gate}`
+  ));
+  const promptLines = [
+    '/goal',
+    `Prepare tag evidence for ${commandGoalId}.`,
+    '',
+    `Read closeout: pnpm --silent symphony goal closeout --goal ${commandGoalId} --markdown`,
+    `Release evidence path: ${releaseEvidencePath}`,
+    `Tag evidence path: ${tagEvidencePath}`,
+    '',
+    'Check and record exact command results:',
+    ...checklistLines,
+    '',
+    'Record remaining closeout gaps from goal-closeout-report.v1. If gaps remain, write blockers and stop.',
+    'Do not create a tag, merge branches, declare release.ready, or treat filenames, branches, commits, prompts, or command text as release proof.'
+  ];
+
+  return {
+    state: closeout === null || closeout === undefined ? 'missing' : 'available',
+    sourceContract: valueState(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+    evidencePath: valueState(tagEvidencePath),
+    releaseEvidencePath: valueState(releaseEvidencePath),
+    promptFormat: valueState('markdown'),
+    text: valueState(promptLines.join('\n')),
+    safety: {
+      copyOnly: valueState(true),
+      createsTag: valueState(false),
+      declaresReleaseReady: valueState(false),
+      runsShell: valueState(false)
+    }
+  };
+}
+
+function releaseGateStatusText(status) {
+  return ['unknown', 'missing', 'pending', 'passed', 'failed', 'blocked'].includes(status)
+    ? status
+    : 'unknown';
+}
+
+function releaseEvidencePathForGoal(goalId) {
+  const version = releaseVersionPrefix(goalId);
+
+  if (version !== null) {
+    return `docs/plans/${version}-release-evidence-2026-05-29.md`;
+  }
+
+  return isNonEmptyString(goalId)
+    ? `docs/plans/${goalId}-release-evidence.md`
+    : 'docs/plans/<release-evidence>.md';
+}
+
+function tagEvidencePathForGoal(goalId) {
+  const version = releaseVersionPrefix(goalId);
+
+  if (version !== null) {
+    return `docs/plans/${version}-tag-evidence-2026-05-29.md`;
+  }
+
+  return isNonEmptyString(goalId)
+    ? `docs/plans/${goalId}-tag-evidence.md`
+    : 'docs/plans/<tag-evidence>.md';
+}
+
+function releaseVersionPrefix(goalId) {
+  const match = String(goalId ?? '').match(/^(v\d+)-/u);
+
+  return match?.[1] ?? null;
 }
 
 function projectGoalNextDetails(next) {
@@ -1892,11 +3255,16 @@ function projectGoalEventFormModel(nextAction, evidenceRefContext = {}) {
   const allowedEvents = Array.isArray(nextAction?.afterCompletion?.allowedEvents)
     ? nextAction.afterCompletion.allowedEvents.filter((eventType) => isNonEmptyString(eventType))
     : [];
-  const supportedDefinitions = GOAL_EVENT_FORM_DEFINITIONS;
+  const supportedDefinitions = GOAL_EVENT_FORM_DEFINITIONS.filter((definition) => definition.eventFamily !== 'release');
   const recommendedDefinitions = allowedEvents
     .map((eventType) => supportedDefinitions.find((definition) => definition.eventType === eventType))
     .filter((definition) => definition !== undefined);
   const evidenceRefHelper = projectEvidenceRefHelper(evidenceRefContext);
+  const workerEvidenceHandoff = projectV25WorkerEvidenceHandoff({
+    nextAction,
+    latestRun: evidenceRefContext.latestRun,
+    evidenceRefHelper
+  });
   const recommendedForms = recommendedDefinitions.map((definition) => projectGoalEventFormSpec({
     definition,
     nextAction,
@@ -1928,6 +3296,7 @@ function projectGoalEventFormModel(nextAction, evidenceRefContext = {}) {
     unsupportedAllowedEvents: arrayTextState(unsupportedAllowedEvents),
     defaultFormId: valueState(recommendedForms[0]?.formId.value),
     evidenceRefHelper,
+    workerEvidenceHandoff,
     recommendedForms: {
       state: recommendedForms.length === 0 ? 'empty' : 'available',
       count: valueState(recommendedForms.length),
@@ -1962,7 +3331,8 @@ function projectGoalEventFormSpec({
   definition,
   nextAction,
   recommended,
-  evidenceRefHelper
+  evidenceRefHelper,
+  fieldOverrides = {}
 }) {
   const taskId = nextAction?.next?.taskId;
   const goalId = nextAction?.goalId;
@@ -1991,10 +3361,296 @@ function projectGoalEventFormSpec({
         fieldId,
         definition,
         goalId,
-        taskId
+        taskId,
+        fieldOverrides
       }))
     }
   };
+}
+
+function projectV25WorkerEvidenceHandoff({
+  nextAction,
+  latestRun,
+  evidenceRefHelper
+}) {
+  const goalId = nextAction?.goalId;
+  const taskId = nextAction?.next?.taskId;
+  const workerEvidenceDefinition = GOAL_EVENT_FORM_DEFINITIONS.find((definition) => (
+    definition.eventType === 'worker.evidence-recorded'
+  ));
+  const evidenceArtifactPath = firstNonEmptyString(
+    latestRun?.evidenceArtifactPath,
+    latestRunArtifactPathByKind(latestRun, 'evidence')
+  );
+  const sourceWorkspacePath = latestRun?.sourceWorkspacePath;
+  const evidenceRef = latestRunEvidenceRefByKind(latestRun, 'evidence');
+  const available = goalId === V25_CONTROLLED_IMPLEMENTATION_GOAL_ID
+    && workerEvidenceDefinition !== undefined
+    && isNonEmptyString(taskId)
+    && isNonEmptyString(latestRun?.runId)
+    && isNonEmptyString(evidenceArtifactPath)
+    && isNonEmptyString(sourceWorkspacePath)
+    && isNonEmptyString(evidenceRef)
+    && latestRunIsConfirmedIsolatedWorkspaceRun(latestRun);
+
+  if (!available) {
+    return {
+      state: 'empty',
+      goalId: valueState(goalId),
+      taskId: valueState(taskId),
+      sourceRunId: valueState(latestRun?.runId),
+      executionPlanId: valueState(latestRun?.executionPlanId),
+      evidenceArtifactPath: valueState(evidenceArtifactPath),
+      sourceWorkspacePath: valueState(sourceWorkspacePath),
+      evidenceRef: valueState(evidenceRef),
+      registrationForm: null,
+      promptHandoff: {
+        available: valueState(false),
+        format: valueState('markdown'),
+        text: textState(MISSING_TEXT)
+      },
+      safety: projectV25WorkerEvidenceHandoffSafety(),
+      note: 'v25 worker evidence handoff appears only after a confirmed isolated workspace run exposes evidenceArtifactPath, sourceWorkspacePath, and a managed evidence artifact ref.'
+    };
+  }
+
+  const actorId = `codex-v25-${taskId}-worker`;
+  const statement = `Confirmed isolated workspace run ${latestRun.runId} produced worker evidence.`;
+  const registrationForm = projectGoalEventFormSpec({
+    definition: workerEvidenceDefinition,
+    nextAction,
+    recommended: true,
+    evidenceRefHelper,
+    fieldOverrides: {
+      workerActor: {
+        value: actorId,
+        source: 'v25 worker evidence handoff'
+      },
+      evidenceRef: {
+        value: evidenceRef,
+        source: 'latest run evidenceArtifactPath'
+      },
+      statement: {
+        value: statement,
+        source: 'v25 worker evidence handoff'
+      }
+    }
+  });
+
+  return {
+    state: 'available',
+    goalId: valueState(goalId),
+    taskId: valueState(taskId),
+    sourceRunId: valueState(latestRun.runId),
+    executionPlanId: valueState(latestRun.executionPlanId),
+    evidenceArtifactPath: valueState(evidenceArtifactPath),
+    sourceWorkspacePath: valueState(sourceWorkspacePath),
+    evidenceRef: valueState(evidenceRef),
+    registrationForm,
+    promptHandoff: {
+      available: valueState(true),
+      format: valueState('markdown'),
+      text: textState(buildV25WorkerEvidencePrompt({
+        goalId,
+        taskId,
+        latestRun,
+        evidenceArtifactPath,
+        sourceWorkspacePath,
+        evidenceRef,
+        actorId
+      }))
+    },
+    safety: projectV25WorkerEvidenceHandoffSafety(),
+    note: 'This v25 handoff turns the confirmed isolated workspace run output into a worker.evidence-recorded registration form. It does not infer approval, run a shell command, merge, tag, or let the worker review the task.'
+  };
+}
+
+function latestRunIsConfirmedIsolatedWorkspaceRun(latestRun) {
+  return latestRun?.workspaceWrites === true
+    && latestRun?.mainWorktreeWrites === false
+    && isNonEmptyString(latestRun?.executionPlanId)
+    && Array.isArray(latestRun?.pipeline)
+    && latestRun.pipeline.includes('implement');
+}
+
+function runIsAdoptionCandidate(run) {
+  const hasIsolatedWorkspace = run?.workspaceWrites === true || run?.writeBoundary === 'isolated-workspace';
+  const keepsMainClean = run?.mainWorktreeWrites === false;
+  const hasImplementationSource = isNonEmptyString(run?.executionPlanId)
+    || (Array.isArray(run?.pipeline) && run.pipeline.includes('implement'));
+  const evidenceArtifactPath = firstNonEmptyString(
+    run?.evidenceArtifactPath,
+    latestRunArtifactPathByKind(run, 'evidence')
+  );
+
+  return run?.status === 'passed'
+    && run?.verifierStatus === 'passed'
+    && hasIsolatedWorkspace
+    && keepsMainClean
+    && hasImplementationSource
+    && isNonEmptyString(run?.runId)
+    && isNonEmptyString(run?.sourceWorkspacePath)
+    && isNonEmptyString(evidenceArtifactPath);
+}
+
+function projectAdoptionCandidates({ runsResult, runs, latestRun }) {
+  const routeRuns = Array.isArray(runs?.runs) ? runs.runs : null;
+  const candidateRuns = routeRuns === null ? [] : routeRuns.filter((run) => runIsAdoptionCandidate(run));
+  const latestRunId = latestRun?.runId;
+
+  return {
+    state: routeRuns === null ? 'missing' : candidateRuns.length === 0 ? 'empty' : 'available',
+    sourceContract: valueState('symphony.console-runs'),
+    routeState: valueState(routeStateFromResult(runsResult)),
+    route: valueState(runsResult?.route),
+    count: valueState(routeRuns === null ? undefined : candidateRuns.length),
+    totalRunsScanned: valueState(routeRuns === null ? undefined : routeRuns.length),
+    criteria: {
+      status: valueState('passed'),
+      verifierStatus: valueState('passed'),
+      workspace: valueState('isolated workspace with sourceWorkspacePath'),
+      mainWorktreeWrites: valueState(false),
+      evidence: valueState('evidenceArtifactPath or managed evidence artifact ref')
+    },
+    items: candidateRuns.map((run) => projectAdoptionCandidateRun({
+      run,
+      latestRunId
+    })),
+    safety: {
+      readOnly: valueState(true),
+      copyOnly: valueState(true),
+      browserExecutionAvailable: valueState(false),
+      genericShellRunner: valueState(false),
+      workerCanApproveOwnTask: valueState(false),
+      approvalReadinessSource: valueState('goal-event-log.v1 only'),
+      unsupportedInferenceSources: arrayTextState(['file-name', 'branch', 'commit-message', 'frontend-heuristic'])
+    },
+    note: 'Adoption Candidate Panel lists confirmed isolated workspace runs that already passed verifier checks. It does not plan adoption, inspect patches, confirm adoption, merge, tag, or infer reviewer/main/release status.'
+  };
+}
+
+function projectAdoptionCandidateRun({ run, latestRunId }) {
+  const evidenceArtifactPath = firstNonEmptyString(
+    run?.evidenceArtifactPath,
+    latestRunArtifactPathByKind(run, 'evidence')
+  );
+  const evidenceRef = latestRunEvidenceRefByKind(run, 'evidence');
+  const changedFiles = adoptionCandidateChangedFiles(run);
+
+  return {
+    sourceRunId: valueState(run?.runId),
+    isLatest: valueState(Boolean(latestRunId && run?.runId === latestRunId)),
+    status: valueState(run?.status),
+    verifierStatus: valueState(run?.verifierStatus),
+    workspace: {
+      path: valueState(run?.sourceWorkspacePath),
+      manifestPath: valueState(run?.sourceWorkspaceManifestPath),
+      fingerprint: valueState(run?.sourceWorkspaceFingerprint)
+    },
+    evidence: {
+      artifactPath: valueState(evidenceArtifactPath),
+      ref: valueState(evidenceRef),
+      verifierStatus: valueState(run?.verifierStatus)
+    },
+    changedFiles: {
+      count: valueState(changedFiles.length),
+      text: textState(changedFiles.length === 0 ? '未暴露' : changedFiles.join('、')),
+      items: changedFiles.map((file) => valueState(file))
+    },
+    executionPlanId: valueState(run?.executionPlanId),
+    writeBoundary: valueState(run?.writeBoundary),
+    workspaceWrites: valueState(run?.workspaceWrites),
+    mainWorktreeWrites: valueState(run?.mainWorktreeWrites),
+    updatedAt: valueState(run?.updatedAt)
+  };
+}
+
+function adoptionCandidateChangedFiles(run) {
+  if (Array.isArray(run?.changedFiles)) {
+    return run.changedFiles.filter((file) => isNonEmptyString(file));
+  }
+
+  if (!Array.isArray(run?.fileOperations)) {
+    return [];
+  }
+
+  return unique(run.fileOperations
+    .flatMap((operation) => [
+      operation?.path,
+      operation?.file,
+      operation?.relativePath,
+      operation?.targetPath,
+      operation?.afterPath
+    ])
+    .filter((file) => isNonEmptyString(file)));
+}
+
+function latestRunEvidenceRefByKind(latestRun, kind) {
+  if (!isNonEmptyString(kind)) {
+    return null;
+  }
+
+  for (const artifact of Array.isArray(latestRun?.artifactRefs) ? latestRun.artifactRefs : []) {
+    if (artifact?.kind !== kind) {
+      continue;
+    }
+
+    const normalizedRef = normalizedManagedArtifactEvidenceRef(artifact?.ref);
+
+    if (isNonEmptyString(normalizedRef)) {
+      return normalizedRef;
+    }
+  }
+
+  return isNonEmptyString(latestRun?.runId) ? `artifact-ref:artifact:${latestRun.runId}:${kind}` : null;
+}
+
+function latestRunArtifactPathByKind(latestRun, kind) {
+  const artifact = Array.isArray(latestRun?.artifactRefs)
+    ? latestRun.artifactRefs.find((candidate) => candidate?.kind === kind)
+    : undefined;
+
+  return artifact?.path;
+}
+
+function projectV25WorkerEvidenceHandoffSafety() {
+  return {
+    v25Only: valueState(true),
+    genericShellRunner: valueState(false),
+    browserExecutionAvailable: valueState(false),
+    modelInvocationAvailable: valueState(false),
+    workerCanApproveOwnTask: valueState(false),
+    requiresGoalEventConfirm: valueState(true)
+  };
+}
+
+function buildV25WorkerEvidencePrompt({
+  goalId,
+  taskId,
+  latestRun,
+  evidenceArtifactPath,
+  sourceWorkspacePath,
+  evidenceRef,
+  actorId
+}) {
+  return [
+    '/goal',
+    `Record worker evidence for ${goalId} ${taskId}.`,
+    '',
+    'Use this confirmed isolated workspace run:',
+    `- runId: ${latestRun.runId}`,
+    `- executionPlanId: ${latestRun.executionPlanId}`,
+    `- evidenceArtifactPath: ${evidenceArtifactPath}`,
+    `- sourceWorkspacePath: ${sourceWorkspacePath}`,
+    '',
+    'Register this event in the goal ledger:',
+    '- event: worker.evidence-recorded',
+    `- actor: ${actorId}`,
+    `- evidenceRef: ${evidenceRef}`,
+    '',
+    'Preview the goal update dry-run before confirming the event append.',
+    'Do not review or approve this task from the worker role.'
+  ].join('\n');
 }
 
 function projectEvidenceRefHelper({
@@ -2096,7 +3752,10 @@ function collectRecentEvidenceRefs({
   }
 
   for (const artifact of Array.isArray(latestRun?.artifactRefs) ? latestRun.artifactRefs : []) {
-    const artifactRef = normalizedManagedArtifactEvidenceRef(artifact?.ref ?? artifact?.path);
+    const artifactRef = normalizedManagedArtifactEvidenceRef(artifact?.ref)
+      ?? (isNonEmptyString(latestRun?.runId) && isNonEmptyString(artifact?.kind)
+        ? `artifact-ref:artifact:${latestRun.runId}:${artifact.kind}`
+        : null);
 
     addRecentEvidenceRef(refs, {
       ref: artifactRef,
@@ -2208,9 +3867,17 @@ function projectGoalEventFormField({
   fieldId,
   definition,
   goalId,
-  taskId
+  taskId,
+  fieldOverrides = {}
 }) {
-  const field = goalEventFieldDefinition({ fieldId, definition, goalId, taskId });
+  const baseField = goalEventFieldDefinition({ fieldId, definition, goalId, taskId });
+  const override = fieldOverrides[fieldId] ?? fieldOverrides[baseField.id] ?? {};
+  const field = {
+    ...baseField,
+    ...override,
+    id: baseField.id,
+    options: override.options ?? baseField.options
+  };
 
   return {
     id: valueState(field.id),
@@ -2324,7 +3991,7 @@ function goalEventFieldDefinition({
         readOnly: true,
         value: definition.gate,
         source: 'form-catalog',
-        options: ['main-verification']
+        options: [definition.gate ?? 'main-verification']
       };
     case 'gateStatus':
       return {
@@ -2335,7 +4002,7 @@ function goalEventFieldDefinition({
         required: true,
         value: definition.gateStatus,
         source: 'form-catalog',
-        options: ['passed', 'failed']
+        options: definition.gateStatus === 'declared' ? ['declared'] : ['passed', 'failed']
       };
     case 'evidenceRef':
       return {
@@ -2344,6 +4011,13 @@ function goalEventFieldDefinition({
         flag: '--evidence-ref',
         required: definition.requiresEvidence,
         placeholder: 'docs/plans/<evidence>.md or artifact:run:kind'
+      };
+    case 'failedCommand':
+      return {
+        ...common,
+        label: 'failed command',
+        flag: '--failed-command',
+        placeholder: 'failed command line'
       };
     case 'statement':
       return {
@@ -2903,6 +4577,29 @@ function latestEventOfTypes(events, eventTypes) {
   return null;
 }
 
+function goalEventIsAfter(left, right) {
+  if (left === null || left === undefined) {
+    return false;
+  }
+
+  if (right === null || right === undefined) {
+    return true;
+  }
+
+  if (Number.isFinite(left.sequence) && Number.isFinite(right.sequence)) {
+    return left.sequence > right.sequence;
+  }
+
+  const leftTime = Date.parse(left.recordedAt ?? left.occurredAt ?? '');
+  const rightTime = Date.parse(right.recordedAt ?? right.occurredAt ?? '');
+
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+    return leftTime > rightTime;
+  }
+
+  return false;
+}
+
 function findLedgerTask(ledger, taskId) {
   if (!Array.isArray(ledger?.tasks)) {
     return null;
@@ -3211,6 +4908,8 @@ function projectLatestRun({ result, run, hasNoRuns, safeArtifactPreviewResults =
       modelInvocation: valueState(undefined),
       executionPlanId: valueState(undefined),
       adoptionPlanId: valueState(undefined),
+      evidenceArtifactPath: valueState(undefined),
+      sourceWorkspacePath: valueState(undefined),
       createdAt: valueState(undefined),
       updatedAt: valueState(undefined),
       timeline: {
@@ -3234,6 +4933,8 @@ function projectLatestRun({ result, run, hasNoRuns, safeArtifactPreviewResults =
       modelInvocation: valueState(undefined),
       executionPlanId: valueState(undefined),
       adoptionPlanId: valueState(undefined),
+      evidenceArtifactPath: valueState(undefined),
+      sourceWorkspacePath: valueState(undefined),
       createdAt: valueState(undefined),
       updatedAt: valueState(undefined),
       timeline: projectTimelineAvailability(undefined),
@@ -3253,6 +4954,8 @@ function projectLatestRun({ result, run, hasNoRuns, safeArtifactPreviewResults =
     modelInvocation: valueState(run?.modelInvocation),
     executionPlanId: valueState(run?.executionPlanId),
     adoptionPlanId: valueState(run?.adoptionPlanId),
+    evidenceArtifactPath: valueState(run?.evidenceArtifactPath),
+    sourceWorkspacePath: valueState(run?.sourceWorkspacePath),
     createdAt: valueState(run?.createdAt),
     updatedAt: valueState(run?.updatedAt),
     timeline: projectTimelineAvailability(run?.timeline),
@@ -3697,6 +5400,20 @@ function isNonEmptyString(value) {
 
 function firstNonEmptyString(...values) {
   return values.find((value) => isNonEmptyString(value));
+}
+
+function firstValue(...statesOrValues) {
+  for (const candidate of statesOrValues) {
+    const value = candidate !== null && typeof candidate === 'object' && 'value' in candidate
+      ? candidate.value
+      : candidate;
+
+    if (isNonEmptyString(value)) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function routeStateFromResult(result) {

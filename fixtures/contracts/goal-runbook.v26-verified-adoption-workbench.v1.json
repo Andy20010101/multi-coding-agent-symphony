@@ -1,0 +1,178 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v26-verified-adoption-workbench",
+  "goalTitle": "v26 Verified Adoption Workbench",
+  "baseline": {
+    "tag": "v25",
+    "commit": null,
+    "evidenceRef": "docs/plans/v25-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Adoption candidate panel",
+      "branch": "v26-task-1-adoption-candidate-panel",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户知道哪些实现结果可以采纳。",
+        "识别可 adoption 的 confirmed run，展示 source run、workspace、evidence、changed files、verifier status。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v26-verified-adoption-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Adoption plan flow",
+      "branch": "v26-task-2-adoption-plan-flow",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能在 UI 里冻结采纳 patch。",
+        "调用 symphony adopt --run <confirmed-run-id> --json，显示 adoptionPlanId、patchArtifactPath、file operations、confirmationCommand。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v26-verified-adoption-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Adoption inspect/recovery view",
+      "branch": "v26-task-3-adoption-inspect-recovery-view",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "采纳失败或中断时用户能恢复判断。",
+        "接入 symphony adopt --inspect <adoption-id> --json，显示 journal、applying 状态、before/after hash、dirty blockers。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v26-verified-adoption-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Confirm adoption + post-apply next action",
+      "branch": "v26-task-4-confirm-adoption-post-apply-next-action",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能从实现结果推进到 main worktree。",
+        "调用 symphony adopt --confirm <adoption-id> --json，完成后转到 v24 main verification 或 v27 review loop。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v26-verified-adoption-workbench --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Adoption tests/docs",
+      "branch": "v26-task-5-adoption-tests-docs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "确保 adoption 是 verified workflow，不是直接 git apply 按钮。",
+        "覆盖 dirty worktree、unsupported changes、stale fingerprint、inspect、confirm、post-verify next action。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v26-verified-adoption-workbench --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.mcas-doctor",
+    "release.docs-updated",
+    "release.tag-evidence"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

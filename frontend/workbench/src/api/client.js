@@ -2,6 +2,7 @@ import {
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
   GOAL_RUNBOOK_ROUTE_TEMPLATE,
+  GOAL_OPERATIONS_ROUTE_TEMPLATE,
   READONLY_API_ROUTES,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   GOAL_EVENTS_ROUTE_TEMPLATE,
@@ -10,7 +11,9 @@ import {
   GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
   createGoalEventsRoute,
+  createGoalOperationsRoute,
   createGoalProgressRoute,
+  createGoalReviewerPromptRoute,
   createRunTimelineRoute,
   createSafeArtifactPreviewRoutes,
   projectSubagentHandoffBoard,
@@ -101,6 +104,8 @@ export async function fetchWorkbenchContracts(options = {}) {
   const activeGoalId = activeGoalIdFromResults(results);
   const activeGoalProgressRoute = createGoalProgressRoute(activeGoalId);
   const activeGoalEventsRoute = createGoalEventsRoute(activeGoalId);
+  const activeGoalOperationsRoute = createGoalOperationsRoute(activeGoalId);
+  const goalReviewerPromptRoute = createGoalReviewerPromptRoute(activeGoalId, results.goalNextAction?.data);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
 
@@ -132,6 +137,28 @@ export async function fetchWorkbenchContracts(options = {}) {
         message: 'active goal events 未暴露 / 不可用'
       })
     : await fetchReadonlyRoute(activeGoalEventsRoute, options);
+
+  results.activeGoalOperations = activeGoalOperationsRoute === null
+    ? readonlySkipped({
+        route: {
+          ...GOAL_OPERATIONS_ROUTE_TEMPLATE,
+          id: 'activeGoalOperations',
+          label: 'Active Goal Operations'
+        },
+        message: 'active goal operations 未暴露 / 不可用'
+      })
+    : await fetchReadonlyRoute(activeGoalOperationsRoute, options);
+
+  results.goalReviewerPromptPack = goalReviewerPromptRoute === null
+    ? readonlySkipped({
+        route: {
+          ...GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+          id: 'goalReviewerPromptPack',
+          label: 'Goal Reviewer Prompt Pack'
+        },
+        message: 'reviewer goal prompt 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(goalReviewerPromptRoute, options);
 
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({

@@ -204,7 +204,7 @@ describe('v19 event-aware goal-next-action.v1 resolver', () => {
     }
   });
 
-  it('does not treat main.verification-failed evidence as main verified', async () => {
+  it('sends failed main verification back to worker revision', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v19-next-main-verification-failed-'));
     const stateDir = join(root, '.symphony');
 
@@ -247,10 +247,15 @@ describe('v19 event-aware goal-next-action.v1 resolver', () => {
       assertValidNextAction(nextAction);
       assert.equal(nextAction.status, 'action-required');
       assert.equal(nextAction.next.taskId, 'task-1');
-      assert.equal(nextAction.next.role, 'main-verifier');
-      assert.equal(nextAction.next.phase, 'main-verification');
+      assert.equal(nextAction.next.role, 'worker');
+      assert.equal(nextAction.next.phase, 'revision');
       assert.match(nextAction.next.reason, /Latest main verification failed for task-1/u);
       assert.equal(nextAction.evidenceState.mainVerificationRef, 'docs/plans/v19-task-1-main-verification-evidence-2026-05-29.md');
+      assert.deepEqual(nextAction.afterCompletion.allowedEvents, [
+        'worker.evidence-recorded',
+        'worker.self-check-passed',
+        'worker.self-check-failed'
+      ]);
       assert.doesNotMatch(nextAction.next.reason, /release\.pnpm-check/u);
     } finally {
       await rm(root, { recursive: true, force: true });

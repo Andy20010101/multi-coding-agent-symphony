@@ -15,6 +15,17 @@ const initialState = {
 };
 const GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-preview';
 const GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-confirm';
+const GOAL_OPERATION_POLL_INTERVAL_MS = 2500;
+const WORKBENCH_NAV_ITEMS = Object.freeze([
+  Object.freeze({ id: 'active-goal', label: 'Active Goal', targetId: 'active-goal-runbook-panel' }),
+  Object.freeze({ id: 'prompt-handoff', label: 'Prompt Handoff', route: '/workbench/prompts/' }),
+  Object.freeze({ id: 'operations', label: 'Operations', targetId: 'goal-operation-console-panel' }),
+  Object.freeze({ id: 'implementation', label: 'Implementation', targetId: 'next-action-card-panel' }),
+  Object.freeze({ id: 'adoption', label: 'Adoption', targetId: 'adoption-candidate-panel' }),
+  Object.freeze({ id: 'review', label: 'Review', targetId: 'review-workspace-panel' }),
+  Object.freeze({ id: 'verification', label: 'Verification', targetId: 'main-verification-readiness-panel' }),
+  Object.freeze({ id: 'closeout', label: 'Closeout', targetId: 'closeout-gaps-panel' })
+]);
 
 export default function App() {
   const [viewState, setViewState] = useState(initialState);
@@ -64,20 +75,82 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (goalOperationPollingEnabled(viewState.model) !== true) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let requestInFlight = false;
+
+    async function pollGoalOperationConsole() {
+      if (requestInFlight) {
+        return;
+      }
+
+      requestInFlight = true;
+
+      try {
+        const model = await fetchWorkbenchContracts();
+
+        if (!cancelled) {
+          setViewState({
+            phase: 'ready',
+            model
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setViewState((current) => ({
+            phase: current.model === null ? 'failed' : 'ready',
+            model: current.model
+          }));
+        }
+      } finally {
+        requestInFlight = false;
+      }
+    }
+
+    const timerId = window.setInterval(pollGoalOperationConsole, GOAL_OPERATION_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timerId);
+    };
+  }, [viewState.model?.activeGoal?.operationConsole?.polling?.enabled?.value]);
+
+  return (
+    <WorkbenchShell
+      viewState={viewState}
+      onRefreshWorkbenchContracts={refreshWorkbenchContracts}
+    />
+  );
+}
+
+export function WorkbenchShell({
+  viewState,
+  onRefreshWorkbenchContracts = () => undefined
+}) {
   const model = viewState.model;
   const routeCounts = routeStateCounts(model?.routeStates ?? []);
   const workbenchRoute = currentWorkbenchRoute();
+  const routeContext = model?.routeContext ?? null;
+  const stateHeader = buildWorkbenchStateHeader({
+    model,
+    phase: viewState.phase,
+    routeCounts,
+    routeContext
+  });
 
   return (
     <main className="workbench-shell" aria-labelledby="workbench-title">
       <header className="workbench-header">
         <div className="header-copy">
-          <p className="eyebrow">v20 Active Goal Workbench</p>
+          <p className="eyebrow">v28 Workbench v1</p>
           <h1 id="workbench-title">Symphony Workbench</h1>
           <p className="header-summary">
-            展示 summary、readiness、runs、latest run、timeline、artifact refs、v16 handoff，
-            以及 goal progress、goal events、ActiveGoalViewModel、capabilities、diagnostics 与安全 error envelope。
-            浏览器端读取受控 routes；v21 event form 只能用 dry-run plan hash 确认 goal update/review/gate event append，不提供任意命令、下载、终端或执行动作。
+            围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。
+            顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。
           </p>
         </div>
         <div className="status-strip" aria-label="当前只读状态">
@@ -87,14 +160,26 @@ export default function App() {
         </div>
       </header>
 
+      <WorkbenchStateHeader header={stateHeader} />
+      <WorkbenchNavigation currentRoute={workbenchRoute} routeContext={routeContext} />
+      <WorkbenchRouteContextBar context={routeContext} />
+
       {viewState.phase === 'loading' ? <ShellState title="读取中" copy="正在读取 summary、readiness、runs 与 latest run 只读 contract。" /> : null}
       {viewState.phase === 'failed' ? <ShellState title="读取失败" copy="错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。" /> : null}
 
       {model === null ? null : (
         workbenchRoute === 'prompts' ? (
-          <PromptWorkspaceRoute model={model} />
+          <PromptWorkspaceRoute
+            model={model}
+            routeContext={routeContext}
+            onWorkbenchContextChanged={onRefreshWorkbenchContracts}
+          />
         ) : (
           <>
+          <section className="golden-path-grid" aria-label="v28 golden path">
+            <GoldenPathPanel goldenPath={model.goldenPath} />
+          </section>
+
           <section className="primary-active-goal-grid" aria-label="v20 primary active goal workflow">
             <ActiveGoalRunbookPanel
               runbook={model.activeGoal.runbook}
@@ -115,15 +200,31 @@ export default function App() {
             <MainVerificationReadinessPanel readiness={model.activeGoal.mainVerificationReadiness} />
           </section>
 
+          <section className="adoption-candidate-grid" aria-label="v26 adoption candidates">
+            <AdoptionCandidatePanel candidates={model.adoptionCandidates} />
+          </section>
+
           <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
             <NextActionCard
               nextAction={model.activeGoal.nextAction}
               route={findRoute(model.routeStates, 'goalNextAction')}
-              onGoalEventConfirmed={refreshWorkbenchContracts}
+              onGoalEventConfirmed={onRefreshWorkbenchContracts}
             />
             <PromptPreviewDrawer promptPreview={model.activeGoal.promptPreview} route={findRoute(model.routeStates, 'goalPromptPack')} />
+            <ReviewWorkspacePanel
+              workspace={model.activeGoal.reviewWorkspace}
+              onGoalEventConfirmed={onRefreshWorkbenchContracts}
+            />
             <ActiveGoalViewModelPanel viewModel={model.activeGoal.viewModel} />
-            <CloseoutGapsPanel closeoutGaps={model.activeGoal.closeoutGaps} route={findRoute(model.routeStates, 'goalCloseout')} />
+            <CloseoutGapsPanel
+              closeoutGaps={model.activeGoal.closeoutGaps}
+              route={findRoute(model.routeStates, 'goalCloseout')}
+              onGoalEventConfirmed={onRefreshWorkbenchContracts}
+            />
+            <GoalOperationConsolePanel
+              operationConsole={model.activeGoal.operationConsole}
+              route={findRoute(model.routeStates, 'activeGoalOperations')}
+            />
           </section>
 
           <section className="panel-grid" aria-label="Workbench 只读 panels">
@@ -169,12 +270,165 @@ export default function App() {
   );
 }
 
-function PromptWorkspaceRoute({ model }) {
+function GoldenPathPanel({ goldenPath }) {
+  return (
+    <DataPanel
+      id="golden-path-panel"
+      kicker="v28 acceptance path"
+      title="Golden Path"
+      state={goldenPath?.state ?? 'missing'}
+    >
+      <FieldList rows={[
+        ['goalId', goldenPath?.goalId],
+        ['taskId', goldenPath?.taskId],
+        ['role', goldenPath?.role],
+        ['step count', goldenPath?.steps?.count],
+        ['source policy', goldenPath?.sourcePolicy],
+        ['copyOnlyCommands', goldenPath?.safety?.copyOnlyCommands],
+        ['controlledConfirmOnly', goldenPath?.safety?.controlledConfirmOnly],
+        ['browserExecutionAvailable', goldenPath?.safety?.browserExecutionAvailable],
+        ['genericShellRunner', goldenPath?.safety?.genericShellRunner],
+        ['workerCanApproveOwnTask', goldenPath?.safety?.workerCanApproveOwnTask],
+        ['infersReadinessFromFilename', goldenPath?.safety?.infersReadinessFromFilename]
+      ]} />
+
+      <Subsection title="goal init/status -> closeout gaps">
+        <GoldenPathStepList steps={goldenPath?.steps} />
+      </Subsection>
+
+      <p className="panel-note">{goldenPath?.note ?? 'Golden Path is unavailable until active goal contracts load.'}</p>
+    </DataPanel>
+  );
+}
+
+function GoldenPathStepList({ steps }) {
+  const items = steps?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="Golden Path steps 未暴露。" />;
+  }
+
+  return (
+    <ol className="golden-path-step-list">
+      {items.map((step) => (
+        <li key={step.id.text}>
+          <div className="run-row-header">
+            <h3>{step.label.text}</h3>
+            <span className="state-pill">{step.status.text}</span>
+          </div>
+          <FieldList rows={[
+            ['source', step.source],
+            ['route', step.route],
+            ['routeState', step.routeState],
+            ['detail', step.detail]
+          ]} />
+          <pre><code>{step.command.text}</code></pre>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function WorkbenchStateHeader({ header }) {
+  return (
+    <section className="workbench-state-header" aria-label="Workbench goal state header">
+      <div className="state-header-main">
+        <p className="section-kicker">goal contracts</p>
+        <h2>Current Workbench State</h2>
+      </div>
+      <dl className="state-header-grid">
+        {header.items.map((item) => (
+          <div key={item.id} className="state-header-item">
+            <dt>{item.label}</dt>
+            <dd>{item.value}</dd>
+            <span>{item.source}</span>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function WorkbenchNavigation({ currentRoute, routeContext }) {
+  return (
+    <nav className="workbench-nav" aria-label="Workbench v1 sections">
+      <ul>
+        {WORKBENCH_NAV_ITEMS.map((item) => (
+          <li key={item.id}>
+            <a
+              className={workbenchNavItemClassName(item, currentRoute)}
+              href={workbenchNavHref(item, routeContext)}
+              aria-current={workbenchNavItemActive(item, currentRoute) ? 'page' : undefined}
+            >
+              <span>{item.label}</span>
+              <code>{workbenchNavHref(item, routeContext)}</code>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p className="panel-note">Navigation follows the latest goal/runbook/next-action workflow. It is not the v8 scan/do/review/verify/status/continue/artifacts command surface.</p>
+    </nav>
+  );
+}
+
+function WorkbenchRouteContextBar({ context }) {
+  const evidenceRefs = context?.evidenceRefs?.items ?? [];
+
+  return (
+    <section className="workbench-route-context" aria-label="Unified Workbench route context">
+      <div>
+        <p className="section-kicker">route context</p>
+        <h2>Goal / Task / Run / Evidence Context</h2>
+      </div>
+      <FieldList rows={[
+        ['goalId', context?.goalId],
+        ['taskId', context?.taskId],
+        ['operationId', context?.operationId],
+        ['runId', context?.runId],
+        ['evidence refs', textValue(evidenceRefs.map((item) => item.ref.text).join('、') || '未暴露')],
+        ['source policy', context?.sourcePolicy]
+      ]} />
+      <Subsection title="evidence refs">
+        <WorkbenchRouteEvidenceList evidenceRefs={context?.evidenceRefs} />
+      </Subsection>
+      <p className="panel-note">{context?.note ?? 'Route context unavailable.'}</p>
+    </section>
+  );
+}
+
+function WorkbenchRouteEvidenceList({ evidenceRefs }) {
+  if (evidenceRefs?.state !== 'available') {
+    return <EmptyBlock copy="当前 context 没有 evidence refs。" />;
+  }
+
+  return (
+    <ul className="workbench-context-evidence-list">
+      {evidenceRefs.items.map((item, index) => (
+        <li key={`${item.ref.text}-${index}`}>
+          <FieldList rows={[
+            ['ref', item.ref],
+            ['kind', item.kind],
+            ['taskId', item.taskId],
+            ['label', item.label],
+            ['source', item.source]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PromptWorkspaceRoute({
+  model,
+  routeContext,
+  onWorkbenchContextChanged = () => undefined
+}) {
   const goalOptions = promptWorkspaceGoalOptions(model);
-  const initialGoalId = promptWorkspaceInitialGoalId(model, goalOptions);
+  const routeSelection = promptWorkspaceRouteSelection(routeContext);
+  const initialGoalId = promptWorkspaceInitialGoalId(model, goalOptions, routeSelection.goalId);
   const [selectedGoalId, setSelectedGoalId] = useState(initialGoalId);
-  const [selectedRole, setSelectedRole] = useState('worker');
-  const [selectedTaskId, setSelectedTaskId] = useState('');
+  const [selectedRole, setSelectedRole] = useState(routeSelection.role);
+  const [selectedTaskId, setSelectedTaskId] = useState(routeSelection.taskId);
   const [runbookState, setRunbookState] = useState({
     phase: initialGoalId === '' ? 'empty' : 'loading',
     runbook: null,
@@ -288,6 +542,10 @@ function PromptWorkspaceRoute({ model }) {
   const taskOptions = promptWorkspaceTaskOptions(runbookState.runbook, selectedRole);
 
   useEffect(() => {
+    if (runbookState.phase !== 'ready') {
+      return;
+    }
+
     if (taskOptions.length === 0) {
       if (selectedTaskId !== '') {
         setSelectedTaskId('');
@@ -298,7 +556,7 @@ function PromptWorkspaceRoute({ model }) {
     if (!taskOptions.some((task) => task.taskId === selectedTaskId)) {
       setSelectedTaskId(taskOptions[0].taskId);
     }
-  }, [selectedTaskId, taskOptions]);
+  }, [runbookState.phase, selectedTaskId, taskOptions]);
 
   useEffect(() => {
     if (selectedGoalId === '' || selectedTaskId === '' || selectedRole === '') {
@@ -364,6 +622,7 @@ function PromptWorkspaceRoute({ model }) {
 
   async function refreshPromptWorkspaceHandoff() {
     setHandoffRefreshToken((current) => current + 1);
+    await onWorkbenchContextChanged();
   }
 
   return (
@@ -418,7 +677,10 @@ function PromptWorkspaceRoute({ model }) {
           ['selected goal', textValue(selectedGoalId)],
           ['selected task', textValue(selectedTaskId)],
           ['selected role', textValue(selectedRole)],
-          ['prompt route', textValue(promptState.route ?? '未暴露')]
+          ['prompt route', textValue(promptState.route ?? '未暴露')],
+          ['context operation', routeContext?.operationId],
+          ['context run', routeContext?.runId],
+          ['context evidence refs', textValue((routeContext?.evidenceRefs?.items ?? []).map((item) => item.ref.text).join('、') || '未暴露')]
         ]} />
 
         {runbookState.phase === 'failed' ? <p className="error-copy">错误摘要：{runbookState.error}</p> : null}
@@ -954,7 +1216,11 @@ function addPromptWorkspaceGoalOption(options, goalId) {
   options.push({ goalId });
 }
 
-function promptWorkspaceInitialGoalId(model, goalOptions) {
+function promptWorkspaceInitialGoalId(model, goalOptions, routeGoalId) {
+  if (typeof routeGoalId === 'string' && routeGoalId.trim() !== '') {
+    return routeGoalId;
+  }
+
   const activeGoalId = model?.activeGoal?.runbook?.goalId?.value
     ?? model?.activeGoal?.viewModel?.goalId?.value;
 
@@ -963,6 +1229,29 @@ function promptWorkspaceInitialGoalId(model, goalOptions) {
   }
 
   return goalOptions[0]?.goalId ?? '';
+}
+
+function promptWorkspaceRouteSelection(routeContext) {
+  const query = currentWorkbenchSearchParams();
+  const queryGoal = safeRouteContextToken(query.get('goal'));
+  const queryTask = safeRouteContextToken(query.get('task'));
+  const queryRole = safePromptWorkspaceRole(query.get('role'));
+
+  return {
+    goalId: queryGoal ?? stringValue(routeContext?.goalId?.value),
+    taskId: queryTask ?? stringValue(routeContext?.taskId?.value),
+    role: queryRole ?? roleForRouteContext(routeContext)
+  };
+}
+
+function roleForRouteContext(routeContext) {
+  const activeRole = stringValue(routeContext?.activeRole?.value);
+
+  if (safePromptWorkspaceRole(activeRole) !== null) {
+    return activeRole;
+  }
+
+  return 'worker';
 }
 
 function promptWorkspaceTaskOptions(runbook, role) {
@@ -1446,7 +1735,203 @@ function PromptPreviewDrawer({ promptPreview, route }) {
   );
 }
 
-function CloseoutGapsPanel({ closeoutGaps, route }) {
+function ReviewWorkspacePanel({ workspace, onGoalEventConfirmed }) {
+  return (
+    <DataPanel
+      id="review-workspace-panel"
+      kicker="v27 review workspace"
+      title="Review Workspace"
+      state={workspace.state}
+    >
+      <FieldList rows={[
+        ['modelName', workspace.modelName],
+        ['goalId', workspace.goalId],
+        ['taskId', workspace.taskId],
+        ['title', workspace.title],
+        ['active next role', workspace.activeNext.role],
+        ['active next phase', workspace.activeNext.phase],
+        ['active next reason', workspace.activeNext.reason],
+        ['source policy', workspace.sourcePolicy]
+      ]} />
+
+      <Subsection title="source run">
+        <FieldList rows={[
+          ['source run', workspace.sourceRun.runId],
+          ['status', workspace.sourceRun.status],
+          ['verifierStatus', workspace.sourceRun.verifierStatus],
+          ['executionPlanId', workspace.sourceRun.executionPlanId],
+          ['sourceWorkspacePath', workspace.sourceRun.sourceWorkspacePath],
+          ['sourceWorkspaceManifestPath', workspace.sourceRun.sourceWorkspaceManifestPath],
+          ['evidenceArtifactPath', workspace.sourceRun.evidenceArtifactPath],
+          ['evidenceRef', workspace.sourceRun.evidenceRef],
+          ['workspaceWrites', workspace.sourceRun.workspaceWrites],
+          ['mainWorktreeWrites', workspace.sourceRun.mainWorktreeWrites],
+          ['updatedAt', workspace.sourceRun.updatedAt]
+        ]} />
+      </Subsection>
+
+      <Subsection title="changed files">
+        <TextItemList items={workspace.changedFiles} emptyCopy="changed files 未暴露。" />
+      </Subsection>
+
+      <Subsection title="worker evidence">
+        <FieldList rows={[
+          ['worker evidence', workspace.workerEvidence.ref],
+          ['ledger ref', workspace.workerEvidence.ledgerRef],
+          ['event ref', workspace.workerEvidence.eventRef],
+          ['eventId', workspace.workerEvidence.eventId],
+          ['eventType', workspace.workerEvidence.eventType],
+          ['source', workspace.workerEvidence.source]
+        ]} />
+      </Subsection>
+
+      <Subsection title="review prompt">
+        <FieldList rows={[
+          ['sourceContract', workspace.reviewPrompt.sourceContract],
+          ['taskId', workspace.reviewPrompt.taskId],
+          ['role', workspace.reviewPrompt.role],
+          ['title', workspace.reviewPrompt.title],
+          ['format', workspace.reviewPrompt.format],
+          ['evidenceFile', workspace.reviewPrompt.evidenceFile],
+          ['textAvailable', workspace.reviewPrompt.textAvailable]
+        ]} />
+        {workspace.reviewPrompt.textAvailable.value === true ? (
+          <pre className="prompt-preview-text review-workspace-prompt"><code>{workspace.reviewPrompt.text.text}</code></pre>
+        ) : (
+          <EmptyBlock copy="review prompt 未暴露；请从 Prompt Workspace 选择 reviewer role 后读取 prompt pack。" />
+        )}
+      </Subsection>
+
+      <Subsection title="reviewer handoff">
+        <FieldList rows={[
+          ['handoff state', workspace.reviewerHandoff.state],
+          ['sourceContract', workspace.reviewerHandoff.sourceContract],
+          ['promptGeneratedFrom', workspace.reviewerHandoff.promptGeneratedFrom],
+          ['promptRoute', workspace.reviewerHandoff.promptRoute],
+          ['promptCommand', workspace.reviewerHandoff.promptCommand],
+          ['reviewer evidence path', workspace.reviewerHandoff.reviewerEvidencePath],
+          ['latest worker actor', workspace.reviewerHandoff.latestWorkerActor],
+          ['separationRequired', workspace.reviewerHandoff.separationRequired],
+          ['reviewerActorMustDifferFromLatestWorker', workspace.reviewerHandoff.reviewerActorMustDifferFromLatestWorker],
+          ['workerCanReviewOwnTask', workspace.reviewerHandoff.workerCanReviewOwnTask],
+          ['workerCanApproveOwnTask', workspace.reviewerHandoff.workerCanApproveOwnTask]
+        ]} />
+        <h4>separation enforcement</h4>
+        <TextItemList items={workspace.reviewerHandoff.enforcedBy} emptyCopy="reviewer/worker separation 未暴露。" />
+        <h4>handoff checklist</h4>
+        <TextItemList items={workspace.reviewerHandoff.handoffChecklist} emptyCopy="reviewer handoff checklist 未暴露。" />
+      </Subsection>
+
+      <Subsection title="review checklist">
+        <FieldList rows={[
+          ['role label', workspace.reviewPrompt.roleGuidance.label],
+          ['role phase', workspace.reviewPrompt.roleGuidance.phase]
+        ]} />
+        <h4>acceptance</h4>
+        <TextItemList items={workspace.reviewChecklist.acceptance} emptyCopy="acceptance 未暴露。" />
+        <h4>validation commands</h4>
+        <TextItemList items={workspace.reviewChecklist.validationCommands} emptyCopy="validation commands 未暴露。" />
+        <h4>role boundary</h4>
+        <TextItemList items={workspace.reviewChecklist.roleBoundary} emptyCopy="role boundary 未暴露。" />
+        <h4>evidence requirements</h4>
+        <TextItemList items={workspace.reviewChecklist.evidenceRequirements} emptyCopy="evidence requirements 未暴露。" />
+        <h4>handoff checklist</h4>
+        <TextItemList items={workspace.reviewChecklist.handoffChecklist} emptyCopy="handoff checklist 未暴露。" />
+        <h4>required context</h4>
+        <TextItemList items={workspace.reviewChecklist.requiredContext} emptyCopy="required context 未暴露。" />
+      </Subsection>
+
+      <Subsection title="expected verdict event">
+        <FieldList rows={[
+          ['registerWith', workspace.expectedVerdict.registerWith],
+          ['expectedEvidence', workspace.expectedVerdict.expectedEvidence],
+          ['confirmRequiresPlanHash', workspace.expectedVerdict.confirmRequiresPlanHash],
+          ['writesInDryRun', workspace.expectedVerdict.writesInDryRun]
+        ]} />
+        <TextItemList items={workspace.expectedVerdict.allowedEvents} emptyCopy="expected reviewer verdict events 未暴露。" />
+        <FieldList rows={[
+          ['dryRunCommand', workspace.expectedVerdict.dryRunCommand]
+        ]} />
+      </Subsection>
+
+      <Subsection title="review verdict registration">
+        <ReviewVerdictRegistration
+          registration={workspace.reviewVerdictRegistration}
+          onGoalEventConfirmed={onGoalEventConfirmed}
+        />
+      </Subsection>
+
+      <Subsection title="existing review">
+        <FieldList rows={[
+          ['verdict', workspace.existingReview.verdict],
+          ['evidenceRef', workspace.existingReview.evidenceRef],
+          ['eventId', workspace.existingReview.eventId],
+          ['eventType', workspace.existingReview.eventType],
+          ['source', workspace.existingReview.source]
+        ]} />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['readOnly', workspace.safety.readOnly],
+          ['copyOnly', workspace.safety.copyOnly],
+          ['workbenchWriteAvailable', workspace.safety.workbenchWriteAvailable],
+          ['browserExecutionAvailable', workspace.safety.browserExecutionAvailable],
+          ['modelInvocationAvailable', workspace.safety.modelInvocationAvailable],
+          ['genericShellRunner', workspace.safety.genericShellRunner],
+          ['workerCanApproveOwnTask', workspace.safety.workerCanApproveOwnTask],
+          ['reviewerActorMustDifferFromLatestWorker', workspace.safety.reviewerActorMustDifferFromLatestWorker],
+          ['approvalReadinessSource', workspace.safety.approvalReadinessSource],
+          ['unsupportedInferenceSources', workspace.safety.unsupportedInferenceSources]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{workspace.note}</p>
+    </DataPanel>
+  );
+}
+
+function ReviewVerdictRegistration({ registration, onGoalEventConfirmed }) {
+  if (registration === null || registration === undefined || registration.state === 'missing') {
+    return <EmptyBlock copy="review verdict registration 未暴露。" />;
+  }
+
+  return (
+    <div className="review-verdict-registration">
+      <FieldList rows={[
+        ['modelName', registration.modelName],
+        ['sourceContract', registration.sourceContract],
+        ['goalId', registration.goalId],
+        ['taskId', registration.taskId],
+        ['registerWith', registration.registerWith],
+        ['defaultFormId', registration.defaultFormId],
+        ['latestWorkerActor', registration.latestWorkerActor],
+        ['reviewerEvidenceRef', registration.reviewerEvidenceRef],
+        ['reviewerActorMustDifferFromLatestWorker', registration.policy.reviewerActorMustDifferFromLatestWorker],
+        ['workerCanApproveOwnTask', registration.policy.workerCanApproveOwnTask],
+        ['approvalReadinessSource', registration.policy.approvalReadinessSource],
+        ['dryRunWrites', registration.safety.dryRunWrites],
+        ['confirmRequiresPlanHash', registration.safety.confirmRequiresPlanHash],
+        ['workbenchWriteAvailable', registration.safety.workbenchWriteAvailable],
+        ['genericShellRunner', registration.safety.genericShellRunner]
+      ]} />
+      <h4>allowed verdict events</h4>
+      <TextItemList items={registration.allowedEvents} emptyCopy="allowed reviewer verdict events 未暴露。" />
+      <GoalEventFormList
+        forms={registration.forms}
+        emptyCopy="当前任务没有可登记的 reviewer verdict 表单。"
+        onGoalEventConfirmed={onGoalEventConfirmed}
+      />
+      <p className="panel-note">{registration.note}</p>
+    </div>
+  );
+}
+
+function CloseoutGapsPanel({
+  closeoutGaps,
+  route,
+  onGoalEventConfirmed = () => undefined
+}) {
   return (
     <DataPanel
       id="closeout-gaps-panel"
@@ -1461,6 +1946,7 @@ function CloseoutGapsPanel({ closeoutGaps, route }) {
 
       <FieldList rows={[
         ['contractName', closeoutGaps.contractName],
+        ['modelName', closeoutGaps.modelName],
         ['contractVersion', closeoutGaps.contractVersion],
         ['goalId', closeoutGaps.goalId],
         ['generatedAt', closeoutGaps.generatedAt],
@@ -1482,6 +1968,21 @@ function CloseoutGapsPanel({ closeoutGaps, route }) {
         <KeyValueList rows={closeoutGaps.releaseGates} nameKey="gate" valueKey="status" emptyCopy="release gates 未暴露。" />
       </Subsection>
 
+      <Subsection title="release verification checklist">
+        <ReleaseVerificationChecklist checklist={closeoutGaps.verificationChecklist} />
+      </Subsection>
+
+      <Subsection title="release.ready gate registration">
+        <ReleaseReadyGateRegistration
+          registration={closeoutGaps.releaseReadyGate}
+          onGoalEventConfirmed={onGoalEventConfirmed}
+        />
+      </Subsection>
+
+      <Subsection title="tag evidence prompt">
+        <TagEvidencePrompt prompt={closeoutGaps.tagEvidencePrompt} />
+      </Subsection>
+
       <Subsection title="safety">
         <FieldList rows={[
           ['readOnly', closeoutGaps.safety.readOnly],
@@ -1497,6 +1998,207 @@ function CloseoutGapsPanel({ closeoutGaps, route }) {
 
       <p className="panel-note">{closeoutGaps.note}</p>
     </DataPanel>
+  );
+}
+
+function ReleaseVerificationChecklist({ checklist }) {
+  if (checklist?.state === 'missing') {
+    return <EmptyBlock copy="release verification checklist 未暴露。" />;
+  }
+
+  return (
+    <div className="release-verification-checklist">
+      <FieldList rows={[
+        ['sourceContract', checklist.sourceContract],
+        ['closeoutCommand', checklist.closeoutCommand],
+        ['totalCount', checklist.totalCount],
+        ['passedCount', checklist.passedCount],
+        ['pendingCount', checklist.pendingCount],
+        ['copyOnlyCommands', checklist.safety.copyOnlyCommands],
+        ['genericShellRunner', checklist.safety.genericShellRunner],
+        ['releaseReadyInferredFromCommands', checklist.safety.releaseReadyInferredFromCommands]
+      ]} />
+      {checklist.items.length === 0 ? (
+        <EmptyBlock copy="release checklist rows 为空。" />
+      ) : (
+        <ul className="release-checklist-list">
+          {checklist.items.map((item) => (
+            <li key={item.id.text}>
+              <FieldList rows={[
+                ['label', item.label],
+                ['gate', item.gate],
+                ['gateId', item.gateId],
+                ['status', item.status],
+                ['command', item.command],
+                ['registrationCommand', item.registrationCommand],
+                ['needsEvidence', item.needsEvidence]
+              ]} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="panel-note">{checklist.note.text}</p>
+    </div>
+  );
+}
+
+function ReleaseReadyGateRegistration({
+  registration,
+  onGoalEventConfirmed
+}) {
+  if (registration?.state === 'missing' || registration?.form === null) {
+    return <EmptyBlock copy="release.ready gate registration form 未暴露。" />;
+  }
+
+  return (
+    <div className="release-ready-registration">
+      <FieldList rows={[
+        ['state', textValue(registration.state)],
+        ['sourcePolicy', registration.sourcePolicy],
+        ['missingReleaseReady', registration.missingReleaseReady],
+        ['releaseEvidencePath', registration.releaseEvidencePath],
+        ['dryRunCommand', registration.dryRunCommand],
+        ['confirmCommandPattern', registration.confirmCommandPattern],
+        ['confirmRequiresPlanHash', registration.safety.confirmRequiresPlanHash],
+        ['appendOnlyOnConfirm', registration.safety.appendOnlyOnConfirm],
+        ['workbenchWriteAvailable', registration.safety.workbenchWriteAvailable],
+        ['declaresReleaseReadyOnlyOnConfirm', registration.safety.declaresReleaseReadyOnlyOnConfirm]
+      ]} />
+      <GoalEventFormList
+        forms={{
+          state: 'available',
+          items: [registration.form]
+        }}
+        emptyCopy="release.ready gate form 不可用。"
+        onGoalEventConfirmed={onGoalEventConfirmed}
+      />
+      <p className="panel-note">{registration.note.text}</p>
+    </div>
+  );
+}
+
+function TagEvidencePrompt({ prompt }) {
+  if (prompt?.state === 'missing') {
+    return <EmptyBlock copy="tag evidence prompt 未暴露。" />;
+  }
+
+  return (
+    <div className="tag-evidence-prompt">
+      <FieldList rows={[
+        ['sourceContract', prompt.sourceContract],
+        ['evidencePath', prompt.evidencePath],
+        ['releaseEvidencePath', prompt.releaseEvidencePath],
+        ['promptFormat', prompt.promptFormat],
+        ['copyOnly', prompt.safety.copyOnly],
+        ['createsTag', prompt.safety.createsTag],
+        ['declaresReleaseReady', prompt.safety.declaresReleaseReady],
+        ['runsShell', prompt.safety.runsShell]
+      ]} />
+      <pre className="prompt-preview-text"><code>{prompt.text.text}</code></pre>
+    </div>
+  );
+}
+
+function GoalOperationConsolePanel({ operationConsole, route }) {
+  return (
+    <DataPanel
+      id="goal-operation-console-panel"
+      kicker="v23 goal operations"
+      title="Goal Operation Console"
+      state={goalOperationConsoleStateText(operationConsole, route)}
+      route={route}
+    >
+      {route?.state === 'failed' ? (
+        <p className="error-copy">错误摘要：{route.error}。刷新页面后会重新读取 operation registry。</p>
+      ) : null}
+
+      <FieldList rows={[
+        ['contractName', operationConsole.contractName],
+        ['contractVersion', operationConsole.contractVersion],
+        ['goalId', operationConsole.goalId],
+        ['storage', operationConsole.storage],
+        ['operation count', operationConsole.operationCount],
+        ['latestOperationId', operationConsole.latestOperationId],
+        ['polling.enabled', operationConsole.polling.enabled],
+        ['polling.intervalMs', operationConsole.polling.intervalMs],
+        ['polling.route', operationConsole.polling.route],
+        ['polling.reason', operationConsole.polling.reason],
+        ['next.taskId', operationConsole.nextAction.taskId],
+        ['next.role', operationConsole.nextAction.role],
+        ['next.phase', operationConsole.nextAction.phase],
+        ['next.status', operationConsole.nextAction.status],
+        ['next.reason', operationConsole.nextAction.reason]
+      ]} />
+
+      <Subsection title="latest operation">
+        <OperationConsoleRunCard run={operationConsole.latest} />
+      </Subsection>
+
+      <Subsection title="operation history">
+        <OperationConsoleRunList runs={operationConsole.items} />
+      </Subsection>
+
+      <p className="panel-note">{operationConsole.note}</p>
+    </DataPanel>
+  );
+}
+
+function goalOperationPollingEnabled(model) {
+  return model?.activeGoal?.operationConsole?.polling?.enabled?.value === true;
+}
+
+function OperationConsoleRunCard({ run }) {
+  if (run.state !== 'available') {
+    return <EmptyBlock copy="当前没有 Workbench goal operation run。" />;
+  }
+
+  return (
+    <div className="operation-console-run">
+      <FieldList rows={[
+        ['operationId', run.operationId],
+        ['status', run.status],
+        ['commandName', run.commandName],
+        ['commandKind', run.commandKind],
+        ['taskId', run.taskId],
+        ['role', run.role],
+        ['exitCode', run.exitCode],
+        ['planHash', run.planHash],
+        ['eventIds', run.eventIds],
+        ['startedAt', run.startedAt],
+        ['updatedAt', run.updatedAt],
+        ['completedAt', run.completedAt]
+      ]} />
+      <div className="operation-console-streams" aria-label="operation console output">
+        <label>
+          <span>command preview</span>
+          <pre><code>{run.commandPreview.text}</code></pre>
+        </label>
+        <label>
+          <span>stdout</span>
+          <pre><code>{run.stdout.text}</code></pre>
+        </label>
+        <label>
+          <span>stderr</span>
+          <pre><code>{run.stderr.text}</code></pre>
+        </label>
+      </div>
+    </div>
+  );
+}
+
+function OperationConsoleRunList({ runs }) {
+  if (!Array.isArray(runs) || runs.length === 0) {
+    return <EmptyBlock copy="operation history 为空。" />;
+  }
+
+  return (
+    <ul className="operation-console-list">
+      {runs.slice().reverse().map((run) => (
+        <li key={run.operationId.text}>
+          <OperationConsoleRunCard run={run} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -1702,6 +2404,8 @@ function LatestRunPanel({ latestRun, route }) {
         ['modelInvocation', latestRun.modelInvocation],
         ['executionPlanId', latestRun.executionPlanId],
         ['adoptionPlanId', latestRun.adoptionPlanId],
+        ['evidenceArtifactPath', latestRun.evidenceArtifactPath],
+        ['sourceWorkspacePath', latestRun.sourceWorkspacePath],
         ['createdAt', latestRun.createdAt],
         ['updatedAt', latestRun.updatedAt],
         ['artifactRefs count', latestRun.artifactRefsCount],
@@ -1788,6 +2492,69 @@ function AdoptionSummaryPanel({ adoption }) {
 
       <p className="panel-note">{adoption.note}</p>
     </DataPanel>
+  );
+}
+
+function AdoptionCandidatePanel({ candidates }) {
+  return (
+    <DataPanel
+      id="adoption-candidate-panel"
+      kicker="v26 adoption candidates"
+      title="Adoption candidate runs"
+      state={candidates.state === 'available' ? `${candidates.count.text} candidates` : candidates.state}
+    >
+      <FieldList rows={[
+        ['sourceContract', candidates.sourceContract],
+        ['routeState', candidates.routeState],
+        ['route', candidates.route],
+        ['candidate count', candidates.count],
+        ['total runs scanned', candidates.totalRunsScanned],
+        ['status criterion', candidates.criteria.status],
+        ['verifier criterion', candidates.criteria.verifierStatus],
+        ['workspace criterion', candidates.criteria.workspace],
+        ['mainWorktreeWrites criterion', candidates.criteria.mainWorktreeWrites],
+        ['evidence criterion', candidates.criteria.evidence],
+        ['genericShellRunner', candidates.safety.genericShellRunner],
+        ['workerCanApproveOwnTask', candidates.safety.workerCanApproveOwnTask]
+      ]} />
+
+      {candidates.state === 'missing' ? <EmptyBlock copy="runs contract 未暴露，无法列出 adoption candidates。" /> : null}
+      {candidates.state === 'empty' ? <EmptyBlock copy="当前没有 passed verifier 的 isolated workspace run 可采纳。" /> : null}
+      {candidates.state === 'available' ? <AdoptionCandidateList candidates={candidates.items} /> : null}
+
+      <p className="panel-note">{candidates.note}</p>
+    </DataPanel>
+  );
+}
+
+function AdoptionCandidateList({ candidates }) {
+  return (
+    <ul className="adoption-candidate-list">
+      {candidates.map((candidate) => (
+        <li key={candidate.sourceRunId.text}>
+          <div className="run-row-header">
+            <h3>{candidate.sourceRunId.text}</h3>
+            <span className="state-pill">{candidate.isLatest.value === true ? 'latest' : 'history'}</span>
+          </div>
+          <FieldList rows={[
+            ['source run', candidate.sourceRunId],
+            ['workspace', candidate.workspace.path],
+            ['workspace manifest', candidate.workspace.manifestPath],
+            ['evidenceArtifactPath', candidate.evidence.artifactPath],
+            ['evidenceRef', candidate.evidence.ref],
+            ['changed file count', candidate.changedFiles.count],
+            ['changed files', candidate.changedFiles.text],
+            ['verifierStatus', candidate.verifierStatus],
+            ['status', candidate.status],
+            ['executionPlanId', candidate.executionPlanId],
+            ['writeBoundary', candidate.writeBoundary],
+            ['workspaceWrites', candidate.workspaceWrites],
+            ['mainWorktreeWrites', candidate.mainWorktreeWrites],
+            ['updatedAt', candidate.updatedAt]
+          ]} />
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -1892,7 +2659,7 @@ function ContractGapPanel({ gaps }) {
 
 function DataPanel({ id, kicker, title, state, route, children }) {
   return (
-    <article className="data-panel" aria-labelledby={`${id}-title`}>
+    <article id={id} className="data-panel" aria-labelledby={`${id}-title`}>
       <header className="panel-header">
         <div>
           <p className="section-kicker">{kicker}</p>
@@ -2446,6 +3213,10 @@ function GoalEventFormModelView({ formModel, onGoalEventConfirmed }) {
         />
       </Subsection>
 
+      <Subsection title="worker evidence handoff">
+        <WorkerEvidenceHandoffView handoff={formModel.workerEvidenceHandoff} onGoalEventConfirmed={onGoalEventConfirmed} />
+      </Subsection>
+
       <Subsection title="supported form catalog">
         <GoalEventFormList
           forms={formModel.supportedForms}
@@ -2455,6 +3226,53 @@ function GoalEventFormModelView({ formModel, onGoalEventConfirmed }) {
       </Subsection>
 
       <p className="panel-note">{formModel.note}</p>
+    </div>
+  );
+}
+
+function WorkerEvidenceHandoffView({ handoff, onGoalEventConfirmed }) {
+  if (handoff?.state !== 'available' || handoff.registrationForm === null) {
+    return <EmptyBlock copy="没有可登记的 confirmed isolated workspace worker evidence。" />;
+  }
+
+  return (
+    <div className="worker-evidence-handoff">
+      <FieldList rows={[
+        ['goalId', handoff.goalId],
+        ['taskId', handoff.taskId],
+        ['sourceRunId', handoff.sourceRunId],
+        ['executionPlanId', handoff.executionPlanId],
+        ['evidenceArtifactPath', handoff.evidenceArtifactPath],
+        ['sourceWorkspacePath', handoff.sourceWorkspacePath],
+        ['evidenceRef', handoff.evidenceRef],
+        ['prompt.available', handoff.promptHandoff.available],
+        ['v25Only', handoff.safety.v25Only],
+        ['genericShellRunner', handoff.safety.genericShellRunner],
+        ['workerCanApproveOwnTask', handoff.safety.workerCanApproveOwnTask]
+      ]} />
+
+      <Subsection title="prompt handoff">
+        <pre><code>{handoff.promptHandoff.text.text}</code></pre>
+      </Subsection>
+
+      <Subsection title="registration form">
+        <ul className="goal-event-form-list worker-evidence-registration-form">
+          <li>
+            <FieldList rows={[
+              ['formId', handoff.registrationForm.formId],
+              ['eventType', handoff.registrationForm.eventType],
+              ['commandName', handoff.registrationForm.commandName],
+              ['actorRole', handoff.registrationForm.actorRole],
+              ['requiresEvidence', handoff.registrationForm.requiresEvidence],
+              ['confirmRequiresPlanHash', handoff.registrationForm.confirmRequiresPlanHash]
+            ]} />
+            <GoalEventFormFieldList fields={handoff.registrationForm.fields} />
+            <GoalEventPlanPreview form={handoff.registrationForm} onGoalEventConfirmed={onGoalEventConfirmed} />
+          </li>
+        </ul>
+      </Subsection>
+
+      <p className="panel-note">{handoff.note}</p>
     </div>
   );
 }
@@ -2680,12 +3498,15 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
       {previewState.phase === 'ready' ? (
         <div className="goal-event-preview-result">
           <FieldList rows={[
+            ['operationId', textValue(previewState.plan.operationRun?.operationId)],
+            ['operationStatus', textValue(previewState.plan.operationRun?.status)],
             ['planHash', textValue(previewState.plan.planHash)],
             ['command', textValue(previewState.plan.eventSummary.commandName)],
             ['eventType', textValue(previewState.plan.eventSummary.eventType)],
             ['taskId', textValue(previewState.plan.eventSummary.taskId)],
             ['actorRole', textValue(previewState.plan.eventSummary.actorRole)],
             ['actorId', textValue(previewState.plan.eventSummary.actorId)],
+            ['operationStartedAt', textValue(previewState.plan.operationRun?.timestamps?.startedAt)],
             ['writesInDryRun', textValue(previewState.plan.eventSummary.writesInDryRun)],
             ['confirmAvailable', textValue(previewState.plan.previewEndpoint.confirmAvailable)]
           ]} />
@@ -2705,20 +3526,237 @@ function GoalEventPlanPreview({ form, onGoalEventConfirmed }) {
       {confirmState.phase === 'ready' ? (
         <div className="goal-event-confirm-result">
           <FieldList rows={[
+            ['operationId', textValue(confirmState.result.operationRun?.operationId)],
+            ['operationStatus', textValue(confirmState.result.operationRun?.status)],
             ['status', textValue(confirmState.result.status)],
             ['written', textValue(confirmState.result.written)],
             ['eventType', textValue(confirmState.result.eventSummary.eventType)],
             ['sequence', textValue(confirmState.result.eventSummary.sequence)],
             ['eventId', textValue(confirmState.result.eventSummary.eventId)],
             ['eventHash', textValue(confirmState.result.eventSummary.eventHash)],
+            ['operationCompletedAt', textValue(confirmState.result.operationRun?.timestamps?.completedAt)],
             ['refreshed.progress', textValue(confirmState.result.refreshed.progress?.contractName)],
             ['refreshed.events', textValue(confirmState.result.refreshed.events?.contractName)],
             ['refreshed.nextAction', textValue(confirmState.result.refreshed.nextAction?.contractName)]
           ]} />
         </div>
       ) : null}
+      <GoalOperationInlineConsole
+        form={form}
+        values={values}
+        previewPath={previewPath}
+        previewState={previewState}
+        confirmState={confirmState}
+      />
     </div>
   );
+}
+
+function GoalOperationInlineConsole({
+  form,
+  values,
+  previewPath,
+  previewState,
+  confirmState
+}) {
+  const transcript = buildGoalOperationInlineTranscript({
+    previewPath,
+    previewState,
+    confirmState
+  });
+  const failureRecovery = buildGoalOperationFailureRecovery({
+    form,
+    values,
+    previewPath,
+    previewState,
+    confirmState,
+    transcript
+  });
+
+  return (
+    <div className="goal-operation-inline-console" aria-label="goal operation console">
+      <h4>operation console</h4>
+      <FieldList rows={[
+        ['command preview', transcript.commandPreview],
+        ['exitCode', transcript.exitCode],
+        ['planHash', transcript.planHash],
+        ['eventId', transcript.eventId],
+        ['nextAction', transcript.nextAction]
+      ]} />
+      <div className="operation-console-streams">
+        <label>
+          <span>stdout</span>
+          <pre><code>{transcript.stdout.text}</code></pre>
+        </label>
+        <label>
+          <span>stderr</span>
+          <pre><code>{transcript.stderr.text}</code></pre>
+        </label>
+      </div>
+      <GoalOperationFailureRecovery recovery={failureRecovery} />
+    </div>
+  );
+}
+
+function GoalOperationFailureRecovery({ recovery }) {
+  if (recovery.available.value !== true) {
+    return null;
+  }
+
+  return (
+    <div className="operation-recovery-shortcuts" aria-label="failure recovery shortcuts">
+      <h5>failure recovery</h5>
+      <FieldList rows={[
+        ['failedStep', recovery.failedStep],
+        ['copyOnly', recovery.copyOnly],
+        ['browserExecutionAvailable', recovery.browserExecutionAvailable]
+      ]} />
+      <ul>
+        {recovery.items.map((item) => (
+          <li key={item.id.text}>
+            <strong>{item.label.text}</strong>
+            <pre><code>{item.text.text}</code></pre>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function buildGoalOperationFailureRecovery({
+  form,
+  values,
+  previewPath,
+  previewState,
+  confirmState,
+  transcript
+}) {
+  const failedStep = confirmState.phase === 'failed'
+    ? 'confirm'
+    : previewState.phase === 'failed' ? 'dry-run-preview' : null;
+
+  if (failedStep === null) {
+    return {
+      available: textValue(false),
+      failedStep: textValue(undefined),
+      copyOnly: textValue(true),
+      browserExecutionAvailable: textValue(false),
+      items: []
+    };
+  }
+
+  const dryRunCommand = buildGoalEventDryRunCopyCommand(form, values);
+  const command = confirmState.phase === 'failed'
+    ? previewState.plan?.confirm?.copyOnlyCommand ?? dryRunCommand
+    : dryRunCommand;
+  const failure = transcript.stderr.text || 'failure details unavailable';
+  const goalId = stringValue(values?.goalId);
+  const taskId = stringValue(values?.taskId);
+  const eventType = stringValue(values?.eventType ?? form?.eventType?.value);
+  const actor = firstNonEmptyText(
+    stringValue(values?.actorId),
+    stringValue(values?.reviewerId),
+    stringValue(values?.verifierId)
+  );
+  const hasPreviewOnlyFields = [
+    values?.blockerId,
+    values?.blockerReason,
+    values?.blockerSeverity
+  ].some((value) => stringValue(value) !== '');
+  const retryDryRun = hasPreviewOnlyFields
+    ? previewPath ?? dryRunCommand ?? 'dry-run preview route unavailable'
+    : dryRunCommand ?? previewPath ?? 'dry-run preview route unavailable';
+  const copyCommand = command ?? previewPath ?? 'command unavailable';
+
+  return {
+    available: textValue(true),
+    failedStep: textValue(failedStep),
+    copyOnly: textValue(true),
+    browserExecutionAvailable: textValue(false),
+    items: [{
+      id: textValue('retry-dry-run'),
+      label: textValue('retry dry-run'),
+      text: textValue(retryDryRun)
+    }, {
+      id: textValue('copy-command'),
+      label: textValue('copy command'),
+      text: textValue(copyCommand)
+    }, {
+      id: textValue('copy-reviewer-prompt'),
+      label: textValue('copy reviewer prompt'),
+      text: textValue([
+        '/goal',
+        `Review the failed Workbench goal operation for ${goalId || '<goal-id>'}.`,
+        `Task: ${taskId || '<task-id>'}`,
+        `Event/form: ${eventType || '<event-type>'}`,
+        `Actor: ${actor || '<actor-id>'}`,
+        `Failed step: ${failedStep}`,
+        `Failure: ${failure}`,
+        `Command to inspect: ${copyCommand}`,
+        'Check the input, plan hash, evidence ref, and role boundary. Do not approve or verify from this prompt alone.'
+      ].join('\n'))
+    }, {
+      id: textValue('copy-issue-prompt'),
+      label: textValue('copy issue prompt'),
+      text: textValue([
+        '/goal',
+        `Open or update an issue for the failed Workbench goal operation on ${goalId || '<goal-id>'}.`,
+        `Task: ${taskId || '<task-id>'}`,
+        `Failed step: ${failedStep}`,
+        `Failure: ${failure}`,
+        `Retry dry-run: ${retryDryRun}`,
+        'Include the observed error, the copied command, and the next owner. Keep this as tracking text; it is not evidence of completion.'
+      ].join('\n'))
+    }]
+  };
+}
+
+function buildGoalOperationInlineTranscript({
+  previewPath,
+  previewState,
+  confirmState
+}) {
+  const confirmResult = confirmState.result;
+  const previewPlan = previewState.plan;
+  const failure = confirmState.phase === 'failed'
+    ? confirmState.error
+    : previewState.phase === 'failed'
+      ? previewState.error
+      : null;
+  const successResult = confirmState.phase === 'ready'
+    ? confirmResult
+    : previewState.phase === 'ready'
+      ? previewPlan
+      : null;
+  const exitCode = failure !== null
+    ? 1
+    : successResult === null ? undefined : 0;
+  const planHash = confirmResult?.planHash ?? previewPlan?.planHash;
+  const eventId = confirmResult?.eventSummary?.eventId;
+  const nextAction = confirmResult?.refreshed?.nextAction?.next;
+  const commandPreview = previewPlan?.confirm?.copyOnlyCommand ?? previewPath;
+  const stdout = successResult === null
+    ? ''
+    : [
+        `operationStatus=${confirmResult?.operationRun?.status ?? previewPlan?.operationRun?.status ?? 'ready'}`,
+        `planHash=${planHash ?? 'missing'}`,
+        eventId === undefined ? 'eventId=none' : `eventId=${eventId}`,
+        nextAction === undefined
+          ? 'nextAction=not-refreshed'
+          : `nextAction=${nextAction.taskId ?? 'missing'}:${nextAction.role ?? 'missing'}:${nextAction.phase ?? 'missing'}`
+      ].join('\n');
+
+  return {
+    commandPreview: textValue(commandPreview),
+    stdout: textValue(stdout),
+    stderr: textValue(failure ?? ''),
+    exitCode: textValue(exitCode),
+    planHash: textValue(planHash),
+    eventId: textValue(eventId),
+    nextAction: textValue(nextAction === undefined
+      ? undefined
+      : `${nextAction.taskId ?? '未暴露'} / ${nextAction.role ?? '未暴露'} / ${nextAction.phase ?? '未暴露'}`)
+  };
 }
 
 function GoalEventPreviewInput({
@@ -2853,6 +3891,7 @@ function shouldRenderGoalEventPreviewInput(field) {
     'gateName',
     'gateStatus',
     'evidenceRef',
+    'failedCommand',
     'statement',
     'branch',
     'commit',
@@ -2906,6 +3945,10 @@ function buildGoalEventPreviewPath(form, values) {
   appendSearchParam(searchParams, 'blockerReason', values.blockerReason);
   appendSearchParam(searchParams, 'blockerSeverity', values.blockerSeverity);
 
+  for (const failedCommand of parseGoalEventListInput(values.failedCommand).items) {
+    appendSearchParam(searchParams, 'failedCommand', failedCommand);
+  }
+
   for (const evidenceRef of parseGoalEventEvidenceRefs(values.evidenceRef).refs) {
     appendSearchParam(searchParams, 'evidenceRef', evidenceRef);
   }
@@ -2958,6 +4001,12 @@ function buildGoalEventConfirmBody(form, values, planHash) {
   assignBodyValue(body, 'blockerReason', values.blockerReason);
   assignBodyValue(body, 'blockerSeverity', values.blockerSeverity);
 
+  const failedCommands = parseGoalEventListInput(values.failedCommand).items;
+
+  if (failedCommands.length > 0) {
+    body.failedCommand = failedCommands;
+  }
+
   const evidenceRefs = parseGoalEventEvidenceRefs(values.evidenceRef).refs;
 
   if (evidenceRefs.length > 0) {
@@ -2965,6 +4014,68 @@ function buildGoalEventConfirmBody(form, values, planHash) {
   }
 
   return body;
+}
+
+function buildGoalEventDryRunCopyCommand(form, values) {
+  const commandName = form?.commandName?.value;
+  const parts = ['pnpm', '--silent', 'symphony'];
+
+  if (commandName === 'symphony goal update') {
+    parts.push('goal', 'update');
+    appendCommandFlag(parts, '--goal', values?.goalId);
+    appendCommandFlag(parts, '--task', values?.taskId);
+    appendCommandFlag(parts, '--event', values?.eventType);
+    appendCommandFlag(parts, '--actor', values?.actorId);
+  } else if (commandName === 'symphony goal review') {
+    parts.push('goal', 'review');
+    appendCommandFlag(parts, '--goal', values?.goalId);
+    appendCommandFlag(parts, '--task', values?.taskId);
+    appendCommandFlag(parts, '--reviewer', values?.reviewerId);
+    appendCommandFlag(parts, '--verdict', values?.verdict);
+  } else if (commandName === 'symphony goal gate') {
+    parts.push('goal', 'gate');
+    appendCommandFlag(parts, '--goal', values?.goalId);
+    appendCommandFlag(parts, '--task', values?.taskId);
+    appendCommandFlag(parts, '--gate', values?.gateName);
+    appendCommandFlag(parts, '--status', values?.gateStatus);
+    appendCommandFlag(parts, '--verifier', values?.verifierId);
+  } else {
+    return null;
+  }
+
+  appendCommandFlag(parts, '--statement', values?.statement);
+  appendCommandFlag(parts, '--branch', values?.branch);
+  appendCommandFlag(parts, '--commit', values?.commit);
+
+  for (const failedCommand of parseGoalEventListInput(values?.failedCommand).items) {
+    appendCommandFlag(parts, '--failed-command', failedCommand);
+  }
+
+  for (const evidenceRef of parseGoalEventEvidenceRefs(values?.evidenceRef).refs) {
+    appendCommandFlag(parts, '--evidence-ref', evidenceRef);
+  }
+
+  parts.push('--dry-run', '--json');
+
+  return parts.map(shellToken).join(' ');
+}
+
+function appendCommandFlag(parts, flag, value) {
+  const normalized = String(value ?? '').trim();
+
+  if (normalized !== '') {
+    parts.push(flag, normalized);
+  }
+}
+
+function shellToken(value) {
+  const text = String(value);
+
+  if (/^[A-Za-z0-9_./:=@+-]+$/u.test(text)) {
+    return text;
+  }
+
+  return `'${text.replaceAll("'", "'\\''")}'`;
 }
 
 function assignBodyValue(body, key, value) {
@@ -3023,6 +4134,24 @@ function parseGoalEventEvidenceRefs(value) {
   return {
     refs,
     errors
+  };
+}
+
+function parseGoalEventListInput(value) {
+  const items = [];
+  const entries = String(value ?? '')
+    .split(/[\r\n]+/u)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '');
+
+  for (const entry of entries) {
+    if (!items.includes(entry)) {
+      items.push(entry);
+    }
+  }
+
+  return {
+    items
   };
 }
 
@@ -3156,8 +4285,15 @@ function PromptPreviewList({ prompts }) {
             ['source', prompt.sourceContract],
             ['taskId', prompt.taskId],
             ['role', prompt.role],
+            ['phase', prompt.phase],
             ['title', prompt.title],
-            ['format', prompt.format]
+            ['format', prompt.format],
+            ['revision trigger', prompt.revisionContext.triggerEventType],
+            ['revision blockers', prompt.revisionContext.blockerCount],
+            ['revision failed commands', prompt.revisionContext.recordedFailedCommandCount],
+            ['revision rerun commands', prompt.revisionContext.rerunCommandCount],
+            ['revision changed files', prompt.revisionContext.changedFileCount],
+            ['revision acceptance delta', prompt.revisionContext.acceptanceDeltaCount]
           ]} />
           <pre className="prompt-preview-text"><code>{prompt.text.text}</code></pre>
         </li>
@@ -3371,6 +4507,160 @@ function currentWorkbenchRoute() {
   return 'home';
 }
 
+function buildWorkbenchStateHeader({ model, phase, routeCounts, routeContext }) {
+  const activeGoal = model?.activeGoal;
+  const viewModel = activeGoal?.viewModel;
+  const nextAction = activeGoal?.nextAction;
+  const operationConsole = activeGoal?.operationConsole;
+  const latestOperation = operationConsole?.latest;
+  const evidenceCount = routeContext?.evidenceRefs?.count?.value;
+  const nextTask = firstText(
+    nextAction?.next?.taskId,
+    viewModel?.next?.taskId,
+    activeGoal?.taskQueue?.nextTaskId
+  );
+  const nextRole = firstText(nextAction?.next?.role, viewModel?.next?.role, activeGoal?.taskQueue?.nextRole);
+  const nextPhase = firstText(nextAction?.next?.phase, viewModel?.next?.phase, activeGoal?.taskQueue?.nextPhase);
+  const nextStatus = firstText(nextAction?.status);
+  const latestOperationText = latestOperation?.state === 'available'
+    ? [
+        textValueFromState(latestOperation.operationId),
+        textValueFromState(latestOperation.status)
+      ].filter((value) => value !== '').join(' / ')
+    : firstText(operationConsole?.latestOperationId);
+
+  return {
+    items: [
+      {
+        id: 'goal',
+        label: 'goal',
+        value: firstText(routeContext?.goalId, viewModel?.goalId, nextAction?.goalId, activeGoal?.taskQueue?.goalId, '未暴露'),
+        source: 'route context / goal-status'
+      },
+      {
+        id: 'task',
+        label: 'task',
+        value: firstText(routeContext?.taskId, nextTask, '未暴露'),
+        source: 'route context / goal-next-action'
+      },
+      {
+        id: 'next-action',
+        label: 'next action',
+        value: [firstText(routeContext?.activeRole, nextRole), firstText(routeContext?.activePhase, nextPhase), nextStatus].filter((value) => value !== '').join(' / ') || '未暴露',
+        source: 'goal next'
+      },
+      {
+        id: 'latest-operation',
+        label: 'latest operation',
+        value: firstText(routeContext?.operationId, latestOperationText, '暂无 operation'),
+        source: 'route context / goal-operation-runs'
+      },
+      {
+        id: 'evidence',
+        label: 'evidence refs',
+        value: typeof evidenceCount === 'number' ? `${evidenceCount} refs` : '暂无 evidence refs',
+        source: 'events / ledger / latest run'
+      },
+      {
+        id: 'routes',
+        label: 'routes',
+        value: phase === 'ready' ? `${routeCounts.ready}/${routeCounts.total} ready` : phaseText(phase),
+        source: 'console API'
+      }
+    ]
+  };
+}
+
+function workbenchNavItemClassName(item, currentRoute) {
+  return workbenchNavItemActive(item, currentRoute) ? 'workbench-nav-item active' : 'workbench-nav-item';
+}
+
+function workbenchNavItemActive(item, currentRoute) {
+  return item.route === '/workbench/prompts/'
+    ? currentRoute === 'prompts'
+    : currentRoute === 'home' && item.id === 'active-goal';
+}
+
+function workbenchNavHref(item, routeContext) {
+  const query = workbenchContextQuery(routeContext);
+
+  if (item.route) {
+    return `${item.route}${query}`;
+  }
+
+  return `/workbench/${query}#${item.targetId}`;
+}
+
+function workbenchContextQuery(routeContext) {
+  const searchParams = new URLSearchParams();
+
+  appendRouteContextParam(searchParams, 'goal', routeContext?.goalId?.value);
+  appendRouteContextParam(searchParams, 'task', routeContext?.taskId?.value);
+  appendRouteContextParam(searchParams, 'role', routeContext?.activeRole?.value);
+  appendRouteContextParam(searchParams, 'operation', routeContext?.operationId?.value);
+  appendRouteContextParam(searchParams, 'run', routeContext?.runId?.value);
+
+  for (const evidenceRef of routeContext?.evidenceRefs?.items ?? []) {
+    appendRouteContextParam(searchParams, 'evidence', evidenceRef.ref.value);
+  }
+
+  const query = searchParams.toString();
+
+  return query === '' ? '' : `?${query}`;
+}
+
+function appendRouteContextParam(searchParams, key, value) {
+  const normalized = stringValue(value);
+
+  if (normalized !== '') {
+    searchParams.append(key, normalized);
+  }
+}
+
+function currentWorkbenchSearchParams() {
+  const search = typeof globalThis.location?.search === 'string'
+    ? globalThis.location.search
+    : '';
+
+  return new URLSearchParams(search);
+}
+
+function safeRouteContextToken(value) {
+  const token = stringValue(value);
+
+  return /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(token) ? token : null;
+}
+
+function safePromptWorkspaceRole(value) {
+  const role = stringValue(value);
+
+  return PROMPT_WORKSPACE_ROLES.some((candidate) => candidate.id === role) ? role : null;
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = textValueFromState(value);
+
+    if (text !== '') {
+      return text;
+    }
+  }
+
+  return '';
+}
+
+function textValueFromState(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'object' && 'text' in value) {
+    return String(value.text ?? '').trim();
+  }
+
+  return String(value).trim();
+}
+
 function routeStateCounts(routes) {
   return {
     total: routes.length,
@@ -3486,6 +4776,14 @@ function activeGoalTaskQueueStateText(taskQueue, route) {
   return activeGoalStateText(taskQueue, route);
 }
 
+function goalOperationConsoleStateText(operationConsole, route) {
+  if (operationConsole.state === 'empty') {
+    return '暂无 operation';
+  }
+
+  return activeGoalStateText(operationConsole, route);
+}
+
 function activeGoalViewModelStateText(viewModel) {
   if (viewModel.state === 'missing') {
     return '未暴露';
@@ -3528,8 +4826,16 @@ function textValue(text) {
   };
 }
 
+function stringValue(value) {
+  return String(value ?? '').trim();
+}
+
 function isNonEmptyText(value) {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+function firstNonEmptyText(...values) {
+  return values.find((value) => isNonEmptyText(value)) ?? '';
 }
 
 function formatState(state) {

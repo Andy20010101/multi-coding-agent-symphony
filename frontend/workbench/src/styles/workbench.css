@@ -28,8 +28,13 @@ body {
 }
 
 .workbench-header,
+.workbench-state-header,
+.workbench-nav,
+.workbench-route-context,
+.golden-path-grid,
 .primary-active-goal-grid,
 .main-verification-readiness-grid,
+.adoption-candidate-grid,
 .panel-grid,
 .detail-grid,
 .handoff-grid,
@@ -51,6 +56,160 @@ body {
   padding: 34px 0 24px;
 }
 
+.workbench-state-header {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.28fr) minmax(0, 0.72fr);
+  gap: 16px;
+  align-items: stretch;
+  border: 1px solid #cbd7d9;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.state-header-main {
+  display: grid;
+  align-content: center;
+}
+
+.state-header-main h2 {
+  font-size: 1rem;
+}
+
+.state-header-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.state-header-item {
+  min-width: 0;
+  border: 1px solid #d8e0e2;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8faf9;
+}
+
+.state-header-item dt {
+  color: #59686e;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.state-header-item dd {
+  min-height: 28px;
+  margin: 4px 0;
+  color: #17262d;
+  font-size: 0.9rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.state-header-item span {
+  color: #63757b;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.workbench-nav {
+  margin-top: 14px;
+}
+
+.workbench-nav ul {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workbench-nav-item {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cbd7d9;
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: #ffffff;
+  color: #255568;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-align: center;
+  text-decoration: none;
+}
+
+.workbench-nav-item code {
+  display: block;
+  color: #63757b;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.workbench-nav-item.active {
+  border-color: #255568;
+  background: #eef6f6;
+  color: #173f4e;
+}
+
+.workbench-nav-item:hover,
+.workbench-nav-item:focus-visible {
+  border-color: #2f7d87;
+  background: #f4fbfb;
+  color: #173f4e;
+}
+
+.workbench-nav-item:focus-visible {
+  outline: 3px solid rgba(47, 125, 135, 0.24);
+  outline-offset: 2px;
+}
+
+.workbench-nav .panel-note {
+  margin-top: 8px;
+}
+
+.workbench-route-context {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.28fr) minmax(0, 0.72fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 14px;
+  border: 1px solid #cbd7d9;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.workbench-route-context .panel-subsection {
+  grid-column: 1 / -1;
+}
+
+.workbench-context-evidence-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workbench-context-evidence-list li {
+  min-width: 0;
+  border: 1px solid #d8e0e2;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8faf9;
+}
+
 .eyebrow,
 .section-kicker {
   margin: 0 0 8px;
@@ -64,6 +223,7 @@ body {
 h1,
 h2,
 h3,
+h4,
 p {
   overflow-wrap: anywhere;
 }
@@ -90,6 +250,15 @@ h3 {
   font-size: 0.94rem;
   line-height: 1.25;
   letter-spacing: 0;
+}
+
+h4 {
+  margin: 12px 0 8px;
+  color: #4b5e65;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
 .header-summary {
@@ -121,7 +290,9 @@ h3 {
 
 .panel-grid,
 .primary-active-goal-grid,
+.golden-path-grid,
 .main-verification-readiness-grid,
+.adoption-candidate-grid,
 .detail-grid,
 .handoff-grid,
 .goal-grid,
@@ -141,7 +312,16 @@ h3 {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
 }
 
+.golden-path-grid {
+  margin-top: 16px;
+}
+
 .main-verification-readiness-grid {
+  grid-template-columns: 1fr;
+  margin-top: 16px;
+}
+
+.adoption-candidate-grid {
   grid-template-columns: 1fr;
   margin-top: 16px;
 }
@@ -197,6 +377,11 @@ h3 {
 .prompt-preview-drawer {
   align-self: start;
   border-left: 4px solid #255568;
+}
+
+#review-workspace-panel {
+  align-self: start;
+  border-left: 4px solid #3f7d65;
 }
 
 .prompt-workspace-selector {
@@ -432,7 +617,9 @@ h3 {
 .release-gate-matrix-list,
 .goal-runbook-task-list,
 .active-goal-task-queue-list,
+.golden-path-step-list,
 .subagent-handoff-list,
+.adoption-candidate-list,
 .prompt-preview-list,
 .closeout-missing-list,
 .command-block-list,
@@ -459,6 +646,8 @@ h3 {
 .release-gate-matrix-list li,
 .goal-runbook-task-list li,
 .active-goal-task-queue-list li,
+.golden-path-step-list li,
+.adoption-candidate-list li,
 .prompt-preview-list li,
 .closeout-missing-list li,
 .command-block-list > li,
@@ -514,6 +703,32 @@ h3 {
 .event-form-model {
   display: grid;
   gap: 12px;
+}
+
+.worker-evidence-handoff {
+  display: grid;
+  gap: 12px;
+}
+
+.review-verdict-registration {
+  display: grid;
+  gap: 12px;
+}
+
+.worker-evidence-handoff pre {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #f7f8f5;
+  color: #18232a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 .goal-event-form-list code {
@@ -660,6 +875,114 @@ h3 {
   gap: 10px;
 }
 
+.goal-operation-inline-console,
+.operation-console-run {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.goal-operation-inline-console {
+  border-top: 1px solid rgba(24, 35, 42, 0.1);
+  padding-top: 10px;
+}
+
+.operation-console-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operation-console-list > li {
+  border: 1px solid #d8e0e2;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfb;
+}
+
+.operation-console-streams {
+  display: grid;
+  gap: 10px;
+}
+
+.operation-console-streams label {
+  display: grid;
+  gap: 4px;
+  color: #59686e;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.operation-console-streams pre {
+  min-height: 42px;
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f3f6f6;
+  color: #18232a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.operation-recovery-shortcuts {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #d8e0e2;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfb;
+}
+
+.operation-recovery-shortcuts h5 {
+  margin: 0;
+  color: #18232a;
+  font-size: 0.86rem;
+}
+
+.operation-recovery-shortcuts ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.operation-recovery-shortcuts li {
+  display: grid;
+  gap: 4px;
+}
+
+.operation-recovery-shortcuts strong {
+  color: #59686e;
+  font-size: 0.8rem;
+}
+
+.operation-recovery-shortcuts pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid #dce3e5;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #f3f6f6;
+  color: #18232a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .safe-preview-block {
   display: grid;
   gap: 10px;
@@ -714,8 +1037,12 @@ h3 {
 
 @media (max-width: 920px) {
   .workbench-header,
+  .workbench-state-header,
+  .workbench-route-context,
+  .golden-path-grid,
   .primary-active-goal-grid,
   .main-verification-readiness-grid,
+  .adoption-candidate-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,
@@ -738,12 +1065,22 @@ h3 {
     display: flex;
     flex-wrap: wrap;
   }
+
+  .state-header-grid,
+  .workbench-nav ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
   .workbench-header,
+  .workbench-state-header,
+  .workbench-nav,
+  .workbench-route-context,
+  .golden-path-grid,
   .primary-active-goal-grid,
   .main-verification-readiness-grid,
+  .adoption-candidate-grid,
   .panel-grid,
   .detail-grid,
   .handoff-grid,
@@ -758,6 +1095,11 @@ h3 {
 
   .workbench-header {
     padding-top: 24px;
+  }
+
+  .state-header-grid,
+  .workbench-nav ul {
+    grid-template-columns: 1fr;
   }
 
   .data-panel,

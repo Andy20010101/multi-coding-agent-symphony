@@ -83,6 +83,11 @@ import {
   confirmGoalGate
 } from './goal-gate.js';
 import {
+  GoalOperationRunRegistryError,
+  readGoalOperationRuns,
+  recordGoalOperationRun
+} from './goal-operation-run-registry.js';
+import {
   buildStageCommandSummary
 } from './stage.js';
 
@@ -898,6 +903,19 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      const goalOperationsRequest = parseGoalOperationsRequestPath(url.pathname, url.searchParams);
+
+      if (goalOperationsRequest !== null) {
+        await writeGoalOperationsResponse({
+          response,
+          stateDir,
+          request: goalOperationsRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
       const goalEventPlanPreviewRequest = parseGoalEventPlanPreviewRequestPath(url.pathname, url.searchParams);
 
       if (goalEventPlanPreviewRequest !== null) {
@@ -1238,6 +1256,77 @@ async function writeGoalEventsResponse({ response, stateDir, request, route, met
   writeJsonResponse(response, 200, eventLog);
 }
 
+async function writeGoalOperationsResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-goal-ref',
+      message: 'Goal operation runs ref is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: 'invalid-route-segment'
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal operation run registry was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, await readGoalOperationRuns({
+      stateDir,
+      goalId: resolvedGoalId
+    }));
+  } catch (error) {
+    if (error instanceof GoalOperationRunRegistryError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function writeGoalEventPlanPreviewResponse({ response, stateDir, request, route, method }) {
   if (request.kind === 'invalid') {
     writeApiErrorResponse(response, {
@@ -1293,14 +1382,22 @@ async function writeGoalEventPlanPreviewResponse({ response, stateDir, request, 
       goalId: resolvedGoalId,
       searchParams: request.searchParams
     });
+    const operationRun = await recordGoalOperationRunFromPlan({
+      stateDir,
+      goalId: resolvedGoalId,
+      plan,
+      status: 'dry-run-planned',
+      source: 'workbench.event-plan-preview'
+    });
 
-    writeJsonResponse(response, 200, addGoalEventPlanPreviewSummary(plan));
+    writeJsonResponse(response, 200, addGoalEventPlanPreviewSummary(plan, operationRun));
   } catch (error) {
     if (
       error instanceof GoalUpdateError ||
       error instanceof GoalReviewError ||
       error instanceof GoalGateError ||
-      error instanceof GoalEventPlanPreviewError
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
     ) {
       writeApiErrorResponse(response, {
         status: 400,
@@ -1380,18 +1477,25 @@ async function writeGoalEventPlanConfirmResponse({
       goalId: resolvedGoalId,
       body
     });
+    const operationRun = await recordGoalOperationRunFromConfirmResult({
+      stateDir,
+      goalId: resolvedGoalId,
+      result
+    });
 
     writeJsonResponse(response, 200, await buildGoalEventPlanConfirmResponse({
       stateDir,
       goalId: resolvedGoalId,
-      result
+      result,
+      operationRun
     }));
   } catch (error) {
     if (
       error instanceof GoalUpdateError ||
       error instanceof GoalReviewError ||
       error instanceof GoalGateError ||
-      error instanceof GoalEventPlanPreviewError
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
     ) {
       writeApiErrorResponse(response, {
         status: 400,
@@ -2191,6 +2295,46 @@ function parseGoalEventsRequestPath(pathname, searchParams = new URLSearchParams
   };
 }
 
+function parseGoalOperationsRequestPath(pathname, searchParams = new URLSearchParams()) {
+  if (hasSearchParams(searchParams)) {
+    if (pathname === '/api/goals/latest/operations' || /^\/api\/goals\/[^/]+\/operations$/u.test(pathname)) {
+      return {
+        kind: 'invalid',
+        goalId: null
+      };
+    }
+
+    return null;
+  }
+
+  if (pathname === '/api/goals/latest/operations') {
+    return {
+      kind: 'goal-operations',
+      goalId: 'latest'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/operations$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null
+    };
+  }
+
+  return {
+    kind: 'goal-operations',
+    goalId: decoded.value
+  };
+}
+
 function parseGoalEventPlanPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
   const latestPath = '/api/goals/latest/event-plan-preview';
 
@@ -2524,6 +2668,7 @@ async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
         'reviewer',
         'verdict',
         'evidenceRef',
+        'failedCommand',
         'statement',
         'branch',
         'commit'
@@ -2536,6 +2681,7 @@ async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
         reviewerId: requiredSingleSearchParam(searchParams, 'reviewer'),
         verdict: requiredSingleSearchParam(searchParams, 'verdict'),
         evidenceRefs: searchParams.getAll('evidenceRef'),
+        failedCommands: searchParams.getAll('failedCommand'),
         statement: optionalSingleSearchParam(searchParams, 'statement'),
         branch: optionalSingleSearchParam(searchParams, 'branch'),
         commit: optionalSingleSearchParam(searchParams, 'commit')
@@ -2548,6 +2694,7 @@ async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
         'status',
         'verifier',
         'evidenceRef',
+        'failedCommand',
         'statement',
         'branch',
         'commit'
@@ -2561,6 +2708,7 @@ async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
         status: requiredSingleSearchParam(searchParams, 'status'),
         verifierId: requiredSingleSearchParam(searchParams, 'verifier'),
         evidenceRefs: searchParams.getAll('evidenceRef'),
+        failedCommands: searchParams.getAll('failedCommand'),
         statement: optionalSingleSearchParam(searchParams, 'statement'),
         branch: optionalSingleSearchParam(searchParams, 'branch'),
         commit: optionalSingleSearchParam(searchParams, 'commit')
@@ -2673,6 +2821,8 @@ async function confirmGoalEventPlan({ stateDir, goalId, body }) {
         'verdict',
         'evidenceRef',
         'evidenceRefs',
+        'failedCommand',
+        'failedCommands',
         'statement',
         'branch',
         'commit'
@@ -2688,6 +2838,7 @@ async function confirmGoalEventPlan({ stateDir, goalId, body }) {
           reviewerId: requiredBodyString(body, 'reviewer'),
           verdict: requiredBodyString(body, 'verdict'),
           evidenceRefs: bodyEvidenceRefs(body),
+          failedCommands: bodyFailedCommands(body),
           statement: optionalBodyString(body, 'statement'),
           branch: optionalBodyString(body, 'branch'),
           commit: optionalBodyString(body, 'commit'),
@@ -2705,6 +2856,8 @@ async function confirmGoalEventPlan({ stateDir, goalId, body }) {
         'verifier',
         'evidenceRef',
         'evidenceRefs',
+        'failedCommand',
+        'failedCommands',
         'statement',
         'branch',
         'commit'
@@ -2721,6 +2874,7 @@ async function confirmGoalEventPlan({ stateDir, goalId, body }) {
           status: requiredBodyString(body, 'status'),
           verifierId: requiredBodyString(body, 'verifier'),
           evidenceRefs: bodyEvidenceRefs(body),
+          failedCommands: bodyFailedCommands(body),
           statement: optionalBodyString(body, 'statement'),
           branch: optionalBodyString(body, 'branch'),
           commit: optionalBodyString(body, 'commit'),
@@ -2737,7 +2891,7 @@ async function confirmGoalEventPlan({ stateDir, goalId, body }) {
   }
 }
 
-async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result }) {
+async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result, operationRun }) {
   const [progress, events, nextAction] = await Promise.all([
     buildGoalProgressLedger({
       stateDir,
@@ -2763,6 +2917,7 @@ async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result }) {
     appendOnly: result.appendOnly,
     planHash: result.planHash,
     command: commandKeyFromConfirmResult(result),
+    operationRun,
     eventSummary: stripUndefined({
       eventId: result.event?.eventId,
       sequence: result.event?.sequence,
@@ -2774,6 +2929,9 @@ async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result }) {
       verdict: result.event?.review?.verdict,
       gate: result.gate,
       gateStatus: result.gateStatus,
+      failedCommands: Array.isArray(result.event?.metadata?.failedCommands)
+        ? [...result.event.metadata.failedCommands]
+        : undefined,
       eventHash: result.event?.eventHash
     }),
     refreshed: {
@@ -2801,6 +2959,48 @@ async function buildGoalEventPlanConfirmResponse({ stateDir, goalId, result }) {
   };
 }
 
+async function recordGoalOperationRunFromPlan({
+  stateDir,
+  goalId,
+  plan,
+  status,
+  source
+}) {
+  const proposedEvent = plan.proposedEvents[0] ?? {};
+
+  return await recordGoalOperationRun({
+    stateDir,
+    goalId,
+    taskId: proposedEvent.taskId ?? null,
+    role: plan.actor.role,
+    commandKind: commandKeyFromPlan(plan),
+    commandName: plan.command.name,
+    status,
+    planHash: plan.planHash,
+    eventIds: [],
+    source
+  });
+}
+
+async function recordGoalOperationRunFromConfirmResult({
+  stateDir,
+  goalId,
+  result
+}) {
+  return await recordGoalOperationRun({
+    stateDir,
+    goalId,
+    taskId: result.taskId ?? null,
+    role: result.event.actor.role,
+    commandKind: commandKeyFromConfirmResult(result),
+    commandName: result.event.metadata?.sourceCommand,
+    status: 'confirmed',
+    planHash: result.planHash,
+    eventIds: [result.event.eventId],
+    source: 'workbench.event-plan-confirm'
+  });
+}
+
 async function buildRefreshedGoalEventLog({ stateDir, goalId }) {
   const goal = await resolveGoalEventsGoal({
     stateDir,
@@ -2825,6 +3025,18 @@ function commandKeyFromConfirmResult(result) {
   }
 
   if (typeof result.gate === 'string') {
+    return 'gate';
+  }
+
+  return 'update';
+}
+
+function commandKeyFromPlan(plan) {
+  if (plan.command.name === 'symphony goal review') {
+    return 'review';
+  }
+
+  if (plan.command.name === 'symphony goal gate') {
     return 'gate';
   }
 
@@ -2928,6 +3140,56 @@ function bodyEvidenceRefs(body) {
   });
 }
 
+function bodyFailedCommands(body) {
+  const commands = [];
+
+  if (body.failedCommand !== undefined) {
+    if (typeof body.failedCommand === 'string') {
+      commands.push(body.failedCommand);
+    } else if (Array.isArray(body.failedCommand)) {
+      commands.push(...body.failedCommand);
+    } else {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm failedCommand must be a string or string array.',
+        { field: 'failedCommand' }
+      );
+    }
+  }
+
+  if (body.failedCommands !== undefined) {
+    if (!Array.isArray(body.failedCommands)) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm failedCommands must be a string array.',
+        { field: 'failedCommands' }
+      );
+    }
+
+    commands.push(...body.failedCommands);
+  }
+
+  const normalized = [];
+
+  commands.forEach((entry, index) => {
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      throw new GoalEventPlanPreviewError(
+        'invalid-goal-confirm-request',
+        'Goal event plan confirm failed commands must be non-empty strings.',
+        { field: `failedCommand[${index}]` }
+      );
+    }
+
+    const command = entry.trim();
+
+    if (!normalized.includes(command)) {
+      normalized.push(command);
+    }
+  });
+
+  return normalized;
+}
+
 function buildConfirmBlocker(body) {
   const blockerId = optionalBodyString(body, 'blockerId');
   const reason = optionalBodyString(body, 'blockerReason');
@@ -2944,11 +3206,12 @@ function buildConfirmBlocker(body) {
   });
 }
 
-function addGoalEventPlanPreviewSummary(plan) {
+function addGoalEventPlanPreviewSummary(plan, operationRun) {
   const proposedEvent = plan.proposedEvents[0] ?? {};
 
   return {
     ...plan,
+    operationRun,
     eventSummary: stripUndefined({
       commandName: plan.command.name,
       commandIntent: plan.command.intent,
@@ -2968,6 +3231,9 @@ function addGoalEventPlanPreviewSummary(plan) {
       verdict: proposedEvent.review?.verdict,
       gate: proposedEvent.gate?.name,
       gateStatus: proposedEvent.gate?.status,
+      failedCommands: Array.isArray(proposedEvent.metadata?.failedCommands)
+        ? [...proposedEvent.metadata.failedCommands]
+        : undefined,
       branch: proposedEvent.branch ?? null,
       commit: proposedEvent.commit ?? null,
       blocker: proposedEvent.blocker,

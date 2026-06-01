@@ -16,7 +16,7 @@ const GOAL_ID = 'v21-goal-event-registration-workbench';
 const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v21-goal-event-registration-workbench.v1.json';
 
 describe('v21 Workbench goal event dry-run plan preview API', () => {
-  it('serves a latest goal update dry-run preview with plan hash and event summary without writing state', async () => {
+  it('serves a latest goal update dry-run preview with plan hash, event summary, and operation tracking without writing goal event state', async () => {
     const context = await startPreviewConsoleServer();
 
     try {
@@ -45,12 +45,27 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
       assert.equal(plan.eventSummary.evidenceRefs[0].ref, 'docs/plans/v21-task-2-worker-evidence-2026-05-29.md');
       assert.equal(plan.eventSummary.planHash, plan.planHash);
       assert.equal(plan.eventSummary.writesInDryRun, false);
+      assert.equal(plan.operationRun.goalId, GOAL_ID);
+      assert.equal(plan.operationRun.taskId, 'task-2');
+      assert.equal(plan.operationRun.role, 'worker');
+      assert.equal(plan.operationRun.commandKind, 'update');
+      assert.equal(plan.operationRun.status, 'dry-run-planned');
+      assert.match(plan.operationRun.operationId, /^op_[a-f0-9]{16}$/u);
       assert.equal(plan.previewEndpoint.dryRunOnly, true);
       assert.equal(plan.previewEndpoint.genericShellRunner, false);
       assert.equal(plan.previewEndpoint.confirmAvailable, false);
       assert.equal(plan.confirm.copyOnlyCommand.includes('--confirm --plan-hash'), true);
 
       assert.deepEqual(await snapshotDirectoryFiles(context.stateDir), before);
+
+      const operationsResponse = await fetch(`${context.baseUrl}/api/goals/latest/operations`);
+      const operations = await operationsResponse.json();
+
+      assert.equal(operationsResponse.status, 200);
+      assert.equal(operations.contractName, 'goal-operation-runs.v1');
+      assert.equal(operations.operationCount, 1);
+      assert.equal(operations.latestOperationId, plan.operationRun.operationId);
+      assert.equal(operations.runs[0].status, 'dry-run-planned');
     } finally {
       await cleanupPreviewConsoleServer(context);
     }
@@ -399,6 +414,9 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
       assert.equal(confirmation.eventSummary.eventType, 'worker.evidence-recorded');
       assert.equal(confirmation.eventSummary.taskId, 'task-3');
       assert.equal(confirmation.eventSummary.actorId, 'codex-v21-task-3-worker');
+      assert.equal(confirmation.operationRun.operationId, previewPlan.operationRun.operationId);
+      assert.equal(confirmation.operationRun.status, 'confirmed');
+      assert.deepEqual(confirmation.operationRun.eventIds, [confirmation.eventSummary.eventId]);
       assert.equal(confirmation.refreshed.events.contractName, 'goal-event-log.v1');
       assert.equal(confirmation.refreshed.events.log.eventCount, 1);
       assert.equal(confirmation.refreshed.progress.contractName, 'goal-progress-ledger.v1');
@@ -536,14 +554,16 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
           task: 'task-2',
           reviewer: 'codex-v21-task-2-reviewer',
           verdict: 'needs-revision',
-          evidenceRef: 'docs/plans/v21-task-2-review-evidence-2026-05-29.md'
+          evidenceRef: 'docs/plans/v21-task-2-review-evidence-2026-05-29.md',
+          failedCommand: 'pnpm test'
         },
         confirmBody: {
           command: 'review',
           task: 'task-2',
           reviewer: 'codex-v21-task-2-reviewer',
           verdict: 'needs-revision',
-          evidenceRef: ['docs/plans/v21-task-2-review-evidence-2026-05-29.md']
+          evidenceRef: ['docs/plans/v21-task-2-review-evidence-2026-05-29.md'],
+          failedCommand: ['pnpm test']
         }
       });
 
@@ -554,6 +574,8 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
       assert.equal(needsRevisionConfirmation.command, 'review');
       assert.equal(needsRevisionConfirmation.eventSummary.eventType, 'reviewer.needs-revision');
       assert.equal(needsRevisionConfirmation.eventSummary.verdict, 'NEEDS_REVISION');
+      assert.deepEqual(needsRevisionConfirmation.eventSummary.failedCommands, ['pnpm test']);
+      assert.deepEqual(needsRevisionConfirmation.refreshed.events.events.at(-1).metadata.failedCommands, ['pnpm test']);
       assert.equal(needsRevisionConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-2').status, 'needs-revision');
       assert.equal(needsRevisionConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-2').reviewVerdict, 'NEEDS_REVISION');
       assert.equal(needsRevisionConfirmation.refreshed.events.log.eventCount, 3);
@@ -591,7 +613,8 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
           gate: 'main-verification',
           status: 'failed',
           verifier: 'codex-v21-task-2-main-verifier',
-          evidenceRef: 'docs/plans/v21-task-2-main-verification-evidence-2026-05-29.md'
+          evidenceRef: 'docs/plans/v21-task-2-main-verification-evidence-2026-05-29.md',
+          failedCommand: 'pnpm workbench:build'
         },
         confirmBody: {
           command: 'gate',
@@ -599,7 +622,8 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
           gate: 'main-verification',
           status: 'failed',
           verifier: 'codex-v21-task-2-main-verifier',
-          evidenceRef: ['docs/plans/v21-task-2-main-verification-evidence-2026-05-29.md']
+          evidenceRef: ['docs/plans/v21-task-2-main-verification-evidence-2026-05-29.md'],
+          failedCommand: ['pnpm workbench:build']
         }
       });
 
@@ -621,6 +645,8 @@ describe('v21 Workbench goal event dry-run plan preview API', () => {
       assert.equal(failedConfirmation.command, 'gate');
       assert.equal(failedConfirmation.eventSummary.eventType, 'main.verification-failed');
       assert.equal(failedConfirmation.eventSummary.gateStatus, 'failed');
+      assert.deepEqual(failedConfirmation.eventSummary.failedCommands, ['pnpm workbench:build']);
+      assert.deepEqual(failedConfirmation.refreshed.events.events.at(-1).metadata.failedCommands, ['pnpm workbench:build']);
       assert.equal(failedConfirmation.refreshed.progress.tasks.find((task) => task.taskId === 'task-2').status, 'unknown');
       assert.equal(failedConfirmation.refreshed.events.log.eventCount, 2);
       assert.equal(invalidGateResponse.status, 400);
@@ -816,10 +842,14 @@ async function cleanupPreviewConsoleServer(context) {
 
 async function snapshotDirectoryFiles(root) {
   const files = await collectFiles(root, root);
-  const entries = await Promise.all(files.map(async (file) => [
-    file,
-    await readFile(join(root, file), 'utf8')
-  ]));
+  const entries = await Promise.all(
+    files
+      .filter((file) => !file.startsWith('goals/operations/'))
+      .map(async (file) => [
+        file,
+        await readFile(join(root, file), 'utf8')
+      ])
+  );
 
   return Object.fromEntries(entries.sort(([left], [right]) => left.localeCompare(right)));
 }

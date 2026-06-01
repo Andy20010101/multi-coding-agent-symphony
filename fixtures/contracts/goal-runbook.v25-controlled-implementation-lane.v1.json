@@ -1,0 +1,176 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v25-controlled-implementation-lane",
+  "goalTitle": "v25 Controlled Implementation Lane",
+  "baseline": {
+    "tag": "v24",
+    "commit": null,
+    "evidenceRef": "docs/plans/v24-release-evidence-2026-05-29.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Task-to-execution-plan bridge",
+      "branch": "v25-task-1-task-to-execution-plan-bridge",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能从 task 进入受控实现计划。",
+        "从 active goal task 和 goal prompt 生成 controlled implementation request，调用 symphony do --write --json 只创建 frozen plan。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v25-controlled-implementation-lane --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Execution plan review UI",
+      "branch": "v25-task-2-execution-plan-review-ui",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能看懂执行计划再确认。",
+        "展示 executionPlanId、confirmationCommand、writeBoundary、workspaceWrites、requiresGate、expected changed files/evidence。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v25-controlled-implementation-lane --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Confirm isolated workspace execution",
+      "branch": "v25-task-3-confirm-isolated-workspace-execution",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能从 Workbench 启动受控实现。",
+        "调用 symphony do --confirm-plan <plan-id> --json，并把结果接入 v23 run console。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v25-controlled-implementation-lane --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Post-run worker evidence flow",
+      "branch": "v25-task-4-post-run-worker-evidence-flow",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "实现结果能回到 goal event ledger。",
+        "把 confirmed run 的 evidenceArtifactPath/sourceWorkspacePath 转成 worker evidence registration 表单和 prompt handoff。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v25-controlled-implementation-lane --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Controlled implementation tests/docs",
+      "branch": "v25-task-5-controlled-implementation-tests-docs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "保证这不是任意 shell 按钮。",
+        "使用 fake/frozen fixtures 覆盖 plan、confirm、missing gate、stale fingerprint、worker evidence registration。"
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v25-controlled-implementation-lane --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.mutation-gate",
+    "release.audit-high",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

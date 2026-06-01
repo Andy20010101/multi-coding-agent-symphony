@@ -823,7 +823,7 @@ describe('v16 Workbench route smoke and server parity', () => {
     const forbiddenEntrypoints = [
       {
         label: 'mutation controls',
-        pattern: /<form\b|<a\b[^>]*(?:href|download)\s*=/iu
+        pattern: /<form\b|<a\b[^>]*download\s*=/iu
       },
       {
         label: 'mutation event handlers',
@@ -862,6 +862,8 @@ describe('v16 Workbench route smoke and server parity', () => {
       if (relativePath === 'App.jsx') {
         assert.match(source, /Preview dry-run plan/u, 'App.jsx exposes the v21 dry-run preview control');
         assert.match(source, /Confirm event append/u, 'App.jsx exposes the v21 controlled confirm control');
+        assert.match(source, /function workbenchNavHref/u, 'App.jsx keeps anchors scoped to Workbench navigation');
+        assert.match(source, /return `\/workbench\/\$\{query\}#\$\{item\.targetId\}`/u, 'App.jsx section anchors stay under /workbench/');
         assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:handlePreview|handleConfirm)\})/u, 'App.jsx exposes a non-preview/non-confirm click handler');
       } else {
         assert.doesNotMatch(source, /\bonClick\s*=/u, `${relativePath} exposes a click handler`);
