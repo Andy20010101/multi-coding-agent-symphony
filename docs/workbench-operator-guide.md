@@ -4,6 +4,8 @@
 
 Workbench v1 是日常操作入口。`symphony console` 启动本地服务器后，操作者打开 `/workbench/`，按 active goal、next action、prompt handoff、event registration、review/revision、main verification、closeout/release 的顺序推进工作。
 
+仓库 tag `v28` 发布的是 Workbench v1 的 v20-v28 完整链路。这个版本把 goal/runbook 操作主线放进 Workbench，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
+
 Workbench 消费 console server 暴露的本地 API，用于查看 active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
 
 `symphony` CLI 是高级/脚本入口。需要 JSON 输出、CI 命令、dry-run/confirm 事件登记、兼容命令或低层诊断时，在终端运行 CLI；Workbench 只显示受控状态、表单和可复制命令。
