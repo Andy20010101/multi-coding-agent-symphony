@@ -382,3 +382,82 @@ Next suggested command:
 ```
 
 If blocked, include the exact command, output summary, and the smallest decision needed from the controller.
+
+## v35 task-1 中文执行口径
+
+Codex High 已完成 v35 goal registration。Claude team 现在可以进入 v35 task-1 worker implementation，但只能在指定 worktree 和分支内执行。
+
+指定 worktree：
+
+```text
+/private/tmp/mcas-v35-task-1
+```
+
+指定分支：
+
+```text
+v35-task-1-job-model-contract
+```
+
+任务：
+
+```text
+v35 task-1: Job model contract
+```
+
+已批准范围：
+
+- 新增 `src/symphony/job-model-contract.js`，作为 v35 job model contract module。
+- 新增 `fixtures/contracts/job-model.v1.json`，作为 contract fixture。
+- 新增 `tests/v35-job-model-contract.test.js`，覆盖 fixture validation、boundary drift rejection、read-only API route。
+- 如 task-1 需要用户可见只读 contract，可增加最小 `GET /api/jobs` route。
+- 如果增加 `GET /api/jobs` route，可同步更新 `frontend/workbench/src/api/contracts.js` 的 route allowlist。
+- Worker evidence 写到 `docs/plans/v35-task-1-worker-evidence-2026-06-02.md`。
+
+未批准范围：
+
+- 不改 `src/task-queue.js`，除非先停止并说明为什么 task-1 不改它无法通过。
+- 不实现 job execution。
+- 不实现 job runner。
+- 不实现 pause / cancel / resume / recover。
+- 不实现 shell execution。
+- 不实现 model invocation。
+- 不实现 git write 或 release write。
+- 不实现 Workbench job console。
+- 不 merge、push、tag、publish。
+
+开始编辑前必须运行：
+
+```sh
+git status --short --branch
+pwd
+pnpm --silent symphony goal-status --goal v35-job-queue-run-control-workspace --json
+pnpm --silent symphony goal next --goal v35-job-queue-run-control-workspace --json
+```
+
+必须验证：
+
+```sh
+pnpm check
+pnpm test -- tests/v35-job-model-contract.test.js tests/v34-action-manifest.test.js tests/workbench-api-client.test.js tests/workbench-route-smoke.test.js
+pnpm workbench:build
+git diff --check
+pnpm --silent symphony actions manifest --json
+pnpm --silent symphony actions availability --json
+pnpm --silent symphony actions preview --action goal.worker-evidence.record --json
+pnpm --silent symphony goal-status --goal v35-job-queue-run-control-workspace --json
+```
+
+完成后返回：
+
+```text
+Task:
+Branch:
+Files changed:
+Validation:
+Evidence:
+Risks:
+Next suggested command:
+```
+
+如果遇到 blocker，返回具体命令、输出摘要、受影响文件，以及需要 Codex High 决策的最小问题。不要自行扩大任务范围。
