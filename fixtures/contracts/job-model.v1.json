@@ -1,0 +1,57 @@
+{
+  "contractName": "job-model.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "projectId": null,
+    "goalId": "v35-job-queue-run-control-workspace",
+    "taskId": "task-1",
+    "actionId": "goal.worker-evidence.record",
+    "sourceContracts": [
+      "action-manifest.v1",
+      "action-availability.v1",
+      "action-preview.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1"
+    ],
+    "stateSource": "explicit-backend-contracts"
+  },
+  "job": {
+    "job_id": "job-v35-task-1-example",
+    "project_id": null,
+    "goal_id": "v35-job-queue-run-control-workspace",
+    "task_id": "task-1",
+    "action_id": "goal.worker-evidence.record",
+    "status": "queued",
+    "queue_state": "action-preview-contract",
+    "refs": [],
+    "timestamps": {
+      "created_at": "2026-06-02T00:00:00.000Z",
+      "leased_at": null,
+      "passed_at": null,
+      "failed_at": null,
+      "cancelled_at": null
+    },
+    "failure": null,
+    "blocker": null
+  },
+  "boundaries": {
+    "readOnly": true,
+    "jobExecutionAvailable": false,
+    "actionExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "jobCreationSource": "action-preview.v1 only",
+    "secondArtifactStoreAvailable": false
+  }
+}

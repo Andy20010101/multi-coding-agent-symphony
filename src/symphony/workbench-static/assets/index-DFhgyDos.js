@@ -9908,6 +9908,7 @@ var CAPABILITIES_CONTRACT_NAME = "capabilities.v1";
 var ACTION_MANIFEST_CONTRACT_NAME = "action-manifest.v1";
 var ACTION_AVAILABILITY_CONTRACT_NAME = "action-availability.v1";
 var ACTION_PREVIEW_CONTRACT_NAME = "action-preview.v1";
+var JOB_MODEL_CONTRACT_NAME = "job-model.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
@@ -10474,6 +10475,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/actions/preview",
 		method: "GET",
 		contractName: ACTION_PREVIEW_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "jobModel",
+		label: "Job Model",
+		path: "/api/jobs",
+		method: "GET",
+		contractName: JOB_MODEL_CONTRACT_NAME
 	}),
 	Object.freeze({
 		id: "diagnostics",

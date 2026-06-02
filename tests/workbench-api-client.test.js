@@ -81,6 +81,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/manifest', 'action-manifest.v1'],
         ['GET', '/api/actions/availability', 'action-availability.v1'],
         ['GET', '/api/actions/preview', 'action-preview.v1'],
+        ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1']
       ]
     );
@@ -106,6 +107,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/manifest', 'action-manifest.v1'],
         ['GET', '/api/actions/availability', 'action-availability.v1'],
         ['GET', '/api/actions/preview', 'action-preview.v1'],
+        ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
