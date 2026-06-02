@@ -9903,6 +9903,7 @@ var CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = "controlled-adoption-plan-fr
 var CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = "controlled-adoption-confirmation.v1";
 var CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = "symphony.console-adoption-inspect";
 var RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = "release-baseline-resolver.v1";
+var APP_STATE_SNAPSHOT_CONTRACT_NAME = "app-state-snapshot.v1";
 var CAPABILITIES_CONTRACT_NAME = "capabilities.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
@@ -10340,6 +10341,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: "symphony.console-snapshot"
 	}),
 	Object.freeze({
+		id: "runtimeSnapshot",
+		label: "Runtime Snapshot",
+		path: "/api/runtime/snapshot",
+		method: "GET",
+		contractName: APP_STATE_SNAPSHOT_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "readiness",
 		label: "Readiness",
 		path: "/api/readiness",
@@ -10642,6 +10650,7 @@ var ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
 ]);
 function projectWorkbenchContracts(results) {
 	const summaryData = dataFrom(results.summary);
+	const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
 	const readinessData = dataFrom(results.readiness);
 	const handoffRefsData = dataFrom(results.handoffRefs);
 	const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
@@ -10760,6 +10769,10 @@ function projectWorkbenchContracts(results) {
 			activeGoal: activeGoalControl,
 			routeStates
 		}),
+		runtimeSnapshot: projectRuntimeSnapshot({
+			result: results.runtimeSnapshot,
+			snapshot: runtimeSnapshotData
+		}),
 		summary: projectSummary(summaryData),
 		readiness: projectReadiness(readinessData, summaryData),
 		runs: projectRuns(runsData, summaryData),
@@ -10810,6 +10823,106 @@ function projectWorkbenchContracts(results) {
 			status: MISSING_TEXT
 		}))
 	};
+}
+function projectRuntimeSnapshot({ result, snapshot }) {
+	const blockers = Array.isArray(snapshot?.known_blockers) ? snapshot.known_blockers : [];
+	const releaseStatus = snapshot?.release_status ?? null;
+	const missingGates = Array.isArray(releaseStatus?.missing_or_unknown_gates) ? releaseStatus.missing_or_unknown_gates : [];
+	const evidenceRefs = Array.isArray(snapshot?.evidence_refs) ? snapshot.evidence_refs : [];
+	const boundaries = snapshot?.boundaries ?? {};
+	return {
+		state: result?.ok === true ? snapshotRuntimeState(snapshot) : "missing",
+		contractName: valueState(snapshot?.contractName),
+		contractVersion: valueState(snapshot?.contractVersion),
+		generatedAt: valueState(snapshot?.generatedAt),
+		readOnly: valueState(snapshot?.readOnly),
+		freshness: {
+			status: valueState(snapshot?.freshness?.status),
+			ageMs: valueState(snapshot?.freshness?.age_ms),
+			staleAfterMs: valueState(snapshot?.freshness?.stale_after_ms)
+		},
+		runtime: {
+			status: valueState(snapshot?.runtime_health?.status),
+			mode: valueState(snapshot?.runtime_health?.mode),
+			version: valueState(snapshot?.runtime_health?.runtime?.version),
+			kernel: valueState(snapshot?.runtime_health?.kernel?.version),
+			cwd: valueState(snapshot?.runtime_health?.process?.cwd),
+			repoPath: valueState(snapshot?.runtime_health?.process?.repoPath)
+		},
+		project: {
+			status: valueState(snapshot?.current_project?.resolution?.status),
+			name: valueState(snapshot?.current_project?.currentProject?.project_name),
+			id: valueState(snapshot?.current_project?.currentProject?.project_id),
+			repoPath: valueState(snapshot?.current_project?.currentProject?.repo_path),
+			defaultBranch: valueState(snapshot?.current_project?.currentProject?.default_branch),
+			lastGoalId: valueState(snapshot?.current_project?.currentProject?.last_goal_id),
+			lastRunId: valueState(snapshot?.current_project?.currentProject?.last_run_id)
+		},
+		activeGoal: {
+			goalId: valueState(snapshot?.active_goal?.goal_id),
+			title: valueState(snapshot?.active_goal?.goal_title),
+			completedTasks: valueState(snapshot?.active_goal?.summary?.completedTasks),
+			totalTasks: valueState(snapshot?.active_goal?.summary?.totalTasks),
+			statusSource: valueState(snapshot?.active_goal?.status_source)
+		},
+		currentTask: {
+			taskId: valueState(snapshot?.current_task?.task_id),
+			title: valueState(snapshot?.current_task?.title),
+			status: valueState(snapshot?.current_task?.status),
+			role: valueState(snapshot?.current_task?.role),
+			phase: valueState(snapshot?.current_task?.phase),
+			blocked: valueState(snapshot?.current_task?.blocked)
+		},
+		nextAction: {
+			status: valueState(snapshot?.next_action?.status),
+			reason: valueState(snapshot?.next_action?.reason),
+			registerWith: valueState(snapshot?.next_action?.afterCompletion?.registerWith),
+			copyOnlyCommands: Array.isArray(snapshot?.next_action?.copyOnlyCommands) ? snapshot.next_action.copyOnlyCommands.map((command) => valueState(command)) : []
+		},
+		release: {
+			ready: valueState(releaseStatus?.release_ready),
+			readySource: valueState(releaseStatus?.release_ready_source),
+			statusSource: valueState(releaseStatus?.status_source),
+			missingGates: missingGates.map((gate) => ({
+				gateId: valueState(gate?.gate_id),
+				status: valueState(gate?.status)
+			}))
+		},
+		blockers: blockers.map((blocker) => ({
+			id: valueState(blocker?.id),
+			severity: valueState(blocker?.severity),
+			source: valueState(blocker?.source),
+			message: valueState(blocker?.message)
+		})),
+		evidenceRefs: evidenceRefs.map((ref) => ({
+			kind: valueState(ref?.kind),
+			taskId: valueState(ref?.task_id),
+			ref: valueState(ref?.ref),
+			source: valueState(ref?.source)
+		})),
+		boundaries: Object.entries({
+			readOnly: boundaries.readOnly,
+			writesInSnapshotPath: boundaries.writesInSnapshotPath,
+			actionExecutionAvailable: boundaries.actionExecutionAvailable,
+			jobQueueAvailable: boundaries.jobQueueAvailable,
+			modelInvocationAvailable: boundaries.modelInvocationAvailable,
+			gitWriteAvailable: boundaries.gitWriteAvailable,
+			releaseWriteAvailable: boundaries.releaseWriteAvailable,
+			arbitraryCommandExecutionAvailable: boundaries.arbitraryCommandExecutionAvailable,
+			confirmCommandAvailable: boundaries.confirmCommandAvailable
+		}).map(([boundary, available]) => ({
+			boundary: valueState(boundary),
+			available: valueState(available)
+		})),
+		note: "Runtime snapshot is the shared read-only app state schema consumed by CLI and Workbench; it does not execute commands or infer approval, verification, or release readiness from frontend state."
+	};
+}
+function snapshotRuntimeState(snapshot) {
+	if (snapshot?.freshness?.status === "stale") return "stale";
+	if (snapshot?.current_project?.currentProject === null || snapshot?.current_project?.resolution?.status !== "resolved") return "empty";
+	if (snapshot?.active_goal === null) return "empty";
+	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
+	return "healthy";
 }
 function projectWorkbenchGoldenPath({ activeGoal, routeStates }) {
 	const goalId = firstValue(activeGoal?.viewModel?.goalId, activeGoal?.runbook?.goalId, activeGoal?.nextAction?.goalId, activeGoal?.closeoutGaps?.goalId);
@@ -17823,6 +17936,11 @@ var GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE = "/api/goals/<goal-id>/event-plan-con
 var GOAL_OPERATION_POLL_INTERVAL_MS = 2500;
 var WORKBENCH_NAV_ITEMS = Object.freeze([
 	Object.freeze({
+		id: "runtime",
+		label: "Runtime",
+		targetId: "runtime-snapshot-panel"
+	}),
+	Object.freeze({
 		id: "active-goal",
 		label: "Active Goal",
 		targetId: "active-goal-runbook-panel"
@@ -18008,6 +18126,14 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					className: "golden-path-grid",
 					"aria-label": "v28 golden path",
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoldenPathPanel, { goldenPath: model.goldenPath })
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "runtime-snapshot-grid",
+					"aria-label": "v33 app runtime snapshot",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RuntimeSnapshotPanel, {
+						runtimeSnapshot: model.runtimeSnapshot,
+						route: findRoute(model.routeStates, "runtimeSnapshot")
+					})
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "primary-active-goal-grid",
@@ -21475,6 +21601,93 @@ function DiagnosticsV1Panel({ diagnostics, route }) {
 		]
 	});
 }
+function RuntimeSnapshotPanel({ runtimeSnapshot, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "runtime-snapshot-panel",
+		kicker: "v33 Runtime Surface",
+		title: "App Runtime Snapshot",
+		state: runtimeSnapshotStateText(runtimeSnapshot?.state, route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", runtimeSnapshot.contractName],
+				["contractVersion", runtimeSnapshot.contractVersion],
+				["readOnly", runtimeSnapshot.readOnly],
+				["generatedAt", runtimeSnapshot.generatedAt],
+				["freshness.status", runtimeSnapshot.freshness.status],
+				["freshness.ageMs", runtimeSnapshot.freshness.ageMs],
+				["freshness.staleAfterMs", runtimeSnapshot.freshness.staleAfterMs]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "runtime health",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["status", runtimeSnapshot.runtime.status],
+					["mode", runtimeSnapshot.runtime.mode],
+					["runtime version", runtimeSnapshot.runtime.version],
+					["kernel", runtimeSnapshot.runtime.kernel],
+					["cwd", runtimeSnapshot.runtime.cwd],
+					["repoPath", runtimeSnapshot.runtime.repoPath]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "current project",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["resolution", runtimeSnapshot.project.status],
+					["project", runtimeSnapshot.project.name],
+					["project id", runtimeSnapshot.project.id],
+					["repo path", runtimeSnapshot.project.repoPath],
+					["default branch", runtimeSnapshot.project.defaultBranch],
+					["last goal", runtimeSnapshot.project.lastGoalId],
+					["last run", runtimeSnapshot.project.lastRunId]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "active goal / next action",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["goal", runtimeSnapshot.activeGoal.goalId],
+					["title", runtimeSnapshot.activeGoal.title],
+					["completed tasks", runtimeSnapshot.activeGoal.completedTasks],
+					["total tasks", runtimeSnapshot.activeGoal.totalTasks],
+					["current task", runtimeSnapshot.currentTask.taskId],
+					["task status", runtimeSnapshot.currentTask.status],
+					["role / phase", textValue(`${runtimeSnapshot.currentTask.role.text} / ${runtimeSnapshot.currentTask.phase.text}`)],
+					["blocked", runtimeSnapshot.currentTask.blocked],
+					["next status", runtimeSnapshot.nextAction.status],
+					["next reason", runtimeSnapshot.nextAction.reason],
+					["registerWith", runtimeSnapshot.nextAction.registerWith]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ValueStateList, {
+					items: runtimeSnapshot.nextAction.copyOnlyCommands,
+					emptyCopy: "copy-only commands 未暴露。"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "release state",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["release ready", runtimeSnapshot.release.ready],
+					["release ready source", runtimeSnapshot.release.readySource],
+					["status source", runtimeSnapshot.release.statusSource]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RuntimeGateList, { gates: runtimeSnapshot.release.missingGates })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "known blockers",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RuntimeBlockerList, { blockers: runtimeSnapshot.blockers })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: runtimeSnapshot.boundaries,
+					nameKey: "boundary",
+					valueKey: "available",
+					emptyCopy: "boundaries 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: runtimeSnapshot.note
+			})
+		]
+	});
+}
 function SummaryPanel({ summary, route }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "summary-panel",
@@ -23726,6 +23939,31 @@ function KeyValueList({ rows, nameKey, valueKey, emptyCopy }) {
 		children: rows.map((row, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: row[nameKey].text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: row[valueKey].text })] }, `${row[nameKey].text}-${index}`))
 	});
 }
+function ValueStateList({ items, emptyCopy }) {
+	if (!Array.isArray(items) || items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: emptyCopy });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "command-text-list",
+		children: items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: item.text }) }, `${item.text}-${index}`))
+	});
+}
+function RuntimeGateList({ gates }) {
+	if (!Array.isArray(gates) || gates.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "missing_or_unknown_gates 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: gates.map((gate, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: gate.gateId.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: gate.status.text })] }, `${gate.gateId.text}-${index}`))
+	});
+}
+function RuntimeBlockerList({ blockers }) {
+	if (!Array.isArray(blockers) || blockers.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "known blockers 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: blockers.map((blocker, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: blocker.message.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: blocker.severity.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: blocker.source.text })
+		] }, `${blocker.id.text}-${index}`))
+	});
+}
 function BlockerList({ blockers }) {
 	if (!Array.isArray(blockers) || blockers.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "无已暴露 blocker。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
@@ -23973,6 +24211,14 @@ function isNonEmptyText(value) {
 }
 function firstNonEmptyText(...values) {
 	return values.find((value) => isNonEmptyText(value)) ?? "";
+}
+function runtimeSnapshotStateText(state, route) {
+	if (route?.state !== "ready") return routeStateText(route);
+	if (state === "healthy") return "healthy";
+	if (state === "empty") return "empty";
+	if (state === "blocked") return "blocked";
+	if (state === "stale") return "stale";
+	return "missing";
 }
 function formatState(state) {
 	if (state === null || state === void 0) return "未暴露";

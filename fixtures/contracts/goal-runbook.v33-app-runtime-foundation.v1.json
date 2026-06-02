@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v33-app-runtime-foundation",
+  "goalTitle": "v33 App Runtime Foundation",
+  "baseline": {
+    "tag": "v32",
+    "commit": null,
+    "evidenceRef": "docs/plans/v32-release-evidence-2026-06-01.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Local sidecar skeleton and health API",
+      "branch": "v33-task-1-local-sidecar-health-api",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能确认本地 app runtime 已启动，并看到 runtime/kernel 版本、进程状态和只读边界。",
+        "增加 local sidecar skeleton 或等价的 read-only runtime service entrypoint；health API/command 返回 runtime version、kernel version/source、process id、cwd/repo path、read-only mode、startup time、known blockers。",
+        "Worker evidence path: docs/plans/v33-task-1-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v33-task-1-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v33-task-1-main-verification-evidence-2026-06-02.md.",
+        "The runtime health path is read-only and does not write repo, modify git, run workflow roles, or invoke models.",
+        "The Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "State changes come only from explicit backend events or command outputs.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v33-app-runtime-foundation --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Project registry and current project resolver",
+      "branch": "v33-task-2-project-registry-resolver",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "app 能列出注册项目，并从 cwd/repo path 解析当前项目。",
+        "增加 project registry read model 和 current project resolver；registry 字段至少包括 project_id、project_name、repo_path、default_branch、remote_url、last_goal_id、last_run_id、health_status、last_opened_at、pinned。",
+        "Worker evidence path: docs/plans/v33-task-2-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v33-task-2-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v33-task-2-main-verification-evidence-2026-06-02.md.",
+        "The registry output is a stable read-only JSON contract.",
+        "The resolver handles cwd, explicit repo path, non-git repo, missing path, and missing metadata.",
+        "v33 does not create a persistent database migration or write project registry state.",
+        "The Workbench user path for this task is visible and testable.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v33-app-runtime-foundation --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Goal and release state snapshot API",
+      "branch": "v33-task-3-goal-release-state-snapshot",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "app 能读取当前 project 的 active goal、next action、verification 和 release 状态。",
+        "增加 app state snapshot API/command；snapshot 至少包含 current_project、runtime_health、active_goal、current_task、next_action、review_status、main_verification_status、release_status、evidence_refs、known_blockers。",
+        "Worker evidence path: docs/plans/v33-task-3-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v33-task-3-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v33-task-3-main-verification-evidence-2026-06-02.md.",
+        "Snapshot state comes from existing goal/runbook/event/gate/release data.",
+        "Missing goal or release state returns explicit null/blocker values.",
+        "Snapshot does not run goal update/review/gate/closeout confirm, create actions, create jobs, or invoke models.",
+        "The Workbench user path for this task is visible and testable.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v33-app-runtime-foundation --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "App runtime contract, fixtures, and read-only Workbench surface",
+      "branch": "v33-task-4-runtime-contract-workbench-surface",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "UI/CLI 消费同一份 app state schema，用户能在 Workbench 看到 runtime health、current project、active goal、next action 和 release state。",
+        "定义 app runtime snapshot contract 和 fixtures；Workbench 增加只读 runtime surface 或现有页面区块，显示 health/current project/active goal/next action/release state/known blockers。",
+        "Worker evidence path: docs/plans/v33-task-4-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v33-task-4-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v33-task-4-main-verification-evidence-2026-06-02.md.",
+        "Contract fixtures cover healthy, missing project, missing goal, blocked, and stale states.",
+        "UI calls only app runtime read APIs and does not directly execute shell commands.",
+        "UI does not add action buttons, trigger jobs, invoke models, write git/release state, open local files, or download artifacts.",
+        "The Workbench user path for this task is visible and testable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v33-app-runtime-foundation --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Runtime operator guide and v34 handoff",
+      "branch": "v33-task-5-runtime-guide-v34-handoff",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户知道如何启动、验证、恢复 v33 runtime，并能直接进入 v34 Action Registry 设计。",
+        "更新 operator guide 或新增 runtime guide，写清楚启动、health check、project registry、snapshot、known blockers、故障恢复；写 v34 Action Registry handoff。",
+        "Worker evidence path: docs/plans/v33-task-5-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v33-task-5-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v33-task-5-main-verification-evidence-2026-06-02.md.",
+        "v34 handoff lists action manifest fields, permission preview fields, available actions API shape, candidate actions, and the v34 no-job-execution boundary.",
+        "Release evidence can cite v33 runtime validation and v34 handoff.",
+        "The task does not implement Action Registry, Job Queue, providers, secret storage, desktop shell, backup, migration, or v34 goal creation.",
+        "The Workbench user path for this task is visible and testable.",
+        "Browser UI does not execute arbitrary shell commands, invoke models, open local files, download artifacts, merge, push, tag, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v33-app-runtime-foundation --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

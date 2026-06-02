@@ -1,0 +1,42 @@
+{
+  "contractName": "local-runtime-health.v1",
+  "contractVersion": 1,
+  "status": "ok",
+  "readOnly": true,
+  "mode": "read-only",
+  "runtime": {
+    "name": "symphony-local-sidecar",
+    "version": "v33-app-runtime-foundation.1",
+    "releaseName": "v33 App Runtime Foundation"
+  },
+  "kernel": {
+    "version": "v32-release-manager-workspace-v2",
+    "source": "v32 Release Manager Workspace v2",
+    "commandSpine": [
+      "goal-status",
+      "goal next",
+      "goal prompt",
+      "goal update/review/gate",
+      "goal closeout",
+      "symphony next --goal latest"
+    ]
+  },
+  "process": {
+    "processId": 12345,
+    "cwd": "/fixture/repo",
+    "repoPath": "/fixture/repo",
+    "startupTime": "2026-06-02T00:00:00.000Z",
+    "generatedAt": "2026-06-02T00:00:01.000Z",
+    "uptimeMs": 1000
+  },
+  "boundaries": {
+    "readOnly": true,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false,
+    "arbitraryCommandExecutionAvailable": false
+  },
+  "knownBlockers": []
+}

@@ -20,6 +20,16 @@ import {
   startSymphonyConsoleServer
 } from '../src/symphony/console.js';
 import {
+  buildLocalRuntimeHealth
+} from '../src/symphony/local-runtime-health.js';
+import {
+  buildAppStateSnapshot
+} from '../src/symphony/app-state-snapshot.js';
+import {
+  buildProjectRegistry,
+  resolveCurrentProject
+} from '../src/symphony/project-registry.js';
+import {
   buildAdoptionInspectionSummary
 } from '../src/symphony/adoption-inspect.js';
 import {
@@ -136,6 +146,7 @@ const KNOWN_COMMANDS = new Set([
   'continue',
   'console',
   'diagnose',
+  'runtime',
   'handoff',
   'goal',
   'goal-status',
@@ -309,6 +320,13 @@ export async function runSymphonyCli({
         stdout,
         runner: runner ?? new NodeProcessRunner(),
         env
+      });
+    }
+
+    if (command === 'runtime') {
+      return await runSymphonyRuntime({
+        args: rest,
+        stdout
       });
     }
 
@@ -1788,6 +1806,78 @@ async function runSymphonyDiagnose({ args, stdout, runner, env }) {
   return EXIT_CODES.ok;
 }
 
+async function runSymphonyRuntime({ args, stdout }) {
+  const options = parseRuntimeArgs(args);
+
+  if (options.help) {
+    stdout.write(runtimeHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'health') {
+    const health = await buildLocalRuntimeHealth({
+      cwd: process.cwd()
+    });
+
+    if (options.json) {
+      writeJson(stdout, health);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderRuntimeHealthText(health));
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'projects') {
+    const registry = await buildProjectRegistry({
+      cwd: process.cwd(),
+      repoPath: options.repoPath
+    });
+
+    if (options.json) {
+      writeJson(stdout, registry);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderProjectRegistryText(registry));
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'current') {
+    const currentProject = await resolveCurrentProject({
+      cwd: process.cwd(),
+      repoPath: options.repoPath
+    });
+
+    if (options.json) {
+      writeJson(stdout, currentProject);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderCurrentProjectText(currentProject));
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'snapshot') {
+    const snapshot = await buildAppStateSnapshot({
+      cwd: process.cwd(),
+      repoPath: options.repoPath,
+      goalId: options.goalId,
+      stateDir: options.stateDir
+    });
+
+    if (options.json) {
+      writeJson(stdout, snapshot);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderAppStateSnapshotText(snapshot));
+    return EXIT_CODES.ok;
+  }
+
+  throw new UsageError('runtime subcommand must be health, projects, current, or snapshot');
+}
+
 async function runSymphonyHandoff({ args, stdout }) {
   const options = parseHandoffArgs(args);
 
@@ -1805,6 +1895,70 @@ async function runSymphonyHandoff({ args, stdout }) {
 
   stdout.write(`${renderGuidedGoalHandoffMarkdown(handoff)}\n`);
   return EXIT_CODES.ok;
+}
+
+function renderRuntimeHealthText(health) {
+  return [
+    `Runtime: ${health.runtime.name} ${health.runtime.version}`,
+    `Status: ${health.status}`,
+    `Mode: ${health.mode}`,
+    `Kernel: ${health.kernel.version} (${health.kernel.source})`,
+    `Process: ${health.process.processId}`,
+    `CWD: ${health.process.cwd}`,
+    `Repo: ${health.process.repoPath ?? 'unresolved'}`,
+    `Startup: ${health.process.startupTime}`,
+    `Known blockers: ${health.knownBlockers.length}`,
+    ''
+  ].join('\n');
+}
+
+function renderProjectRegistryText(registry) {
+  const lines = [
+    `Projects: ${registry.projects.length}`,
+    `Current project: ${registry.currentProjectId ?? 'unresolved'}`,
+    `Mode: ${registry.readOnly ? 'read-only' : 'write-enabled'}`
+  ];
+
+  for (const project of registry.projects) {
+    lines.push(`- ${project.project_name} (${project.project_id})`);
+    lines.push(`  Repo: ${project.repo_path}`);
+    lines.push(`  Branch: ${project.default_branch}`);
+    lines.push(`  Health: ${project.health_status}`);
+  }
+
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function renderCurrentProjectText(currentProject) {
+  const project = currentProject.currentProject;
+
+  return [
+    `Status: ${currentProject.resolution.status}`,
+    `Strategy: ${currentProject.resolution.strategy}`,
+    `Project: ${project?.project_name ?? 'unresolved'}`,
+    `Project id: ${project?.project_id ?? 'unresolved'}`,
+    `Repo: ${project?.repo_path ?? currentProject.resolution.repoPath ?? 'unresolved'}`,
+    `Known blockers: ${currentProject.resolution.blockers.length}`,
+    ''
+  ].join('\n');
+}
+
+function renderAppStateSnapshotText(snapshot) {
+  return [
+    `Runtime: ${snapshot.runtime_health.status}`,
+    `Project: ${snapshot.current_project.currentProject?.project_name ?? 'unresolved'}`,
+    `Active goal: ${snapshot.active_goal?.goal_id ?? 'missing'}`,
+    `Current task: ${snapshot.current_task?.task_id ?? 'none'}`,
+    `Next action: ${snapshot.next_action.reason}`,
+    `Review: ${snapshot.review_status?.verdict ?? 'missing'}`,
+    `Main verification: ${snapshot.main_verification_status?.evidence_ref ?? 'missing'}`,
+    `Release ready: ${snapshot.release_status?.release_ready === true ? 'yes' : 'no'}`,
+    `Evidence refs: ${snapshot.evidence_refs.length}`,
+    `Known blockers: ${snapshot.known_blockers.length}`,
+    ''
+  ].join('\n');
 }
 
 async function runSymphonyGoalStatus({ args, stdout }) {
@@ -3315,6 +3469,80 @@ function parseDiagnoseArgs(args) {
   }
 
   return options;
+}
+
+function parseRuntimeArgs(args) {
+  const options = {
+    subcommand: null,
+    repoPath: undefined,
+    goalId: undefined,
+    stateDir: undefined,
+    json: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--repo-path') {
+      options.repoPath = readRequiredValue(args, index, '--repo-path');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('runtime read commands do not write files; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown runtime option: ${value}`);
+    }
+
+    if (options.subcommand !== null) {
+      throw new UsageError(`unexpected runtime argument: ${value}`);
+    }
+
+    options.subcommand = value;
+  }
+
+  options.subcommand ??= 'health';
+
+  return options;
+}
+
+function runtimeHelpText() {
+  return [
+    'Usage: symphony runtime health [--json]',
+    '       symphony runtime projects [--repo-path <path>] [--json]',
+    '       symphony runtime current [--repo-path <path>] [--json]',
+    '       symphony runtime snapshot [--repo-path <path>] [--goal <goal-id>] [--state-dir <path>] [--json]',
+    '',
+    'Prints read-only v33 runtime contracts.',
+    'The commands read process, repository, and repo-local Symphony metadata only; they do not write files, run actions, call models, or change git state.',
+    ''
+  ].join('\n');
 }
 
 function parseHandoffArgs(args) {

@@ -18,6 +18,7 @@ const CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = 'controlled-adoption-plan-
 const CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = 'controlled-adoption-confirmation.v1';
 const CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = 'symphony.console-adoption-inspect';
 const RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = 'release-baseline-resolver.v1';
+const APP_STATE_SNAPSHOT_CONTRACT_NAME = 'app-state-snapshot.v1';
 const CAPABILITIES_CONTRACT_NAME = 'capabilities.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
@@ -343,6 +344,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: 'symphony.console-snapshot'
   }),
   Object.freeze({
+    id: 'runtimeSnapshot',
+    label: 'Runtime Snapshot',
+    path: '/api/runtime/snapshot',
+    method: 'GET',
+    contractName: APP_STATE_SNAPSHOT_CONTRACT_NAME
+  }),
+  Object.freeze({
     id: 'readiness',
     label: 'Readiness',
     path: '/api/readiness',
@@ -666,6 +674,7 @@ const ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
 
 export function projectWorkbenchContracts(results) {
   const summaryData = dataFrom(results.summary);
+  const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
   const readinessData = dataFrom(results.readiness);
   const handoffRefsData = dataFrom(results.handoffRefs);
   const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
@@ -823,6 +832,10 @@ export function projectWorkbenchContracts(results) {
       activeGoal: activeGoalControl,
       routeStates
     }),
+    runtimeSnapshot: projectRuntimeSnapshot({
+      result: results.runtimeSnapshot,
+      snapshot: runtimeSnapshotData
+    }),
     summary: projectSummary(summaryData),
     readiness: projectReadiness(readinessData, summaryData),
     runs: projectRuns(runsData, summaryData),
@@ -873,6 +886,129 @@ export function projectWorkbenchContracts(results) {
       status: MISSING_TEXT
     }))
   };
+}
+
+function projectRuntimeSnapshot({ result, snapshot }) {
+  const blockers = Array.isArray(snapshot?.known_blockers)
+    ? snapshot.known_blockers
+    : [];
+  const releaseStatus = snapshot?.release_status ?? null;
+  const missingGates = Array.isArray(releaseStatus?.missing_or_unknown_gates)
+    ? releaseStatus.missing_or_unknown_gates
+    : [];
+  const evidenceRefs = Array.isArray(snapshot?.evidence_refs)
+    ? snapshot.evidence_refs
+    : [];
+  const boundaries = snapshot?.boundaries ?? {};
+
+  return {
+    state: result?.ok === true ? snapshotRuntimeState(snapshot) : 'missing',
+    contractName: valueState(snapshot?.contractName),
+    contractVersion: valueState(snapshot?.contractVersion),
+    generatedAt: valueState(snapshot?.generatedAt),
+    readOnly: valueState(snapshot?.readOnly),
+    freshness: {
+      status: valueState(snapshot?.freshness?.status),
+      ageMs: valueState(snapshot?.freshness?.age_ms),
+      staleAfterMs: valueState(snapshot?.freshness?.stale_after_ms)
+    },
+    runtime: {
+      status: valueState(snapshot?.runtime_health?.status),
+      mode: valueState(snapshot?.runtime_health?.mode),
+      version: valueState(snapshot?.runtime_health?.runtime?.version),
+      kernel: valueState(snapshot?.runtime_health?.kernel?.version),
+      cwd: valueState(snapshot?.runtime_health?.process?.cwd),
+      repoPath: valueState(snapshot?.runtime_health?.process?.repoPath)
+    },
+    project: {
+      status: valueState(snapshot?.current_project?.resolution?.status),
+      name: valueState(snapshot?.current_project?.currentProject?.project_name),
+      id: valueState(snapshot?.current_project?.currentProject?.project_id),
+      repoPath: valueState(snapshot?.current_project?.currentProject?.repo_path),
+      defaultBranch: valueState(snapshot?.current_project?.currentProject?.default_branch),
+      lastGoalId: valueState(snapshot?.current_project?.currentProject?.last_goal_id),
+      lastRunId: valueState(snapshot?.current_project?.currentProject?.last_run_id)
+    },
+    activeGoal: {
+      goalId: valueState(snapshot?.active_goal?.goal_id),
+      title: valueState(snapshot?.active_goal?.goal_title),
+      completedTasks: valueState(snapshot?.active_goal?.summary?.completedTasks),
+      totalTasks: valueState(snapshot?.active_goal?.summary?.totalTasks),
+      statusSource: valueState(snapshot?.active_goal?.status_source)
+    },
+    currentTask: {
+      taskId: valueState(snapshot?.current_task?.task_id),
+      title: valueState(snapshot?.current_task?.title),
+      status: valueState(snapshot?.current_task?.status),
+      role: valueState(snapshot?.current_task?.role),
+      phase: valueState(snapshot?.current_task?.phase),
+      blocked: valueState(snapshot?.current_task?.blocked)
+    },
+    nextAction: {
+      status: valueState(snapshot?.next_action?.status),
+      reason: valueState(snapshot?.next_action?.reason),
+      registerWith: valueState(snapshot?.next_action?.afterCompletion?.registerWith),
+      copyOnlyCommands: Array.isArray(snapshot?.next_action?.copyOnlyCommands)
+        ? snapshot.next_action.copyOnlyCommands.map((command) => valueState(command))
+        : []
+    },
+    release: {
+      ready: valueState(releaseStatus?.release_ready),
+      readySource: valueState(releaseStatus?.release_ready_source),
+      statusSource: valueState(releaseStatus?.status_source),
+      missingGates: missingGates.map((gate) => ({
+        gateId: valueState(gate?.gate_id),
+        status: valueState(gate?.status)
+      }))
+    },
+    blockers: blockers.map((blocker) => ({
+      id: valueState(blocker?.id),
+      severity: valueState(blocker?.severity),
+      source: valueState(blocker?.source),
+      message: valueState(blocker?.message)
+    })),
+    evidenceRefs: evidenceRefs.map((ref) => ({
+      kind: valueState(ref?.kind),
+      taskId: valueState(ref?.task_id),
+      ref: valueState(ref?.ref),
+      source: valueState(ref?.source)
+    })),
+    boundaries: Object.entries({
+      readOnly: boundaries.readOnly,
+      writesInSnapshotPath: boundaries.writesInSnapshotPath,
+      actionExecutionAvailable: boundaries.actionExecutionAvailable,
+      jobQueueAvailable: boundaries.jobQueueAvailable,
+      modelInvocationAvailable: boundaries.modelInvocationAvailable,
+      gitWriteAvailable: boundaries.gitWriteAvailable,
+      releaseWriteAvailable: boundaries.releaseWriteAvailable,
+      arbitraryCommandExecutionAvailable: boundaries.arbitraryCommandExecutionAvailable,
+      confirmCommandAvailable: boundaries.confirmCommandAvailable
+    }).map(([boundary, available]) => ({
+      boundary: valueState(boundary),
+      available: valueState(available)
+    })),
+    note: 'Runtime snapshot is the shared read-only app state schema consumed by CLI and Workbench; it does not execute commands or infer approval, verification, or release readiness from frontend state.'
+  };
+}
+
+function snapshotRuntimeState(snapshot) {
+  if (snapshot?.freshness?.status === 'stale') {
+    return 'stale';
+  }
+
+  if (snapshot?.current_project?.currentProject === null || snapshot?.current_project?.resolution?.status !== 'resolved') {
+    return 'empty';
+  }
+
+  if (snapshot?.active_goal === null) {
+    return 'empty';
+  }
+
+  if (snapshot?.runtime_health?.status === 'blocked' || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === 'blocked') {
+    return 'blocked';
+  }
+
+  return 'healthy';
 }
 
 function projectWorkbenchGoldenPath({ activeGoal, routeStates }) {

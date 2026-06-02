@@ -63,6 +63,7 @@ describe('v15 Workbench read-only API client', () => {
       READONLY_API_ROUTES.map((route) => [route.method, route.path, route.contractName]),
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
+        ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
@@ -84,6 +85,7 @@ describe('v15 Workbench read-only API client', () => {
       READONLY_API_ROUTE_ALLOWLIST.map((route) => [route.method, route.path, route.contractName]),
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
+        ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
@@ -199,6 +201,29 @@ describe('v15 Workbench read-only API client', () => {
         ['/api/runs/run-1/artifacts/summary/preview', 'GET', 'no-store', 'application/json', false]
       ]
     );
+  });
+
+  it('projects the v33 runtime snapshot route for healthy, missing, blocked, and stale surfaces', async () => {
+    const fixtureExpectations = [
+      ['fixtures/contracts/app-state-snapshot.healthy.v1.json', 'healthy'],
+      ['fixtures/contracts/app-state-snapshot.missing-project.v1.json', 'empty'],
+      ['fixtures/contracts/app-state-snapshot.missing-goal.v1.json', 'empty'],
+      ['fixtures/contracts/app-state-snapshot.blocked.v1.json', 'blocked'],
+      ['fixtures/contracts/app-state-snapshot.stale.v1.json', 'stale']
+    ];
+
+    for (const [fixturePath, expectedState] of fixtureExpectations) {
+      const snapshot = JSON.parse(await readFile(fixturePath, 'utf8'));
+      const model = projectWorkbenchContracts({
+        runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', snapshot)
+      });
+
+      assert.equal(model.runtimeSnapshot.state, expectedState, fixturePath);
+      assert.equal(model.runtimeSnapshot.contractName.value, 'app-state-snapshot.v1', fixturePath);
+      assert.equal(model.runtimeSnapshot.readOnly.value, true, fixturePath);
+      assert.equal(model.runtimeSnapshot.boundaries.find((boundary) => boundary.boundary.value === 'actionExecutionAvailable').available.value, false, fixturePath);
+      assert.equal(model.routeStates.find((route) => route.id === 'runtimeSnapshot').state, 'ready', fixturePath);
+    }
   });
 
   it('gets controlled goal event dry-run previews before confirm requests write event state', async () => {

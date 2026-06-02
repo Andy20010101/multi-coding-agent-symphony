@@ -64,6 +64,9 @@ describe('v15 Workbench React/Vite shell', () => {
 
     for (const componentName of [
       'SummaryPanel',
+      'RuntimeSnapshotPanel',
+      'RuntimeGateList',
+      'RuntimeBlockerList',
       'ReadinessPanel',
       'RunsPanel',
       'LatestRunPanel',
@@ -109,6 +112,12 @@ describe('v15 Workbench React/Vite shell', () => {
     }
 
     assert.match(app, /暂无 timeline/u);
+    assert.match(app, /App Runtime Snapshot/u);
+    assert.match(app, /v33 app runtime snapshot/u);
+    assert.match(app, /runtime health/u);
+    assert.match(app, /current project/u);
+    assert.match(app, /release state/u);
+    assert.match(app, /known blockers/u);
     assert.match(app, /读取中/u);
     assert.match(app, /读取失败/u);
     assert.match(app, /artifactRefs 只读列表/u);
@@ -204,6 +213,7 @@ describe('v15 Workbench React/Vite shell', () => {
       );
 
       for (const label of [
+        'Runtime',
         'Active Goal',
         'Prompt Handoff',
         'Operations',
@@ -219,16 +229,21 @@ describe('v15 Workbench React/Vite shell', () => {
 
       const stateHeaderIndex = homeHtml.indexOf('class="workbench-state-header"');
       const navigationIndex = homeHtml.indexOf('class="workbench-nav"');
+      const runtimePanelIndex = homeHtml.indexOf('id="runtime-snapshot-panel"');
       const activeGoalPanelIndex = homeHtml.indexOf('id="active-goal-runbook-panel"');
       const legacyPanelIndex = homeHtml.indexOf('id="summary-panel-title"');
 
       assert.notEqual(stateHeaderIndex, -1);
       assert.notEqual(navigationIndex, -1);
+      assert.notEqual(runtimePanelIndex, -1);
       assert.notEqual(activeGoalPanelIndex, -1);
       assert.notEqual(legacyPanelIndex, -1);
       assert.equal(stateHeaderIndex < navigationIndex, true);
-      assert.equal(navigationIndex < activeGoalPanelIndex, true);
+      assert.equal(navigationIndex < runtimePanelIndex, true);
+      assert.equal(runtimePanelIndex < activeGoalPanelIndex, true);
       assert.equal(activeGoalPanelIndex < legacyPanelIndex, true);
+      assert.match(homeHtml, /App Runtime Snapshot/u);
+      assert.match(homeHtml, /Runtime snapshot is the shared read-only app state schema consumed by CLI and Workbench/u);
       assert.match(homeHtml, /id="golden-path-panel"/u);
       assert.match(homeHtml, /goal init\/status -&gt; closeout gaps/u);
       assert.match(homeHtml, /copyOnlyCommands/u);
@@ -768,6 +783,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/runs/<run-id>/artifacts/<artifact-kind>/preview',
       '/api/runs/<run-id>/timeline',
       '/api/runs/latest',
+      '/api/runtime/snapshot',
       '/api/summary'
     ]);
   });

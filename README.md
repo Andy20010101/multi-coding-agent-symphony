@@ -111,6 +111,7 @@ Implemented:
 - Controlled diagnostics CLI `symphony diagnose` for terminal summaries, stable JSON reports, and redirectable static HTML reports without starting a browser server.
 - v17 read-only goal progress ledger: `symphony goal-status`, `goal-progress-ledger.v1`, `/api/goals`, `/api/goals/latest/progress`, `/api/goals/<goal-id>/progress`, and Workbench Goal Progress display for task status, evidence refs, blockers, release gates, and next copy-only commands.
 - v17 console contract hardening: `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` are exposed through read-only API routes and Workbench panels without adding browser execution, Workbench writes, artifact download, arbitrary path preview, or frontend safety inference.
+- v33 local runtime foundation: `symphony runtime health --json` and `GET /api/health` return `local-runtime-health.v1` with runtime/kernel version, process id, cwd/repo path, startup time, read-only mode, boundary flags, and known blockers. `symphony runtime projects --json`, `symphony runtime current --json`, `GET /api/projects`, and `GET /api/projects/current` return read-only `project-registry.v1` and `current-project-resolver.v1` contracts from cwd or an explicit repo path. `symphony runtime snapshot --json` and `GET /api/runtime/snapshot` return the shared `app-state-snapshot.v1` schema consumed by CLI and Workbench, combining current/stale freshness, current project, runtime health, active goal, current task, next action, review/main verification status, release gates/readiness, evidence refs, and known blockers without registering events or declaring release state.
 - v18 goal event journal candidate: `goal-event-log.v1`, `goal-update-plan.v1`, `symphony goal update`, `symphony goal review`, and `symphony goal gate` provide dry-run / confirm event registration. Confirm writes append-only events to the managed journal; dry-run produces a reviewable plan and writes nothing.
 - v18 event-backed goal progress: the resolver reads `goal-event-log.v1` into the existing `goal-progress-ledger.v1`. With no events, it keeps the v17 planned/unknown template instead of guessing status.
 - v18 read-only goal events API and Workbench display: `GET /api/goals/latest/events`, `GET /api/goals/<goal-id>/events`, Workbench Goal Events Timeline, and Workbench Evidence Matrix expose registered events and evidence refs without reading evidence document bodies.
@@ -189,6 +190,10 @@ pnpm --silent symphony goal closeout --goal v19-fixture --json
 pnpm symphony console --snapshot --json
 pnpm --silent symphony diagnose --json
 pnpm --silent symphony diagnose --html > tmp/symphony-diagnostics.html
+pnpm --silent symphony runtime health --json
+pnpm --silent symphony runtime projects --json
+pnpm --silent symphony runtime snapshot --json
+pnpm --silent symphony runtime current --json
 pnpm smoke:codex:help
 pnpm smoke:claude:help
 pnpm smoke:kiro:help
@@ -230,6 +235,10 @@ symphony goal closeout --goal <goal-id> --json
 symphony console --snapshot --json
 symphony diagnose --json
 symphony diagnose --html > report.html
+symphony runtime health --json
+symphony runtime projects --json
+symphony runtime snapshot --json
+symphony runtime current --repo-path /path/to/repo --json
 symphony scan
 symphony do --dry-run "inspect README"
 symphony verify --dry-run "inspect README"
@@ -301,6 +310,7 @@ symphony status   latest run state
 symphony artifacts artifact and evidence pointers
 symphony console  local Workbench v1 server
 symphony diagnose read-only diagnostics report
+symphony runtime  local runtime health and boundary status
 symphony adopt    controlled verified adoption
 symphony new      limited dry-run/write project bootstrap
 symphony agent    native CLI passthrough

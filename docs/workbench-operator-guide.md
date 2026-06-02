@@ -6,7 +6,7 @@ Workbench v1 是日常操作入口。`symphony console` 启动本地服务器后
 
 仓库 tag `v28` 发布的是 Workbench v1 的 v20-v28 完整链路。这个版本把 goal/runbook 操作主线放进 Workbench，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
 
-Workbench 消费 console server 暴露的本地 API，用于查看 active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
+Workbench 消费 console server 暴露的本地 API，用于查看 app runtime snapshot、active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
 
 `symphony` CLI 是高级/脚本入口。需要 JSON 输出、CI 命令、dry-run/confirm 事件登记、兼容命令或低层诊断时，在终端运行 CLI；Workbench 只显示受控状态、表单和可复制命令。
 
@@ -48,7 +48,7 @@ Open Workbench -> active goal -> next action -> prompt handoff -> event registra
 goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal closeout -> symphony next --goal latest
 ```
 
-日常判断以 Workbench 里的 active goal、task queue、next action、prompt preview、operation registry、review workspace 和 closeout gaps 为准。终端 CLI 用于脚本化读取同一批 contract、运行检查命令、生成 evidence、或执行 dry-run/confirm 登记。
+日常判断先看 Workbench Runtime 面板确认当前 project、runtime health、active goal、next action、release state 和 known blockers，再看 active goal、task queue、prompt preview、operation registry、review workspace 和 closeout gaps。终端 CLI 用于脚本化读取同一批 contract、运行检查命令、生成 evidence、或执行 dry-run/confirm 登记。
 
 旧的 `scan`、`do`、`review`、`verify`、`status`、`continue` 和 `artifacts` 命令仍可用于兼容流程和脚本，不作为 Workbench v1 顶层按钮或主任务列表。
 
@@ -122,6 +122,10 @@ Console / Workbench 当前可用的核心只读 API 包括：
 
 ```text
 GET /api/summary
+GET /api/health
+GET /api/projects
+GET /api/projects/current
+GET /api/runtime/snapshot
 GET /api/readiness
 GET /api/handoff
 GET /api/handoff/<ref>
@@ -160,6 +164,192 @@ GET /api/goals/<goal-id>/closeout
 GET /api/capabilities
 GET /api/diagnostics
 ```
+
+`GET /api/health` 返回 `local-runtime-health.v1`，用于确认本地 sidecar 已启动、当前进程 id、cwd/repo path、runtime 版本、v32 kernel source、startup time、read-only mode 和 known blockers。这个 route 不接受 query 参数，不写 repo、不写 `.symphony`、不改 git、不执行 worker/reviewer/main verification/release、不调用模型、不创建 job queue。
+
+`GET /api/projects` 返回 `project-registry.v1`，列出从当前 cwd/repo-local metadata 解析出的 registered project。`GET /api/projects/current` 返回 `current-project-resolver.v1`，从 console cwd 解析 current project；可选 `repoPath` 只用于显式 repo path 解析。两个 route 都不写 project registry 数据库、不扫描全盘、不执行 git 写入、不调用模型、不创建 job queue。`/api/projects` 不接受 query 参数，`/api/projects/current` 只接受 `repoPath`。
+
+`GET /api/runtime/snapshot` 返回 `app-state-snapshot.v1`，把 freshness、current project、runtime health、active goal、current task、next action、review status、main verification status、release status、evidence refs 和 known blockers 聚合到同一份只读响应。Workbench 的 Runtime 面板和 `symphony runtime snapshot --json` 消费同一份 schema；healthy、missing project、missing goal、blocked 和 stale 都由后端 contract 字段表达。goal/task/release 字段来自 managed runbook、goal-status ledger、goal next、event/gate/release state 和 v33 runtime/project resolver；缺少 active goal 或 release state 时返回 `null` 和 blocker，不从文件名、branch、prompt 文本或前端状态补状态。route 只接受可选 `repoPath` 和 `goal` query，不登记 `goal update/review/gate/closeout`，不运行验证，不写 `.symphony`，不声明 release ready。
+
+终端可用的同一份 health contract：
+
+```sh
+pnpm --silent symphony runtime health --json
+pnpm --silent symphony runtime projects --json
+pnpm --silent symphony runtime current --repo-path /path/to/repo --json
+pnpm --silent symphony runtime snapshot --json
+```
+
+## v33 Runtime 操作流程
+
+从当前 checkout 启动只读 console / Workbench：
+
+```sh
+pnpm workbench:build
+pnpm symphony console --host 127.0.0.1 --port 8765
+```
+
+预期结果：build 生成 `src/symphony/workbench-static/index.html` 和 hashed assets；console 监听 `127.0.0.1:8765`。打开 `http://127.0.0.1:8765/workbench/` 后，首页先显示 Runtime 面板，再显示 active goal、task queue、prompt handoff、review workspace 和 closeout 路径。Runtime 面板只读取 `GET /api/runtime/snapshot`，不运行命令、不写 evidence、不登记 gate。
+
+如果只需要在终端确认 console 可读状态，不启动服务器：
+
+```sh
+pnpm symphony console --snapshot --json
+```
+
+预期结果：返回 `symphony.console-snapshot`，用于确认本地摘要、runs 和 readiness 输入可读。这个命令不打开浏览器服务器。
+
+v33 runtime health：
+
+```sh
+pnpm --silent symphony runtime health --json
+```
+
+预期结果：返回 `local-runtime-health.v1`；`status` 为 `ok`，`readOnly` 为 `true`，`runtime.version` 为 `v33-app-runtime-foundation.1`，`kernel.source` 为 `v32 Release Manager Workspace v2`，`process.cwd` 和 `process.repoPath` 指向当前 repo，`knownBlockers` 是数组。`boundaries.actionExecutionAvailable`、`jobQueueAvailable`、`modelInvocationAvailable`、`gitWriteAvailable`、`releaseWriteAvailable` 和 `arbitraryCommandExecutionAvailable` 都应为 `false`。
+
+project registry：
+
+```sh
+pnpm --silent symphony runtime projects --json
+```
+
+预期结果：返回 `project-registry.v1`；`readOnly` 为 `true`；`projects` 中至少包含当前 repo 的 `project_id`、`project_name`、`repo_path`、`default_branch`、`remote_url`、`last_goal_id`、`last_run_id`、`health_status`、`last_opened_at` 和 `pinned`。它只读取 cwd 或显式 repo path 附近的 repo-local metadata，不创建 registry database，不扫描全盘。
+
+current project resolver：
+
+```sh
+pnpm --silent symphony runtime current --json
+pnpm --silent symphony runtime current --repo-path /path/to/repo --json
+```
+
+预期结果：返回 `current-project-resolver.v1`；正常 repo 下 `resolution.status` 为 `resolved`，`currentProject.repo_path` 是解析后的 repo。路径不存在时仍然 exit 0，`currentProject` 为 `null`，`resolution.status` 为 `unresolved`，blocker 包含 `project-path-missing`；非 git 目录返回对应 unresolved blocker。
+
+runtime snapshot：
+
+```sh
+pnpm --silent symphony runtime snapshot --json
+pnpm --silent symphony runtime snapshot --goal v33-app-runtime-foundation --json
+pnpm --silent symphony runtime snapshot --repo-path /path/to/repo --json
+```
+
+预期结果：返回 `app-state-snapshot.v1`；包含 `freshness`、`current_project`、`runtime_health`、`active_goal`、`current_task`、`next_action`、`review_status`、`main_verification_status`、`release_status`、`evidence_refs`、`known_blockers` 和 `boundaries`。当前 v33 goal 在 release ready 未登记前，`release_status.release_ready` 为 `false`，known blockers 应包含 release-ready 未声明的 blocker。缺 active goal 时，`active_goal` 和 `release_status` 保持 `null`，不会从文件名、分支、prompt 或前端状态补推断。
+
+Workbench Runtime 面板检查：
+
+```text
+http://127.0.0.1:8765/workbench/
+```
+
+预期结果：Runtime 面板显示 freshness、runtime health、current project、active goal/current task、next action、release state、known blockers 和 read-only boundary flags。面板没有执行按钮、shell 输入、模型调用、git 写入、release 写入、下载 artifact 或打开本地文件入口。
+
+managed goal 状态检查：
+
+```sh
+pnpm --silent symphony goal-status --goal v33-app-runtime-foundation --json
+pnpm --silent symphony goal next --goal v33-app-runtime-foundation --json
+```
+
+预期结果：`goal-status` 返回 `goal-progress-ledger.v1`，task 状态只来自 managed runbook 和 explicit event/gate evidence。task-1 到 task-4 已 main-verified 时，task-5 仍会保持 `planned`，直到 task-5 worker evidence 被单独登记。`goal next` 返回 `goal-next-action.v1`；没有 task-5 worker evidence 时，`next.taskId` 为 `task-5`，`next.role` 为 `worker`，reason 指向缺少 task-5 worker evidence。
+
+v33 不执行 actions、jobs、models、git 写入、release 写入，也不创建 v34 goal。v33 的 value 是读取、解析和聚合 runtime state，为 v34 Action Registry 留出 contract handoff。
+
+## v33 Runtime 恢复
+
+dirty checkout：
+
+先运行 `git status -sb --untracked-files=all`。如果已有 prior v33 task files、staged files 或 untracked evidence，继续使用当前 checkout 的 repo-local fallback；不要 checkout、pull、merge、stash、reset、revert、stage 或 commit。只做 scoped additive edits，并在 evidence 写明 fallback。release baseline 或 main verification 仍需要后续独立 verifier 在安全 git 边界下处理。
+
+missing active goal：
+
+运行 `pnpm --silent symphony goal-status --goal v33-app-runtime-foundation --json`。如果返回缺失 managed runbook 或 snapshot 中 `active_goal: null`，用 runbook fixture 走 dry-run/confirm：
+
+```sh
+pnpm --silent symphony goal init --from-json fixtures/contracts/goal-runbook.v33-app-runtime-foundation.v1.json --goal v33-app-runtime-foundation --dry-run --json
+```
+
+只在 operator 核对 plan hash 后 confirm。Workbench 不自动创建 goal，v33 task-5 worker 也不创建 v34 goal。
+
+missing project：
+
+运行 `pnpm --silent symphony runtime current --repo-path /path/to/repo --json`。如果 `currentProject` 为 `null`，检查路径是否存在、是否在 git repo 内、是否从正确 checkout 启动 console。恢复方式是从 repo root 重新运行 runtime 命令或传入正确 `--repo-path`；不要让 runtime 扫描全盘。
+
+stale runtime snapshot：
+
+运行 `pnpm --silent symphony runtime snapshot --json`。如果 `freshness.status` 是 `stale`，刷新 Workbench 或重启 `pnpm symphony console --host 127.0.0.1 --port 8765`，再重新读取 snapshot。不要在前端根据旧 panel 状态登记 worker/review/main/release 事件。
+
+invalid query / API request：
+
+`/api/health` 和 `/api/projects` 不接受 query；`/api/projects/current` 只接受 `repoPath`；`/api/runtime/snapshot` 只接受 `repoPath` 和 `goal`。未知 query、非 GET、任意 path、confirm 或 command 字段应返回 `error-envelope.v1` 或 `405`。恢复方式是改用上面列出的受控 CLI/API shape。
+
+release-ready not declared：
+
+`goal-status` 或 runtime snapshot 中 `summary.releaseReady: false` / `release_status.release_ready: false` 是预期状态，直到 release manager 用 `symphony goal gate --gate release.ready --status declared` 的 dry-run/confirm 路径登记。测试通过、文件名、分支名、task title、Workbench 文案或 task-5 worker evidence 都不能代替 release-ready gate。
+
+## v34 Action Registry 交接
+
+v34 的目标是声明可用 actions 和 permission preview，不创建 job、不执行 action。v33 交给 v34 的输入是 `app-state-snapshot.v1`、`goal-progress-ledger.v1`、`goal-next-action.v1`、`goal-runbook.v1`、`goal-event-log.v1`、`goal-operation-runs.v1` 和 Workbench capability flags。
+
+action manifest 建议字段：
+
+- `action_id`
+- `title`
+- `description`
+- `category`
+- `source_contract`
+- `goal_id`
+- `task_id`
+- `role`
+- `phase`
+- `preconditions`
+- `required_inputs`
+- `copy_only_command`
+- `dry_run_available`
+- `confirm_available`
+- `writes_scope`
+- `event_mapping`
+- `evidence_ref_policy`
+- `unsupported_reason`
+
+permission preview 建议字段：
+
+- `permission_preview_id`
+- `action_id`
+- `read_paths`
+- `write_paths`
+- `network_access`
+- `model_invocation`
+- `git_write`
+- `release_write`
+- `job_creation`
+- `artifact_download`
+- `local_file_open`
+- `risk_level`
+- `requires_plan_hash`
+- `requires_operator_confirm`
+- `blocked_reasons`
+
+available actions API shape：
+
+```text
+GET /api/actions/available?goal=<goal-id>&task=<task-id>
+symphony actions available --goal <goal-id> --task <task-id> --json
+```
+
+建议 response 使用 `available-actions.v1`，包含 `contractName`、`contractVersion`、`goalId`、`taskId`、`generatedAt`、`sourceSnapshotRef`、`actions`、`permissionPreviews`、`knownBlockers` 和 `boundaries`。v34 阶段 `boundaries.jobExecutionAvailable`、`actionExecutionAvailable`、`modelInvocationAvailable`、`gitWriteAvailable` 和 `releaseWriteAvailable` 仍为 `false`，直到后续版本显式设计 job queue 和 execution confirm。
+
+第一批 candidate actions：
+
+- `goal.workerEvidence.preview`：为当前 worker task 生成 `worker.evidence-recorded` dry-run plan 的表单上下文。
+- `goal.reviewVerdict.preview`：为 reviewer verdict 生成 approved / needs-revision dry-run plan 的表单上下文。
+- `goal.mainVerification.preview`：为 main verification gate 生成 dry-run plan 的表单上下文。
+- `goal.releaseGate.preview`：为 release checklist gate 生成 passed / failed dry-run plan 的表单上下文。
+- `runtime.snapshot.refresh`：重新读取 `app-state-snapshot.v1`。
+- `project.current.resolve`：重新读取 `current-project-resolver.v1`。
+- `prompt.copy`：展示 `goal-prompt-pack.v1` copy-only prompt。
+
+no-job-execution boundary：
+
+v34 Action Registry 只列出 actions、输入要求、preconditions、permission preview、copy-only command 和 dry-run/confirm 映射。它不启动 worker/reviewer/verifier，不创建 queue job，不运行 shell，不调用模型，不写 git，不合并、不 push、不 tag、不 publish，不打开本地文件，不下载 artifact，不登记 release ready，不自动创建 v34 或后续 goal。
 
 除 `POST /api/goals/<goal-id|latest>/event-plan-confirm`、`POST /api/goals/<goal-id|latest>/implementation-run-confirm`、`POST /api/goals/<goal-id|latest>/verification-run-confirm`、`POST /api/goals/<goal-id|latest>/adoption-plan-freeze` 和 `POST /api/goals/<goal-id|latest>/adoption-confirm` 外，所有非 `GET` 请求都必须返回 `405`，并使用 `error-envelope.v1`。`/api/goals/<goal-id>/event-plan-preview` 是 dry-run 预览 GET route，只接受受控 query 字段，不接受任意 `path`、`confirm`、`planHash` 或未登记命令。event confirm route 只接受 JSON body 中的 `command=update|review|gate`、该 command 的字段和 `planHash`，不接受任意 command、path 或 shell 输入。implementation confirm route 只接受 implementation preview 返回的 `goalId`、`taskId`、`planId` 和 `planHash`，并重新读取同一 goal/task context 后才映射到 `symphony do --confirm-plan <plan-id> --json`。verification confirm route 只接受 `goalId`、`taskId` 和固定 `suiteId=v31-main-verification-command-suite`，后端重新读取 managed runbook task，只运行 `pnpm check`、`pnpm test`、`pnpm workbench:build`、`git diff --check` 和已允许的 active-goal JSON read commands。adoption confirm route 只接受 frozen adoption operation 返回的 `goalId`、`taskId`、`adoptionPlanId` 和 `operationId`，并重新读取同一 goal/task adoption-plan operation 后才映射到 `symphony adopt --confirm <adoption-id> --json`。`/api/handoff` 只暴露 registered handoff ref，当前为 `guided-goal-handoff.v1`。safe preview route 只接受 run state 已登记的 artifact kind，不接受 `path` query、encoded traversal 或任意本地路径。
 

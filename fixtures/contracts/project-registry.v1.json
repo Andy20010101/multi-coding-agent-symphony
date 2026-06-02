@@ -1,0 +1,47 @@
+{
+  "contractName": "project-registry.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "readOnly": true,
+  "source": {
+    "kind": "repo-local-metadata",
+    "scanScope": "cwd-or-explicit-repo-path",
+    "stateDir": ".symphony",
+    "writes": false
+  },
+  "projects": [
+    {
+      "project_id": "multi-coding-agent-symphony-multi-coding-agent-symphony",
+      "project_name": "multi-coding-agent-symphony",
+      "repo_path": "/workspace/multi-coding-agent-symphony",
+      "default_branch": "main",
+      "remote_url": "git@github.com:Andy20010101/multi-coding-agent-symphony.git",
+      "last_goal_id": "v33-app-runtime-foundation",
+      "last_run_id": "symphony-scan-example",
+      "health_status": "ok",
+      "last_opened_at": "2026-06-02T00:00:00.000Z",
+      "pinned": false
+    }
+  ],
+  "currentProjectId": "multi-coding-agent-symphony-multi-coding-agent-symphony",
+  "resolution": {
+    "status": "resolved",
+    "strategy": "cwd",
+    "inputPath": "/workspace/multi-coding-agent-symphony",
+    "repoPath": "/workspace/multi-coding-agent-symphony",
+    "stateDir": ".symphony",
+    "readOnly": true,
+    "blockers": []
+  },
+  "boundaries": {
+    "readOnly": true,
+    "diskScanScope": "cwd-or-explicit-repo-path-only",
+    "registryDatabaseWritesAvailable": false,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false,
+    "arbitraryCommandExecutionAvailable": false
+  }
+}

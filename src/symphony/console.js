@@ -48,6 +48,16 @@ import {
   buildErrorEnvelope
 } from './error-envelope.js';
 import {
+  buildLocalRuntimeHealth
+} from './local-runtime-health.js';
+import {
+  buildAppStateSnapshot
+} from './app-state-snapshot.js';
+import {
+  buildProjectRegistry,
+  resolveCurrentProject
+} from './project-registry.js';
+import {
   readGoalEventJournal
 } from './goal-event-journal.js';
 import {
@@ -805,7 +815,8 @@ export function createSymphonyConsoleServer({
   env = process.env,
   runner = new NodeProcessRunner(),
   mcasRunner,
-  readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS
+  readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS,
+  runtimeStartedAt = new Date().toISOString()
 } = {}) {
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
@@ -919,10 +930,86 @@ export function createSymphonyConsoleServer({
       }
 
       if (url.pathname === '/api/health') {
-        writeJsonResponse(response, 200, {
-          status: 'ok',
-          readOnly: true
-        });
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-health-request',
+            message: 'Runtime health does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildLocalRuntimeHealth({
+          cwd,
+          startedAt: runtimeStartedAt
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/projects') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-project-registry-request',
+            message: 'Project registry does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildProjectRegistry({
+          cwd,
+          stateDir
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/projects/current') {
+        const unsupportedParams = [...url.searchParams.keys()].filter((key) => key !== 'repoPath');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-current-project-request',
+            message: 'Current project resolver accepts only repoPath query parameter.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await resolveCurrentProject({
+          cwd,
+          repoPath: url.searchParams.get('repoPath') ?? undefined,
+          stateDir
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/runtime/snapshot') {
+        const unsupportedParams = [...url.searchParams.keys()].filter((key) => key !== 'repoPath' && key !== 'goal');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-runtime-snapshot-request',
+            message: 'Runtime snapshot accepts only repoPath and goal query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildAppStateSnapshot({
+          cwd,
+          repoPath: url.searchParams.get('repoPath') ?? undefined,
+          goalId: url.searchParams.get('goal') ?? undefined,
+          stateDir,
+          startedAt: runtimeStartedAt
+        }));
         return;
       }
 
