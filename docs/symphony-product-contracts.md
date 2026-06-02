@@ -1,8 +1,6 @@
 # Symphony Product JSON Contracts
 
-v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 adds the implemented/draft `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract family for Goal Runbook + Next Action Control Center work. v21 adds a Workbench dry-run preview route for the existing `goal-update-plan.v1` contract. v23 adds `goal-operation-runs.v1` for Workbench-started goal operation tracking. v25 adds a Workbench-only worker evidence handoff for `v25-controlled-implementation-lane`, derived from the latest confirmed isolated workspace run. v26 adds a read-only Adoption Candidate Panel derived from confirmed isolated workspace runs in `symphony.console-runs`. v27 adds Review Workspace projection and controlled review verdict registration from existing Workbench contracts. v28 adds Release Closeout Workspace projection with release verification checklist rows, a controlled `release.ready` gate registration form, and a copy-only tag evidence prompt derived from closeout/runbook/event contracts. v29 adds `controlled-implementation-plan-preview.v1` for a Workbench active-task preview mapped to `symphony do --write --json` plan semantics without starting implementation, plus `controlled-implementation-run-confirmation.v1` for confirming the same frozen plan through `symphony do --confirm-plan <plan-id> --json`; confirmed implementation runs are also recorded in `goal-operation-runs.v1` with run result, artifact refs, verifier summary, and failure reason fields. The same v29 operation registry now feeds a worker evidence handoff that pre-fills `worker.evidence-recorded` through the existing `goal-update-plan.v1` dry-run and plan-hash confirm path. v30 normalizes adoption candidates from v29 implementation operations and run records, separating adoptable and blocked rows using explicit passed run status, artifact refs, workspace refs, source workspace fingerprints, verifier status, and main-worktree write fields. v30 also adds a controlled Workbench adoption plan freeze path that accepts only the selected active-goal implementation run context and maps it to existing `symphony adopt --run <confirmed-run-id> --json` semantics, showing patch summary, fingerprints, affected files, and recovery notes without confirming adoption. The same v30 adoption path adds an inspect/recovery view for the frozen adoption id from `goal-operation-runs.v1`, reusing `symphony adopt --inspect <adoption-id> --json` output to show journal state, before/after hashes, current worktree match results, patch refs, and evidence context. v30 then adds `controlled-adoption-confirmation.v1`, which accepts only the frozen adoption operation context and maps to existing `symphony adopt --confirm <adoption-id> --json`; successful confirms record `commandKind: "adoption-confirm"` and return refreshed active goal, events, runs, operations, and next action without merge, push, tag, publish, or approval/release event registration. v31 changes the Main Verification Readiness projection so it reads only `goal-progress-ledger.v1`, `goal-event-log.v1`, `goal-next-action.v1`, `goal-closeout-report.v1`, `goal-operation-runs.v1`, and `symphony.console-adoption-inspect` when a frozen adoption plan exists. The projection shows reviewer verdict, adoption-confirm status, inspect state, blockers, copy-only verification commands, and ignored inference sources; it does not derive readiness from branch names, file names, commit messages, prompt text, task titles, command text, or frontend state. v31 also adds `controlled-verification-run-confirmation.v1` for a fixed main verification command suite recorded in `goal-operation-runs.v1` with per-command status, stdout/stderr summaries, exit codes, operation artifact refs, and `gatePassed: false`. The same v31 Workbench projection renders a `MainVerificationEvidenceDraft` from the latest verification operation plus explicit goal/task/run, worker evidence, review evidence, adoption operation, and existing main-verification refs. The draft requires operator/reviewer checking and does not write files, read evidence bodies, declare passed, or register the `main-verification` gate. v19, v21, v23, v25, v26, v27, v28, v29, v30, and v31 are not released or tagged by this document. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
-
-v32 adds `ReleaseBaselineResolver` inside release closeout. It is backed by `/api/readiness` git/GitHub command output for current branch, main HEAD, origin/main, worktree cleanliness, and PR/CI ref; dirty or non-main baselines show stop/fix guidance instead of a release-ready form. v32 also upgrades the release checklist so each required gate row shows copy-only validation commands, latest explicit gate evidence refs, and controlled `symphony goal gate` dry-run/plan-hash confirm forms for passed or failed gate events. v32 adds display-only release/tag evidence drafts that expose release evidence ref, tag evidence ref, target commit, release notes summary, per-gate command/result fields, tag recommendation, and a copy-only `git tag -a <tag> <commit> -m "<release>"` command. v32 also adds `NextVersionHandoffDraft` inside release closeout. It derives copy-only next-version context from `goal-closeout-report.v1`, `release-baseline-resolver.v1`, `goal-event-log.v1`, `goal-progress-ledger.v1`, the latest run id, release/tag evidence draft refs, and implemented Workbench capability flags. The drafts do not write files, read evidence bodies, run tag/push/publish commands, create the next managed goal, enter the next version, or declare release readiness. v32 is not released or tagged by this document.
+v8.2 made the product CLI JSON surface stable for scripts and local UI consumers. v9 adds workbench-oriented console fields and read-only routes without changing `contractVersion`. v9.1 adds Workbench diagnostics, run filters, grouped commands, and risk summaries as additive fields. v10 adds the controlled `symphony diagnose` CLI report. v11 adds controlled kernel execution plans for `symphony do --write`. v12 adds verified adoption plans for applying verifier-passing isolated workspace changes through a separate frozen-patch confirmation step. v13 adds a compact Workbench information architecture with derived `overview` and `adoptionSummary` fields plus a read-only adoption inspect route. v17 adds `goal-progress-ledger.v1`, `capabilities.v1`, `diagnostics.v1`, and `error-envelope.v1` for the read-only console and Workbench. v18 adds `goal-event-log.v1` and `goal-update-plan.v1` for controlled goal event registration and read-only event display. v19 adds the `goal-runbook.v1`, `goal-next-action.v1`, `goal-prompt-pack.v1`, and `goal-closeout-report.v1` contract family for Goal Runbook + Next Action Control Center work. v21 adds a Workbench dry-run preview route for the existing `goal-update-plan.v1` contract. v23 adds `goal-operation-runs.v1` for Workbench-started goal operation tracking. v25 adds a Workbench-only worker evidence handoff for `v25-controlled-implementation-lane`, derived from the latest confirmed isolated workspace run. v26 adds a read-only Adoption Candidate Panel derived from confirmed isolated workspace runs in `symphony.console-runs`. v27 adds Review Workspace projection and controlled review verdict registration from existing Workbench contracts. v28 adds Release Closeout Workspace projection with release verification checklist rows, a controlled `release.ready` gate registration form, and a copy-only tag evidence prompt derived from closeout/runbook/event contracts. The Workbench v1 v20-v28 chain is published as repository tag `v28`; the intermediate goal ids are part of that cumulative release rather than separate repository release tags. v29 adds `controlled-implementation-plan-preview.v1` for a Workbench active-task preview mapped to `symphony do --write --json` plan semantics without starting implementation, plus `controlled-implementation-run-confirmation.v1` for confirming the same frozen plan through `symphony do --confirm-plan <plan-id> --json`; confirmed implementation runs are also recorded in `goal-operation-runs.v1` with run result, artifact refs, verifier summary, and failure reason fields. The same v29 operation registry now feeds a worker evidence handoff that pre-fills `worker.evidence-recorded` through the existing `goal-update-plan.v1` dry-run and plan-hash confirm path. v30 normalizes adoption candidates from v29 implementation operations and run records, separating adoptable and blocked rows using explicit passed run status, artifact refs, workspace refs, source workspace fingerprints, verifier status, and main-worktree write fields. v30 also adds a controlled Workbench adoption plan freeze path that accepts only the selected active-goal implementation run context and maps it to existing `symphony adopt --run <confirmed-run-id> --json` semantics, showing patch summary, fingerprints, affected files, and recovery notes without confirming adoption. The same v30 adoption path adds an inspect/recovery view for the frozen adoption id from `goal-operation-runs.v1`, reusing `symphony adopt --inspect <adoption-id> --json` output to show journal state, before/after hashes, current-worktree match results, patch refs, and evidence context. v30 then adds `controlled-adoption-confirmation.v1`, which accepts only the frozen adoption operation context and maps to existing `symphony adopt --confirm <adoption-id> --json`; successful confirms record `commandKind: "adoption-confirm"` and return refreshed active goal, events, runs, operations, and next action without merge, push, tag, publish, or approval/release event registration. v31 changes the Main Verification Readiness projection so it reads only `goal-progress-ledger.v1`, `goal-event-log.v1`, `goal-next-action.v1`, `goal-closeout-report.v1`, `goal-operation-runs.v1`, and `symphony.console-adoption-inspect` when a frozen adoption plan exists. The projection shows reviewer verdict, adoption-confirm status, inspect state, blockers, copy-only verification commands, and ignored inference sources; it does not derive readiness from branch names, file names, prompt text, task titles, command text, or frontend state. v31 also adds `controlled-verification-run-confirmation.v1` for a fixed main verification command suite recorded in `goal-operation-runs.v1` with per-command status, stdout/stderr summaries, exit codes, operation artifact refs, and `gatePassed: false`. The same v31 Workbench projection renders a `MainVerificationEvidenceDraft` from the latest verification operation plus explicit goal/task/run, worker evidence, review evidence, adoption operation, and existing main-verification refs. The draft requires operator/reviewer checking and does not write files, read evidence bodies, declare passed, or register the `main-verification` gate. v32 adds `ReleaseBaselineResolver` inside release closeout. It is backed by `/api/readiness` git/GitHub command output for current branch, main HEAD, origin/main, worktree cleanliness, and PR/CI ref; dirty or non-main baselines show stop/fix guidance instead of a release-ready form. v32 also upgrades the release checklist so each required gate row shows copy-only validation commands, latest explicit gate evidence refs, and controlled `symphony goal gate` dry-run/plan-hash confirm forms for passed or failed gate events. v32 adds display-only release/tag evidence drafts that expose release evidence ref, tag evidence ref, target commit, release notes summary, per-gate command/result fields, tag recommendation, and a copy-only `git tag -a <tag> <commit> -m "<release>"` command. v32 also adds `NextVersionHandoffDraft` inside release closeout. It derives copy-only next-version context from `goal-closeout-report.v1`, `release-baseline-resolver.v1`, `goal-event-log.v1`, `goal-progress-ledger.v1`, the latest run id, release/tag evidence draft refs, and implemented Workbench capability flags. The drafts do not write files, read evidence bodies, run tag/push/publish commands, create the next managed goal, enter the next version, or declare release readiness. v29, v30, v31, and v32 are published as repository release tags. v33 adds `local-runtime-health.v1` for the local sidecar health path plus `project-registry.v1` and `current-project-resolver.v1` for project listing and cwd/repo-path resolution. `GET /api/health` and `symphony runtime health --json` return runtime version, v32 kernel source, process id, cwd, repo path, startup time, read-only mode, boundary flags, and known blockers. `GET /api/projects`, `GET /api/projects/current`, `symphony runtime projects --json`, and `symphony runtime current --json` read repo-local metadata and managed Symphony pointers for project identity, default branch, remote URL, latest goal, and latest run. `GET /api/runtime/snapshot` and `symphony runtime snapshot --json` return the same `app-state-snapshot.v1` schema for CLI and Workbench, including current/stale freshness metadata. The Workbench Runtime surface renders that API response as runtime health, current project, active goal, next action, release state, and known blockers. These v33 paths do not write repo files or `.symphony`, change git state, scan the full disk, execute actions, create jobs, call models, run verification, or declare release readiness. Existing contract v1 changes are additive unless a future response declares a new `contractVersion`.
 
 ## Shared Rules
 
@@ -30,6 +28,9 @@ v32 adds `ReleaseBaselineResolver` inside release closeout. It is backed by `/ap
 - v17 `capabilities.v1` declares unsupported browser capabilities as explicit `false` values. The Workbench displays those fields but does not turn them into write, execution, download, or model invocation controls.
 - v17 `diagnostics.v1` is read-only. It does not run shell commands, tests, audit, mutation, package installs, or model calls.
 - v17 `error-envelope.v1` is used for relevant Console API error responses. Error bodies must not contain stack traces, absolute local paths, secrets, or repository file contents.
+- v33 `local-runtime-health.v1` is read-only runtime status. It reports the local sidecar process and v32 kernel source, but it cannot execute actions, create jobs, invoke models, write git state, register goal events, or write release state.
+- v33 `project-registry.v1` and `current-project-resolver.v1` are read-only project status. They read cwd or an explicit repo path plus repo-local metadata such as `.git`, `package.json`, `.symphony/goals/latest-active-goal.json`, and `.symphony/runs/latest.json`. They cannot write a project registry database, scan the user's whole disk, execute actions, invoke models, write git state, register goal events, or write release state.
+- v33 `app-state-snapshot.v1` is a read-only aggregation for app surfaces. It combines the current project resolver, runtime health, goal-status ledger, goal next action, review/main verification fields, release gates/readiness, evidence refs, blockers, and explicit `freshness` status for current/stale snapshots. Missing goal or release state remains `null` with blockers; the snapshot cannot register goal events, run validation commands, execute actions, invoke models, write git state, or declare release readiness.
 - v18 `goal-event-log.v1` is the append-only source for worker evidence, independent review evidence, main verification evidence, release gate evidence, and release ready declaration.
 - v18 `goal-update-plan.v1` is the dry-run contract used by `symphony goal update`, `symphony goal review`, and `symphony goal gate` before confirm appends to the managed journal.
 - v18 keeps the `goal-progress-ledger.v1` contract name. The resolver reads `goal-event-log.v1`; with no events it returns the v17 planned/unknown template.
@@ -518,6 +519,273 @@ symphony goal-status --json
 symphony goal-status --markdown
 symphony goal-status --goal v17-readonly-goal-progress-console-contracts --json
 ```
+
+## `local-runtime-health.v1`
+
+`local-runtime-health.v1` lets terminal, Console, and future app surfaces confirm that the local runtime is alive and still inside the read-only v33 boundary.
+
+```json
+{
+  "contractName": "local-runtime-health.v1",
+  "contractVersion": 1,
+  "status": "ok",
+  "readOnly": true,
+  "mode": "read-only",
+  "runtime": {
+    "name": "symphony-local-sidecar",
+    "version": "v33-app-runtime-foundation.1",
+    "releaseName": "v33 App Runtime Foundation"
+  },
+  "kernel": {
+    "version": "v32-release-manager-workspace-v2",
+    "source": "v32 Release Manager Workspace v2",
+    "commandSpine": [
+      "goal-status",
+      "goal next",
+      "goal prompt",
+      "goal update/review/gate",
+      "goal closeout",
+      "symphony next --goal latest"
+    ]
+  },
+  "process": {
+    "processId": 12345,
+    "cwd": "/fixture/repo",
+    "repoPath": "/fixture/repo",
+    "startupTime": "2026-06-02T00:00:00.000Z",
+    "generatedAt": "2026-06-02T00:00:01.000Z",
+    "uptimeMs": 1000
+  },
+  "boundaries": {
+    "readOnly": true,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false,
+    "arbitraryCommandExecutionAvailable": false
+  },
+  "knownBlockers": []
+}
+```
+
+Routes and CLI:
+
+```text
+GET /api/health
+symphony runtime health --json
+```
+
+The route rejects query parameters. Non-GET requests still return `error-envelope.v1`.
+
+## `project-registry.v1` and `current-project-resolver.v1`
+
+`project-registry.v1` lets terminal, Console, and future app surfaces list the registered project visible from the current cwd or an explicit repo path. v33 reads repo-local metadata only; it does not create a registry database or scan unrelated directories.
+
+```json
+{
+  "contractName": "project-registry.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "readOnly": true,
+  "source": {
+    "kind": "repo-local-metadata",
+    "scanScope": "cwd-or-explicit-repo-path",
+    "stateDir": ".symphony",
+    "writes": false
+  },
+  "projects": [{
+    "project_id": "multi-coding-agent-symphony-multi-coding-agent-symphony",
+    "project_name": "multi-coding-agent-symphony",
+    "repo_path": "/fixture/repo",
+    "default_branch": "main",
+    "remote_url": "git@example.com:fixture/project.git",
+    "last_goal_id": "v33-app-runtime-foundation",
+    "last_run_id": "run-v33-project-registry",
+    "health_status": "ok",
+    "last_opened_at": "2026-06-02T00:00:00.000Z",
+    "pinned": false
+  }],
+  "currentProjectId": "multi-coding-agent-symphony-multi-coding-agent-symphony",
+  "resolution": {
+    "status": "resolved",
+    "strategy": "cwd",
+    "inputPath": "/fixture/repo",
+    "repoPath": "/fixture/repo",
+    "stateDir": ".symphony",
+    "readOnly": true,
+    "blockers": []
+  },
+  "boundaries": {
+    "readOnly": true,
+    "diskScanScope": "cwd-or-explicit-repo-path-only",
+    "registryDatabaseWritesAvailable": false,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false,
+    "arbitraryCommandExecutionAvailable": false
+  }
+}
+```
+
+`current-project-resolver.v1` returns the same project object under `currentProject`, or `null` with explicit blockers when the requested path is missing or is not inside a git repo.
+
+Routes and CLI:
+
+```text
+GET /api/projects
+GET /api/projects/current
+GET /api/projects/current?repoPath=/path/to/repo
+symphony runtime projects --json
+symphony runtime current --json
+symphony runtime current --repo-path /path/to/repo --json
+```
+
+`/api/projects` rejects query parameters. `/api/projects/current` accepts only `repoPath`. Non-GET requests still return `error-envelope.v1`.
+
+## `app-state-snapshot.v1`
+
+`app-state-snapshot.v1` lets terminal, Console, and future app surfaces read the current project workflow state in one response. It reuses existing readers instead of running CLI commands or registering events.
+
+Top-level fields:
+
+```text
+current_project
+runtime_health
+active_goal
+current_task
+next_action
+review_status
+main_verification_status
+release_status
+evidence_refs
+known_blockers
+source_data
+boundaries
+```
+
+`active_goal`, `current_task`, `review_status`, `main_verification_status`, and `release_status` come from managed runbook state, `goal-progress-ledger.v1`, `goal-next-action.v1`, event/gate evidence, and release state. Missing active goal or release state is reported as `null` with a blocker entry. The snapshot does not infer status from filenames, branch names, commits, prompt text, task titles, copy-only commands, or frontend-only state.
+
+Routes and CLI:
+
+```text
+GET /api/runtime/snapshot
+GET /api/runtime/snapshot?goal=<goal-id>
+GET /api/runtime/snapshot?repoPath=/path/to/repo
+symphony runtime snapshot --json
+symphony runtime snapshot --goal <goal-id> --json
+symphony runtime snapshot --repo-path /path/to/repo --json
+```
+
+`/api/runtime/snapshot` accepts only `goal` and `repoPath`. The CLI accepts `--goal`, `--repo-path`, `--state-dir`, and `--json`. The snapshot path is read-only: it does not call `goal update`, `goal review`, `goal gate`, or `goal closeout --confirm`; it does not run validation commands, execute actions, invoke models, write `.symphony`, change git state, create jobs, or declare release readiness.
+
+## v34 Action Registry handoff
+
+v33 does not implement Action Registry. It defines the runtime state inputs that v34 can consume without changing the v32 workflow kernel:
+
+```text
+app-state-snapshot.v1
+goal-progress-ledger.v1
+goal-next-action.v1
+goal-runbook.v1
+goal-event-log.v1
+goal-operation-runs.v1
+capabilities.v1
+```
+
+The first v34 contract should be read-only and declaration-only. A suggested API shape:
+
+```text
+GET /api/actions/available?goal=<goal-id>&task=<task-id>
+symphony actions available --goal <goal-id> --task <task-id> --json
+```
+
+Suggested `available-actions.v1` top-level fields:
+
+```json
+{
+  "contractName": "available-actions.v1",
+  "contractVersion": 1,
+  "goalId": "v34-action-registry",
+  "taskId": "task-1",
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "sourceSnapshotRef": {
+    "contractName": "app-state-snapshot.v1",
+    "freshnessStatus": "current"
+  },
+  "actions": [],
+  "permissionPreviews": [],
+  "knownBlockers": [],
+  "boundaries": {
+    "readOnly": true,
+    "actionExecutionAvailable": false,
+    "jobExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false,
+    "arbitraryCommandExecutionAvailable": false
+  }
+}
+```
+
+Suggested action manifest fields:
+
+```text
+action_id
+title
+description
+category
+source_contract
+goal_id
+task_id
+role
+phase
+preconditions
+required_inputs
+copy_only_command
+dry_run_available
+confirm_available
+writes_scope
+event_mapping
+evidence_ref_policy
+unsupported_reason
+```
+
+Suggested permission preview fields:
+
+```text
+permission_preview_id
+action_id
+read_paths
+write_paths
+network_access
+model_invocation
+git_write
+release_write
+job_creation
+artifact_download
+local_file_open
+risk_level
+requires_plan_hash
+requires_operator_confirm
+blocked_reasons
+```
+
+Candidate action ids for the first v34 pass:
+
+```text
+goal.workerEvidence.preview
+goal.reviewVerdict.preview
+goal.mainVerification.preview
+goal.releaseGate.preview
+runtime.snapshot.refresh
+project.current.resolve
+prompt.copy
+```
+
+No-job-execution boundary: v34 Action Registry may declare actions, permission previews, preconditions, dry-run availability, confirm availability, event mapping, and copy-only command text. It must not create jobs, run actions, execute shell commands, invoke models, write files, write git state, merge, push, tag, publish, download artifacts, open local files, register release readiness, or create the v34 managed goal automatically.
 
 ## `capabilities.v1`
 

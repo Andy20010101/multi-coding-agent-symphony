@@ -31,6 +31,9 @@ import {
 import {
   validateErrorEnvelopeContract
 } from '../src/symphony/error-envelope.js';
+import {
+  validateLocalRuntimeHealthContract
+} from '../src/symphony/local-runtime-health.js';
 
 const FAKE_SECRET_VALUE = ['deepseek', 'secret', 'value'].join('-');
 const FAKE_OPENAI_TOKEN = ['sk', '123456789012345678901234'].join('-');
@@ -3778,10 +3781,17 @@ describe('v8 prompt-driven symphony CLI', () => {
         assert.deepEqual(consoleSnapshotContractProjection(routeSummary, normalize), expectedSummary);
         assert.deepEqual(consoleReadinessContractProjection(directReadiness, normalize), expectedReadiness);
         assert.deepEqual(consoleReadinessContractProjection(routeReadiness, normalize), expectedReadiness);
-        assert.deepEqual(health, {
-          status: 'ok',
-          readOnly: true
+        assert.deepEqual(validateLocalRuntimeHealthContract(health), {
+          ok: true,
+          errors: []
         });
+        assert.equal(health.status, 'ok');
+        assert.equal(health.readOnly, true);
+        assert.equal(health.runtime.version, 'v33-app-runtime-foundation.1');
+        assert.equal(health.kernel.version, 'v32-release-manager-workspace-v2');
+        assert.equal(health.boundaries.actionExecutionAvailable, false);
+        assert.equal(health.boundaries.modelInvocationAvailable, false);
+        assert.equal(health.boundaries.gitWriteAvailable, false);
       } finally {
         if (server !== undefined) {
           await closeServer(server);

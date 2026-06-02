@@ -22,6 +22,7 @@ const GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-p
 const GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-confirm';
 const GOAL_OPERATION_POLL_INTERVAL_MS = 2500;
 const WORKBENCH_NAV_ITEMS = Object.freeze([
+  Object.freeze({ id: 'runtime', label: 'Runtime', targetId: 'runtime-snapshot-panel' }),
   Object.freeze({ id: 'active-goal', label: 'Active Goal', targetId: 'active-goal-runbook-panel' }),
   Object.freeze({ id: 'prompt-handoff', label: 'Prompt Handoff', route: '/workbench/prompts/' }),
   Object.freeze({ id: 'operations', label: 'Operations', targetId: 'goal-operation-console-panel' }),
@@ -184,6 +185,13 @@ export function WorkbenchShell({
           <>
           <section className="golden-path-grid" aria-label="v28 golden path">
             <GoldenPathPanel goldenPath={model.goldenPath} />
+          </section>
+
+          <section className="runtime-snapshot-grid" aria-label="v33 app runtime snapshot">
+            <RuntimeSnapshotPanel
+              runtimeSnapshot={model.runtimeSnapshot}
+              route={findRoute(model.routeStates, 'runtimeSnapshot')}
+            />
           </section>
 
           <section className="primary-active-goal-grid" aria-label="v20 primary active goal workflow">
@@ -3626,6 +3634,87 @@ function DiagnosticsV1Panel({ diagnostics, route }) {
   );
 }
 
+function RuntimeSnapshotPanel({ runtimeSnapshot, route }) {
+  return (
+    <DataPanel
+      id="runtime-snapshot-panel"
+      kicker="v33 Runtime Surface"
+      title="App Runtime Snapshot"
+      state={runtimeSnapshotStateText(runtimeSnapshot?.state, route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', runtimeSnapshot.contractName],
+        ['contractVersion', runtimeSnapshot.contractVersion],
+        ['readOnly', runtimeSnapshot.readOnly],
+        ['generatedAt', runtimeSnapshot.generatedAt],
+        ['freshness.status', runtimeSnapshot.freshness.status],
+        ['freshness.ageMs', runtimeSnapshot.freshness.ageMs],
+        ['freshness.staleAfterMs', runtimeSnapshot.freshness.staleAfterMs]
+      ]} />
+
+      <Subsection title="runtime health">
+        <FieldList rows={[
+          ['status', runtimeSnapshot.runtime.status],
+          ['mode', runtimeSnapshot.runtime.mode],
+          ['runtime version', runtimeSnapshot.runtime.version],
+          ['kernel', runtimeSnapshot.runtime.kernel],
+          ['cwd', runtimeSnapshot.runtime.cwd],
+          ['repoPath', runtimeSnapshot.runtime.repoPath]
+        ]} />
+      </Subsection>
+
+      <Subsection title="current project">
+        <FieldList rows={[
+          ['resolution', runtimeSnapshot.project.status],
+          ['project', runtimeSnapshot.project.name],
+          ['project id', runtimeSnapshot.project.id],
+          ['repo path', runtimeSnapshot.project.repoPath],
+          ['default branch', runtimeSnapshot.project.defaultBranch],
+          ['last goal', runtimeSnapshot.project.lastGoalId],
+          ['last run', runtimeSnapshot.project.lastRunId]
+        ]} />
+      </Subsection>
+
+      <Subsection title="active goal / next action">
+        <FieldList rows={[
+          ['goal', runtimeSnapshot.activeGoal.goalId],
+          ['title', runtimeSnapshot.activeGoal.title],
+          ['completed tasks', runtimeSnapshot.activeGoal.completedTasks],
+          ['total tasks', runtimeSnapshot.activeGoal.totalTasks],
+          ['current task', runtimeSnapshot.currentTask.taskId],
+          ['task status', runtimeSnapshot.currentTask.status],
+          ['role / phase', textValue(`${runtimeSnapshot.currentTask.role.text} / ${runtimeSnapshot.currentTask.phase.text}`)],
+          ['blocked', runtimeSnapshot.currentTask.blocked],
+          ['next status', runtimeSnapshot.nextAction.status],
+          ['next reason', runtimeSnapshot.nextAction.reason],
+          ['registerWith', runtimeSnapshot.nextAction.registerWith]
+        ]} />
+        <ValueStateList items={runtimeSnapshot.nextAction.copyOnlyCommands} emptyCopy="copy-only commands 未暴露。" />
+      </Subsection>
+
+      <Subsection title="release state">
+        <FieldList rows={[
+          ['release ready', runtimeSnapshot.release.ready],
+          ['release ready source', runtimeSnapshot.release.readySource],
+          ['status source', runtimeSnapshot.release.statusSource]
+        ]} />
+        <RuntimeGateList gates={runtimeSnapshot.release.missingGates} />
+      </Subsection>
+
+      <Subsection title="known blockers">
+        <RuntimeBlockerList blockers={runtimeSnapshot.blockers} />
+      </Subsection>
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={runtimeSnapshot.boundaries} nameKey="boundary" valueKey="available" emptyCopy="boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{runtimeSnapshot.note}</p>
+    </DataPanel>
+  );
+}
+
 function SummaryPanel({ summary, route }) {
   return (
     <DataPanel
@@ -6524,6 +6613,57 @@ function KeyValueList({ rows, nameKey, valueKey, emptyCopy }) {
   );
 }
 
+function ValueStateList({ items, emptyCopy }) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return <EmptyBlock copy={emptyCopy} />;
+  }
+
+  return (
+    <ul className="command-text-list">
+      {items.map((item, index) => (
+        <li key={`${item.text}-${index}`}>
+          <code>{item.text}</code>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RuntimeGateList({ gates }) {
+  if (!Array.isArray(gates) || gates.length === 0) {
+    return <EmptyBlock copy="missing_or_unknown_gates 为空。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {gates.map((gate, index) => (
+        <li key={`${gate.gateId.text}-${index}`}>
+          <strong>{gate.gateId.text}</strong>
+          <span>{gate.status.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RuntimeBlockerList({ blockers }) {
+  if (!Array.isArray(blockers) || blockers.length === 0) {
+    return <EmptyBlock copy="known blockers 为空。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {blockers.map((blocker, index) => (
+        <li key={`${blocker.id.text}-${index}`}>
+          <strong>{blocker.message.text}</strong>
+          <span>{blocker.severity.text}</span>
+          <span>{blocker.source.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function BlockerList({ blockers }) {
   if (!Array.isArray(blockers) || blockers.length === 0) {
     return <EmptyBlock copy="无已暴露 blocker。" />;
@@ -6963,6 +7103,30 @@ function isNonEmptyText(value) {
 
 function firstNonEmptyText(...values) {
   return values.find((value) => isNonEmptyText(value)) ?? '';
+}
+
+function runtimeSnapshotStateText(state, route) {
+  if (route?.state !== 'ready') {
+    return routeStateText(route);
+  }
+
+  if (state === 'healthy') {
+    return 'healthy';
+  }
+
+  if (state === 'empty') {
+    return 'empty';
+  }
+
+  if (state === 'blocked') {
+    return 'blocked';
+  }
+
+  if (state === 'stale') {
+    return 'stale';
+  }
+
+  return 'missing';
 }
 
 function formatState(state) {

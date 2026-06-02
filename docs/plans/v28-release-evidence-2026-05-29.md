@@ -195,9 +195,9 @@ releaseGates:
 - README now presents Workbench v1 as the daily operator entry and keeps `symphony` CLI as the advanced/script and compatibility surface.
 - `docs/workbench-operator-guide.md` documents the Workbench v1 path: active goal, next action, prompt handoff, event registration, review/revision, main verification, and closeout/release.
 - The operator guide states that final release readiness requires explicit `symphony goal gate --gate release.ready --status declared` dry-run and confirm; Workbench must not infer release-ready from branch, file name, command text, or prompt text.
-- This file is the v28 tag evidence prompt. It records the fallback commit, the validation commands, closeout gaps before gate registration, and the tag recommendation.
+- This file records the v28 tag evidence path. The release-manager section records the fallback commit, validation commands, closeout gaps before gate registration, and tag recommendation; the published release section records the final merge commit and tag.
 
-Tag recommendation: after the parent registers the release gates and declares `release.ready`, do not create a Git tag from fallback commit `7bc15cf4a303e2f81f85db21ee4f899921c89a92` unless the v28 release changes are committed there. The repository tag should point at the final committed release candidate that contains the v28 Workbench v1 changes. No automatic tag was created.
+Tag recommendation from the release-manager run: after the parent registers the release gates and declares `release.ready`, do not create a Git tag from fallback commit `7bc15cf4a303e2f81f85db21ee4f899921c89a92` unless the v28 release changes are committed there. The repository tag should point at the final committed release candidate that contains the v28 Workbench v1 changes. No automatic tag was created during that run.
 
 ## Closeout Gaps
 
@@ -226,7 +226,7 @@ Release command blockers: none. The remaining gaps are managed-goal event regist
 - `release.diff-check`: pass. `git diff --check` exited 0 with no output.
 - `release.mcas-doctor`: pass. `pnpm mcas doctor` exited 0 with status `ok`.
 - `release.docs-updated`: pass. README and operator guide describe Workbench v1 as the daily entry, CLI as advanced/script entry, and release-ready as explicit gate registration.
-- `release.tag-evidence`: pass. This release evidence file records the tag recommendation and states that no automatic tag was created.
+- `release.tag-evidence`: pass. This release evidence file records the tag recommendation and the later published tag target.
 
 ## Release Decision
 
@@ -237,3 +237,21 @@ The parent should register the release gates above through dry-run plus confirm.
 ```bash
 pnpm --silent symphony goal gate --goal v28-workbench-v1-release --gate release.ready --status declared --verifier codex-v28-release-manager --evidence-ref docs/plans/v28-release-evidence-2026-05-29.md
 ```
+
+## Published Release
+
+Date recorded: 2026-06-01 Asia/Shanghai
+
+- PR: `#7 Release Workbench v1 v20-v28 chain`
+- Merge commit: `8454c2c1b3fe78138eb32b2ecd4f26df1c50ffd2`
+- Release commit included in main: `bacf1d846ee71fb8d5e60e5e5fc32b104ac4531b`
+- Tag: `v28`
+- GitHub release: `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v28`
+
+Final release checks:
+
+- GitHub CI passed `pnpm check`, `pnpm test`, `pnpm test:mutation:gate`, `git diff --check`, and `pnpm mcas doctor`.
+- Clean-main local verification passed `git diff --check`, `pnpm check`, `pnpm test`, `pnpm workbench:build`, and `pnpm mcas doctor`.
+- v20-v28 closeouts were checked with managed goal state; every goal reported `releaseReady: true` and `missing: []`.
+
+The `v28` tag points at the merge commit above. The earlier fallback commit in this evidence remains a validation boundary from the release-manager run, not the published tag target.

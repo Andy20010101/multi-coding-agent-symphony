@@ -1,0 +1,232 @@
+{
+  "contractName": "app-state-snapshot.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "readOnly": true,
+  "current_project": {
+    "contractName": "current-project-resolver.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-02T00:00:00.000Z",
+    "readOnly": true,
+    "currentProject": {
+      "project_id": "fixture-project-fixture-project",
+      "project_name": "fixture-project",
+      "repo_path": "/tmp/fixture-project",
+      "default_branch": "main",
+      "remote_url": "git@example.com:fixture/project.git",
+      "last_goal_id": "v33-app-runtime-foundation",
+      "last_run_id": "run-v33-snapshot",
+      "health_status": "ok",
+      "last_opened_at": "2026-06-02T00:00:00.000Z",
+      "pinned": false
+    },
+    "resolution": {
+      "status": "resolved",
+      "strategy": "cwd",
+      "inputPath": "/tmp/fixture-project",
+      "repoPath": "/tmp/fixture-project",
+      "stateDir": "/tmp/fixture-project/.symphony",
+      "readOnly": true,
+      "blockers": []
+    },
+    "boundaries": {
+      "readOnly": true,
+      "diskScanScope": "cwd-or-explicit-repo-path-only",
+      "registryDatabaseWritesAvailable": false,
+      "actionExecutionAvailable": false,
+      "jobQueueAvailable": false,
+      "modelInvocationAvailable": false,
+      "gitWriteAvailable": false,
+      "releaseWriteAvailable": false,
+      "arbitraryCommandExecutionAvailable": false
+    }
+  },
+  "runtime_health": {
+    "contractName": "local-runtime-health.v1",
+    "contractVersion": 1,
+    "status": "ok",
+    "readOnly": true,
+    "mode": "read-only",
+    "runtime": {
+      "name": "symphony-local-sidecar",
+      "version": "v33-app-runtime-foundation.1",
+      "releaseName": "v33 App Runtime Foundation"
+    },
+    "kernel": {
+      "version": "v32-release-manager-workspace-v2",
+      "source": "v32 Release Manager Workspace v2",
+      "commandSpine": [
+        "goal-status",
+        "goal next",
+        "goal prompt",
+        "goal update/review/gate",
+        "goal closeout",
+        "symphony next --goal latest"
+      ]
+    },
+    "process": {
+      "processId": 4321,
+      "cwd": "/tmp/fixture-project",
+      "repoPath": "/tmp/fixture-project",
+      "startupTime": "2026-06-02T00:00:00.000Z",
+      "generatedAt": "2026-06-02T00:00:00.000Z",
+      "uptimeMs": 0
+    },
+    "boundaries": {
+      "readOnly": true,
+      "actionExecutionAvailable": false,
+      "jobQueueAvailable": false,
+      "modelInvocationAvailable": false,
+      "gitWriteAvailable": false,
+      "releaseWriteAvailable": false,
+      "arbitraryCommandExecutionAvailable": false
+    },
+    "knownBlockers": []
+  },
+  "active_goal": {
+    "goal_id": "v33-app-runtime-foundation",
+    "goal_title": "v33 App Runtime Foundation",
+    "baseline": {
+      "tag": "v32",
+      "commit": null,
+      "evidenceRef": "docs/plans/v32-release-evidence-2026-06-01.md"
+    },
+    "summary": {
+      "totalTasks": 5,
+      "completedTasks": 1,
+      "blockedTasks": 0,
+      "needsReviewTasks": 0,
+      "needsRevisionTasks": 0,
+      "releaseReady": false,
+      "releaseReadySource": null
+    },
+    "status_source": "goal-progress-ledger.v1"
+  },
+  "current_task": {
+    "task_id": "task-2",
+    "title": "Project registry and current project resolver",
+    "status": "planned",
+    "status_source": "goal-runbook.v1",
+    "branch": "v33-task-2-project-registry-resolver",
+    "role": "worker",
+    "phase": "implement",
+    "reason": "No explicit worker evidence is recorded for task-2.",
+    "blocked": false,
+    "ledger_task": null
+  },
+  "next_action": {
+    "contractName": "goal-next-action.v1",
+    "contractVersion": 1,
+    "goalId": "v33-app-runtime-foundation",
+    "status": "action-required",
+    "next": {
+      "taskId": "task-2",
+      "role": "worker",
+      "phase": "implement",
+      "reason": "No explicit worker evidence is recorded for task-2.",
+      "blocked": false
+    },
+    "reason": "No explicit worker evidence is recorded for task-2.",
+    "evidenceState": {
+      "workerEvidenceRef": null,
+      "reviewEvidenceRef": null,
+      "mainVerificationRef": null
+    },
+    "copyOnlyPrompt": {
+      "available": false,
+      "format": null,
+      "text": null
+    },
+    "copyOnlyCommands": [
+      "pnpm check"
+    ],
+    "afterCompletion": {
+      "registerWith": "symphony goal update",
+      "allowedEvents": [
+        "worker.evidence-recorded"
+      ]
+    },
+    "safety": {
+      "readOnly": true,
+      "copyOnly": true,
+      "workbenchWriteAvailable": false,
+      "browserExecutionAvailable": false,
+      "modelInvocationAvailable": false
+    }
+  },
+  "review_status": {
+    "task_id": "task-2",
+    "verdict": null,
+    "evidence_ref": null,
+    "status_source": null
+  },
+  "main_verification_status": {
+    "task_id": "task-2",
+    "status": null,
+    "evidence_ref": null,
+    "status_source": null
+  },
+  "release_status": {
+    "release_ready": false,
+    "release_ready_source": null,
+    "release_gates": {
+      "pnpmCheck": "unknown",
+      "pnpmTest": "unknown",
+      "workbenchBuild": "unknown",
+      "mutationGate": "unknown",
+      "auditHigh": "unknown",
+      "diffCheck": "unknown",
+      "mcasDoctor": "unknown",
+      "docsUpdated": "unknown",
+      "tagEvidence": "unknown"
+    },
+    "missing_or_unknown_gates": [
+      {
+        "gate_id": "pnpmCheck",
+        "status": "unknown"
+      }
+    ],
+    "status_source": "goal-progress-ledger.v1"
+  },
+  "evidence_refs": [
+    {
+      "kind": "worker",
+      "task_id": "task-1",
+      "ref": "docs/plans/v33-task-1-worker-evidence-2026-06-02.md",
+      "source": "goal-event-log.v1:evt_fixture"
+    }
+  ],
+  "known_blockers": [
+    {
+      "id": "release-ready-not-declared",
+      "severity": "info",
+      "source": "goal-status",
+      "message": "No explicit release.ready declaration is recorded."
+    }
+  ],
+  "source_data": {
+    "state_dir": "/tmp/fixture-project/.symphony",
+    "requested_goal_id": "v33-app-runtime-foundation",
+    "current_project_goal_id": "v33-app-runtime-foundation",
+    "goal_status_source": "goal-progress-ledger.v1",
+    "next_action_source": "goal-next-action.v1",
+    "release_status_source": "goal-progress-ledger.v1"
+  },
+  "boundaries": {
+    "readOnly": true,
+    "writesInSnapshotPath": false,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "confirmCommandAvailable": false
+  },
+  "freshness": {
+    "status": "current",
+    "generated_at": "2026-06-02T00:00:00.000Z",
+    "age_ms": 0,
+    "stale_after_ms": 300000
+  }
+}
