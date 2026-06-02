@@ -886,6 +886,8 @@ symphony actions availability --goal <goal-id> --task <task-id> --json
 symphony actions preview --goal <goal-id> --task <task-id> --action <action-id> --json
 ```
 
+`docs/action-registry-migration-guide.md` is the v34 task-5 handoff for later App surfaces. It records how Web Workbench, Desktop Shell, Notch/Menu Bar, and CLI consume the same action layer, and how v35 job queue should create recoverable jobs from controlled action preview data instead of frontend shell command strings.
+
 `action-preview.v1` top-level fields:
 
 ```json

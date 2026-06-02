@@ -406,6 +406,28 @@ describe('v34 action-availability.v1 contract', () => {
   });
 });
 
+describe('v34 action registry migration guide', () => {
+  it('anchors v35 and future app surfaces to the shared action layer without execution shortcuts', async () => {
+    const guide = await readFile('docs/action-registry-migration-guide.md', 'utf8');
+    const operatorGuide = await readFile('docs/workbench-operator-guide.md', 'utf8');
+    const productContracts = await readFile('docs/symphony-product-contracts.md', 'utf8');
+
+    assert.match(guide, /action-manifest\.v1 -> action-availability\.v1 -> action-preview\.v1/u);
+    assert.match(guide, /v35 should create jobs from a controlled action preview/u);
+    assert.match(guide, /Web Workbench:/u);
+    assert.match(guide, /Desktop Shell:/u);
+    assert.match(guide, /Notch or menu bar:/u);
+    assert.match(guide, /CLI:/u);
+    assert.match(guide, /Keep legacy v8 compatibility commands out of the top-level App\/Workbench action model/u);
+    assert.match(guide, /No surface should build shell commands from button state/u);
+    assert.match(guide, /Those behaviors require explicit later contracts and explicit goal events/u);
+    assert.match(operatorGuide, /docs\/action-registry-migration-guide\.md/u);
+    assert.match(operatorGuide, /v35 job queue .*受控 action preview 创建 job/u);
+    assert.match(productContracts, /docs\/action-registry-migration-guide\.md/u);
+    assert.match(productContracts, /Web Workbench, Desktop Shell, Notch\/Menu Bar, and CLI/u);
+  });
+});
+
 function createOutput() {
   const stdoutChunks = [];
   const stderrChunks = [];
