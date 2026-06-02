@@ -80,6 +80,8 @@ describe('v15 Workbench React/Vite shell', () => {
       'ActiveGoalTaskQueuePanel',
       'GoldenPathPanel',
       'GoldenPathStepList',
+      'ActionRegistryPanel',
+      'ActionRegistryList',
       'NextActionCard',
       'PromptPreviewDrawer',
       'GoalOperationConsolePanel',
@@ -153,6 +155,29 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /刷新页面后会重新读取只读 API/u);
     assert.doesNotMatch(app, /\bfetch\s*\(/u);
     assert.doesNotMatch(app, /rawRunState/u);
+  });
+
+  it('renders the v34 Action Registry panel from backend action contracts without execution handlers', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const actionRegistryBody = app.slice(
+      app.indexOf('function ActionRegistryPanel'),
+      app.indexOf('function PromptPreviewDrawer')
+    );
+    const actionRegistryProjection = contracts.slice(
+      contracts.indexOf('function projectActionRegistryPanel'),
+      contracts.indexOf('export function projectSubagentHandoffBoard')
+    );
+
+    assert.match(app, /<ActionRegistryPanel[\s\S]*registry=\{model\.activeGoal\.actionRegistry\}/u);
+    assert.match(app, /manifestRoute=\{findRoute\(model\.routeStates, 'actionManifest'\)\}/u);
+    assert.match(app, /availabilityRoute=\{findRoute\(model\.routeStates, 'actionAvailability'\)\}/u);
+    assert.match(app, /previewRoute=\{findRoute\(model\.routeStates, 'actionPreview'\)\}/u);
+    assert.match(actionRegistryBody, /title="Action Registry Panel"/u);
+    assert.match(actionRegistryBody, /<button type="button" disabled>\{action\.label\.text\}<\/button>/u);
+    assert.doesNotMatch(actionRegistryBody, /onClick=|fetch\(|confirmGoalEventPlan|confirmControlledImplementationRunPlan|window\.open|location\.href/u);
+    assert.match(actionRegistryProjection, /action-manifest\.v1 \+ action-availability\.v1 \+ action-preview\.v1/u);
+    assert.doesNotMatch(actionRegistryProjection, /symphony\s+[^']*--|command\.replace|copyOnlyCommand/u);
   });
 
   it('renders the Active Goal workflow before legacy Workbench information panels', async () => {

@@ -252,6 +252,12 @@ export function WorkbenchShell({
           </section>
 
           <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
+            <ActionRegistryPanel
+              registry={model.activeGoal.actionRegistry}
+              manifestRoute={findRoute(model.routeStates, 'actionManifest')}
+              availabilityRoute={findRoute(model.routeStates, 'actionAvailability')}
+              previewRoute={findRoute(model.routeStates, 'actionPreview')}
+            />
             <NextActionCard
               nextAction={model.activeGoal.nextAction}
               route={findRoute(model.routeStates, 'goalNextAction')}
@@ -2562,6 +2568,142 @@ function NextActionCard({ nextAction, route, onGoalEventConfirmed }) {
   );
 }
 
+function ActionRegistryPanel({
+  registry,
+  manifestRoute,
+  availabilityRoute,
+  previewRoute
+}) {
+  return (
+    <DataPanel
+      id="action-registry-panel"
+      kicker="v34 action registry"
+      title="Action Registry Panel"
+      state={registry?.state ?? 'missing'}
+      route={previewRoute}
+    >
+      <FieldList rows={[
+        ['modelName', registry?.modelName],
+        ['goalId', registry?.goalId],
+        ['taskId', registry?.taskId],
+        ['sourcePolicy', registry?.sourcePolicy],
+        ['actionCount', registry?.actionCount],
+        ['unavailableActionCount', registry?.unavailableActionCount]
+      ]} />
+      <Subsection title="contract routes">
+        <FieldList rows={[
+          ['manifest route', routeLabelState(manifestRoute)],
+          ['availability route', routeLabelState(availabilityRoute)],
+          ['preview route', routeLabelState(previewRoute)],
+          ['manifest state', registry?.routeStates?.manifest],
+          ['availability state', registry?.routeStates?.availability],
+          ['preview state', registry?.routeStates?.preview]
+        ]} />
+      </Subsection>
+      <Subsection title="preview endpoint">
+        <FieldList rows={[
+          ['method', registry?.endpoint?.method],
+          ['route', registry?.endpoint?.route],
+          ['allowedQueryFields', registry?.endpoint?.allowedQueryFields],
+          ['writesInPreview', registry?.endpoint?.writesInPreview],
+          ['genericShellRunner', registry?.endpoint?.genericShellRunner]
+        ]} />
+      </Subsection>
+      <ActionRegistryList actions={registry?.actions} />
+      <Subsection title="boundaries">
+        <FieldList rows={[
+          ['actionExecutionAvailable', registry?.boundaries?.actionExecutionAvailable],
+          ['jobQueueAvailable', registry?.boundaries?.jobQueueAvailable],
+          ['arbitraryCommandExecutionAvailable', registry?.boundaries?.arbitraryCommandExecutionAvailable],
+          ['modelInvocationAvailable', registry?.boundaries?.modelInvocationAvailable],
+          ['gitWriteAvailable', registry?.boundaries?.gitWriteAvailable],
+          ['publishAvailable', registry?.boundaries?.publishAvailable],
+          ['selfApprovalAvailable', registry?.boundaries?.selfApprovalAvailable]
+        ]} />
+      </Subsection>
+      <ActionRegistryBlockers blockers={registry?.blockers} />
+      <p className="panel-note">{registry?.note}</p>
+    </DataPanel>
+  );
+}
+
+function ActionRegistryList({ actions }) {
+  if (actions?.state === 'missing' || actions === undefined || actions === null) {
+    return <EmptyBlock copy="action registry actions 未暴露。" />;
+  }
+
+  if (actions.items.length === 0) {
+    return <EmptyBlock copy="action registry actions 为空。" />;
+  }
+
+  return (
+    <ul className="action-registry-list" aria-label="Backend-declared actions">
+      {actions.items.map((action) => (
+        <li key={action.actionId.text}>
+          <div className="action-button-row">
+            <button type="button" disabled>{action.label.text}</button>
+            <span>{action.state.text}</span>
+          </div>
+          <FieldList rows={[
+            ['actionId', action.actionId],
+            ['scope', action.scope],
+            ['role', action.role],
+            ['previewContract', action.previewContract],
+            ['confirmationContract', action.confirmationContract],
+            ['commandName', action.commandName],
+            ['requiredInputs', action.requiredInputs],
+            ['missingContext', action.missingContext],
+            ['eventTypes', action.eventTypes],
+            ['requiresPlanHash', action.requiresPlanHash],
+            ['writesInPreview', action.writesInPreview],
+            ['writesGoalEventOnConfirm', action.writesGoalEventOnConfirm],
+            ['executionAvailable', action.executionAvailable]
+          ]} />
+          <ActionRegistryReasonList reasons={action.reasons} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ActionRegistryReasonList({ reasons }) {
+  if (!Array.isArray(reasons) || reasons.length === 0) {
+    return <EmptyBlock copy="blocked reasons 为空。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {reasons.map((reason, index) => (
+        <li key={`${reason.code.text}-${index}`}>
+          <span>{reason.code.text}</span>
+          <span>{reason.source.text}</span>
+          <span>{reason.message.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ActionRegistryBlockers({ blockers }) {
+  if (!Array.isArray(blockers) || blockers.length === 0) {
+    return null;
+  }
+
+  return (
+    <Subsection title="blockers">
+      <ul className="compact-list">
+        {blockers.map((blocker, index) => (
+          <li key={`${blocker.code.text}-${index}`}>
+            <span>{blocker.code.text}</span>
+            <span>{blocker.source.text}</span>
+            <span>{blocker.message.text}</span>
+          </li>
+        ))}
+      </ul>
+    </Subsection>
+  );
+}
+
 function PromptPreviewDrawer({ promptPreview, route }) {
   return (
     <aside className="data-panel prompt-preview-drawer" aria-labelledby="prompt-preview-drawer-title">
@@ -4848,6 +4990,10 @@ function FieldList({ rows }) {
       ))}
     </dl>
   );
+}
+
+function routeLabelState(route) {
+  return textValue(route?.path);
 }
 
 function CompactList({ items }) {

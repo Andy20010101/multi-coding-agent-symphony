@@ -786,6 +786,49 @@ h4 {
   user-select: text;
 }
 
+.action-registry-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.action-registry-list > li {
+  min-width: 0;
+  border: 1px solid #d8e0e2;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8faf9;
+}
+
+.action-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.action-button-row button {
+  min-height: 34px;
+  max-width: 100%;
+  border: 1px solid #96a8ad;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #e8eeee;
+  color: #25363d;
+  font-weight: 800;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.action-button-row span {
+  color: #59686e;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .field-options {
   display: flex;
   flex-wrap: wrap;

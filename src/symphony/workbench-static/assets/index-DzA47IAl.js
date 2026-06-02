@@ -9913,6 +9913,7 @@ var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
 var ACTIVE_GOAL_VIEW_MODEL_NAME = "ActiveGoalViewModel";
+var ACTION_REGISTRY_PANEL_MODEL_NAME = "ActionRegistryPanel";
 var ACTIVE_TASK_IMPLEMENTATION_ELIGIBILITY_MODEL_NAME = "ActiveTaskImplementationEligibility";
 var GOAL_EVENT_FORM_MODEL_NAME = "GoalEventRegistrationFormModel";
 var REVIEW_WORKSPACE_MODEL_NAME = "ReviewWorkspaceContextModel";
@@ -10696,6 +10697,9 @@ function projectWorkbenchContracts(results) {
 	const adoptionInspectData = dataFrom(results.adoptionInspect);
 	const controlledImplementationPlanPreviewData = dataFrom(results.controlledImplementationPlanPreview);
 	const capabilitiesData = dataFrom(results.capabilities);
+	const actionManifestData = dataFrom(results.actionManifest);
+	const actionAvailabilityData = dataFrom(results.actionAvailability);
+	const actionPreviewData = dataFrom(results.actionPreview);
 	const diagnosticsData = dataFrom(results.diagnostics);
 	const latestRun = latestRunData?.run ?? null;
 	const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews) ? results.safeArtifactPreviews : [];
@@ -10745,6 +10749,15 @@ function projectWorkbenchContracts(results) {
 		adoptionInspectResult: results.adoptionInspect,
 		adoptionInspect: adoptionInspectData,
 		latestRun
+	});
+	activeGoalControl.actionRegistry = projectActionRegistryPanel({
+		manifestResult: results.actionManifest,
+		manifest: actionManifestData,
+		availabilityResult: results.actionAvailability,
+		availability: actionAvailabilityData,
+		previewResult: results.actionPreview,
+		preview: actionPreviewData,
+		nextAction: goalNextActionData
 	});
 	const routeContext = projectWorkbenchRouteContext({
 		activeGoal: activeGoalControl,
@@ -13321,6 +13334,94 @@ function projectActiveGoalCommandInventory({ goalId, sourceResults }) {
 				command: valueState(command.command.replace("<goal-id>", commandGoalId))
 			};
 		})
+	};
+}
+function projectActionRegistryPanel({ manifestResult, manifest, availabilityResult, availability, previewResult, preview, nextAction }) {
+	const manifestActions = Array.isArray(manifest?.actions) ? manifest.actions : [];
+	const availabilityActions = Array.isArray(availability?.actions) ? availability.actions : [];
+	const previewActions = Array.isArray(preview?.actions) ? preview.actions : [];
+	const actionIds = uniqueNonEmptyStrings([
+		...manifestActions.map((action) => action?.action_id),
+		...availabilityActions.map((action) => action?.action_id),
+		...previewActions.map((action) => action?.action_id)
+	]);
+	const routeStates = {
+		manifest: valueState(routeStateFromResult(manifestResult)),
+		availability: valueState(routeStateFromResult(availabilityResult)),
+		preview: valueState(routeStateFromResult(previewResult))
+	};
+	const unavailableCount = actionIds.filter((actionId) => {
+		const availabilityAction = availabilityActions.find((action) => action?.action_id === actionId);
+		return (previewActions.find((action) => action?.action_id === actionId)?.state ?? availabilityAction?.state) !== "available";
+	}).length;
+	return {
+		state: actionIds.length === 0 ? "missing" : unavailableCount > 0 ? "partial" : "available",
+		modelName: valueState(ACTION_REGISTRY_PANEL_MODEL_NAME),
+		goalId: valueState(firstNonEmptyString(preview?.context?.goalId, availability?.context?.goalId, manifest?.context?.goalId)),
+		taskId: valueState(firstNonEmptyString(preview?.context?.taskId, availability?.context?.taskId, manifest?.context?.taskId, nextAction?.next?.taskId)),
+		sourcePolicy: valueState("action-manifest.v1 + action-availability.v1 + action-preview.v1"),
+		actionCount: valueState(actionIds.length),
+		unavailableActionCount: valueState(unavailableCount),
+		routeStates,
+		endpoint: {
+			method: valueState(preview?.endpoint?.method),
+			route: valueState(preview?.endpoint?.route),
+			allowedQueryFields: arrayTextState(preview?.endpoint?.allowedQueryFields),
+			writesInPreview: valueState(preview?.endpoint?.writesInPreview),
+			genericShellRunner: valueState(preview?.endpoint?.genericShellRunner)
+		},
+		boundaries: {
+			actionExecutionAvailable: valueState(preview?.boundaries?.actionExecutionAvailable ?? availability?.boundaries?.actionExecutionAvailable ?? manifest?.boundaries?.actionExecutionAvailable),
+			jobQueueAvailable: valueState(preview?.boundaries?.jobQueueAvailable ?? availability?.boundaries?.jobQueueAvailable ?? manifest?.boundaries?.jobQueueAvailable),
+			arbitraryCommandExecutionAvailable: valueState(preview?.boundaries?.arbitraryCommandExecutionAvailable ?? availability?.boundaries?.arbitraryCommandExecutionAvailable ?? manifest?.boundaries?.arbitraryCommandExecutionAvailable),
+			modelInvocationAvailable: valueState(preview?.boundaries?.modelInvocationAvailable ?? availability?.boundaries?.modelInvocationAvailable ?? manifest?.boundaries?.modelInvocationAvailable),
+			gitWriteAvailable: valueState(preview?.boundaries?.gitWriteAvailable ?? availability?.boundaries?.gitWriteAvailable ?? manifest?.boundaries?.gitWriteAvailable),
+			publishAvailable: valueState(preview?.boundaries?.publishAvailable ?? availability?.boundaries?.publishAvailable ?? manifest?.boundaries?.publishAvailable),
+			selfApprovalAvailable: valueState(preview?.boundaries?.selfApprovalAvailable ?? availability?.boundaries?.selfApprovalAvailable ?? manifest?.boundaries?.selfApprovalAvailable)
+		},
+		actions: {
+			state: actionIds.length === 0 ? "empty" : "available",
+			items: actionIds.map((actionId) => projectActionRegistryItem({
+				actionId,
+				manifestAction: manifestActions.find((action) => action?.action_id === actionId),
+				availabilityAction: availabilityActions.find((action) => action?.action_id === actionId),
+				previewAction: previewActions.find((action) => action?.action_id === actionId)
+			}))
+		},
+		blockers: Array.isArray(preview?.blockers) ? preview.blockers.map((blocker) => ({
+			code: valueState(blocker?.code),
+			message: valueState(blocker?.message),
+			source: valueState(blocker?.source)
+		})) : [],
+		note: "ActionRegistryPanel renders backend-declared actions from action-manifest, action-availability, and action-preview contracts only; it does not synthesize shell commands or attach execution handlers."
+	};
+}
+function projectActionRegistryItem({ actionId, manifestAction, availabilityAction, previewAction }) {
+	const reasons = Array.isArray(previewAction?.reasons) ? previewAction.reasons : Array.isArray(availabilityAction?.reasons) ? availabilityAction.reasons : [];
+	const requiredConfirmation = previewAction?.requiredConfirmation ?? {};
+	const capability = previewAction?.capability ?? {};
+	const impactPreview = previewAction?.impactPreview ?? {};
+	return {
+		actionId: valueState(actionId),
+		label: valueState(previewAction?.label ?? availabilityAction?.label ?? manifestAction?.label),
+		scope: valueState(previewAction?.scope ?? availabilityAction?.scope ?? manifestAction?.scope),
+		role: valueState(previewAction?.role ?? availabilityAction?.role ?? manifestAction?.role),
+		state: valueState(previewAction?.state ?? availabilityAction?.state ?? manifestAction?.availability?.defaultState),
+		previewContract: valueState(capability.previewContract ?? manifestAction?.capabilityPreview?.contractName),
+		confirmationContract: valueState(requiredConfirmation.confirmationContract ?? manifestAction?.eventMapping?.confirmationContract),
+		commandName: valueState(requiredConfirmation.commandName ?? manifestAction?.eventMapping?.commandName),
+		requiredInputs: arrayTextState(requiredConfirmation.requiredInputs ?? availabilityAction?.requiredInputs),
+		missingContext: arrayTextState(previewAction?.missingContext ?? availabilityAction?.missingContext),
+		eventTypes: arrayTextState(requiredConfirmation.eventTypes ?? [manifestAction?.eventMapping?.primaryEventType, ...Array.isArray(manifestAction?.eventMapping?.alternateEventTypes) ? manifestAction.eventMapping.alternateEventTypes : []].filter((eventType) => eventType !== null && eventType !== void 0)),
+		requiresPlanHash: valueState(requiredConfirmation.requiresPlanHash),
+		writesInPreview: valueState(impactPreview.writesInPreview),
+		writesGoalEventOnConfirm: valueState(impactPreview.writesGoalEventOnConfirm),
+		executionAvailable: valueState(impactPreview.executionAvailable ?? manifestAction?.execution?.enabled),
+		reasons: reasons.map((reason) => ({
+			code: valueState(reason?.code),
+			message: valueState(reason?.message),
+			source: valueState(reason?.source)
+		}))
 	};
 }
 function projectSubagentHandoffBoard({ progressResult, progress, eventsResult, eventLog, nextResult, nextAction, closeoutResult, closeout } = {}) {
@@ -17210,6 +17311,9 @@ function isNonEmptyString(value) {
 function firstNonEmptyString(...values) {
 	return values.find((value) => isNonEmptyString(value));
 }
+function uniqueNonEmptyStrings(values) {
+	return Array.from(new Set(values.filter((value) => isNonEmptyString(value))));
+}
 function firstValue(...statesOrValues) {
 	for (const candidate of statesOrValues) {
 		const value = candidate !== null && typeof candidate === "object" && "value" in candidate ? candidate.value : candidate;
@@ -18228,6 +18332,12 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					className: "active-goal-grid",
 					"aria-label": "v20 Active Goal supporting contracts",
 					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActionRegistryPanel, {
+							registry: model.activeGoal.actionRegistry,
+							manifestRoute: findRoute(model.routeStates, "actionManifest"),
+							availabilityRoute: findRoute(model.routeStates, "actionAvailability"),
+							previewRoute: findRoute(model.routeStates, "actionPreview")
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
 							nextAction: model.activeGoal.nextAction,
 							route: findRoute(model.routeStates, "goalNextAction"),
@@ -20529,6 +20639,123 @@ function NextActionCard({ nextAction, route, onGoalEventConfirmed }) {
 		]
 	});
 }
+function ActionRegistryPanel({ registry, manifestRoute, availabilityRoute, previewRoute }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "action-registry-panel",
+		kicker: "v34 action registry",
+		title: "Action Registry Panel",
+		state: registry?.state ?? "missing",
+		route: previewRoute,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", registry?.modelName],
+				["goalId", registry?.goalId],
+				["taskId", registry?.taskId],
+				["sourcePolicy", registry?.sourcePolicy],
+				["actionCount", registry?.actionCount],
+				["unavailableActionCount", registry?.unavailableActionCount]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "contract routes",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["manifest route", routeLabelState(manifestRoute)],
+					["availability route", routeLabelState(availabilityRoute)],
+					["preview route", routeLabelState(previewRoute)],
+					["manifest state", registry?.routeStates?.manifest],
+					["availability state", registry?.routeStates?.availability],
+					["preview state", registry?.routeStates?.preview]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "preview endpoint",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["method", registry?.endpoint?.method],
+					["route", registry?.endpoint?.route],
+					["allowedQueryFields", registry?.endpoint?.allowedQueryFields],
+					["writesInPreview", registry?.endpoint?.writesInPreview],
+					["genericShellRunner", registry?.endpoint?.genericShellRunner]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActionRegistryList, { actions: registry?.actions }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["actionExecutionAvailable", registry?.boundaries?.actionExecutionAvailable],
+					["jobQueueAvailable", registry?.boundaries?.jobQueueAvailable],
+					["arbitraryCommandExecutionAvailable", registry?.boundaries?.arbitraryCommandExecutionAvailable],
+					["modelInvocationAvailable", registry?.boundaries?.modelInvocationAvailable],
+					["gitWriteAvailable", registry?.boundaries?.gitWriteAvailable],
+					["publishAvailable", registry?.boundaries?.publishAvailable],
+					["selfApprovalAvailable", registry?.boundaries?.selfApprovalAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActionRegistryBlockers, { blockers: registry?.blockers }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: registry?.note
+			})
+		]
+	});
+}
+function ActionRegistryList({ actions }) {
+	if (actions?.state === "missing" || actions === void 0 || actions === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "action registry actions 未暴露。" });
+	if (actions.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "action registry actions 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "action-registry-list",
+		"aria-label": "Backend-declared actions",
+		children: actions.items.map((action) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "action-button-row",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					disabled: true,
+					children: action.label.text
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: action.state.text })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["actionId", action.actionId],
+				["scope", action.scope],
+				["role", action.role],
+				["previewContract", action.previewContract],
+				["confirmationContract", action.confirmationContract],
+				["commandName", action.commandName],
+				["requiredInputs", action.requiredInputs],
+				["missingContext", action.missingContext],
+				["eventTypes", action.eventTypes],
+				["requiresPlanHash", action.requiresPlanHash],
+				["writesInPreview", action.writesInPreview],
+				["writesGoalEventOnConfirm", action.writesGoalEventOnConfirm],
+				["executionAvailable", action.executionAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActionRegistryReasonList, { reasons: action.reasons })
+		] }, action.actionId.text))
+	});
+}
+function ActionRegistryReasonList({ reasons }) {
+	if (!Array.isArray(reasons) || reasons.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "blocked reasons 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: reasons.map((reason, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: reason.code.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: reason.source.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: reason.message.text })
+		] }, `${reason.code.text}-${index}`))
+	});
+}
+function ActionRegistryBlockers({ blockers }) {
+	if (!Array.isArray(blockers) || blockers.length === 0) return null;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "blockers",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "compact-list",
+			children: blockers.map((blocker, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: blocker.code.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: blocker.source.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: blocker.message.text })
+			] }, `${blocker.code.text}-${index}`))
+		})
+	});
+}
 function PromptPreviewDrawer({ promptPreview, route }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
 		className: "data-panel prompt-preview-drawer",
@@ -22755,6 +22982,9 @@ function FieldList({ rows }) {
 			})]
 		}, label))
 	});
+}
+function routeLabelState(route) {
+	return textValue(route?.path);
 }
 function CompactList({ items }) {
 	const normalizedItems = Array.isArray(items) ? items.filter((item) => typeof item === "string" && item.trim() !== "") : [];

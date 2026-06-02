@@ -124,6 +124,37 @@ describe('v15 Workbench read-only API client', () => {
     );
   });
 
+  it('projects the Workbench Action Registry panel from backend action contracts only', () => {
+    const manifest = createActionManifestPayload();
+    const availability = createActionAvailabilityPayload();
+    const preview = createActionPreviewPayload();
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', createV19RunbookPayload()),
+      goalNextAction: createWorkbenchResult('goalNextAction', createV19NextActionPayload()),
+      actionManifest: createWorkbenchResult('actionManifest', manifest),
+      actionAvailability: createWorkbenchResult('actionAvailability', availability),
+      actionPreview: createWorkbenchResult('actionPreview', preview)
+    });
+    const panel = model.activeGoal.actionRegistry;
+    const action = panel.actions.items[0];
+
+    assert.equal(panel.modelName.value, 'ActionRegistryPanel');
+    assert.equal(panel.sourcePolicy.value, 'action-manifest.v1 + action-availability.v1 + action-preview.v1');
+    assert.equal(panel.actionCount.value, 1);
+    assert.equal(panel.endpoint.route.value, '/api/actions/preview');
+    assert.equal(panel.endpoint.writesInPreview.value, false);
+    assert.equal(panel.boundaries.actionExecutionAvailable.value, false);
+    assert.equal(panel.boundaries.arbitraryCommandExecutionAvailable.value, false);
+    assert.equal(action.actionId.value, 'goal.worker-evidence.record');
+    assert.equal(action.label.value, 'Record worker evidence');
+    assert.equal(action.previewContract.value, 'action-capability-preview.v1');
+    assert.equal(action.confirmationContract.value, 'goal-update-plan.v1');
+    assert.equal(action.commandName.value, 'symphony goal update');
+    assert.equal(action.requiresPlanHash.value, true);
+    assert.equal(action.writesInPreview.value, false);
+    assert.equal(action.executionAvailable.value, false);
+  });
+
   it('uses GET for every client request', async () => {
     const calls = [];
     const fetchImpl = async (path, init) => {
@@ -4178,6 +4209,177 @@ function createWorkbenchResult(routeId, data) {
     routeDescriptor: route,
     httpStatus: 200,
     data
+  };
+}
+
+function createActionManifestPayload() {
+  return {
+    contractName: 'action-manifest.v1',
+    contractVersion: 1,
+    readOnly: true,
+    context: {
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      sourceContracts: ['goal-runbook.v1'],
+      stateSource: 'explicit-backend-contracts'
+    },
+    actions: [{
+      action_id: 'goal.worker-evidence.record',
+      label: 'Record worker evidence',
+      scope: 'active-task',
+      role: 'worker',
+      availability: {
+        defaultState: 'preview-required',
+        resolverContract: 'action-availability.v1',
+        requiredContext: ['goalId', 'taskId', 'workerEvidenceRef']
+      },
+      capabilityPreview: {
+        contractName: 'action-capability-preview.v1',
+        sideEffectsInPreview: false,
+        requiredBeforeConfirm: true
+      },
+      eventMapping: {
+        commandName: 'symphony goal update',
+        primaryEventType: 'worker.evidence-recorded',
+        alternateEventTypes: [],
+        confirmationContract: 'goal-update-plan.v1',
+        appendOnlyOnConfirm: true
+      },
+      evidenceExpectations: {
+        required: true,
+        evidenceRefField: 'workerEvidenceRef',
+        bodyReadAvailable: false
+      },
+      execution: {
+        enabled: false
+      }
+    }],
+    boundaries: {
+      actionExecutionAvailable: false,
+      jobQueueAvailable: false,
+      arbitraryCommandExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      gitWriteAvailable: false,
+      publishAvailable: false,
+      selfApprovalAvailable: false
+    }
+  };
+}
+
+function createActionAvailabilityPayload() {
+  return {
+    contractName: 'action-availability.v1',
+    contractVersion: 1,
+    readOnly: true,
+    context: {
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      sourceContracts: ['action-manifest.v1'],
+      nextAction: createV19NextActionPayload().next,
+      currentTask: null,
+      evidenceState: {}
+    },
+    actions: [{
+      action_id: 'goal.worker-evidence.record',
+      label: 'Record worker evidence',
+      scope: 'active-task',
+      role: 'worker',
+      state: 'available',
+      reasons: [],
+      requiredContext: ['goalId', 'taskId', 'workerEvidenceRef'],
+      missingContext: [],
+      requiredInputs: ['workerEvidenceRef'],
+      eventMapping: {
+        commandName: 'symphony goal update',
+        primaryEventType: 'worker.evidence-recorded',
+        alternateEventTypes: [],
+        confirmationContract: 'goal-update-plan.v1',
+        appendOnlyOnConfirm: true
+      },
+      evidenceExpectations: {
+        required: true,
+        evidenceRefField: 'workerEvidenceRef'
+      },
+      preview: {
+        contractName: 'action-capability-preview.v1'
+      },
+      execution: {
+        enabled: false
+      }
+    }],
+    blockers: [],
+    boundaries: {
+      actionExecutionAvailable: false,
+      jobQueueAvailable: false,
+      arbitraryCommandExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      gitWriteAvailable: false,
+      publishAvailable: false,
+      selfApprovalAvailable: false
+    }
+  };
+}
+
+function createActionPreviewPayload() {
+  return {
+    contractName: 'action-preview.v1',
+    contractVersion: 1,
+    readOnly: true,
+    context: {
+      goalId: V19_GOAL_ID,
+      taskId: 'task-6',
+      actionId: null,
+      sourceContracts: ['action-manifest.v1', 'action-availability.v1'],
+      stateSource: 'explicit-backend-contracts',
+      nextAction: createV19NextActionPayload().next,
+      evidenceState: {}
+    },
+    actions: [{
+      action_id: 'goal.worker-evidence.record',
+      label: 'Record worker evidence',
+      scope: 'active-task',
+      role: 'worker',
+      state: 'available',
+      reasons: [],
+      requiredContext: ['goalId', 'taskId', 'workerEvidenceRef'],
+      missingContext: [],
+      requiredInputs: ['workerEvidenceRef'],
+      capability: {
+        previewContract: 'action-capability-preview.v1',
+        confirmationContract: 'goal-update-plan.v1'
+      },
+      requiredConfirmation: {
+        commandName: 'symphony goal update',
+        confirmationContract: 'goal-update-plan.v1',
+        requiredInputs: ['workerEvidenceRef'],
+        eventTypes: ['worker.evidence-recorded'],
+        requiresPlanHash: true
+      },
+      impactPreview: {
+        writesInPreview: false,
+        writesGoalEventOnConfirm: true,
+        executionAvailable: false
+      }
+    }],
+    capabilities: [],
+    requiredConfirmations: [],
+    blockers: [],
+    endpoint: {
+      method: 'GET',
+      route: '/api/actions/preview',
+      allowedQueryFields: ['goal', 'task', 'action'],
+      writesInPreview: false,
+      genericShellRunner: false
+    },
+    boundaries: {
+      actionExecutionAvailable: false,
+      jobQueueAvailable: false,
+      arbitraryCommandExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      gitWriteAvailable: false,
+      publishAvailable: false,
+      selfApprovalAvailable: false
+    }
   };
 }
 

@@ -312,6 +312,8 @@ availability 从 `action-manifest.v1`、`goal-progress-ledger.v1` 和 `goal-next
 
 preview 从 `action-availability.v1` 生成 action 影响说明、capability preview、required confirmation 和 endpoint safety。preview route 只接受 `goal`、`task` 和 `action`，不接受 command、path、confirm、planHash、prompt 或任意本地路径；`action` 只是过滤已声明 action id，不执行 action。
 
+Workbench 的 Active Goal 区域渲染 `Action Registry Panel`。面板条目来自 `action-manifest.v1`、`action-availability.v1` 和 `action-preview.v1`，按钮 label 使用后端 action label；按钮不绑定执行 handler，不拼 shell command，不触发 confirm。可执行状态、required input、planHash 要求、impact preview 和 boundary 都来自 backend contract 字段。
+
 action preview 当前字段：
 
 - `action_id`
