@@ -752,6 +752,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.deepEqual(apiPaths, [
       '/api/actions/availability',
       '/api/actions/manifest',
+      '/api/actions/preview',
       '/api/adoptions/<adoption-id>/inspect',
       '/api/capabilities',
       '/api/diagnostics',

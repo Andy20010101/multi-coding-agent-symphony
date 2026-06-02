@@ -164,6 +164,7 @@ GET /api/goals/<goal-id>/closeout
 GET /api/capabilities
 GET /api/actions/manifest
 GET /api/actions/availability
+GET /api/actions/preview
 GET /api/diagnostics
 ```
 
@@ -281,7 +282,7 @@ stale runtime snapshot：
 
 invalid query / API request：
 
-`/api/health` 和 `/api/projects` 不接受 query；`/api/projects/current` 只接受 `repoPath`；`/api/runtime/snapshot` 只接受 `repoPath` 和 `goal`；`/api/actions/manifest` 和 `/api/actions/availability` 只接受 `goal` 和 `task`。未知 query、非 GET、任意 path、confirm 或 command 字段应返回 `error-envelope.v1` 或 `405`。恢复方式是改用上面列出的受控 CLI/API shape。
+`/api/health` 和 `/api/projects` 不接受 query；`/api/projects/current` 只接受 `repoPath`；`/api/runtime/snapshot` 只接受 `repoPath` 和 `goal`；`/api/actions/manifest` 和 `/api/actions/availability` 只接受 `goal` 和 `task`；`/api/actions/preview` 只接受 `goal`、`task` 和 `action`。未知 query、非 GET、任意 path、confirm 或 command 字段应返回 `error-envelope.v1` 或 `405`。恢复方式是改用上面列出的受控 CLI/API shape。
 
 release-ready not declared：
 
@@ -291,68 +292,46 @@ release-ready not declared：
 
 v34 的目标是声明可用 actions 和 permission preview，不创建 job、不执行 action。v33 交给 v34 的输入是 `app-state-snapshot.v1`、`goal-progress-ledger.v1`、`goal-next-action.v1`、`goal-runbook.v1`、`goal-event-log.v1`、`goal-operation-runs.v1` 和 Workbench capability flags。
 
-task-1 已实现 `action-manifest.v1`，task-2 已实现 `action-availability.v1`：
+task-1 已实现 `action-manifest.v1`，task-2 已实现 `action-availability.v1`，task-3 已实现 `action-preview.v1`：
 
 ```text
 GET /api/actions/manifest
 GET /api/actions/manifest?goal=<goal-id>&task=<task-id>
 GET /api/actions/availability
 GET /api/actions/availability?goal=<goal-id>&task=<task-id>
+GET /api/actions/preview
+GET /api/actions/preview?goal=<goal-id>&task=<task-id>&action=<action-id>
 pnpm --silent symphony actions manifest --goal <goal-id> --task <task-id> --json
 pnpm --silent symphony actions availability --goal <goal-id> --task <task-id> --json
+pnpm --silent symphony actions preview --goal <goal-id> --task <task-id> --action <action-id> --json
 ```
 
 manifest 只声明 `action_id`、label、scope、availability resolver、capability preview contract、event mapping 和 evidence expectations。它不执行 action、不创建 job、不追加 goal event、不读取 evidence 正文、不调用模型、不读任意本地路径、不合并、不 push、不 tag、不发布。
 
 availability 从 `action-manifest.v1`、`goal-progress-ledger.v1` 和 `goal-next-action.v1` 计算每个 action 的 `available`、`unavailable` 或 `blocked` 状态，并返回 `reasons`、`missingContext` 和 `requiredInputs`。`requiredInputs` 是操作者需要填写的字段，比如 evidence ref；它不是后端状态缺失，也不会被当作文件读取。availability route 只接受 `goal` 和 `task`，不接受 command、path、confirm、planHash 或任意本地路径。
 
-action manifest 建议字段：
+preview 从 `action-availability.v1` 生成 action 影响说明、capability preview、required confirmation 和 endpoint safety。preview route 只接受 `goal`、`task` 和 `action`，不接受 command、path、confirm、planHash、prompt 或任意本地路径；`action` 只是过滤已声明 action id，不执行 action。
+
+action preview 当前字段：
 
 - `action_id`
-- `title`
-- `description`
-- `category`
-- `source_contract`
-- `goal_id`
-- `task_id`
-- `role`
-- `phase`
-- `preconditions`
-- `required_inputs`
-- `copy_only_command`
-- `dry_run_available`
-- `confirm_available`
-- `writes_scope`
-- `event_mapping`
-- `evidence_ref_policy`
-- `unsupported_reason`
+- `state`
+- `capability.previewContract`
+- `capability.confirmationContract`
+- `requiredConfirmation.requiredInputs`
+- `requiredConfirmation.requiresPlanHash`
+- `impactPreview.writesInPreview`
+- `impactPreview.writesGoalEventOnConfirm`
+- `boundaries.actionExecutionAvailable`
 
-permission preview 建议字段：
-
-- `permission_preview_id`
-- `action_id`
-- `read_paths`
-- `write_paths`
-- `network_access`
-- `model_invocation`
-- `git_write`
-- `release_write`
-- `job_creation`
-- `artifact_download`
-- `local_file_open`
-- `risk_level`
-- `requires_plan_hash`
-- `requires_operator_confirm`
-- `blocked_reasons`
-
-available actions API shape：
+preview API shape：
 
 ```text
-GET /api/actions/available?goal=<goal-id>&task=<task-id>
-symphony actions available --goal <goal-id> --task <task-id> --json
+GET /api/actions/preview?goal=<goal-id>&task=<task-id>&action=<action-id>
+symphony actions preview --goal <goal-id> --task <task-id> --action <action-id> --json
 ```
 
-建议 response 使用 `available-actions.v1`，包含 `contractName`、`contractVersion`、`goalId`、`taskId`、`generatedAt`、`sourceSnapshotRef`、`actions`、`permissionPreviews`、`knownBlockers` 和 `boundaries`。v34 阶段 `boundaries.jobExecutionAvailable`、`actionExecutionAvailable`、`modelInvocationAvailable`、`gitWriteAvailable` 和 `releaseWriteAvailable` 仍为 `false`，直到后续版本显式设计 job queue 和 execution confirm。
+response 使用 `action-preview.v1`，包含 `contractName`、`contractVersion`、`context`、`actions`、`capabilities`、`requiredConfirmations`、`blockers`、`endpoint` 和 `boundaries`。v34 阶段 `boundaries.jobQueueAvailable`、`actionExecutionAvailable`、`modelInvocationAvailable`、`gitWriteAvailable`、`publishAvailable` 和 `selfApprovalAvailable` 仍为 `false`，直到后续版本显式设计 job queue 和 execution confirm。
 
 第一批 candidate actions：
 

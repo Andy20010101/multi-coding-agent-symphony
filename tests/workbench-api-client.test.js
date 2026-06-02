@@ -80,6 +80,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/capabilities', 'capabilities.v1'],
         ['GET', '/api/actions/manifest', 'action-manifest.v1'],
         ['GET', '/api/actions/availability', 'action-availability.v1'],
+        ['GET', '/api/actions/preview', 'action-preview.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1']
       ]
     );
@@ -104,6 +105,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/capabilities', 'capabilities.v1'],
         ['GET', '/api/actions/manifest', 'action-manifest.v1'],
         ['GET', '/api/actions/availability', 'action-availability.v1'],
+        ['GET', '/api/actions/preview', 'action-preview.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
@@ -5307,6 +5309,34 @@ function createV17ReadonlyPayloadEntries({
       },
       actions: [],
       blockers: [],
+      boundaries: {
+        actionExecutionAvailable: false
+      }
+    }],
+    ['/api/actions/preview', {
+      contractName: 'action-preview.v1',
+      contractVersion: 1,
+      readOnly: true,
+      context: {
+        goalId: 'latest',
+        taskId: null,
+        actionId: null,
+        sourceContracts: ['action-manifest.v1', 'action-availability.v1'],
+        stateSource: 'explicit-backend-contracts',
+        nextAction: {
+          status: 'missing-runbook'
+        },
+        evidenceState: {}
+      },
+      actions: [],
+      capabilities: [],
+      requiredConfirmations: [],
+      blockers: [],
+      endpoint: {
+        method: 'GET',
+        route: '/api/actions/preview',
+        writesInPreview: false
+      },
       boundaries: {
         actionExecutionAvailable: false
       }

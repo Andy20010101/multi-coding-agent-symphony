@@ -26,6 +26,9 @@ import {
   validateActionAvailabilityContract
 } from '../src/symphony/action-availability.js';
 import {
+  validateActionPreviewContract
+} from '../src/symphony/action-preview.js';
+import {
   validateDiagnosticsContract
 } from '../src/symphony/diagnostics.js';
 import {
@@ -442,6 +445,21 @@ describe('v16 Workbench route smoke and server parity', () => {
           }
         },
         {
+          path: '/api/actions/preview?goal=v34-action-registry-workspace&task=task-1&action=goal.worker-evidence.record',
+          contractName: 'action-preview.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateActionPreviewContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.context.goalId, 'v34-action-registry-workspace');
+            assert.equal(payload.context.taskId, 'task-1');
+            assert.equal(payload.context.actionId, 'goal.worker-evidence.record');
+            assert.equal(payload.endpoint.writesInPreview, false);
+            assert.equal(payload.boundaries.actionExecutionAvailable, false);
+          }
+        },
+        {
           path: '/api/diagnostics',
           contractName: 'diagnostics.v1',
           assertPayload(payload) {
@@ -559,6 +577,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/capabilities',
         '/api/actions/manifest',
         '/api/actions/availability',
+        '/api/actions/preview',
         '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
       ];

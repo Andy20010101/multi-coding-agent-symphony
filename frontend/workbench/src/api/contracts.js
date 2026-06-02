@@ -22,6 +22,7 @@ const APP_STATE_SNAPSHOT_CONTRACT_NAME = 'app-state-snapshot.v1';
 const CAPABILITIES_CONTRACT_NAME = 'capabilities.v1';
 const ACTION_MANIFEST_CONTRACT_NAME = 'action-manifest.v1';
 const ACTION_AVAILABILITY_CONTRACT_NAME = 'action-availability.v1';
+const ACTION_PREVIEW_CONTRACT_NAME = 'action-preview.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
@@ -468,6 +469,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/actions/availability',
     method: 'GET',
     contractName: ACTION_AVAILABILITY_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'actionPreview',
+    label: 'Action Preview',
+    path: '/api/actions/preview',
+    method: 'GET',
+    contractName: ACTION_PREVIEW_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'diagnostics',

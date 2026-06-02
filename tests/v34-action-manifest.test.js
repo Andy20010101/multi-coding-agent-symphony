@@ -13,6 +13,10 @@ import {
   buildActionAvailabilityContract,
   validateActionAvailabilityContract
 } from '../src/symphony/action-availability.js';
+import {
+  buildActionPreviewContract,
+  validateActionPreviewContract
+} from '../src/symphony/action-preview.js';
 import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 
 describe('v34 action-manifest.v1 contract', () => {
@@ -79,7 +83,7 @@ describe('v34 action-manifest.v1 contract', () => {
     });
 
     assert.equal(rejectedExitCode, 64);
-    assert.match(rejectedOutput.stderrText(), /actions manifest is read-only/u);
+    assert.match(rejectedOutput.stderrText(), /actions contracts are read-only/u);
 
     const unsafeOutput = createOutput();
     const unsafeExitCode = await runSymphonyCli({
@@ -123,6 +127,151 @@ describe('v34 action-manifest.v1 contract', () => {
       assert.equal((await postResponse.json()).error.code, 'method-not-allowed');
     } finally {
       await closeServer(server);
+    }
+  });
+});
+
+describe('v34 action-preview.v1 contract', () => {
+  it('validates the fixture and rejects preview execution drift', async () => {
+    const fixture = JSON.parse(await readFile('fixtures/contracts/action-preview.v1.json', 'utf8'));
+
+    assert.deepEqual(validateActionPreviewContract(fixture), {
+      ok: true,
+      errors: []
+    });
+
+    const drift = structuredClone(fixture);
+    drift.actions[0].capability.executionEnabled = true;
+    drift.actions[0].impactPreview.writesInPreview = true;
+    drift.endpoint.writesInPreview = true;
+    drift.boundaries.actionExecutionAvailable = true;
+
+    const errors = validateActionPreviewContract(drift).errors;
+
+    assert.equal(errors.includes('actions[0].capability.executionEnabled must be false'), true);
+    assert.equal(errors.includes('actions[0].impactPreview.writesInPreview must be false'), true);
+    assert.equal(errors.includes('endpoint.writesInPreview must be false'), true);
+    assert.equal(errors.includes('boundaries.actionExecutionAvailable must be false'), true);
+  });
+
+  it('resolves a read-only action preview from availability and manifest contracts', async () => {
+    const stateDir = await registerV34GoalFixture();
+
+    try {
+      const preview = await buildActionPreviewContract({
+        stateDir,
+        goalId: 'v34-action-registry-workspace',
+        taskId: 'task-1',
+        actionId: 'goal.worker-evidence.record',
+        generatedAt: '2026-06-02T00:00:00.000Z'
+      });
+
+      assert.deepEqual(validateActionPreviewContract(preview), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(preview.actions.length, 1);
+      assert.equal(preview.actions[0].state, 'available');
+      assert.equal(preview.actions[0].capability.previewContract, 'action-capability-preview.v1');
+      assert.equal(preview.actions[0].requiredConfirmation.confirmationContract, 'goal-update-plan.v1');
+      assert.deepEqual(preview.actions[0].requiredConfirmation.requiredInputs, ['workerEvidenceRef']);
+      assert.equal(preview.actions[0].impactPreview.writesInPreview, false);
+      assert.equal(preview.actions[0].impactPreview.writesGoalEventOnConfirm, true);
+      assert.equal(preview.boundaries.actionExecutionAvailable, false);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exposes a read-only CLI preview contract and rejects unsafe or misplaced action input', async () => {
+    const stateDir = await registerV34GoalFixture();
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: [
+          'actions',
+          'preview',
+          '--state-dir',
+          stateDir,
+          '--goal',
+          'v34-action-registry-workspace',
+          '--task',
+          'task-1',
+          '--action',
+          'goal.worker-evidence.record',
+          '--json'
+        ],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const preview = JSON.parse(output.stdoutText());
+
+      assert.deepEqual(validateActionPreviewContract(preview), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(preview.context.actionId, 'goal.worker-evidence.record');
+      assert.equal(preview.actions[0].requiredConfirmation.requiresPlanHash, true);
+
+      const unsafeOutput = createOutput();
+      const unsafeExitCode = await runSymphonyCli({
+        argv: ['actions', 'preview', '--action', '../run', '--json'],
+        stdout: unsafeOutput.stdout,
+        stderr: unsafeOutput.stderr
+      });
+
+      assert.equal(unsafeExitCode, 64);
+      assert.match(unsafeOutput.stderrText(), /safe action id/u);
+
+      const misplacedOutput = createOutput();
+      const misplacedExitCode = await runSymphonyCli({
+        argv: ['actions', 'manifest', '--action', 'goal.worker-evidence.record', '--json'],
+        stdout: misplacedOutput.stdout,
+        stderr: misplacedOutput.stderr
+      });
+
+      assert.equal(misplacedExitCode, 64);
+      assert.match(misplacedOutput.stderrText(), /preview subcommand/u);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('serves the Workbench preview route and rejects unsupported query parameters', async () => {
+    const stateDir = await registerV34GoalFixture();
+    const server = createSymphonyConsoleServer({ stateDir });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const previewResponse = await fetch(`${baseUrl}/api/actions/preview?goal=v34-action-registry-workspace&task=task-1&action=goal.worker-evidence.record`);
+      const invalidResponse = await fetch(`${baseUrl}/api/actions/preview?command=run`);
+      const unsafeResponse = await fetch(`${baseUrl}/api/actions/preview?action=..%2Frun`);
+      const postResponse = await fetch(`${baseUrl}/api/actions/preview`, { method: 'POST' });
+
+      assert.equal(previewResponse.status, 200);
+      assert.equal(invalidResponse.status, 400);
+      assert.equal(unsafeResponse.status, 400);
+      assert.equal(postResponse.status, 405);
+
+      const preview = await previewResponse.json();
+
+      assert.deepEqual(validateActionPreviewContract(preview), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(preview.context.actionId, 'goal.worker-evidence.record');
+      assert.equal(preview.endpoint.writesInPreview, false);
+      assert.equal((await invalidResponse.json()).error.code, 'invalid-action-preview-request');
+      assert.equal((await unsafeResponse.json()).error.code, 'invalid-action-preview-request');
+      assert.equal((await postResponse.json()).error.code, 'method-not-allowed');
+    } finally {
+      await closeServer(server);
+      await rm(stateDir, { recursive: true, force: true });
     }
   });
 });

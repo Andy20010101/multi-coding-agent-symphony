@@ -32,6 +32,10 @@ import {
   buildActionAvailabilityContract
 } from '../src/symphony/action-availability.js';
 import {
+  buildActionPreviewContract,
+  isSafeActionPreviewId
+} from '../src/symphony/action-preview.js';
+import {
   buildProjectRegistry,
   resolveCurrentProject
 } from '../src/symphony/project-registry.js';
@@ -1916,6 +1920,23 @@ async function runSymphonyActions({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
+  if (options.subcommand === 'preview') {
+    const preview = await buildActionPreviewContract({
+      stateDir: options.stateDir,
+      goalId: options.goalId,
+      taskId: options.taskId,
+      actionId: options.actionId
+    });
+
+    if (options.json) {
+      writeJson(stdout, preview);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderActionPreviewText(preview));
+    return EXIT_CODES.ok;
+  }
+
   const manifest = buildActionManifestContract({
     goalId: options.goalId,
     taskId: options.taskId
@@ -2048,6 +2069,29 @@ function renderActionAvailabilityText(availability) {
     for (const item of action.reasons) {
       lines.push(`  ${item.code}: ${item.message}`);
     }
+  }
+
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function renderActionPreviewText(preview) {
+  const lines = [
+    `Action preview: ${preview.context.goalId}`,
+    `Task: ${preview.context.taskId ?? 'none'}`,
+    `Action: ${preview.context.actionId ?? 'all'}`,
+    `Actions: ${preview.actions.length}`
+  ];
+
+  for (const action of preview.actions) {
+    lines.push(`- ${action.action_id}: ${action.state}`);
+    lines.push(`  preview: ${action.capability.previewContract}`);
+    lines.push(`  confirm: ${action.requiredConfirmation.confirmationContract}`);
+  }
+
+  for (const blocker of preview.blockers) {
+    lines.push(`blocker ${blocker.code}: ${blocker.message}`);
   }
 
   lines.push('');
@@ -3644,6 +3688,7 @@ function parseActionsArgs(args) {
     subcommand: null,
     goalId: 'latest',
     taskId: null,
+    actionId: null,
     stateDir: '.symphony',
     json: false,
     help: false
@@ -3674,6 +3719,12 @@ function parseActionsArgs(args) {
       continue;
     }
 
+    if (value === '--action') {
+      options.actionId = readRequiredValue(args, index, '--action');
+      index += 1;
+      continue;
+    }
+
     if (value === '--state-dir') {
       options.stateDir = readRequiredValue(args, index, '--state-dir');
       index += 1;
@@ -3681,7 +3732,7 @@ function parseActionsArgs(args) {
     }
 
     if (value === '--output' || value === '-o') {
-      throw new UsageError('actions manifest is read-only; redirect stdout if you need a file');
+      throw new UsageError('actions contracts are read-only; redirect stdout if you need a file');
     }
 
     if (value.startsWith('--')) {
@@ -3697,12 +3748,20 @@ function parseActionsArgs(args) {
 
   options.subcommand ??= 'manifest';
 
-  if (!['manifest', 'availability'].includes(options.subcommand)) {
-    throw new UsageError('actions subcommand must be manifest or availability');
+  if (!['manifest', 'availability', 'preview'].includes(options.subcommand)) {
+    throw new UsageError('actions subcommand must be manifest, availability, or preview');
   }
 
   if (isUnsafeActionsContextRef(options.goalId) || (options.taskId !== null && isUnsafeActionsContextRef(options.taskId))) {
-    throw new UsageError('actions manifest goal and task values must be safe refs');
+    throw new UsageError('actions goal and task values must be safe refs');
+  }
+
+  if (!isSafeActionPreviewId(options.actionId)) {
+    throw new UsageError('actions preview action value must be a safe action id');
+  }
+
+  if (options.actionId !== null && options.subcommand !== 'preview') {
+    throw new UsageError('actions --action is supported only by the preview subcommand');
   }
 
   return options;
@@ -3712,8 +3771,9 @@ function actionsHelpText() {
   return [
     'Usage: symphony actions manifest [--goal <goal-id>] [--task <task-id>] [--json]',
     '       symphony actions availability [--goal <goal-id>] [--task <task-id>] [--state-dir <path>] [--json]',
+    '       symphony actions preview [--goal <goal-id>] [--task <task-id>] [--action <action-id>] [--state-dir <path>] [--json]',
     '',
-    'Prints the read-only v34 action manifest and availability contracts.',
+    'Prints the read-only v34 action manifest, availability, and preview contracts.',
     'The commands do not execute actions, create jobs, call models, read arbitrary files, or change git state.',
     ''
   ].join('\n');

@@ -48,6 +48,10 @@ import {
   buildActionAvailabilityContract
 } from './action-availability.js';
 import {
+  buildActionPreviewContract,
+  isSafeActionPreviewId
+} from './action-preview.js';
+import {
   buildDiagnosticsContract
 } from './diagnostics.js';
 import {
@@ -1272,6 +1276,48 @@ export function createSymphonyConsoleServer({
           stateDir,
           goalId,
           taskId
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/actions/preview') {
+        const allowedParams = new Set(['goal', 'task', 'action']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+        const actionId = url.searchParams.get('action');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-action-preview-request',
+            message: 'Action preview route accepts only goal, task, and action query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(goalId)
+          || (taskId !== null && isUnsafeGoalRouteSegment(taskId))
+          || !isSafeActionPreviewId(actionId)
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-action-preview-request',
+            message: 'Action preview goal, task, and action query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildActionPreviewContract({
+          stateDir,
+          goalId,
+          taskId,
+          actionId
         }));
         return;
       }
