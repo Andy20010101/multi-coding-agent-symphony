@@ -1255,7 +1255,13 @@ function roleGuidanceFor({ role, phase, runbook, runbookTask, evidenceFile, revi
   };
 }
 
-function evidenceFileFor({ runbook, taskId, role }) {
+function evidenceFileFor({ runbook, runbookTask, taskId, role }) {
+  const explicitEvidenceFile = explicitEvidenceFileFromAcceptance({ runbookTask, role });
+
+  if (explicitEvidenceFile !== null) {
+    return explicitEvidenceFile;
+  }
+
   const goalSegment = evidenceGoalSegment(runbook.goalId);
 
   if (role === 'release-manager') {
@@ -1273,6 +1279,35 @@ function evidenceFileFor({ runbook, taskId, role }) {
       : 'worker';
 
   return `docs/plans/${goalSegment}-${taskSegment}-${roleSegment}-evidence-${EVIDENCE_DATE}.md`;
+}
+
+function explicitEvidenceFileFromAcceptance({ runbookTask, role }) {
+  const acceptance = Array.isArray(runbookTask?.acceptance) ? runbookTask.acceptance : [];
+  const label = role === 'main-verifier'
+    ? 'Main verification'
+    : role === 'reviewer'
+      ? 'Review'
+      : role === 'worker'
+        ? 'Worker'
+        : null;
+
+  if (label === null) {
+    return null;
+  }
+
+  for (const item of acceptance) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+
+    const match = new RegExp(`^${label} evidence path:\\s*(?<ref>docs/plans/[^\\s]+\\.md)\\.?$`, 'u').exec(item);
+
+    if (match?.groups?.ref) {
+      return match.groups.ref;
+    }
+  }
+
+  return null;
 }
 
 function evidenceGoalSegment(goalId) {
