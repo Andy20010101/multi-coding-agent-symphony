@@ -78,6 +78,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/latest/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/goals/latest/release-baseline', 'release-baseline-resolver.v1'],
         ['GET', '/api/capabilities', 'capabilities.v1'],
+        ['GET', '/api/actions/manifest', 'action-manifest.v1'],
+        ['GET', '/api/actions/availability', 'action-availability.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1']
       ]
     );
@@ -100,6 +102,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/latest/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/goals/latest/release-baseline', 'release-baseline-resolver.v1'],
         ['GET', '/api/capabilities', 'capabilities.v1'],
+        ['GET', '/api/actions/manifest', 'action-manifest.v1'],
+        ['GET', '/api/actions/availability', 'action-availability.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
@@ -5265,6 +5269,46 @@ function createV17ReadonlyPayloadEntries({
         safePreview: true,
         goalProgress: true,
         diagnostics: true
+      }
+    }],
+    ['/api/actions/manifest', {
+      contractName: 'action-manifest.v1',
+      contractVersion: 1,
+      readOnly: true,
+      context: {
+        goalId: 'latest',
+        taskId: null,
+        sourceContracts: ['goal-runbook.v1'],
+        stateSource: 'explicit-backend-contracts'
+      },
+      actions: [],
+      boundaries: {
+        actionExecutionAvailable: false
+      }
+    }],
+    ['/api/actions/availability', {
+      contractName: 'action-availability.v1',
+      contractVersion: 1,
+      readOnly: true,
+      context: {
+        goalId: 'latest',
+        taskId: null,
+        sourceContracts: ['action-manifest.v1'],
+        nextAction: {
+          status: 'missing-runbook',
+          taskId: null,
+          role: null,
+          phase: null,
+          reason: 'No active managed goal runbook is registered.',
+          blocked: false
+        },
+        currentTask: null,
+        evidenceState: {}
+      },
+      actions: [],
+      blockers: [],
+      boundaries: {
+        actionExecutionAvailable: false
       }
     }],
     ['/api/diagnostics', {

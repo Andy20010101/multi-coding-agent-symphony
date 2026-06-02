@@ -20,6 +20,8 @@ const CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = 'symphony.console-adoption-inspec
 const RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = 'release-baseline-resolver.v1';
 const APP_STATE_SNAPSHOT_CONTRACT_NAME = 'app-state-snapshot.v1';
 const CAPABILITIES_CONTRACT_NAME = 'capabilities.v1';
+const ACTION_MANIFEST_CONTRACT_NAME = 'action-manifest.v1';
+const ACTION_AVAILABILITY_CONTRACT_NAME = 'action-availability.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
@@ -452,6 +454,20 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/capabilities',
     method: 'GET',
     contractName: CAPABILITIES_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'actionManifest',
+    label: 'Action Manifest',
+    path: '/api/actions/manifest',
+    method: 'GET',
+    contractName: ACTION_MANIFEST_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'actionAvailability',
+    label: 'Action Availability',
+    path: '/api/actions/availability',
+    method: 'GET',
+    contractName: ACTION_AVAILABILITY_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'diagnostics',

@@ -163,6 +163,7 @@ GET /api/goals/latest/closeout
 GET /api/goals/<goal-id>/closeout
 GET /api/capabilities
 GET /api/actions/manifest
+GET /api/actions/availability
 GET /api/diagnostics
 ```
 
@@ -280,7 +281,7 @@ stale runtime snapshot：
 
 invalid query / API request：
 
-`/api/health` 和 `/api/projects` 不接受 query；`/api/projects/current` 只接受 `repoPath`；`/api/runtime/snapshot` 只接受 `repoPath` 和 `goal`。未知 query、非 GET、任意 path、confirm 或 command 字段应返回 `error-envelope.v1` 或 `405`。恢复方式是改用上面列出的受控 CLI/API shape。
+`/api/health` 和 `/api/projects` 不接受 query；`/api/projects/current` 只接受 `repoPath`；`/api/runtime/snapshot` 只接受 `repoPath` 和 `goal`；`/api/actions/manifest` 和 `/api/actions/availability` 只接受 `goal` 和 `task`。未知 query、非 GET、任意 path、confirm 或 command 字段应返回 `error-envelope.v1` 或 `405`。恢复方式是改用上面列出的受控 CLI/API shape。
 
 release-ready not declared：
 
@@ -290,15 +291,20 @@ release-ready not declared：
 
 v34 的目标是声明可用 actions 和 permission preview，不创建 job、不执行 action。v33 交给 v34 的输入是 `app-state-snapshot.v1`、`goal-progress-ledger.v1`、`goal-next-action.v1`、`goal-runbook.v1`、`goal-event-log.v1`、`goal-operation-runs.v1` 和 Workbench capability flags。
 
-task-1 已实现 `action-manifest.v1`：
+task-1 已实现 `action-manifest.v1`，task-2 已实现 `action-availability.v1`：
 
 ```text
 GET /api/actions/manifest
 GET /api/actions/manifest?goal=<goal-id>&task=<task-id>
+GET /api/actions/availability
+GET /api/actions/availability?goal=<goal-id>&task=<task-id>
 pnpm --silent symphony actions manifest --goal <goal-id> --task <task-id> --json
+pnpm --silent symphony actions availability --goal <goal-id> --task <task-id> --json
 ```
 
 manifest 只声明 `action_id`、label、scope、availability resolver、capability preview contract、event mapping 和 evidence expectations。它不执行 action、不创建 job、不追加 goal event、不读取 evidence 正文、不调用模型、不读任意本地路径、不合并、不 push、不 tag、不发布。
+
+availability 从 `action-manifest.v1`、`goal-progress-ledger.v1` 和 `goal-next-action.v1` 计算每个 action 的 `available`、`unavailable` 或 `blocked` 状态，并返回 `reasons`、`missingContext` 和 `requiredInputs`。`requiredInputs` 是操作者需要填写的字段，比如 evidence ref；它不是后端状态缺失，也不会被当作文件读取。availability route 只接受 `goal` 和 `task`，不接受 command、path、confirm、planHash 或任意本地路径。
 
 action manifest 建议字段：
 

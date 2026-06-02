@@ -45,6 +45,9 @@ import {
   buildActionManifestContract
 } from './action-manifest.js';
 import {
+  buildActionAvailabilityContract
+} from './action-availability.js';
+import {
   buildDiagnosticsContract
 } from './diagnostics.js';
 import {
@@ -1231,6 +1234,42 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, buildActionManifestContract({
+          goalId,
+          taskId
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/actions/availability') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-action-availability-request',
+            message: 'Action availability route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (isUnsafeGoalRouteSegment(goalId) || (taskId !== null && isUnsafeGoalRouteSegment(taskId))) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-action-availability-request',
+            message: 'Action availability goal and task query values must be safe route segments.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildActionAvailabilityContract({
+          stateDir,
           goalId,
           taskId
         }));

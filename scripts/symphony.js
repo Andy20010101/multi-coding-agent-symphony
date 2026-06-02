@@ -29,6 +29,9 @@ import {
   buildActionManifestContract
 } from '../src/symphony/action-manifest.js';
 import {
+  buildActionAvailabilityContract
+} from '../src/symphony/action-availability.js';
+import {
   buildProjectRegistry,
   resolveCurrentProject
 } from '../src/symphony/project-registry.js';
@@ -1897,6 +1900,22 @@ async function runSymphonyActions({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
+  if (options.subcommand === 'availability') {
+    const availability = await buildActionAvailabilityContract({
+      stateDir: options.stateDir,
+      goalId: options.goalId,
+      taskId: options.taskId
+    });
+
+    if (options.json) {
+      writeJson(stdout, availability);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderActionAvailabilityText(availability));
+    return EXIT_CODES.ok;
+  }
+
   const manifest = buildActionManifestContract({
     goalId: options.goalId,
     taskId: options.taskId
@@ -2008,6 +2027,27 @@ function renderActionManifestText(manifest) {
     lines.push(`  Role: ${action.role}`);
     lines.push(`  Preview: ${action.capabilityPreview.contractName}`);
     lines.push(`  Execution enabled: ${action.execution.enabled ? 'yes' : 'no'}`);
+  }
+
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function renderActionAvailabilityText(availability) {
+  const lines = [
+    `Action availability: ${availability.context.goalId}`,
+    `Task: ${availability.context.taskId ?? 'none'}`,
+    `Next: ${availability.context.nextAction.role ?? 'none'} / ${availability.context.nextAction.phase ?? 'none'}`,
+    `Actions: ${availability.actions.length}`
+  ];
+
+  for (const action of availability.actions) {
+    lines.push(`- ${action.action_id}: ${action.state}`);
+
+    for (const item of action.reasons) {
+      lines.push(`  ${item.code}: ${item.message}`);
+    }
   }
 
   lines.push('');
@@ -3604,6 +3644,7 @@ function parseActionsArgs(args) {
     subcommand: null,
     goalId: 'latest',
     taskId: null,
+    stateDir: '.symphony',
     json: false,
     help: false
   };
@@ -3633,6 +3674,12 @@ function parseActionsArgs(args) {
       continue;
     }
 
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
     if (value === '--output' || value === '-o') {
       throw new UsageError('actions manifest is read-only; redirect stdout if you need a file');
     }
@@ -3650,8 +3697,8 @@ function parseActionsArgs(args) {
 
   options.subcommand ??= 'manifest';
 
-  if (options.subcommand !== 'manifest') {
-    throw new UsageError('actions subcommand must be manifest');
+  if (!['manifest', 'availability'].includes(options.subcommand)) {
+    throw new UsageError('actions subcommand must be manifest or availability');
   }
 
   if (isUnsafeActionsContextRef(options.goalId) || (options.taskId !== null && isUnsafeActionsContextRef(options.taskId))) {
@@ -3664,9 +3711,10 @@ function parseActionsArgs(args) {
 function actionsHelpText() {
   return [
     'Usage: symphony actions manifest [--goal <goal-id>] [--task <task-id>] [--json]',
+    '       symphony actions availability [--goal <goal-id>] [--task <task-id>] [--state-dir <path>] [--json]',
     '',
-    'Prints the read-only v34 action-manifest.v1 contract.',
-    'The command does not execute actions, create jobs, call models, read arbitrary files, or change git state.',
+    'Prints the read-only v34 action manifest and availability contracts.',
+    'The commands do not execute actions, create jobs, call models, read arbitrary files, or change git state.',
     ''
   ].join('\n');
 }

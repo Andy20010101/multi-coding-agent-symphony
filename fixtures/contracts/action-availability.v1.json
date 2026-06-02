@@ -1,0 +1,155 @@
+{
+  "contractName": "action-availability.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v34-action-registry-workspace",
+    "taskId": "task-2",
+    "sourceContracts": [
+      "action-manifest.v1",
+      "goal-progress-ledger.v1",
+      "goal-next-action.v1"
+    ],
+    "nextAction": {
+      "status": "action-required",
+      "taskId": "task-2",
+      "role": "worker",
+      "phase": "implement",
+      "reason": "No explicit worker evidence is recorded for task-2.",
+      "blocked": false
+    },
+    "currentTask": {
+      "taskId": "task-2",
+      "status": "planned",
+      "statusSource": "goal-runbook.v1",
+      "workerEvidenceRef": null,
+      "reviewEvidenceRef": null,
+      "reviewVerdict": null,
+      "mainVerificationRef": null
+    },
+    "evidenceState": {
+      "workerEvidenceRef": null,
+      "reviewEvidenceRef": null,
+      "mainVerificationRef": null
+    }
+  },
+  "actions": [
+    {
+      "action_id": "goal.worker-evidence.record",
+      "label": "Record worker evidence",
+      "scope": "active-task",
+      "role": "worker",
+      "state": "available",
+      "reasons": [],
+      "requiredContext": [
+        "goalId",
+        "taskId",
+        "workerEvidenceRef"
+      ],
+      "missingContext": [],
+      "requiredInputs": [
+        "workerEvidenceRef"
+      ],
+      "eventMapping": {
+        "commandName": "symphony goal update",
+        "primaryEventType": "worker.evidence-recorded",
+        "alternateEventTypes": [],
+        "confirmationContract": "goal-update-plan.v1",
+        "appendOnlyOnConfirm": true
+      },
+      "evidenceExpectations": {
+        "required": true,
+        "evidenceRefField": "workerEvidenceRef",
+        "bodyReadAvailable": false
+      },
+      "preview": {
+        "contractName": "action-capability-preview.v1",
+        "requiredBeforeConfirm": true,
+        "sideEffectsInPreview": false
+      },
+      "execution": {
+        "enabled": false,
+        "rawShellCommandAvailable": false,
+        "arbitraryCommandAvailable": false,
+        "modelInvocationAvailable": false,
+        "gitWriteAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    },
+    {
+      "action_id": "goal.review-verdict.record",
+      "label": "Record review verdict",
+      "scope": "active-task",
+      "role": "reviewer",
+      "state": "unavailable",
+      "reasons": [
+        {
+          "code": "next-action-role-mismatch",
+          "message": "This action requires next action role reviewer in phase review.",
+          "source": "goal-next-action.v1"
+        },
+        {
+          "code": "worker-evidence-missing",
+          "message": "Review is unavailable until worker evidence is recorded.",
+          "source": "goal-progress-ledger.v1"
+        }
+      ],
+      "requiredContext": [
+        "goalId",
+        "taskId",
+        "reviewerId",
+        "verdict",
+        "reviewEvidenceRef"
+      ],
+      "missingContext": [],
+      "requiredInputs": [
+        "reviewerId",
+        "verdict",
+        "reviewEvidenceRef"
+      ],
+      "eventMapping": {
+        "commandName": "symphony goal review",
+        "primaryEventType": "reviewer.approved",
+        "alternateEventTypes": [
+          "reviewer.needs-revision"
+        ],
+        "confirmationContract": "goal-update-plan.v1",
+        "appendOnlyOnConfirm": true
+      },
+      "evidenceExpectations": {
+        "required": true,
+        "evidenceRefField": "reviewEvidenceRef",
+        "bodyReadAvailable": false
+      },
+      "preview": {
+        "contractName": "action-capability-preview.v1",
+        "requiredBeforeConfirm": true,
+        "sideEffectsInPreview": false
+      },
+      "execution": {
+        "enabled": false,
+        "rawShellCommandAvailable": false,
+        "arbitraryCommandAvailable": false,
+        "modelInvocationAvailable": false,
+        "gitWriteAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    }
+  ],
+  "blockers": [],
+  "boundaries": {
+    "readOnly": true,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false
+  }
+}
