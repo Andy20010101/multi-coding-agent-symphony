@@ -162,6 +162,7 @@ GET /api/goals/<goal-id>/prompt
 GET /api/goals/latest/closeout
 GET /api/goals/<goal-id>/closeout
 GET /api/capabilities
+GET /api/actions/manifest
 GET /api/diagnostics
 ```
 
@@ -288,6 +289,16 @@ release-ready not declared：
 ## v34 Action Registry 交接
 
 v34 的目标是声明可用 actions 和 permission preview，不创建 job、不执行 action。v33 交给 v34 的输入是 `app-state-snapshot.v1`、`goal-progress-ledger.v1`、`goal-next-action.v1`、`goal-runbook.v1`、`goal-event-log.v1`、`goal-operation-runs.v1` 和 Workbench capability flags。
+
+task-1 已实现 `action-manifest.v1`：
+
+```text
+GET /api/actions/manifest
+GET /api/actions/manifest?goal=<goal-id>&task=<task-id>
+pnpm --silent symphony actions manifest --goal <goal-id> --task <task-id> --json
+```
+
+manifest 只声明 `action_id`、label、scope、availability resolver、capability preview contract、event mapping 和 evidence expectations。它不执行 action、不创建 job、不追加 goal event、不读取 evidence 正文、不调用模型、不读任意本地路径、不合并、不 push、不 tag、不发布。
 
 action manifest 建议字段：
 

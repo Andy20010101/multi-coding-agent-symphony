@@ -20,6 +20,9 @@ import {
   validateCapabilitiesContract
 } from '../src/symphony/capabilities.js';
 import {
+  validateActionManifestContract
+} from '../src/symphony/action-manifest.js';
+import {
   validateDiagnosticsContract
 } from '../src/symphony/diagnostics.js';
 import {
@@ -410,6 +413,19 @@ describe('v16 Workbench route smoke and server parity', () => {
           }
         },
         {
+          path: '/api/actions/manifest?goal=v34-action-registry-workspace&task=task-1',
+          contractName: 'action-manifest.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateActionManifestContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.context.goalId, 'v34-action-registry-workspace');
+            assert.equal(payload.context.taskId, 'task-1');
+            assert.equal(payload.boundaries.actionExecutionAvailable, false);
+          }
+        },
+        {
           path: '/api/diagnostics',
           contractName: 'diagnostics.v1',
           assertPayload(payload) {
@@ -525,6 +541,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/goals/latest/closeout',
         `/api/goals/${V20_GOAL_ID}/closeout`,
         '/api/capabilities',
+        '/api/actions/manifest',
         '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
       ];

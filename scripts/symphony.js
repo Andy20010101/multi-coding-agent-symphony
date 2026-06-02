@@ -26,6 +26,9 @@ import {
   buildAppStateSnapshot
 } from '../src/symphony/app-state-snapshot.js';
 import {
+  buildActionManifestContract
+} from '../src/symphony/action-manifest.js';
+import {
   buildProjectRegistry,
   resolveCurrentProject
 } from '../src/symphony/project-registry.js';
@@ -147,6 +150,7 @@ const KNOWN_COMMANDS = new Set([
   'console',
   'diagnose',
   'runtime',
+  'actions',
   'handoff',
   'goal',
   'goal-status',
@@ -325,6 +329,13 @@ export async function runSymphonyCli({
 
     if (command === 'runtime') {
       return await runSymphonyRuntime({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'actions') {
+      return await runSymphonyActions({
         args: rest,
         stdout
       });
@@ -1878,6 +1889,28 @@ async function runSymphonyRuntime({ args, stdout }) {
   throw new UsageError('runtime subcommand must be health, projects, current, or snapshot');
 }
 
+async function runSymphonyActions({ args, stdout }) {
+  const options = parseActionsArgs(args);
+
+  if (options.help) {
+    stdout.write(actionsHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  const manifest = buildActionManifestContract({
+    goalId: options.goalId,
+    taskId: options.taskId
+  });
+
+  if (options.json) {
+    writeJson(stdout, manifest);
+    return EXIT_CODES.ok;
+  }
+
+  stdout.write(renderActionManifestText(manifest));
+  return EXIT_CODES.ok;
+}
+
 async function runSymphonyHandoff({ args, stdout }) {
   const options = parseHandoffArgs(args);
 
@@ -1959,6 +1992,27 @@ function renderAppStateSnapshotText(snapshot) {
     `Known blockers: ${snapshot.known_blockers.length}`,
     ''
   ].join('\n');
+}
+
+function renderActionManifestText(manifest) {
+  const lines = [
+    `Action manifest: ${manifest.context.goalId}`,
+    `Task: ${manifest.context.taskId ?? 'latest'}`,
+    `Mode: ${manifest.readOnly ? 'read-only' : 'write-enabled'}`,
+    `Actions: ${manifest.actions.length}`
+  ];
+
+  for (const action of manifest.actions) {
+    lines.push(`- ${action.action_id}: ${action.label}`);
+    lines.push(`  Scope: ${action.scope}`);
+    lines.push(`  Role: ${action.role}`);
+    lines.push(`  Preview: ${action.capabilityPreview.contractName}`);
+    lines.push(`  Execution enabled: ${action.execution.enabled ? 'yes' : 'no'}`);
+  }
+
+  lines.push('');
+
+  return lines.join('\n');
 }
 
 async function runSymphonyGoalStatus({ args, stdout }) {
@@ -3543,6 +3597,82 @@ function runtimeHelpText() {
     'The commands read process, repository, and repo-local Symphony metadata only; they do not write files, run actions, call models, or change git state.',
     ''
   ].join('\n');
+}
+
+function parseActionsArgs(args) {
+  const options = {
+    subcommand: null,
+    goalId: 'latest',
+    taskId: null,
+    json: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('actions manifest is read-only; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown actions option: ${value}`);
+    }
+
+    if (options.subcommand !== null) {
+      throw new UsageError(`unexpected actions argument: ${value}`);
+    }
+
+    options.subcommand = value;
+  }
+
+  options.subcommand ??= 'manifest';
+
+  if (options.subcommand !== 'manifest') {
+    throw new UsageError('actions subcommand must be manifest');
+  }
+
+  if (isUnsafeActionsContextRef(options.goalId) || (options.taskId !== null && isUnsafeActionsContextRef(options.taskId))) {
+    throw new UsageError('actions manifest goal and task values must be safe refs');
+  }
+
+  return options;
+}
+
+function actionsHelpText() {
+  return [
+    'Usage: symphony actions manifest [--goal <goal-id>] [--task <task-id>] [--json]',
+    '',
+    'Prints the read-only v34 action-manifest.v1 contract.',
+    'The command does not execute actions, create jobs, call models, read arbitrary files, or change git state.',
+    ''
+  ].join('\n');
+}
+
+function isUnsafeActionsContextRef(value) {
+  return typeof value !== 'string' || value === '' || value.includes('/') || value.includes('\\') || value.includes('..');
 }
 
 function parseHandoffArgs(args) {

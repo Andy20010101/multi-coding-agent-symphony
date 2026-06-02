@@ -1,0 +1,244 @@
+{
+  "contractName": "action-manifest.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-02T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v34-action-registry-workspace",
+    "taskId": "task-1",
+    "sourceContracts": [
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "goal-update-plan.v1"
+    ],
+    "stateSource": "explicit-backend-contracts"
+  },
+  "actions": [
+    {
+      "action_id": "goal.worker-evidence.record",
+      "label": "Record worker evidence",
+      "scope": "active-task",
+      "role": "worker",
+      "availability": {
+        "defaultState": "preview-required",
+        "resolverContract": "action-availability.v1",
+        "requiredContext": [
+          "goalId",
+          "taskId",
+          "workerEvidenceRef"
+        ]
+      },
+      "capabilityPreview": {
+        "contractName": "action-capability-preview.v1",
+        "sideEffectsInPreview": false,
+        "requiredBeforeConfirm": true
+      },
+      "eventMapping": {
+        "commandName": "symphony goal update",
+        "primaryEventType": "worker.evidence-recorded",
+        "alternateEventTypes": [],
+        "confirmationContract": "goal-update-plan.v1",
+        "appendOnlyOnConfirm": true
+      },
+      "evidenceExpectations": {
+        "required": true,
+        "evidenceRefField": "workerEvidenceRef",
+        "bodyReadAvailable": false
+      },
+      "execution": {
+        "enabled": false,
+        "rawShellCommandAvailable": false,
+        "arbitraryCommandAvailable": false,
+        "modelInvocationAvailable": false,
+        "gitWriteAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    },
+    {
+      "action_id": "goal.review-verdict.record",
+      "label": "Record review verdict",
+      "scope": "active-task",
+      "role": "reviewer",
+      "availability": {
+        "defaultState": "preview-required",
+        "resolverContract": "action-availability.v1",
+        "requiredContext": [
+          "goalId",
+          "taskId",
+          "reviewerId",
+          "verdict",
+          "reviewEvidenceRef"
+        ]
+      },
+      "capabilityPreview": {
+        "contractName": "action-capability-preview.v1",
+        "sideEffectsInPreview": false,
+        "requiredBeforeConfirm": true
+      },
+      "eventMapping": {
+        "commandName": "symphony goal review",
+        "primaryEventType": "reviewer.approved",
+        "alternateEventTypes": [
+          "reviewer.needs-revision"
+        ],
+        "confirmationContract": "goal-update-plan.v1",
+        "appendOnlyOnConfirm": true
+      },
+      "evidenceExpectations": {
+        "required": true,
+        "evidenceRefField": "reviewEvidenceRef",
+        "bodyReadAvailable": false
+      },
+      "execution": {
+        "enabled": false,
+        "rawShellCommandAvailable": false,
+        "arbitraryCommandAvailable": false,
+        "modelInvocationAvailable": false,
+        "gitWriteAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    },
+    {
+      "action_id": "goal.main-verification-gate.record",
+      "label": "Record main verification gate",
+      "scope": "active-task",
+      "role": "main-verifier",
+      "availability": {
+        "defaultState": "preview-required",
+        "resolverContract": "action-availability.v1",
+        "requiredContext": [
+          "goalId",
+          "taskId",
+          "verifierId",
+          "mainVerificationRef"
+        ]
+      },
+      "capabilityPreview": {
+        "contractName": "action-capability-preview.v1",
+        "sideEffectsInPreview": false,
+        "requiredBeforeConfirm": true
+      },
+      "eventMapping": {
+        "commandName": "symphony goal gate",
+        "primaryEventType": "main.verification-passed",
+        "alternateEventTypes": [
+          "main.verification-failed"
+        ],
+        "confirmationContract": "goal-update-plan.v1",
+        "appendOnlyOnConfirm": true
+      },
+      "evidenceExpectations": {
+        "required": true,
+        "evidenceRefField": "mainVerificationRef",
+        "bodyReadAvailable": false
+      },
+      "execution": {
+        "enabled": false,
+        "rawShellCommandAvailable": false,
+        "arbitraryCommandAvailable": false,
+        "modelInvocationAvailable": false,
+        "gitWriteAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    },
+    {
+      "action_id": "goal.release-gate.record",
+      "label": "Record release gate evidence",
+      "scope": "release",
+      "role": "release-verifier",
+      "availability": {
+        "defaultState": "preview-required",
+        "resolverContract": "action-availability.v1",
+        "requiredContext": [
+          "goalId",
+          "gateId",
+          "verifierId",
+          "releaseEvidenceRef"
+        ]
+      },
+      "capabilityPreview": {
+        "contractName": "action-capability-preview.v1",
+        "sideEffectsInPreview": false,
+        "requiredBeforeConfirm": true
+      },
+      "eventMapping": {
+        "commandName": "symphony goal gate",
+        "primaryEventType": "release.gate-passed",
+        "alternateEventTypes": [
+          "release.gate-failed",
+          "release.evidence-recorded"
+        ],
+        "confirmationContract": "goal-update-plan.v1",
+        "appendOnlyOnConfirm": true
+      },
+      "evidenceExpectations": {
+        "required": true,
+        "evidenceRefField": "releaseEvidenceRef",
+        "bodyReadAvailable": false
+      },
+      "execution": {
+        "enabled": false,
+        "rawShellCommandAvailable": false,
+        "arbitraryCommandAvailable": false,
+        "modelInvocationAvailable": false,
+        "gitWriteAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    },
+    {
+      "action_id": "goal.implementation.preview",
+      "label": "Preview controlled implementation",
+      "scope": "active-task",
+      "role": "operator",
+      "availability": {
+        "defaultState": "preview-required",
+        "resolverContract": "action-availability.v1",
+        "requiredContext": [
+          "goalId",
+          "taskId"
+        ]
+      },
+      "capabilityPreview": {
+        "contractName": "controlled-implementation-plan-preview.v1",
+        "sideEffectsInPreview": false,
+        "requiredBeforeConfirm": true
+      },
+      "eventMapping": {
+        "commandName": "symphony do --write",
+        "primaryEventType": null,
+        "alternateEventTypes": [],
+        "confirmationContract": "controlled-implementation-run-confirmation.v1",
+        "appendOnlyOnConfirm": true
+      },
+      "evidenceExpectations": {
+        "required": false,
+        "evidenceRefField": null,
+        "bodyReadAvailable": false
+      },
+      "execution": {
+        "enabled": false,
+        "rawShellCommandAvailable": false,
+        "arbitraryCommandAvailable": false,
+        "modelInvocationAvailable": false,
+        "gitWriteAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    }
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false
+  }
+}
