@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v36-artifact-evidence-index-workspace",
+  "goalTitle": "v36 Artifact/Evidence Index Workspace",
+  "baseline": {
+    "tag": "v35",
+    "commit": null,
+    "evidenceRef": "docs/plans/v35-release-evidence-2026-06-02.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Artifact index contract",
+      "branch": "v36-task-1-artifact-index-contract",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "证据和 artifact 有稳定可查索引字段。",
+        "定义 artifact refs、hashes、kind、goal/task/run/job linkage 的稳定 schema。",
+        "Worker evidence path: docs/plans/v36-task-1-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v36-task-1-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v36-task-1-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v36-artifact-evidence-index-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Indexer from existing ArtifactStore/event refs",
+      "branch": "v36-task-2-indexer-from-artifactstore-event-refs",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "App index 是 ArtifactStore/event refs 的派生缓存。",
+        "从现有 ArtifactStore 和 event refs 建索引，不替代 canonical source。",
+        "Worker evidence path: docs/plans/v36-task-2-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v36-task-2-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v36-task-2-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v36-artifact-evidence-index-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Safe preview/search/filter API",
+      "branch": "v36-task-3-safe-preview-search-filter-api",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能安全搜索和预览 evidence/artifact。",
+        "提供 safe preview/search/filter API，不接受任意本地路径读取。",
+        "Worker evidence path: docs/plans/v36-task-3-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v36-task-3-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v36-task-3-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v36-artifact-evidence-index-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Evidence timeline and release bundle view",
+      "branch": "v36-task-4-evidence-timeline-release-bundle-view",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能查看 task/review/main verification/release evidence 时间线。",
+        "Workbench 显示 evidence timeline 和 release bundle view。",
+        "Worker evidence path: docs/plans/v36-task-4-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v36-task-4-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v36-task-4-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v36-artifact-evidence-index-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Export diagnostics/evidence bundle draft",
+      "branch": "v36-task-5-export-diagnostics-evidence-bundle-draft",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能生成 evidence/diagnostics bundle 草稿。",
+        "实现 copy-only 或 write-gated export draft，保留证据边界。",
+        "Worker evidence path: docs/plans/v36-task-5-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v36-task-5-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v36-task-5-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v36-artifact-evidence-index-workspace --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

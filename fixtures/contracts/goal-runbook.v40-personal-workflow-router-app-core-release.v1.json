@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v40-personal-workflow-router-app-core-release",
+  "goalTitle": "v40 Personal Workflow Router + App Core Release Closeout",
+  "baseline": {
+    "tag": "v39",
+    "commit": null,
+    "evidenceRef": "docs/plans/v39-release-evidence-2026-06-02.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Inbox/capture contract",
+      "branch": "v40-task-1-inbox-capture-contract",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "App core 可以接收原始请求而不强制进入 Workbench。",
+        "定义 inbox/capture contract。",
+        "Worker evidence path: docs/plans/v40-task-1-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v40-task-1-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v40-task-1-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v40-personal-workflow-router-app-core-release --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Workflow router categories",
+      "branch": "v40-task-2-workflow-router-categories",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "请求可以分到 direct answer、skill、automation、workbench goal、research、skip。",
+        "定义 router categories 和边界。",
+        "Worker evidence path: docs/plans/v40-task-2-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v40-task-2-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v40-task-2-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v40-personal-workflow-router-app-core-release --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Goal/runbook draft handoff",
+      "branch": "v40-task-3-goal-runbook-draft-handoff",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "重复或项目级工作能变成 goal draft。",
+        "生成 goal/runbook draft handoff，不自动注册。",
+        "Worker evidence path: docs/plans/v40-task-3-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v40-task-3-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v40-task-3-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v40-personal-workflow-router-app-core-release --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "App core release manager",
+      "branch": "v40-task-4-app-core-release-manager",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "App core 可以 declared release ready。",
+        "收口 v34-v39 release checklist，生成 final app core evidence。",
+        "Worker evidence path: docs/plans/v40-task-4-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v40-task-4-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v40-task-4-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v40-personal-workflow-router-app-core-release --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Native UX handoff generator",
+      "branch": "v40-task-5-native-ux-handoff-generator",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "v41+ native UX/distribution 能接上。",
+        "生成 v41+ menu bar/notch/UX/distribution handoff。",
+        "Worker evidence path: docs/plans/v40-task-5-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v40-task-5-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v40-task-5-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v40-personal-workflow-router-app-core-release --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

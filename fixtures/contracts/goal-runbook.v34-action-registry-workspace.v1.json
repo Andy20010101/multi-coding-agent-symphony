@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v34-action-registry-workspace",
+  "goalTitle": "v34 Action Registry Workspace",
+  "baseline": {
+    "tag": "v33",
+    "commit": null,
+    "evidenceRef": "docs/plans/v33-release-evidence-2026-06-02.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Action manifest contract",
+      "branch": "v34-task-1-action-manifest-contract",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "UI/Workbench 后续按钮有内核声明式 action，不再硬编码命令。",
+        "定义 action_id、label、scope、availability、capability preview、event mapping、evidence expectations。",
+        "Worker evidence path: docs/plans/v34-task-1-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v34-task-1-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v34-task-1-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v34-action-registry-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Action availability resolver",
+      "branch": "v34-task-2-action-availability-resolver",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能知道某个 action 为什么能做或不能做。",
+        "基于 active goal/task/runbook/next action 计算 available/unavailable reasons。",
+        "Worker evidence path: docs/plans/v34-task-2-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v34-task-2-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v34-task-2-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v34-action-registry-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Action preview API",
+      "branch": "v34-task-3-action-preview-api",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "App/Workbench 能预览动作影响，不触发写入。",
+        "新增只读 action preview API，返回 actions、capabilities、required confirmations，不执行。",
+        "Worker evidence path: docs/plans/v34-task-3-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v34-task-3-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v34-task-3-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v34-action-registry-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Workbench action panel binding",
+      "branch": "v34-task-4-workbench-action-panel-binding",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "页面按钮来自内核，而不是前端自造流程。",
+        "Workbench action 面板从 registry 读取 action，不直接拼 shell 命令。",
+        "Worker evidence path: docs/plans/v34-task-4-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v34-task-4-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v34-task-4-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v34-action-registry-workspace --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Action registry evidence + migration guide",
+      "branch": "v34-task-5-action-registry-evidence-migration-guide",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "v35 job queue 可以稳定接上 action。",
+        "补齐 docs/tests/evidence，说明未来 Web/Desktop/Notch 如何消费同一套 action layer。",
+        "Worker evidence path: docs/plans/v34-task-5-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v34-task-5-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v34-task-5-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v34-action-registry-workspace --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

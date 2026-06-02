@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v37-desktop-shell-mvp",
+  "goalTitle": "v37 Desktop Shell MVP",
+  "baseline": {
+    "tag": "v36",
+    "commit": null,
+    "evidenceRef": "docs/plans/v36-release-evidence-2026-06-02.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Desktop shell decision and minimal workspace",
+      "branch": "v37-task-1-desktop-shell-decision-minimal-workspace",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Desktop shell 技术选择和最小 workspace 明确。",
+        "记录 Tauri/Electron 选择并建立 minimal workspace，不重写 workflow kernel。",
+        "Worker evidence path: docs/plans/v37-task-1-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v37-task-1-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v37-task-1-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Sidecar launcher + health bridge",
+      "branch": "v37-task-2-sidecar-launcher-health-bridge",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Desktop shell 能启动或连接 local sidecar 并读取 health。",
+        "shell starts/attaches to sidecar and reads app state。",
+        "Worker evidence path: docs/plans/v37-task-2-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v37-task-2-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v37-task-2-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Project list + active goal + next action view",
+      "branch": "v37-task-3-project-active-goal-next-action-view",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Desktop 显示项目列表、当前 goal 和 next action。",
+        "显示项目列表、当前 goal、next action、blocked/review/main verification/release 状态。",
+        "Worker evidence path: docs/plans/v37-task-3-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v37-task-3-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v37-task-3-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Job status + artifact preview binding",
+      "branch": "v37-task-4-job-status-artifact-preview-binding",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Desktop 消费 job/artifact API。",
+        "Desktop binding 只消费已有 APIs，不绕过 kernel。",
+        "Worker evidence path: docs/plans/v37-task-4-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v37-task-4-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v37-task-4-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Desktop build smoke + packaging boundary evidence",
+      "branch": "v37-task-5-desktop-build-smoke-packaging-boundary-evidence",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Desktop MVP 可构建并明确不发布。",
+        "build smoke works；no auto-update/publish yet。",
+        "Worker evidence path: docs/plans/v37-task-5-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v37-task-5-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v37-task-5-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

@@ -1,0 +1,219 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v38-provider-hub-capability-profiles",
+  "goalTitle": "v38 Provider Hub + Capability Profiles",
+  "baseline": {
+    "tag": "v37",
+    "commit": null,
+    "evidenceRef": "docs/plans/v37-release-evidence-2026-06-02.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Provider profile contract",
+      "branch": "v38-task-1-provider-profile-contract",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Provider availability 和 secrets boundary 明确。",
+        "定义 Codex/Claude/Kiro/DeepSeek availability、lane、gate、health、secrets boundary。",
+        "Worker evidence path: docs/plans/v38-task-1-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v38-task-1-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v38-task-1-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Provider health check API",
+      "branch": "v38-task-2-provider-health-check-api",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "用户能看到 provider health，但 UI 不调用模型。",
+        "Provider health check API read-only；no model invocation from UI。",
+        "Worker evidence path: docs/plans/v38-task-2-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v38-task-2-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v38-task-2-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Capability profile mapping",
+      "branch": "v38-task-3-capability-profile-mapping",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "action requirements 能映射 provider/tool gates。",
+        "将 action requirements 映射到 provider/tool gates：repo.write、model.invoke、test.run、git.change 等。",
+        "Worker evidence path: docs/plans/v38-task-3-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v38-task-3-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v38-task-3-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Worker/reviewer lane assignment preview",
+      "branch": "v38-task-4-worker-reviewer-lane-assignment-preview",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "实现和 review lane 可预览并保持独立。",
+        "预览 worker/reviewer lane assignment，区分 implementation 与 independent review。",
+        "Worker evidence path: docs/plans/v38-task-4-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v38-task-4-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v38-task-4-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Provider hub panel + evidence",
+      "branch": "v38-task-5-provider-hub-panel-evidence",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workbench 显示 provider availability/blockers，不泄露 secrets。",
+        "Provider hub panel consumes provider profile contracts and evidence。",
+        "Worker evidence path: docs/plans/v38-task-5-worker-evidence-2026-06-02.md.",
+        "Review evidence path: docs/plans/v38-task-5-review-evidence-2026-06-02.md.",
+        "Main verification evidence path: docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md.",
+        "The App/Workbench user path for this task is visible and testable.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "The task reuses existing goal/event/run/adoption/verification contracts where applicable.",
+        "State changes come only from explicit backend events or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke models, open arbitrary local files, merge, push, tag, publish, or self-approve.",
+        "v8 compatibility commands are not presented as the top-level App/Workbench model."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}
