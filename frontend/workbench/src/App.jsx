@@ -312,6 +312,16 @@ export function WorkbenchShell({
             <EvidenceMatrixPanel matrix={model.goalEvents.evidenceMatrix} route={findRoute(model.routeStates, 'goalEvents')} />
           </section>
 
+          <section className="job-console-grid" aria-label="v35 job console 只读 panel">
+            <JobConsolePanel
+              jobConsole={model.jobConsole}
+              jobModelRoute={findRoute(model.routeStates, 'jobModel')}
+              jobCreationRoute={findRoute(model.routeStates, 'jobCreation')}
+              jobTimelineRoute={findRoute(model.routeStates, 'jobTimeline')}
+              jobRunControlRoute={findRoute(model.routeStates, 'jobRunControl')}
+            />
+          </section>
+
           <section className="support-grid" aria-label="只读 contract 支撑信息">
             <RoutePanel routes={model.routeStates} />
             <ContractGapPanel gaps={model.deferredGaps} />
@@ -320,6 +330,149 @@ export function WorkbenchShell({
         )
       )}
     </main>
+  );
+}
+
+function JobConsolePanel({
+  jobConsole,
+  jobModelRoute,
+  jobCreationRoute,
+  jobTimelineRoute,
+  jobRunControlRoute
+}) {
+  const jm = jobConsole?.jobModel;
+  const jc = jobConsole?.jobCreation;
+  const jt = jobConsole?.jobTimeline;
+  const jr = jobConsole?.jobRunControl;
+
+  return (
+    <DataPanel
+      id="job-console-panel"
+      kicker="v35 job queue"
+      title="Job Console"
+      state={jobConsole?.state ?? 'missing'}
+    >
+      <Subsection title="job queue">
+        <FieldList rows={[
+          ['state', textValue(jobConsole?.state)],
+          ['job id', jm?.jobId],
+          ['status', jm?.status],
+          ['queue state', jm?.queueState],
+          ['goal id', jm?.goalId],
+          ['task id', jm?.taskId],
+          ['action id', jm?.actionId],
+          ['created at', jm?.createdAt]
+        ]} />
+      </Subsection>
+
+      {jm?.blocker?.state === 'blocked' ? (
+        <Subsection title="blocker">
+          <FieldList rows={[
+            ['reason', jm.blocker.reason],
+            ['requires', jm.blocker.requires]
+          ]} />
+        </Subsection>
+      ) : null}
+
+      {jm?.failure?.state === 'failed' ? (
+        <Subsection title="failure">
+          <FieldList rows={[
+            ['code', jm.failure.code],
+            ['message', jm.failure.message]
+          ]} />
+        </Subsection>
+      ) : null}
+
+      <Subsection title="run control">
+        <FieldList rows={[
+          ['current state', jr?.currentState],
+          ['available transitions', textValue(jr?.availableTransitions?.items?.map((item) => item.text).join('、') || '无')]
+        ]} />
+
+        {jr?.transitionTable?.state === 'available' ? (
+          <div className="transition-table-wrap">
+            <table className="transition-table">
+              <thead>
+                <tr>
+                  <th>transition</th>
+                  <th>from</th>
+                  <th>to</th>
+                  <th>reversible</th>
+                  <th>terminal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jr.transitionTable.items.map((t, index) => (
+                  <tr key={t.id.text || index}>
+                    <td><strong>{t.label.text}</strong><br /><small>{t.description.text}</small></td>
+                    <td>{t.validFrom.text}</td>
+                    <td>{t.to.text}</td>
+                    <td>{t.reversible.text}</td>
+                    <td>{t.terminal.text}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </Subsection>
+
+      <Subsection title="creation contract">
+        <FieldList rows={[
+          ['dry run', jc?.plan?.dryRun],
+          ['requires confirmation', jc?.plan?.requiresConfirmation],
+          ['job execution available', jc?.plan?.jobExecutionAvailable],
+          ['warnings', textValue(jc?.warnings?.count?.text ?? '0')],
+          ['blockers', textValue(jc?.blockers?.count?.text ?? '0')]
+        ]} />
+
+        {jc?.warnings?.state === 'available' && jc.warnings.items.length > 0 ? (
+          <ul className="compact-list">
+            {jc.warnings.items.map((w, index) => (
+              <li key={`w-${index}`}>
+                <span>{w.code.text}: {w.message.text} ({w.source.text})</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {jc?.blockers?.state === 'available' && jc.blockers.items.length > 0 ? (
+          <ul className="compact-list">
+            {jc.blockers.items.map((b, index) => (
+              <li key={`b-${index}`}>
+                <span>{b.code.text}: {b.message.text} ({b.source.text})</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Subsection>
+
+      <Subsection title="timeline">
+        <FieldList rows={[
+          ['events', jt?.eventCount],
+          ['log refs', jt?.logRefCount]
+        ]} />
+      </Subsection>
+
+      <Subsection title="API routes">
+        <FieldList rows={[
+          ['job model', routeLabelState(jobModelRoute)],
+          ['job creation', routeLabelState(jobCreationRoute)],
+          ['job timeline', routeLabelState(jobTimelineRoute)],
+          ['job run control', routeLabelState(jobRunControlRoute)]
+        ]} />
+      </Subsection>
+
+      <Subsection title="safety boundaries">
+        {jm?.boundaries?.state === 'available' ? (
+          <FieldList rows={jm.boundaries.items.map(({ key, value }) => [key.text, value])} />
+        ) : (
+          <EmptyBlock copy="job model boundaries 未暴露。" />
+        )}
+      </Subsection>
+
+      <p className="panel-note">{jobConsole?.note ?? 'Job Console unavailable.'}</p>
+    </DataPanel>
   );
 }
 

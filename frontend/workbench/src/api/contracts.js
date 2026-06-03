@@ -757,6 +757,10 @@ export function projectWorkbenchContracts(results) {
   const actionAvailabilityData = dataFrom(results.actionAvailability);
   const actionPreviewData = dataFrom(results.actionPreview);
   const diagnosticsData = dataFrom(results.diagnostics);
+  const jobModelData = dataFrom(results.jobModel);
+  const jobCreationData = dataFrom(results.jobCreation);
+  const jobTimelineData = dataFrom(results.jobTimeline);
+  const jobRunControlData = dataFrom(results.jobRunControl);
   const latestRun = latestRunData?.run ?? null;
   const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews)
     ? results.safeArtifactPreviews
@@ -950,6 +954,16 @@ export function projectWorkbenchContracts(results) {
     activeGoal: activeGoalControl,
     capabilities: projectCapabilities(capabilitiesData),
     diagnosticsV1: projectDiagnostics(diagnosticsData),
+    jobConsole: projectJobConsole({
+      jobModelResult: results.jobModel,
+      jobModel: jobModelData,
+      jobCreationResult: results.jobCreation,
+      jobCreation: jobCreationData,
+      jobTimelineResult: results.jobTimeline,
+      jobTimeline: jobTimelineData,
+      jobRunControlResult: results.jobRunControl,
+      jobRunControl: jobRunControlData
+    }),
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
       status: MISSING_TEXT
@@ -8891,6 +8905,172 @@ function projectDiagnostics(diagnostics) {
       available: valueState(available)
     })),
     note: 'Diagnostics panel 只展示 diagnostics.v1 的安全健康字段；浏览器端不会运行 shell、测试、audit、mutation 或模型调用。'
+  };
+}
+
+function projectJobConsole({
+  jobModelResult,
+  jobModel,
+  jobCreationResult,
+  jobCreation,
+  jobTimelineResult,
+  jobTimeline,
+  jobRunControlResult,
+  jobRunControl
+}) {
+  const jobModelOk = jobModelResult?.ok === true;
+  const jobCreationOk = jobCreationResult?.ok === true;
+  const jobTimelineOk = jobTimelineResult?.ok === true;
+  const jobRunControlOk = jobRunControlResult?.ok === true;
+  const allOk = jobModelOk && jobCreationOk && jobTimelineOk && jobRunControlOk;
+  const anyOk = jobModelOk || jobCreationOk || jobTimelineOk || jobRunControlOk;
+
+  return {
+    state: allOk ? 'available' : anyOk ? 'partial' : 'unavailable',
+    jobModel: {
+      state: jobModelOk ? 'ready' : jobModelResult ? 'failed' : 'missing',
+      route: valueState(jobModelResult?.route),
+      contractName: valueState(jobModel?.contractName),
+      jobId: valueState(jobModel?.job?.job_id),
+      goalId: valueState(jobModel?.job?.goal_id),
+      taskId: valueState(jobModel?.job?.task_id),
+      actionId: valueState(jobModel?.job?.action_id),
+      status: valueState(jobModel?.job?.status),
+      queueState: valueState(jobModel?.job?.queue_state),
+      blocker: jobBlockerState(jobModel?.job?.blocker),
+      failure: jobFailureState(jobModel?.job?.failure),
+      createdAt: valueState(jobModel?.job?.timestamps?.created_at),
+      boundaries: jobBoundariesState(jobModel?.boundaries)
+    },
+    jobCreation: {
+      state: jobCreationOk ? 'ready' : jobCreationResult ? 'failed' : 'missing',
+      route: valueState(jobCreationResult?.route),
+      contractName: valueState(jobCreation?.contractName),
+      plan: {
+        dryRun: valueState(jobCreation?.plan?.dryRun),
+        requiresConfirmation: valueState(jobCreation?.plan?.requiresConfirmation),
+        jobExecutionAvailable: valueState(jobCreation?.plan?.jobExecutionAvailable)
+      },
+      warnings: jobCreationWarningsState(jobCreation?.warnings),
+      blockers: jobCreationBlockersState(jobCreation?.blockers)
+    },
+    jobTimeline: {
+      state: jobTimelineOk ? 'ready' : jobTimelineResult ? 'failed' : 'missing',
+      route: valueState(jobTimelineResult?.route),
+      contractName: valueState(jobTimeline?.contractName),
+      eventCount: valueState(Array.isArray(jobTimeline?.timeline) ? jobTimeline.timeline.length : undefined),
+      logRefCount: valueState(Array.isArray(jobTimeline?.logRefs) ? jobTimeline.logRefs.length : undefined)
+    },
+    jobRunControl: {
+      state: jobRunControlOk ? 'ready' : jobRunControlResult ? 'failed' : 'missing',
+      route: valueState(jobRunControlResult?.route),
+      contractName: valueState(jobRunControl?.contractName),
+      currentState: valueState(jobRunControl?.currentState),
+      availableTransitions: jobTransitionsState(jobRunControl?.availableTransitions),
+      transitionTable: jobTransitionTableState(jobRunControl?.transitions)
+    },
+    note: 'Job Console panel 只展示 /api/jobs/* 已暴露的只读 contract 字段。不执行 shell、不 invoke 模型、不写入本地文件。不创建、不运行、不暂停、不取消、不恢复 job。状态变化来自显式 backend job 或 goal 事件。'
+  };
+}
+
+function jobBlockerState(blocker) {
+  if (blocker === null || blocker === undefined) {
+    return { state: 'empty', reason: valueState(undefined), requires: valueState(undefined) };
+  }
+
+  return {
+    state: 'blocked',
+    reason: valueState(blocker.reason),
+    requires: valueState(blocker.requires)
+  };
+}
+
+function jobFailureState(failure) {
+  if (failure === null || failure === undefined) {
+    return { state: 'empty', code: valueState(undefined), message: valueState(undefined) };
+  }
+
+  return {
+    state: 'failed',
+    code: valueState(failure.code),
+    message: valueState(failure.message)
+  };
+}
+
+function jobBoundariesState(boundaries) {
+  if (boundaries === null || boundaries === undefined || typeof boundaries !== 'object') {
+    return { state: 'missing', items: [] };
+  }
+
+  const items = Object.entries(boundaries).map(([key, val]) => ({
+    key: valueState(key),
+    value: valueState(val)
+  }));
+
+  return { state: 'available', items };
+}
+
+function jobCreationWarningsState(warnings) {
+  if (!Array.isArray(warnings)) {
+    return { state: 'missing', count: valueState(undefined), items: [] };
+  }
+
+  return {
+    state: warnings.length === 0 ? 'empty' : 'available',
+    count: valueState(warnings.length),
+    items: warnings.map((w) => ({
+      code: valueState(w.code),
+      message: valueState(w.message),
+      source: valueState(w.source)
+    }))
+  };
+}
+
+function jobCreationBlockersState(blockers) {
+  if (!Array.isArray(blockers)) {
+    return { state: 'missing', count: valueState(undefined), items: [] };
+  }
+
+  return {
+    state: blockers.length === 0 ? 'empty' : 'available',
+    count: valueState(blockers.length),
+    items: blockers.map((b) => ({
+      code: valueState(b.code),
+      message: valueState(b.message),
+      source: valueState(b.source)
+    }))
+  };
+}
+
+function jobTransitionsState(available) {
+  if (!Array.isArray(available)) {
+    return { state: 'missing', count: valueState(undefined), items: [] };
+  }
+
+  return {
+    state: available.length === 0 ? 'empty' : 'available',
+    count: valueState(available.length),
+    items: available.map((id) => valueState(id))
+  };
+}
+
+function jobTransitionTableState(transitions) {
+  if (!Array.isArray(transitions)) {
+    return { state: 'missing', count: valueState(undefined), items: [] };
+  }
+
+  return {
+    state: transitions.length === 0 ? 'empty' : 'available',
+    count: valueState(transitions.length),
+    items: transitions.map((t) => ({
+      id: valueState(t.id),
+      label: valueState(t.label),
+      description: valueState(t.description),
+      validFrom: valueState(Array.isArray(t.validFrom) ? t.validFrom.join(', ') : undefined),
+      to: valueState(t.to),
+      reversible: valueState(t.reversible),
+      terminal: valueState(t.terminal)
+    }))
   };
 }
 

@@ -10733,6 +10733,10 @@ function projectWorkbenchContracts(results) {
 	const actionAvailabilityData = dataFrom(results.actionAvailability);
 	const actionPreviewData = dataFrom(results.actionPreview);
 	const diagnosticsData = dataFrom(results.diagnostics);
+	const jobModelData = dataFrom(results.jobModel);
+	const jobCreationData = dataFrom(results.jobCreation);
+	const jobTimelineData = dataFrom(results.jobTimeline);
+	const jobRunControlData = dataFrom(results.jobRunControl);
 	const latestRun = latestRunData?.run ?? null;
 	const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews) ? results.safeArtifactPreviews : [];
 	const routeStates = [
@@ -10887,6 +10891,16 @@ function projectWorkbenchContracts(results) {
 		activeGoal: activeGoalControl,
 		capabilities: projectCapabilities(capabilitiesData),
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
+		jobConsole: projectJobConsole({
+			jobModelResult: results.jobModel,
+			jobModel: jobModelData,
+			jobCreationResult: results.jobCreation,
+			jobCreation: jobCreationData,
+			jobTimelineResult: results.jobTimeline,
+			jobTimeline: jobTimelineData,
+			jobRunControlResult: results.jobRunControl,
+			jobRunControl: jobRunControlData
+		}),
 		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
 			label: gap,
 			status: MISSING_TEXT
@@ -16803,6 +16817,159 @@ function projectDiagnostics(diagnostics) {
 		note: "Diagnostics panel 只展示 diagnostics.v1 的安全健康字段；浏览器端不会运行 shell、测试、audit、mutation 或模型调用。"
 	};
 }
+function projectJobConsole({ jobModelResult, jobModel, jobCreationResult, jobCreation, jobTimelineResult, jobTimeline, jobRunControlResult, jobRunControl }) {
+	const jobModelOk = jobModelResult?.ok === true;
+	const jobCreationOk = jobCreationResult?.ok === true;
+	const jobTimelineOk = jobTimelineResult?.ok === true;
+	const jobRunControlOk = jobRunControlResult?.ok === true;
+	return {
+		state: jobModelOk && jobCreationOk && jobTimelineOk && jobRunControlOk ? "available" : jobModelOk || jobCreationOk || jobTimelineOk || jobRunControlOk ? "partial" : "unavailable",
+		jobModel: {
+			state: jobModelOk ? "ready" : jobModelResult ? "failed" : "missing",
+			route: valueState(jobModelResult?.route),
+			contractName: valueState(jobModel?.contractName),
+			jobId: valueState(jobModel?.job?.job_id),
+			goalId: valueState(jobModel?.job?.goal_id),
+			taskId: valueState(jobModel?.job?.task_id),
+			actionId: valueState(jobModel?.job?.action_id),
+			status: valueState(jobModel?.job?.status),
+			queueState: valueState(jobModel?.job?.queue_state),
+			blocker: jobBlockerState(jobModel?.job?.blocker),
+			failure: jobFailureState(jobModel?.job?.failure),
+			createdAt: valueState(jobModel?.job?.timestamps?.created_at),
+			boundaries: jobBoundariesState(jobModel?.boundaries)
+		},
+		jobCreation: {
+			state: jobCreationOk ? "ready" : jobCreationResult ? "failed" : "missing",
+			route: valueState(jobCreationResult?.route),
+			contractName: valueState(jobCreation?.contractName),
+			plan: {
+				dryRun: valueState(jobCreation?.plan?.dryRun),
+				requiresConfirmation: valueState(jobCreation?.plan?.requiresConfirmation),
+				jobExecutionAvailable: valueState(jobCreation?.plan?.jobExecutionAvailable)
+			},
+			warnings: jobCreationWarningsState(jobCreation?.warnings),
+			blockers: jobCreationBlockersState(jobCreation?.blockers)
+		},
+		jobTimeline: {
+			state: jobTimelineOk ? "ready" : jobTimelineResult ? "failed" : "missing",
+			route: valueState(jobTimelineResult?.route),
+			contractName: valueState(jobTimeline?.contractName),
+			eventCount: valueState(Array.isArray(jobTimeline?.timeline) ? jobTimeline.timeline.length : void 0),
+			logRefCount: valueState(Array.isArray(jobTimeline?.logRefs) ? jobTimeline.logRefs.length : void 0)
+		},
+		jobRunControl: {
+			state: jobRunControlOk ? "ready" : jobRunControlResult ? "failed" : "missing",
+			route: valueState(jobRunControlResult?.route),
+			contractName: valueState(jobRunControl?.contractName),
+			currentState: valueState(jobRunControl?.currentState),
+			availableTransitions: jobTransitionsState(jobRunControl?.availableTransitions),
+			transitionTable: jobTransitionTableState(jobRunControl?.transitions)
+		},
+		note: "Job Console panel 只展示 /api/jobs/* 已暴露的只读 contract 字段。不执行 shell、不 invoke 模型、不写入本地文件。不创建、不运行、不暂停、不取消、不恢复 job。状态变化来自显式 backend job 或 goal 事件。"
+	};
+}
+function jobBlockerState(blocker) {
+	if (blocker === null || blocker === void 0) return {
+		state: "empty",
+		reason: valueState(void 0),
+		requires: valueState(void 0)
+	};
+	return {
+		state: "blocked",
+		reason: valueState(blocker.reason),
+		requires: valueState(blocker.requires)
+	};
+}
+function jobFailureState(failure) {
+	if (failure === null || failure === void 0) return {
+		state: "empty",
+		code: valueState(void 0),
+		message: valueState(void 0)
+	};
+	return {
+		state: "failed",
+		code: valueState(failure.code),
+		message: valueState(failure.message)
+	};
+}
+function jobBoundariesState(boundaries) {
+	if (boundaries === null || boundaries === void 0 || typeof boundaries !== "object") return {
+		state: "missing",
+		items: []
+	};
+	return {
+		state: "available",
+		items: Object.entries(boundaries).map(([key, val]) => ({
+			key: valueState(key),
+			value: valueState(val)
+		}))
+	};
+}
+function jobCreationWarningsState(warnings) {
+	if (!Array.isArray(warnings)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	return {
+		state: warnings.length === 0 ? "empty" : "available",
+		count: valueState(warnings.length),
+		items: warnings.map((w) => ({
+			code: valueState(w.code),
+			message: valueState(w.message),
+			source: valueState(w.source)
+		}))
+	};
+}
+function jobCreationBlockersState(blockers) {
+	if (!Array.isArray(blockers)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	return {
+		state: blockers.length === 0 ? "empty" : "available",
+		count: valueState(blockers.length),
+		items: blockers.map((b) => ({
+			code: valueState(b.code),
+			message: valueState(b.message),
+			source: valueState(b.source)
+		}))
+	};
+}
+function jobTransitionsState(available) {
+	if (!Array.isArray(available)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	return {
+		state: available.length === 0 ? "empty" : "available",
+		count: valueState(available.length),
+		items: available.map((id) => valueState(id))
+	};
+}
+function jobTransitionTableState(transitions) {
+	if (!Array.isArray(transitions)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	return {
+		state: transitions.length === 0 ? "empty" : "available",
+		count: valueState(transitions.length),
+		items: transitions.map((t) => ({
+			id: valueState(t.id),
+			label: valueState(t.label),
+			description: valueState(t.description),
+			validFrom: valueState(Array.isArray(t.validFrom) ? t.validFrom.join(", ") : void 0),
+			to: valueState(t.to),
+			reversible: valueState(t.reversible),
+			terminal: valueState(t.terminal)
+		}))
+	};
+}
 function projectDiagnosticChecks(checks) {
 	if (!Array.isArray(checks)) return {
 		state: "missing",
@@ -18467,12 +18634,139 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						route: findRoute(model.routeStates, "goalEvents")
 					})]
 				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "job-console-grid",
+					"aria-label": "v35 job console 只读 panel",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobConsolePanel, {
+						jobConsole: model.jobConsole,
+						jobModelRoute: findRoute(model.routeStates, "jobModel"),
+						jobCreationRoute: findRoute(model.routeStates, "jobCreation"),
+						jobTimelineRoute: findRoute(model.routeStates, "jobTimeline"),
+						jobRunControlRoute: findRoute(model.routeStates, "jobRunControl")
+					})
+				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "support-grid",
 					"aria-label": "只读 contract 支撑信息",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RoutePanel, { routes: model.routeStates }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContractGapPanel, { gaps: model.deferredGaps })]
 				})
 			] })
+		]
+	});
+}
+function JobConsolePanel({ jobConsole, jobModelRoute, jobCreationRoute, jobTimelineRoute, jobRunControlRoute }) {
+	const jm = jobConsole?.jobModel;
+	const jc = jobConsole?.jobCreation;
+	const jt = jobConsole?.jobTimeline;
+	const jr = jobConsole?.jobRunControl;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "job-console-panel",
+		kicker: "v35 job queue",
+		title: "Job Console",
+		state: jobConsole?.state ?? "missing",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "job queue",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["state", textValue(jobConsole?.state)],
+					["job id", jm?.jobId],
+					["status", jm?.status],
+					["queue state", jm?.queueState],
+					["goal id", jm?.goalId],
+					["task id", jm?.taskId],
+					["action id", jm?.actionId],
+					["created at", jm?.createdAt]
+				] })
+			}),
+			jm?.blocker?.state === "blocked" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "blocker",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["reason", jm.blocker.reason], ["requires", jm.blocker.requires]] })
+			}) : null,
+			jm?.failure?.state === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "failure",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["code", jm.failure.code], ["message", jm.failure.message]] })
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "run control",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["current state", jr?.currentState], ["available transitions", textValue(jr?.availableTransitions?.items?.map((item) => item.text).join("、") || "无")]] }), jr?.transitionTable?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "transition-table-wrap",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+						className: "transition-table",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "transition" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "from" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "to" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "reversible" }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", { children: "terminal" })
+						] }) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", { children: jr.transitionTable.items.map((t, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", { children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: t.label.text }),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("br", {}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: t.description.text })
+							] }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: t.validFrom.text }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: t.to.text }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: t.reversible.text }),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", { children: t.terminal.text })
+						] }, t.id.text || index)) })]
+					})
+				}) : null]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "creation contract",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["dry run", jc?.plan?.dryRun],
+						["requires confirmation", jc?.plan?.requiresConfirmation],
+						["job execution available", jc?.plan?.jobExecutionAvailable],
+						["warnings", textValue(jc?.warnings?.count?.text ?? "0")],
+						["blockers", textValue(jc?.blockers?.count?.text ?? "0")]
+					] }),
+					jc?.warnings?.state === "available" && jc.warnings.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+						className: "compact-list",
+						children: jc.warnings.items.map((w, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+							w.code.text,
+							": ",
+							w.message.text,
+							" (",
+							w.source.text,
+							")"
+						] }) }, `w-${index}`))
+					}) : null,
+					jc?.blockers?.state === "available" && jc.blockers.items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+						className: "compact-list",
+						children: jc.blockers.items.map((b, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+							b.code.text,
+							": ",
+							b.message.text,
+							" (",
+							b.source.text,
+							")"
+						] }) }, `b-${index}`))
+					}) : null
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "timeline",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["events", jt?.eventCount], ["log refs", jt?.logRefCount]] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "API routes",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["job model", routeLabelState(jobModelRoute)],
+					["job creation", routeLabelState(jobCreationRoute)],
+					["job timeline", routeLabelState(jobTimelineRoute)],
+					["job run control", routeLabelState(jobRunControlRoute)]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety boundaries",
+				children: jm?.boundaries?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: jm.boundaries.items.map(({ key, value }) => [key.text, value]) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "job model boundaries 未暴露。" })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: jobConsole?.note ?? "Job Console unavailable."
+			})
 		]
 	});
 }
