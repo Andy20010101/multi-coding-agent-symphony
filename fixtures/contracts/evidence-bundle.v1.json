@@ -1,0 +1,67 @@
+{
+  "contractName": "evidence-bundle.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-03T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v36-artifact-evidence-index-workspace",
+    "taskId": "task-5",
+    "totalEvents": 2,
+    "summarizedEvents": 2,
+    "matchedEvents": 2,
+    "gateEvents": 1,
+    "dataSource": "goal-event-log.v1"
+  },
+  "events": [
+    {
+      "eventId": "evt_worker_001",
+      "eventType": "worker.evidence-recorded",
+      "phase": "implement",
+      "taskId": "task-5",
+      "gate_name": null,
+      "status": null,
+      "review_verdict": null,
+      "evidenceCount": 1,
+      "statement": "Worker evidence recorded for task-5.",
+      "occurredAt": "2026-06-03T00:00:00.000Z"
+    },
+    {
+      "eventId": "evt_mainver_001",
+      "eventType": "main.verification-passed",
+      "phase": "main-verification",
+      "taskId": "task-5",
+      "gate_name": "main-verification",
+      "status": "passed",
+      "review_verdict": null,
+      "evidenceCount": 1,
+      "statement": "Main verification passed for task-5.",
+      "occurredAt": "2026-06-03T01:00:00.000Z"
+    }
+  ],
+  "gateEvents": [
+    {
+      "eventId": "evt_mainver_001",
+      "eventType": "main.verification-passed",
+      "phase": "main-verification",
+      "taskId": "task-5",
+      "gate_name": "main-verification",
+      "status": "passed",
+      "review_verdict": null,
+      "evidenceCount": 1,
+      "statement": "Main verification passed for task-5.",
+      "occurredAt": "2026-06-03T01:00:00.000Z"
+    }
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "shellExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false
+  }
+}

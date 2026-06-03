@@ -70,6 +70,7 @@ import {
   buildEvidenceTimelineContract,
   buildReleaseBundleContract
 } from './evidence-timeline-contract.js';
+import { buildEvidenceBundle } from './evidence-bundle.js';
 import {
   buildArtifactIndex
 } from './artifact-indexer.js';
@@ -1767,6 +1768,62 @@ export function createSymphonyConsoleServer({
           goalEvents: Array.isArray(bundleGoalEvents.events) ? bundleGoalEvents.events : [],
           goalProgress
         }));
+        return;
+      }
+
+      if (url.pathname === '/api/bundle') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const bundleGoalId = url.searchParams.get('goal') ?? 'latest';
+        const bundleTaskId = url.searchParams.get('task') ?? null;
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-bundle-request',
+            message: 'Bundle route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (isUnsafeGoalRouteSegment(bundleGoalId)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-bundle-request',
+            message: 'Bundle goal query value must be a safe ref.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (bundleTaskId !== null && isUnsafeGoalRouteSegment(bundleTaskId)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-bundle-request',
+            message: 'Bundle task query value must be a safe ref.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const resolvedBundleGoal = await resolveGoalEventsGoal({
+          stateDir,
+          goalId: bundleGoalId
+        });
+
+        const resolvedBundleGoalId = resolvedBundleGoal?.goalId ?? bundleGoalId;
+
+        const bundle = await buildEvidenceBundle({
+          stateDir,
+          goalId: resolvedBundleGoalId,
+          taskId: bundleTaskId
+        });
+
+        writeJsonResponse(response, 200, bundle);
         return;
       }
 

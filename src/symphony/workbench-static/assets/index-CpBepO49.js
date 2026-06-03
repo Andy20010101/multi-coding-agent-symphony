@@ -9916,6 +9916,7 @@ var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var ARTIFACT_INDEX_CONTRACT_NAME = "artifact-index.v1";
 var EVIDENCE_TIMELINE_CONTRACT_NAME = "evidence-timeline.v1";
 var RELEASE_BUNDLE_CONTRACT_NAME = "release-bundle.v1";
+var EVIDENCE_BUNDLE_CONTRACT_NAME = "evidence-bundle.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
@@ -10537,6 +10538,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/release/bundle",
 		method: "GET",
 		contractName: RELEASE_BUNDLE_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "evidenceBundle",
+		label: "Evidence Bundle",
+		path: "/api/bundle",
+		method: "GET",
+		contractName: EVIDENCE_BUNDLE_CONTRACT_NAME
 	})
 ]);
 var GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE = Object.freeze({

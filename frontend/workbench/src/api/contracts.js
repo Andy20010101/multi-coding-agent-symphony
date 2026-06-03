@@ -31,6 +31,7 @@ const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ARTIFACT_INDEX_CONTRACT_NAME = 'artifact-index.v1';
 const EVIDENCE_TIMELINE_CONTRACT_NAME = 'evidence-timeline.v1';
 const RELEASE_BUNDLE_CONTRACT_NAME = 'release-bundle.v1';
+const EVIDENCE_BUNDLE_CONTRACT_NAME = 'evidence-bundle.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
@@ -540,6 +541,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/release/bundle',
     method: 'GET',
     contractName: RELEASE_BUNDLE_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'evidenceBundle',
+    label: 'Evidence Bundle',
+    path: '/api/bundle',
+    method: 'GET',
+    contractName: EVIDENCE_BUNDLE_CONTRACT_NAME
   })
 ]);
 

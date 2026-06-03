@@ -100,6 +100,7 @@ import {
   buildGoalCloseoutReport,
   renderGoalCloseoutReportMarkdown
 } from '../src/symphony/goal-closeout-report.js';
+import { buildEvidenceBundle } from '../src/symphony/evidence-bundle.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -165,7 +166,8 @@ const KNOWN_COMMANDS = new Set([
   'adopt',
   'new',
   'stage',
-  'next'
+  'next',
+  'evidence'
 ]);
 let productRunSequence = 0;
 
@@ -378,6 +380,13 @@ export async function runSymphonyCli({
 
     if (command === 'next') {
       return await runSymphonyNext({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'evidence') {
+      return await runSymphonyEvidence({
         args: rest,
         stdout
       });
@@ -2358,6 +2367,103 @@ function commandForGoalNextAction(goalNextAction) {
   }
 
   return goalNextAction.copyOnlyCommands[0] ?? `symphony goal next --goal ${goalNextAction.goalId}`;
+}
+
+
+async function runSymphonyEvidence({ args, stdout }) {
+  const options = parseEvidenceArgs(args);
+
+  if (options.subcommand === "bundle") {
+    const bundle = await buildEvidenceBundle({
+      stateDir: options.stateDir,
+      goalId: options.goalId,
+      taskId: options.taskId
+    });
+
+    if (options.json) {
+      writeJson(stdout, bundle);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderEvidenceBundleText(bundle));
+    return EXIT_CODES.ok;
+  }
+
+  throw new UsageError("evidence subcommand must be: bundle");
+}
+
+function parseEvidenceArgs(args) {
+  const options = {
+    subcommand: null,
+    stateDir: ".symphony",
+    goalId: null,
+    taskId: null,
+    json: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === "--json") {
+      options.json = true;
+      continue;
+    }
+
+    if (value === "--state-dir") {
+      options.stateDir = readRequiredValue(args, index, "--state-dir");
+      index += 1;
+      continue;
+    }
+
+    if (value === "--goal") {
+      options.goalId = readRequiredValue(args, index, "--goal");
+      index += 1;
+      continue;
+    }
+
+    if (value === "--task") {
+      options.taskId = readRequiredValue(args, index, "--task");
+      index += 1;
+      continue;
+    }
+
+    if (!value.startsWith("--") && options.subcommand === null) {
+      options.subcommand = value;
+      continue;
+    }
+
+    throw new UsageError(`unknown evidence option: ${value}`);
+  }
+
+  if (options.subcommand === null) {
+    throw new UsageError("evidence subcommand is required: bundle");
+  }
+
+  if (options.goalId === null) {
+    throw new UsageError("--goal is required for evidence bundle");
+  }
+
+  return options;
+}
+
+function renderEvidenceBundleText(bundle) {
+  const lines = [
+    `Evidence bundle: ${bundle.context.goalId}`,
+    `Task: ${bundle.context.taskId ?? "all"}`,
+    `Events: ${bundle.context.matchedEvents} (${bundle.context.gateEvents} gate/review events)`,
+    `Generated: ${bundle.generatedAt}`,
+    ""
+  ];
+
+  for (const event of bundle.events) {
+    const gateInfo = event.gate_name !== null ? `gate=${event.gate_name} status=${event.status}` : "";
+    const reviewInfo = event.review_verdict !== null ? `verdict=${event.review_verdict}` : "";
+    const extra = [gateInfo, reviewInfo].filter(Boolean).join(" ");
+    lines.push(`- ${event.eventType} task=${event.taskId ?? "none"} ${extra}`.trim());
+  }
+
+  lines.push("");
+  return lines.join("\n");
 }
 
 async function runSymphonyAdopt({ args, stdout, runner }) {
