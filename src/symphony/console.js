@@ -67,8 +67,8 @@ import {
   buildDiagnosticsContract
 } from './diagnostics.js';
 import {
-  buildArtifactIndexContract
-} from './artifact-index-contract.js';
+  buildArtifactIndex
+} from './artifact-indexer.js';
 import {
   buildErrorEnvelope
 } from './error-envelope.js';
@@ -1574,10 +1574,22 @@ export function createSymphonyConsoleServer({
           return;
         }
 
-        writeJsonResponse(response, 200, await buildArtifactIndexContract({
+        const artifactStoreDir = join(stateDir, 'artifacts');
+        const artifactIndex = await buildArtifactIndex({
+          artifactStoreDir,
+          stateDir,
           goalId,
           taskId
-        }));
+        });
+
+        if (kind !== null) {
+          artifactIndex.entries = artifactIndex.entries.filter(
+            (entry) => entry.kind === kind
+          );
+          artifactIndex.context.kindFilter = kind;
+        }
+
+        writeJsonResponse(response, 200, artifactIndex);
         return;
       }
 

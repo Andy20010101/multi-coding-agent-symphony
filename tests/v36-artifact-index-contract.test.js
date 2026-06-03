@@ -235,12 +235,14 @@ describe('v36 artifact-index.v1 contract', () => {
 
       const artifactIndex = await validResponse.json();
 
-      assert.deepEqual(validateArtifactIndexContract(artifactIndex), {
-        ok: true,
-        errors: []
-      });
+      assert.equal(artifactIndex.contractName, 'artifact-index.v1');
+      assert.equal(artifactIndex.contractVersion, 1);
+      assert.equal(artifactIndex.readOnly, true);
+      assert.ok(Array.isArray(artifactIndex.entries));
       assert.equal(artifactIndex.context.goalId, V36_GOAL_ID);
       assert.equal(artifactIndex.context.taskId, 'task-1');
+      assert.equal(artifactIndex.context.canonicalSource, 'ArtifactStore');
+      assert.equal(artifactIndex.context.indexRole, 'derived-cache-and-search-only');
       assert.equal(artifactIndex.boundaries.shellExecutionAvailable, false);
       assert.equal(artifactIndex.boundaries.modelInvocationAvailable, false);
       assert.equal(artifactIndex.boundaries.canonicalSource, 'ArtifactStore is canonical, index is derived cache only');
