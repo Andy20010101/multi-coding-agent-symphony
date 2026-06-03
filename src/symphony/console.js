@@ -70,6 +70,10 @@ import {
   buildArtifactIndex
 } from './artifact-indexer.js';
 import {
+  searchArtifactEntries,
+  validateSearchFilters
+} from './safe-preview-search.js';
+import {
   buildErrorEnvelope
 } from './error-envelope.js';
 import {
@@ -1542,17 +1546,18 @@ export function createSymphonyConsoleServer({
       }
 
       if (url.pathname === '/api/artifacts') {
-        const allowedParams = new Set(['goal', 'task', 'kind']);
+        const allowedParams = new Set(['goal', 'task', 'kind', 'q']);
         const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
         const goalId = url.searchParams.get('goal') ?? 'latest';
         const taskId = url.searchParams.get('task');
         const kind = url.searchParams.get('kind');
+        const query = url.searchParams.get('q');
 
         if (unsupportedParams.length > 0) {
           writeApiErrorResponse(response, {
             status: 400,
             code: 'invalid-artifact-index-request',
-            message: 'Artifact index route accepts only goal, task, and kind query parameters.',
+            message: 'Artifact index route accepts only goal, task, kind, and q query parameters.',
             route: url.pathname,
             method
           });
@@ -1574,6 +1579,20 @@ export function createSymphonyConsoleServer({
           return;
         }
 
+        if (query !== null) {
+          const searchValidation = validateSearchFilters({ q: query });
+          if (!searchValidation.ok) {
+            writeApiErrorResponse(response, {
+              status: 400,
+              code: 'invalid-artifact-index-request',
+              message: `Invalid search query: ${searchValidation.errors.join('; ')}`,
+              route: url.pathname,
+              method
+            });
+            return;
+          }
+        }
+
         const artifactStoreDir = join(stateDir, 'artifacts');
         const artifactIndex = await buildArtifactIndex({
           artifactStoreDir,
@@ -1582,11 +1601,24 @@ export function createSymphonyConsoleServer({
           taskId
         });
 
-        if (kind !== null) {
-          artifactIndex.entries = artifactIndex.entries.filter(
-            (entry) => entry.kind === kind
+        if (kind !== null || query !== null) {
+          const filters = {
+            ...(kind !== null ? { kind } : {}),
+            ...(query !== null ? { q: query } : {})
+          };
+
+          artifactIndex.entries = searchArtifactEntries(
+            artifactIndex.entries,
+            filters
           );
-          artifactIndex.context.kindFilter = kind;
+
+          if (kind !== null) {
+            artifactIndex.context.kindFilter = kind;
+          }
+
+          if (query !== null) {
+            artifactIndex.context.searchQuery = query;
+          }
         }
 
         writeJsonResponse(response, 200, artifactIndex);
