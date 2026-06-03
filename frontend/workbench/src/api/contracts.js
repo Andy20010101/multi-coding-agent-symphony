@@ -29,6 +29,8 @@ const JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = 'job-timeline-log-stream.v1';
 const JOB_RUN_CONTROL_CONTRACT_NAME = 'job-run-control.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ARTIFACT_INDEX_CONTRACT_NAME = 'artifact-index.v1';
+const EVIDENCE_TIMELINE_CONTRACT_NAME = 'evidence-timeline.v1';
+const RELEASE_BUNDLE_CONTRACT_NAME = 'release-bundle.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
@@ -524,6 +526,20 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/artifacts',
     method: 'GET',
     contractName: ARTIFACT_INDEX_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'evidenceTimeline',
+    label: 'Evidence Timeline',
+    path: '/api/evidence/timeline',
+    method: 'GET',
+    contractName: EVIDENCE_TIMELINE_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'releaseBundle',
+    label: 'Release Bundle',
+    path: '/api/release/bundle',
+    method: 'GET',
+    contractName: RELEASE_BUNDLE_CONTRACT_NAME
   })
 ]);
 
@@ -769,6 +785,8 @@ export function projectWorkbenchContracts(results) {
   const jobCreationData = dataFrom(results.jobCreation);
   const jobTimelineData = dataFrom(results.jobTimeline);
   const jobRunControlData = dataFrom(results.jobRunControl);
+  const evidenceTimelineData = dataFrom(results.evidenceTimeline);
+  const releaseBundleData = dataFrom(results.releaseBundle);
   const latestRun = latestRunData?.run ?? null;
   const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews)
     ? results.safeArtifactPreviews
@@ -971,6 +989,14 @@ export function projectWorkbenchContracts(results) {
       jobTimeline: jobTimelineData,
       jobRunControlResult: results.jobRunControl,
       jobRunControl: jobRunControlData
+    }),
+    evidenceTimeline: projectEvidenceTimeline({
+      result: results.evidenceTimeline,
+      timeline: evidenceTimelineData
+    }),
+    releaseBundle: projectReleaseBundle({
+      result: results.releaseBundle,
+      bundle: releaseBundleData
     }),
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
@@ -9803,6 +9829,89 @@ function hasOwn(value, key) {
 
 function unique(values) {
   return [...new Set(values)];
+}
+
+function projectEvidenceTimeline({ result, timeline }) {
+  if (timeline === null || timeline === undefined) {
+    return {
+      state: result?.ok === true ? 'empty' : 'unavailable',
+      errorEnvelope: result?.errorEnvelope ?? null,
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      generatedAt: valueState(undefined),
+      readOnly: valueState(undefined),
+      context: {},
+      entryCount: valueState(0),
+      entries: valueState([]),
+      note: 'Evidence timeline 未暴露 / 不可用。'
+    };
+  }
+
+  return {
+    state: Array.isArray(timeline.timeline) && timeline.timeline.length > 0 ? 'available' : 'empty',
+    errorEnvelope: result?.errorEnvelope ?? null,
+    contractName: valueState(timeline.contractName),
+    contractVersion: valueState(timeline.contractVersion),
+    generatedAt: valueState(timeline.generatedAt),
+    readOnly: valueState(timeline.readOnly),
+    context: {
+      goalId: valueState(timeline.context?.goalId),
+      taskId: valueState(timeline.context?.taskId),
+      entryCount: valueState(timeline.context?.entryCount),
+      canonicalSource: valueState(timeline.context?.canonicalSource),
+      timelineRole: valueState(timeline.context?.timelineRole)
+    },
+    entryCount: valueState(timeline.context?.entryCount ?? (Array.isArray(timeline.timeline) ? timeline.timeline.length : 0)),
+    entries: valueState(Array.isArray(timeline.timeline) ? timeline.timeline : []),
+    boundaries: {
+      readOnly: valueState(timeline.boundaries?.readOnly),
+      canonicalSource: valueState(timeline.boundaries?.canonicalSource)
+    },
+    note: 'Evidence Timeline 只展示 artifact index 和 goal events 的派生时间线数据。不执行 shell、不调用模型、不打开本地文件。'
+  };
+}
+
+function projectReleaseBundle({ result, bundle }) {
+  if (bundle === null || bundle === undefined) {
+    return {
+      state: result?.ok === true ? 'empty' : 'unavailable',
+      errorEnvelope: result?.errorEnvelope ?? null,
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      generatedAt: valueState(undefined),
+      readOnly: valueState(undefined),
+      context: {},
+      taskCount: valueState(0),
+      tasks: valueState([]),
+      releaseGates: valueState([]),
+      releaseReady: valueState(false),
+      note: 'Release bundle 未暴露 / 不可用。'
+    };
+  }
+
+  return {
+    state: bundle.bundle?.tasks?.length > 0 ? 'available' : 'empty',
+    errorEnvelope: result?.errorEnvelope ?? null,
+    contractName: valueState(bundle.contractName),
+    contractVersion: valueState(bundle.contractVersion),
+    generatedAt: valueState(bundle.generatedAt),
+    readOnly: valueState(bundle.readOnly),
+    context: {
+      goalId: valueState(bundle.context?.goalId),
+      canonicalSource: valueState(bundle.context?.canonicalSource),
+      bundleRole: valueState(bundle.context?.bundleRole)
+    },
+    taskCount: valueState(bundle.bundle?.taskCount ?? 0),
+    tasks: valueState(bundle.bundle?.tasks ?? []),
+    releaseGates: valueState(bundle.bundle?.releaseGates ?? []),
+    releaseReady: valueState(bundle.bundle?.releaseReady ?? false),
+    boundaries: {
+      readOnly: valueState(bundle.boundaries?.readOnly),
+      canonicalSource: valueState(bundle.boundaries?.canonicalSource),
+      releaseDecisionAvailable: valueState(bundle.boundaries?.releaseDecisionAvailable)
+    },
+    note: 'Release Bundle 按 task 展示 worker/reviewer/main-verifier/release-manager evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。'
+  };
 }
 
 export const CONTRACT_TEXT = Object.freeze({

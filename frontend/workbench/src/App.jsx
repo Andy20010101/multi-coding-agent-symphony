@@ -322,6 +322,17 @@ export function WorkbenchShell({
             />
           </section>
 
+          <section className="evidence-grid" aria-label="v36 evidence timeline 与 release bundle 只读 panels">
+            <EvidenceTimelinePanel
+              evidenceTimeline={model.evidenceTimeline}
+              route={findRoute(model.routeStates, 'evidenceTimeline')}
+            />
+            <ReleaseBundlePanel
+              releaseBundle={model.releaseBundle}
+              route={findRoute(model.routeStates, 'releaseBundle')}
+            />
+          </section>
+
           <section className="support-grid" aria-label="只读 contract 支撑信息">
             <RoutePanel routes={model.routeStates} />
             <ContractGapPanel gaps={model.deferredGaps} />
@@ -1633,6 +1644,149 @@ function EvidenceMatrixPanel({ matrix, route }) {
 
       <p className="panel-note">Evidence Matrix 只使用 reviewer/main/release 的显式 event；approved、main-verified 和 release-ready 不由 ledger status、分支、文件名或命令文本推断。</p>
     </DataPanel>
+  );
+}
+
+function EvidenceTimelinePanel({ evidenceTimeline, route }) {
+  const entries = evidenceTimeline?.entries?.value ?? [];
+  const entryCount = evidenceTimeline?.entryCount?.value ?? 0;
+
+  return (
+    <DataPanel
+      id="evidence-timeline-panel"
+      kicker="v36 evidence timeline"
+      title="Evidence Timeline"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', evidenceTimeline?.contractName],
+        ['contractVersion', evidenceTimeline?.contractVersion],
+        ['generatedAt', evidenceTimeline?.generatedAt],
+        ['readOnly', evidenceTimeline?.readOnly],
+        ['context.goalId', evidenceTimeline?.context?.goalId],
+        ['context.taskId', evidenceTimeline?.context?.taskId],
+        ['context.entryCount', evidenceTimeline?.context?.entryCount],
+        ['context.canonicalSource', evidenceTimeline?.context?.canonicalSource],
+        ['context.timelineRole', evidenceTimeline?.context?.timelineRole],
+        ['boundaries.readOnly', evidenceTimeline?.boundaries?.readOnly],
+        ['boundaries.canonicalSource', evidenceTimeline?.boundaries?.canonicalSource],
+        ['entryCount', evidenceTimeline?.entryCount]
+      ]} />
+
+      <Subsection title={`evidence entries (${entryCount})`}>
+        <EvidenceTimelineEntryList entries={entries} />
+      </Subsection>
+
+      <p className="panel-note">{evidenceTimeline?.note ?? 'Evidence Timeline 只展示 artifact index 和 goal events 的派生时间线数据。不执行 shell、不调用模型、不打开本地文件。'}</p>
+    </DataPanel>
+  );
+}
+
+function EvidenceTimelineEntryList({ entries }) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return <p className="empty-list">暂无 evidence timeline 条目</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {entries.map((entry, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-kind">{entry.evidence_kind ?? entry.kind ?? '-'}</span>
+          {' '}
+          <span className="artifact-ref">{entry.artifact_ref ?? '-'}</span>
+          <span className="artifact-meta">
+            goal={entry.goal_id ?? '-'} task={entry.task_id ?? '-'}
+            {' '}ts={typeof entry.timestamp === 'string' ? entry.timestamp.slice(0, 19) : '-'}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReleaseBundlePanel({ releaseBundle, route }) {
+  const tasks = releaseBundle?.tasks?.value ?? [];
+  const releaseGates = releaseBundle?.releaseGates?.value ?? [];
+  const taskCount = releaseBundle?.taskCount?.value ?? 0;
+  const releaseReady = releaseBundle?.releaseReady?.value ?? false;
+
+  return (
+    <DataPanel
+      id="release-bundle-panel"
+      kicker="v36 release bundle"
+      title="Release Bundle"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', releaseBundle?.contractName],
+        ['contractVersion', releaseBundle?.contractVersion],
+        ['generatedAt', releaseBundle?.generatedAt],
+        ['readOnly', releaseBundle?.readOnly],
+        ['context.goalId', releaseBundle?.context?.goalId],
+        ['context.canonicalSource', releaseBundle?.context?.canonicalSource],
+        ['context.bundleRole', releaseBundle?.context?.bundleRole],
+        ['taskCount', releaseBundle?.taskCount],
+        ['releaseReady', releaseBundle?.releaseReady],
+        ['boundaries.readOnly', releaseBundle?.boundaries?.readOnly],
+        ['boundaries.releaseDecisionAvailable', releaseBundle?.boundaries?.releaseDecisionAvailable]
+      ]} />
+
+      <Subsection title={`release gates (${releaseGates.length})`}>
+        <ReleaseGatesList releaseGates={releaseGates} />
+      </Subsection>
+
+      <Subsection title={`tasks (${taskCount})`}>
+        <ReleaseBundleTaskList tasks={tasks} />
+      </Subsection>
+
+      <p className="panel-note">{releaseBundle?.note ?? 'Release Bundle 按 task 展示 evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。'}</p>
+    </DataPanel>
+  );
+}
+
+function ReleaseGatesList({ releaseGates }) {
+  if (!Array.isArray(releaseGates) || releaseGates.length === 0) {
+    return <p className="empty-list">暂无 release gate 条目</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {releaseGates.map((gate, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-kind">gate={gate.gate ?? '-'}</span>
+          {' '}
+          <span className="artifact-meta">
+            status={gate.status ?? '-'}
+            {' '}verifier={gate.verifier ?? '-'}
+            {' '}eventId={gate.eventId ?? '-'}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReleaseBundleTaskList({ tasks }) {
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return <p className="empty-list">暂无 task bundle 条目</p>;
+  }
+
+  return (
+    <ul className="task-list">
+      {tasks.map((task, index) => (
+        <li key={index} className="task-item">
+          <span className="task-title">task: {task.taskId ?? '-'}</span>
+          <ul className="evidence-kind-list">
+            <li>worker evidence: {Array.isArray(task.workerEvidence) ? task.workerEvidence.length : 0} entries</li>
+            <li>review evidence: {Array.isArray(task.reviewEvidence) ? task.reviewEvidence.length : 0} entries</li>
+            <li>main verification: {Array.isArray(task.mainVerification) ? task.mainVerification.length : 0} entries</li>
+            <li>release evidence: {Array.isArray(task.releaseEvidence) ? task.releaseEvidence.length : 0} entries</li>
+          </ul>
+        </li>
+      ))}
+    </ul>
   );
 }
 

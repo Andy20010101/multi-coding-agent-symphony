@@ -86,7 +86,9 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
         ['GET', '/api/jobs/control', 'job-run-control.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
-        ['GET', '/api/artifacts', 'artifact-index.v1']
+        ['GET', '/api/artifacts', 'artifact-index.v1'],
+        ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
+        ['GET', '/api/release/bundle', 'release-bundle.v1']
       ]
     );
     assert.deepEqual(
@@ -117,6 +119,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/jobs/control', 'job-run-control.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
         ['GET', '/api/artifacts', 'artifact-index.v1'],
+        ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
+        ['GET', '/api/release/bundle', 'release-bundle.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
         ['GET', '/api/goals/<goal-id>/operations', 'goal-operation-runs.v1'],

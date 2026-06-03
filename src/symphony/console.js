@@ -67,6 +67,10 @@ import {
   buildDiagnosticsContract
 } from './diagnostics.js';
 import {
+  buildEvidenceTimelineContract,
+  buildReleaseBundleContract
+} from './evidence-timeline-contract.js';
+import {
   buildArtifactIndex
 } from './artifact-indexer.js';
 import {
@@ -1622,6 +1626,147 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, artifactIndex);
+        return;
+      }
+
+      if (url.pathname === '/api/evidence/timeline') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-evidence-timeline-request',
+            message: 'Evidence timeline route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(goalId)
+          || (taskId !== null && isUnsafeGoalRouteSegment(taskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-evidence-timeline-request',
+            message: 'Evidence timeline goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const resolvedGoal = await resolveGoalEventsGoal({
+          stateDir,
+          goalId
+        });
+
+        let goalEventsData = { events: [] };
+        if (resolvedGoal !== null) {
+          try {
+            const eventLog = await readGoalEventJournal({
+              stateDir,
+              goalId: resolvedGoal.goalId,
+              goalTitle: resolvedGoal.goalTitle,
+              baseline: resolvedGoal.baseline
+            });
+            goalEventsData = eventLog;
+          } catch {
+            goalEventsData = { events: [] };
+          }
+        }
+
+        const artifactStoreDir = join(stateDir, 'artifacts');
+        const artifactIndex = await buildArtifactIndex({
+          artifactStoreDir,
+          stateDir,
+          goalId,
+          taskId
+        });
+
+        writeJsonResponse(response, 200, buildEvidenceTimelineContract({
+          goalId,
+          taskId,
+          entries: artifactIndex.entries,
+          goalEvents: Array.isArray(goalEventsData.events) ? goalEventsData.events : []
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/release/bundle') {
+        const allowedParams = new Set(['goal']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-release-bundle-request',
+            message: 'Release bundle route accepts only goal query parameter.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (isUnsafeGoalRouteSegment(goalId)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-release-bundle-request',
+            message: 'Release bundle goal query value must be a safe ref.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const resolvedBundleGoal = await resolveGoalEventsGoal({
+          stateDir,
+          goalId
+        });
+
+        let bundleGoalEvents = { events: [] };
+        let goalProgress = null;
+        if (resolvedBundleGoal !== null) {
+          try {
+            const eventLog = await readGoalEventJournal({
+              stateDir,
+              goalId: resolvedBundleGoal.goalId,
+              goalTitle: resolvedBundleGoal.goalTitle,
+              baseline: resolvedBundleGoal.baseline
+            });
+            bundleGoalEvents = eventLog;
+          } catch {
+            bundleGoalEvents = { events: [] };
+          }
+
+          try {
+            goalProgress = await buildGoalProgressLedger({
+              stateDir,
+              goalId: resolvedBundleGoal.goalId
+            });
+          } catch {
+            goalProgress = null;
+          }
+        }
+
+        const bundleArtifactStoreDir = join(stateDir, 'artifacts');
+        const bundleArtifactIndex = await buildArtifactIndex({
+          artifactStoreDir: bundleArtifactStoreDir,
+          stateDir,
+          goalId
+        });
+
+        writeJsonResponse(response, 200, buildReleaseBundleContract({
+          goalId,
+          entries: bundleArtifactIndex.entries,
+          goalEvents: Array.isArray(bundleGoalEvents.events) ? bundleGoalEvents.events : [],
+          goalProgress
+        }));
         return;
       }
 

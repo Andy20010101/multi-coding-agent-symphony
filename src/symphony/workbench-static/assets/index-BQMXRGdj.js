@@ -9914,6 +9914,8 @@ var JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = "job-timeline-log-stream.v1";
 var JOB_RUN_CONTROL_CONTRACT_NAME = "job-run-control.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var ARTIFACT_INDEX_CONTRACT_NAME = "artifact-index.v1";
+var EVIDENCE_TIMELINE_CONTRACT_NAME = "evidence-timeline.v1";
+var RELEASE_BUNDLE_CONTRACT_NAME = "release-bundle.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
@@ -10521,6 +10523,20 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/artifacts",
 		method: "GET",
 		contractName: ARTIFACT_INDEX_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "evidenceTimeline",
+		label: "Evidence Timeline",
+		path: "/api/evidence/timeline",
+		method: "GET",
+		contractName: EVIDENCE_TIMELINE_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "releaseBundle",
+		label: "Release Bundle",
+		path: "/api/release/bundle",
+		method: "GET",
+		contractName: RELEASE_BUNDLE_CONTRACT_NAME
 	})
 ]);
 var GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE = Object.freeze({
@@ -10745,6 +10761,8 @@ function projectWorkbenchContracts(results) {
 	const jobCreationData = dataFrom(results.jobCreation);
 	const jobTimelineData = dataFrom(results.jobTimeline);
 	const jobRunControlData = dataFrom(results.jobRunControl);
+	const evidenceTimelineData = dataFrom(results.evidenceTimeline);
+	const releaseBundleData = dataFrom(results.releaseBundle);
 	const latestRun = latestRunData?.run ?? null;
 	const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews) ? results.safeArtifactPreviews : [];
 	const routeStates = [
@@ -10908,6 +10926,14 @@ function projectWorkbenchContracts(results) {
 			jobTimeline: jobTimelineData,
 			jobRunControlResult: results.jobRunControl,
 			jobRunControl: jobRunControlData
+		}),
+		evidenceTimeline: projectEvidenceTimeline({
+			result: results.evidenceTimeline,
+			timeline: evidenceTimelineData
+		}),
+		releaseBundle: projectReleaseBundle({
+			result: results.releaseBundle,
+			bundle: releaseBundleData
 		}),
 		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
 			label: gap,
@@ -17538,6 +17564,81 @@ function hasOwn(value, key) {
 function unique(values) {
 	return [...new Set(values)];
 }
+function projectEvidenceTimeline({ result, timeline }) {
+	if (timeline === null || timeline === void 0) return {
+		state: result?.ok === true ? "empty" : "unavailable",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(void 0),
+		contractVersion: valueState(void 0),
+		generatedAt: valueState(void 0),
+		readOnly: valueState(void 0),
+		context: {},
+		entryCount: valueState(0),
+		entries: valueState([]),
+		note: "Evidence timeline 未暴露 / 不可用。"
+	};
+	return {
+		state: Array.isArray(timeline.timeline) && timeline.timeline.length > 0 ? "available" : "empty",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(timeline.contractName),
+		contractVersion: valueState(timeline.contractVersion),
+		generatedAt: valueState(timeline.generatedAt),
+		readOnly: valueState(timeline.readOnly),
+		context: {
+			goalId: valueState(timeline.context?.goalId),
+			taskId: valueState(timeline.context?.taskId),
+			entryCount: valueState(timeline.context?.entryCount),
+			canonicalSource: valueState(timeline.context?.canonicalSource),
+			timelineRole: valueState(timeline.context?.timelineRole)
+		},
+		entryCount: valueState(timeline.context?.entryCount ?? (Array.isArray(timeline.timeline) ? timeline.timeline.length : 0)),
+		entries: valueState(Array.isArray(timeline.timeline) ? timeline.timeline : []),
+		boundaries: {
+			readOnly: valueState(timeline.boundaries?.readOnly),
+			canonicalSource: valueState(timeline.boundaries?.canonicalSource)
+		},
+		note: "Evidence Timeline 只展示 artifact index 和 goal events 的派生时间线数据。不执行 shell、不调用模型、不打开本地文件。"
+	};
+}
+function projectReleaseBundle({ result, bundle }) {
+	if (bundle === null || bundle === void 0) return {
+		state: result?.ok === true ? "empty" : "unavailable",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(void 0),
+		contractVersion: valueState(void 0),
+		generatedAt: valueState(void 0),
+		readOnly: valueState(void 0),
+		context: {},
+		taskCount: valueState(0),
+		tasks: valueState([]),
+		releaseGates: valueState([]),
+		releaseReady: valueState(false),
+		note: "Release bundle 未暴露 / 不可用。"
+	};
+	return {
+		state: bundle.bundle?.tasks?.length > 0 ? "available" : "empty",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(bundle.contractName),
+		contractVersion: valueState(bundle.contractVersion),
+		generatedAt: valueState(bundle.generatedAt),
+		readOnly: valueState(bundle.readOnly),
+		context: {
+			goalId: valueState(bundle.context?.goalId),
+			canonicalSource: valueState(bundle.context?.canonicalSource),
+			bundleRole: valueState(bundle.context?.bundleRole)
+		},
+		taskCount: valueState(bundle.bundle?.taskCount ?? 0),
+		tasks: valueState(bundle.bundle?.tasks ?? []),
+		releaseGates: valueState(bundle.bundle?.releaseGates ?? []),
+		releaseReady: valueState(bundle.bundle?.releaseReady ?? false),
+		boundaries: {
+			readOnly: valueState(bundle.boundaries?.readOnly),
+			canonicalSource: valueState(bundle.boundaries?.canonicalSource),
+			releaseDecisionAvailable: valueState(bundle.boundaries?.releaseDecisionAvailable)
+		},
+		note: "Release Bundle 按 task 展示 worker/reviewer/main-verifier/release-manager evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。"
+	};
+}
 Object.freeze({
 	missing: MISSING_TEXT,
 	unavailable: UNAVAILABLE_TEXT,
@@ -18652,6 +18753,17 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						jobTimelineRoute: findRoute(model.routeStates, "jobTimeline"),
 						jobRunControlRoute: findRoute(model.routeStates, "jobRunControl")
 					})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "evidence-grid",
+					"aria-label": "v36 evidence timeline 与 release bundle 只读 panels",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceTimelinePanel, {
+						evidenceTimeline: model.evidenceTimeline,
+						route: findRoute(model.routeStates, "evidenceTimeline")
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseBundlePanel, {
+						releaseBundle: model.releaseBundle,
+						route: findRoute(model.routeStates, "releaseBundle")
+					})]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "support-grid",
@@ -19851,6 +19963,188 @@ function EvidenceMatrixPanel({ matrix, route }) {
 				children: "Evidence Matrix 只使用 reviewer/main/release 的显式 event；approved、main-verified 和 release-ready 不由 ledger status、分支、文件名或命令文本推断。"
 			})
 		]
+	});
+}
+function EvidenceTimelinePanel({ evidenceTimeline, route }) {
+	const entries = evidenceTimeline?.entries?.value ?? [];
+	const entryCount = evidenceTimeline?.entryCount?.value ?? 0;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "evidence-timeline-panel",
+		kicker: "v36 evidence timeline",
+		title: "Evidence Timeline",
+		state: routeStateText(route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", evidenceTimeline?.contractName],
+				["contractVersion", evidenceTimeline?.contractVersion],
+				["generatedAt", evidenceTimeline?.generatedAt],
+				["readOnly", evidenceTimeline?.readOnly],
+				["context.goalId", evidenceTimeline?.context?.goalId],
+				["context.taskId", evidenceTimeline?.context?.taskId],
+				["context.entryCount", evidenceTimeline?.context?.entryCount],
+				["context.canonicalSource", evidenceTimeline?.context?.canonicalSource],
+				["context.timelineRole", evidenceTimeline?.context?.timelineRole],
+				["boundaries.readOnly", evidenceTimeline?.boundaries?.readOnly],
+				["boundaries.canonicalSource", evidenceTimeline?.boundaries?.canonicalSource],
+				["entryCount", evidenceTimeline?.entryCount]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `evidence entries (${entryCount})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceTimelineEntryList, { entries })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: evidenceTimeline?.note ?? "Evidence Timeline 只展示 artifact index 和 goal events 的派生时间线数据。不执行 shell、不调用模型、不打开本地文件。"
+			})
+		]
+	});
+}
+function EvidenceTimelineEntryList({ entries }) {
+	if (!Array.isArray(entries) || entries.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 evidence timeline 条目"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "artifact-list",
+		children: entries.map((entry, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-kind",
+					children: entry.evidence_kind ?? entry.kind ?? "-"
+				}),
+				" ",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-ref",
+					children: entry.artifact_ref ?? "-"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-meta",
+					children: [
+						"goal=",
+						entry.goal_id ?? "-",
+						" task=",
+						entry.task_id ?? "-",
+						" ",
+						"ts=",
+						typeof entry.timestamp === "string" ? entry.timestamp.slice(0, 19) : "-"
+					]
+				})
+			]
+		}, index))
+	});
+}
+function ReleaseBundlePanel({ releaseBundle, route }) {
+	const tasks = releaseBundle?.tasks?.value ?? [];
+	const releaseGates = releaseBundle?.releaseGates?.value ?? [];
+	const taskCount = releaseBundle?.taskCount?.value ?? 0;
+	releaseBundle?.releaseReady?.value;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "release-bundle-panel",
+		kicker: "v36 release bundle",
+		title: "Release Bundle",
+		state: routeStateText(route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", releaseBundle?.contractName],
+				["contractVersion", releaseBundle?.contractVersion],
+				["generatedAt", releaseBundle?.generatedAt],
+				["readOnly", releaseBundle?.readOnly],
+				["context.goalId", releaseBundle?.context?.goalId],
+				["context.canonicalSource", releaseBundle?.context?.canonicalSource],
+				["context.bundleRole", releaseBundle?.context?.bundleRole],
+				["taskCount", releaseBundle?.taskCount],
+				["releaseReady", releaseBundle?.releaseReady],
+				["boundaries.readOnly", releaseBundle?.boundaries?.readOnly],
+				["boundaries.releaseDecisionAvailable", releaseBundle?.boundaries?.releaseDecisionAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `release gates (${releaseGates.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseGatesList, { releaseGates })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `tasks (${taskCount})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseBundleTaskList, { tasks })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: releaseBundle?.note ?? "Release Bundle 按 task 展示 evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。"
+			})
+		]
+	});
+}
+function ReleaseGatesList({ releaseGates }) {
+	if (!Array.isArray(releaseGates) || releaseGates.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 release gate 条目"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "artifact-list",
+		children: releaseGates.map((gate, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-kind",
+					children: ["gate=", gate.gate ?? "-"]
+				}),
+				" ",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-meta",
+					children: [
+						"status=",
+						gate.status ?? "-",
+						" ",
+						"verifier=",
+						gate.verifier ?? "-",
+						" ",
+						"eventId=",
+						gate.eventId ?? "-"
+					]
+				})
+			]
+		}, index))
+	});
+}
+function ReleaseBundleTaskList({ tasks }) {
+	if (!Array.isArray(tasks) || tasks.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 task bundle 条目"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "task-list",
+		children: tasks.map((task, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "task-item",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+				className: "task-title",
+				children: ["task: ", task.taskId ?? "-"]
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("ul", {
+				className: "evidence-kind-list",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+						"worker evidence: ",
+						Array.isArray(task.workerEvidence) ? task.workerEvidence.length : 0,
+						" entries"
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+						"review evidence: ",
+						Array.isArray(task.reviewEvidence) ? task.reviewEvidence.length : 0,
+						" entries"
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+						"main verification: ",
+						Array.isArray(task.mainVerification) ? task.mainVerification.length : 0,
+						" entries"
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+						"release evidence: ",
+						Array.isArray(task.releaseEvidence) ? task.releaseEvidence.length : 0,
+						" entries"
+					] })
+				]
+			})]
+		}, index))
 	});
 }
 function ActiveGoalViewModelPanel({ viewModel }) {
