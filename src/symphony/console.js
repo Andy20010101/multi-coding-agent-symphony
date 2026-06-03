@@ -61,6 +61,9 @@ import {
   buildJobTimelineLogStreamContract
 } from './job-timeline-contract.js';
 import {
+  buildJobRunControlContract
+} from './job-run-control-contract.js';
+import {
   buildDiagnosticsContract
 } from './diagnostics.js';
 import {
@@ -1459,6 +1462,62 @@ export function createSymphonyConsoleServer({
           jobId,
           goalId,
           taskId
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/jobs/control') {
+        const allowedParams = new Set(['job_id', 'goal', 'task', 'state']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const jobId = url.searchParams.get('job_id');
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+        const stateParam = url.searchParams.get('state');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-job-run-control-request',
+            message: 'Job run control route accepts only job_id, goal, task, and state query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          (jobId !== null && isUnsafeGoalRouteSegment(jobId))
+          || isUnsafeGoalRouteSegment(goalId)
+          || (taskId !== null && isUnsafeGoalRouteSegment(taskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-job-run-control-request',
+            message: 'Job run control query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const validStates = new Set(['queued', 'running', 'blocked', 'failed', 'passed', 'cancelled']);
+
+        if (stateParam !== null && !validStates.has(stateParam)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-job-run-control-request',
+            message: 'Job run control state parameter must be a valid job status.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildJobRunControlContract({
+          jobId,
+          goalId,
+          taskId,
+          currentState: stateParam
         }));
         return;
       }

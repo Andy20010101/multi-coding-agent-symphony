@@ -1,0 +1,82 @@
+{
+  "contractName": "job-run-control.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-03T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "jobId": null,
+    "goalId": "v35-job-queue-run-control-workspace",
+    "taskId": "task-4",
+    "sourceContracts": [
+      "job-model.v1",
+      "job-creation.v1",
+      "job-timeline-log-stream.v1",
+      "goal-runbook.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1"
+    ],
+    "stateSource": "explicit-backend-contracts"
+  },
+  "transitions": [
+    {
+      "id": "pause",
+      "label": "Pause",
+      "description": "Pause a queued or running job. Paused jobs enter blocked state and must be explicitly resumed.",
+      "validFrom": ["queued", "running"],
+      "to": "blocked",
+      "reversible": true,
+      "terminal": false,
+      "hiddenRetry": false
+    },
+    {
+      "id": "cancel",
+      "label": "Cancel",
+      "description": "Cancel a queued, running, blocked, or failed job. Cancellation is terminal and cannot be undone.",
+      "validFrom": ["queued", "running", "blocked", "failed"],
+      "to": "cancelled",
+      "reversible": false,
+      "terminal": true,
+      "hiddenRetry": false
+    },
+    {
+      "id": "resume",
+      "label": "Resume",
+      "description": "Resume a blocked job after the blocker has been resolved.",
+      "validFrom": ["blocked"],
+      "to": "queued",
+      "reversible": false,
+      "terminal": false,
+      "hiddenRetry": false
+    },
+    {
+      "id": "recover",
+      "label": "Recover",
+      "description": "Recover a failed job. Recovery is always explicit, never automatic. A recovered job returns to the queue for re-execution.",
+      "validFrom": ["failed"],
+      "to": "queued",
+      "reversible": false,
+      "terminal": false,
+      "hiddenRetry": false
+    }
+  ],
+  "currentState": null,
+  "availableTransitions": [],
+  "note": "Job run control contract. Defines controlled pause, cancel, resume, and recover transitions. No hidden retries. Recovery is always explicit. Passed and cancelled are terminal states. Available transitions are computed from the current job state; an empty list indicates either no state was provided or the job is in a terminal state.",
+  "boundaries": {
+    "readOnly": true,
+    "jobExecutionAvailable": false,
+    "actionExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "secondArtifactStoreAvailable": false,
+    "controlSource": "explicit-backend-job-state",
+    "hiddenRetryAvailable": false
+  }
+}
