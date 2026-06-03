@@ -4,9 +4,9 @@
 
 Workbench v1 是日常操作入口。`symphony console` 启动本地服务器后，操作者打开 `/workbench/`，按 active goal、next action、prompt handoff、event registration、review/revision、main verification、closeout/release 的顺序推进工作。
 
-当前仓库 release tag 是 `v34`。`v28` 发布 Workbench v1 的 v20-v28 完整链路；`v29` 到 `v32` 扩展 release-manager workspace；`v33` 发布本地 runtime foundation；`v34` 发布 Action Registry Workspace。Workbench 继续把 goal/runbook 操作主线放在浏览器里，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
+当前仓库 release tag 是 `v35`。`v28` 发布 Workbench v1 的 v20-v28 完整链路；`v29` 到 `v32` 扩展 release-manager workspace；`v33` 发布本地 runtime foundation；`v34` 发布 Action Registry Workspace；`v35` 发布 Job Queue + Run Control Workspace。Workbench 继续把 goal/runbook 操作主线放在浏览器里，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
 
-Workbench 消费 console server 暴露的本地 API，用于查看 app runtime snapshot、active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
+Workbench 消费 console server 暴露的本地 API，用于查看 app runtime snapshot、active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、Job Console、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
 
 `symphony` CLI 是高级/脚本入口。需要 JSON 输出、CI 命令、dry-run/confirm 事件登记、兼容命令或低层诊断时，在终端运行 CLI；Workbench 只显示受控状态、表单和可复制命令。
 
@@ -19,7 +19,7 @@ Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受�
 
 v18 增加 `goal-event-log.v1` 和 `goal-update-plan.v1`。v21 之前，`symphony goal update`、`symphony goal review`、`symphony goal gate` 的 dry-run / confirm 流程只在终端 CLI 中运行；Workbench 只展示后端已经写入的 event log 和 resolver 生成的 ledger。v21 后，Workbench 可以请求 dry-run 预览，并用 plan hash 完成受控 confirm。任何状态变化仍来自后端写入的 explicit event，不能由文件名、分支名、commit message 或前端判断替代。
 
-v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout` 和 `symphony next`。v20 到 v32 把 active goal runbook、task queue、prompt handoff、controlled event registration、review/revision、main verification、release closeout、release baseline、release checklist 和 next-version handoff 放到 Workbench 主路径。v33 增加 Runtime 面板；v34 增加 Action Registry Panel。summary、runs、handoff、events、capabilities 和 diagnostics 是支撑信息。release-ready 仍需要显式登记 `symphony goal gate --gate release.ready --status declared`，不能从 Workbench 文案、文件名、分支或测试结果推断。
+v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout` 和 `symphony next`。v20 到 v32 把 active goal runbook、task queue、prompt handoff、controlled event registration、review/revision、main verification、release closeout、release baseline、release checklist 和 next-version handoff 放到 Workbench 主路径。v33 增加 Runtime 面板；v34 增加 Action Registry Panel；v35 增加 Job Console。summary、runs、handoff、events、capabilities 和 diagnostics 是支撑信息。release-ready 仍需要显式登记 `symphony goal gate --gate release.ready --status declared`，不能从 Workbench 文案、文件名、分支或测试结果推断。
 
 ## 日常操作路径
 
@@ -165,6 +165,10 @@ GET /api/capabilities
 GET /api/actions/manifest
 GET /api/actions/availability
 GET /api/actions/preview
+GET /api/jobs
+GET /api/jobs/create
+GET /api/jobs/timeline
+GET /api/jobs/control
 GET /api/diagnostics
 ```
 
@@ -173,6 +177,19 @@ GET /api/diagnostics
 `GET /api/projects` 返回 `project-registry.v1`，列出从当前 cwd/repo-local metadata 解析出的 registered project。`GET /api/projects/current` 返回 `current-project-resolver.v1`，从 console cwd 解析 current project；可选 `repoPath` 只用于显式 repo path 解析。两个 route 都不写 project registry 数据库、不扫描全盘、不执行 git 写入、不调用模型、不创建 job queue。`/api/projects` 不接受 query 参数，`/api/projects/current` 只接受 `repoPath`。
 
 `GET /api/runtime/snapshot` 返回 `app-state-snapshot.v1`，把 freshness、current project、runtime health、active goal、current task、next action、review status、main verification status、release status、evidence refs 和 known blockers 聚合到同一份只读响应。Workbench 的 Runtime 面板和 `symphony runtime snapshot --json` 消费同一份 schema；healthy、missing project、missing goal、blocked 和 stale 都由后端 contract 字段表达。goal/task/release 字段来自 managed runbook、goal-status ledger、goal next、event/gate/release state 和 v33 runtime/project resolver；缺少 active goal 或 release state 时返回 `null` 和 blocker，不从文件名、branch、prompt 文本或前端状态补状态。route 只接受可选 `repoPath` 和 `goal` query，不登记 `goal update/review/gate/closeout`，不运行验证，不写 `.symphony`，不声明 release ready。
+
+v35 Job Console 使用四个只读 job route：
+
+```text
+GET /api/jobs
+GET /api/jobs/create
+GET /api/jobs/timeline
+GET /api/jobs/control
+```
+
+`GET /api/jobs` 返回 `job-model.v1`，用于显示 job identity、goal/task/action refs、queue state、status、blocker、failure、boundary fields 和 source contract refs。`GET /api/jobs/create` 返回 `job-creation.v1`，只展示从受控 `action-preview.v1` 生成 job 的 dry-run 计划；它不持久化 job、不执行 action、不确认 event。`GET /api/jobs/timeline` 返回 `job-timeline-log-stream.v1`，当前没有真实 job event store 时返回空 timeline 和 log refs。`GET /api/jobs/control` 返回 `job-run-control.v1`，展示 pause、cancel、resume、recover 的允许来源状态、目标状态、reversible、terminal 和 hiddenRetry 字段。四个 route 都只接受各自 allowlist query 参数，拒绝 unsupported 参数和非 GET 请求。
+
+Workbench 的 Job Console 只把这些 contract 投影成界面字段。它不创建 job、不运行 job、不调用 shell、不调用模型、不写 `.symphony`、不写 git、不登记 review/main/release gate，也不从前端状态推断 job passed、review approved、main verified 或 release ready。
 
 终端可用的同一份 health contract：
 

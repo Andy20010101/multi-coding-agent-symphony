@@ -22,7 +22,7 @@ Use these contracts as the source for action display and preview:
 
 ## v35 Job Queue Handoff
 
-v35 should create jobs from a controlled action preview, not from a frontend command string.
+v35 creates the job contract surface from a controlled action preview, not from a frontend command string. The implementation remains read-only: it models job identity, dry-run creation, timeline/log refs, and run-control semantics, but it does not add a live job runner or persistent execution queue.
 
 Required handoff fields:
 
@@ -38,7 +38,14 @@ Required handoff fields:
 - `boundaries.actionExecutionAvailable`
 - `boundaries.jobQueueAvailable`
 
-For v34, `boundaries.jobQueueAvailable` remains `false`. v35 can turn that into an explicit job queue contract only after it defines a queue model, job id, job status, recovery behavior, and a controlled confirm path. A v35 job must carry the original `goalId`, `taskId`, `action_id`, preview contract name, required inputs, plan hash requirement, and evidence refs so it can be audited against the same goal event log.
+For v34, `boundaries.jobQueueAvailable` remains `false`. v35 adds explicit job contracts without changing the v34 Action Registry execution boundary:
+
+- `job-model.v1` from `GET /api/jobs`
+- `job-creation.v1` from `GET /api/jobs/create`
+- `job-timeline-log-stream.v1` from `GET /api/jobs/timeline`
+- `job-run-control.v1` from `GET /api/jobs/control`
+
+A v35 job carries the original `goalId`, `taskId`, `action_id`, preview contract name, required inputs, plan hash requirement, source contract refs, and evidence refs so it can be audited against the same goal event log.
 
 ## Surface Consumption
 
@@ -46,13 +53,15 @@ Web Workbench:
 
 - Reads `/api/actions/manifest`, `/api/actions/availability`, and `/api/actions/preview`.
 - Renders action labels and preview fields from backend contracts.
-- Keeps controls display-only until a later controlled queue/confirm path exists.
+- Reads `/api/jobs`, `/api/jobs/create`, `/api/jobs/timeline`, and `/api/jobs/control` for the v35 Job Console.
+- Renders queue state, dry-run creation status, timeline/log counts, pause/cancel/resume/recover transition semantics, route health, and safety boundaries.
+- Keeps controls display-only until a later controlled runner/confirm path exists.
 
 Desktop Shell:
 
 - Connects to the local sidecar and reads the same action routes.
 - Does not bypass the sidecar with local shell execution.
-- Shows job/action status from backend contracts once v35 adds job queue state.
+- Shows job/action status from backend contracts once it consumes the v35 job routes.
 
 Notch or menu bar:
 
