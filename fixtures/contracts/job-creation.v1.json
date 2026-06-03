@@ -1,0 +1,120 @@
+{
+  "contractName": "job-creation.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-03T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v35-job-queue-run-control-workspace",
+    "taskId": "task-2",
+    "actionId": "goal.worker-evidence.record",
+    "sourceContracts": [
+      "action-availability.v1",
+      "action-manifest.v1",
+      "action-preview.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "job-creation.v1",
+      "job-model.v1"
+    ],
+    "stateSource": "explicit-backend-contracts"
+  },
+  "job": {
+    "job_id": "job-v35-job-queue-run-control-workspace-task-2-goal.worker-evidence.record",
+    "project_id": null,
+    "goal_id": "v35-job-queue-run-control-workspace",
+    "task_id": "task-2",
+    "action_id": "goal.worker-evidence.record",
+    "status": "queued",
+    "queue_state": "action-preview-contract",
+    "refs": [],
+    "timestamps": {
+      "created_at": "2026-06-03T00:00:00.000Z",
+      "leased_at": null,
+      "passed_at": null,
+      "failed_at": null,
+      "cancelled_at": null
+    },
+    "failure": null,
+    "blocker": null
+  },
+  "plan": {
+    "dryRun": true,
+    "requiresConfirmation": true,
+    "jobExecutionAvailable": false,
+    "writesEventLog": false,
+    "writesQueueState": false,
+    "createsPersistentJob": false,
+    "createsJobRecord": false
+  },
+  "warnings": [],
+  "blockers": [],
+  "sourceActionPreview": {
+    "contractName": "action-preview.v1",
+    "generatedAt": "2026-06-03T00:00:00.000Z",
+    "action": {
+      "action_id": "goal.worker-evidence.record",
+      "label": "Record worker evidence",
+      "scope": "active-task",
+      "role": "worker",
+      "state": "available",
+      "reasons": [],
+      "requiredContext": ["goalId", "taskId", "workerEvidenceRef"],
+      "missingContext": [],
+      "requiredInputs": ["workerEvidenceRef"],
+      "capability": {
+        "action_id": "goal.worker-evidence.record",
+        "previewContract": "action-capability-preview.v1",
+        "confirmationContract": "goal-update-plan.v1",
+        "state": "available",
+        "available": true,
+        "requiredBeforeConfirm": true,
+        "sideEffectsInPreview": false,
+        "executionEnabled": false
+      },
+      "requiredConfirmation": {
+        "action_id": "goal.worker-evidence.record",
+        "commandName": "symphony goal update",
+        "confirmationContract": "goal-update-plan.v1",
+        "requiredInputs": ["workerEvidenceRef"],
+        "evidenceRequired": true,
+        "evidenceRefField": "workerEvidenceRef",
+        "eventTypes": ["worker.evidence-recorded"],
+        "appendOnlyOnConfirm": true,
+        "requiresPreview": true,
+        "requiresPlanHash": true,
+        "available": true
+      },
+      "impactPreview": {
+        "writesInPreview": false,
+        "writesGoalEventOnConfirm": true,
+        "eventTypes": ["worker.evidence-recorded"],
+        "readsEvidenceBody": false,
+        "startsImplementationRun": false,
+        "changesMainWorktree": false,
+        "executionAvailable": false,
+        "publishAvailable": false,
+        "selfApprovalAvailable": false
+      }
+    }
+  },
+  "boundaries": {
+    "readOnly": true,
+    "dryRun": true,
+    "jobExecutionAvailable": false,
+    "actionExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "secondArtifactStoreAvailable": false,
+    "jobCreationSource": "action-preview.v1 only",
+    "createsPersistentJob": false,
+    "writesEventLog": false,
+    "writesQueueState": false
+  }
+}

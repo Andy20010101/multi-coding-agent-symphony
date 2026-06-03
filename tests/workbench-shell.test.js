@@ -806,6 +806,8 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/goals/latest/runbook',
       '/api/handoff',
       '/api/handoff/<ref>',
+      '/api/jobs',
+      '/api/jobs/create',
       '/api/readiness',
       '/api/runs',
       '/api/runs/<run-id>/artifacts/<artifact-kind>/preview',
