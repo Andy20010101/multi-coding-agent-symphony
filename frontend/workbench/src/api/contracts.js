@@ -28,6 +28,7 @@ const JOB_CREATION_CONTRACT_NAME = 'job-creation.v1';
 const JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = 'job-timeline-log-stream.v1';
 const JOB_RUN_CONTROL_CONTRACT_NAME = 'job-run-control.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
+const ARTIFACT_INDEX_CONTRACT_NAME = 'artifact-index.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
@@ -516,6 +517,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/diagnostics',
     method: 'GET',
     contractName: DIAGNOSTICS_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'artifactIndex',
+    label: 'Artifact Index',
+    path: '/api/artifacts',
+    method: 'GET',
+    contractName: ARTIFACT_INDEX_CONTRACT_NAME
   })
 ]);
 

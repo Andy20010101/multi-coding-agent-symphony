@@ -9913,6 +9913,7 @@ var JOB_CREATION_CONTRACT_NAME = "job-creation.v1";
 var JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = "job-timeline-log-stream.v1";
 var JOB_RUN_CONTROL_CONTRACT_NAME = "job-run-control.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
+var ARTIFACT_INDEX_CONTRACT_NAME = "artifact-index.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
@@ -10513,6 +10514,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/diagnostics",
 		method: "GET",
 		contractName: DIAGNOSTICS_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "artifactIndex",
+		label: "Artifact Index",
+		path: "/api/artifacts",
+		method: "GET",
+		contractName: ARTIFACT_INDEX_CONTRACT_NAME
 	})
 ]);
 var GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE = Object.freeze({

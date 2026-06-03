@@ -67,6 +67,9 @@ import {
   buildDiagnosticsContract
 } from './diagnostics.js';
 import {
+  buildArtifactIndexContract
+} from './artifact-index-contract.js';
+import {
   buildErrorEnvelope
 } from './error-envelope.js';
 import {
@@ -1535,6 +1538,46 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, await buildDiagnosticsContract({ stateDir }));
+        return;
+      }
+
+      if (url.pathname === '/api/artifacts') {
+        const allowedParams = new Set(['goal', 'task', 'kind']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+        const kind = url.searchParams.get('kind');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-artifact-index-request',
+            message: 'Artifact index route accepts only goal, task, and kind query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(goalId)
+          || (taskId !== null && isUnsafeGoalRouteSegment(taskId))
+          || (kind !== null && isUnsafeGoalRouteSegment(kind))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-artifact-index-request',
+            message: 'Artifact index query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildArtifactIndexContract({
+          goalId,
+          taskId
+        }));
         return;
       }
 

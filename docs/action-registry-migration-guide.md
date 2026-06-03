@@ -22,7 +22,7 @@ Use these contracts as the source for action display and preview:
 
 ## v35 Job Queue Handoff
 
-v35 creates the job contract surface from a controlled action preview, not from a frontend command string. The implementation remains read-only: it models job identity, dry-run creation, timeline/log refs, and run-control semantics, but it does not add a live job runner or persistent execution queue.
+v35 should create jobs from a controlled action preview, not from a frontend command string. The implementation remains read-only: it models job identity, dry-run creation, timeline/log refs, and run-control semantics, but it does not add a live job runner or persistent execution queue.
 
 Required handoff fields:
 

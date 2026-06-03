@@ -1,0 +1,61 @@
+{
+  "contractName": "artifact-index.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-03T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "projectId": null,
+    "goalId": "v36-artifact-evidence-index-workspace",
+    "taskId": "task-1",
+    "runId": null,
+    "jobId": null,
+    "sourceContracts": [
+      "artifact-store.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "action-manifest.v1",
+      "action-availability.v1",
+      "action-preview.v1",
+      "job-model.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "canonicalSource": "ArtifactStore",
+    "indexRole": "derived-cache-and-search-only"
+  },
+  "indexEntry": {
+    "artifact_ref": "v36-task-1-worker-evidence-example",
+    "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "kind": "evidence",
+    "goal_id": "v36-artifact-evidence-index-workspace",
+    "task_id": "task-1",
+    "run_id": null,
+    "job_id": null,
+    "evidence_kind": "worker",
+    "timestamps": {
+      "created_at": "2026-06-03T00:00:00.000Z",
+      "indexed_at": "2026-06-03T00:00:00.000Z"
+    },
+    "labels": [],
+    "file_path": null
+  },
+  "boundaries": {
+    "readOnly": true,
+    "artifactExecutionAvailable": false,
+    "shellExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "canonicalSource": "ArtifactStore is canonical, index is derived cache only",
+    "secondArtifactStoreAvailable": false,
+    "artifactDownloadAvailable": false,
+    "localFileOpenAvailable": false
+  }
+}
