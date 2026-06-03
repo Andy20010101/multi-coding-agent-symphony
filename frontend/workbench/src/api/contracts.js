@@ -25,6 +25,7 @@ const ACTION_AVAILABILITY_CONTRACT_NAME = 'action-availability.v1';
 const ACTION_PREVIEW_CONTRACT_NAME = 'action-preview.v1';
 const JOB_MODEL_CONTRACT_NAME = 'job-model.v1';
 const JOB_CREATION_CONTRACT_NAME = 'job-creation.v1';
+const JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = 'job-timeline-log-stream.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
@@ -493,6 +494,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/jobs/create',
     method: 'GET',
     contractName: JOB_CREATION_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'jobTimeline',
+    label: 'Job Timeline',
+    path: '/api/jobs/timeline',
+    method: 'GET',
+    contractName: JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'diagnostics',

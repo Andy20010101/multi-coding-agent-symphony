@@ -83,6 +83,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/preview', 'action-preview.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
+        ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1']
       ]
     );
@@ -110,6 +111,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/preview', 'action-preview.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
+        ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
@@ -759,7 +761,7 @@ describe('v15 Workbench read-only API client', () => {
     });
 
     assert.equal(calls.includes('/api/runs/<run-id>/timeline'), false);
-    assert.equal(calls.some((path) => path.endsWith('/timeline')), false);
+    assert.equal(calls.some((path) => path.startsWith('/api/runs/') && path.endsWith('/timeline')), false);
     assert.equal(model.latestRun.state, 'empty');
     assert.equal(model.latestRunTimeline.state, 'empty');
     assert.equal(model.latestRunTimeline.note, '暂无 timeline；当前没有 latest run。');

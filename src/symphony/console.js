@@ -58,6 +58,9 @@ import {
   buildJobCreationContract
 } from './job-creation-contract.js';
 import {
+  buildJobTimelineLogStreamContract
+} from './job-timeline-contract.js';
+import {
   buildDiagnosticsContract
 } from './diagnostics.js';
 import {
@@ -1415,6 +1418,47 @@ export function createSymphonyConsoleServer({
           goalId,
           taskId,
           actionId
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/jobs/timeline') {
+        const allowedParams = new Set(['job_id', 'goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const jobId = url.searchParams.get('job_id');
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-job-timeline-request',
+            message: 'Job timeline route accepts only job_id, goal, and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          (jobId !== null && isUnsafeGoalRouteSegment(jobId))
+          || isUnsafeGoalRouteSegment(goalId)
+          || (taskId !== null && isUnsafeGoalRouteSegment(taskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-job-timeline-request',
+            message: 'Job timeline query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildJobTimelineLogStreamContract({
+          jobId,
+          goalId,
+          taskId
         }));
         return;
       }
