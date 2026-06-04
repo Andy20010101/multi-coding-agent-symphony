@@ -1,18 +1,20 @@
-# v38 Plan + /goal Runbook: Provider Hub + Capability Profiles
-Date: 2026-06-02  Goal id: `v38-provider-hub-capability-profiles`  Baseline: `v37 Desktop Shell MVP`  Release name: `v38 Provider Hub + Capability Profiles`
+# v38 Plan + /goal Runbook: Agent CLI Provider Hub MVP
+Date: 2026-06-02  Goal id: `v38-provider-hub-capability-profiles`  Baseline: `v37 Desktop Shell MVP`  Release name: `v38 Agent CLI Provider Hub MVP`
 ## Correction note
 This runbook continues the current goal/runbook/next-action Workbench workflow. It does **not** use the old v8 command surface as the Workbench/App action baseline.
 ```text
 goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal closeout -> symphony next --goal latest
 ```
 ## Product purpose
-把 Codex/Claude/Kiro/DeepSeek 等 provider 变成 App 可配置、可诊断、可门控的 provider hub，支持 worker/reviewer lane 预览。
+把本地 Agent CLI provider 从散落命令整理成受控配置。v38 只启用 `claude-code-cli` 和 `codex-cli` 两个 active provider instance，并声明 provider profile、sanitized backend profile ref、availability、lane、gate、health 和 secrets boundary。
+
+Gemini CLI、Kiro CLI、DeepSeek active provider 不进入 v38。DeepSeek 只能作为现有本地 Agent CLI 后面的 sanitized backend profile/ref，或作为未来 official agent CLI handoff 说明出现。
 ## Product spine
 ```text
-provider profile -> health check -> capability mapping -> worker/reviewer lane preview -> provider hub panel
+agent CLI provider profile -> health check -> capability mapping -> worker/reviewer lane preview -> provider hub panel
 ```
 ## Tasks
-- task-1: Provider profile contract — 模型/工具通道从散落命令变成受控配置。
+- task-1: Agent CLI provider profile contract — 模型/工具通道从散落命令变成受控配置。
 - task-2: Provider health check API — 用户知道为什么某个 lane 不可用。
 - task-3: Capability profile mapping — 真实执行前有明确能力预览。
 - task-4: Worker/reviewer lane assignment preview — 实现者与 reviewer 分离在 App 里可见。
@@ -21,6 +23,8 @@ provider profile -> health check -> capability mapping -> worker/reviewer lane p
 ## Non-goals
 - Do not create a generic shell runner, browser terminal, arbitrary command palette, or generic model invocation path.
 - Do not let UI execute raw shell commands.
+- Do not invoke `claude`, `codex`, Gemini, Kiro, DeepSeek, or any provider CLI in v38.
+- Do not install providers, open OAuth login, dispatch prompts, or call models.
 - Do not replace the goal framework, ArtifactStore, or event semantics.
 - Do not infer status from branch names, filenames, task titles, prompt text, or frontend state.
 - Do not let worker self-approve.
@@ -54,7 +58,7 @@ git checkout -b v38-task0-goal-runbook
 - 写入或确认 execution prompt doc：docs/plans/v34-v40-final-app-core-execution-prompts-2026-06-02.md
 - Goal id：v38-provider-hub-capability-profiles
 - Baseline：v37 Desktop Shell MVP
-- 版本目标：Provider Hub + Capability Profiles
+- 版本目标：Agent CLI Provider Hub MVP
 - Workbench/App 主线必须使用 latest goal/runbook/next-action 命令面，不要回到 v8 command surface。
 
 必须包含：
@@ -95,7 +99,7 @@ pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --j
 
 ---
 
-# task-1: Provider profile contract
+# task-1: Agent CLI provider profile contract
 
 Branch: `v38-task-1-provider-profile-contract`  
 Worker evidence: `docs/plans/v38-task-1-worker-evidence-2026-06-02.md`  
@@ -108,11 +112,24 @@ Main verification evidence: `docs/plans/v38-task-1-main-verification-evidence-20
 
 ## Implementation scope
 
-定义 Codex/Claude/Kiro/DeepSeek profiles：availability、lane、gate、health、secret boundary。
+Define the generic `agent-cli-provider.v1` contract for v38 Agent CLI Provider Hub MVP.
+
+Active provider instances:
+
+- `claude-code-cli`: display name `Claude Code CLI`, local command `claude`, provider kind `agent-cli`, adapter id `claude-code`.
+- `codex-cli`: display name `Codex CLI`, local command `codex`, provider kind `agent-cli`, adapter id `codex`.
+
+Backend profile data is sanitized. It can expose profile refs and `configured`, `missing`, or `unknown` style status. It must not expose API keys, OAuth tokens, credential file contents, raw provider settings, full secret-bearing config, or secret-looking values.
+
+The contract expresses availability, lane, gate, health, secrets, workspace, prompt, output, and capability boundaries. v38 task-1 does not run provider CLIs, send prompts, call models, install providers, open OAuth, or add a generic shell runner.
 
 ## Acceptance
 
-- The App/Workbench user path for this task is visible and testable.
+- The App/Workbench user path for this task is contract-only and testable through the fixture and validator.
+- Active provider instances are exactly `claude-code-cli` and `codex-cli`.
+- Gemini CLI, Kiro CLI, and DeepSeek are not active provider instances.
+- DeepSeek appears only as sanitized backend profile/ref or future handoff documentation.
+- Validator rejects secret-bearing fields, active provider drift, raw shell runner drift, and model invocation boundary drift.
 - The task is anchored to active goal/task/run/evidence context.
 - The task reuses existing goal/event/run/adoption/verification contracts where applicable.
 - State changes come only from explicit backend events or command outputs.
@@ -134,7 +151,7 @@ git checkout -b v38-task-1-provider-profile-contract
 
 ```text
 /goal
-执行 v38 task-1 worker implementation：Provider profile contract。
+执行 v38 task-1 worker implementation：Agent CLI provider profile contract。
 
 目标：
 - 当前 goal id：v38-provider-hub-capability-profiles
@@ -154,12 +171,17 @@ git checkout -b v38-task-1-provider-profile-contract
 - Workbench frontend/backend entrypoints and relevant tests.
 
 实现范围：
-定义 Codex/Claude/Kiro/DeepSeek profiles：availability、lane、gate、health、secret boundary。
+- 定义 generic Agent CLI provider profile contract，不做 Claude/Codex 专用抽象。
+- Active provider instances 只能是 `claude-code-cli` 和 `codex-cli`。
+- Backend profile 只能暴露 sanitized profile/ref 和 configured/missing/unknown 状态。
+- Validator/tests 必须拒绝 secret-bearing fields、active provider drift、raw shell/model runner drift、execution/model invocation boundary drift。
 
 边界：
 - App/Workbench 主路径必须围绕 latest goal/runbook/next-action 命令面。
 - UI 不得直接执行 shell 命令；只能消费 backend action/job/artifact/provider/router contracts。
 - 不新增 generic shell runner、browser terminal、任意模型调用路径、任意本地路径读取、auto merge/tag/push。
+- 不实现 task-2 health check API、task-3 capability mapping、task-4 lane preview UI、task-5 Provider Hub panel。
+- 不真实调用 `claude` 或 `codex`。
 - 不从 branch、filename、commit message、prompt text、task title 或 frontend state 推断完成状态。
 - 不宣称 reviewer approved、main verified 或 release ready。
 
@@ -215,7 +237,7 @@ git checkout -b v38-task-1-provider-profile-contract
 
 ```text
 /goal
-执行 v38 task-1 independent reviewer review：Provider profile contract。
+执行 v38 task-1 independent reviewer review：Agent CLI provider profile contract。
 
 目标：
 - 审查当前分支 `v38-task-1-provider-profile-contract` 相对 main 的 diff。

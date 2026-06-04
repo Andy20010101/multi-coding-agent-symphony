@@ -2,7 +2,7 @@
   "contractName": "goal-runbook.v1",
   "contractVersion": 1,
   "goalId": "v38-provider-hub-capability-profiles",
-  "goalTitle": "v38 Provider Hub + Capability Profiles",
+  "goalTitle": "v38 Agent CLI Provider Hub MVP",
   "baseline": {
     "tag": "v37",
     "commit": null,
@@ -11,7 +11,7 @@
   "tasks": [
     {
       "taskId": "task-1",
-      "title": "Provider profile contract",
+      "title": "Agent CLI provider profile contract",
       "branch": "v38-task-1-provider-profile-contract",
       "roleOrder": [
         "worker",
@@ -19,8 +19,11 @@
         "main-verifier"
       ],
       "acceptance": [
-        "Provider availability 和 secrets boundary 明确。",
-        "定义 Codex/Claude/Kiro/DeepSeek availability、lane、gate、health、secrets boundary。",
+        "Agent CLI provider profile contract validates active provider, backend profile, availability, lane, gate, health, workspace, prompt, output, capability, and secrets boundaries.",
+        "Active provider instances are exactly claude-code-cli and codex-cli.",
+        "Gemini CLI, Kiro CLI, and DeepSeek are not active v38 provider instances.",
+        "DeepSeek may appear only as a sanitized backend profile/ref behind an existing local agent CLI or as future official agent CLI handoff documentation.",
+        "v38 task-1 does not implement a real CLI runner, renderer-side provider invocation, generic shell runner, automatic install, automatic OAuth login, prompt dispatch, or model invocation.",
         "Worker evidence path: docs/plans/v38-task-1-worker-evidence-2026-06-02.md.",
         "Review evidence path: docs/plans/v38-task-1-review-evidence-2026-06-02.md.",
         "Main verification evidence path: docs/plans/v38-task-1-main-verification-evidence-2026-06-02.md.",

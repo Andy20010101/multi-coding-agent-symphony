@@ -204,6 +204,29 @@ git diff --check
 # Write main verification evidence and register main-verification gate.
 ```
 
+## v37-v41 scoped release gates
+
+For v37-v41 scoped closeout, the controlled runbook fixture `releaseGates` is the source of truth. When the fixture lists only:
+
+```text
+release.pnpm-check
+release.pnpm-test
+release.workbench-build
+release.diff-check
+release.docs-updated
+```
+
+the default local evidence commands are:
+
+```sh
+pnpm check
+pnpm test
+pnpm workbench:build
+git diff --check
+```
+
+Docs-updated evidence is written evidence tied to the task or closeout document. Do not add `pnpm test:mutation:gate`, `pnpm audit --audit-level high`, or `pnpm mcas doctor` to a scoped v37-v41 closeout unless the active runbook fixture explicitly includes that gate or the operator requests a repository tag/full release validation.
+
 ## Version sequence
 
 - [v33 App Runtime Foundation](v33_app-runtime-foundation_goal_runbook_latest.md)

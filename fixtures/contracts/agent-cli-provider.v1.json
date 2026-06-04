@@ -1,0 +1,235 @@
+{
+  "contractName": "agent-cli-provider.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-04T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v38-provider-hub-capability-profiles",
+    "taskId": "task-1",
+    "sourceContracts": [
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "goal-update-plan.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "scope": "v38-agent-cli-provider-hub-mvp"
+  },
+  "activeProviders": [
+    {
+      "providerId": "claude-code-cli",
+      "displayName": "Claude Code CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "claude-code",
+      "localCommand": {
+        "command": "claude",
+        "shellExpansionAvailable": false,
+        "commandExecutionAvailable": false,
+        "automaticInstallAvailable": false,
+        "automaticOauthAvailable": false
+      },
+      "backendProfile": {
+        "profileRef": "claude-code-cli.backend-profile",
+        "status": "unknown",
+        "sanitized": true,
+        "secretMaterialAvailable": false,
+        "credentialFileContentsAvailable": false,
+        "rawProviderSettingsAvailable": false
+      },
+      "availability": {
+        "state": "unknown",
+        "healthContract": "agent-cli-provider-health.v1",
+        "healthCheckImplementedInV38Task1": false,
+        "blocker": null
+      },
+      "lanes": [
+        {
+          "laneId": "worker",
+          "assignableInV38": true,
+          "requiresIndependentReviewForApproval": false
+        },
+        {
+          "laneId": "reviewer",
+          "assignableInV38": true,
+          "requiresIndependentReviewForApproval": true
+        }
+      ],
+      "gates": [
+        {
+          "gateId": "provider-profile.present",
+          "status": "unknown",
+          "evidenceRequired": true
+        },
+        {
+          "gateId": "backend-profile.sanitized",
+          "status": "unknown",
+          "evidenceRequired": true
+        },
+        {
+          "gateId": "runner.disabled",
+          "status": "unknown",
+          "evidenceRequired": true
+        }
+      ],
+      "workspaceBoundary": {
+        "workspaceSelectionAvailable": true,
+        "arbitraryPathReadAvailable": false,
+        "mainWorktreeWritesAvailable": false,
+        "workspaceWritesAvailable": false
+      },
+      "promptBoundary": {
+        "promptDispatchAvailable": false,
+        "sendsPromptToProvider": false,
+        "promptTemplateRefOnly": true
+      },
+      "outputBoundary": {
+        "outputCollectionAvailable": false,
+        "transcriptCaptureAvailable": false,
+        "rawProviderOutputAvailable": false,
+        "redactionRequiredBeforeEvidence": true
+      },
+      "capabilityBoundary": {
+        "capabilityProfileFieldsAvailable": true,
+        "capabilityProbeAvailable": false,
+        "modelCapabilityDiscoveryAvailable": false,
+        "task3MappingImplemented": false
+      },
+      "execution": {
+        "providerCliExecutionAvailable": false,
+        "rendererProviderInvocationAvailable": false,
+        "rawShellCommandAvailable": false,
+        "genericShellRunnerAvailable": false,
+        "modelInvocationAvailable": false
+      }
+    },
+    {
+      "providerId": "codex-cli",
+      "displayName": "Codex CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "codex",
+      "localCommand": {
+        "command": "codex",
+        "shellExpansionAvailable": false,
+        "commandExecutionAvailable": false,
+        "automaticInstallAvailable": false,
+        "automaticOauthAvailable": false
+      },
+      "backendProfile": {
+        "profileRef": "codex-cli.backend-profile",
+        "status": "unknown",
+        "sanitized": true,
+        "secretMaterialAvailable": false,
+        "credentialFileContentsAvailable": false,
+        "rawProviderSettingsAvailable": false
+      },
+      "availability": {
+        "state": "unknown",
+        "healthContract": "agent-cli-provider-health.v1",
+        "healthCheckImplementedInV38Task1": false,
+        "blocker": null
+      },
+      "lanes": [
+        {
+          "laneId": "worker",
+          "assignableInV38": true,
+          "requiresIndependentReviewForApproval": false
+        },
+        {
+          "laneId": "reviewer",
+          "assignableInV38": true,
+          "requiresIndependentReviewForApproval": true
+        }
+      ],
+      "gates": [
+        {
+          "gateId": "provider-profile.present",
+          "status": "unknown",
+          "evidenceRequired": true
+        },
+        {
+          "gateId": "backend-profile.sanitized",
+          "status": "unknown",
+          "evidenceRequired": true
+        },
+        {
+          "gateId": "runner.disabled",
+          "status": "unknown",
+          "evidenceRequired": true
+        }
+      ],
+      "workspaceBoundary": {
+        "workspaceSelectionAvailable": true,
+        "arbitraryPathReadAvailable": false,
+        "mainWorktreeWritesAvailable": false,
+        "workspaceWritesAvailable": false
+      },
+      "promptBoundary": {
+        "promptDispatchAvailable": false,
+        "sendsPromptToProvider": false,
+        "promptTemplateRefOnly": true
+      },
+      "outputBoundary": {
+        "outputCollectionAvailable": false,
+        "transcriptCaptureAvailable": false,
+        "rawProviderOutputAvailable": false,
+        "redactionRequiredBeforeEvidence": true
+      },
+      "capabilityBoundary": {
+        "capabilityProfileFieldsAvailable": true,
+        "capabilityProbeAvailable": false,
+        "modelCapabilityDiscoveryAvailable": false,
+        "task3MappingImplemented": false
+      },
+      "execution": {
+        "providerCliExecutionAvailable": false,
+        "rendererProviderInvocationAvailable": false,
+        "rawShellCommandAvailable": false,
+        "genericShellRunnerAvailable": false,
+        "modelInvocationAvailable": false
+      }
+    }
+  ],
+  "inactiveProviders": [
+    {
+      "providerId": "gemini-cli",
+      "reason": "out-of-scope-for-v38"
+    },
+    {
+      "providerId": "kiro-cli",
+      "reason": "out-of-scope-for-v38"
+    },
+    {
+      "providerId": "deepseek",
+      "reason": "backend-profile-only-or-future-official-agent-cli-handoff"
+    }
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "activeProviderIds": [
+      "claude-code-cli",
+      "codex-cli"
+    ],
+    "providerCliExecutionAvailable": false,
+    "rendererProviderInvocationAvailable": false,
+    "promptDispatchAvailable": false,
+    "modelInvocationAvailable": false,
+    "healthCheckApiAvailable": false,
+    "task3CapabilityMappingAvailable": false,
+    "providerHubPanelAvailable": false,
+    "genericShellRunnerAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "automaticInstallAvailable": false,
+    "automaticOauthAvailable": false,
+    "credentialMaterialAvailable": false,
+    "rawProviderConfigAvailable": false,
+    "backendProfileSanitizedOnly": true,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false
+  }
+}
