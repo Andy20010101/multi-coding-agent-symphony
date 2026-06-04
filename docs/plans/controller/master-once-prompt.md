@@ -10,6 +10,7 @@ First read:
 
 ```text
 docs/plans/controller/README.md
+docs/plans/controller/context-management.md
 docs/plans/controller/v38-controller-state.md
 docs/plans/controller/subagent-result-format.md
 docs/plans/controller/subagent-dispatch-log.md
@@ -64,13 +65,17 @@ When the user sends `/goal continue`:
 
 When the user sends `/goal autopilot --steps <N>`:
 
+- Treat this as deprecated syntax for `/goal run` with explicit lease limits.
+- Do not use repeated slash commands or `/goal continue` internally.
+
+When the user sends `/goal run ... --max-actions <N> --max-subagents <M>`:
+
 - Reconcile first.
 - Apply the context guard before each step.
+- Create a lease using `context-management.md`.
 - Run up to `N` bounded controller actions without waiting for another user message.
 - Treat each step as an internal operation, not as a recursive slash command.
-- Default to `N = 3` when the command omits a step count.
-- Start at most one new subagent per autopilot command.
-- Advance at most one role for a task per autopilot command.
+- Start at most `M` new or steered subagents in the lease.
 - Stop immediately after dispatching a subagent unless the user explicitly adds `--wait-for-subagent`.
 - Stop after registering one goal event unless the user explicitly adds `--continue-after-event`.
 - Stop before release closeout unless the command explicitly includes `--allow-closeout`.
@@ -111,6 +116,8 @@ git diff --check
 Use product-visible context indicators when available, such as `/status` in Codex CLI or a status line with `context-remaining`.
 
 Do not depend on an exact compaction threshold. In Codex app threads, the controller may not have a machine-readable remaining-token value. Treat chat memory as temporary and repository state as authoritative.
+
+Always apply `docs/plans/controller/context-management.md` before dispatching, polling, registering events, or updating checkpoint/log files. If a pause/stop instruction appears, pause owned active subagents first, then stop.
 
 Before dispatching, reviewing, verifying, or closing out:
 

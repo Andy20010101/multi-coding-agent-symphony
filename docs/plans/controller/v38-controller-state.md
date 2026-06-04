@@ -60,7 +60,7 @@ codex/controller-loop-ops
 Current controller state:
 
 ```text
-task-1 reviewer approved event registered; task-1 main verification required next
+controller automation paused after context self-management failure; task-1 worker revision was dispatched then paused
 controller command policy: use explicit next commands; /goal continue is one-step compatibility only
 ```
 
@@ -101,7 +101,7 @@ Do not run mutation, audit, doctor, real CLI, tag, push, or publish unless expli
 Command received:
 
 ```text
-/goal autopilot --steps 3 --stop-on-subagent
+/goal dispatch task-1 worker-revision
 ```
 
 Files read:
@@ -181,20 +181,20 @@ Reconcile after action:
 
 ```text
 pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json
-returned task-1 status approved, statusSource evt_8259bd487042edb9, reviewVerdict APPROVED, mainVerificationRef null.
+returned task-1 status unknown, statusSource evt_54b41ed97732c6be, reviewVerdict APPROVED, mainVerificationRef docs/plans/v38-task-1-main-verification-evidence-2026-06-02.md.
 
 pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --json
-returned action-required: task-1 main-verifier, phase main-verification, reason: Reviewer approved task-1 but main verification is missing.
+returned action-required: task-1 worker, phase revision, reason: Latest main verification failed for task-1.
 
-controller git status:
-M docs/plans/controller/README.md
-M docs/plans/controller/master-once-prompt.md
-M docs/plans/controller/subagent-dispatch-log.md
-M docs/plans/controller/v38-controller-state.md
+task-1 worktree remains dirty with expected worker/review implementation and evidence files plus main verification failure evidence.
 
-task-1 worktree remains dirty with expected worker/review implementation and evidence files.
+Main-verifier thread 019e929e-de99-79d0-95ae-72806f6fb74c wrote docs/plans/v38-task-1-main-verification-evidence-2026-06-02.md and reported main.verification-failed.
+Controller registered main.verification-failed event evt_54b41ed97732c6be with plan hash sha256:bd4e0acb8ea81ccf74b9ad4c92ebeb4bc4b2e6b79fe4a03020195529fdf6c580.
+Failure blocker: task implementation is uncommitted in the task worktree; branch ref codex/v38-task-1-provider-profile-contract has no diff from origin/main, so clean ff-only merge would merge no task-1 implementation.
 
-Autopilot stopped after one bounded controller bookkeeping action. No main-verifier subagent dispatched in this turn.
+Controller steered existing worker thread 019e9206-5ad3-7db0-b032-fe5cb100f8e2 for task-1 worker revision.
+Worker revision prompt asks it to preserve existing task-1 dirty/untracked work, create local commit(s) on codex/v38-task-1-provider-profile-contract containing task-1 implementation/evidence, update worker evidence, run required validations, and not push/tag/release/merge/register events.
+No goal event registered in this dispatch turn.
 ```
 
 Evidence refs:
@@ -202,20 +202,22 @@ Evidence refs:
 ```text
 task-1 worker evidence: docs/plans/v38-task-1-worker-evidence-2026-06-02.md
 task-1 review evidence: docs/plans/v38-task-1-review-evidence-2026-06-02.md
-task-1 main verification evidence: null
+task-1 main verification evidence: docs/plans/v38-task-1-main-verification-evidence-2026-06-02.md
 ```
 
 Subagent:
 
 ```text
 task-1 worker thread: 019e9206-5ad3-7db0-b032-fe5cb100f8e2
-status: revision completed; initial worker event evt_a78443418d567eb3; revision worker event evt_4309fb40ea68305e
+status: paused after appending worker evidence section; no stage, commit, push, or event registration; initial worker event evt_a78443418d567eb3; prior revision worker event evt_4309fb40ea68305e
 task-1 reviewer thread: 019e9278-122d-7fa0-9108-c43e778220a1
 status: re-review completed; prior reviewer.needs-revision event evt_895cd535d94d7e36; reviewer.approved event evt_8259bd487042edb9
+task-1 main-verifier thread: 019e929e-de99-79d0-95ae-72806f6fb74c
+status: completed; main.verification-failed event evt_54b41ed97732c6be
 ```
 
 ## Next Suggested Command
 
 ```text
-/goal verify task-1
+/goal status
 ```

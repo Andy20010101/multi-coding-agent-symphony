@@ -22,6 +22,7 @@ Use it when a Codex thread should act as a short-lived controller instead of a l
 ## Files
 
 - `master-once-prompt.md`: startup prompt for the controller Codex thread.
+- `context-management.md`: lease, context budget, rotation, and pause rules.
 - `v38-controller-state.md`: current checkpoint for v38 controller work.
 - `subagent-result-format.md`: required result format for worker, reviewer, and verifier subagents.
 - `subagent-dispatch-log.md`: append-only log of controller dispatches and handoffs.
@@ -35,7 +36,7 @@ Use these messages in the controller thread:
 /goal reconcile
 /goal step
 /goal continue
-/goal autopilot --steps 3
+/goal run v38-provider-hub-capability-profiles --until blocked --max-actions 8 --max-subagents 2
 /goal dispatch task-1 worker
 /goal review task-1
 /goal verify task-1
@@ -46,7 +47,9 @@ The controller should treat `/goal step` as: reconcile first, identify the next 
 
 The controller should treat `/goal continue` as a deprecated compatibility alias for `/goal step`. It must not suggest, queue, or self-trigger another bare `/goal continue`.
 
-The controller should treat `/goal autopilot --steps <N>` as: run up to `N` bounded controller actions without waiting for another user message, stopping early on any stop condition below.
+The controller should treat `/goal run ... --max-actions <N> --max-subagents <M>` as: run a bounded state machine inside one lease, stopping early on any stop condition below.
+
+The controller should treat `/goal autopilot --steps <N>` as deprecated. It may be accepted only as `/goal run` with explicit lease limits. It must not be implemented as repeated `/goal continue`.
 
 Every end-of-turn next command must be specific, for example:
 
@@ -57,9 +60,9 @@ Every end-of-turn next command must be specific, for example:
 /goal register task-1 reviewer.approved
 ```
 
-## Autopilot
+## Run
 
-Autopilot exists so the user does not need to watch every controller turn. It is still bounded and evidence-driven.
+Run mode exists so the user does not need to watch every controller turn. It is still bounded, evidence-driven, and controlled by the lease rules in `context-management.md`.
 
 Default limits:
 
@@ -99,7 +102,7 @@ Autopilot must stop when:
 Recommended unattended command:
 
 ```text
-/goal autopilot --steps 3 --stop-on-subagent
+/goal run v38-provider-hub-capability-profiles --until blocked --max-actions 8 --max-subagents 2
 ```
 
 ## Context Guard
@@ -159,6 +162,8 @@ Checkpoint entries should be short:
 Do not paste long command output into checkpoints. Summarize pass/fail and keep exact command names.
 
 If automatic compaction happens anyway, treat the current controller thread as disposable. Start a fresh controller thread with `master-once-prompt.md`; do not ask the compressed controller to reconstruct missing details from memory.
+
+The controller must also read and apply `context-management.md`. That file is the authority for leases, pause propagation, subagent ownership, and controller rotation.
 
 ## Boundaries
 
