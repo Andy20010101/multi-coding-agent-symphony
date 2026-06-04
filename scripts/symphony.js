@@ -29,6 +29,9 @@ import {
   buildAgentCliCapabilityProfileContract
 } from '../src/symphony/agent-cli-capability-profile.js';
 import {
+  buildAgentCliLaneAssignmentPreviewContract
+} from '../src/symphony/agent-cli-lane-assignment-preview.js';
+import {
   buildAppStateSnapshot
 } from '../src/symphony/app-state-snapshot.js';
 import {
@@ -1997,6 +2000,20 @@ async function runSymphonyProviders({ args, stdout, env }) {
     return EXIT_CODES.ok;
   }
 
+  if (options.subcommand === 'lanes') {
+    const preview = buildAgentCliLaneAssignmentPreviewContract({
+      env
+    });
+
+    if (options.json) {
+      writeJson(stdout, preview);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderProviderLaneAssignmentPreviewText(preview));
+    return EXIT_CODES.ok;
+  }
+
   const health = buildAgentCliProviderHealthContract({
     env
   });
@@ -2061,6 +2078,17 @@ function renderProviderCapabilityProfileText(profile) {
     `Mapped actions: ${profile.summary.mappedActionCount}`,
     `Active providers: ${profile.boundaries.activeProviderIds.join(', ')}`,
     `Test run mode: ${profile.summary.testRunMode}`,
+    ''
+  ].join('\n');
+}
+
+function renderProviderLaneAssignmentPreviewText(preview) {
+  return [
+    `Provider lanes: ${preview.summary.laneCount} lanes`,
+    `Contract: ${preview.contractName}`,
+    `Active providers: ${preview.activeProviderIds.join(', ')}`,
+    `Independent review required: ${preview.summary.independentReviewRequired}`,
+    `Auto approval available: ${preview.summary.autoApprovalAvailable}`,
     ''
   ].join('\n');
 }
@@ -3993,8 +4021,8 @@ function parseProvidersArgs(args) {
 
   options.subcommand ??= 'health';
 
-  if (!['health', 'capabilities'].includes(options.subcommand)) {
-    throw new UsageError('providers subcommand must be health or capabilities');
+  if (!['health', 'capabilities', 'lanes'].includes(options.subcommand)) {
+    throw new UsageError('providers subcommand must be health, capabilities, or lanes');
   }
 
   return options;
@@ -4002,11 +4030,12 @@ function parseProvidersArgs(args) {
 
 function providersHelpText() {
   return [
-    'Usage: symphony providers <health|capabilities> [--json]',
+    'Usage: symphony providers <health|capabilities|lanes> [--json]',
     '',
     'Prints read-only v38 Agent CLI provider contracts.',
     'health checks sanitized environment presence only.',
     'capabilities maps action requirements to provider/tool gates.',
+    'lanes previews worker/reviewer/main-verifier lane separation.',
     'The command does not execute provider CLIs, read credential files, call models, install providers, open OAuth, write git state, or run validations.',
     ''
   ].join('\n');

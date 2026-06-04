@@ -9910,6 +9910,7 @@ var ACTION_AVAILABILITY_CONTRACT_NAME = "action-availability.v1";
 var ACTION_PREVIEW_CONTRACT_NAME = "action-preview.v1";
 var AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = "agent-cli-provider-health.v1";
 var AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = "agent-cli-capability-profile.v1";
+var AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME = "agent-cli-lane-assignment-preview.v1";
 var JOB_MODEL_CONTRACT_NAME = "job-model.v1";
 var JOB_CREATION_CONTRACT_NAME = "job-creation.v1";
 var JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = "job-timeline-log-stream.v1";
@@ -10508,6 +10509,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "providerLanePreview",
+		label: "Provider Lane Preview",
+		path: "/api/providers/lane-preview",
+		method: "GET",
+		contractName: AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "jobModel",
 		label: "Job Model",
 		path: "/api/jobs",
@@ -10789,6 +10797,7 @@ function projectWorkbenchContracts(results) {
 	const actionManifestData = dataFrom(results.actionManifest);
 	const actionAvailabilityData = dataFrom(results.actionAvailability);
 	const actionPreviewData = dataFrom(results.actionPreview);
+	const providerLanePreviewData = dataFrom(results.providerLanePreview);
 	const diagnosticsData = dataFrom(results.diagnostics);
 	const jobModelData = dataFrom(results.jobModel);
 	const jobCreationData = dataFrom(results.jobCreation);
@@ -10991,6 +11000,10 @@ function projectWorkbenchContracts(results) {
 		}),
 		activeGoal: activeGoalControl,
 		capabilities: projectCapabilities(capabilitiesData),
+		providerLanePreview: projectProviderLanePreview({
+			result: results.providerLanePreview,
+			preview: providerLanePreviewData
+		}),
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
 		jobConsole: projectedJobConsole,
 		evidenceTimeline: projectedEvidenceTimeline,
@@ -17361,6 +17374,77 @@ function projectCapabilities(capabilities) {
 		note: "Capabilities panel 只展示后端 capabilities.v1，不把 capability 字段转换成写入、执行或下载入口。"
 	};
 }
+function projectProviderLanePreview({ result, preview }) {
+	const lanes = Array.isArray(preview?.lanePreviews) ? preview.lanePreviews : [];
+	const matrix = Array.isArray(preview?.assignmentMatrix) ? preview.assignmentMatrix : [];
+	const boundaries = preview?.boundaries ?? {};
+	return {
+		state: preview === null || preview === void 0 ? "missing" : "available",
+		contractName: valueState(preview?.contractName),
+		contractVersion: valueState(preview?.contractVersion),
+		goalId: valueState(preview?.context?.goalId),
+		taskId: valueState(preview?.context?.taskId),
+		routeState: valueState(routeStateFromResult(result)),
+		route: valueState(result?.route),
+		sourcePolicy: valueState(preview?.context?.assignmentSource),
+		activeProviderIds: arrayTextState(preview?.activeProviderIds),
+		laneCount: valueState(preview?.summary?.laneCount),
+		independentReviewRequired: valueState(preview?.summary?.independentReviewRequired),
+		mainVerifierLaneOperatorControlled: valueState(preview?.summary?.mainVerifierLaneOperatorControlled),
+		autoAssignmentAvailable: valueState(preview?.summary?.autoAssignmentAvailable),
+		autoApprovalAvailable: valueState(preview?.summary?.autoApprovalAvailable),
+		lanes: {
+			state: lanes.length === 0 ? "missing" : "available",
+			items: lanes.map((lane) => ({
+				role: valueState(lane?.role),
+				laneId: valueState(lane?.laneId),
+				phase: valueState(lane?.phase),
+				laneKind: valueState(lane?.laneKind),
+				assignmentState: valueState(lane?.assignmentState),
+				requiresDistinctActorFrom: arrayTextState(lane?.requiresDistinctActorFrom),
+				eventTypes: arrayTextState(lane?.eventTypes),
+				confirmationContract: valueState(lane?.confirmationContract),
+				previewOnly: valueState(lane?.previewOnly),
+				executionEnabled: valueState(lane?.executionEnabled),
+				autoAssignAvailable: valueState(lane?.autoAssignAvailable),
+				autoApprovalAvailable: valueState(lane?.autoApprovalAvailable),
+				candidateProviders: {
+					state: Array.isArray(lane?.candidateProviders) && lane.candidateProviders.length > 0 ? "available" : "empty",
+					items: (Array.isArray(lane?.candidateProviders) ? lane.candidateProviders : []).map((provider) => ({
+						providerId: valueState(provider?.providerId),
+						displayName: valueState(provider?.displayName),
+						healthState: valueState(provider?.healthState),
+						assignableInV38: valueState(provider?.assignableInV38),
+						unavailableReason: valueState(provider?.unavailableReason),
+						selectionSource: valueState(provider?.selectionSource)
+					}))
+				},
+				operatorLane: objectState(lane?.operatorLane),
+				copyOnlyVerificationCommands: arrayTextState(lane?.copyOnlyVerificationCommands)
+			}))
+		},
+		assignmentMatrix: {
+			state: matrix.length === 0 ? "missing" : "available",
+			items: matrix.map((row) => ({
+				matrixId: valueState(row?.matrixId),
+				state: valueState(row?.state),
+				workerProviderId: valueState(row?.worker?.providerId),
+				reviewerProviderId: valueState(row?.reviewer?.providerId),
+				reviewerMustBeDifferentActorFrom: valueState(row?.reviewer?.mustBeDifferentActorFrom),
+				mainVerifierLaneId: valueState(row?.mainVerifier?.laneId),
+				mainVerifierOperatorControlled: valueState(row?.mainVerifier?.operatorControlled),
+				blockers: arrayTextState(row?.blockers),
+				previewOnly: valueState(row?.previewOnly),
+				autoApprovalAvailable: valueState(row?.autoApprovalAvailable)
+			}))
+		},
+		boundaries: Object.entries(boundaries).map(([boundary, available]) => ({
+			boundary: valueState(boundary),
+			available: valueState(available)
+		})),
+		note: "Provider Lane Preview renders agent-cli-lane-assignment-preview.v1 only. It separates worker, reviewer, and main-verifier lanes without assigning agents, executing provider CLIs, registering review, or passing main verification."
+	};
+}
 function projectDiagnostics(diagnostics) {
 	return {
 		state: diagnostics === null || diagnostics === void 0 ? "missing" : "available",
@@ -19189,6 +19273,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 							manifestRoute: findRoute(model.routeStates, "actionManifest"),
 							availabilityRoute: findRoute(model.routeStates, "actionAvailability"),
 							previewRoute: findRoute(model.routeStates, "actionPreview")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderLanePreviewPanel, {
+							preview: model.providerLanePreview,
+							route: findRoute(model.routeStates, "providerLanePreview")
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
 							nextAction: model.activeGoal.nextAction,
@@ -22352,6 +22440,112 @@ function ActionRegistryPanel({ registry, manifestRoute, availabilityRoute, previ
 				children: registry?.note
 			})
 		]
+	});
+}
+function ProviderLanePreviewPanel({ preview, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "provider-lane-preview-panel",
+		kicker: "v38 provider lanes",
+		title: "Provider Lane Preview",
+		state: preview?.state ?? "missing",
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", preview?.contractName],
+				["contractVersion", preview?.contractVersion],
+				["goalId", preview?.goalId],
+				["taskId", preview?.taskId],
+				["routeState", preview?.routeState],
+				["sourcePolicy", preview?.sourcePolicy],
+				["active providers", preview?.activeProviderIds],
+				["lane count", preview?.laneCount],
+				["independent review required", preview?.independentReviewRequired],
+				["main verifier operator lane", preview?.mainVerifierLaneOperatorControlled],
+				["auto assignment available", preview?.autoAssignmentAvailable],
+				["auto approval available", preview?.autoApprovalAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderLanePreviewList, { lanes: preview?.lanes }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderAssignmentMatrix, { matrix: preview?.assignmentMatrix }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: preview?.boundaries,
+					nameKey: "boundary",
+					valueKey: "available",
+					emptyCopy: "provider lane boundaries 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: preview?.note
+			})
+		]
+	});
+}
+function ProviderLanePreviewList({ lanes }) {
+	if (lanes?.state !== "available" || !Array.isArray(lanes.items) || lanes.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider lane previews 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "lane previews",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "action-registry-list",
+			"aria-label": "Provider lane previews",
+			children: lanes.items.map((lane, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["role", lane.role],
+					["laneId", lane.laneId],
+					["phase", lane.phase],
+					["laneKind", lane.laneKind],
+					["assignmentState", lane.assignmentState],
+					["distinct actor from", lane.requiresDistinctActorFrom],
+					["event types", lane.eventTypes],
+					["confirmation contract", lane.confirmationContract],
+					["previewOnly", lane.previewOnly],
+					["executionEnabled", lane.executionEnabled],
+					["autoAssignAvailable", lane.autoAssignAvailable],
+					["autoApprovalAvailable", lane.autoApprovalAvailable],
+					["copy-only verification commands", lane.copyOnlyVerificationCommands]
+				] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderCandidateList, { candidates: lane.candidateProviders }),
+				lane.operatorLane?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["operatorId", textValue(lane.operatorLane.value.operatorId)],
+					["operator goal", textValue(lane.operatorLane.value.goalId)],
+					["operator task", textValue(lane.operatorLane.value.taskId)],
+					["requires approved reviewer", textValue(lane.operatorLane.value.requiresApprovedReviewer)],
+					["requires clean verification worktree", textValue(lane.operatorLane.value.requiresCleanMainVerificationWorktree)]
+				] }) : null
+			] }, `${lane.role.text}-${lane.laneId.text}-${index}`))
+		})
+	});
+}
+function ProviderCandidateList({ candidates }) {
+	if (candidates?.state !== "available" || !Array.isArray(candidates.items) || candidates.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider candidates 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: candidates.items.map((provider, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: provider.providerId.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: provider.healthState.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: provider.assignableInV38.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: provider.unavailableReason.text })
+		] }, `${provider.providerId.text}-${index}`))
+	});
+}
+function ProviderAssignmentMatrix({ matrix }) {
+	if (matrix?.state !== "available" || !Array.isArray(matrix.items) || matrix.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider lane assignment matrix 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "independent review matrix",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "compact-list",
+			children: matrix.items.map((row, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+					row.workerProviderId.text,
+					" -> ",
+					row.reviewerProviderId.text
+				] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: row.mainVerifierLaneId.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: row.state.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: row.blockers.text })
+			] }, `${row.matrixId.text}-${index}`))
+		})
 	});
 }
 function ActionRegistryList({ actions }) {

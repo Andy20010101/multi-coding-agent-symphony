@@ -269,6 +269,10 @@ export function WorkbenchShell({
               availabilityRoute={findRoute(model.routeStates, 'actionAvailability')}
               previewRoute={findRoute(model.routeStates, 'actionPreview')}
             />
+            <ProviderLanePreviewPanel
+              preview={model.providerLanePreview}
+              route={findRoute(model.routeStates, 'providerLanePreview')}
+            />
             <NextActionCard
               nextAction={model.activeGoal.nextAction}
               route={findRoute(model.routeStates, 'goalNextAction')}
@@ -3398,6 +3402,124 @@ function ActionRegistryPanel({
       <ActionRegistryBlockers blockers={registry?.blockers} />
       <p className="panel-note">{registry?.note}</p>
     </DataPanel>
+  );
+}
+
+function ProviderLanePreviewPanel({ preview, route }) {
+  return (
+    <DataPanel
+      id="provider-lane-preview-panel"
+      kicker="v38 provider lanes"
+      title="Provider Lane Preview"
+      state={preview?.state ?? 'missing'}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', preview?.contractName],
+        ['contractVersion', preview?.contractVersion],
+        ['goalId', preview?.goalId],
+        ['taskId', preview?.taskId],
+        ['routeState', preview?.routeState],
+        ['sourcePolicy', preview?.sourcePolicy],
+        ['active providers', preview?.activeProviderIds],
+        ['lane count', preview?.laneCount],
+        ['independent review required', preview?.independentReviewRequired],
+        ['main verifier operator lane', preview?.mainVerifierLaneOperatorControlled],
+        ['auto assignment available', preview?.autoAssignmentAvailable],
+        ['auto approval available', preview?.autoApprovalAvailable]
+      ]} />
+
+      <ProviderLanePreviewList lanes={preview?.lanes} />
+      <ProviderAssignmentMatrix matrix={preview?.assignmentMatrix} />
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={preview?.boundaries} nameKey="boundary" valueKey="available" emptyCopy="provider lane boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note}</p>
+    </DataPanel>
+  );
+}
+
+function ProviderLanePreviewList({ lanes }) {
+  if (lanes?.state !== 'available' || !Array.isArray(lanes.items) || lanes.items.length === 0) {
+    return <EmptyBlock copy="provider lane previews 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="lane previews">
+      <ul className="action-registry-list" aria-label="Provider lane previews">
+        {lanes.items.map((lane, index) => (
+          <li key={`${lane.role.text}-${lane.laneId.text}-${index}`}>
+            <FieldList rows={[
+              ['role', lane.role],
+              ['laneId', lane.laneId],
+              ['phase', lane.phase],
+              ['laneKind', lane.laneKind],
+              ['assignmentState', lane.assignmentState],
+              ['distinct actor from', lane.requiresDistinctActorFrom],
+              ['event types', lane.eventTypes],
+              ['confirmation contract', lane.confirmationContract],
+              ['previewOnly', lane.previewOnly],
+              ['executionEnabled', lane.executionEnabled],
+              ['autoAssignAvailable', lane.autoAssignAvailable],
+              ['autoApprovalAvailable', lane.autoApprovalAvailable],
+              ['copy-only verification commands', lane.copyOnlyVerificationCommands]
+            ]} />
+            <ProviderCandidateList candidates={lane.candidateProviders} />
+            {lane.operatorLane?.state === 'available' ? (
+              <FieldList rows={[
+                ['operatorId', textValue(lane.operatorLane.value.operatorId)],
+                ['operator goal', textValue(lane.operatorLane.value.goalId)],
+                ['operator task', textValue(lane.operatorLane.value.taskId)],
+                ['requires approved reviewer', textValue(lane.operatorLane.value.requiresApprovedReviewer)],
+                ['requires clean verification worktree', textValue(lane.operatorLane.value.requiresCleanMainVerificationWorktree)]
+              ]} />
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Subsection>
+  );
+}
+
+function ProviderCandidateList({ candidates }) {
+  if (candidates?.state !== 'available' || !Array.isArray(candidates.items) || candidates.items.length === 0) {
+    return <EmptyBlock copy="provider candidates 为空。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {candidates.items.map((provider, index) => (
+        <li key={`${provider.providerId.text}-${index}`}>
+          <span>{provider.providerId.text}</span>
+          <span>{provider.healthState.text}</span>
+          <span>{provider.assignableInV38.text}</span>
+          <span>{provider.unavailableReason.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProviderAssignmentMatrix({ matrix }) {
+  if (matrix?.state !== 'available' || !Array.isArray(matrix.items) || matrix.items.length === 0) {
+    return <EmptyBlock copy="provider lane assignment matrix 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="independent review matrix">
+      <ul className="compact-list">
+        {matrix.items.map((row, index) => (
+          <li key={`${row.matrixId.text}-${index}`}>
+            <span>{row.workerProviderId.text}{' -> '}{row.reviewerProviderId.text}</span>
+            <span>{row.mainVerifierLaneId.text}</span>
+            <span>{row.state.text}</span>
+            <span>{row.blockers.text}</span>
+          </li>
+        ))}
+      </ul>
+    </Subsection>
   );
 }
 

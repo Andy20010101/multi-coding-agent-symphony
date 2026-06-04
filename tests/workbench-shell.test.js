@@ -905,6 +905,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/projects',
       '/api/providers/capabilities',
       '/api/providers/health',
+      '/api/providers/lane-preview',
       '/api/readiness',
       '/api/release/bundle',
       '/api/runs',

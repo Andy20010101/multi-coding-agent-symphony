@@ -42,6 +42,9 @@ import {
 import {
   recordGoalOperationRun
 } from '../src/symphony/goal-operation-run-registry.js';
+import {
+  buildAgentCliLaneAssignmentPreviewContract
+} from '../src/symphony/agent-cli-lane-assignment-preview.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
 const V19_GOAL_ID = 'v19-goal-runbook-next-action';
@@ -84,6 +87,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/preview', 'action-preview.v1'],
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
+        ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
@@ -120,6 +124,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/preview', 'action-preview.v1'],
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
+        ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
@@ -175,6 +180,38 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(action.requiresPlanHash.value, true);
     assert.equal(action.writesInPreview.value, false);
     assert.equal(action.executionAvailable.value, false);
+  });
+
+  it('projects the v38 Provider Lane Preview panel from backend provider contracts only', () => {
+    const lanePreview = buildAgentCliLaneAssignmentPreviewContract({
+      generatedAt: '2026-06-04T00:00:00.000Z',
+      env: {
+        ANTHROPIC_API_KEY: 'sk-test-secret-value',
+        OPENAI_API_KEY: 'sk-test-secret-value'
+      }
+    });
+    const model = projectWorkbenchContracts({
+      providerLanePreview: createWorkbenchResult('providerLanePreview', lanePreview)
+    });
+    const preview = model.providerLanePreview;
+    const reviewerLane = preview.lanes.items.find((lane) => lane.role.value === 'reviewer');
+    const mainVerifierLane = preview.lanes.items.find((lane) => lane.role.value === 'main-verifier');
+
+    assert.equal(preview.contractName.value, 'agent-cli-lane-assignment-preview.v1');
+    assert.equal(preview.goalId.value, 'v38-provider-hub-capability-profiles');
+    assert.equal(preview.taskId.value, 'task-4');
+    assert.equal(preview.sourcePolicy.value, 'goal-runbook.v1:roleOrder + provider-health + capability-profile');
+    assert.equal(preview.activeProviderIds.value, 'claude-code-cli、codex-cli');
+    assert.equal(preview.independentReviewRequired.value, true);
+    assert.equal(preview.autoApprovalAvailable.value, false);
+    assert.equal(reviewerLane.requiresDistinctActorFrom.value, 'worker');
+    assert.equal(reviewerLane.executionEnabled.value, false);
+    assert.equal(mainVerifierLane.candidateProviders.state, 'empty');
+    assert.equal(mainVerifierLane.operatorLane.value.requiresApprovedReviewer, true);
+    assert.equal(mainVerifierLane.copyOnlyVerificationCommands.value, 'pnpm check、pnpm test、pnpm workbench:build、git diff --check');
+    assert.equal(preview.assignmentMatrix.items.every((row) => row.workerProviderId.value !== row.reviewerProviderId.value), true);
+    assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'providerCliExecutionAvailable').available.value, false);
+    assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'selfApprovalAvailable').available.value, false);
   });
 
   it('projects the v37 Desktop Shell view model from existing read-only contracts', () => {

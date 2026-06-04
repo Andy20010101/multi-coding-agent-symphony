@@ -91,6 +91,9 @@ import {
   buildAgentCliCapabilityProfileContract
 } from './agent-cli-capability-profile.js';
 import {
+  buildAgentCliLaneAssignmentPreviewContract
+} from './agent-cli-lane-assignment-preview.js';
+import {
   buildAppStateSnapshot
 } from './app-state-snapshot.js';
 import {
@@ -1019,6 +1022,24 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, buildAgentCliCapabilityProfileContract({
+          env
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/providers/lane-preview') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-provider-lane-preview-request',
+            message: 'Provider lane preview does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildAgentCliLaneAssignmentPreviewContract({
           env
         }));
         return;

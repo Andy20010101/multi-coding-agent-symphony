@@ -29,6 +29,9 @@ import {
   validateActionPreviewContract
 } from '../src/symphony/action-preview.js';
 import {
+  validateAgentCliLaneAssignmentPreviewContract
+} from '../src/symphony/agent-cli-lane-assignment-preview.js';
+import {
   validateDiagnosticsContract
 } from '../src/symphony/diagnostics.js';
 import {
@@ -460,6 +463,19 @@ describe('v16 Workbench route smoke and server parity', () => {
           }
         },
         {
+          path: '/api/providers/lane-preview',
+          contractName: 'agent-cli-lane-assignment-preview.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateAgentCliLaneAssignmentPreviewContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.deepEqual(payload.activeProviderIds, ['claude-code-cli', 'codex-cli']);
+            assert.equal(payload.summary.autoApprovalAvailable, false);
+            assert.equal(payload.boundaries.providerCliExecutionAvailable, false);
+          }
+        },
+        {
           path: '/api/diagnostics',
           contractName: 'diagnostics.v1',
           assertPayload(payload) {
@@ -580,6 +596,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/actions/preview',
         '/api/providers/capabilities',
         '/api/providers/health',
+        '/api/providers/lane-preview',
         '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
       ];
