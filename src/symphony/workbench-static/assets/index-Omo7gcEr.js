@@ -9909,6 +9909,7 @@ var ACTION_MANIFEST_CONTRACT_NAME = "action-manifest.v1";
 var ACTION_AVAILABILITY_CONTRACT_NAME = "action-availability.v1";
 var ACTION_PREVIEW_CONTRACT_NAME = "action-preview.v1";
 var AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = "agent-cli-provider-health.v1";
+var AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = "agent-cli-capability-profile.v1";
 var JOB_MODEL_CONTRACT_NAME = "job-model.v1";
 var JOB_CREATION_CONTRACT_NAME = "job-creation.v1";
 var JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = "job-timeline-log-stream.v1";
@@ -10498,6 +10499,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/providers/health",
 		method: "GET",
 		contractName: AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "providerCapabilities",
+		label: "Provider Capabilities",
+		path: "/api/providers/capabilities",
+		method: "GET",
+		contractName: AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME
 	}),
 	Object.freeze({
 		id: "jobModel",

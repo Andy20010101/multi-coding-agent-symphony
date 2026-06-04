@@ -1,0 +1,529 @@
+{
+  "contractName": "agent-cli-capability-profile.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-04T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v38-provider-hub-capability-profiles",
+    "taskId": "task-3",
+    "sourceContracts": [
+      "agent-cli-provider.v1",
+      "agent-cli-provider-health.v1",
+      "action-manifest.v1",
+      "action-availability.v1",
+      "action-preview.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "goal-operation-runs.v1",
+      "controlled-implementation-plan-preview.v1",
+      "controlled-verification-run-confirmation.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "scope": "v38-agent-cli-provider-hub-mvp",
+    "activeGoalAnchored": true,
+    "activeTaskAnchored": true,
+    "runContextSource": "goal-operation-runs.v1",
+    "evidenceContextSource": "goal-event-log.v1:evidenceRefs"
+  },
+  "requirements": [
+    {
+      "requirementId": "repo.write",
+      "state": "unavailable",
+      "providerGateIds": [
+        "provider.workspace.write.disabled"
+      ],
+      "toolGateIds": [
+        "repo.write.disabled"
+      ],
+      "reason": "v38 provider capability mapping does not grant repository writes.",
+      "source": "action-requirement"
+    },
+    {
+      "requirementId": "model.invoke",
+      "state": "unavailable",
+      "providerGateIds": [
+        "provider.cli.execution.disabled",
+        "provider.model.invoke.disabled"
+      ],
+      "toolGateIds": [
+        "prompt.dispatch.disabled"
+      ],
+      "reason": "v38 does not invoke provider CLIs or models.",
+      "source": "action-requirement"
+    },
+    {
+      "requirementId": "test.run",
+      "state": "copy-only",
+      "providerGateIds": [],
+      "toolGateIds": [
+        "validation.copy-only"
+      ],
+      "reason": "Validation commands are exposed as operator-run copy-only commands.",
+      "source": "action-requirement"
+    },
+    {
+      "requirementId": "git.change",
+      "state": "unavailable",
+      "providerGateIds": [
+        "provider.git.write.disabled"
+      ],
+      "toolGateIds": [
+        "git.change.disabled"
+      ],
+      "reason": "v38 Provider Hub does not merge, push, tag, or publish.",
+      "source": "action-requirement"
+    },
+    {
+      "requirementId": "goal.event.append",
+      "state": "controlled-confirm",
+      "providerGateIds": [],
+      "toolGateIds": [
+        "goal.event.append.controlled"
+      ],
+      "reason": "Goal events require dry-run plus plan-hash confirmation.",
+      "source": "action-requirement"
+    },
+    {
+      "requirementId": "evidence.ref",
+      "state": "read-only",
+      "providerGateIds": [],
+      "toolGateIds": [
+        "evidence.ref.only"
+      ],
+      "reason": "Contracts carry evidence refs without reading evidence bodies.",
+      "source": "action-requirement"
+    },
+    {
+      "requirementId": "provider.health.read",
+      "state": "read-only",
+      "providerGateIds": [
+        "provider.health.contract.read"
+      ],
+      "toolGateIds": [],
+      "reason": "Provider health is read from agent-cli-provider-health.v1.",
+      "source": "action-requirement"
+    }
+  ],
+  "providerGates": [
+    {
+      "providerId": "claude-code-cli",
+      "displayName": "Claude Code CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "claude-code",
+      "healthState": "missing",
+      "gates": [
+        {
+          "gateId": "provider.profile.present",
+          "state": "available",
+          "requirementIds": [
+            "provider.health.read"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.health.contract.read",
+          "state": "missing",
+          "requirementIds": [
+            "provider.health.read"
+          ],
+          "sourceContract": "agent-cli-provider-health.v1"
+        },
+        {
+          "gateId": "provider.workspace.write.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "repo.write"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.cli.execution.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "model.invoke"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.model.invoke.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "model.invoke"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.git.write.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "git.change"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        }
+      ],
+      "boundaries": {
+        "providerCliExecutionAvailable": false,
+        "modelInvocationAvailable": false,
+        "capabilityProbeAvailable": false,
+        "workspaceWritesAvailable": false,
+        "gitWriteAvailable": false,
+        "secretMaterialAvailable": false
+      }
+    },
+    {
+      "providerId": "codex-cli",
+      "displayName": "Codex CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "codex",
+      "healthState": "missing",
+      "gates": [
+        {
+          "gateId": "provider.profile.present",
+          "state": "available",
+          "requirementIds": [
+            "provider.health.read"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.health.contract.read",
+          "state": "missing",
+          "requirementIds": [
+            "provider.health.read"
+          ],
+          "sourceContract": "agent-cli-provider-health.v1"
+        },
+        {
+          "gateId": "provider.workspace.write.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "repo.write"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.cli.execution.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "model.invoke"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.model.invoke.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "model.invoke"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        },
+        {
+          "gateId": "provider.git.write.disabled",
+          "state": "disabled",
+          "requirementIds": [
+            "git.change"
+          ],
+          "sourceContract": "agent-cli-provider.v1"
+        }
+      ],
+      "boundaries": {
+        "providerCliExecutionAvailable": false,
+        "modelInvocationAvailable": false,
+        "capabilityProbeAvailable": false,
+        "workspaceWritesAvailable": false,
+        "gitWriteAvailable": false,
+        "secretMaterialAvailable": false
+      }
+    }
+  ],
+  "toolGates": [
+    {
+      "gateId": "repo.write.disabled",
+      "state": "disabled",
+      "requirementIds": [
+        "repo.write"
+      ],
+      "sourceContract": "controlled-implementation-plan-preview.v1",
+      "confirmationContract": null,
+      "copyOnlyCommands": []
+    },
+    {
+      "gateId": "prompt.dispatch.disabled",
+      "state": "disabled",
+      "requirementIds": [
+        "model.invoke"
+      ],
+      "sourceContract": "action-preview.v1",
+      "confirmationContract": null,
+      "copyOnlyCommands": []
+    },
+    {
+      "gateId": "validation.copy-only",
+      "state": "copy-only",
+      "requirementIds": [
+        "test.run"
+      ],
+      "sourceContract": "goal-runbook.v1",
+      "confirmationContract": null,
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check"
+      ]
+    },
+    {
+      "gateId": "git.change.disabled",
+      "state": "disabled",
+      "requirementIds": [
+        "git.change"
+      ],
+      "sourceContract": "goal-next-action.v1",
+      "confirmationContract": null,
+      "copyOnlyCommands": []
+    },
+    {
+      "gateId": "goal.event.append.controlled",
+      "state": "controlled",
+      "requirementIds": [
+        "goal.event.append"
+      ],
+      "sourceContract": "goal-update-plan.v1",
+      "confirmationContract": "goal-update-plan.v1",
+      "copyOnlyCommands": []
+    },
+    {
+      "gateId": "evidence.ref.only",
+      "state": "available",
+      "requirementIds": [
+        "evidence.ref"
+      ],
+      "sourceContract": "goal-event-log.v1",
+      "confirmationContract": null,
+      "copyOnlyCommands": []
+    }
+  ],
+  "actionMappings": [
+    {
+      "action_id": "goal.worker-evidence.record",
+      "label": "Record worker evidence",
+      "role": "worker",
+      "requiredContext": [
+        "goalId",
+        "taskId",
+        "workerEvidenceRef"
+      ],
+      "requirementIds": [
+        "goal.event.append",
+        "evidence.ref"
+      ],
+      "providerGateIds": [],
+      "toolGateIds": [
+        "goal.event.append.controlled",
+        "evidence.ref.only"
+      ],
+      "confirmationContract": "goal-update-plan.v1",
+      "eventTypes": [
+        "worker.evidence-recorded"
+      ],
+      "previewOnly": true,
+      "executionEnabled": false,
+      "stateSource": "action-manifest.v1"
+    },
+    {
+      "action_id": "goal.review-verdict.record",
+      "label": "Record review verdict",
+      "role": "reviewer",
+      "requiredContext": [
+        "goalId",
+        "taskId",
+        "reviewerId",
+        "verdict",
+        "reviewEvidenceRef"
+      ],
+      "requirementIds": [
+        "goal.event.append",
+        "evidence.ref"
+      ],
+      "providerGateIds": [],
+      "toolGateIds": [
+        "goal.event.append.controlled",
+        "evidence.ref.only"
+      ],
+      "confirmationContract": "goal-update-plan.v1",
+      "eventTypes": [
+        "reviewer.approved",
+        "reviewer.needs-revision"
+      ],
+      "previewOnly": true,
+      "executionEnabled": false,
+      "stateSource": "action-manifest.v1"
+    },
+    {
+      "action_id": "goal.main-verification-gate.record",
+      "label": "Record main verification gate",
+      "role": "main-verifier",
+      "requiredContext": [
+        "goalId",
+        "taskId",
+        "verifierId",
+        "mainVerificationRef"
+      ],
+      "requirementIds": [
+        "test.run",
+        "git.change",
+        "goal.event.append",
+        "evidence.ref"
+      ],
+      "providerGateIds": [
+        "provider.git.write.disabled"
+      ],
+      "toolGateIds": [
+        "validation.copy-only",
+        "git.change.disabled",
+        "goal.event.append.controlled",
+        "evidence.ref.only"
+      ],
+      "confirmationContract": "goal-update-plan.v1",
+      "eventTypes": [
+        "main.verification-passed",
+        "main.verification-failed"
+      ],
+      "previewOnly": true,
+      "executionEnabled": false,
+      "stateSource": "action-manifest.v1"
+    },
+    {
+      "action_id": "goal.release-gate.record",
+      "label": "Record release gate evidence",
+      "role": "release-verifier",
+      "requiredContext": [
+        "goalId",
+        "gateId",
+        "verifierId",
+        "releaseEvidenceRef"
+      ],
+      "requirementIds": [
+        "test.run",
+        "git.change",
+        "goal.event.append",
+        "evidence.ref"
+      ],
+      "providerGateIds": [
+        "provider.git.write.disabled"
+      ],
+      "toolGateIds": [
+        "validation.copy-only",
+        "git.change.disabled",
+        "goal.event.append.controlled",
+        "evidence.ref.only"
+      ],
+      "confirmationContract": "goal-update-plan.v1",
+      "eventTypes": [
+        "release.gate-passed",
+        "release.gate-failed",
+        "release.evidence-recorded"
+      ],
+      "previewOnly": true,
+      "executionEnabled": false,
+      "stateSource": "action-manifest.v1"
+    },
+    {
+      "action_id": "goal.implementation.preview",
+      "label": "Preview controlled implementation",
+      "role": "operator",
+      "requiredContext": [
+        "goalId",
+        "taskId"
+      ],
+      "requirementIds": [
+        "repo.write",
+        "model.invoke",
+        "test.run",
+        "git.change"
+      ],
+      "providerGateIds": [
+        "provider.workspace.write.disabled",
+        "provider.cli.execution.disabled",
+        "provider.model.invoke.disabled",
+        "provider.git.write.disabled"
+      ],
+      "toolGateIds": [
+        "repo.write.disabled",
+        "prompt.dispatch.disabled",
+        "validation.copy-only",
+        "git.change.disabled"
+      ],
+      "confirmationContract": "controlled-implementation-run-confirmation.v1",
+      "eventTypes": [],
+      "previewOnly": true,
+      "executionEnabled": false,
+      "stateSource": "action-manifest.v1"
+    }
+  ],
+  "inactiveProviders": [
+    {
+      "providerId": "gemini-cli",
+      "reason": "out-of-scope-for-v38"
+    },
+    {
+      "providerId": "kiro-cli",
+      "reason": "out-of-scope-for-v38"
+    },
+    {
+      "providerId": "deepseek",
+      "reason": "backend-profile-only-or-future-official-agent-cli-handoff"
+    }
+  ],
+  "summary": {
+    "activeProviderCount": 2,
+    "mappedRequirementCount": 7,
+    "mappedActionCount": 5,
+    "requiredRequirementIds": [
+      "repo.write",
+      "model.invoke",
+      "test.run",
+      "git.change"
+    ],
+    "capabilityProfileMappingAvailable": true,
+    "providerCliExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "repoWriteAvailable": false,
+    "gitChangeAvailable": false,
+    "testRunMode": "copy-only"
+  },
+  "boundaries": {
+    "readOnly": true,
+    "activeProviderIds": [
+      "claude-code-cli",
+      "codex-cli"
+    ],
+    "actionRequirementMappingAvailable": true,
+    "providerCliExecutionAvailable": false,
+    "providerCliExecutionAttempted": false,
+    "rendererProviderInvocationAvailable": false,
+    "promptDispatchAvailable": false,
+    "modelInvocationAvailable": false,
+    "capabilityProbeAvailable": false,
+    "modelCapabilityDiscoveryAvailable": false,
+    "genericShellRunnerAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "envValueExposureAvailable": false,
+    "credentialMaterialAvailable": false,
+    "rawProviderConfigAvailable": false,
+    "actionExecutionAvailable": false,
+    "jobQueueAvailable": false,
+    "automaticInstallAvailable": false,
+    "automaticOauthAvailable": false,
+    "repoWriteAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false
+  }
+}

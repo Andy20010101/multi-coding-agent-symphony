@@ -578,6 +578,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/actions/manifest',
         '/api/actions/availability',
         '/api/actions/preview',
+        '/api/providers/capabilities',
         '/api/providers/health',
         '/api/diagnostics',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`

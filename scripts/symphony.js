@@ -26,6 +26,9 @@ import {
   buildAgentCliProviderHealthContract
 } from '../src/symphony/agent-cli-provider-health.js';
 import {
+  buildAgentCliCapabilityProfileContract
+} from '../src/symphony/agent-cli-capability-profile.js';
+import {
   buildAppStateSnapshot
 } from '../src/symphony/app-state-snapshot.js';
 import {
@@ -1980,6 +1983,20 @@ async function runSymphonyProviders({ args, stdout, env }) {
     return EXIT_CODES.ok;
   }
 
+  if (options.subcommand === 'capabilities') {
+    const profile = buildAgentCliCapabilityProfileContract({
+      env
+    });
+
+    if (options.json) {
+      writeJson(stdout, profile);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderProviderCapabilityProfileText(profile));
+    return EXIT_CODES.ok;
+  }
+
   const health = buildAgentCliProviderHealthContract({
     env
   });
@@ -2033,6 +2050,17 @@ function renderProviderHealthText(health) {
     `Contract: ${health.contractName}`,
     `Configured: ${health.summary.configuredProviderCount}/${health.summary.activeProviderCount}`,
     ...health.providers.map((provider) => `${provider.providerId}: ${provider.health.state}`),
+    ''
+  ].join('\n');
+}
+
+function renderProviderCapabilityProfileText(profile) {
+  return [
+    `Provider capabilities: ${profile.summary.mappedRequirementCount} requirements`,
+    `Contract: ${profile.contractName}`,
+    `Mapped actions: ${profile.summary.mappedActionCount}`,
+    `Active providers: ${profile.boundaries.activeProviderIds.join(', ')}`,
+    `Test run mode: ${profile.summary.testRunMode}`,
     ''
   ].join('\n');
 }
@@ -3949,7 +3977,7 @@ function parseProvidersArgs(args) {
     }
 
     if (value === '--output' || value === '-o') {
-      throw new UsageError('provider health contracts are read-only; redirect stdout if you need a file');
+      throw new UsageError('provider contracts are read-only; redirect stdout if you need a file');
     }
 
     if (value.startsWith('--')) {
@@ -3965,8 +3993,8 @@ function parseProvidersArgs(args) {
 
   options.subcommand ??= 'health';
 
-  if (options.subcommand !== 'health') {
-    throw new UsageError('providers subcommand must be health');
+  if (!['health', 'capabilities'].includes(options.subcommand)) {
+    throw new UsageError('providers subcommand must be health or capabilities');
   }
 
   return options;
@@ -3974,10 +4002,12 @@ function parseProvidersArgs(args) {
 
 function providersHelpText() {
   return [
-    'Usage: symphony providers health [--json]',
+    'Usage: symphony providers <health|capabilities> [--json]',
     '',
-    'Prints the read-only v38 Agent CLI provider health contract.',
-    'The command checks sanitized environment presence only; it does not execute provider CLIs, read credential files, call models, install providers, or open OAuth.',
+    'Prints read-only v38 Agent CLI provider contracts.',
+    'health checks sanitized environment presence only.',
+    'capabilities maps action requirements to provider/tool gates.',
+    'The command does not execute provider CLIs, read credential files, call models, install providers, open OAuth, write git state, or run validations.',
     ''
   ].join('\n');
 }

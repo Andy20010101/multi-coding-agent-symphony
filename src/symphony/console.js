@@ -88,6 +88,9 @@ import {
   buildAgentCliProviderHealthContract
 } from './agent-cli-provider-health.js';
 import {
+  buildAgentCliCapabilityProfileContract
+} from './agent-cli-capability-profile.js';
+import {
   buildAppStateSnapshot
 } from './app-state-snapshot.js';
 import {
@@ -998,6 +1001,24 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, buildAgentCliProviderHealthContract({
+          env
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/providers/capabilities') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-provider-capabilities-request',
+            message: 'Provider capabilities do not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildAgentCliCapabilityProfileContract({
           env
         }));
         return;
