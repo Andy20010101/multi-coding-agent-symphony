@@ -57,10 +57,11 @@ codex/controller-loop-ops
 4. `task-4`: Worker/reviewer lane assignment preview
 5. `task-5`: Agent CLI Provider Hub panel + evidence
 
-Current intended next action:
+Current controller state:
 
 ```text
-task-1 worker
+task-1 reviewer approved event registered; task-1 main verification required next
+controller command policy: use explicit next commands; /goal continue is one-step compatibility only
 ```
 
 ## Scope Decisions
@@ -100,7 +101,7 @@ Do not run mutation, audit, doctor, real CLI, tag, push, or publish unless expli
 Command received:
 
 ```text
-/goal continue
+/goal autopilot --steps 3 --stop-on-subagent
 ```
 
 Files read:
@@ -112,8 +113,11 @@ docs/plans/controller/v38-controller-state.md
 docs/plans/controller/subagent-result-format.md
 docs/plans/controller/subagent-dispatch-log.md
 fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json
+docs/plans/app-core-v34-v40-goal-runbooks/v38_provider-hub-capability-profiles_goal_runbook_latest.md
 docs/plans/workbench-v33-v40-app-runtime-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
 docs/release-checklist.md
+docs/plans/v38-task-1-worker-evidence-2026-06-02.md
+docs/plans/v38-task-1-review-evidence-2026-06-02.md
 ```
 
 Missing files recorded during startup read:
@@ -124,58 +128,94 @@ docs/plans/v37-release-to-v38-agent-cli-provider-handoff-2026-06-04.md
 docs/plans/v38-agent-cli-provider-hub-mvp-2026-06-04.md
 ```
 
-Git state after reconcile:
+Git state before dispatch:
 
 ```text
-controller worktree is clean on codex/controller-loop-ops at 01a1041 before this checkpoint update.
+controller worktree is dirty in controller README/master prompt plus checkpoint/log files; this turn only updates checkpoint/log.
 main is aligned with origin/main at 7f0108b.
-v38 task-1 worktree exists and is clean at branch codex/v38-task-1-provider-profile-contract, commit 7f0108b.
+v38 task-1 worktree exists at branch codex/v38-task-1-provider-profile-contract, commit 7f0108b, with worker implementation, worker evidence, review evidence, worker revision, and reviewer re-review changes.
 remote branch origin/codex/test-hardening-convergence remains for separate review.
 local archive/v37-legacy-task0-runbook-09c926f remains as short-term safety reference.
 ```
 
-Controller action completed:
+Reconcile before action:
 
 ```text
-pnpm --silent symphony goal init --from-json fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json --goal v38-provider-hub-capability-profiles --dry-run --json
-pnpm --silent symphony goal init --from-json fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json --goal v38-provider-hub-capability-profiles --confirm --plan-hash sha256:3ab0de93b8fc56bff95d75d7df230fe66073ae0782d0030b571b371bdcf3dfe7 --json
+pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json
+returned goal-progress-ledger.v1 with task-1 status needs-revision, statusSource evt_895cd535d94d7e36, workerEvidenceRef docs/plans/v38-task-1-worker-evidence-2026-06-02.md, reviewEvidenceRef docs/plans/v38-task-1-review-evidence-2026-06-02.md, and reviewVerdict NEEDS_REVISION.
+
+pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --json
+returned action-required: task-1 reviewer, phase review, reason: Worker evidence exists for task-1 but reviewer verdict is missing.
 ```
 
-Result:
+Reviewer re-review result inspected:
 
 ```text
-v38 managed runbook registered.
-No task event registered.
-No subagent dispatched.
-No mutation, audit, doctor, real CLI, tag, or push command run.
+Worktree: /Users/andy/.codex/worktrees/0845/multi-coding-agent-symphony
+Branch: codex/v38-task-1-provider-profile-contract
+Evidence ref exists in worker worktree: docs/plans/v38-task-1-worker-evidence-2026-06-02.md
+Review evidence exists: docs/plans/v38-task-1-review-evidence-2026-06-02.md
+Review evidence now contains Re-review 2026-06-04 with verdict APPROVED.
+Reviewer thread 019e9278-122d-7fa0-9108-c43e778220a1 is idle and completed the re-review.
+Reviewer final block: role reviewer, status completed, eventToRegister reviewer.approved, evidenceRef docs/plans/v38-task-1-review-evidence-2026-06-02.md.
+Reviewer validation: node task test passed 6 tests; pnpm check passed; pnpm test passed 998 tests; pnpm workbench:build passed; git diff --check passed; old blocker and allowlist drift probes all returned ok=false.
+```
+
+Controller action:
+
+```text
+Registered reviewer.approved for task-1.
+
+Dry-run:
+pnpm --silent symphony goal review --goal v38-provider-hub-capability-profiles --task task-1 --verdict approved --reviewer codex-v38-task-1-reviewer --evidence-ref docs/plans/v38-task-1-review-evidence-2026-06-02.md --dry-run --json
+returned validation ok and planHash sha256:17bb96737368652e6795e467be7f4b43d9b2e2eb9b3a8c70abb8128388ab1444.
+
+Confirm:
+pnpm --silent symphony goal review --goal v38-provider-hub-capability-profiles --task task-1 --reviewer codex-v38-task-1-reviewer --verdict approved --evidence-ref docs/plans/v38-task-1-review-evidence-2026-06-02.md --confirm --plan-hash sha256:17bb96737368652e6795e467be7f4b43d9b2e2eb9b3a8c70abb8128388ab1444
+appended event evt_8259bd487042edb9 with eventHash sha256:62a155eac893f49996a7736d9fa4c4c86f3aed8dfdae0ba2e46a8703ab3ed41b.
+
+No mutation, audit, doctor, real CLI, tag, push, or publish command run by the controller.
 ```
 
 Reconcile after action:
 
 ```text
 pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json
-returns goal-progress-ledger.v1 with 5 planned tasks and 0 completed tasks.
+returned task-1 status approved, statusSource evt_8259bd487042edb9, reviewVerdict APPROVED, mainVerificationRef null.
 
 pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --json
-returns action-required: task-1 worker, reason: No explicit worker evidence is recorded for task-1.
+returned action-required: task-1 main-verifier, phase main-verification, reason: Reviewer approved task-1 but main verification is missing.
+
+controller git status:
+M docs/plans/controller/README.md
+M docs/plans/controller/master-once-prompt.md
+M docs/plans/controller/subagent-dispatch-log.md
+M docs/plans/controller/v38-controller-state.md
+
+task-1 worktree remains dirty with expected worker/review implementation and evidence files.
+
+Autopilot stopped after one bounded controller bookkeeping action. No main-verifier subagent dispatched in this turn.
 ```
 
 Evidence refs:
 
 ```text
-task-1 worker evidence: null
-task-1 review evidence: null
+task-1 worker evidence: docs/plans/v38-task-1-worker-evidence-2026-06-02.md
+task-1 review evidence: docs/plans/v38-task-1-review-evidence-2026-06-02.md
 task-1 main verification evidence: null
 ```
 
 Subagent:
 
 ```text
-none created or steered in this turn
+task-1 worker thread: 019e9206-5ad3-7db0-b032-fe5cb100f8e2
+status: revision completed; initial worker event evt_a78443418d567eb3; revision worker event evt_4309fb40ea68305e
+task-1 reviewer thread: 019e9278-122d-7fa0-9108-c43e778220a1
+status: re-review completed; prior reviewer.needs-revision event evt_895cd535d94d7e36; reviewer.approved event evt_8259bd487042edb9
 ```
 
 ## Next Suggested Command
 
 ```text
-/goal autopilot --steps 3 --stop-on-subagent
+/goal verify task-1
 ```

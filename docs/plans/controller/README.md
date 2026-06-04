@@ -10,7 +10,7 @@ Use it when a Codex thread should act as a short-lived controller instead of a l
 
 ```text
 /goal command
-  -> controller reads repo state, runbook, checkpoint, and git state
+  -> controller reads repo state, compact checkpoint, and targeted runbook fields
   -> controller decides one next action
   -> controller may create or steer one subagent thread
   -> subagent works in its own branch/worktree
@@ -33,6 +33,7 @@ Use these messages in the controller thread:
 ```text
 /goal status
 /goal reconcile
+/goal step
 /goal continue
 /goal autopilot --steps 3
 /goal dispatch task-1 worker
@@ -41,9 +42,20 @@ Use these messages in the controller thread:
 /goal closeout
 ```
 
-The controller should treat `/goal continue` as: reconcile first, identify the next runbook-backed action, and do one bounded step.
+The controller should treat `/goal step` as: reconcile first, identify the next runbook-backed action, and do one bounded step.
+
+The controller should treat `/goal continue` as a deprecated compatibility alias for `/goal step`. It must not suggest, queue, or self-trigger another bare `/goal continue`.
 
 The controller should treat `/goal autopilot --steps <N>` as: run up to `N` bounded controller actions without waiting for another user message, stopping early on any stop condition below.
+
+Every end-of-turn next command must be specific, for example:
+
+```text
+/goal dispatch task-1 worker
+/goal review task-1
+/goal verify task-1
+/goal register task-1 reviewer.approved
+```
 
 ## Autopilot
 
@@ -56,6 +68,13 @@ max steps: 3
 max subagents started per command: 1
 max role advancement per task: one role at a time
 max release stage: no release closeout unless explicitly requested
+```
+
+Low-context rule:
+
+```text
+The controller reads summaries and targeted snippets.
+Subagents read long implementation docs, evidence files, and broad diffs.
 ```
 
 Autopilot may:
@@ -92,7 +111,7 @@ Before any dispatch, review, verify, or closeout action:
 ```text
 reconcile repo state
 read the controller checkpoint
-read the runbook task and evidence refs
+read only the relevant runbook task fields
 confirm git status and active worktrees
 ```
 
@@ -106,7 +125,40 @@ Signals that the controller should checkpoint and recommend a fresh controller t
 - The controller refers to "memory" without a file, command, evidence, or checkpoint reference.
 - The visible transcript has been compacted and required details are missing.
 
-For this temporary system, the safe default is one bounded controller action per `/goal continue`, followed by a checkpoint.
+For this temporary system, the safe default is one bounded controller action per `/goal step`, followed by a checkpoint.
+
+Do not use bare `/goal continue` as the next suggested command. If the user sends it, complete one bounded step and end with a concrete command such as `/goal verify task-1`.
+
+## Low-Context Operating Rules
+
+Do not load large files into the controller thread unless the user asks for a detailed audit. Prefer commands that return compact facts:
+
+```sh
+git status --short --branch
+git rev-parse --abbrev-ref HEAD
+git rev-parse HEAD
+git rev-parse origin/main
+git worktree list --porcelain
+jq -r '.goalId, .goalTitle, (.releaseGates[]), (.tasks[] | select(.taskId=="task-1") | .title)' fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json
+pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json
+pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --json
+```
+
+Use `rg` and `sed -n` to read only the relevant section of a long document. Avoid `git branch -vv --all`, full `git diff`, full runbook docs, full evidence files, and large test output in the controller thread.
+
+Checkpoint entries should be short:
+
+- command received;
+- task and role;
+- event ids;
+- evidence refs;
+- thread ids;
+- current blocker;
+- next command.
+
+Do not paste long command output into checkpoints. Summarize pass/fail and keep exact command names.
+
+If automatic compaction happens anyway, treat the current controller thread as disposable. Start a fresh controller thread with `master-once-prompt.md`; do not ask the compressed controller to reconstruct missing details from memory.
 
 ## Boundaries
 
