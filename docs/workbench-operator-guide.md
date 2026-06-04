@@ -229,6 +229,8 @@ GET /api/diagnostics
 
 `GET /api/health` 返回 `local-runtime-health.v1`，用于确认本地 sidecar 已启动、当前进程 id、cwd/repo path、runtime 版本、v32 kernel source、startup time、read-only mode、`sidecarHost` 和 known blockers。这个 route 不接受 query 参数，不写 repo、不写 `.symphony`、不改 git、不执行 worker/reviewer/main verification/release、不调用模型、不创建 job queue。
 
+`GET /api/providers/health` 返回 `agent-cli-provider-health.v1`，用于查看 v38 active Agent CLI provider 的只读健康状态。当前只覆盖 `claude-code-cli` 和 `codex-cli`；Gemini CLI、Kiro CLI、DeepSeek 不会作为 active provider 返回。route 只报告 sanitized env presence、configured/missing 状态、lane assignability 和 blocker，不执行 `claude` 或 `codex`，不读取 credential file，不暴露 env value/raw provider settings，不安装 provider，不打开 OAuth，不调用模型。
+
 `GET /api/projects` 返回 `project-registry.v1`，列出从当前 cwd/repo-local metadata 解析出的 registered project。`GET /api/projects/current` 返回 `current-project-resolver.v1`，从 console cwd 解析 current project；可选 `repoPath` 只用于显式 repo path 解析。两个 route 都不写 project registry 数据库、不扫描全盘、不执行 git 写入、不调用模型、不创建 job queue。`/api/projects` 不接受 query 参数，`/api/projects/current` 只接受 `repoPath`。
 
 `GET /api/runtime/snapshot` 返回 `app-state-snapshot.v1`，把 freshness、current project、runtime health、active goal、current task、next action、review status、main verification status、release status、evidence refs 和 known blockers 聚合到同一份只读响应。Workbench 的 Runtime 面板和 `symphony runtime snapshot --json` 消费同一份 schema；healthy、missing project、missing goal、blocked 和 stale 都由后端 contract 字段表达。goal/task/release 字段来自 managed runbook、goal-status ledger、goal next、event/gate/release state 和 v33 runtime/project resolver；缺少 active goal 或 release state 时返回 `null` 和 blocker，不从文件名、branch、prompt 文本或前端状态补状态。route 只接受可选 `repoPath` 和 `goal` query，不登记 `goal update/review/gate/closeout`，不运行验证，不写 `.symphony`，不声明 release ready。
@@ -281,6 +283,14 @@ pnpm --silent symphony runtime health --json
 ```
 
 预期结果：返回 `local-runtime-health.v1`；`status` 为 `ok`，`readOnly` 为 `true`，`runtime.version` 为 `v33-app-runtime-foundation.1`，`kernel.source` 为 `v32 Release Manager Workspace v2`，`process.cwd` 和 `process.repoPath` 指向当前 repo，`knownBlockers` 是数组。`sidecarHost.contractName` 为 `sidecar-host-lifecycle.v1`，`sidecarHost.attach.state` 为 `attached`，`sidecarHost.launcher.commandId` 为 `symphony.console.sidecar.launch`，`sidecarHost.launcher.rendererLaunchAvailable` 为 `false`。`boundaries.actionExecutionAvailable`、`jobQueueAvailable`、`modelInvocationAvailable`、`gitWriteAvailable`、`releaseWriteAvailable` 和 `arbitraryCommandExecutionAvailable` 都应为 `false`。
+
+v38 provider health：
+
+```sh
+pnpm --silent symphony providers health --json
+```
+
+预期结果：返回 `agent-cli-provider-health.v1`；`providers` 只包含 `claude-code-cli` 和 `codex-cli`；`boundaries.providerCliExecutionAvailable`、`providerCliExecutionAttempted`、`modelInvocationAvailable`、`promptDispatchAvailable`、`envValueExposureAvailable`、`credentialMaterialAvailable`、`automaticInstallAvailable` 和 `automaticOauthAvailable` 都是 `false`。
 
 project registry：
 

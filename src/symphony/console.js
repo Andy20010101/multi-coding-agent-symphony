@@ -85,6 +85,9 @@ import {
   buildLocalRuntimeHealth
 } from './local-runtime-health.js';
 import {
+  buildAgentCliProviderHealthContract
+} from './agent-cli-provider-health.js';
+import {
   buildAppStateSnapshot
 } from './app-state-snapshot.js';
 import {
@@ -978,6 +981,24 @@ export function createSymphonyConsoleServer({
         writeJsonResponse(response, 200, await buildLocalRuntimeHealth({
           cwd,
           startedAt: runtimeStartedAt
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/providers/health') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-provider-health-request',
+            message: 'Provider health does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildAgentCliProviderHealthContract({
+          env
         }));
         return;
       }

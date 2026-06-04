@@ -1,0 +1,166 @@
+{
+  "contractName": "agent-cli-provider-health.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-04T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v38-provider-hub-capability-profiles",
+    "taskId": "task-2",
+    "sourceContracts": [
+      "agent-cli-provider.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "scope": "v38-agent-cli-provider-hub-mvp"
+  },
+  "providers": [
+    {
+      "providerId": "claude-code-cli",
+      "displayName": "Claude Code CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "claude-code",
+      "health": {
+        "state": "missing",
+        "checkedAt": null,
+        "checkSource": "sanitized-env-presence",
+        "commandProbeAttempted": false,
+        "commandProbeAvailable": false,
+        "modelInvocationAttempted": false,
+        "blocker": "required-env-not-detected"
+      },
+      "localCommand": {
+        "command": "claude",
+        "commandExecutionAvailable": false,
+        "commandExecutionAttempted": false,
+        "shellExpansionAvailable": false
+      },
+      "backendProfile": {
+        "profileRef": "claude-code-cli.backend-profile",
+        "status": "missing",
+        "sanitized": true,
+        "requiredEnv": [
+          {
+            "name": "ANTHROPIC_API_KEY",
+            "present": false,
+            "valueAvailable": false
+          }
+        ],
+        "secretMaterialAvailable": false,
+        "credentialFileContentsAvailable": false,
+        "rawProviderSettingsAvailable": false
+      },
+      "lanes": [
+        {
+          "laneId": "worker",
+          "assignableInV38": false,
+          "unavailableReason": "provider-health-missing"
+        },
+        {
+          "laneId": "reviewer",
+          "assignableInV38": false,
+          "unavailableReason": "provider-health-missing"
+        }
+      ]
+    },
+    {
+      "providerId": "codex-cli",
+      "displayName": "Codex CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "codex",
+      "health": {
+        "state": "missing",
+        "checkedAt": null,
+        "checkSource": "sanitized-env-presence",
+        "commandProbeAttempted": false,
+        "commandProbeAvailable": false,
+        "modelInvocationAttempted": false,
+        "blocker": "required-env-not-detected"
+      },
+      "localCommand": {
+        "command": "codex",
+        "commandExecutionAvailable": false,
+        "commandExecutionAttempted": false,
+        "shellExpansionAvailable": false
+      },
+      "backendProfile": {
+        "profileRef": "codex-cli.backend-profile",
+        "status": "missing",
+        "sanitized": true,
+        "requiredEnv": [
+          {
+            "name": "OPENAI_API_KEY",
+            "present": false,
+            "valueAvailable": false
+          }
+        ],
+        "secretMaterialAvailable": false,
+        "credentialFileContentsAvailable": false,
+        "rawProviderSettingsAvailable": false
+      },
+      "lanes": [
+        {
+          "laneId": "worker",
+          "assignableInV38": false,
+          "unavailableReason": "provider-health-missing"
+        },
+        {
+          "laneId": "reviewer",
+          "assignableInV38": false,
+          "unavailableReason": "provider-health-missing"
+        }
+      ]
+    }
+  ],
+  "inactiveProviders": [
+    {
+      "providerId": "gemini-cli",
+      "reason": "out-of-scope-for-v38"
+    },
+    {
+      "providerId": "kiro-cli",
+      "reason": "out-of-scope-for-v38"
+    },
+    {
+      "providerId": "deepseek",
+      "reason": "backend-profile-only-or-future-official-agent-cli-handoff"
+    }
+  ],
+  "summary": {
+    "activeProviderCount": 2,
+    "configuredProviderCount": 0,
+    "missingProviderCount": 2,
+    "unknownProviderCount": 0,
+    "healthCheckApiAvailable": true,
+    "state": "missing"
+  },
+  "boundaries": {
+    "readOnly": true,
+    "activeProviderIds": [
+      "claude-code-cli",
+      "codex-cli"
+    ],
+    "providerCliExecutionAvailable": false,
+    "providerCliExecutionAttempted": false,
+    "rendererProviderInvocationAvailable": false,
+    "promptDispatchAvailable": false,
+    "modelInvocationAvailable": false,
+    "genericShellRunnerAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "commandProbeAvailable": false,
+    "filesystemCredentialReadAvailable": false,
+    "envValueExposureAvailable": false,
+    "credentialMaterialAvailable": false,
+    "rawProviderConfigAvailable": false,
+    "automaticInstallAvailable": false,
+    "automaticOauthAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false
+  }
+}

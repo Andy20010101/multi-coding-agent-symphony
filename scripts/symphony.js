@@ -23,6 +23,9 @@ import {
   buildLocalRuntimeHealth
 } from '../src/symphony/local-runtime-health.js';
 import {
+  buildAgentCliProviderHealthContract
+} from '../src/symphony/agent-cli-provider-health.js';
+import {
   buildAppStateSnapshot
 } from '../src/symphony/app-state-snapshot.js';
 import {
@@ -159,6 +162,7 @@ const KNOWN_COMMANDS = new Set([
   'diagnose',
   'runtime',
   'actions',
+  'providers',
   'handoff',
   'goal',
   'goal-status',
@@ -347,6 +351,14 @@ export async function runSymphonyCli({
       return await runSymphonyActions({
         args: rest,
         stdout
+      });
+    }
+
+    if (command === 'providers') {
+      return await runSymphonyProviders({
+        args: rest,
+        stdout,
+        env
       });
     }
 
@@ -1960,6 +1972,27 @@ async function runSymphonyActions({ args, stdout }) {
   return EXIT_CODES.ok;
 }
 
+async function runSymphonyProviders({ args, stdout, env }) {
+  const options = parseProvidersArgs(args);
+
+  if (options.help) {
+    stdout.write(providersHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  const health = buildAgentCliProviderHealthContract({
+    env
+  });
+
+  if (options.json) {
+    writeJson(stdout, health);
+    return EXIT_CODES.ok;
+  }
+
+  stdout.write(renderProviderHealthText(health));
+  return EXIT_CODES.ok;
+}
+
 async function runSymphonyHandoff({ args, stdout }) {
   const options = parseHandoffArgs(args);
 
@@ -1990,6 +2023,16 @@ function renderRuntimeHealthText(health) {
     `Repo: ${health.process.repoPath ?? 'unresolved'}`,
     `Startup: ${health.process.startupTime}`,
     `Known blockers: ${health.knownBlockers.length}`,
+    ''
+  ].join('\n');
+}
+
+function renderProviderHealthText(health) {
+  return [
+    `Provider health: ${health.summary.state}`,
+    `Contract: ${health.contractName}`,
+    `Configured: ${health.summary.configuredProviderCount}/${health.summary.activeProviderCount}`,
+    ...health.providers.map((provider) => `${provider.providerId}: ${provider.health.state}`),
     ''
   ].join('\n');
 }
@@ -3881,6 +3924,60 @@ function actionsHelpText() {
     '',
     'Prints the read-only v34 action manifest, availability, and preview contracts.',
     'The commands do not execute actions, create jobs, call models, read arbitrary files, or change git state.',
+    ''
+  ].join('\n');
+}
+
+function parseProvidersArgs(args) {
+  const options = {
+    subcommand: null,
+    json: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('provider health contracts are read-only; redirect stdout if you need a file');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown providers option: ${value}`);
+    }
+
+    if (options.subcommand !== null) {
+      throw new UsageError(`unexpected providers argument: ${value}`);
+    }
+
+    options.subcommand = value;
+  }
+
+  options.subcommand ??= 'health';
+
+  if (options.subcommand !== 'health') {
+    throw new UsageError('providers subcommand must be health');
+  }
+
+  return options;
+}
+
+function providersHelpText() {
+  return [
+    'Usage: symphony providers health [--json]',
+    '',
+    'Prints the read-only v38 Agent CLI provider health contract.',
+    'The command checks sanitized environment presence only; it does not execute provider CLIs, read credential files, call models, install providers, or open OAuth.',
     ''
   ].join('\n');
 }

@@ -38,7 +38,7 @@ Backend profile data must not include API keys, OAuth tokens, credential file co
 ## Task Breakdown
 
 - task-1: Agent CLI provider profile contract and validator.
-- task-2: Provider health check API. Read-only health state only; no model invocation.
+- task-2: Provider health check API. Read-only health state from `agent-cli-provider.v1` plus sanitized env presence only; no provider CLI execution, credential file read, prompt dispatch, or model invocation.
 - task-3: Capability profile mapping. Map contract fields to capability previews; no real runner.
 - task-4: Worker/reviewer lane assignment preview. Display assignment preview; no execution.
 - task-5: Provider Hub panel and evidence. Workbench consumes backend contracts; renderer does not run provider CLIs.
