@@ -22,6 +22,7 @@ const GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-p
 const GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-confirm';
 const GOAL_OPERATION_POLL_INTERVAL_MS = 2500;
 const WORKBENCH_NAV_ITEMS = Object.freeze([
+  Object.freeze({ id: 'desktop', label: 'Desktop', route: '/workbench/desktop/' }),
   Object.freeze({ id: 'runtime', label: 'Runtime', targetId: 'runtime-snapshot-panel' }),
   Object.freeze({ id: 'active-goal', label: 'Active Goal', targetId: 'active-goal-runbook-panel' }),
   Object.freeze({ id: 'prompt-handoff', label: 'Prompt Handoff', route: '/workbench/prompts/' }),
@@ -150,32 +151,42 @@ export function WorkbenchShell({
   });
 
   return (
-    <main className="workbench-shell" aria-labelledby="workbench-title">
+    <main className={workbenchRoute === 'desktop' ? 'workbench-shell desktop-shell-route' : 'workbench-shell'} aria-labelledby="workbench-title">
       <header className="workbench-header">
         <div className="header-copy">
-          <p className="eyebrow">v28 Workbench v1</p>
-          <h1 id="workbench-title">Symphony Workbench</h1>
+          <p className="eyebrow">{workbenchRoute === 'desktop' ? 'v37 Desktop Shell MVP' : 'v28 Workbench v1'}</p>
+          <h1 id="workbench-title">{workbenchRoute === 'desktop' ? 'Symphony Desktop Shell' : 'Symphony Workbench'}</h1>
           <p className="header-summary">
-            围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。
-            顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。
+            {workbenchRoute === 'desktop'
+              ? '只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。'
+              : '围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。'}
           </p>
         </div>
         <div className="status-strip" aria-label="当前只读状态">
           <span>{phaseText(viewState.phase)}</span>
           <span>{routeCounts.ready}/{routeCounts.total} routes 已读取</span>
-          <span>confirm 后会刷新 goal-status / events / next action</span>
+          <span>{workbenchRoute === 'desktop' ? 'contract-backed' : 'confirm 后会刷新 goal-status / events / next action'}</span>
         </div>
       </header>
 
-      <WorkbenchStateHeader header={stateHeader} />
-      <WorkbenchNavigation currentRoute={workbenchRoute} routeContext={routeContext} />
-      <WorkbenchRouteContextBar context={routeContext} />
+      {workbenchRoute === 'desktop' ? null : (
+        <>
+          <WorkbenchStateHeader header={stateHeader} />
+          <WorkbenchNavigation currentRoute={workbenchRoute} routeContext={routeContext} />
+          <WorkbenchRouteContextBar context={routeContext} />
+        </>
+      )}
 
       {viewState.phase === 'loading' ? <ShellState title="读取中" copy="正在读取 summary、readiness、runs 与 latest run 只读 contract。" /> : null}
       {viewState.phase === 'failed' ? <ShellState title="读取失败" copy="错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。" /> : null}
 
       {model === null ? null : (
-        workbenchRoute === 'prompts' ? (
+        workbenchRoute === 'desktop' ? (
+          <DesktopShellRoute
+            desktopShell={model.desktopShell}
+            routeContext={routeContext}
+          />
+        ) : workbenchRoute === 'prompts' ? (
           <PromptWorkspaceRoute
             model={model}
             routeContext={routeContext}
@@ -485,6 +496,462 @@ function JobConsolePanel({
       <p className="panel-note">{jobConsole?.note ?? 'Job Console unavailable.'}</p>
     </DataPanel>
   );
+}
+
+function DesktopShellRoute({ desktopShell, routeContext }) {
+  return (
+    <section className="desktop-shell-workspace" aria-label="v37 Desktop Shell MVP">
+      <aside className="desktop-sidebar" aria-label="Desktop shell navigation">
+        <div className="desktop-brand-lockup">
+          <p className="section-kicker">local app</p>
+          <h2>Command Center</h2>
+        </div>
+        <nav aria-label="Desktop shell sections">
+          <a href="#desktop-overview" aria-current="page">Overview</a>
+          <a href="#desktop-lifecycle">Lifecycle</a>
+          <a href="#desktop-run-state">Run State</a>
+          <a href="#desktop-artifacts">Artifacts</a>
+          <a href="#desktop-boundaries">Boundaries</a>
+        </nav>
+        <div className="desktop-sidebar-status">
+          <span>sidecar</span>
+          <strong>{desktopShell?.sidecarHealth?.state?.text ?? 'missing'}</strong>
+        </div>
+      </aside>
+
+      <div className="desktop-main-stage">
+        <section className="desktop-topbar" aria-label="Desktop shell top status bar">
+          <div>
+            <span>project</span>
+            <strong>{desktopShell?.workspace?.project?.text ?? '未暴露'}</strong>
+          </div>
+          <div>
+            <span>goal</span>
+            <strong>{desktopShell?.activeGoalStatus?.goalId?.text ?? desktopShell?.workspace?.lastGoalId?.text ?? '未暴露'}</strong>
+          </div>
+          <div>
+            <span>state</span>
+            <strong>{desktopShell?.state ?? 'missing'}</strong>
+          </div>
+          <div>
+            <span>decision</span>
+            <strong>{desktopShell?.shellDecision?.selected?.text ?? '未暴露'}</strong>
+          </div>
+        </section>
+
+        <DesktopDevelopmentStatusStrip
+          activeGoalStatus={desktopShell?.activeGoalStatus}
+          nextActionDetail={desktopShell?.nextActionDetail}
+        />
+
+        <section id="desktop-overview" className="desktop-card-grid desktop-first-row" aria-label="Desktop shell first row">
+          <DesktopProjectListCard projectList={desktopShell?.projectList} />
+          <DesktopSidecarCard sidecarHealth={desktopShell?.sidecarHealth} />
+          <DesktopMetricCards cards={desktopShell?.firstRowCards} />
+        </section>
+
+        <section className="desktop-card-grid desktop-lower-grid" aria-label="Desktop shell lower workspace">
+          <DesktopLifecycleCard lifecycle={desktopShell?.lifecycle} />
+          <DesktopDevelopmentStatusCard
+            activeGoalStatus={desktopShell?.activeGoalStatus}
+            nextActionDetail={desktopShell?.nextActionDetail}
+          />
+          <DesktopRunStateCard jobRun={desktopShell?.jobRun} />
+          <DesktopArtifactReadinessCard artifactReadiness={desktopShell?.artifactReadiness} />
+          <DesktopDecisionCard shellDecision={desktopShell?.shellDecision} />
+          <DesktopBoundaryCard boundaries={desktopShell?.boundaries} note={desktopShell?.note} />
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function DesktopDevelopmentStatusStrip({ activeGoalStatus, nextActionDetail }) {
+  const rows = [
+    ['blocked', activeGoalStatus?.currentTaskBlocked],
+    ['review', activeGoalStatus?.reviewVerdict],
+    ['main verification', activeGoalStatus?.mainVerificationStatus],
+    ['release state', activeGoalStatus?.releaseReady],
+    ['blockers', activeGoalStatus?.blockerCount],
+    ['status source', desktopStatusSourceState(activeGoalStatus, nextActionDetail)]
+  ];
+
+  return (
+    <section className="desktop-development-strip" aria-label="Desktop first-screen development status">
+      <div className="desktop-development-strip-heading">
+        <p className="section-kicker">development state</p>
+        <h2>Task Status</h2>
+      </div>
+      <dl className="desktop-development-status-list">
+        {rows.map(([label, state]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd className={state?.state === 'missing' ? 'missing-value' : ''}>{formatState(state)}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function desktopStatusSourceState(activeGoalStatus, nextActionDetail) {
+  const sources = [
+    textValueFromState(activeGoalStatus?.sourcePolicy),
+    textValueFromState(nextActionDetail?.sourcePolicy)
+  ].filter((source) => source !== '');
+
+  return textValue(sources.length === 0 ? '未暴露' : sources.join(' + '));
+}
+
+function DesktopProjectListCard({ projectList }) {
+  const projects = projectList?.projects?.items ?? [];
+
+  return (
+    <article className="desktop-card desktop-project-list-card" aria-labelledby="desktop-project-list-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">project registry</p>
+          <h2 id="desktop-project-list-title">Projects</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(projectList?.state)}`}>{projectList?.state ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['routeState', projectList?.routeState],
+        ['projects', projectList?.projects?.count],
+        ['source', projectList?.sourcePolicy]
+      ]} />
+      {projects.length === 0 ? (
+        <EmptyBlock copy="Project registry 未暴露。" />
+      ) : (
+        <ul className="desktop-project-list">
+          {projects.slice(0, 3).map((project, index) => (
+            <li key={project.projectId?.text ?? index}>
+              <div>
+                <strong>{project.name?.text ?? 'project'}</strong>
+                <span>{project.healthStatus?.text ?? 'unknown'}</span>
+              </div>
+              <small>{project.repoPath?.text ?? 'repo path 未暴露'}</small>
+              <FieldList rows={[
+                ['current', project.current],
+                ['last goal', project.lastGoalId],
+                ['last run', project.lastRunId]
+              ]} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
+function DesktopSidecarCard({ sidecarHealth }) {
+  return (
+    <article className="desktop-card sidecar-health-card" aria-labelledby="desktop-sidecar-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">sidecar health</p>
+          <h2 id="desktop-sidecar-title">Local Runtime</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(sidecarHealth?.state?.text)}`}>{sidecarHealth?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['status', sidecarHealth?.status],
+        ['attach', sidecarHealth?.attachState],
+        ['launcher', sidecarHealth?.launcherState],
+        ['bridge', sidecarHealth?.launcherHandoff]
+      ]} />
+    </article>
+  );
+}
+
+function DesktopMetricCards({ cards }) {
+  const items = cards?.items ?? [];
+
+  if (items.length === 0) {
+    return <article className="desktop-card"><EmptyBlock copy="Desktop first row metrics 未暴露。" /></article>;
+  }
+
+  return (
+    <>
+      {items.map((card) => (
+        <article className="desktop-card desktop-metric-card" key={card.id.text}>
+          <header className="desktop-card-header">
+            <div>
+              <p className="section-kicker">{card.source.text}</p>
+              <h2>{card.label.text}</h2>
+            </div>
+            <span className={`desktop-status ${desktopStatusClass(card.state.text)}`}>{card.state.text}</span>
+          </header>
+          <strong>{card.value.text}</strong>
+          <p>{card.detail.text}</p>
+        </article>
+      ))}
+    </>
+  );
+}
+
+function DesktopLifecycleCard({ lifecycle }) {
+  return (
+    <article id="desktop-lifecycle" className="desktop-card desktop-span-2" aria-labelledby="desktop-lifecycle-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">lifecycle timeline</p>
+          <h2 id="desktop-lifecycle-title">Goal Tasks</h2>
+        </div>
+        <span className="desktop-status">{lifecycle?.state ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['task count', lifecycle?.taskCount],
+        ['next task', lifecycle?.nextTaskId],
+        ['next role', lifecycle?.nextRole],
+        ['routeState', lifecycle?.routeState]
+      ]} />
+      <DesktopTaskTimeline tasks={lifecycle?.tasks} />
+    </article>
+  );
+}
+
+function DesktopTaskTimeline({ tasks }) {
+  const items = tasks?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="Task lifecycle 暂未暴露。" />;
+  }
+
+  return (
+    <ol className="desktop-timeline">
+      {items.slice(0, 3).map((task, index) => (
+        <li key={`${task.taskId?.text ?? index}-${index}`}>
+          <span>{task.status?.text ?? 'unknown'}</span>
+          <strong>{task.taskId?.text ?? 'task'}</strong>
+          <small>{task.title?.text ?? '未暴露'}</small>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function DesktopDevelopmentStatusCard({ activeGoalStatus, nextActionDetail }) {
+  return (
+    <article className="desktop-card" aria-labelledby="desktop-development-status-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">development state</p>
+          <h2 id="desktop-development-status-title">Review / Verification / Release</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(activeGoalStatus?.state?.text)}`}>{activeGoalStatus?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['goal', activeGoalStatus?.goalId],
+        ['current task', activeGoalStatus?.currentTaskId],
+        ['next role', nextActionDetail?.role],
+        ['next phase', nextActionDetail?.phase],
+        ['blocked', activeGoalStatus?.currentTaskBlocked],
+        ['review', activeGoalStatus?.reviewVerdict],
+        ['main verification', activeGoalStatus?.mainVerificationStatus],
+        ['release state', activeGoalStatus?.releaseReady],
+        ['blockers', activeGoalStatus?.blockerCount],
+        ['source', activeGoalStatus?.sourcePolicy]
+      ]} />
+    </article>
+  );
+}
+
+function DesktopRunStateCard({ jobRun }) {
+  return (
+    <article id="desktop-run-state" className="desktop-card" aria-labelledby="desktop-run-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">active run</p>
+          <h2 id="desktop-run-title">Job / Run State</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(jobRun?.state?.text)}`}>{jobRun?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['jobId', jobRun?.jobId],
+        ['status', jobRun?.status],
+        ['queueState', jobRun?.queueState],
+        ['actionId', jobRun?.actionId],
+        ['created', jobRun?.createdAt],
+        ['leased', jobRun?.leasedAt],
+        ['passed', jobRun?.passedAt],
+        ['failed', jobRun?.failedAt],
+        ['cancelled', jobRun?.cancelledAt],
+        ['blocker', jobRun?.blocker?.reason],
+        ['failure', jobRun?.failure?.message],
+        ['timeline events', jobRun?.timeline?.eventCount],
+        ['log refs', jobRun?.timeline?.logRefCount],
+        ['run-control state', jobRun?.runControl?.currentState],
+        ['routeState', jobRun?.routeState],
+        ['source', jobRun?.sourcePolicy]
+      ]} />
+      <DesktopJobTransitionList
+        transitions={jobRun?.runControl?.transitionTable}
+        availableTransitions={jobRun?.runControl?.availableTransitions}
+      />
+    </article>
+  );
+}
+
+function DesktopJobTransitionList({ transitions, availableTransitions }) {
+  const items = transitions?.items ?? [];
+  const availableIds = new Set((availableTransitions?.items ?? [])
+    .map((item) => textValueFromState(item))
+    .filter((item) => item !== ''));
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="Run-control transitions 未暴露。" />;
+  }
+
+  return (
+    <div className="desktop-readonly-list-wrap">
+      <h3>Run-control transitions</h3>
+      <ul className="desktop-readonly-list desktop-transition-list">
+        {items.slice(0, 4).map((transition, index) => {
+          const id = transition.id?.text ?? `transition-${index}`;
+          const isAvailable = availableIds.has(id);
+
+          return (
+            <li key={`${id}-${index}`}>
+              <div>
+                <strong>{transition.label?.text ?? id}</strong>
+                <span>{isAvailable ? 'available' : 'read-only'}</span>
+              </div>
+              <small>{transition.description?.text ?? 'description 未暴露'}</small>
+              <FieldList rows={[
+                ['from', transition.validFrom],
+                ['to', transition.to],
+                ['terminal', transition.terminal],
+                ['reversible', transition.reversible]
+              ]} />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function DesktopArtifactReadinessCard({ artifactReadiness }) {
+  return (
+    <article id="desktop-artifacts" className="desktop-card" aria-labelledby="desktop-artifacts-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">artifact preview</p>
+          <h2 id="desktop-artifacts-title">Evidence Readiness</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(artifactReadiness?.state?.text)}`}>{artifactReadiness?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['refs', artifactReadiness?.registeredRefs],
+        ['status', artifactReadiness?.status],
+        ['missing', artifactReadiness?.missing],
+        ['preview routes', artifactReadiness?.safePreviewRoutes],
+        ['preview available', artifactReadiness?.previewAvailable],
+        ['safe inline', artifactReadiness?.safeInlineAvailable],
+        ['artifact index', artifactReadiness?.artifactIndexState],
+        ['index entries', artifactReadiness?.artifactIndexEntries],
+        ['evidence timeline', artifactReadiness?.evidenceTimelineState],
+        ['evidence entries', artifactReadiness?.evidenceEntryCount],
+        ['bundle', artifactReadiness?.releaseBundleState],
+        ['bundle tasks', artifactReadiness?.releaseTaskCount],
+        ['release state', artifactReadiness?.releaseReady],
+        ['local file open', artifactReadiness?.boundaries?.localFileOpenAvailable],
+        ['source', artifactReadiness?.sourcePolicy]
+      ]} />
+      <DesktopArtifactPreviewList previews={artifactReadiness?.previewItems} />
+    </article>
+  );
+}
+
+function DesktopArtifactPreviewList({ previews }) {
+  const items = previews?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="Safe artifact preview routes 未暴露。" />;
+  }
+
+  return (
+    <div className="desktop-readonly-list-wrap">
+      <h3>Safe preview availability</h3>
+      <ul className="desktop-readonly-list desktop-artifact-preview-list">
+        {items.slice(0, 3).map((preview, index) => (
+          <li key={`${preview.kind?.text ?? 'artifact'}-${index}`}>
+            <div>
+              <strong>{preview.kind?.text ?? 'artifact'}</strong>
+              <span>{preview.previewState?.text ?? 'missing'}</span>
+            </div>
+            <small>{preview.ref?.text ?? 'artifact ref 未暴露'}</small>
+            <FieldList rows={[
+              ['artifact status', preview.status],
+              ['preview status', preview.previewStatus],
+              ['contract', preview.contractName],
+              ['preview route', preview.previewRoute],
+              ['preview available', preview.previewAvailable],
+              ['safe inline', preview.safeToRenderInline],
+              ['inline state', preview.inlineState]
+            ]} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DesktopDecisionCard({ shellDecision }) {
+  return (
+    <article className="desktop-card" aria-labelledby="desktop-decision-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">desktop decision</p>
+          <h2 id="desktop-decision-title">Tauri First</h2>
+        </div>
+        <span className="desktop-status olive">task-2</span>
+      </header>
+      <FieldList rows={[
+        ['selected', shellDecision?.selected],
+        ['workspace', shellDecision?.workspace],
+        ['bridge', shellDecision?.hostBridgeAvailable],
+        ['native build', shellDecision?.nativeBuildAvailableNow]
+      ]} />
+    </article>
+  );
+}
+
+function DesktopBoundaryCard({ boundaries, note }) {
+  return (
+    <article id="desktop-boundaries" className="desktop-card" aria-labelledby="desktop-boundaries-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">desktop-only boundary</p>
+          <h2 id="desktop-boundaries-title">No Runner Surface</h2>
+        </div>
+        <span className="desktop-status olive">locked</span>
+      </header>
+      <FieldList rows={[
+        ['readOnly', boundaries?.readOnly],
+        ['shell exec', boundaries?.shellCommandExecutionAvailable],
+        ['git write', boundaries?.gitWriteAvailable],
+        ['release declared', boundaries?.releaseReadyDeclared]
+      ]} />
+    </article>
+  );
+}
+
+function desktopStatusClass(status) {
+  if (['ok', 'ready', 'healthy', 'attached', 'available'].includes(status)) {
+    return 'olive';
+  }
+
+  if (['defined'].includes(status)) {
+    return 'olive';
+  }
+
+  if (['blocked', 'stale', 'partial', 'needs-attention', 'unavailable', 'needs-attach', 'launch-requested'].includes(status)) {
+    return 'amber';
+  }
+
+  return 'plum';
 }
 
 function GoldenPathPanel({ goldenPath }) {
@@ -7204,6 +7671,10 @@ function currentWorkbenchRoute() {
     return 'prompts';
   }
 
+  if (normalized === '/workbench/desktop/') {
+    return 'desktop';
+  }
+
   return 'home';
 }
 
@@ -7276,9 +7747,15 @@ function workbenchNavItemClassName(item, currentRoute) {
 }
 
 function workbenchNavItemActive(item, currentRoute) {
-  return item.route === '/workbench/prompts/'
-    ? currentRoute === 'prompts'
-    : currentRoute === 'home' && item.id === 'active-goal';
+  if (item.route === '/workbench/prompts/') {
+    return currentRoute === 'prompts';
+  }
+
+  if (item.route === '/workbench/desktop/') {
+    return currentRoute === 'desktop';
+  }
+
+  return currentRoute === 'home' && item.id === 'active-goal';
 }
 
 function workbenchNavHref(item, routeContext) {

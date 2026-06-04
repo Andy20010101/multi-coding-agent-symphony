@@ -116,6 +116,61 @@ pnpm symphony console --snapshot --state-dir .symphony --json
 
 `--snapshot --json` 只输出 `symphony.console-snapshot`，不启动浏览器服务器。`console --help` 不是当前支持的 console 选项，不要把它写进操作流程。
 
+## v37 Desktop Shell MVP 路径
+
+v37 task-1 增加一个可运行的桌面 shell renderer 路径：
+
+```text
+http://127.0.0.1:8765/workbench/desktop/
+```
+
+这个页面仍由 `pnpm workbench:build` 生成，仍由 `symphony console` 的 Workbench 静态根目录服务。它显示 sidecar health、project、active goal、next action、job/run state、artifact preview 和 evidence readiness。状态来自现有 `/api/runtime/snapshot`、goal、action、job、artifact/evidence routes，不从 branch、文件名、prompt、task title 或前端状态补推断。
+
+task-2 在 `desktop/shell/src-tauri/` 增加 Tauri host workspace，并把 sidecar attach/launch boundary 接入 runtime health。Desktop route 仍不执行 shell、不调用模型、不打开任意本地文件、不写 git、不登记 reviewer/main/release gate。完整 native build smoke 和 packaging 边界仍由 task-5 处理。
+
+task-2 的 sidecar 状态来源：
+
+```text
+GET /api/health -> local-runtime-health.v1.sidecarHost
+GET /api/runtime/snapshot -> app-state-snapshot.v1.runtime_health.sidecarHost
+DesktopShellMvpViewModel.sidecarHealth
+```
+
+`sidecarHost` 使用 `sidecar-host-lifecycle.v1` 子 contract。`attach.state` 来自当前 runtime health；`launcher.commandId` 固定为 `symphony.console.sidecar.launch`。renderer 只显示该状态，不调用 native launcher。
+
+task-3 在同一路由增加项目和开发状态视图：
+
+```text
+GET /api/projects -> project-registry.v1 -> DesktopShellMvpViewModel.projectList
+GET /api/runtime/snapshot -> app-state-snapshot.v1 -> activeGoalStatus
+GET /api/goals/latest/next -> goal-next-action.v1 -> nextActionDetail
+```
+
+桌面页显示项目列表、active goal、next action、blocked、review、main verification 和 release state。所有状态仍来自 backend contracts、goal events、project registry、runbook/next-action/progress contracts；页面不从 branch、filename、commit message、prompt text、task title 或 frontend state 推断完成、审批、main verification 或 release readiness。
+
+task-4 在同一路由增加 job 和 artifact/evidence 状态视图：
+
+```text
+GET /api/jobs -> job-model.v1 -> jobRun
+GET /api/jobs/create -> job-creation.v1 -> jobRun.creation
+GET /api/jobs/timeline -> job-timeline-log-stream.v1 -> jobRun.timeline
+GET /api/jobs/control -> job-run-control.v1 -> jobRun.runControl
+GET /api/artifacts -> artifact-index.v1 -> artifactReadiness.artifactIndex
+GET /api/runs/<run-id>/artifacts/<artifact-kind>/preview -> safe-artifact-preview.v1 -> artifactReadiness.previewItems
+GET /api/evidence/timeline -> evidence-timeline.v1 -> artifactReadiness.evidenceTimeline
+GET /api/release/bundle -> release-bundle.v1 -> artifactReadiness.releaseBundle
+```
+
+桌面页显示 job id、status、queue state、action id、timestamps、blocker/failure、timeline/log counts、run-control transitions、artifact refs/status/missing、safe preview availability、evidence timeline readiness 和 release bundle state。transitions 是只读列表，不是按钮；safe preview 只展示后端 `safe-artifact-preview.v1` 的可用性和 inline safety 字段，不打开本地路径，也不从文件名或扩展名判断安全。
+
+Tauri host smoke：
+
+```sh
+pnpm desktop:shell:smoke
+```
+
+该命令只检查 host manifest、受控命令名、loopback host、端口范围和禁止项。它不是 native build。
+
 ## 当前只读 API
 
 Console / Workbench 当前可用的核心只读 API 包括：
@@ -172,7 +227,7 @@ GET /api/jobs/control
 GET /api/diagnostics
 ```
 
-`GET /api/health` 返回 `local-runtime-health.v1`，用于确认本地 sidecar 已启动、当前进程 id、cwd/repo path、runtime 版本、v32 kernel source、startup time、read-only mode 和 known blockers。这个 route 不接受 query 参数，不写 repo、不写 `.symphony`、不改 git、不执行 worker/reviewer/main verification/release、不调用模型、不创建 job queue。
+`GET /api/health` 返回 `local-runtime-health.v1`，用于确认本地 sidecar 已启动、当前进程 id、cwd/repo path、runtime 版本、v32 kernel source、startup time、read-only mode、`sidecarHost` 和 known blockers。这个 route 不接受 query 参数，不写 repo、不写 `.symphony`、不改 git、不执行 worker/reviewer/main verification/release、不调用模型、不创建 job queue。
 
 `GET /api/projects` 返回 `project-registry.v1`，列出从当前 cwd/repo-local metadata 解析出的 registered project。`GET /api/projects/current` 返回 `current-project-resolver.v1`，从 console cwd 解析 current project；可选 `repoPath` 只用于显式 repo path 解析。两个 route 都不写 project registry 数据库、不扫描全盘、不执行 git 写入、不调用模型、不创建 job queue。`/api/projects` 不接受 query 参数，`/api/projects/current` 只接受 `repoPath`。
 
@@ -225,7 +280,7 @@ v33 runtime health：
 pnpm --silent symphony runtime health --json
 ```
 
-预期结果：返回 `local-runtime-health.v1`；`status` 为 `ok`，`readOnly` 为 `true`，`runtime.version` 为 `v33-app-runtime-foundation.1`，`kernel.source` 为 `v32 Release Manager Workspace v2`，`process.cwd` 和 `process.repoPath` 指向当前 repo，`knownBlockers` 是数组。`boundaries.actionExecutionAvailable`、`jobQueueAvailable`、`modelInvocationAvailable`、`gitWriteAvailable`、`releaseWriteAvailable` 和 `arbitraryCommandExecutionAvailable` 都应为 `false`。
+预期结果：返回 `local-runtime-health.v1`；`status` 为 `ok`，`readOnly` 为 `true`，`runtime.version` 为 `v33-app-runtime-foundation.1`，`kernel.source` 为 `v32 Release Manager Workspace v2`，`process.cwd` 和 `process.repoPath` 指向当前 repo，`knownBlockers` 是数组。`sidecarHost.contractName` 为 `sidecar-host-lifecycle.v1`，`sidecarHost.attach.state` 为 `attached`，`sidecarHost.launcher.commandId` 为 `symphony.console.sidecar.launch`，`sidecarHost.launcher.rendererLaunchAvailable` 为 `false`。`boundaries.actionExecutionAvailable`、`jobQueueAvailable`、`modelInvocationAvailable`、`gitWriteAvailable`、`releaseWriteAvailable` 和 `arbitraryCommandExecutionAvailable` 都应为 `false`。
 
 project registry：
 
@@ -252,7 +307,7 @@ pnpm --silent symphony runtime snapshot --goal v33-app-runtime-foundation --json
 pnpm --silent symphony runtime snapshot --repo-path /path/to/repo --json
 ```
 
-预期结果：返回 `app-state-snapshot.v1`；包含 `freshness`、`current_project`、`runtime_health`、`active_goal`、`current_task`、`next_action`、`review_status`、`main_verification_status`、`release_status`、`evidence_refs`、`known_blockers` 和 `boundaries`。当前 v33 goal 在 release ready 未登记前，`release_status.release_ready` 为 `false`，known blockers 应包含 release-ready 未声明的 blocker。缺 active goal 时，`active_goal` 和 `release_status` 保持 `null`，不会从文件名、分支、prompt 或前端状态补推断。
+预期结果：返回 `app-state-snapshot.v1`；包含 `freshness`、`current_project`、`runtime_health`、`active_goal`、`current_task`、`next_action`、`review_status`、`main_verification_status`、`release_status`、`evidence_refs`、`known_blockers` 和 `boundaries`。`runtime_health.sidecarHost` 继续暴露 sidecar attach/launcher 状态。当前 v33 goal 在 release ready 未登记前，`release_status.release_ready` 为 `false`，known blockers 应包含 release-ready 未声明的 blocker。缺 active goal 时，`active_goal` 和 `release_status` 保持 `null`，不会从文件名、分支、prompt 或前端状态补推断。
 
 Workbench Runtime 面板检查：
 

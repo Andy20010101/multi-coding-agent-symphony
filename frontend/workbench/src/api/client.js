@@ -36,9 +36,11 @@ const CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE = 'adoption plan freeze 未返回
 const CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE = 'adoption confirm 未返回可用 contract';
 const ADOPTION_INSPECT_ERROR_MESSAGE = 'adoption inspect 未返回可用 contract';
 const PROMPT_WORKSPACE_ERROR_MESSAGE = 'prompt workspace route 未返回可用 contract';
+const READONLY_ROUTE_TIMEOUT_MS = 3000;
 
 export async function fetchReadonlyRoute(route, {
-  fetchImpl = globalThis.fetch
+  fetchImpl = globalThis.fetch,
+  timeoutMs = READONLY_ROUTE_TIMEOUT_MS
 } = {}) {
   if (typeof fetchImpl !== 'function') {
     return readonlyError({
@@ -48,6 +50,10 @@ export async function fetchReadonlyRoute(route, {
   }
 
   let response;
+  const abortController = typeof AbortController === 'function' ? new AbortController() : null;
+  const timerId = abortController === null || !Number.isFinite(timeoutMs) || timeoutMs <= 0
+    ? null
+    : globalThis.setTimeout(() => abortController.abort(), timeoutMs);
 
   try {
     response = await fetchImpl(route.path, {
@@ -55,13 +61,18 @@ export async function fetchReadonlyRoute(route, {
       cache: 'no-store',
       headers: {
         Accept: 'application/json'
-      }
+      },
+      ...(abortController === null ? {} : { signal: abortController.signal })
     });
   } catch {
     return readonlyError({
       route,
       message: READONLY_ERROR_MESSAGE
     });
+  } finally {
+    if (timerId !== null) {
+      globalThis.clearTimeout(timerId);
+    }
   }
 
   let data;

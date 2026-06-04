@@ -1,6 +1,9 @@
 import { buildGoalNextAction } from './goal-next-action-resolver.js';
 import { buildGoalProgressLedger } from './goal-progress-ledger.js';
-import { buildLocalRuntimeHealth } from './local-runtime-health.js';
+import {
+  buildLocalRuntimeHealth,
+  validateLocalRuntimeHealthContract
+} from './local-runtime-health.js';
 import { resolveCurrentProject } from './project-registry.js';
 
 export const APP_STATE_SNAPSHOT_CONTRACT_NAME = 'app-state-snapshot.v1';
@@ -204,12 +207,23 @@ export function validateAppStateSnapshotContract(snapshot) {
   }
 
   validateFreshness(errors, snapshot.freshness);
+  validateRuntimeHealth(errors, snapshot.runtime_health);
   validateEvidenceRefs(errors, snapshot.evidence_refs);
   validateKnownBlockers(errors, snapshot.known_blockers);
   validateSourceData(errors, snapshot.source_data);
   validateBoundaries(errors, snapshot.boundaries);
 
   return { ok: errors.length === 0, errors };
+}
+
+function validateRuntimeHealth(errors, runtimeHealth) {
+  const result = validateLocalRuntimeHealthContract(runtimeHealth);
+
+  if (!result.ok) {
+    for (const error of result.errors) {
+      errors.push(`runtime_health.${error}`);
+    }
+  }
 }
 
 export function assertAppStateSnapshotContract(snapshot) {
@@ -295,7 +309,7 @@ function buildReleaseStatus(ledger) {
 
   return {
     release_ready: ledger.summary.releaseReady,
-    release_ready_source: ledger.summary.releaseReadySource,
+    release_ready_source: ledger.summary.releaseReadySource ?? null,
     release_gates: ledger.releaseGates,
     missing_or_unknown_gates: Object.entries(ledger.releaseGates)
       .filter(([, status]) => status !== 'passed')

@@ -1,0 +1,42 @@
+{
+  "contractName": "sidecar-host-lifecycle.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-03T00:00:00.000Z",
+  "hostKind": "tauri-native-host",
+  "sidecarKind": "symphony-console-sidecar",
+  "lifecycle": "attached",
+  "attach": {
+    "state": "attached",
+    "strategy": "current-runtime-health",
+    "healthRoute": "/api/health",
+    "endpoint": "/api/health",
+    "processId": 12345,
+    "sourceContract": "local-runtime-health.v1"
+  },
+  "launcher": {
+    "state": "defined",
+    "commandId": "symphony.console.sidecar.launch",
+    "nativeHostRequired": true,
+    "rendererLaunchAvailable": false,
+    "allowedHosts": [
+      "127.0.0.1",
+      "localhost"
+    ],
+    "allowedPortRange": {
+      "min": 1024,
+      "max": 65535
+    },
+    "stateDirScope": "repo-local .symphony only",
+    "source": "desktop/shell/src-tauri controlled command registry"
+  },
+  "boundaries": {
+    "readOnlyHealth": true,
+    "rendererShellExecutionAvailable": false,
+    "genericShellRunnerAvailable": false,
+    "arbitraryCommandAvailable": false,
+    "arbitraryPathAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false
+  }
+}

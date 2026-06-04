@@ -1,0 +1,1 @@
+{"desktop-shell":{"identifier":"desktop-shell","description":"Default capability for the Symphony Desktop Shell window. Custom commands remain fixed to sidecar attach/launch bridge handlers.","local":true,"windows":["main"],"permissions":["core:default"]}}

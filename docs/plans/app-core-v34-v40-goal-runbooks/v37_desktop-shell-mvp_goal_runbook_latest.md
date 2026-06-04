@@ -97,7 +97,7 @@ pnpm --silent symphony goal next --goal v37-desktop-shell-mvp --json
 
 # task-1: Desktop shell decision + minimal workspace
 
-Branch: `v37-task-1-desktop-shell-decision-workspace`  
+Branch: `v37-task-1-desktop-shell-decision-minimal-workspace`
 Worker evidence: `docs/plans/v37-task-1-worker-evidence-2026-06-02.md`  
 Review evidence: `docs/plans/v37-task-1-review-evidence-2026-06-02.md`  
 Main verification evidence: `docs/plans/v37-task-1-main-verification-evidence-2026-06-02.md`
@@ -127,7 +127,7 @@ git pull --ff-only
 git status -sb
 pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json
 pnpm --silent symphony goal next --goal v37-desktop-shell-mvp --json
-git checkout -b v37-task-1-desktop-shell-decision-workspace
+git checkout -b v37-task-1-desktop-shell-decision-minimal-workspace
 ```
 
 ## Worker prompt
@@ -139,7 +139,7 @@ git checkout -b v37-task-1-desktop-shell-decision-workspace
 目标：
 - 当前 goal id：v37-desktop-shell-mvp
 - 当前任务：task-1
-- 当前分支必须是：v37-task-1-desktop-shell-decision-workspace
+- 当前分支必须是：v37-task-1-desktop-shell-decision-minimal-workspace
 - 如果当前不在这个分支，先停止并说明当前分支，不要继续实现。
 - 用户可见价值：从网页走向 app，但不是网页套壳。
 
@@ -191,7 +191,7 @@ git checkout -b v37-task-1-desktop-shell-decision-workspace
 必须记录：
 - Goal id: v37-desktop-shell-mvp
 - Task id: task-1
-- Branch: v37-task-1-desktop-shell-decision-workspace
+- Branch: v37-task-1-desktop-shell-decision-minimal-workspace
 - User-visible value: 从网页走向 app，但不是网页套壳。
 - Implementation summary
 - Files changed
@@ -218,7 +218,7 @@ git checkout -b v37-task-1-desktop-shell-decision-workspace
 执行 v37 task-1 independent reviewer review：Desktop shell decision + minimal workspace。
 
 目标：
-- 审查当前分支 `v37-task-1-desktop-shell-decision-workspace` 相对 main 的 diff。
+- 审查当前分支 `v37-task-1-desktop-shell-decision-minimal-workspace` 相对 main 的 diff。
 - 读取 worker evidence：docs/plans/v37-task-1-worker-evidence-2026-06-02.md。
 - 判断实现是否满足 v37 plan、runbook 和本 task scope。
 - reviewer 必须独立；不能只复述 worker 总结；不能因为测试通过就自动 APPROVED。
@@ -256,7 +256,7 @@ git checkout -b v37-task-1-desktop-shell-decision-workspace
 验证：
 - git checkout main
 - git pull --ff-only
-- git merge --ff-only v37-task-1-desktop-shell-decision-workspace
+- git merge --ff-only v37-task-1-desktop-shell-decision-minimal-workspace
 - pnpm check
 - pnpm test
 - pnpm workbench:build
@@ -817,7 +817,7 @@ Desktop 使用现有 job/artifact API 展示状态和安全预览。
 
 # task-5: Desktop build smoke + packaging boundary evidence
 
-Branch: `v37-task-5-desktop-build-smoke-packaging-boundary`  
+Branch: `v37-task-5-desktop-build-smoke-packaging-boundary-evidence`
 Worker evidence: `docs/plans/v37-task-5-worker-evidence-2026-06-02.md`  
 Review evidence: `docs/plans/v37-task-5-review-evidence-2026-06-02.md`  
 Main verification evidence: `docs/plans/v37-task-5-main-verification-evidence-2026-06-02.md`
@@ -847,7 +847,7 @@ git pull --ff-only
 git status -sb
 pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json
 pnpm --silent symphony goal next --goal v37-desktop-shell-mvp --json
-git checkout -b v37-task-5-desktop-build-smoke-packaging-boundary
+git checkout -b v37-task-5-desktop-build-smoke-packaging-boundary-evidence
 ```
 
 ## Worker prompt
@@ -859,7 +859,7 @@ git checkout -b v37-task-5-desktop-build-smoke-packaging-boundary
 目标：
 - 当前 goal id：v37-desktop-shell-mvp
 - 当前任务：task-5
-- 当前分支必须是：v37-task-5-desktop-build-smoke-packaging-boundary
+- 当前分支必须是：v37-task-5-desktop-build-smoke-packaging-boundary-evidence
 - 如果当前不在这个分支，先停止并说明当前分支，不要继续实现。
 - 用户可见价值：桌面 MVP 可验证但不急于分发。
 
@@ -911,7 +911,7 @@ git checkout -b v37-task-5-desktop-build-smoke-packaging-boundary
 必须记录：
 - Goal id: v37-desktop-shell-mvp
 - Task id: task-5
-- Branch: v37-task-5-desktop-build-smoke-packaging-boundary
+- Branch: v37-task-5-desktop-build-smoke-packaging-boundary-evidence
 - User-visible value: 桌面 MVP 可验证但不急于分发。
 - Implementation summary
 - Files changed
@@ -938,7 +938,7 @@ git checkout -b v37-task-5-desktop-build-smoke-packaging-boundary
 执行 v37 task-5 independent reviewer review：Desktop build smoke + packaging boundary evidence。
 
 目标：
-- 审查当前分支 `v37-task-5-desktop-build-smoke-packaging-boundary` 相对 main 的 diff。
+- 审查当前分支 `v37-task-5-desktop-build-smoke-packaging-boundary-evidence` 相对 main 的 diff。
 - 读取 worker evidence：docs/plans/v37-task-5-worker-evidence-2026-06-02.md。
 - 判断实现是否满足 v37 plan、runbook 和本 task scope。
 - reviewer 必须独立；不能只复述 worker 总结；不能因为测试通过就自动 APPROVED。
@@ -976,7 +976,7 @@ git checkout -b v37-task-5-desktop-build-smoke-packaging-boundary
 验证：
 - git checkout main
 - git pull --ff-only
-- git merge --ff-only v37-task-5-desktop-build-smoke-packaging-boundary
+- git merge --ff-only v37-task-5-desktop-build-smoke-packaging-boundary-evidence
 - pnpm check
 - pnpm test
 - pnpm workbench:build

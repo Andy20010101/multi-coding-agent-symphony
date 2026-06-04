@@ -1789,7 +1789,7 @@ Workbench 显示 job queue、current job、blocked reason、next action。
 目标：
 - 当前 goal id：v37-desktop-shell-mvp
 - 当前任务：task-1
-- 当前分支必须是：v37-task-1-desktop-shell-decision-workspace
+- 当前分支必须是：v37-task-1-desktop-shell-decision-minimal-workspace
 - 如果当前不在这个分支，先停止并说明当前分支，不要继续实现。
 - 用户可见价值：从网页走向 app，但不是网页套壳。
 
@@ -1836,7 +1836,7 @@ Workbench 显示 job queue、current job、blocked reason、next action。
 执行 v37 task-1 independent reviewer review：Desktop shell decision + minimal workspace。
 
 目标：
-- 审查当前分支 `v37-task-1-desktop-shell-decision-workspace` 相对 main 的 diff。
+- 审查当前分支 `v37-task-1-desktop-shell-decision-minimal-workspace` 相对 main 的 diff。
 - 读取 worker evidence：docs/plans/v37-task-1-worker-evidence-2026-06-02.md。
 - 判断实现是否满足 v37 plan、runbook 和本 task scope。
 - reviewer 必须独立；不能只复述 worker 总结；不能因为测试通过就自动 APPROVED。
@@ -1874,7 +1874,7 @@ Workbench 显示 job queue、current job、blocked reason、next action。
 验证：
 - git checkout main
 - git pull --ff-only
-- git merge --ff-only v37-task-1-desktop-shell-decision-workspace
+- git merge --ff-only v37-task-1-desktop-shell-decision-minimal-workspace
 - pnpm check
 - pnpm test
 - pnpm workbench:build
@@ -2237,7 +2237,7 @@ Desktop 使用现有 job/artifact API 展示状态和安全预览。
 目标：
 - 当前 goal id：v37-desktop-shell-mvp
 - 当前任务：task-5
-- 当前分支必须是：v37-task-5-desktop-build-smoke-packaging-boundary
+- 当前分支必须是：v37-task-5-desktop-build-smoke-packaging-boundary-evidence
 - 如果当前不在这个分支，先停止并说明当前分支，不要继续实现。
 - 用户可见价值：桌面 MVP 可验证但不急于分发。
 
@@ -2284,7 +2284,7 @@ Desktop 使用现有 job/artifact API 展示状态和安全预览。
 执行 v37 task-5 independent reviewer review：Desktop build smoke + packaging boundary evidence。
 
 目标：
-- 审查当前分支 `v37-task-5-desktop-build-smoke-packaging-boundary` 相对 main 的 diff。
+- 审查当前分支 `v37-task-5-desktop-build-smoke-packaging-boundary-evidence` 相对 main 的 diff。
 - 读取 worker evidence：docs/plans/v37-task-5-worker-evidence-2026-06-02.md。
 - 判断实现是否满足 v37 plan、runbook 和本 task scope。
 - reviewer 必须独立；不能只复述 worker 总结；不能因为测试通过就自动 APPROVED。
@@ -2322,7 +2322,7 @@ Desktop 使用现有 job/artifact API 展示状态和安全预览。
 验证：
 - git checkout main
 - git pull --ff-only
-- git merge --ff-only v37-task-5-desktop-build-smoke-packaging-boundary
+- git merge --ff-only v37-task-5-desktop-build-smoke-packaging-boundary-evidence
 - pnpm check
 - pnpm test
 - pnpm workbench:build
@@ -4083,4 +4083,3 @@ Workbench/Desktop 显示 provider availability 和 blocked reasons，不泄露 s
 - 不创建 tag。
 - 不自动 push，除非父流程明确要求且 main verification 已完成。
 ```
-

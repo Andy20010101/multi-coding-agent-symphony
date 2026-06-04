@@ -32,6 +32,7 @@ const ARTIFACT_INDEX_CONTRACT_NAME = 'artifact-index.v1';
 const EVIDENCE_TIMELINE_CONTRACT_NAME = 'evidence-timeline.v1';
 const RELEASE_BUNDLE_CONTRACT_NAME = 'release-bundle.v1';
 const EVIDENCE_BUNDLE_CONTRACT_NAME = 'evidence-bundle.v1';
+const PROJECT_REGISTRY_CONTRACT_NAME = 'project-registry.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
@@ -354,6 +355,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/summary',
     method: 'GET',
     contractName: 'symphony.console-snapshot'
+  }),
+  Object.freeze({
+    id: 'projectRegistry',
+    label: 'Project Registry',
+    path: '/api/projects',
+    method: 'GET',
+    contractName: PROJECT_REGISTRY_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'runtimeSnapshot',
@@ -763,6 +771,7 @@ const ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
 
 export function projectWorkbenchContracts(results) {
   const summaryData = dataFrom(results.summary);
+  const projectRegistryData = dataFrom(results.projectRegistry);
   const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
   const readinessData = dataFrom(results.readiness);
   const handoffRefsData = dataFrom(results.handoffRefs);
@@ -793,6 +802,7 @@ export function projectWorkbenchContracts(results) {
   const jobCreationData = dataFrom(results.jobCreation);
   const jobTimelineData = dataFrom(results.jobTimeline);
   const jobRunControlData = dataFrom(results.jobRunControl);
+  const artifactIndexData = dataFrom(results.artifactIndex);
   const evidenceTimelineData = dataFrom(results.evidenceTimeline);
   const releaseBundleData = dataFrom(results.releaseBundle);
   const latestRun = latestRunData?.run ?? null;
@@ -916,6 +926,41 @@ export function projectWorkbenchContracts(results) {
     eligibility: activeGoalControl.activeTaskImplementationEligibility,
     operations: activeGoalOperations
   });
+  const projectedRuntimeSnapshot = projectRuntimeSnapshot({
+    result: results.runtimeSnapshot,
+    snapshot: runtimeSnapshotData
+  });
+  const projectedProjectRegistry = projectProjectRegistry({
+    result: results.projectRegistry,
+    registry: projectRegistryData
+  });
+  const projectedArtifactRefs = projectArtifactRefs(
+    latestRun?.artifactRefs,
+    latestRun?.artifactStatus,
+    safeArtifactPreviewResults
+  );
+  const projectedArtifactIndex = projectArtifactIndex({
+    result: results.artifactIndex,
+    index: artifactIndexData
+  });
+  const projectedJobConsole = projectJobConsole({
+    jobModelResult: results.jobModel,
+    jobModel: jobModelData,
+    jobCreationResult: results.jobCreation,
+    jobCreation: jobCreationData,
+    jobTimelineResult: results.jobTimeline,
+    jobTimeline: jobTimelineData,
+    jobRunControlResult: results.jobRunControl,
+    jobRunControl: jobRunControlData
+  });
+  const projectedEvidenceTimeline = projectEvidenceTimeline({
+    result: results.evidenceTimeline,
+    timeline: evidenceTimelineData
+  });
+  const projectedReleaseBundle = projectReleaseBundle({
+    result: results.releaseBundle,
+    bundle: releaseBundleData
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -939,10 +984,19 @@ export function projectWorkbenchContracts(results) {
       activeGoal: activeGoalControl,
       routeStates
     }),
-    runtimeSnapshot: projectRuntimeSnapshot({
-      result: results.runtimeSnapshot,
-      snapshot: runtimeSnapshotData
+    desktopShell: projectDesktopShell({
+      projectRegistry: projectedProjectRegistry,
+      runtimeSnapshot: projectedRuntimeSnapshot,
+      activeGoal: activeGoalControl,
+      jobConsole: projectedJobConsole,
+      artifactRefs: projectedArtifactRefs,
+      artifactIndex: projectedArtifactIndex,
+      evidenceTimeline: projectedEvidenceTimeline,
+      releaseBundle: projectedReleaseBundle,
+      routeStates
     }),
+    projectRegistry: projectedProjectRegistry,
+    runtimeSnapshot: projectedRuntimeSnapshot,
     summary: projectSummary(summaryData),
     readiness: projectReadiness(readinessData, summaryData),
     runs: projectRuns(runsData, summaryData),
@@ -969,7 +1023,8 @@ export function projectWorkbenchContracts(results) {
       result: results.adoptionInspect,
       inspect: adoptionInspectData
     }),
-    artifactRefs: projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus, safeArtifactPreviewResults),
+    artifactRefs: projectedArtifactRefs,
+    artifactIndex: projectedArtifactIndex,
     goals: projectGoals(goalsData),
     goalProgress: projectGoalProgress({
       result: results.goalProgress,
@@ -988,24 +1043,9 @@ export function projectWorkbenchContracts(results) {
     activeGoal: activeGoalControl,
     capabilities: projectCapabilities(capabilitiesData),
     diagnosticsV1: projectDiagnostics(diagnosticsData),
-    jobConsole: projectJobConsole({
-      jobModelResult: results.jobModel,
-      jobModel: jobModelData,
-      jobCreationResult: results.jobCreation,
-      jobCreation: jobCreationData,
-      jobTimelineResult: results.jobTimeline,
-      jobTimeline: jobTimelineData,
-      jobRunControlResult: results.jobRunControl,
-      jobRunControl: jobRunControlData
-    }),
-    evidenceTimeline: projectEvidenceTimeline({
-      result: results.evidenceTimeline,
-      timeline: evidenceTimelineData
-    }),
-    releaseBundle: projectReleaseBundle({
-      result: results.releaseBundle,
-      bundle: releaseBundleData
-    }),
+    jobConsole: projectedJobConsole,
+    evidenceTimeline: projectedEvidenceTimeline,
+    releaseBundle: projectedReleaseBundle,
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
       status: MISSING_TEXT
@@ -1043,7 +1083,8 @@ function projectRuntimeSnapshot({ result, snapshot }) {
       version: valueState(snapshot?.runtime_health?.runtime?.version),
       kernel: valueState(snapshot?.runtime_health?.kernel?.version),
       cwd: valueState(snapshot?.runtime_health?.process?.cwd),
-      repoPath: valueState(snapshot?.runtime_health?.process?.repoPath)
+      repoPath: valueState(snapshot?.runtime_health?.process?.repoPath),
+      sidecarHost: projectSidecarHostLifecycle(snapshot?.runtime_health?.sidecarHost)
     },
     project: {
       status: valueState(snapshot?.current_project?.resolution?.status),
@@ -1076,6 +1117,18 @@ function projectRuntimeSnapshot({ result, snapshot }) {
       copyOnlyCommands: Array.isArray(snapshot?.next_action?.copyOnlyCommands)
         ? snapshot.next_action.copyOnlyCommands.map((command) => valueState(command))
         : []
+    },
+    review: {
+      taskId: valueState(snapshot?.review_status?.task_id),
+      verdict: valueState(snapshot?.review_status?.verdict),
+      evidenceRef: valueState(snapshot?.review_status?.evidence_ref),
+      statusSource: valueState(snapshot?.review_status?.status_source)
+    },
+    mainVerification: {
+      taskId: valueState(snapshot?.main_verification_status?.task_id),
+      status: valueState(snapshot?.main_verification_status?.status),
+      evidenceRef: valueState(snapshot?.main_verification_status?.evidence_ref),
+      statusSource: valueState(snapshot?.main_verification_status?.status_source)
     },
     release: {
       ready: valueState(releaseStatus?.release_ready),
@@ -1116,6 +1169,97 @@ function projectRuntimeSnapshot({ result, snapshot }) {
   };
 }
 
+function projectProjectRegistry({ result, registry }) {
+  const projects = Array.isArray(registry?.projects)
+    ? registry.projects
+    : [];
+
+  return {
+    state: result?.ok === true ? (projects.length === 0 ? 'empty' : 'available') : 'missing',
+    contractName: valueState(registry?.contractName),
+    contractVersion: valueState(registry?.contractVersion),
+    generatedAt: valueState(registry?.generatedAt),
+    readOnly: valueState(registry?.readOnly),
+    currentProjectId: valueState(registry?.currentProjectId),
+    source: {
+      kind: valueState(registry?.source?.kind),
+      scanScope: valueState(registry?.source?.scanScope),
+      writes: valueState(registry?.source?.writes)
+    },
+    projects: {
+      state: projects.length === 0 ? 'empty' : 'available',
+      count: valueState(projects.length),
+      items: projects.map((project) => projectRegistryProject(project, registry?.currentProjectId))
+    },
+    resolution: {
+      status: valueState(registry?.resolution?.status),
+      strategy: valueState(registry?.resolution?.strategy),
+      repoPath: valueState(registry?.resolution?.repoPath),
+      stateDir: valueState(registry?.resolution?.stateDir)
+    },
+    boundaries: {
+      readOnly: valueState(registry?.boundaries?.readOnly),
+      diskScanScope: valueState(registry?.boundaries?.diskScanScope),
+      registryDatabaseWritesAvailable: valueState(registry?.boundaries?.registryDatabaseWritesAvailable),
+      actionExecutionAvailable: valueState(registry?.boundaries?.actionExecutionAvailable),
+      modelInvocationAvailable: valueState(registry?.boundaries?.modelInvocationAvailable),
+      gitWriteAvailable: valueState(registry?.boundaries?.gitWriteAvailable),
+      releaseWriteAvailable: valueState(registry?.boundaries?.releaseWriteAvailable),
+      arbitraryCommandExecutionAvailable: valueState(registry?.boundaries?.arbitraryCommandExecutionAvailable)
+    },
+    note: 'Project list comes from project-registry.v1. The route reads only cwd or an explicit repo path and does not scan the disk, run commands, write git state, or infer active goal status from frontend state.'
+  };
+}
+
+function projectRegistryProject(project, currentProjectId) {
+  const isCurrentProject = project?.project_id === currentProjectId;
+
+  return {
+    projectId: valueState(project?.project_id),
+    name: valueState(project?.project_name),
+    repoPath: valueState(project?.repo_path),
+    defaultBranch: valueState(project?.default_branch),
+    remoteUrl: valueState(project?.remote_url),
+    lastGoalId: valueState(project?.last_goal_id),
+    lastRunId: valueState(project?.last_run_id),
+    healthStatus: valueState(project?.health_status),
+    lastOpenedAt: valueState(project?.last_opened_at),
+    pinned: valueState(project?.pinned),
+    current: valueState(isCurrentProject)
+  };
+}
+
+function projectSidecarHostLifecycle(sidecarHost) {
+  const attach = sidecarHost?.attach ?? {};
+  const launcher = sidecarHost?.launcher ?? {};
+  const boundaries = sidecarHost?.boundaries ?? {};
+
+  return {
+    contractName: valueState(sidecarHost?.contractName),
+    contractVersion: valueState(sidecarHost?.contractVersion),
+    lifecycle: valueState(sidecarHost?.lifecycle),
+    hostKind: valueState(sidecarHost?.hostKind),
+    sidecarKind: valueState(sidecarHost?.sidecarKind),
+    attachState: valueState(attach.state),
+    attachStrategy: valueState(attach.strategy),
+    healthRoute: valueState(attach.healthRoute),
+    endpoint: valueState(attach.endpoint),
+    attachSourceContract: valueState(attach.sourceContract),
+    launcherState: valueState(launcher.state),
+    launcherCommandId: valueState(launcher.commandId),
+    nativeHostRequired: valueState(launcher.nativeHostRequired),
+    rendererLaunchAvailable: valueState(launcher.rendererLaunchAvailable),
+    stateDirScope: valueState(launcher.stateDirScope),
+    launcherSource: valueState(launcher.source),
+    boundaries: {
+      rendererShellExecutionAvailable: valueState(boundaries.rendererShellExecutionAvailable),
+      genericShellRunnerAvailable: valueState(boundaries.genericShellRunnerAvailable),
+      arbitraryCommandAvailable: valueState(boundaries.arbitraryCommandAvailable),
+      arbitraryPathAvailable: valueState(boundaries.arbitraryPathAvailable)
+    }
+  };
+}
+
 function snapshotRuntimeState(snapshot) {
   if (snapshot?.freshness?.status === 'stale') {
     return 'stale';
@@ -1134,6 +1278,396 @@ function snapshotRuntimeState(snapshot) {
   }
 
   return 'healthy';
+}
+
+function projectDesktopShell({
+  projectRegistry,
+  runtimeSnapshot,
+  activeGoal,
+  jobConsole,
+  artifactRefs,
+  artifactIndex,
+  evidenceTimeline,
+  releaseBundle,
+  routeStates
+}) {
+  const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
+  const runtimeRoute = findProjectedRoute(routeStates, 'runtimeSnapshot');
+  const goalRoute = findProjectedRoute(routeStates, 'goalRunbook');
+  const nextRoute = findProjectedRoute(routeStates, 'goalNextAction');
+  const jobRoute = findProjectedRoute(routeStates, 'jobModel');
+  const jobCreationRoute = findProjectedRoute(routeStates, 'jobCreation');
+  const jobTimelineRoute = findProjectedRoute(routeStates, 'jobTimeline');
+  const jobRunControlRoute = findProjectedRoute(routeStates, 'jobRunControl');
+  const artifactRoute = findProjectedRoute(routeStates, 'artifactIndex');
+  const evidenceRoute = findProjectedRoute(routeStates, 'evidenceTimeline');
+  const releaseBundleRoute = findProjectedRoute(routeStates, 'releaseBundle');
+  const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
+  const currentProject = currentProjectFromRegistry(projectRegistry);
+  const sidecarAttachState = firstValue(sidecarHost?.attachState);
+  const sidecarState = sidecarAttachState === 'attached'
+    ? 'attached'
+    : sidecarAttachState === undefined
+      ? 'missing'
+      : runtimeSnapshot?.state === 'stale' ? 'stale' : 'needs-attention';
+  const currentTaskText = [
+    firstValue(activeGoal?.nextAction?.next?.taskId, runtimeSnapshot?.currentTask?.taskId),
+    firstValue(activeGoal?.nextAction?.next?.role, runtimeSnapshot?.currentTask?.role),
+    firstValue(activeGoal?.nextAction?.next?.phase, runtimeSnapshot?.currentTask?.phase)
+  ].filter((value) => isNonEmptyString(value)).join(' / ');
+  const runHealthText = [
+    firstValue(jobConsole?.jobModel?.status),
+    firstValue(jobConsole?.jobModel?.queueState)
+  ].filter((value) => isNonEmptyString(value)).join(' / ');
+  const firstRowCards = [
+    {
+      id: valueState('active-goal'),
+      label: valueState('Active goal'),
+      value: valueState(firstValue(activeGoal?.viewModel?.goalId, runtimeSnapshot?.activeGoal?.goalId)),
+      detail: valueState(firstValue(activeGoal?.viewModel?.title, runtimeSnapshot?.activeGoal?.title)),
+      state: valueState(activeGoal?.viewModel?.state ?? runtimeSnapshot?.state),
+      source: valueState('app-state-snapshot.v1 + goal-runbook.v1 + goal-progress-ledger.v1')
+    },
+    {
+      id: valueState('next-action'),
+      label: valueState('Next action'),
+      value: valueState(currentTaskText),
+      detail: valueState(firstValue(activeGoal?.nextAction?.reason, runtimeSnapshot?.nextAction?.reason)),
+      state: valueState(firstValue(activeGoal?.nextAction?.status, runtimeSnapshot?.nextAction?.status)),
+      source: valueState('goal-next-action.v1')
+    },
+    {
+      id: valueState('run-health'),
+      label: valueState('Run health'),
+      value: valueState(runHealthText),
+      detail: valueState(`job routes ${routeStateFromRoute(jobRoute)}; evidence timeline ${evidenceTimeline?.state ?? 'missing'}`),
+      state: valueState(jobConsole?.state),
+      source: valueState('job-model.v1 + job-timeline-log-stream.v1')
+    }
+  ];
+
+  return {
+    state: runtimeSnapshot?.state === 'healthy' ? 'ready' : runtimeSnapshot?.state ?? 'missing',
+    modelName: valueState('DesktopShellMvpViewModel'),
+    route: {
+      path: valueState('/workbench/desktop/'),
+      routeState: valueState('client-rendered'),
+      source: valueState('Workbench Vite route hosted by the local console sidecar')
+    },
+    shellDecision: {
+      selected: valueState('Tauri-first desktop shell'),
+      deferredAlternative: valueState('Electron deferred'),
+      rationale: valueState('Tauri hosts the existing Workbench renderer and exposes only controlled sidecar attach/launch commands during v37 task-2.'),
+      workspace: valueState('desktop/shell/src-tauri + /workbench/desktop/'),
+      hostBridgeAvailable: valueState(sidecarHost?.launcherCommandId?.state === 'available'),
+      nativeBuildAvailableNow: valueState(false)
+    },
+    sidecarHealth: {
+      state: valueState(sidecarState),
+      status: runtimeSnapshot?.runtime?.status,
+      mode: runtimeSnapshot?.runtime?.mode,
+      version: runtimeSnapshot?.runtime?.version,
+      kernel: runtimeSnapshot?.runtime?.kernel,
+      cwd: runtimeSnapshot?.runtime?.cwd,
+      repoPath: runtimeSnapshot?.runtime?.repoPath,
+      route: valueState(runtimeRoute?.path),
+      routeState: valueState(routeStateFromRoute(runtimeRoute)),
+      attachState: sidecarHost?.attachState,
+      attachStrategy: sidecarHost?.attachStrategy,
+      lifecycleContract: sidecarHost?.contractName,
+      launcherState: sidecarHost?.launcherState,
+      launcherCommandId: sidecarHost?.launcherCommandId,
+      launcherAvailable: valueState(firstValue(sidecarHost?.launcherState) === 'defined'),
+      rendererLaunchAvailable: sidecarHost?.rendererLaunchAvailable,
+      launcherHandoff: valueState(firstValue(sidecarHost?.launcherCommandId) || 'native host bridge unavailable')
+    },
+    workspace: {
+      project: valueState(firstValue(runtimeSnapshot?.project?.name, currentProject?.name)),
+      projectId: valueState(firstValue(runtimeSnapshot?.project?.id, currentProject?.projectId)),
+      repoPath: valueState(firstValue(runtimeSnapshot?.project?.repoPath, currentProject?.repoPath)),
+      defaultBranch: valueState(firstValue(runtimeSnapshot?.project?.defaultBranch, currentProject?.defaultBranch)),
+      lastGoalId: valueState(firstValue(runtimeSnapshot?.project?.lastGoalId, currentProject?.lastGoalId)),
+      lastRunId: valueState(firstValue(runtimeSnapshot?.project?.lastRunId, currentProject?.lastRunId))
+    },
+    projectList: {
+      state: projectRegistry?.state ?? 'missing',
+      contractName: projectRegistry?.contractName,
+      route: valueState(projectRoute?.path),
+      routeState: valueState(routeStateFromRoute(projectRoute)),
+      currentProjectId: projectRegistry?.currentProjectId,
+      sourcePolicy: valueState('project-registry.v1 + current-project-resolver.v1'),
+      scanScope: projectRegistry?.source?.scanScope,
+      projects: projectRegistry?.projects ?? {
+        state: 'missing',
+        count: valueState(undefined),
+        items: []
+      }
+    },
+    activeGoalStatus: {
+      state: valueState(firstValue(activeGoal?.viewModel?.state, runtimeSnapshot?.state)),
+      goalId: valueState(firstValue(activeGoal?.viewModel?.goalId, runtimeSnapshot?.activeGoal?.goalId)),
+      title: valueState(firstValue(activeGoal?.viewModel?.title, runtimeSnapshot?.activeGoal?.title)),
+      completedTasks: runtimeSnapshot?.activeGoal?.completedTasks,
+      totalTasks: runtimeSnapshot?.activeGoal?.totalTasks,
+      currentTaskId: valueState(firstValue(activeGoal?.taskQueue?.nextTaskId, runtimeSnapshot?.currentTask?.taskId)),
+      currentTaskStatus: runtimeSnapshot?.currentTask?.status,
+      currentTaskBlocked: runtimeSnapshot?.currentTask?.blocked,
+      reviewVerdict: runtimeSnapshot?.review?.verdict,
+      reviewEvidenceRef: runtimeSnapshot?.review?.evidenceRef,
+      mainVerificationStatus: runtimeSnapshot?.mainVerification?.status,
+      mainVerificationEvidenceRef: runtimeSnapshot?.mainVerification?.evidenceRef,
+      releaseReady: runtimeSnapshot?.release?.ready,
+      releaseReadySource: runtimeSnapshot?.release?.readySource,
+      missingReleaseGates: valueState((runtimeSnapshot?.release?.missingGates ?? []).length),
+      blockerCount: valueState((runtimeSnapshot?.blockers ?? []).length),
+      sourcePolicy: valueState('app-state-snapshot.v1 + goal-progress-ledger.v1 + goal-event-log.v1')
+    },
+    nextActionDetail: {
+      state: valueState(firstValue(activeGoal?.nextAction?.status, runtimeSnapshot?.nextAction?.status)),
+      taskId: valueState(firstValue(activeGoal?.nextAction?.next?.taskId, runtimeSnapshot?.currentTask?.taskId)),
+      role: valueState(firstValue(activeGoal?.nextAction?.next?.role, runtimeSnapshot?.currentTask?.role)),
+      phase: valueState(firstValue(activeGoal?.nextAction?.next?.phase, runtimeSnapshot?.currentTask?.phase)),
+      reason: valueState(firstValue(activeGoal?.nextAction?.reason, runtimeSnapshot?.nextAction?.reason)),
+      blocked: activeGoal?.nextAction?.next?.blocked ?? runtimeSnapshot?.currentTask?.blocked,
+      registerWith: valueState(firstValue(activeGoal?.nextAction?.afterCompletion?.registerWith, runtimeSnapshot?.nextAction?.registerWith)),
+      route: valueState(nextRoute?.path),
+      routeState: valueState(routeStateFromRoute(nextRoute)),
+      sourcePolicy: valueState('goal-next-action.v1')
+    },
+    firstRowCards: {
+      state: firstRowCards.length === 0 ? 'empty' : 'available',
+      items: firstRowCards
+    },
+    lifecycle: {
+      state: activeGoal?.taskQueue?.state ?? 'missing',
+      taskCount: activeGoal?.taskQueue?.totalTasks,
+      nextTaskId: activeGoal?.taskQueue?.nextTaskId,
+      nextRole: activeGoal?.taskQueue?.nextRole,
+      nextPhase: activeGoal?.taskQueue?.nextPhase,
+      route: valueState(goalRoute?.path),
+      routeState: valueState(routeStateFromRoute(goalRoute)),
+      tasks: {
+        state: activeGoal?.taskQueue?.tasks?.state ?? activeGoal?.taskQueue?.state ?? 'missing',
+        items: (activeGoal?.taskQueue?.items ?? []).slice(0, 5)
+      }
+    },
+    jobRun: projectDesktopJobRun({
+      jobConsole,
+      jobRoute,
+      jobCreationRoute,
+      jobTimelineRoute,
+      jobRunControlRoute
+    }),
+    artifactReadiness: projectDesktopArtifactReadiness({
+      artifactRefs,
+      artifactIndex,
+      evidenceTimeline,
+      releaseBundle,
+      artifactRoute,
+      evidenceRoute,
+      releaseBundleRoute
+    }),
+    boundaries: {
+      readOnly: valueState(true),
+      shellCommandExecutionAvailable: valueState(false),
+      modelInvocationAvailable: valueState(false),
+      arbitraryLocalFileOpenAvailable: valueState(false),
+      gitWriteAvailable: valueState(false),
+      releaseReadyDeclared: valueState(false),
+      statusSource: valueState('explicit backend contracts only')
+    },
+    note: 'Desktop Shell MVP is a first-screen desktop information architecture over the existing local API contracts. It does not execute shell commands, start jobs, open files, call models, self-approve, or declare release readiness.'
+  };
+}
+
+function projectDesktopJobRun({
+  jobConsole,
+  jobRoute,
+  jobCreationRoute,
+  jobTimelineRoute,
+  jobRunControlRoute
+}) {
+  const jobModel = jobConsole?.jobModel ?? {};
+  const jobCreation = jobConsole?.jobCreation ?? {};
+  const jobTimeline = jobConsole?.jobTimeline ?? {};
+  const jobRunControl = jobConsole?.jobRunControl ?? {};
+
+  return {
+    state: valueState(jobConsole?.state),
+    sourcePolicy: valueState('job-model.v1 + job-creation.v1 + job-timeline-log-stream.v1 + job-run-control.v1'),
+    jobId: jobModel.jobId,
+    status: jobModel.status,
+    queueState: jobModel.queueState,
+    actionId: jobModel.actionId,
+    goalId: jobModel.goalId,
+    taskId: jobModel.taskId,
+    createdAt: jobModel.createdAt,
+    leasedAt: jobModel.leasedAt,
+    passedAt: jobModel.passedAt,
+    failedAt: jobModel.failedAt,
+    cancelledAt: jobModel.cancelledAt,
+    blocker: jobModel.blocker ?? jobBlockerState(undefined),
+    failure: jobModel.failure ?? jobFailureState(undefined),
+    creation: {
+      routeState: valueState(routeStateFromRoute(jobCreationRoute)),
+      dryRun: jobCreation.plan?.dryRun,
+      requiresConfirmation: jobCreation.plan?.requiresConfirmation,
+      jobExecutionAvailable: jobCreation.plan?.jobExecutionAvailable,
+      warnings: jobCreation.warnings ?? jobCreationWarningsState(undefined),
+      blockers: jobCreation.blockers ?? jobCreationBlockersState(undefined)
+    },
+    timeline: {
+      routeState: valueState(routeStateFromRoute(jobTimelineRoute)),
+      eventCount: jobTimeline.eventCount,
+      logRefCount: jobTimeline.logRefCount
+    },
+    runControl: {
+      routeState: valueState(routeStateFromRoute(jobRunControlRoute)),
+      currentState: jobRunControl.currentState,
+      availableTransitions: jobRunControl.availableTransitions ?? jobTransitionsState(undefined),
+      transitionTable: jobRunControl.transitionTable ?? jobTransitionTableState(undefined)
+    },
+    routes: {
+      jobModel: valueState(routeStateFromRoute(jobRoute)),
+      jobCreation: valueState(routeStateFromRoute(jobCreationRoute)),
+      jobTimeline: valueState(routeStateFromRoute(jobTimelineRoute)),
+      jobRunControl: valueState(routeStateFromRoute(jobRunControlRoute))
+    },
+    route: valueState(jobRoute?.path),
+    routeState: valueState(routeStateFromRoute(jobRoute)),
+    boundaries: {
+      readOnly: jobModel.boundaries?.items?.find((item) => firstValue(item.key) === 'readOnly')?.value ?? valueState(true),
+      jobExecutionAvailable: jobModel.boundaries?.items?.find((item) => firstValue(item.key) === 'jobExecutionAvailable')?.value ?? jobCreation.plan?.jobExecutionAvailable ?? valueState(false),
+      actionExecutionAvailable: jobModel.boundaries?.items?.find((item) => firstValue(item.key) === 'actionExecutionAvailable')?.value ?? valueState(false),
+      modelInvocationAvailable: jobModel.boundaries?.items?.find((item) => firstValue(item.key) === 'modelInvocationAvailable')?.value ?? valueState(false),
+      arbitraryCommandExecutionAvailable: jobModel.boundaries?.items?.find((item) => firstValue(item.key) === 'arbitraryCommandExecutionAvailable')?.value ?? valueState(false)
+    }
+  };
+}
+
+function projectDesktopArtifactReadiness({
+  artifactRefs,
+  artifactIndex,
+  evidenceTimeline,
+  releaseBundle,
+  artifactRoute,
+  evidenceRoute,
+  releaseBundleRoute
+}) {
+  const previewItems = (artifactRefs?.items ?? []).map((artifact) => ({
+    kind: artifact.kind,
+    status: artifact.status,
+    ref: artifact.ref,
+    previewRoute: artifact.preview?.route,
+    previewState: valueState(artifact.preview?.state),
+    previewStatus: artifact.preview?.status,
+    contractName: artifact.preview?.contractName,
+    previewAvailable: artifact.preview?.previewAvailable,
+    safeToRenderInline: artifact.preview?.safeToRenderInline,
+    inlineState: valueState(artifact.preview?.inline?.state),
+    inlineReason: valueState(artifact.preview?.inline?.reason),
+    mime: artifact.preview?.mime
+  }));
+  const previewAvailableCount = previewItems.filter((item) => item.previewAvailable?.value === true).length;
+  const safeInlineCount = previewItems.filter((item) => item.safeToRenderInline?.value === true).length;
+
+  return {
+    state: valueState(desktopArtifactReadinessState({
+      artifactRefs,
+      artifactIndex,
+      evidenceTimeline,
+      releaseBundle
+    })),
+    sourcePolicy: valueState('artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1'),
+    registeredRefs: valueState(artifactRefs?.count),
+    status: artifactRefs?.status?.status,
+    missing: artifactRefs?.status?.missing,
+    missingKinds: artifactRefs?.status?.missingKinds,
+    safePreviewRoutes: valueState(artifactRefs?.previewRoutes?.count),
+    previewAvailable: valueState(previewAvailableCount),
+    safeInlineAvailable: valueState(safeInlineCount),
+    missingPreviewFields: textState(Array.isArray(artifactRefs?.missingPreviewFields) && artifactRefs.missingPreviewFields.length > 0
+      ? artifactRefs.missingPreviewFields.join('、')
+      : '无'),
+    previewItems: {
+      state: previewItems.length === 0 ? 'empty' : 'available',
+      count: valueState(previewItems.length),
+      items: previewItems
+    },
+    artifactIndexState: valueState(artifactIndex?.state),
+    artifactIndexEntries: artifactIndex?.entries?.count,
+    artifactIndexCanonicalSource: artifactIndex?.context?.canonicalSource,
+    artifactIndexRole: artifactIndex?.context?.indexRole,
+    evidenceTimelineState: valueState(evidenceTimeline?.state),
+    evidenceEntryCount: evidenceTimeline?.entryCount,
+    evidenceCanonicalSource: evidenceTimeline?.context?.canonicalSource,
+    releaseBundleState: valueState(releaseBundle?.state),
+    releaseTaskCount: releaseBundle?.taskCount,
+    releaseReady: releaseBundle?.releaseReady,
+    releaseDecisionAvailable: releaseBundle?.boundaries?.releaseDecisionAvailable,
+    route: valueState(artifactRoute?.path),
+    routeState: valueState(routeStateFromRoute(artifactRoute)),
+    evidenceRouteState: valueState(routeStateFromRoute(evidenceRoute)),
+    releaseBundleRouteState: valueState(routeStateFromRoute(releaseBundleRoute)),
+    boundaries: {
+      readOnly: artifactIndex?.boundaries?.readOnly ?? valueState(true),
+      canonicalSource: artifactIndex?.boundaries?.canonicalSource ?? valueState('ArtifactStore is canonical'),
+      localFileOpenAvailable: artifactIndex?.boundaries?.localFileOpenAvailable ?? valueState(false),
+      artifactDownloadAvailable: artifactIndex?.boundaries?.artifactDownloadAvailable ?? valueState(false),
+      arbitraryPathReadAvailable: artifactIndex?.boundaries?.arbitraryPathReadAvailable ?? valueState(false)
+    }
+  };
+}
+
+function desktopArtifactReadinessState({
+  artifactRefs,
+  artifactIndex,
+  evidenceTimeline,
+  releaseBundle
+}) {
+  const states = [
+    artifactRefs?.state,
+    artifactIndex?.state,
+    evidenceTimeline?.state,
+    releaseBundle?.state
+  ].filter((state) => typeof state === 'string');
+
+  if (states.includes('unavailable')) {
+    return 'unavailable';
+  }
+
+  if (states.includes('missing')) {
+    return 'partial';
+  }
+
+  if (states.includes('available')) {
+    return 'available';
+  }
+
+  if (states.includes('empty')) {
+    return 'empty';
+  }
+
+  return 'missing';
+}
+
+function currentProjectFromRegistry(projectRegistry) {
+  const projects = projectRegistry?.projects?.items ?? [];
+  const currentProjectId = firstValue(projectRegistry?.currentProjectId);
+
+  return projects.find((project) => firstValue(project.projectId) === currentProjectId) ?? projects[0] ?? null;
+}
+
+function routeStateFromRoute(route) {
+  if (route?.state === 'ready') {
+    return 'ready';
+  }
+
+  if (route?.state === 'skipped') {
+    return 'skipped';
+  }
+
+  return route?.state ?? 'unavailable';
 }
 
 function projectWorkbenchGoldenPath({ activeGoal, routeStates }) {
@@ -1502,6 +2036,59 @@ function createGoalScopedRoute({ template, goalId, suffix, id, label }) {
     path: ['', 'api', 'goals', encodeURIComponent(goalId), suffix].join('/'),
     goalId
   });
+}
+
+function projectArtifactIndex({ result, index }) {
+  const entries = Array.isArray(index?.entries)
+    ? index.entries
+    : index?.indexEntry !== null && typeof index?.indexEntry === 'object' && !Array.isArray(index?.indexEntry)
+      ? [index.indexEntry]
+      : null;
+
+  return {
+    state: result?.ok === true
+      ? entries === null ? 'missing' : entries.length === 0 ? 'empty' : 'available'
+      : result ? 'unavailable' : 'missing',
+    errorEnvelope: result?.errorEnvelope ?? null,
+    contractName: valueState(index?.contractName),
+    contractVersion: valueState(index?.contractVersion),
+    generatedAt: valueState(index?.generatedAt),
+    readOnly: valueState(index?.readOnly),
+    context: {
+      projectId: valueState(index?.context?.projectId),
+      goalId: valueState(index?.context?.goalId),
+      taskId: valueState(index?.context?.taskId),
+      runId: valueState(index?.context?.runId),
+      jobId: valueState(index?.context?.jobId),
+      canonicalSource: valueState(index?.context?.canonicalSource),
+      indexRole: valueState(index?.context?.indexRole),
+      stateSource: valueState(index?.context?.stateSource),
+      entryCount: valueState(index?.context?.entryCount ?? (entries === null ? undefined : entries.length))
+    },
+    entries: {
+      state: entries === null ? 'missing' : entries.length === 0 ? 'empty' : 'available',
+      count: valueState(entries === null ? undefined : entries.length),
+      items: entries === null ? [] : entries.map((entry) => ({
+        artifactRef: valueState(entry?.artifact_ref),
+        kind: valueState(entry?.kind),
+        evidenceKind: valueState(entry?.evidence_kind),
+        goalId: valueState(entry?.goal_id),
+        taskId: valueState(entry?.task_id),
+        runId: valueState(entry?.run_id),
+        jobId: valueState(entry?.job_id),
+        createdAt: valueState(entry?.timestamps?.created_at),
+        indexedAt: valueState(entry?.timestamps?.indexed_at)
+      }))
+    },
+    boundaries: {
+      readOnly: valueState(index?.boundaries?.readOnly),
+      canonicalSource: valueState(index?.boundaries?.canonicalSource),
+      localFileOpenAvailable: valueState(index?.boundaries?.localFileOpenAvailable),
+      artifactDownloadAvailable: valueState(index?.boundaries?.artifactDownloadAvailable),
+      arbitraryPathReadAvailable: valueState(index?.boundaries?.arbitraryPathReadAvailable)
+    },
+    note: 'Artifact index is a derived cache/search view over ArtifactStore. Desktop displays index readiness only and does not open local files.'
+  };
 }
 
 export function projectArtifactRefs(artifactRefs, artifactStatus, safeArtifactPreviewResults = []) {
@@ -8982,6 +9569,10 @@ function projectJobConsole({
       blocker: jobBlockerState(jobModel?.job?.blocker),
       failure: jobFailureState(jobModel?.job?.failure),
       createdAt: valueState(jobModel?.job?.timestamps?.created_at),
+      leasedAt: valueState(jobModel?.job?.timestamps?.leased_at),
+      passedAt: valueState(jobModel?.job?.timestamps?.passed_at),
+      failedAt: valueState(jobModel?.job?.timestamps?.failed_at),
+      cancelledAt: valueState(jobModel?.job?.timestamps?.cancelled_at),
       boundaries: jobBoundariesState(jobModel?.boundaries)
     },
     jobCreation: {

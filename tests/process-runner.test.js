@@ -32,11 +32,11 @@ describe('NodeProcessRunner', () => {
   it('escalates timed out processes from SIGTERM to SIGKILL after a grace period', async () => {
     const runner = new NodeProcessRunner();
     const result = await runner.run({
-      executable: 'bash',
-      args: ['-lc', [
-        "trap 'echo sigterm ignored briefly; sleep 1; exit 0' TERM",
-        'echo started',
-        'while true; do sleep 1; done'
+      executable: process.execPath,
+      args: ['-e', [
+        "process.stdout.write('started\\n')",
+        "process.on('SIGTERM', () => process.stdout.write('sigterm ignored\\n'))",
+        'setInterval(() => {}, 1000)'
       ].join('; ')],
       timeoutMs: 500,
       timeoutKillDelayMs: 50

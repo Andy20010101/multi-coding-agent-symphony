@@ -30,6 +30,14 @@ describe('v33 app state snapshot', () => {
       ok: false,
       errors: ['boundaries.confirmCommandAvailable must be false']
     });
+
+    const missingSidecarHost = structuredClone(fixture);
+    delete missingSidecarHost.runtime_health.sidecarHost;
+
+    assert.deepEqual(validateAppStateSnapshotContract(missingSidecarHost), {
+      ok: false,
+      errors: ['runtime_health.sidecarHost.sidecar lifecycle must be a plain object']
+    });
   });
 
   it('validates healthy, missing project, missing goal, blocked, and stale app-state fixtures', async () => {
@@ -76,6 +84,9 @@ describe('v33 app state snapshot', () => {
       assert.equal(snapshot.freshness.status, 'current');
       assert.equal(snapshot.current_project.currentProject.project_name, 'fixture-project');
       assert.equal(snapshot.runtime_health.boundaries.actionExecutionAvailable, false);
+      assert.equal(snapshot.runtime_health.sidecarHost.contractName, 'sidecar-host-lifecycle.v1');
+      assert.equal(snapshot.runtime_health.sidecarHost.attach.state, 'attached');
+      assert.equal(snapshot.runtime_health.sidecarHost.launcher.rendererLaunchAvailable, false);
       assert.equal(snapshot.active_goal.goal_id, 'v33-app-runtime-foundation');
       assert.equal(snapshot.current_task.task_id, 'task-2');
       assert.equal(snapshot.current_task.role, 'worker');
