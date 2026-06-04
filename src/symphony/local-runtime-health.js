@@ -1,6 +1,11 @@
 import { lstat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
+import {
+  buildSidecarHostLifecycle,
+  validateSidecarHostLifecycleContract
+} from './sidecar-host-bridge.js';
+
 export const LOCAL_RUNTIME_HEALTH_CONTRACT_NAME = 'local-runtime-health.v1';
 export const LOCAL_RUNTIME_HEALTH_CONTRACT_VERSION = 1;
 export const LOCAL_RUNTIME_VERSION = 'v33-app-runtime-foundation.1';
@@ -73,6 +78,18 @@ export async function buildLocalRuntimeHealth({
       generatedAt,
       uptimeMs
     },
+    sidecarHost: buildSidecarHostLifecycle({
+      generatedAt,
+      pid,
+      attach: {
+        state: 'attached',
+        strategy: 'current-runtime-health',
+        processId: pid
+      },
+      launcher: {
+        state: 'defined'
+      }
+    }),
     boundaries: {
       ...DEFAULT_BOUNDARIES
     },
@@ -98,6 +115,7 @@ export function validateLocalRuntimeHealthContract(health) {
   validateRuntime(errors, health.runtime);
   validateKernel(errors, health.kernel);
   validateProcess(errors, health.process);
+  validateSidecarHost(errors, health.sidecarHost);
   validateBoundaries(errors, health.boundaries);
   validateKnownBlockers(errors, health.knownBlockers);
 
@@ -191,6 +209,16 @@ function validateProcess(errors, processInfo) {
 
   if (!Number.isInteger(processInfo.uptimeMs) || processInfo.uptimeMs < 0) {
     errors.push('process.uptimeMs must be a non-negative integer');
+  }
+}
+
+function validateSidecarHost(errors, sidecarHost) {
+  const result = validateSidecarHostLifecycleContract(sidecarHost);
+
+  if (!result.ok) {
+    for (const error of result.errors) {
+      errors.push(`sidecarHost.${error}`);
+    }
   }
 }
 

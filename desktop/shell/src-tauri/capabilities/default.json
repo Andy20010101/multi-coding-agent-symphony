@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-shell",
+  "description": "Default capability for the Symphony Desktop Shell window. Custom commands remain fixed to sidecar attach/launch bridge handlers.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

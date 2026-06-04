@@ -52,6 +52,10 @@ describe('v33 local runtime health contract', () => {
       assert.equal(health.readOnly, true);
       assert.equal(health.process.repoPath, root);
       assert.equal(health.process.uptimeMs, 3000);
+      assert.equal(health.sidecarHost.contractName, 'sidecar-host-lifecycle.v1');
+      assert.equal(health.sidecarHost.attach.state, 'attached');
+      assert.equal(health.sidecarHost.launcher.commandId, 'symphony.console.sidecar.launch');
+      assert.equal(health.sidecarHost.launcher.rendererLaunchAvailable, false);
       assert.equal(health.boundaries.actionExecutionAvailable, false);
       assert.equal(health.boundaries.jobQueueAvailable, false);
       assert.equal(health.boundaries.modelInvocationAvailable, false);
@@ -128,6 +132,8 @@ describe('v33 local runtime health contract', () => {
           errors: []
         });
         assert.equal(health.process.repoPath, root);
+        assert.equal(health.sidecarHost.attach.sourceContract, 'local-runtime-health.v1');
+        assert.equal(health.sidecarHost.boundaries.arbitraryCommandAvailable, false);
         assert.equal(health.boundaries.arbitraryCommandExecutionAvailable, false);
 
         const postResponse = await fetch(`${baseUrl}/api/health`, { method: 'POST' });

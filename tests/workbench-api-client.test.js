@@ -63,6 +63,7 @@ describe('v15 Workbench read-only API client', () => {
       READONLY_API_ROUTES.map((route) => [route.method, route.path, route.contractName]),
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
+        ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
@@ -96,6 +97,7 @@ describe('v15 Workbench read-only API client', () => {
       READONLY_API_ROUTE_ALLOWLIST.map((route) => [route.method, route.path, route.contractName]),
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
+        ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
@@ -169,6 +171,208 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(action.requiresPlanHash.value, true);
     assert.equal(action.writesInPreview.value, false);
     assert.equal(action.executionAvailable.value, false);
+  });
+
+  it('projects the v37 Desktop Shell view model from existing read-only contracts', () => {
+    const runtimeSnapshotContract = JSON.parse(`{
+        "contractName": "app-state-snapshot.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "generatedAt": "2026-06-03T00:00:00.000Z",
+        "freshness": { "status": "current", "age_ms": 0, "stale_after_ms": 5000 },
+        "runtime_health": {
+          "status": "ok",
+          "mode": "sidecar",
+          "runtime": { "version": "v33-app-runtime-foundation.1" },
+          "kernel": { "version": "v32 Release Manager Workspace v2" },
+          "process": { "cwd": "/repo", "repoPath": "/repo" },
+          "sidecarHost": {
+            "contractName": "sidecar-host-lifecycle.v1",
+            "contractVersion": 1,
+            "generatedAt": "2026-06-03T00:00:00.000Z",
+            "hostKind": "tauri-native-host",
+            "sidecarKind": "symphony-console-sidecar",
+            "lifecycle": "attached",
+            "attach": {
+              "state": "attached",
+              "strategy": "current-runtime-health",
+              "healthRoute": "/api/health",
+              "endpoint": "/api/health",
+              "processId": 4321,
+              "sourceContract": "local-runtime-health.v1"
+            },
+            "launcher": {
+              "state": "defined",
+              "commandId": "symphony.console.sidecar.launch",
+              "nativeHostRequired": true,
+              "rendererLaunchAvailable": false,
+              "allowedHosts": ["127.0.0.1", "localhost"],
+              "allowedPortRange": { "min": 1024, "max": 65535 },
+              "stateDirScope": "repo-local .symphony only",
+              "source": "desktop/shell/src-tauri controlled command registry"
+            },
+            "boundaries": {
+              "readOnlyHealth": true,
+              "rendererShellExecutionAvailable": false,
+              "genericShellRunnerAvailable": false,
+              "arbitraryCommandAvailable": false,
+              "arbitraryPathAvailable": false,
+              "modelInvocationAvailable": false,
+              "gitWriteAvailable": false,
+              "releaseWriteAvailable": false
+            }
+          }
+        },
+        "current_project": {
+          "resolution": { "status": "resolved" },
+          "currentProject": {
+            "project_name": "Multi Coding Agent Symphony",
+            "project_id": "multi-coding-agent-symphony",
+            "repo_path": "/repo",
+            "default_branch": "main",
+            "last_goal_id": "v37-desktop-shell-mvp",
+            "last_run_id": "run-v37-task-1"
+          }
+        },
+        "active_goal": {
+          "goal_id": "v37-desktop-shell-mvp",
+          "goal_title": "v37 Desktop Shell MVP",
+          "summary": { "completedTasks": 0, "totalTasks": 5 },
+          "status_source": "goal-progress-ledger.v1"
+        },
+        "current_task": {
+          "task_id": "task-1",
+          "title": "Desktop shell decision and minimal workspace",
+          "status": "planned",
+          "role": "worker",
+          "phase": "implement",
+          "blocked": false
+        },
+        "next_action": {
+          "status": "action-required",
+          "reason": "No worker evidence is recorded.",
+          "afterCompletion": { "registerWith": "symphony goal update" },
+          "copyOnlyCommands": []
+        },
+        "release_status": null,
+        "evidence_refs": [],
+        "known_blockers": [],
+        "boundaries": {
+          "readOnly": true,
+          "writesInSnapshotPath": false,
+          "actionExecutionAvailable": false,
+          "jobQueueAvailable": false,
+          "modelInvocationAvailable": false,
+          "gitWriteAvailable": false,
+          "releaseWriteAvailable": false,
+          "arbitraryCommandExecutionAvailable": false,
+          "confirmCommandAvailable": false
+        }
+      }`);
+    const projectRegistryContract = createV37ProjectRegistryPayload();
+    const latestRunContract = createV37LatestRunPayload();
+    const [safePreviewRoute] = createSafeArtifactPreviewRoutes(latestRunContract.run.artifactRefs);
+    const model = projectWorkbenchContracts({
+      projectRegistry: createWorkbenchResult('projectRegistry', projectRegistryContract),
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', runtimeSnapshotContract),
+      latestRun: createWorkbenchResult('latestRun', latestRunContract),
+      jobModel: createWorkbenchResult('jobModel', createV37JobModelPayload()),
+      jobCreation: createWorkbenchResult('jobCreation', createV37JobCreationPayload()),
+      jobTimeline: createWorkbenchResult('jobTimeline', createV37JobTimelinePayload()),
+      jobRunControl: createWorkbenchResult('jobRunControl', createV37JobRunControlPayload()),
+      artifactIndex: createWorkbenchResult('artifactIndex', createV37ArtifactIndexPayload()),
+      evidenceTimeline: createWorkbenchResult('evidenceTimeline', createV37EvidenceTimelinePayload()),
+      releaseBundle: createWorkbenchResult('releaseBundle', createV37ReleaseBundlePayload()),
+      safeArtifactPreviews: [
+        createWorkbenchRouteResult(safePreviewRoute, createV37SafeArtifactPreviewPayload())
+      ]
+    });
+
+    assert.equal(model.desktopShell.modelName.text, 'DesktopShellMvpViewModel');
+    assert.equal(model.desktopShell.shellDecision.selected.text, 'Tauri-first desktop shell');
+    assert.equal(model.desktopShell.shellDecision.deferredAlternative.text, 'Electron deferred');
+    assert.equal(model.desktopShell.shellDecision.workspace.text, 'desktop/shell/src-tauri + /workbench/desktop/');
+    assert.equal(model.desktopShell.shellDecision.hostBridgeAvailable.value, true);
+    assert.equal(model.desktopShell.route.path.text, '/workbench/desktop/');
+    assert.equal(model.desktopShell.sidecarHealth.state.text, 'attached');
+    assert.equal(model.desktopShell.sidecarHealth.attachState.text, 'attached');
+    assert.equal(model.desktopShell.sidecarHealth.lifecycleContract.text, 'sidecar-host-lifecycle.v1');
+    assert.equal(model.desktopShell.sidecarHealth.launcherState.text, 'defined');
+    assert.equal(model.desktopShell.sidecarHealth.launcherAvailable.value, true);
+    assert.equal(model.desktopShell.sidecarHealth.rendererLaunchAvailable.value, false);
+    assert.equal(model.desktopShell.sidecarHealth.launcherHandoff.text, 'symphony.console.sidecar.launch');
+    assert.equal(model.desktopShell.workspace.project.text, 'Multi Coding Agent Symphony');
+    assert.equal(model.projectRegistry.contractName.text, 'project-registry.v1');
+    assert.equal(model.projectRegistry.projects.count.value, 2);
+    assert.equal(model.desktopShell.projectList.contractName.text, 'project-registry.v1');
+    assert.equal(model.desktopShell.projectList.routeState.text, 'ready');
+    assert.equal(model.desktopShell.projectList.projects.items[0].name.text, 'Multi Coding Agent Symphony');
+    assert.equal(model.desktopShell.projectList.projects.items[0].lastGoalId.text, 'v37-desktop-shell-mvp');
+    assert.equal(model.desktopShell.projectList.sourcePolicy.text, 'project-registry.v1 + current-project-resolver.v1');
+    assert.equal(model.desktopShell.activeGoalStatus.goalId.text, 'v37-desktop-shell-mvp');
+    assert.equal(model.desktopShell.activeGoalStatus.currentTaskId.text, 'task-1');
+    assert.equal(model.desktopShell.activeGoalStatus.currentTaskBlocked.value, false);
+    assert.equal(model.desktopShell.activeGoalStatus.reviewVerdict.state, 'missing');
+    assert.equal(model.desktopShell.activeGoalStatus.mainVerificationStatus.state, 'missing');
+    assert.equal(model.desktopShell.activeGoalStatus.releaseReady.state, 'missing');
+    assert.equal(model.desktopShell.activeGoalStatus.sourcePolicy.text, 'app-state-snapshot.v1 + goal-progress-ledger.v1 + goal-event-log.v1');
+    assert.equal(model.desktopShell.nextActionDetail.taskId.text, 'task-1');
+    assert.equal(model.desktopShell.nextActionDetail.role.text, 'worker');
+    assert.equal(model.desktopShell.nextActionDetail.phase.text, 'implement');
+    assert.equal(model.desktopShell.nextActionDetail.sourcePolicy.text, 'goal-next-action.v1');
+    assert.equal(model.desktopShell.firstRowCards.items.map((card) => card.label.text).join(', '), 'Active goal, Next action, Run health');
+    assert.equal(model.desktopShell.jobRun.sourcePolicy.text, 'job-model.v1 + job-creation.v1 + job-timeline-log-stream.v1 + job-run-control.v1');
+    assert.equal(model.desktopShell.jobRun.jobId.text, 'job-v37-task-4');
+    assert.equal(model.desktopShell.jobRun.status.text, 'running');
+    assert.equal(model.desktopShell.jobRun.queueState.text, 'leased');
+    assert.equal(model.desktopShell.jobRun.actionId.text, 'goal.worker-evidence.record');
+    assert.equal(model.desktopShell.jobRun.createdAt.text, '2026-06-04T00:00:00.000Z');
+    assert.equal(model.desktopShell.jobRun.leasedAt.text, '2026-06-04T00:01:00.000Z');
+    assert.equal(model.desktopShell.jobRun.blocker.state, 'empty');
+    assert.equal(model.desktopShell.jobRun.failure.state, 'empty');
+    assert.equal(model.desktopShell.jobRun.creation.jobExecutionAvailable.value, false);
+    assert.equal(model.desktopShell.jobRun.timeline.eventCount.value, 2);
+    assert.equal(model.desktopShell.jobRun.timeline.logRefCount.value, 1);
+    assert.equal(model.desktopShell.jobRun.runControl.availableTransitions.items.map((item) => item.text).join(', '), 'pause, cancel');
+    assert.equal(model.desktopShell.jobRun.runControl.transitionTable.count.value, 4);
+    assert.equal(model.desktopShell.jobRun.boundaries.arbitraryCommandExecutionAvailable.value, false);
+    assert.equal(model.artifactIndex.contractName.text, 'artifact-index.v1');
+    assert.equal(model.artifactIndex.entries.count.value, 2);
+    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1');
+    assert.equal(model.desktopShell.artifactReadiness.status.text, 'partial');
+    assert.equal(model.desktopShell.artifactReadiness.missing.value, 1);
+    assert.equal(model.desktopShell.artifactReadiness.safePreviewRoutes.value, 1);
+    assert.equal(model.desktopShell.artifactReadiness.previewAvailable.value, 1);
+    assert.equal(model.desktopShell.artifactReadiness.safeInlineAvailable.value, 1);
+    assert.equal(model.desktopShell.artifactReadiness.previewItems.items[0].contractName.text, 'safe-artifact-preview.v1');
+    assert.equal(model.desktopShell.artifactReadiness.previewItems.items[0].previewRoute.text, '/api/runs/run-v37-task-4/artifacts/evidence/preview');
+    assert.equal(model.desktopShell.artifactReadiness.artifactIndexState.text, 'available');
+    assert.equal(model.desktopShell.artifactReadiness.artifactIndexEntries.value, 2);
+    assert.equal(model.desktopShell.artifactReadiness.artifactIndexCanonicalSource.text, 'ArtifactStore');
+    assert.equal(model.desktopShell.artifactReadiness.evidenceTimelineState.text, 'available');
+    assert.equal(model.desktopShell.artifactReadiness.evidenceEntryCount.value, 1);
+    assert.equal(model.desktopShell.artifactReadiness.releaseBundleState.text, 'available');
+    assert.equal(model.desktopShell.artifactReadiness.releaseTaskCount.value, 1);
+    assert.equal(model.desktopShell.artifactReadiness.releaseReady.value, false);
+    assert.equal(model.desktopShell.artifactReadiness.releaseDecisionAvailable.value, false);
+    assert.equal(model.desktopShell.artifactReadiness.boundaries.localFileOpenAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.shellCommandExecutionAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.modelInvocationAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.arbitraryLocalFileOpenAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.gitWriteAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.releaseReadyDeclared.value, false);
+    assert.equal(model.desktopShell.boundaries.statusSource.text, 'explicit backend contracts only');
+
+    const missingSidecarHostContract = structuredClone(runtimeSnapshotContract);
+    delete missingSidecarHostContract.runtime_health.sidecarHost;
+
+    const missingSidecarHostModel = projectWorkbenchContracts({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', missingSidecarHostContract)
+    });
+
+    assert.equal(missingSidecarHostModel.desktopShell.sidecarHealth.state.text, 'missing');
+    assert.equal(missingSidecarHostModel.desktopShell.sidecarHealth.attachState.state, 'missing');
+    assert.equal(missingSidecarHostModel.desktopShell.sidecarHealth.lifecycleContract.state, 'missing');
   });
 
   it('uses GET for every client request', async () => {
@@ -4228,6 +4432,19 @@ function createWorkbenchResult(routeId, data) {
   };
 }
 
+function createWorkbenchRouteResult(route, data) {
+  assert.notEqual(route, undefined);
+
+  return {
+    ok: true,
+    route: route.path,
+    method: route.method,
+    routeDescriptor: route,
+    httpStatus: 200,
+    data
+  };
+}
+
 function createActionManifestPayload() {
   return {
     contractName: 'action-manifest.v1',
@@ -5577,6 +5794,440 @@ function createV17ReadonlyPayloadEntries({
       }
     }]
   ];
+}
+
+function createV37ProjectRegistryPayload() {
+  return {
+    contractName: 'project-registry.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    source: {
+      kind: 'repo-local-metadata',
+      scanScope: 'cwd-or-explicit-repo-path',
+      stateDir: '.symphony',
+      writes: false
+    },
+    projects: [
+      {
+        project_id: 'multi-coding-agent-symphony',
+        project_name: 'Multi Coding Agent Symphony',
+        repo_path: '/repo',
+        default_branch: 'main',
+        remote_url: 'git@example.com:fixture/mcas.git',
+        last_goal_id: 'v37-desktop-shell-mvp',
+        last_run_id: 'run-v37-task-1',
+        health_status: 'ok',
+        last_opened_at: '2026-06-04T00:00:00.000Z',
+        pinned: false
+      },
+      {
+        project_id: 'docs-only-project',
+        project_name: 'Docs Only Project',
+        repo_path: '/repo/docs',
+        default_branch: 'main',
+        remote_url: null,
+        last_goal_id: null,
+        last_run_id: null,
+        health_status: 'unknown',
+        last_opened_at: null,
+        pinned: false
+      }
+    ],
+    currentProjectId: 'multi-coding-agent-symphony',
+    resolution: {
+      status: 'resolved',
+      strategy: 'cwd',
+      inputPath: '/repo',
+      repoPath: '/repo',
+      stateDir: '.symphony',
+      readOnly: true,
+      blockers: []
+    },
+    boundaries: {
+      readOnly: true,
+      diskScanScope: 'cwd-or-explicit-repo-path-only',
+      registryDatabaseWritesAvailable: false,
+      actionExecutionAvailable: false,
+      jobQueueAvailable: false,
+      modelInvocationAvailable: false,
+      gitWriteAvailable: false,
+      releaseWriteAvailable: false,
+      arbitraryCommandExecutionAvailable: false
+    }
+  };
+}
+
+function createV37JobModelPayload() {
+  return {
+    contractName: 'job-model.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      goalId: 'v37-desktop-shell-mvp',
+      taskId: 'task-4',
+      actionId: 'goal.worker-evidence.record',
+      sourceContracts: ['action-preview.v1', 'goal-runbook.v1', 'goal-next-action.v1'],
+      stateSource: 'explicit-backend-contracts'
+    },
+    job: {
+      job_id: 'job-v37-task-4',
+      project_id: 'multi-coding-agent-symphony',
+      goal_id: 'v37-desktop-shell-mvp',
+      task_id: 'task-4',
+      action_id: 'goal.worker-evidence.record',
+      status: 'running',
+      queue_state: 'leased',
+      refs: [],
+      timestamps: {
+        created_at: '2026-06-04T00:00:00.000Z',
+        leased_at: '2026-06-04T00:01:00.000Z',
+        passed_at: null,
+        failed_at: null,
+        cancelled_at: null
+      },
+      blocker: null,
+      failure: null
+    },
+    boundaries: {
+      readOnly: true,
+      jobExecutionAvailable: false,
+      actionExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      arbitraryCommandExecutionAvailable: false,
+      arbitraryPathReadAvailable: false,
+      gitWriteAvailable: false,
+      mergeAvailable: false,
+      pushAvailable: false,
+      tagAvailable: false,
+      publishAvailable: false,
+      selfApprovalAvailable: false
+    }
+  };
+}
+
+function createV37JobCreationPayload() {
+  return {
+    contractName: 'job-creation.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      goalId: 'v37-desktop-shell-mvp',
+      taskId: 'task-4',
+      actionId: 'goal.worker-evidence.record',
+      sourceContracts: ['action-preview.v1', 'job-model.v1'],
+      stateSource: 'explicit-backend-contracts'
+    },
+    plan: {
+      dryRun: true,
+      requiresConfirmation: true,
+      jobExecutionAvailable: false,
+      writesEventLog: false,
+      writesQueueState: false,
+      createsPersistentJob: false
+    },
+    warnings: [],
+    blockers: [],
+    boundaries: {
+      readOnly: true,
+      dryRun: true,
+      jobExecutionAvailable: false,
+      actionExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      arbitraryCommandExecutionAvailable: false
+    }
+  };
+}
+
+function createV37JobTimelinePayload() {
+  return {
+    contractName: 'job-timeline-log-stream.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      jobId: 'job-v37-task-4',
+      goalId: 'v37-desktop-shell-mvp',
+      taskId: 'task-4',
+      sourceContracts: ['job-model.v1', 'job-creation.v1'],
+      stateSource: 'explicit-backend-contracts'
+    },
+    timeline: [
+      { eventId: 'job-event-1', status: 'queued', timestamp: '2026-06-04T00:00:00.000Z' },
+      { eventId: 'job-event-2', status: 'running', timestamp: '2026-06-04T00:01:00.000Z' }
+    ],
+    logRefs: [
+      { ref: 'log:job-v37-task-4:worker', kind: 'worker-log' }
+    ],
+    boundaries: {
+      readOnly: true,
+      jobExecutionAvailable: false,
+      arbitraryPathReadAvailable: false,
+      logRefSource: 'structured-log-refs-only'
+    }
+  };
+}
+
+function createV37JobRunControlPayload() {
+  return {
+    contractName: 'job-run-control.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      jobId: 'job-v37-task-4',
+      goalId: 'v37-desktop-shell-mvp',
+      taskId: 'task-4',
+      sourceContracts: ['job-model.v1', 'job-timeline-log-stream.v1'],
+      stateSource: 'explicit-backend-contracts'
+    },
+    currentState: 'running',
+    availableTransitions: ['pause', 'cancel'],
+    transitions: [
+      {
+        id: 'pause',
+        label: 'Pause',
+        description: 'Pause a queued or running job.',
+        validFrom: ['queued', 'running'],
+        to: 'blocked',
+        reversible: true,
+        terminal: false
+      },
+      {
+        id: 'cancel',
+        label: 'Cancel',
+        description: 'Cancel a queued, running, blocked, or failed job.',
+        validFrom: ['queued', 'running', 'blocked', 'failed'],
+        to: 'cancelled',
+        reversible: false,
+        terminal: true
+      },
+      {
+        id: 'resume',
+        label: 'Resume',
+        description: 'Resume a blocked job after the blocker is resolved.',
+        validFrom: ['blocked'],
+        to: 'queued',
+        reversible: false,
+        terminal: false
+      },
+      {
+        id: 'recover',
+        label: 'Recover',
+        description: 'Recover a failed job explicitly.',
+        validFrom: ['failed'],
+        to: 'queued',
+        reversible: false,
+        terminal: false
+      }
+    ],
+    boundaries: {
+      readOnly: true,
+      jobExecutionAvailable: false,
+      actionExecutionAvailable: false,
+      hiddenRetryAvailable: false
+    }
+  };
+}
+
+function createV37LatestRunPayload() {
+  return {
+    contractName: 'symphony.console-run',
+    contractVersion: '1',
+    run: {
+      runId: 'run-v37-task-4',
+      status: 'running',
+      verifierStatus: 'pending',
+      modelInvocation: false,
+      artifactStatus: {
+        status: 'partial',
+        total: 2,
+        available: 1,
+        missing: 1,
+        unknown: 0,
+        missingKinds: ['summary'],
+        missingRefs: [{ kind: 'summary', path: '/repo/.symphony/artifacts/run-v37-task-4/summary.md' }]
+      },
+      artifactRefs: [
+        {
+          kind: 'evidence',
+          ref: 'artifact:run-v37-task-4:evidence',
+          uri: '/api/runs/run-v37-task-4/artifacts/evidence/preview'
+        },
+        {
+          kind: 'summary',
+          ref: 'artifact:run-v37-task-4:summary',
+          uri: '/api/runs/run-v37-task-4/artifacts/summary/preview',
+          status: 'missing'
+        }
+      ],
+      timeline: []
+    }
+  };
+}
+
+function createV37SafeArtifactPreviewPayload() {
+  return {
+    contractName: 'safe-artifact-preview.v1',
+    contractVersion: '1',
+    ref: 'artifact:run-v37-task-4:evidence',
+    uri: '/api/runs/run-v37-task-4/artifacts/evidence/preview',
+    mime: 'text/markdown; charset=utf-8',
+    displayTitle: 'Task-4 worker evidence preview',
+    artifactKind: 'evidence',
+    sourceRunId: 'run-v37-task-4',
+    sizeBytes: 512,
+    previewAvailable: true,
+    safeToRenderInline: true,
+    truncated: false,
+    truncationReason: null,
+    maxPreviewBytes: 204800,
+    previewText: 'Task-4 evidence preview generated by safe preview contract.',
+    downloadAvailable: false
+  };
+}
+
+function createV37ArtifactIndexPayload() {
+  return {
+    contractName: 'artifact-index.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      projectId: 'multi-coding-agent-symphony',
+      goalId: 'v37-desktop-shell-mvp',
+      taskId: 'task-4',
+      runId: 'run-v37-task-4',
+      jobId: 'job-v37-task-4',
+      sourceContracts: ['artifact-store.v1', 'goal-runbook.v1', 'goal-progress-ledger.v1', 'goal-event-log.v1'],
+      stateSource: 'explicit-backend-contracts',
+      canonicalSource: 'ArtifactStore',
+      indexRole: 'derived-cache-and-search-only',
+      entryCount: 2
+    },
+    entries: [
+      {
+        artifact_ref: 'artifact:run-v37-task-4:evidence',
+        content_hash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+        kind: 'evidence',
+        goal_id: 'v37-desktop-shell-mvp',
+        task_id: 'task-4',
+        run_id: 'run-v37-task-4',
+        job_id: 'job-v37-task-4',
+        evidence_kind: 'worker',
+        timestamps: {
+          created_at: '2026-06-04T00:02:00.000Z',
+          indexed_at: '2026-06-04T00:02:01.000Z'
+        },
+        labels: [],
+        file_path: null
+      },
+      {
+        artifact_ref: 'artifact:run-v37-task-4:summary',
+        content_hash: null,
+        kind: 'summary',
+        goal_id: 'v37-desktop-shell-mvp',
+        task_id: 'task-4',
+        run_id: 'run-v37-task-4',
+        job_id: 'job-v37-task-4',
+        evidence_kind: null,
+        timestamps: {
+          created_at: '2026-06-04T00:02:00.000Z',
+          indexed_at: '2026-06-04T00:02:01.000Z'
+        },
+        labels: [],
+        file_path: null
+      }
+    ],
+    boundaries: {
+      readOnly: true,
+      canonicalSource: 'ArtifactStore is canonical, index is derived cache only',
+      localFileOpenAvailable: false,
+      artifactDownloadAvailable: false,
+      arbitraryPathReadAvailable: false
+    }
+  };
+}
+
+function createV37EvidenceTimelinePayload() {
+  return {
+    contractName: 'evidence-timeline.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      goalId: 'v37-desktop-shell-mvp',
+      taskId: 'task-4',
+      sourceContracts: ['artifact-store.v1', 'artifact-index.v1', 'goal-event-log.v1'],
+      stateSource: 'explicit-backend-contracts',
+      canonicalSource: 'ArtifactStore',
+      timelineRole: 'derived-view-only',
+      entryCount: 1
+    },
+    timeline: [
+      {
+        artifact_ref: 'artifact:run-v37-task-4:evidence',
+        goal_id: 'v37-desktop-shell-mvp',
+        task_id: 'task-4',
+        kind: 'evidence',
+        evidence_kind: 'worker',
+        timestamp: '2026-06-04T00:02:00.000Z',
+        content_hash: null,
+        labels: [],
+        file_path: null
+      }
+    ],
+    boundaries: {
+      readOnly: true,
+      canonicalSource: 'ArtifactStore'
+    }
+  };
+}
+
+function createV37ReleaseBundlePayload() {
+  return {
+    contractName: 'release-bundle.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      goalId: 'v37-desktop-shell-mvp',
+      sourceContracts: ['artifact-store.v1', 'artifact-index.v1', 'goal-event-log.v1'],
+      stateSource: 'explicit-backend-contracts',
+      canonicalSource: 'ArtifactStore',
+      bundleRole: 'derived-view-only'
+    },
+    bundle: {
+      goalId: 'v37-desktop-shell-mvp',
+      taskCount: 1,
+      tasks: [
+        {
+          taskId: 'task-4',
+          workerEvidence: [
+            {
+              eventId: 'evt-v37-task-4-worker',
+              evidenceRefs: ['docs/plans/v37-task-4-worker-evidence-2026-06-02.md'],
+              timestamp: '2026-06-04T00:02:00.000Z',
+              actor: 'codex-v37-task-4-worker'
+            }
+          ],
+          reviewEvidence: [],
+          mainVerification: [],
+          releaseEvidence: []
+        }
+      ],
+      releaseGates: [],
+      releaseReady: false,
+      note: 'Derived read-only release bundle.'
+    },
+    boundaries: {
+      readOnly: true,
+      canonicalSource: 'ArtifactStore',
+      releaseDecisionAvailable: false
+    }
+  };
 }
 
 function createV19RunbookPayload() {

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Symphony Desktop Shell",
+  "version": "0.1.0",
+  "identifier": "dev.symphony.desktop-shell",
+  "build": {
+    "beforeDevCommand": "pnpm --dir ../../.. workbench:dev",
+    "devUrl": "http://127.0.0.1:5173/workbench/desktop/",
+    "beforeBuildCommand": "pnpm --dir ../../.. workbench:build",
+    "frontendDist": "../../../src/symphony/workbench-static"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Symphony Desktop Shell",
+        "url": "/workbench/desktop/",
+        "width": 1280,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all"
+  }
+}
