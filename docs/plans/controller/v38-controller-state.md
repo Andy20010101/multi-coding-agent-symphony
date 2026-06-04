@@ -17,11 +17,14 @@ origin/main: 7f0108b8c9c4658219f91aa8c687f3b1ae03cfd0
 GitHub Release: https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v37
 ```
 
-Known managed-goal state issue:
+Managed-goal state:
 
 ```text
-pnpm --silent symphony goal-status --goal v37-desktop-shell-mvp --json
-returns exit 64 / goal not found in this checkout.
+v38 managed runbook is registered.
+Registered by controller command: /goal continue
+Plan hash: sha256:3ab0de93b8fc56bff95d75d7df230fe66073ae0782d0030b571b371bdcf3dfe7
+Runbook state: .symphony/goals/runbooks/v38-provider-hub-capability-profiles.json
+Latest active goal pointer: .symphony/goals/latest-active-goal.json
 ```
 
 Use v37 release, tag, and GitHub Release evidence on `origin/main` as the v37 baseline source.
@@ -54,7 +57,7 @@ codex/controller-loop-ops
 4. `task-4`: Worker/reviewer lane assignment preview
 5. `task-5`: Agent CLI Provider Hub panel + evidence
 
-Current intended start:
+Current intended next action:
 
 ```text
 task-1 worker
@@ -94,18 +97,85 @@ Do not run mutation, audit, doctor, real CLI, tag, push, or publish unless expli
 
 ## Last Reconciliation
 
-Status before controller thread starts:
+Command received:
 
 ```text
-main is clean and aligned with origin/main at 7f0108b.
-v38 worktree exists and is clean at branch codex/v38-task-1-provider-profile-contract.
+/goal continue
+```
+
+Files read:
+
+```text
+docs/plans/controller/master-once-prompt.md
+docs/plans/controller/README.md
+docs/plans/controller/v38-controller-state.md
+docs/plans/controller/subagent-result-format.md
+docs/plans/controller/subagent-dispatch-log.md
+fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json
+docs/plans/workbench-v33-v40-app-runtime-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
+docs/release-checklist.md
+```
+
+Missing files recorded during startup read:
+
+```text
+docs/plans/v37-release-process-audit-2026-06-04.md
+docs/plans/v37-release-to-v38-agent-cli-provider-handoff-2026-06-04.md
+docs/plans/v38-agent-cli-provider-hub-mvp-2026-06-04.md
+```
+
+Git state after reconcile:
+
+```text
+controller worktree is clean on codex/controller-loop-ops at 01a1041 before this checkpoint update.
+main is aligned with origin/main at 7f0108b.
+v38 task-1 worktree exists and is clean at branch codex/v38-task-1-provider-profile-contract, commit 7f0108b.
 remote branch origin/codex/test-hardening-convergence remains for separate review.
 local archive/v37-legacy-task0-runbook-09c926f remains as short-term safety reference.
-dirty legacy worktrees were stashed during git cleanup.
+```
+
+Controller action completed:
+
+```text
+pnpm --silent symphony goal init --from-json fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json --goal v38-provider-hub-capability-profiles --dry-run --json
+pnpm --silent symphony goal init --from-json fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json --goal v38-provider-hub-capability-profiles --confirm --plan-hash sha256:3ab0de93b8fc56bff95d75d7df230fe66073ae0782d0030b571b371bdcf3dfe7 --json
+```
+
+Result:
+
+```text
+v38 managed runbook registered.
+No task event registered.
+No subagent dispatched.
+No mutation, audit, doctor, real CLI, tag, or push command run.
+```
+
+Reconcile after action:
+
+```text
+pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json
+returns goal-progress-ledger.v1 with 5 planned tasks and 0 completed tasks.
+
+pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --json
+returns action-required: task-1 worker, reason: No explicit worker evidence is recorded for task-1.
+```
+
+Evidence refs:
+
+```text
+task-1 worker evidence: null
+task-1 review evidence: null
+task-1 main verification evidence: null
+```
+
+Subagent:
+
+```text
+none created or steered in this turn
 ```
 
 ## Next Suggested Command
 
 ```text
-/goal continue
+/goal autopilot --steps 3 --stop-on-subagent
 ```

@@ -34,6 +34,7 @@ Use these messages in the controller thread:
 /goal status
 /goal reconcile
 /goal continue
+/goal autopilot --steps 3
 /goal dispatch task-1 worker
 /goal review task-1
 /goal verify task-1
@@ -41,6 +42,46 @@ Use these messages in the controller thread:
 ```
 
 The controller should treat `/goal continue` as: reconcile first, identify the next runbook-backed action, and do one bounded step.
+
+The controller should treat `/goal autopilot --steps <N>` as: run up to `N` bounded controller actions without waiting for another user message, stopping early on any stop condition below.
+
+## Autopilot
+
+Autopilot exists so the user does not need to watch every controller turn. It is still bounded and evidence-driven.
+
+Default limits:
+
+```text
+max steps: 3
+max subagents started per command: 1
+max role advancement per task: one role at a time
+max release stage: no release closeout unless explicitly requested
+```
+
+Autopilot may:
+
+- reconcile state;
+- register a missing managed goal/runbook when the runbook fixture is valid;
+- dispatch the next required worker, reviewer, or verifier subagent;
+- update the dispatch log and checkpoint;
+- inspect completed subagent results when they are already available;
+- register a goal event only when evidence is present and the dry-run plan hash is confirmed by the controller in the same turn.
+
+Autopilot must stop when:
+
+- a worktree is dirty and the change is not from the current controller turn;
+- a subagent is running or was just dispatched;
+- expected evidence is missing;
+- a test, build, or validation command fails;
+- the next action would require mutation, audit, doctor, real CLI, tag, push, publish, broad cleanup, or destructive git commands;
+- the next action depends on product or scope judgment not already written in the runbook/checkpoint;
+- context guard recommends `/compact` or a fresh controller thread.
+
+Recommended unattended command:
+
+```text
+/goal autopilot --steps 3 --stop-on-subagent
+```
 
 ## Context Guard
 

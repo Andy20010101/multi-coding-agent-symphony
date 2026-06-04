@@ -56,6 +56,19 @@ When the user sends `/goal continue`:
 - If subagent work is needed, create or steer one subagent only.
 - If controller-only bookkeeping is needed, do that and stop.
 
+When the user sends `/goal autopilot --steps <N>`:
+
+- Reconcile first.
+- Apply the context guard before each step.
+- Run up to `N` bounded controller actions without waiting for another user message.
+- Default to `N = 3` when the command omits a step count.
+- Start at most one new subagent per autopilot command.
+- Advance at most one role for a task per autopilot command.
+- Stop immediately after dispatching a subagent unless the user explicitly adds `--wait-for-subagent`.
+- Stop before release closeout unless the command explicitly includes `--allow-closeout`.
+- Update the checkpoint after every completed step.
+- End with the next suggested `/goal` command.
+
 When the user sends `/goal dispatch <task-id> <role>`:
 
 - Apply the context guard.
@@ -111,6 +124,25 @@ Checkpoint and recommend a fresh controller thread or manual `/compact` when any
 - A visible compaction summary has replaced details needed for the next action.
 
 For this temporary system, the safe default is one bounded controller action per `/goal continue`, followed by a checkpoint.
+
+## Autopilot Stop Conditions
+
+Autopilot must stop when:
+
+- a worktree is dirty and the change is not from the current controller turn;
+- a subagent is running or was just dispatched;
+- expected evidence is missing;
+- a test, build, or validation command fails;
+- the next action would require mutation, audit, doctor, real CLI, tag, push, publish, broad cleanup, or destructive git commands;
+- the next action depends on product or scope judgment not already written in the runbook/checkpoint;
+- context guard recommends `/compact` or a fresh controller thread.
+
+Autopilot may register goal events only when:
+
+- the evidence ref exists;
+- the event is supported by the current runbook;
+- the dry-run plan validates successfully;
+- the controller confirms with the exact plan hash returned in the same turn.
 
 ## v38 Boundaries
 
