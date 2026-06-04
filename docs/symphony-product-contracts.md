@@ -8,6 +8,8 @@ v37 task-3 extends `DesktopShellMvpViewModel` with `projectList`, `activeGoalSta
 
 v37 task-4 extends `DesktopShellMvpViewModel` with detailed `jobRun` and `artifactReadiness` projections. `jobRun` is projected from `job-model.v1`, `job-creation.v1`, `job-timeline-log-stream.v1`, and `job-run-control.v1`; it exposes job identity, status, queue state, action id, timestamps, blocker/failure, timeline/log counts, route readiness, and run-control transitions as read-only state. `artifactReadiness` is projected from latest run artifact refs, `artifact-index.v1`, backend `safe-artifact-preview.v1` route results, `evidence-timeline.v1`, and `release-bundle.v1`; it exposes ref counts, missing counts, safe preview availability, evidence timeline readiness, and release bundle state. The projection does not create or execute jobs, mutate job state, open local files, infer preview safety from filenames/extensions, replace ArtifactStore, or register release state.
 
+v37 task-5 records the Desktop Shell build smoke and packaging boundary. `desktop-shell-smoke.v1` verifies the fixed native bridge commands, disabled arbitrary command/path access, disabled renderer shell execution, and disabled bundle/publish/signing/notarization claims. Rust `cargo check` and `cargo build` validate the native host at compile level; full Tauri CLI packaging remains out of scope until the CLI is installed or declared.
+
 ## Shared Rules
 
 - `contractVersion` is the version gate. v8.2 emits `"1"`.

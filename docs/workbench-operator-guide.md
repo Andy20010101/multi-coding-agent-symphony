@@ -4,7 +4,7 @@
 
 Workbench v1 是日常操作入口。`symphony console` 启动本地服务器后，操作者打开 `/workbench/`，按 active goal、next action、prompt handoff、event registration、review/revision、main verification、closeout/release 的顺序推进工作。
 
-当前仓库 release tag 是 `v35`。`v28` 发布 Workbench v1 的 v20-v28 完整链路；`v29` 到 `v32` 扩展 release-manager workspace；`v33` 发布本地 runtime foundation；`v34` 发布 Action Registry Workspace；`v35` 发布 Job Queue + Run Control Workspace。Workbench 继续把 goal/runbook 操作主线放在浏览器里，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
+当前仓库 release tag 是 `v37`。`v28` 发布 Workbench v1 的 v20-v28 完整链路；`v29` 到 `v32` 扩展 release-manager workspace；`v33` 发布本地 runtime foundation；`v34` 发布 Action Registry Workspace；`v35` 发布 Job Queue + Run Control Workspace；`v36` 发布 Artifact/Evidence Index Workspace；`v37` 发布 Desktop Shell MVP。Workbench 继续把 goal/runbook 操作主线放在浏览器里，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
 
 Workbench 消费 console server 暴露的本地 API，用于查看 app runtime snapshot、active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、Job Console、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities 和 diagnostics。
 
@@ -19,7 +19,7 @@ Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受�
 
 v18 增加 `goal-event-log.v1` 和 `goal-update-plan.v1`。v21 之前，`symphony goal update`、`symphony goal review`、`symphony goal gate` 的 dry-run / confirm 流程只在终端 CLI 中运行；Workbench 只展示后端已经写入的 event log 和 resolver 生成的 ledger。v21 后，Workbench 可以请求 dry-run 预览，并用 plan hash 完成受控 confirm。任何状态变化仍来自后端写入的 explicit event，不能由文件名、分支名、commit message 或前端判断替代。
 
-v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout` 和 `symphony next`。v20 到 v32 把 active goal runbook、task queue、prompt handoff、controlled event registration、review/revision、main verification、release closeout、release baseline、release checklist 和 next-version handoff 放到 Workbench 主路径。v33 增加 Runtime 面板；v34 增加 Action Registry Panel；v35 增加 Job Console。summary、runs、handoff、events、capabilities 和 diagnostics 是支撑信息。release-ready 仍需要显式登记 `symphony goal gate --gate release.ready --status declared`，不能从 Workbench 文案、文件名、分支或测试结果推断。
+v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout` 和 `symphony next`。v20 到 v32 把 active goal runbook、task queue、prompt handoff、controlled event registration、review/revision、main verification、release closeout、release baseline、release checklist 和 next-version handoff 放到 Workbench 主路径。v33 增加 Runtime 面板；v34 增加 Action Registry Panel；v35 增加 Job Console；v36 增加 Artifact/Evidence Index 视图；v37 增加 Desktop Shell 路由。summary、runs、handoff、events、capabilities 和 diagnostics 是支撑信息。release-ready 仍需要显式登记 `symphony goal gate --gate release.ready --status declared`，不能从 Workbench 文案、文件名、分支或测试结果推断。
 
 ## 日常操作路径
 
