@@ -22,6 +22,20 @@ Next: explicit `/goal` command; never bare `/goal continue`
 
 ## Entries
 
+Date: 2026-06-05
+Controller command: `/goal verify task-5 --fresh-controller`
+Goal id: `v38-provider-hub-capability-profiles`
+Task id: `task-5`
+Role: `main-verifier`
+Thread id: `019e955c-683a-7831-8851-7855ce7780ba`
+Branch: `codex/v38-task-5-provider-hub-panel-evidence`
+Worktree: `/Users/andy/.codex/worktrees/v38-task-5/multi-coding-agent-symphony`
+Prompt source: `docs/plans/controller/subagent-result-format.md`, `fixtures/contracts/goal-runbook.v38-provider-hub-capability-profiles.v1.json`, `docs/plans/v38-task-5-worker-evidence-2026-06-02.md`, `docs/plans/v38-task-5-review-evidence-2026-06-02.md`, managed ledger next-action output
+Expected evidence: `docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md`
+Status: completed; main.verification-passed event registered by controller
+Result ref: `docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md`; event `evt_73afffc64276405d`
+Next: `/supervisor tick` to start release-gate handling from a fresh phase.
+
 Date: 2026-06-04
 Controller command: `/goal autopilot --steps 3 --stop-on-subagent`
 Goal id: `v38-provider-hub-capability-profiles`

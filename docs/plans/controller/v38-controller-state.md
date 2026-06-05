@@ -62,8 +62,8 @@ Current controller state:
 ```text
 task-1 through task-4 are main-verified in the managed goal ledger.
 task-5 reviewer approved evidence exists and task-5 review event is registered.
-task-5 main verification is missing.
-next action is task-5 main-verifier.
+task-5 main verification was missing at fresh-controller reconciliation.
+task-5 main-verifier subagent is now dispatched and active.
 controller command policy: use phase rotation; /goal continue is one-step compatibility only.
 after automatic compaction, the compacted controller thread must not continue review, verification, gates, or event registration.
 ```
@@ -101,6 +101,116 @@ git diff --check
 Do not run mutation, audit, doctor, real CLI, tag, push, or publish unless explicitly requested or explicitly listed in the current runbook.
 
 ## Latest Reconciliation
+
+Date: 2026-06-05
+
+Command context:
+
+```text
+Received /goal verify task-5 --fresh-controller.
+This fresh controller consumed the completed task-5 main-verifier result only.
+No release closeout, mutation, audit, doctor, real CLI, tag, push, publish, or release gate execution was run.
+```
+
+Reconciled state before registration:
+
+```text
+Controller branch: codex/controller-loop-ops.
+Controller HEAD before registration: e9b08c1c59e0a17708e69a6ad85ee08f12a8f781.
+origin/main: 7f0108b8c9c4658219f91aa8c687f3b1ae03cfd0.
+Task-5 worktree: /Users/andy/.codex/worktrees/v38-task-5/multi-coding-agent-symphony.
+Task-5 branch: codex/v38-task-5-provider-hub-panel-evidence.
+Task-5 HEAD: b9711646c55117ce1a9a48fbed34dd1ecd70387d.
+Managed ledger before registration: task-5 approved, reviewVerdict APPROVED, mainVerificationRef null.
+Managed next action before registration: task-5 main-verifier/main-verification because reviewer approved task-5 but main verification was missing.
+Expected evidence existed in the task-5 worktree: docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md.
+Expected evidence was not present in the controller ops worktree.
+```
+
+Verifier result consumed:
+
+```text
+Verifier subagent thread id: 019e955c-683a-7831-8851-7855ce7780ba.
+Verifier status: passed.
+Event requested: main.verification-passed.
+Evidence ref: docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md.
+Validation reported by verifier: git diff --check passed; pnpm check passed; pnpm test passed with 1015 tests; pnpm workbench:build passed.
+Risks reported by verifier: task worktree lacks .symphony managed-goal state; ledger context was verified from controller root.
+```
+
+Controller action:
+
+```text
+Dry-run command: pnpm --silent symphony goal gate --goal v38-provider-hub-capability-profiles --gate main-verification --status passed --verifier 019e955c-683a-7831-8851-7855ce7780ba --evidence-ref docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md --task task-5 --dry-run.
+Dry-run plan hash: sha256:994e30367a03e9800888c768e3d60f456b815acbb376daa9d84d29a5bd71f997.
+Confirmed in the same controller turn with that plan hash.
+Registered event: evt_73afffc64276405d.
+Registered event type: main.verification-passed.
+```
+
+Post-registration state:
+
+```text
+task-5 status: main-verified.
+task-5 status source: goal-event-log.v1:evt_73afffc64276405d.
+task-5 mainVerificationRef: docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md.
+All 5 tasks are completed in the managed goal ledger.
+ReleaseReady remains false.
+Next ledger action: release manager / release-gate, starting with release.pnpm-check.
+Dirty controller files: docs/plans/controller/v38-controller-state.md and docs/plans/controller/subagent-dispatch-log.md.
+Dirty task-5 worktree file: docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md is untracked in /Users/andy/.codex/worktrees/v38-task-5/multi-coding-agent-symphony.
+```
+
+Next suggested command:
+
+```text
+/supervisor tick
+```
+
+## Previous Reconciliation 2026-06-05 Task-5 Verifier Dispatch
+
+Date: 2026-06-05
+
+Command context:
+
+```text
+Received /goal verify task-5 --fresh-controller.
+This controller owns only the task-5 main-verifier/main-verification phase.
+No release closeout, mutation, audit, doctor, real CLI, tag, push, publish, or gate execution was run.
+```
+
+Reconciled state:
+
+```text
+Controller branch: codex/controller-loop-ops.
+Controller HEAD: a0f5c59f20805fd3ff7bf31b94da1b978b520ec6.
+origin/main: 7f0108b8c9c4658219f91aa8c687f3b1ae03cfd0.
+Task-5 worktree: /Users/andy/.codex/worktrees/v38-task-5/multi-coding-agent-symphony.
+Task-5 branch: codex/v38-task-5-provider-hub-panel-evidence.
+Task-5 HEAD: b9711646c55117ce1a9a48fbed34dd1ecd70387d.
+Managed ledger status: task-5 approved, reviewVerdict APPROVED, mainVerificationRef null.
+Managed next action: task-5 main-verifier/main-verification because reviewer approved task-5 but main verification is missing.
+Worker evidence exists in task-5 worktree: docs/plans/v38-task-5-worker-evidence-2026-06-02.md.
+Review evidence exists in task-5 worktree: docs/plans/v38-task-5-review-evidence-2026-06-02.md.
+Main verification evidence is missing before dispatch.
+```
+
+Controller action:
+
+```text
+Dispatched one main-verifier subagent.
+Subagent thread/agent id: 019e955c-683a-7831-8851-7855ce7780ba.
+Expected evidence: docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md.
+Event to register after completed evidence inspection: main.verification-passed or main.verification-failed.
+```
+
+Next suggested command:
+
+```text
+/goal verify task-5 --fresh-controller
+```
+
+## Previous Reconciliation
 
 Date: 2026-06-05
 
