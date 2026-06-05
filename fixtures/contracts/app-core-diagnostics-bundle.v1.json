@@ -1,0 +1,120 @@
+{
+  "contractName": "app-core-diagnostics-bundle.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-05T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v39-backup-diagnostics-migration-workspace",
+    "resolvedGoalId": "v39-backup-diagnostics-migration-workspace",
+    "taskId": "task-4",
+    "cwdRef": "multi-coding-agent-symphony",
+    "sourceContracts": [
+      "local-runtime-health.v1",
+      "diagnostics.v1",
+      "goal-runbook.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "symphony.console-runs",
+      "job-timeline-log-stream.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "diagnosticsRole": "sanitized-health-and-refs-only"
+  },
+  "health": {
+    "status": "warning",
+    "runtime": {
+      "status": "ok",
+      "runtimeVersion": "v33-app-runtime-foundation.1",
+      "kernelVersion": "v32-release-manager-workspace-v2",
+      "nodeVersion": "v24.11.1"
+    },
+    "checks": {
+      "status": "ok",
+      "total": 7,
+      "warnings": 0,
+      "errors": 0
+    },
+    "blockers": []
+  },
+  "versions": {
+    "runtimeVersion": "v33-app-runtime-foundation.1",
+    "kernelVersion": "v32-release-manager-workspace-v2",
+    "nodeVersion": "v24.11.1",
+    "contracts": [
+      {
+        "contractName": "local-runtime-health.v1",
+        "contractVersion": 1
+      },
+      {
+        "contractName": "diagnostics.v1",
+        "contractVersion": 1
+      },
+      {
+        "contractName": "goal-progress-ledger.v1",
+        "contractVersion": 1
+      }
+    ]
+  },
+  "gateStatus": {
+    "state": "available",
+    "goalStatus": "in-progress",
+    "releaseReady": false,
+    "taskCount": 5,
+    "mainVerifiedCount": 3,
+    "blockedCount": 0,
+    "gates": [
+      {
+        "gateId": "pnpmCheck",
+        "status": "unknown",
+        "source": "goal-progress-ledger.v1"
+      }
+    ]
+  },
+  "recentFailures": [
+    {
+      "id": "evt_v39_task_4_self_check_failed",
+      "source": "goal-event-log.v1",
+      "goal_id": "v39-backup-diagnostics-migration-workspace",
+      "task_id": "task-4",
+      "run_id": null,
+      "status": "worker.self-check-failed",
+      "failurePhase": "implement",
+      "message": "Worker self-check failed with [REDACTED_CWD] path and TOKEN=[REDACTED_TOKEN].",
+      "occurredAt": "2026-06-05T00:00:00.000Z"
+    }
+  ],
+  "sanitizedLogs": {
+    "policy": "structured-refs-only-no-log-bodies",
+    "refs": [
+      {
+        "ref_id": "goal-event-log-v39-backup-diagnostics-migration-workspace",
+        "kind": "event-log",
+        "label": "Goal event journal",
+        "uri": "managed-state://goals/events/v39-backup-diagnostics-migration-workspace.ndjson",
+        "available": true,
+        "size_bytes": null,
+        "note": "Structured event ref only; event bodies are not copied into the diagnostics bundle."
+      }
+    ]
+  },
+  "boundaries": {
+    "readOnly": true,
+    "includesSecretValues": false,
+    "includesRawLogBodies": false,
+    "includesRepoSourcePayloads": false,
+    "localFileOpenAvailable": false,
+    "shellExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "releaseDecisionAvailable": false,
+    "logPolicy": "structured-refs-only",
+    "statusSource": "explicit-events-and-backend-contracts"
+  }
+}

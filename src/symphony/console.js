@@ -75,6 +75,9 @@ import {
   buildAppCoreBackupExport
 } from './app-core-backup-export.js';
 import {
+  buildAppCoreDiagnosticsBundle
+} from './app-core-diagnostics-bundle.js';
+import {
   buildArtifactIndex
 } from './artifact-indexer.js';
 import {
@@ -1613,6 +1616,46 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, await buildDiagnosticsContract({ stateDir }));
+        return;
+      }
+
+      if (url.pathname === '/api/diagnostics/bundle') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const diagnosticsGoalId = url.searchParams.get('goal') ?? 'latest';
+        const diagnosticsTaskId = url.searchParams.get('task') ?? null;
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-diagnostics-bundle-request',
+            message: 'Diagnostics bundle route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(diagnosticsGoalId)
+          || (diagnosticsTaskId !== null && isUnsafeGoalRouteSegment(diagnosticsTaskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-diagnostics-bundle-request',
+            message: 'Diagnostics bundle goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildAppCoreDiagnosticsBundle({
+          cwd,
+          stateDir,
+          goalId: diagnosticsGoalId,
+          taskId: diagnosticsTaskId
+        }));
         return;
       }
 

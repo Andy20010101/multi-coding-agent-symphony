@@ -118,6 +118,10 @@ import {
   buildAppCoreBackupExport,
   renderAppCoreBackupExportText
 } from '../src/symphony/app-core-backup-export.js';
+import {
+  buildAppCoreDiagnosticsBundle,
+  renderAppCoreDiagnosticsBundleText
+} from '../src/symphony/app-core-diagnostics-bundle.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -187,6 +191,7 @@ const KNOWN_COMMANDS = new Set([
   'next',
   'evidence',
   'backup',
+  'diagnostics',
   'supervisor'
 ]);
 let productRunSequence = 0;
@@ -422,6 +427,13 @@ export async function runSymphonyCli({
 
     if (command === 'backup') {
       return await runSymphonyBackup({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'diagnostics') {
+      return await runSymphonyDiagnosticsBundle({
         args: rest,
         stdout
       });
@@ -2625,6 +2637,112 @@ function backupHelpText() {
     '',
     'Prints the read-only v39 app core backup export manifest.',
     'The command returns manifest hashes and refs only; it does not copy repo content, open local files, execute shell commands, call models, write git state, or declare release readiness.',
+    ''
+  ].join('\n');
+}
+
+async function runSymphonyDiagnosticsBundle({ args, stdout }) {
+  const options = parseDiagnosticsBundleArgs(args);
+
+  if (options.help) {
+    stdout.write(diagnosticsBundleHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'bundle') {
+    const bundle = await buildAppCoreDiagnosticsBundle({
+      cwd: process.cwd(),
+      stateDir: options.stateDir,
+      goalId: options.goalId,
+      taskId: options.taskId
+    });
+
+    if (options.json) {
+      writeJson(stdout, bundle);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderAppCoreDiagnosticsBundleText(bundle));
+    return EXIT_CODES.ok;
+  }
+
+  throw new UsageError('diagnostics subcommand must be bundle');
+}
+
+function parseDiagnosticsBundleArgs(args) {
+  const options = {
+    subcommand: null,
+    stateDir: '.symphony',
+    goalId: 'latest',
+    taskId: null,
+    json: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('diagnostics bundle is sanitized JSON/text only; redirect stdout if you need a file');
+    }
+
+    if (!value.startsWith('--') && options.subcommand === null) {
+      options.subcommand = value;
+      continue;
+    }
+
+    throw new UsageError(`unknown diagnostics option: ${value}`);
+  }
+
+  if (options.subcommand === null) {
+    options.subcommand = 'bundle';
+  }
+
+  if (options.subcommand !== 'bundle') {
+    throw new UsageError('diagnostics subcommand must be bundle');
+  }
+
+  if (isUnsafeActionsContextRef(options.goalId) || (options.taskId !== null && isUnsafeActionsContextRef(options.taskId))) {
+    throw new UsageError('diagnostics goal and task values must be safe refs');
+  }
+
+  return options;
+}
+
+function diagnosticsBundleHelpText() {
+  return [
+    'Usage: symphony diagnostics bundle [--goal <goal-id>] [--task <task-id>] [--state-dir <path>] [--json]',
+    '',
+    'Prints the read-only v39 app core diagnostics bundle.',
+    'The command returns sanitized health, versions, recent failures, gate status, and structured log refs only; it does not copy raw logs, execute shell commands, call models, write git state, or declare release readiness.',
     ''
   ].join('\n');
 }
