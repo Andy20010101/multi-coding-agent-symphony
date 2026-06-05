@@ -314,9 +314,18 @@ function normalizeEvidenceRefs(refs) {
     .map((ref) => ({
       kind: typeof ref.kind === 'string' && ref.kind.trim() !== '' ? ref.kind : 'evidence',
       ref: typeof ref.ref === 'string' && ref.ref.trim() !== '' ? ref.ref : null,
-      source: typeof ref.source === 'string' && ref.source.trim() !== '' ? ref.source : 'app-state-snapshot.v1'
+      source: normalizeEvidenceSource(ref.source)
     }))
     .filter((ref) => ref.ref !== null);
+}
+
+function normalizeEvidenceSource(source) {
+  if (typeof source !== 'string' || source.trim() === '') {
+    return 'app-state-snapshot.v1';
+  }
+
+  const contractName = source.trim().split(':')[0];
+  return /^[a-z0-9][a-z0-9.-]*\.v[0-9]+$/u.test(contractName) ? contractName : 'app-state-snapshot.v1';
 }
 
 function normalizeBoundaryFlags(boundaries) {
