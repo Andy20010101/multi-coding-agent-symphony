@@ -159,9 +159,10 @@ GET /api/artifacts -> artifact-index.v1 -> artifactReadiness.artifactIndex
 GET /api/runs/<run-id>/artifacts/<artifact-kind>/preview -> safe-artifact-preview.v1 -> artifactReadiness.previewItems
 GET /api/evidence/timeline -> evidence-timeline.v1 -> artifactReadiness.evidenceTimeline
 GET /api/release/bundle -> release-bundle.v1 -> artifactReadiness.releaseBundle
+GET /api/backup/export -> app-core-backup-export.v1 -> artifactReadiness.backupExport
 ```
 
-桌面页显示 job id、status、queue state、action id、timestamps、blocker/failure、timeline/log counts、run-control transitions、artifact refs/status/missing、safe preview availability、evidence timeline readiness 和 release bundle state。transitions 是只读列表，不是按钮；safe preview 只展示后端 `safe-artifact-preview.v1` 的可用性和 inline safety 字段，不打开本地路径，也不从文件名或扩展名判断安全。
+桌面页显示 job id、status、queue state、action id、timestamps、blocker/failure、timeline/log counts、run-control transitions、artifact refs/status/missing、safe preview availability、evidence timeline readiness、release bundle state 和 backup export manifest state。transitions 是只读列表，不是按钮；safe preview 只展示后端 `safe-artifact-preview.v1` 的可用性和 inline safety 字段，不打开本地路径，也不从文件名或扩展名判断安全。backup export 只显示 app core state manifest hash、managed state refs、artifact refs 和 repo content exclusion policy，不复制 repo 内容。
 
 Tauri host smoke：
 
@@ -230,6 +231,7 @@ GET /api/jobs/create
 GET /api/jobs/timeline
 GET /api/jobs/control
 GET /api/diagnostics
+GET /api/backup/export
 ```
 
 `GET /api/health` 返回 `local-runtime-health.v1`，用于确认本地 sidecar 已启动、当前进程 id、cwd/repo path、runtime 版本、v32 kernel source、startup time、read-only mode、`sidecarHost` 和 known blockers。这个 route 不接受 query 参数，不写 repo、不写 `.symphony`、不改 git、不执行 worker/reviewer/main verification/release、不调用模型、不创建 job queue。
@@ -260,6 +262,16 @@ GET /api/jobs/control
 `GET /api/jobs` 返回 `job-model.v1`，用于显示 job identity、goal/task/action refs、queue state、status、blocker、failure、boundary fields 和 source contract refs。`GET /api/jobs/create` 返回 `job-creation.v1`，只展示从受控 `action-preview.v1` 生成 job 的 dry-run 计划；它不持久化 job、不执行 action、不确认 event。`GET /api/jobs/timeline` 返回 `job-timeline-log-stream.v1`，当前没有真实 job event store 时返回空 timeline 和 log refs。`GET /api/jobs/control` 返回 `job-run-control.v1`，展示 pause、cancel、resume、recover 的允许来源状态、目标状态、reversible、terminal 和 hiddenRetry 字段。四个 route 都只接受各自 allowlist query 参数，拒绝 unsupported 参数和非 GET 请求。
 
 Workbench 的 Job Console 只把这些 contract 投影成界面字段。它不创建 job、不运行 job、不调用 shell、不调用模型、不写 `.symphony`、不写 git、不登记 review/main/release gate，也不从前端状态推断 job passed、review approved、main verified 或 release ready。
+
+v39 task-3 增加只读 backup export manifest：
+
+```text
+GET /api/backup/export
+GET /api/backup/export?goal=<goal-id>&task=<task-id>
+pnpm --silent symphony backup export --goal <goal-id> --task <task-id> --json
+```
+
+`app-core-backup-export.v1` 列出 `.symphony` managed state 文件的 hash、ArtifactStore 派生 refs、manifest hash 和明确排除的 repo content。它不复制 `src/`、`frontend/`、`tests/`、`docs/`、`.git/`、package manifest 或 lockfile 内容；route 只接受 `goal` 和 `task`，不接受 `path`、`command`、`confirm`、`output` 或任意本地路径。Workbench 的 `Backup Export` panel 和 Desktop Shell artifact readiness card 只展示这些 contract 字段，不写 bundle 文件、不下载 artifact、不打开本地文件、不登记 goal event。
 
 终端可用的同一份 health contract：
 

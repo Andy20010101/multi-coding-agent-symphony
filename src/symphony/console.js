@@ -72,6 +72,9 @@ import {
 } from './evidence-timeline-contract.js';
 import { buildEvidenceBundle } from './evidence-bundle.js';
 import {
+  buildAppCoreBackupExport
+} from './app-core-backup-export.js';
+import {
   buildArtifactIndex
 } from './artifact-indexer.js';
 import {
@@ -1895,6 +1898,46 @@ export function createSymphonyConsoleServer({
           entries: bundleArtifactIndex.entries,
           goalEvents: Array.isArray(bundleGoalEvents.events) ? bundleGoalEvents.events : [],
           goalProgress
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/backup/export') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const backupGoalId = url.searchParams.get('goal') ?? 'latest';
+        const backupTaskId = url.searchParams.get('task') ?? null;
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-backup-export-request',
+            message: 'Backup export route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(backupGoalId)
+          || (backupTaskId !== null && isUnsafeGoalRouteSegment(backupTaskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-backup-export-request',
+            message: 'Backup export goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildAppCoreBackupExport({
+          cwd,
+          stateDir,
+          goalId: backupGoalId,
+          taskId: backupTaskId
         }));
         return;
       }

@@ -358,6 +358,10 @@ export function WorkbenchShell({
               releaseBundle={model.releaseBundle}
               route={findRoute(model.routeStates, 'releaseBundle')}
             />
+            <BackupExportPanel
+              backupExport={model.backupExport}
+              route={findRoute(model.routeStates, 'backupExport')}
+            />
           </section>
 
           <section className="support-grid" aria-label="只读 contract 支撑信息">
@@ -873,6 +877,11 @@ function DesktopArtifactReadinessCard({ artifactReadiness }) {
         ['bundle', artifactReadiness?.releaseBundleState],
         ['bundle tasks', artifactReadiness?.releaseTaskCount],
         ['release state', artifactReadiness?.releaseReady],
+        ['backup export', artifactReadiness?.backupExportState],
+        ['backup manifest', artifactReadiness?.backupManifestHash],
+        ['backup state entries', artifactReadiness?.backupManagedStateEntryCount],
+        ['backup artifact refs', artifactReadiness?.backupArtifactRefCount],
+        ['repo content policy', artifactReadiness?.backupRepoContentPolicy],
         ['local file open', artifactReadiness?.boundaries?.localFileOpenAvailable],
         ['source', artifactReadiness?.sourcePolicy]
       ]} />
@@ -2320,6 +2329,91 @@ function ReleaseBundleTaskList({ tasks }) {
             <li>main verification: {Array.isArray(task.mainVerification) ? task.mainVerification.length : 0} entries</li>
             <li>release evidence: {Array.isArray(task.releaseEvidence) ? task.releaseEvidence.length : 0} entries</li>
           </ul>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BackupExportPanel({ backupExport, route }) {
+  const managedStateEntries = backupExport?.managedStateEntries?.value ?? [];
+  const excludedRepoContent = backupExport?.excludedRepoContent?.value ?? [];
+
+  return (
+    <DataPanel
+      id="backup-export-panel"
+      kicker="v39 backup export"
+      title="Backup Export"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', backupExport?.contractName],
+        ['contractVersion', backupExport?.contractVersion],
+        ['generatedAt', backupExport?.generatedAt],
+        ['readOnly', backupExport?.readOnly],
+        ['context.goalId', backupExport?.context?.goalId],
+        ['context.resolvedGoalId', backupExport?.context?.resolvedGoalId],
+        ['context.taskId', backupExport?.context?.taskId],
+        ['context.exportRole', backupExport?.context?.exportRole],
+        ['manifestHash', backupExport?.manifestHash],
+        ['managedStateEntryCount', backupExport?.managedStateEntryCount],
+        ['artifactRefCount', backupExport?.artifactRefCount],
+        ['includedByteCount', backupExport?.includedByteCount],
+        ['boundaries.writesBundleFile', backupExport?.boundaries?.writesBundleFile],
+        ['boundaries.copiesRepoContent', backupExport?.boundaries?.copiesRepoContent],
+        ['boundaries.repoContentPolicy', backupExport?.boundaries?.repoContentPolicy],
+        ['boundaries.exportPayloadPolicy', backupExport?.boundaries?.exportPayloadPolicy]
+      ]} />
+
+      <Subsection title={`managed state (${managedStateEntries.length})`}>
+        <BackupManagedStateList entries={managedStateEntries} />
+      </Subsection>
+
+      <Subsection title={`excluded repo content (${excludedRepoContent.length})`}>
+        <BackupExcludedRepoContentList entries={excludedRepoContent} />
+      </Subsection>
+
+      <p className="panel-note">{backupExport?.note ?? 'Backup Export 只展示 app core state manifest、hash 和 refs。不复制 repo source、docs、tests、.git 或 artifact 内容。'}</p>
+    </DataPanel>
+  );
+}
+
+function BackupManagedStateList({ entries }) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return <p className="empty-list">暂无 managed state 条目</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {entries.slice(0, 8).map((entry, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-kind">{entry.kind ?? '-'}</span>
+          {' '}
+          <span className="artifact-ref">{entry.ref ?? '-'}</span>
+          <span className="artifact-meta">
+            present={String(entry.present ?? false)}
+            {' '}bytes={entry.byteSize ?? 0}
+            {' '}policy={entry.copyPolicy ?? '-'}
+          </span>
+        </li>
+      ))}
+      {entries.length > 8 ? <li className="artifact-item">另外 {entries.length - 8} 个 managed state 条目</li> : null}
+    </ul>
+  );
+}
+
+function BackupExcludedRepoContentList({ entries }) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return <p className="empty-list">暂无 excluded repo content 条目</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {entries.map((entry, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-ref">{entry.ref ?? '-'}</span>
+          <span className="artifact-meta">{entry.reason ?? '-'}</span>
         </li>
       ))}
     </ul>

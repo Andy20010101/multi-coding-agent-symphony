@@ -24,6 +24,32 @@ v39 task-1 adds `app-data-inventory.v1`, exposed through `GET /api/app/data-inve
 
 v39 task-2 adds `app-schema-migration.v1`. The contract reports `appData.schemaVersion` current and target versions, migration-required state, affected app data areas from the v39 inventory, dry-run migration steps, `app.schema.migration.confirm`, and the `app-schema-migration-confirmation.v1` plan-hash requirement. `GET /api/app-data/migration` and `symphony app-data migration --json` return the preview only. They do not write app data, execute shell commands, read arbitrary paths, open local files, invoke models, change git state, confirm migration, approve review, pass main verification, or declare release readiness.
 
+v39 task-3 adds `app-core-backup-export.v1`, exposed through `GET /api/backup/export` and `symphony backup export --json`. The contract lists app core managed state refs, SHA-256 hashes, derived ArtifactStore refs, a manifest hash, and the repo content that is explicitly excluded from the backup export surface. Workbench renders the same contract in the Backup Export panel, and Desktop Shell carries the state/hash/count fields in `DesktopShellMvpViewModel.artifactReadiness`. This path does not copy repo source, docs, tests, `.git`, package manifests, lockfiles, artifact payloads, or arbitrary local paths; it does not write a bundle file, execute shell commands, call models, download artifacts, open files, write git state, self-approve, pass main verification, or declare release readiness.
+
+## `app-core-backup-export.v1`
+
+`app-core-backup-export.v1` is the v39 task-3 backup/export contract. It is a manifest, not a file-copy operation.
+
+Routes and CLI:
+
+```text
+GET /api/backup/export
+GET /api/backup/export?goal=<goal-id>&task=<task-id>
+symphony backup export --goal <goal-id> --task <task-id> --json
+```
+
+The route accepts only optional `goal` and `task` query parameters. The CLI accepts `--goal`, `--task`, `--state-dir`, and `--json`; it rejects `--output` and writes only to stdout.
+
+The contract contains:
+
+- `manifest.manifestHash`: hash of the generated manifest payload.
+- `manifest.managedStateEntries`: managed `.symphony` state refs with `content_hash`, byte size, modified time, and `copyPolicy`.
+- `manifest.artifactRefs`: ArtifactStore-derived refs and hashes; artifact bodies are not copied.
+- `manifest.excludedRepoContent`: repo paths excluded from the bundle surface, including `src/`, `frontend/`, `tests/`, `docs/`, `.git/`, package manifests, and lockfiles.
+- `boundaries`: explicit `false` values for bundle file writes, repo content copy, artifact download, local file open, arbitrary path reads, shell/model execution, git writes, merge, push, tag, publish, self-approval, and release decisions.
+
+Workbench displays this contract in `Backup Export`. Desktop Shell displays backup status fields inside artifact readiness. Both surfaces consume backend contract fields only.
+
 ## Shared Rules
 
 - `contractVersion` is the version gate. v8.2 emits `"1"`.
@@ -63,6 +89,7 @@ v39 task-2 adds `app-schema-migration.v1`. The contract reports `appData.schemaV
 - v38 `agent-cli-lane-assignment-preview.v1` is a read-only lane preview contract. It can show worker/reviewer/main-verifier lanes, active provider candidate ids, reviewer independence requirements, a provider-pair preview matrix, explicit event/confirmation contract refs, and copy-only verification commands. It cannot assign agents, execute provider CLIs, invoke models, dispatch prompts, approve review, pass main verification, infer status from frontend state, write repositories, merge, push, tag, publish, self-approve, expose credential material, or promote Gemini, Kiro, or DeepSeek into active provider status.
 - v38 `ProviderHubPanel` is a Workbench/Desktop projection over existing provider and goal evidence contracts. It can show provider availability, blocked reasons, sanitized env variable names with presence booleans, capability gates, lane previews, and ledger evidence refs. It cannot expose env values, API keys, OAuth tokens, credential file contents, raw provider settings, evidence document bodies, provider CLI execution, model invocation, prompt dispatch, automatic provider install, OAuth login, worker/reviewer assignment, approval, main verification, release readiness, git writes, push, tag, or publish.
 - v39 `app-data-inventory.v1` is a read-only inventory contract for long-lived App data. It can list registry, snapshots, job state, artifact index, settings pointers, provider profiles, and evidence refs with owning routes/contracts and boundary flags. It cannot create a second canonical store, read arbitrary paths, open files, download artifacts, read evidence bodies, execute shell commands, invoke models, mutate jobs, expose secrets, write git state, self-approve, pass main verification, or declare release readiness.
+- v39 `app-core-backup-export.v1` is a manifest/hash/ref contract for app core backup visibility. It can hash managed `.symphony` state files, list derived ArtifactStore refs, show a manifest hash, and show repo content exclusions. It cannot copy repo content, include source payloads, include `.git`, write a bundle file, download artifacts, open local files, read arbitrary paths, execute commands, invoke models, write git state, merge, push, tag, publish, self-approve, pass main verification, or declare release readiness.
 - v18 `goal-event-log.v1` is the append-only source for worker evidence, independent review evidence, main verification evidence, release gate evidence, and release ready declaration.
 - v18 `goal-update-plan.v1` is the dry-run contract used by `symphony goal update`, `symphony goal review`, and `symphony goal gate` before confirm appends to the managed journal.
 - v18 keeps the `goal-progress-ledger.v1` contract name. The resolver reads `goal-event-log.v1`; with no events it returns the v17 planned/unknown template.

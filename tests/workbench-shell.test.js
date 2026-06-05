@@ -892,6 +892,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/app/data-inventory',
       '/api/app-data/migration',
       '/api/artifacts',
+      '/api/backup/export',
       '/api/bundle',
       '/api/capabilities',
       '/api/diagnostics',

@@ -37,6 +37,7 @@ const ARTIFACT_INDEX_CONTRACT_NAME = 'artifact-index.v1';
 const EVIDENCE_TIMELINE_CONTRACT_NAME = 'evidence-timeline.v1';
 const RELEASE_BUNDLE_CONTRACT_NAME = 'release-bundle.v1';
 const EVIDENCE_BUNDLE_CONTRACT_NAME = 'evidence-bundle.v1';
+const APP_CORE_BACKUP_EXPORT_CONTRACT_NAME = 'app-core-backup-export.v1';
 const PROJECT_REGISTRY_CONTRACT_NAME = 'project-registry.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
@@ -597,6 +598,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/bundle',
     method: 'GET',
     contractName: EVIDENCE_BUNDLE_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'backupExport',
+    label: 'Backup Export',
+    path: '/api/backup/export',
+    method: 'GET',
+    contractName: APP_CORE_BACKUP_EXPORT_CONTRACT_NAME
   })
 ]);
 
@@ -851,6 +859,7 @@ export function projectWorkbenchContracts(results) {
   const artifactIndexData = dataFrom(results.artifactIndex);
   const evidenceTimelineData = dataFrom(results.evidenceTimeline);
   const releaseBundleData = dataFrom(results.releaseBundle);
+  const backupExportData = dataFrom(results.backupExport);
   const latestRun = latestRunData?.run ?? null;
   const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews)
     ? results.safeArtifactPreviews
@@ -1007,6 +1016,10 @@ export function projectWorkbenchContracts(results) {
     result: results.releaseBundle,
     bundle: releaseBundleData
   });
+  const projectedBackupExport = projectBackupExport({
+    result: results.backupExport,
+    backupExport: backupExportData
+  });
   const projectedProviderLanePreview = projectProviderLanePreview({
     result: results.providerLanePreview,
     preview: providerLanePreviewData
@@ -1052,6 +1065,7 @@ export function projectWorkbenchContracts(results) {
       artifactIndex: projectedArtifactIndex,
       evidenceTimeline: projectedEvidenceTimeline,
       releaseBundle: projectedReleaseBundle,
+      backupExport: projectedBackupExport,
       providerHub: projectedProviderHub,
       routeStates
     }),
@@ -1116,6 +1130,7 @@ export function projectWorkbenchContracts(results) {
     jobConsole: projectedJobConsole,
     evidenceTimeline: projectedEvidenceTimeline,
     releaseBundle: projectedReleaseBundle,
+    backupExport: projectedBackupExport,
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
       status: MISSING_TEXT
@@ -1443,6 +1458,7 @@ function projectDesktopShell({
   artifactIndex,
   evidenceTimeline,
   releaseBundle,
+  backupExport,
   providerHub,
   routeStates
 }) {
@@ -1457,6 +1473,7 @@ function projectDesktopShell({
   const artifactRoute = findProjectedRoute(routeStates, 'artifactIndex');
   const evidenceRoute = findProjectedRoute(routeStates, 'evidenceTimeline');
   const releaseBundleRoute = findProjectedRoute(routeStates, 'releaseBundle');
+  const backupExportRoute = findProjectedRoute(routeStates, 'backupExport');
   const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
   const currentProject = currentProjectFromRegistry(projectRegistry);
   const sidecarAttachState = firstValue(sidecarHost?.attachState);
@@ -1618,9 +1635,11 @@ function projectDesktopShell({
       artifactIndex,
       evidenceTimeline,
       releaseBundle,
+      backupExport,
       artifactRoute,
       evidenceRoute,
-      releaseBundleRoute
+      releaseBundleRoute,
+      backupExportRoute
     }),
     providerHub,
     boundaries: {
@@ -1706,9 +1725,11 @@ function projectDesktopArtifactReadiness({
   artifactIndex,
   evidenceTimeline,
   releaseBundle,
+  backupExport,
   artifactRoute,
   evidenceRoute,
-  releaseBundleRoute
+  releaseBundleRoute,
+  backupExportRoute
 }) {
   const previewItems = (artifactRefs?.items ?? []).map((artifact) => ({
     kind: artifact.kind,
@@ -1734,7 +1755,7 @@ function projectDesktopArtifactReadiness({
       evidenceTimeline,
       releaseBundle
     })),
-    sourcePolicy: valueState('artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1'),
+    sourcePolicy: valueState('artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1'),
     registeredRefs: valueState(artifactRefs?.count),
     status: artifactRefs?.status?.status,
     missing: artifactRefs?.status?.missing,
@@ -1761,10 +1782,16 @@ function projectDesktopArtifactReadiness({
     releaseTaskCount: releaseBundle?.taskCount,
     releaseReady: releaseBundle?.releaseReady,
     releaseDecisionAvailable: releaseBundle?.boundaries?.releaseDecisionAvailable,
+    backupExportState: valueState(backupExport?.state),
+    backupManifestHash: backupExport?.manifestHash,
+    backupManagedStateEntryCount: backupExport?.managedStateEntryCount,
+    backupArtifactRefCount: backupExport?.artifactRefCount,
+    backupRepoContentPolicy: backupExport?.boundaries?.repoContentPolicy,
     route: valueState(artifactRoute?.path),
     routeState: valueState(routeStateFromRoute(artifactRoute)),
     evidenceRouteState: valueState(routeStateFromRoute(evidenceRoute)),
     releaseBundleRouteState: valueState(routeStateFromRoute(releaseBundleRoute)),
+    backupExportRouteState: valueState(routeStateFromRoute(backupExportRoute)),
     boundaries: {
       readOnly: artifactIndex?.boundaries?.readOnly ?? valueState(true),
       canonicalSource: artifactIndex?.boundaries?.canonicalSource ?? valueState('ArtifactStore is canonical'),
@@ -11018,6 +11045,68 @@ function projectReleaseBundle({ result, bundle }) {
       releaseDecisionAvailable: valueState(bundle.boundaries?.releaseDecisionAvailable)
     },
     note: 'Release Bundle 按 task 展示 worker/reviewer/main-verifier/release-manager evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。'
+  };
+}
+
+function projectBackupExport({ result, backupExport }) {
+  if (backupExport === null || backupExport === undefined) {
+    return {
+      state: result?.ok === true ? 'empty' : 'unavailable',
+      errorEnvelope: result?.errorEnvelope ?? null,
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      generatedAt: valueState(undefined),
+      readOnly: valueState(undefined),
+      context: {},
+      manifestHash: valueState(undefined),
+      managedStateEntryCount: valueState(0),
+      artifactRefCount: valueState(0),
+      includedByteCount: valueState(0),
+      managedStateEntries: valueState([]),
+      artifactRefs: valueState([]),
+      excludedRepoContent: valueState([]),
+      note: 'Backup export manifest 未暴露 / 不可用。'
+    };
+  }
+
+  const managedStateEntries = Array.isArray(backupExport.manifest?.managedStateEntries)
+    ? backupExport.manifest.managedStateEntries
+    : [];
+  const artifactRefs = Array.isArray(backupExport.manifest?.artifactRefs)
+    ? backupExport.manifest.artifactRefs
+    : [];
+
+  return {
+    state: backupExport.manifest?.manifestHash ? 'available' : 'empty',
+    errorEnvelope: result?.errorEnvelope ?? null,
+    contractName: valueState(backupExport.contractName),
+    contractVersion: valueState(backupExport.contractVersion),
+    generatedAt: valueState(backupExport.generatedAt),
+    readOnly: valueState(backupExport.readOnly),
+    context: {
+      goalId: valueState(backupExport.context?.goalId),
+      resolvedGoalId: valueState(backupExport.context?.resolvedGoalId),
+      taskId: valueState(backupExport.context?.taskId),
+      exportRole: valueState(backupExport.context?.exportRole),
+      canonicalArtifactSource: valueState(backupExport.context?.canonicalArtifactSource)
+    },
+    manifestHash: valueState(backupExport.manifest?.manifestHash),
+    managedStateEntryCount: valueState(backupExport.manifest?.managedStateEntryCount ?? managedStateEntries.length),
+    artifactRefCount: valueState(backupExport.manifest?.artifactRefCount ?? artifactRefs.length),
+    includedByteCount: valueState(backupExport.manifest?.includedByteCount ?? 0),
+    managedStateEntries: valueState(managedStateEntries),
+    artifactRefs: valueState(artifactRefs),
+    excludedRepoContent: valueState(Array.isArray(backupExport.manifest?.excludedRepoContent) ? backupExport.manifest.excludedRepoContent : []),
+    boundaries: {
+      readOnly: valueState(backupExport.boundaries?.readOnly),
+      writesBundleFile: valueState(backupExport.boundaries?.writesBundleFile),
+      copiesRepoContent: valueState(backupExport.boundaries?.copiesRepoContent),
+      includesRepoSourcePayloads: valueState(backupExport.boundaries?.includesRepoSourcePayloads),
+      arbitraryPathReadAvailable: valueState(backupExport.boundaries?.arbitraryPathReadAvailable),
+      repoContentPolicy: valueState(backupExport.boundaries?.repoContentPolicy),
+      exportPayloadPolicy: valueState(backupExport.boundaries?.exportPayloadPolicy)
+    },
+    note: 'Backup Export 只展示 app core state manifest、hash 和 refs。它不复制 repo source、docs、tests、.git 或 artifact 内容。'
   };
 }
 
