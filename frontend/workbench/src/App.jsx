@@ -263,6 +263,10 @@ export function WorkbenchShell({
           </section>
 
           <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
+            <AppDataInventoryPanel
+              inventory={model.appDataInventory}
+              route={findRoute(model.routeStates, 'appDataInventory')}
+            />
             <ActionRegistryPanel
               registry={model.activeGoal.actionRegistry}
               manifestRoute={findRoute(model.routeStates, 'actionManifest')}
@@ -3459,6 +3463,97 @@ function ActionRegistryPanel({
       <ActionRegistryBlockers blockers={registry?.blockers} />
       <p className="panel-note">{registry?.note}</p>
     </DataPanel>
+  );
+}
+
+function AppDataInventoryPanel({ inventory, route }) {
+  return (
+    <DataPanel
+      id="app-data-inventory-panel"
+      kicker="v39 data inventory"
+      title="App Data Inventory"
+      state={inventory?.state ?? 'missing'}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', inventory?.contractName],
+        ['contractVersion', inventory?.contractVersion],
+        ['goalId', inventory?.goalId],
+        ['taskId', inventory?.taskId],
+        ['source', inventory?.sourcePolicy],
+        ['scope', inventory?.inventoryScope],
+        ['domains', inventory?.domainCount],
+        ['available domains', inventory?.availableDomainCount],
+        ['evidence refs', inventory?.evidenceRefCount],
+        ['data kinds', inventory?.persistedDataKinds]
+      ]} />
+
+      <Subsection title="settings">
+        <FieldList rows={[
+          ['stateDir', inventory?.settings?.stateDir],
+          ['artifactStoreDir', inventory?.settings?.artifactStoreDir],
+          ['repoPath', inventory?.settings?.repoPath],
+          ['settingsWriteAvailable', inventory?.settings?.settingsWriteAvailable],
+          ['secretValueExposureAvailable', inventory?.settings?.secretValueExposureAvailable]
+        ]} />
+      </Subsection>
+
+      <AppDataInventoryDomainList domains={inventory?.domains} />
+      <AppDataInventoryEvidenceList evidenceRefs={inventory?.evidenceRefs} />
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={inventory?.boundaries?.items} nameKey="key" valueKey="value" emptyCopy="inventory boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{inventory?.note}</p>
+    </DataPanel>
+  );
+}
+
+function AppDataInventoryDomainList({ domains }) {
+  if (domains?.state !== 'available' || !Array.isArray(domains.items) || domains.items.length === 0) {
+    return <EmptyBlock copy="app data domains 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="data domains">
+      <ul className="action-registry-list" aria-label="App data inventory domains">
+        {domains.items.map((domain, index) => (
+          <li key={`${domain.domainId.text}-${index}`}>
+            <FieldList rows={[
+              ['domain', domain.domainId],
+              ['label', domain.label],
+              ['contract', domain.contractName],
+              ['route', domain.route],
+              ['storage', domain.storageKind],
+              ['canonical source', domain.canonicalSource],
+              ['state', domain.state],
+              ['items', domain.itemCount]
+            ]} />
+            <KeyValueList rows={domain.refs?.items} nameKey="kind" valueKey="value" emptyCopy="domain refs 为空。" />
+          </li>
+        ))}
+      </ul>
+    </Subsection>
+  );
+}
+
+function AppDataInventoryEvidenceList({ evidenceRefs }) {
+  if (evidenceRefs?.state !== 'available' || !Array.isArray(evidenceRefs.items) || evidenceRefs.items.length === 0) {
+    return <EmptyBlock copy="evidence refs 为空。" />;
+  }
+
+  return (
+    <Subsection title="evidence refs">
+      <ul className="compact-list" aria-label="App data inventory evidence refs">
+        {evidenceRefs.items.slice(0, 8).map((ref, index) => (
+          <li key={`${ref.ref.text}-${index}`}>
+            <strong>{ref.kind.text}</strong>
+            <span>{ref.ref.text}</span>
+          </li>
+        ))}
+      </ul>
+    </Subsection>
   );
 }
 

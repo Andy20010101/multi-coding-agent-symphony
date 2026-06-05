@@ -9904,6 +9904,7 @@ var CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = "controlled-adoption-confirmatio
 var CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = "symphony.console-adoption-inspect";
 var RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = "release-baseline-resolver.v1";
 var APP_STATE_SNAPSHOT_CONTRACT_NAME = "app-state-snapshot.v1";
+var APP_DATA_INVENTORY_CONTRACT_NAME = "app-data-inventory.v1";
 var CAPABILITIES_CONTRACT_NAME = "capabilities.v1";
 var ACTION_MANIFEST_CONTRACT_NAME = "action-manifest.v1";
 var ACTION_AVAILABILITY_CONTRACT_NAME = "action-availability.v1";
@@ -10372,6 +10373,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: APP_STATE_SNAPSHOT_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "appDataInventory",
+		label: "App Data Inventory",
+		path: "/api/app/data-inventory",
+		method: "GET",
+		contractName: APP_DATA_INVENTORY_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "readiness",
 		label: "Readiness",
 		path: "/api/readiness",
@@ -10774,6 +10782,7 @@ function projectWorkbenchContracts(results) {
 	const summaryData = dataFrom(results.summary);
 	const projectRegistryData = dataFrom(results.projectRegistry);
 	const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
+	const appDataInventoryData = dataFrom(results.appDataInventory);
 	const readinessData = dataFrom(results.readiness);
 	const handoffRefsData = dataFrom(results.handoffRefs);
 	const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
@@ -10972,6 +10981,10 @@ function projectWorkbenchContracts(results) {
 		}),
 		projectRegistry: projectedProjectRegistry,
 		runtimeSnapshot: projectedRuntimeSnapshot,
+		appDataInventory: projectAppDataInventory({
+			result: results.appDataInventory,
+			inventory: appDataInventoryData
+		}),
 		summary: projectSummary(summaryData),
 		readiness: projectReadiness(readinessData, summaryData),
 		runs: projectRuns(runsData, summaryData),
@@ -11216,6 +11229,83 @@ function projectSidecarHostLifecycle(sidecarHost) {
 			arbitraryCommandAvailable: valueState(boundaries.arbitraryCommandAvailable),
 			arbitraryPathAvailable: valueState(boundaries.arbitraryPathAvailable)
 		}
+	};
+}
+function projectAppDataInventory({ result, inventory }) {
+	const domains = Array.isArray(inventory?.domains) ? inventory.domains : [];
+	const evidenceRefs = Array.isArray(inventory?.evidenceRefs) ? inventory.evidenceRefs : [];
+	return {
+		state: result?.ok === true ? domains.length > 0 ? "available" : "empty" : "missing",
+		modelName: valueState("AppDataInventoryPanel"),
+		contractName: valueState(inventory?.contractName),
+		contractVersion: valueState(inventory?.contractVersion),
+		generatedAt: valueState(inventory?.generatedAt),
+		readOnly: valueState(inventory?.readOnly),
+		goalId: valueState(inventory?.context?.goalId),
+		taskId: valueState(inventory?.context?.taskId),
+		sourcePolicy: valueState(inventory?.context?.stateSource),
+		inventoryScope: valueState(inventory?.context?.inventoryScope),
+		domainCount: valueState(inventory?.summary?.domainCount),
+		availableDomainCount: valueState(inventory?.summary?.availableDomainCount),
+		evidenceRefCount: valueState(inventory?.summary?.evidenceRefCount),
+		persistedDataKinds: textState(Array.isArray(inventory?.summary?.persistedDataKinds) ? inventory.summary.persistedDataKinds.join(" / ") : void 0),
+		settings: {
+			stateDir: valueState(inventory?.settings?.stateDir),
+			artifactStoreDir: valueState(inventory?.settings?.artifactStoreDir),
+			repoPath: valueState(inventory?.settings?.repoPath),
+			settingsWriteAvailable: valueState(inventory?.settings?.settingsWriteAvailable),
+			secretValueExposureAvailable: valueState(inventory?.settings?.secretValueExposureAvailable)
+		},
+		domains: {
+			state: domains.length > 0 ? "available" : "empty",
+			count: valueState(domains.length),
+			items: domains.map((domain) => ({
+				domainId: valueState(domain.domainId),
+				label: valueState(domain.label),
+				contractName: valueState(domain.contractName),
+				route: valueState(domain.route),
+				storageKind: valueState(domain.storageKind),
+				canonicalSource: valueState(domain.canonicalSource),
+				state: valueState(domain.state),
+				itemCount: valueState(domain.itemCount),
+				refs: {
+					state: Array.isArray(domain.refs) && domain.refs.length > 0 ? "available" : "empty",
+					count: valueState(Array.isArray(domain.refs) ? domain.refs.length : 0),
+					items: Array.isArray(domain.refs) ? domain.refs.map((ref) => ({
+						kind: valueState(ref.kind),
+						value: valueState(ref.value)
+					})) : []
+				},
+				boundaries: boundaryListState(domain.boundaries)
+			}))
+		},
+		evidenceRefs: {
+			state: evidenceRefs.length > 0 ? "available" : "empty",
+			count: valueState(evidenceRefs.length),
+			items: evidenceRefs.map((ref) => ({
+				kind: valueState(ref.kind),
+				ref: valueState(ref.ref),
+				source: valueState(ref.source)
+			}))
+		},
+		boundaries: boundaryListState(inventory?.boundaries),
+		note: "App Data Inventory lists saved app data domains from backend contracts only. It does not read evidence bodies, execute shell commands, open local files, invoke models, mutate jobs, write git state, expose secrets, or declare release readiness."
+	};
+}
+function boundaryListState(boundaries) {
+	if (boundaries === null || boundaries === void 0 || typeof boundaries !== "object" || Array.isArray(boundaries)) return {
+		state: "missing",
+		count: valueState(void 0),
+		items: []
+	};
+	const items = Object.entries(boundaries).map(([key, val]) => ({
+		key: valueState(key),
+		value: valueState(val)
+	}));
+	return {
+		state: items.length === 0 ? "empty" : "available",
+		count: valueState(items.length),
+		items
 	};
 }
 function snapshotRuntimeState(snapshot) {
@@ -19480,6 +19570,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					className: "active-goal-grid",
 					"aria-label": "v20 Active Goal supporting contracts",
 					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppDataInventoryPanel, {
+							inventory: model.appDataInventory,
+							route: findRoute(model.routeStates, "appDataInventory")
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActionRegistryPanel, {
 							registry: model.activeGoal.actionRegistry,
 							manifestRoute: findRoute(model.routeStates, "actionManifest"),
@@ -22709,6 +22803,90 @@ function ActionRegistryPanel({ registry, manifestRoute, availabilityRoute, previ
 				children: registry?.note
 			})
 		]
+	});
+}
+function AppDataInventoryPanel({ inventory, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "app-data-inventory-panel",
+		kicker: "v39 data inventory",
+		title: "App Data Inventory",
+		state: inventory?.state ?? "missing",
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", inventory?.contractName],
+				["contractVersion", inventory?.contractVersion],
+				["goalId", inventory?.goalId],
+				["taskId", inventory?.taskId],
+				["source", inventory?.sourcePolicy],
+				["scope", inventory?.inventoryScope],
+				["domains", inventory?.domainCount],
+				["available domains", inventory?.availableDomainCount],
+				["evidence refs", inventory?.evidenceRefCount],
+				["data kinds", inventory?.persistedDataKinds]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "settings",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["stateDir", inventory?.settings?.stateDir],
+					["artifactStoreDir", inventory?.settings?.artifactStoreDir],
+					["repoPath", inventory?.settings?.repoPath],
+					["settingsWriteAvailable", inventory?.settings?.settingsWriteAvailable],
+					["secretValueExposureAvailable", inventory?.settings?.secretValueExposureAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppDataInventoryDomainList, { domains: inventory?.domains }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppDataInventoryEvidenceList, { evidenceRefs: inventory?.evidenceRefs }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: inventory?.boundaries?.items,
+					nameKey: "key",
+					valueKey: "value",
+					emptyCopy: "inventory boundaries 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: inventory?.note
+			})
+		]
+	});
+}
+function AppDataInventoryDomainList({ domains }) {
+	if (domains?.state !== "available" || !Array.isArray(domains.items) || domains.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "app data domains 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "data domains",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "action-registry-list",
+			"aria-label": "App data inventory domains",
+			children: domains.items.map((domain, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["domain", domain.domainId],
+				["label", domain.label],
+				["contract", domain.contractName],
+				["route", domain.route],
+				["storage", domain.storageKind],
+				["canonical source", domain.canonicalSource],
+				["state", domain.state],
+				["items", domain.itemCount]
+			] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+				rows: domain.refs?.items,
+				nameKey: "kind",
+				valueKey: "value",
+				emptyCopy: "domain refs 为空。"
+			})] }, `${domain.domainId.text}-${index}`))
+		})
+	});
+}
+function AppDataInventoryEvidenceList({ evidenceRefs }) {
+	if (evidenceRefs?.state !== "available" || !Array.isArray(evidenceRefs.items) || evidenceRefs.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "evidence refs 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "evidence refs",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "compact-list",
+			"aria-label": "App data inventory evidence refs",
+			children: evidenceRefs.items.slice(0, 8).map((ref, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: ref.kind.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: ref.ref.text })] }, `${ref.ref.text}-${index}`))
+		})
 	});
 }
 function ProviderHubPanel({ hub, route }) {

@@ -19,6 +19,7 @@ const CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = 'controlled-adoption-confirmat
 const CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = 'symphony.console-adoption-inspect';
 const RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = 'release-baseline-resolver.v1';
 const APP_STATE_SNAPSHOT_CONTRACT_NAME = 'app-state-snapshot.v1';
+const APP_DATA_INVENTORY_CONTRACT_NAME = 'app-data-inventory.v1';
 const CAPABILITIES_CONTRACT_NAME = 'capabilities.v1';
 const ACTION_MANIFEST_CONTRACT_NAME = 'action-manifest.v1';
 const ACTION_AVAILABILITY_CONTRACT_NAME = 'action-availability.v1';
@@ -373,6 +374,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/runtime/snapshot',
     method: 'GET',
     contractName: APP_STATE_SNAPSHOT_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'appDataInventory',
+    label: 'App Data Inventory',
+    path: '/api/app/data-inventory',
+    method: 'GET',
+    contractName: APP_DATA_INVENTORY_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'readiness',
@@ -798,6 +806,7 @@ export function projectWorkbenchContracts(results) {
   const summaryData = dataFrom(results.summary);
   const projectRegistryData = dataFrom(results.projectRegistry);
   const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
+  const appDataInventoryData = dataFrom(results.appDataInventory);
   const readinessData = dataFrom(results.readiness);
   const handoffRefsData = dataFrom(results.handoffRefs);
   const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
@@ -1039,6 +1048,10 @@ export function projectWorkbenchContracts(results) {
     }),
     projectRegistry: projectedProjectRegistry,
     runtimeSnapshot: projectedRuntimeSnapshot,
+    appDataInventory: projectAppDataInventory({
+      result: results.appDataInventory,
+      inventory: appDataInventoryData
+    }),
     summary: projectSummary(summaryData),
     readiness: projectReadiness(readinessData, summaryData),
     runs: projectRuns(runsData, summaryData),
@@ -1301,6 +1314,90 @@ function projectSidecarHostLifecycle(sidecarHost) {
       arbitraryCommandAvailable: valueState(boundaries.arbitraryCommandAvailable),
       arbitraryPathAvailable: valueState(boundaries.arbitraryPathAvailable)
     }
+  };
+}
+
+function projectAppDataInventory({ result, inventory }) {
+  const domains = Array.isArray(inventory?.domains) ? inventory.domains : [];
+  const evidenceRefs = Array.isArray(inventory?.evidenceRefs) ? inventory.evidenceRefs : [];
+
+  return {
+    state: result?.ok === true ? (domains.length > 0 ? 'available' : 'empty') : 'missing',
+    modelName: valueState('AppDataInventoryPanel'),
+    contractName: valueState(inventory?.contractName),
+    contractVersion: valueState(inventory?.contractVersion),
+    generatedAt: valueState(inventory?.generatedAt),
+    readOnly: valueState(inventory?.readOnly),
+    goalId: valueState(inventory?.context?.goalId),
+    taskId: valueState(inventory?.context?.taskId),
+    sourcePolicy: valueState(inventory?.context?.stateSource),
+    inventoryScope: valueState(inventory?.context?.inventoryScope),
+    domainCount: valueState(inventory?.summary?.domainCount),
+    availableDomainCount: valueState(inventory?.summary?.availableDomainCount),
+    evidenceRefCount: valueState(inventory?.summary?.evidenceRefCount),
+    persistedDataKinds: textState(Array.isArray(inventory?.summary?.persistedDataKinds)
+      ? inventory.summary.persistedDataKinds.join(' / ')
+      : undefined),
+    settings: {
+      stateDir: valueState(inventory?.settings?.stateDir),
+      artifactStoreDir: valueState(inventory?.settings?.artifactStoreDir),
+      repoPath: valueState(inventory?.settings?.repoPath),
+      settingsWriteAvailable: valueState(inventory?.settings?.settingsWriteAvailable),
+      secretValueExposureAvailable: valueState(inventory?.settings?.secretValueExposureAvailable)
+    },
+    domains: {
+      state: domains.length > 0 ? 'available' : 'empty',
+      count: valueState(domains.length),
+      items: domains.map((domain) => ({
+        domainId: valueState(domain.domainId),
+        label: valueState(domain.label),
+        contractName: valueState(domain.contractName),
+        route: valueState(domain.route),
+        storageKind: valueState(domain.storageKind),
+        canonicalSource: valueState(domain.canonicalSource),
+        state: valueState(domain.state),
+        itemCount: valueState(domain.itemCount),
+        refs: {
+          state: Array.isArray(domain.refs) && domain.refs.length > 0 ? 'available' : 'empty',
+          count: valueState(Array.isArray(domain.refs) ? domain.refs.length : 0),
+          items: Array.isArray(domain.refs)
+            ? domain.refs.map((ref) => ({
+                kind: valueState(ref.kind),
+                value: valueState(ref.value)
+              }))
+            : []
+        },
+        boundaries: boundaryListState(domain.boundaries)
+      }))
+    },
+    evidenceRefs: {
+      state: evidenceRefs.length > 0 ? 'available' : 'empty',
+      count: valueState(evidenceRefs.length),
+      items: evidenceRefs.map((ref) => ({
+        kind: valueState(ref.kind),
+        ref: valueState(ref.ref),
+        source: valueState(ref.source)
+      }))
+    },
+    boundaries: boundaryListState(inventory?.boundaries),
+    note: 'App Data Inventory lists saved app data domains from backend contracts only. It does not read evidence bodies, execute shell commands, open local files, invoke models, mutate jobs, write git state, expose secrets, or declare release readiness.'
+  };
+}
+
+function boundaryListState(boundaries) {
+  if (boundaries === null || boundaries === undefined || typeof boundaries !== 'object' || Array.isArray(boundaries)) {
+    return { state: 'missing', count: valueState(undefined), items: [] };
+  }
+
+  const items = Object.entries(boundaries).map(([key, val]) => ({
+    key: valueState(key),
+    value: valueState(val)
+  }));
+
+  return {
+    state: items.length === 0 ? 'empty' : 'available',
+    count: valueState(items.length),
+    items
   };
 }
 
