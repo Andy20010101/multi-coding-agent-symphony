@@ -9912,6 +9912,7 @@ var ACTION_PREVIEW_CONTRACT_NAME = "action-preview.v1";
 var AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = "agent-cli-provider-health.v1";
 var AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = "agent-cli-capability-profile.v1";
 var AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME = "agent-cli-lane-assignment-preview.v1";
+var APP_SCHEMA_MIGRATION_CONTRACT_NAME = "app-schema-migration.v1";
 var JOB_MODEL_CONTRACT_NAME = "job-model.v1";
 var JOB_CREATION_CONTRACT_NAME = "job-creation.v1";
 var JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = "job-timeline-log-stream.v1";
@@ -10525,6 +10526,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "appSchemaMigration",
+		label: "App Schema Migration",
+		path: "/api/app-data/migration",
+		method: "GET",
+		contractName: APP_SCHEMA_MIGRATION_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "jobModel",
 		label: "Job Model",
 		path: "/api/jobs",
@@ -10810,6 +10818,7 @@ function projectWorkbenchContracts(results) {
 	const providerHealthData = dataFrom(results.providerHealth);
 	const providerCapabilitiesData = dataFrom(results.providerCapabilities);
 	const providerLanePreviewData = dataFrom(results.providerLanePreview);
+	const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
 	const diagnosticsData = dataFrom(results.diagnostics);
 	const jobModelData = dataFrom(results.jobModel);
 	const jobCreationData = dataFrom(results.jobCreation);
@@ -11032,6 +11041,10 @@ function projectWorkbenchContracts(results) {
 		capabilities: projectCapabilities(capabilitiesData),
 		providerHub: projectedProviderHub,
 		providerLanePreview: projectedProviderLanePreview,
+		appSchemaMigration: projectAppSchemaMigration({
+			result: results.appSchemaMigration,
+			migration: appSchemaMigrationData
+		}),
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
 		jobConsole: projectedJobConsole,
 		evidenceTimeline: projectedEvidenceTimeline,
@@ -17747,6 +17760,55 @@ function projectProviderHubEvidenceAnchors(activeGoal) {
 		sourcePolicy: valueState("goal-progress-ledger.v1 task evidence refs; evidence bodies are not read by Workbench")
 	};
 }
+function projectAppSchemaMigration({ result, migration }) {
+	const boundaries = Object.entries(migration?.boundaries ?? {}).map(([boundary, available]) => ({
+		boundary: valueState(boundary),
+		available: valueState(available)
+	}));
+	const affectedAreas = Array.isArray(migration?.dryRun?.affectedAreas) ? migration.dryRun.affectedAreas.map((area) => ({
+		area: valueState(area?.area),
+		currentVersion: valueState(area?.currentVersion),
+		targetVersion: valueState(area?.targetVersion),
+		writeRequiredOnConfirm: valueState(area?.writeRequiredOnConfirm)
+	})) : [];
+	const steps = Array.isArray(migration?.dryRun?.steps) ? migration.dryRun.steps.map((step) => ({
+		stepId: valueState(step?.stepId),
+		status: valueState(step?.status),
+		writesOnConfirm: valueState(step?.writesOnConfirm),
+		description: valueState(step?.description)
+	})) : [];
+	return {
+		state: result?.ok === true ? "available" : result ? "failed" : "missing",
+		contractName: valueState(migration?.contractName),
+		contractVersion: valueState(migration?.contractVersion),
+		generatedAt: valueState(migration?.generatedAt),
+		schema: {
+			currentVersion: valueState(migration?.schema?.currentVersion),
+			targetVersion: valueState(migration?.schema?.targetVersion),
+			versionField: valueState(migration?.schema?.versionField),
+			migrationRequired: valueState(migration?.schema?.migrationRequired),
+			versionSource: valueState(migration?.schema?.versionSource)
+		},
+		dryRun: {
+			defaultMode: valueState(migration?.dryRun?.defaultMode),
+			previewOnly: valueState(migration?.dryRun?.previewOnly),
+			writesAttempted: valueState(migration?.dryRun?.writesAttempted),
+			status: valueState(migration?.dryRun?.status),
+			affectedAreas,
+			steps
+		},
+		confirmation: {
+			required: valueState(migration?.confirmation?.required),
+			actionId: valueState(migration?.confirmation?.actionId),
+			confirmationContract: valueState(migration?.confirmation?.confirmationContract),
+			requiresPlanHash: valueState(migration?.confirmation?.requiresPlanHash),
+			planHash: valueState(migration?.confirmation?.planHash),
+			confirmAvailableFromBrowser: valueState(migration?.confirmation?.confirmAvailableFromBrowser)
+		},
+		boundaries,
+		note: "App schema migration panel shows the dry-run preview and confirm requirements only; the browser route does not execute the migration or write app data."
+	};
+}
 function projectDiagnostics(diagnostics) {
 	return {
 		state: diagnostics === null || diagnostics === void 0 ? "missing" : "available",
@@ -19587,6 +19649,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderLanePreviewPanel, {
 							preview: model.providerLanePreview,
 							route: findRoute(model.routeStates, "providerLanePreview")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppSchemaMigrationPanel, {
+							migration: model.appSchemaMigration,
+							route: findRoute(model.routeStates, "appSchemaMigration")
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
 							nextAction: model.activeGoal.nextAction,
@@ -23244,6 +23310,78 @@ function PromptPreviewDrawer({ promptPreview, route }) {
 				children: promptPreview.note
 			})
 		]
+	});
+}
+function AppSchemaMigrationPanel({ migration, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "app-schema-migration-panel",
+		kicker: "v39 schema migration",
+		title: "Schema Migration Preview",
+		state: routeStateText(route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", migration.contractName],
+				["contractVersion", migration.contractVersion],
+				["current version", migration.schema.currentVersion],
+				["target version", migration.schema.targetVersion],
+				["version field", migration.schema.versionField],
+				["migration required", migration.schema.migrationRequired],
+				["dry-run status", migration.dryRun.status],
+				["dry-run default", migration.dryRun.defaultMode],
+				["preview only", migration.dryRun.previewOnly],
+				["writes attempted", migration.dryRun.writesAttempted],
+				["confirm action", migration.confirmation.actionId],
+				["confirm contract", migration.confirmation.confirmationContract],
+				["requires plan hash", migration.confirmation.requiresPlanHash],
+				["browser confirm available", migration.confirmation.confirmAvailableFromBrowser]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "affected app data",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaMigrationAreaList, { areas: migration.dryRun.affectedAreas })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "migration steps",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SchemaMigrationStepList, { steps: migration.dryRun.steps })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: migration.boundaries,
+					nameKey: "boundary",
+					valueKey: "available",
+					emptyCopy: "boundaries 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: migration.note
+			})
+		]
+	});
+}
+function SchemaMigrationAreaList({ areas }) {
+	if (!Array.isArray(areas) || areas.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "affected app data 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: areas.map((area, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: area.area.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+			area.currentVersion.text,
+			" -> ",
+			area.targetVersion.text,
+			"; write on confirm: ",
+			area.writeRequiredOnConfirm.text
+		] })] }, `${area.area.text}-${index}`))
+	});
+}
+function SchemaMigrationStepList({ steps }) {
+	if (!Array.isArray(steps) || steps.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "migration steps 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		children: steps.map((step, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: step.stepId.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+			step.status.text,
+			"; write on confirm: ",
+			step.writesOnConfirm.text
+		] })] }, `${step.stepId.text}-${index}`))
 	});
 }
 function ReviewWorkspacePanel({ workspace, onGoalEventConfirmed }) {

@@ -22,6 +22,8 @@ v38 task-5 adds the Workbench `ProviderHubPanel` projection and carries the same
 
 v39 task-1 adds `app-data-inventory.v1`, exposed through `GET /api/app/data-inventory` and rendered in Workbench as `AppDataInventoryPanel`. The inventory lists the app data domains the local app already knows how to persist or project: project registry, runtime snapshots, job state, artifact index, settings pointers, sanitized provider profiles, and evidence refs. Each row names the owning backend contract, route, storage role, canonical source, state, item count, safe refs, and read-only boundaries. It is an inventory over existing contracts; it does not scan arbitrary local paths, read evidence document bodies, execute shell commands, invoke models, mutate jobs, expose secret values, write git state, or declare release readiness.
 
+v39 task-2 adds `app-schema-migration.v1`. The contract reports `appData.schemaVersion` current and target versions, migration-required state, affected app data areas from the v39 inventory, dry-run migration steps, `app.schema.migration.confirm`, and the `app-schema-migration-confirmation.v1` plan-hash requirement. `GET /api/app-data/migration` and `symphony app-data migration --json` return the preview only. They do not write app data, execute shell commands, read arbitrary paths, open local files, invoke models, change git state, confirm migration, approve review, pass main verification, or declare release readiness.
+
 ## Shared Rules
 
 - `contractVersion` is the version gate. v8.2 emits `"1"`.

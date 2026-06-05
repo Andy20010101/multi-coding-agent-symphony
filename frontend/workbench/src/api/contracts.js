@@ -27,6 +27,7 @@ const ACTION_PREVIEW_CONTRACT_NAME = 'action-preview.v1';
 const AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = 'agent-cli-provider-health.v1';
 const AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = 'agent-cli-capability-profile.v1';
 const AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME = 'agent-cli-lane-assignment-preview.v1';
+const APP_SCHEMA_MIGRATION_CONTRACT_NAME = 'app-schema-migration.v1';
 const JOB_MODEL_CONTRACT_NAME = 'job-model.v1';
 const JOB_CREATION_CONTRACT_NAME = 'job-creation.v1';
 const JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = 'job-timeline-log-stream.v1';
@@ -528,6 +529,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME
   }),
   Object.freeze({
+    id: 'appSchemaMigration',
+    label: 'App Schema Migration',
+    path: '/api/app-data/migration',
+    method: 'GET',
+    contractName: APP_SCHEMA_MIGRATION_CONTRACT_NAME
+  }),
+  Object.freeze({
     id: 'jobModel',
     label: 'Job Model',
     path: '/api/jobs',
@@ -834,6 +842,7 @@ export function projectWorkbenchContracts(results) {
   const providerHealthData = dataFrom(results.providerHealth);
   const providerCapabilitiesData = dataFrom(results.providerCapabilities);
   const providerLanePreviewData = dataFrom(results.providerLanePreview);
+  const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
   const diagnosticsData = dataFrom(results.diagnostics);
   const jobModelData = dataFrom(results.jobModel);
   const jobCreationData = dataFrom(results.jobCreation);
@@ -1099,6 +1108,10 @@ export function projectWorkbenchContracts(results) {
     capabilities: projectCapabilities(capabilitiesData),
     providerHub: projectedProviderHub,
     providerLanePreview: projectedProviderLanePreview,
+    appSchemaMigration: projectAppSchemaMigration({
+      result: results.appSchemaMigration,
+      migration: appSchemaMigrationData
+    }),
     diagnosticsV1: projectDiagnostics(diagnosticsData),
     jobConsole: projectedJobConsole,
     evidenceTimeline: projectedEvidenceTimeline,
@@ -9959,6 +9972,61 @@ function projectProviderHubEvidenceAnchors(activeGoal) {
     count: valueState(totalRefs),
     items,
     sourcePolicy: valueState('goal-progress-ledger.v1 task evidence refs; evidence bodies are not read by Workbench')
+  };
+}
+
+function projectAppSchemaMigration({ result, migration }) {
+  const boundaries = Object.entries(migration?.boundaries ?? {}).map(([boundary, available]) => ({
+    boundary: valueState(boundary),
+    available: valueState(available)
+  }));
+  const affectedAreas = Array.isArray(migration?.dryRun?.affectedAreas)
+    ? migration.dryRun.affectedAreas.map((area) => ({
+      area: valueState(area?.area),
+      currentVersion: valueState(area?.currentVersion),
+      targetVersion: valueState(area?.targetVersion),
+      writeRequiredOnConfirm: valueState(area?.writeRequiredOnConfirm)
+    }))
+    : [];
+  const steps = Array.isArray(migration?.dryRun?.steps)
+    ? migration.dryRun.steps.map((step) => ({
+      stepId: valueState(step?.stepId),
+      status: valueState(step?.status),
+      writesOnConfirm: valueState(step?.writesOnConfirm),
+      description: valueState(step?.description)
+    }))
+    : [];
+
+  return {
+    state: result?.ok === true ? 'available' : result ? 'failed' : 'missing',
+    contractName: valueState(migration?.contractName),
+    contractVersion: valueState(migration?.contractVersion),
+    generatedAt: valueState(migration?.generatedAt),
+    schema: {
+      currentVersion: valueState(migration?.schema?.currentVersion),
+      targetVersion: valueState(migration?.schema?.targetVersion),
+      versionField: valueState(migration?.schema?.versionField),
+      migrationRequired: valueState(migration?.schema?.migrationRequired),
+      versionSource: valueState(migration?.schema?.versionSource)
+    },
+    dryRun: {
+      defaultMode: valueState(migration?.dryRun?.defaultMode),
+      previewOnly: valueState(migration?.dryRun?.previewOnly),
+      writesAttempted: valueState(migration?.dryRun?.writesAttempted),
+      status: valueState(migration?.dryRun?.status),
+      affectedAreas,
+      steps
+    },
+    confirmation: {
+      required: valueState(migration?.confirmation?.required),
+      actionId: valueState(migration?.confirmation?.actionId),
+      confirmationContract: valueState(migration?.confirmation?.confirmationContract),
+      requiresPlanHash: valueState(migration?.confirmation?.requiresPlanHash),
+      planHash: valueState(migration?.confirmation?.planHash),
+      confirmAvailableFromBrowser: valueState(migration?.confirmation?.confirmAvailableFromBrowser)
+    },
+    boundaries,
+    note: 'App schema migration panel shows the dry-run preview and confirm requirements only; the browser route does not execute the migration or write app data.'
   };
 }
 

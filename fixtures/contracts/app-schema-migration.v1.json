@@ -1,0 +1,139 @@
+{
+  "contractName": "app-schema-migration.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-05T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v39-backup-diagnostics-migration-workspace",
+    "taskId": "task-2",
+    "sourceContracts": [
+      "app-data-inventory.v1",
+      "project-registry.v1",
+      "app-state-snapshot.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "scope": "v39-schema-version-migration-runner"
+  },
+  "schema": {
+    "currentVersion": 1,
+    "targetVersion": 2,
+    "versionField": "appData.schemaVersion",
+    "migrationRequired": true,
+    "versionSource": "app-schema-migration.v1 static target until a durable app data store is introduced"
+  },
+  "dryRun": {
+    "defaultMode": true,
+    "previewOnly": true,
+    "writesAttempted": false,
+    "status": "pending-confirm",
+    "affectedAreas": [
+      {
+        "area": "project-registry",
+        "currentVersion": 1,
+        "targetVersion": 2,
+        "writeRequiredOnConfirm": true
+      },
+      {
+        "area": "runtime-snapshots",
+        "currentVersion": 1,
+        "targetVersion": 2,
+        "writeRequiredOnConfirm": true
+      },
+      {
+        "area": "job-state",
+        "currentVersion": 1,
+        "targetVersion": 2,
+        "writeRequiredOnConfirm": true
+      },
+      {
+        "area": "artifact-index",
+        "currentVersion": 1,
+        "targetVersion": 2,
+        "writeRequiredOnConfirm": true
+      },
+      {
+        "area": "settings",
+        "currentVersion": 1,
+        "targetVersion": 2,
+        "writeRequiredOnConfirm": true
+      },
+      {
+        "area": "provider-profiles",
+        "currentVersion": 1,
+        "targetVersion": 2,
+        "writeRequiredOnConfirm": true
+      },
+      {
+        "area": "evidence-refs",
+        "currentVersion": 1,
+        "targetVersion": 2,
+        "writeRequiredOnConfirm": true
+      }
+    ],
+    "steps": [
+      {
+        "stepId": "schema-version.write-target",
+        "fromVersion": 1,
+        "toVersion": 2,
+        "status": "pending-confirm",
+        "description": "Write appData.schemaVersion after the confirm contract is accepted.",
+        "writesOnConfirm": true
+      },
+      {
+        "stepId": "inventory.refs.backfill-schema-version",
+        "fromVersion": 1,
+        "toVersion": 2,
+        "status": "pending-confirm",
+        "description": "Attach the target schema version to inventory refs for registry, snapshots, jobs, artifacts, settings, providers, and evidence.",
+        "writesOnConfirm": true
+      },
+      {
+        "stepId": "migration.preview.record-result",
+        "fromVersion": 1,
+        "toVersion": 2,
+        "status": "pending-confirm",
+        "description": "Record the migration preview result as explicit backend state before any later backup or restore task consumes it.",
+        "writesOnConfirm": true
+      }
+    ],
+    "warnings": [
+      "Preview does not write app data.",
+      "Confirm must use the matching plan hash and confirmation action id."
+    ]
+  },
+  "confirmation": {
+    "required": true,
+    "actionId": "app.schema.migration.confirm",
+    "confirmationContract": "app-schema-migration-confirmation.v1",
+    "requiresPlanHash": true,
+    "planHash": "sha256:2b22d86221a26cba59b33d210d365660d8817522a175e69f34df34b42f9c9311",
+    "appendOnlyEventRequired": true,
+    "allowedWriteTarget": "managed-app-data-store",
+    "writesInPreview": false,
+    "confirmAvailableFromBrowser": false
+  },
+  "boundaries": {
+    "readOnly": true,
+    "dryRunDefault": true,
+    "writesInDryRunAvailable": false,
+    "confirmRequiredForWrites": true,
+    "shellExecutionAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "localFileOpenAvailable": false,
+    "providerCliExecutionAvailable": false,
+    "migrationConfirmExecuted": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "releaseReadyDeclarationAvailable": false
+  }
+}

@@ -51,6 +51,9 @@ import {
 import {
   buildAgentCliLaneAssignmentPreviewContract
 } from '../src/symphony/agent-cli-lane-assignment-preview.js';
+import {
+  buildAppSchemaMigrationContract
+} from '../src/symphony/app-schema-migration.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
 const V19_GOAL_ID = 'v19-goal-runbook-next-action';
@@ -95,6 +98,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
         ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
+        ['GET', '/api/app-data/migration', 'app-schema-migration.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
@@ -133,6 +137,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
         ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
+        ['GET', '/api/app-data/migration', 'app-schema-migration.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
@@ -220,6 +225,29 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(preview.assignmentMatrix.items.every((row) => row.workerProviderId.value !== row.reviewerProviderId.value), true);
     assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'providerCliExecutionAvailable').available.value, false);
     assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'selfApprovalAvailable').available.value, false);
+  });
+
+  it('projects the v39 Schema Migration Preview panel as dry-run only', () => {
+    const migration = buildAppSchemaMigrationContract({
+      generatedAt: '2026-06-05T00:00:00.000Z'
+    });
+    const model = projectWorkbenchContracts({
+      appSchemaMigration: createWorkbenchResult('appSchemaMigration', migration)
+    });
+    const panel = model.appSchemaMigration;
+
+    assert.equal(panel.contractName.value, 'app-schema-migration.v1');
+    assert.equal(panel.schema.currentVersion.value, 1);
+    assert.equal(panel.schema.targetVersion.value, 2);
+    assert.equal(panel.dryRun.status.value, 'pending-confirm');
+    assert.equal(panel.dryRun.defaultMode.value, true);
+    assert.equal(panel.dryRun.writesAttempted.value, false);
+    assert.equal(panel.dryRun.affectedAreas.length, 7);
+    assert.equal(panel.confirmation.actionId.value, 'app.schema.migration.confirm');
+    assert.equal(panel.confirmation.confirmAvailableFromBrowser.value, false);
+    assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'writesInDryRunAvailable').available.value, false);
+    assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'shellExecutionAvailable').available.value, false);
+    assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'releaseReadyDeclarationAvailable').available.value, false);
   });
 
   it('projects the v38 Provider Hub panel from provider contracts and explicit evidence refs only', () => {

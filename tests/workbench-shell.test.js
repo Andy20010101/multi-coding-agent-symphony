@@ -890,6 +890,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/actions/preview',
       '/api/adoptions/<adoption-id>/inspect',
       '/api/app/data-inventory',
+      '/api/app-data/migration',
       '/api/artifacts',
       '/api/bundle',
       '/api/capabilities',
