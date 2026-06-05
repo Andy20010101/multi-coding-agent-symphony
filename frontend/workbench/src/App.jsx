@@ -269,6 +269,10 @@ export function WorkbenchShell({
               availabilityRoute={findRoute(model.routeStates, 'actionAvailability')}
               previewRoute={findRoute(model.routeStates, 'actionPreview')}
             />
+            <ProviderHubPanel
+              hub={model.providerHub}
+              route={findRoute(model.routeStates, 'providerHealth')}
+            />
             <ProviderLanePreviewPanel
               preview={model.providerLanePreview}
               route={findRoute(model.routeStates, 'providerLanePreview')}
@@ -562,6 +566,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
           />
           <DesktopRunStateCard jobRun={desktopShell?.jobRun} />
           <DesktopArtifactReadinessCard artifactReadiness={desktopShell?.artifactReadiness} />
+          <DesktopProviderHubCard providerHub={desktopShell?.providerHub} />
           <DesktopDecisionCard shellDecision={desktopShell?.shellDecision} />
           <DesktopBoundaryCard boundaries={desktopShell?.boundaries} note={desktopShell?.note} />
         </section>
@@ -899,6 +904,58 @@ function DesktopArtifactPreviewList({ previews }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+function DesktopProviderHubCard({ providerHub }) {
+  const providers = providerHub?.providers?.items ?? [];
+
+  return (
+    <article id="desktop-provider-hub" className="desktop-card desktop-span-2" aria-labelledby="desktop-provider-hub-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">provider hub</p>
+          <h2 id="desktop-provider-hub-title">Provider Availability</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(providerHub?.summary?.healthState?.text)}`}>{providerHub?.summary?.healthState?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['model', providerHub?.modelName],
+        ['goal', providerHub?.goalId],
+        ['active providers', providerHub?.summary?.activeProviderIds],
+        ['configured', providerHub?.summary?.configuredProviderCount],
+        ['missing', providerHub?.summary?.missingProviderCount],
+        ['mapped requirements', providerHub?.summary?.mappedRequirementCount],
+        ['lane count', providerHub?.summary?.laneCount],
+        ['evidence refs', providerHub?.evidenceAnchors?.count],
+        ['provider CLI execution', providerHub?.boundaries?.find((item) => item.boundary.text === 'providerCliExecutionAvailable')?.available],
+        ['model invocation', providerHub?.boundaries?.find((item) => item.boundary.text === 'modelInvocationAvailable')?.available],
+        ['secret values', providerHub?.boundaries?.find((item) => item.boundary.text === 'envValueExposureAvailable')?.available],
+        ['source', providerHub?.sourcePolicy]
+      ]} />
+      {providers.length === 0 ? (
+        <EmptyBlock copy="Desktop Provider Hub 未暴露 provider 状态。" />
+      ) : (
+        <ul className="desktop-readonly-list desktop-artifact-preview-list" aria-label="Desktop provider availability">
+          {providers.slice(0, 2).map((provider, index) => (
+            <li key={`${provider.providerId.text}-${index}`}>
+              <div>
+                <strong>{provider.displayName.text}</strong>
+                <span>{provider.healthState.text}</span>
+              </div>
+              <small>{provider.healthBlocker.text}</small>
+              <FieldList rows={[
+                ['provider', provider.providerId],
+                ['adapter', provider.adapterId],
+                ['local command', provider.localCommand],
+                ['lane candidates', provider.lanePreviewCandidates],
+                ['blocked reasons', provider.blockedReasons]
+              ]} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
   );
 }
 
@@ -3402,6 +3459,163 @@ function ActionRegistryPanel({
       <ActionRegistryBlockers blockers={registry?.blockers} />
       <p className="panel-note">{registry?.note}</p>
     </DataPanel>
+  );
+}
+
+function ProviderHubPanel({ hub, route }) {
+  return (
+    <DataPanel
+      id="provider-hub-panel"
+      kicker="v38 provider hub"
+      title="Provider Hub"
+      state={hub?.state ?? 'missing'}
+      route={route}
+    >
+      <FieldList rows={[
+        ['model', hub?.modelName],
+        ['goal', hub?.goalId],
+        ['source', hub?.sourcePolicy],
+        ['health route', hub?.routeStates?.health],
+        ['capabilities route', hub?.routeStates?.capabilities],
+        ['lane route', hub?.routeStates?.lanePreview],
+        ['active providers', hub?.summary?.activeProviderIds],
+        ['health state', hub?.summary?.healthState],
+        ['configured', hub?.summary?.configuredProviderCount],
+        ['missing', hub?.summary?.missingProviderCount],
+        ['mapped requirements', hub?.summary?.mappedRequirementCount],
+        ['mapped actions', hub?.summary?.mappedActionCount],
+        ['test run mode', hub?.summary?.testRunMode],
+        ['independent review', hub?.summary?.independentReviewRequired],
+        ['main verifier operator lane', hub?.summary?.mainVerifierLaneOperatorControlled]
+      ]} />
+
+      <ProviderHubAvailabilityList providers={hub?.providers} />
+      <ProviderHubRequirementList requirements={hub?.requirementGates} />
+      <ProviderHubEvidenceAnchors anchors={hub?.evidenceAnchors} />
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={hub?.boundaries} nameKey="boundary" valueKey="available" emptyCopy="provider hub boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{hub?.note}</p>
+    </DataPanel>
+  );
+}
+
+function ProviderHubAvailabilityList({ providers }) {
+  if (providers?.state !== 'available' || !Array.isArray(providers.items) || providers.items.length === 0) {
+    return <EmptyBlock copy="provider availability 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="provider availability">
+      <ul className="action-registry-list" aria-label="Provider Hub availability">
+        {providers.items.map((provider, index) => (
+          <li key={`${provider.providerId.text}-${index}`}>
+            <FieldList rows={[
+              ['provider', provider.providerId],
+              ['display', provider.displayName],
+              ['adapter', provider.adapterId],
+              ['local command', provider.localCommand],
+              ['health', provider.healthState],
+              ['blocker', provider.healthBlocker],
+              ['backend profile', provider.backendProfileRef],
+              ['profile status', provider.backendProfileStatus],
+              ['sanitized', provider.backendProfileSanitized],
+              ['lane candidates', provider.lanePreviewCandidates],
+              ['disabled gates', provider.capabilityGates?.disabledCount],
+              ['missing gates', provider.capabilityGates?.missingCount]
+            ]} />
+            <ProviderHubEnvPresenceList envPresence={provider.requiredEnvPresence} />
+            <ProviderHubLaneList lanes={provider.lanes} />
+            <TextItemList items={provider.blockedReasons} emptyCopy="blocked reasons 为空。" />
+          </li>
+        ))}
+      </ul>
+    </Subsection>
+  );
+}
+
+function ProviderHubEnvPresenceList({ envPresence }) {
+  if (envPresence?.state !== 'available' || !Array.isArray(envPresence.items) || envPresence.items.length === 0) {
+    return <EmptyBlock copy="sanitized env presence 未暴露。" />;
+  }
+
+  return (
+    <ul className="compact-list" aria-label="Provider sanitized environment presence">
+      {envPresence.items.map((entry, index) => (
+        <li key={`${entry.name.text}-${index}`}>
+          <span>{entry.name.text}</span>
+          <span>{entry.present.text}</span>
+          <span>valueAvailable={entry.valueAvailable.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProviderHubLaneList({ lanes }) {
+  if (lanes?.state !== 'available' || !Array.isArray(lanes.items) || lanes.items.length === 0) {
+    return <EmptyBlock copy="provider lanes 未暴露。" />;
+  }
+
+  return (
+    <ul className="compact-list" aria-label="Provider Hub lane assignability">
+      {lanes.items.map((lane, index) => (
+        <li key={`${lane.laneId.text}-${index}`}>
+          <span>{lane.laneId.text}</span>
+          <span>{lane.assignableInV38.text}</span>
+          <span>{lane.unavailableReason.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProviderHubRequirementList({ requirements }) {
+  if (requirements?.state !== 'available' || !Array.isArray(requirements.items) || requirements.items.length === 0) {
+    return <EmptyBlock copy="provider requirement gates 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="requirement gates">
+      <ul className="compact-list" aria-label="Provider Hub requirement gates">
+        {requirements.items.map((requirement, index) => (
+          <li key={`${requirement.requirementId.text}-${index}`}>
+            <span>{requirement.requirementId.text}</span>
+            <span>{requirement.state.text}</span>
+            <span>{requirement.providerGateIds.text}</span>
+            <span>{requirement.toolGateIds.text}</span>
+          </li>
+        ))}
+      </ul>
+    </Subsection>
+  );
+}
+
+function ProviderHubEvidenceAnchors({ anchors }) {
+  if (anchors?.state !== 'available' || !Array.isArray(anchors.items) || anchors.items.length === 0) {
+    return <EmptyBlock copy="provider hub evidence anchors 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="evidence anchors">
+      <FieldList rows={[
+        ['evidence refs', anchors.count],
+        ['source', anchors.sourcePolicy]
+      ]} />
+      <ul className="compact-list" aria-label="Provider Hub evidence anchors">
+        {anchors.items.map((item, index) => (
+          <li key={`${item.taskId.text}-${index}`}>
+            <span>{item.taskId.text}</span>
+            <span>{item.status.text}</span>
+            <span>{item.workerEvidenceRef.text}</span>
+            <span>{item.reviewEvidenceRef.text}</span>
+            <span>{item.mainVerificationRef.text}</span>
+          </li>
+        ))}
+      </ul>
+    </Subsection>
   );
 }
 

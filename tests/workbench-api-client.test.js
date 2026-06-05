@@ -43,6 +43,12 @@ import {
   recordGoalOperationRun
 } from '../src/symphony/goal-operation-run-registry.js';
 import {
+  buildAgentCliProviderHealthContract
+} from '../src/symphony/agent-cli-provider-health.js';
+import {
+  buildAgentCliCapabilityProfileContract
+} from '../src/symphony/agent-cli-capability-profile.js';
+import {
   buildAgentCliLaneAssignmentPreviewContract
 } from '../src/symphony/agent-cli-lane-assignment-preview.js';
 
@@ -212,6 +218,55 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(preview.assignmentMatrix.items.every((row) => row.workerProviderId.value !== row.reviewerProviderId.value), true);
     assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'providerCliExecutionAvailable').available.value, false);
     assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'selfApprovalAvailable').available.value, false);
+  });
+
+  it('projects the v38 Provider Hub panel from provider contracts and explicit evidence refs only', () => {
+    const env = {
+      ANTHROPIC_API_KEY: 'sk-test-secret-value'
+    };
+    const health = buildAgentCliProviderHealthContract({
+      generatedAt: '2026-06-04T00:00:00.000Z',
+      env
+    });
+    const capabilities = buildAgentCliCapabilityProfileContract({
+      generatedAt: '2026-06-04T00:00:00.000Z',
+      env
+    });
+    const lanePreview = buildAgentCliLaneAssignmentPreviewContract({
+      generatedAt: '2026-06-04T00:00:00.000Z',
+      env
+    });
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', createV38ProviderHubRunbookPayload()),
+      goalProgress: createWorkbenchResult('goalProgress', createV38ProviderHubLedgerPayload()),
+      goalNextAction: createWorkbenchResult('goalNextAction', createV38ProviderHubNextActionPayload()),
+      providerHealth: createWorkbenchResult('providerHealth', health),
+      providerCapabilities: createWorkbenchResult('providerCapabilities', capabilities),
+      providerLanePreview: createWorkbenchResult('providerLanePreview', lanePreview)
+    });
+    const hub = model.providerHub;
+    const claude = hub.providers.items.find((provider) => provider.providerId.value === 'claude-code-cli');
+    const codex = hub.providers.items.find((provider) => provider.providerId.value === 'codex-cli');
+
+    assert.equal(hub.modelName.value, 'ProviderHubPanel');
+    assert.equal(hub.goalId.value, 'v38-provider-hub-capability-profiles');
+    assert.equal(hub.routeStates.health.value, 'ready');
+    assert.equal(hub.routeStates.capabilities.value, 'ready');
+    assert.equal(hub.routeStates.lanePreview.value, 'ready');
+    assert.equal(hub.summary.activeProviderIds.value, 'claude-code-cli、codex-cli');
+    assert.equal(hub.providers.count.value, 2);
+    assert.equal(claude.healthState.value, 'configured');
+    assert.equal(claude.requiredEnvPresence.items[0].valueAvailable.value, false);
+    assert.equal(codex.healthState.value, 'missing');
+    assert.equal(codex.healthBlocker.value, 'required-env-not-detected');
+    assert.equal(codex.blockedReasons.items.some((item) => item.value === 'required-env-not-detected'), true);
+    assert.equal(hub.evidenceAnchors.count.value, 1);
+    assert.equal(hub.evidenceAnchors.items[0].workerEvidenceRef.value, 'docs/plans/v38-task-5-worker-evidence-2026-06-02.md');
+    assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'providerCliExecutionAvailable').available.value, false);
+    assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'envValueExposureAvailable').available.value, false);
+    assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'selfApprovalAvailable').available.value, false);
+    assert.equal(model.desktopShell.providerHub.summary.activeProviderIds.value, 'claude-code-cli、codex-cli');
+    assert.doesNotMatch(JSON.stringify(hub), /sk-test-secret-value/u);
   });
 
   it('projects the v37 Desktop Shell view model from existing read-only contracts', () => {
@@ -6313,6 +6368,104 @@ function createV19RunbookPayload() {
       workerCannotApproveOwnTask: true,
       reviewerApprovalRequiredBeforeMainVerification: true,
       mainVerificationRequiredBeforeReleaseReady: true
+    }
+  };
+}
+
+function createV38ProviderHubRunbookPayload() {
+  return {
+    contractName: 'goal-runbook.v1',
+    contractVersion: 1,
+    goalId: 'v38-provider-hub-capability-profiles',
+    goalTitle: 'v38 Provider Hub + Capability Profiles',
+    tasks: [
+      {
+        taskId: 'task-5',
+        title: 'Provider hub panel + evidence',
+        branch: 'v38-task-5-provider-hub-panel-evidence',
+        roleOrder: ['worker', 'reviewer', 'main-verifier'],
+        acceptance: [
+          'Workbench displays provider availability and blocked reasons without leaking secrets.'
+        ],
+        expectedEvidence: {
+          worker: 'worker.evidence-recorded',
+          reviewer: ['reviewer.approved', 'reviewer.needs-revision'],
+          mainVerifier: 'main.verification-passed'
+        },
+        copyOnlyCommands: [
+          'pnpm check',
+          'pnpm test',
+          'pnpm workbench:build',
+          'git diff --check'
+        ]
+      }
+    ]
+  };
+}
+
+function createV38ProviderHubLedgerPayload() {
+  return {
+    contractName: 'goal-progress-ledger.v1',
+    contractVersion: 1,
+    goalId: 'v38-provider-hub-capability-profiles',
+    goalTitle: 'v38 Provider Hub + Capability Profiles',
+    summary: {
+      totalTasks: 5,
+      completedTasks: 4,
+      blockedTasks: 0,
+      needsReviewTasks: 0,
+      needsRevisionTasks: 0
+    },
+    tasks: [
+      {
+        taskId: 'task-5',
+        title: 'Provider hub panel + evidence',
+        status: 'in-progress',
+        statusSource: 'goal-event-log.v1:evt_worker',
+        workerEvidenceRef: 'docs/plans/v38-task-5-worker-evidence-2026-06-02.md',
+        reviewEvidenceRef: null,
+        reviewVerdict: null,
+        mainVerificationRef: null,
+        blockers: []
+      }
+    ]
+  };
+}
+
+function createV38ProviderHubNextActionPayload() {
+  return {
+    contractName: 'goal-next-action.v1',
+    contractVersion: 1,
+    goalId: 'v38-provider-hub-capability-profiles',
+    status: 'action-required',
+    next: {
+      taskId: 'task-5',
+      role: 'worker',
+      phase: 'implement',
+      reason: 'No explicit worker evidence is recorded for task-5.',
+      blocked: false
+    },
+    evidenceState: {
+      workerEvidenceRef: 'docs/plans/v38-task-5-worker-evidence-2026-06-02.md',
+      reviewEvidenceRef: null,
+      mainVerificationRef: null
+    },
+    copyOnlyCommands: [
+      'pnpm check',
+      'pnpm test',
+      'pnpm workbench:build',
+      'git diff --check'
+    ],
+    afterCompletion: {
+      registerWith: 'symphony goal update',
+      allowedEvents: ['worker.evidence-recorded']
+    },
+    safety: {
+      readOnly: true,
+      copyOnly: true,
+      workbenchWriteAvailable: false,
+      browserExecutionAvailable: false,
+      modelInvocationAvailable: false
     }
   };
 }

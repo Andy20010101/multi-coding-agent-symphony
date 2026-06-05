@@ -51,6 +51,7 @@ const RELEASE_EVIDENCE_DRAFT_MODEL_NAME = 'ReleaseEvidenceDraftWriter';
 const TAG_EVIDENCE_DRAFT_MODEL_NAME = 'TagEvidenceDraftWriter';
 const NEXT_VERSION_HANDOFF_DRAFT_MODEL_NAME = 'NextVersionHandoffDraft';
 const EVIDENCE_REF_HELPER_NAME = 'EvidenceRefHelper';
+const PROVIDER_HUB_PANEL_MODEL_NAME = 'ProviderHubPanel';
 const V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = 'v25-controlled-implementation-lane';
 const V30_VERIFIED_ADOPTION_GOAL_ID = 'v30-verified-adoption-workspace-v2';
 const EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
@@ -821,6 +822,8 @@ export function projectWorkbenchContracts(results) {
   const actionManifestData = dataFrom(results.actionManifest);
   const actionAvailabilityData = dataFrom(results.actionAvailability);
   const actionPreviewData = dataFrom(results.actionPreview);
+  const providerHealthData = dataFrom(results.providerHealth);
+  const providerCapabilitiesData = dataFrom(results.providerCapabilities);
   const providerLanePreviewData = dataFrom(results.providerLanePreview);
   const diagnosticsData = dataFrom(results.diagnostics);
   const jobModelData = dataFrom(results.jobModel);
@@ -986,6 +989,19 @@ export function projectWorkbenchContracts(results) {
     result: results.releaseBundle,
     bundle: releaseBundleData
   });
+  const projectedProviderLanePreview = projectProviderLanePreview({
+    result: results.providerLanePreview,
+    preview: providerLanePreviewData
+  });
+  const projectedProviderHub = projectProviderHubPanel({
+    healthResult: results.providerHealth,
+    health: providerHealthData,
+    capabilityResult: results.providerCapabilities,
+    capability: providerCapabilitiesData,
+    laneResult: results.providerLanePreview,
+    lanePreview: providerLanePreviewData,
+    activeGoal: activeGoalControl
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1018,6 +1034,7 @@ export function projectWorkbenchContracts(results) {
       artifactIndex: projectedArtifactIndex,
       evidenceTimeline: projectedEvidenceTimeline,
       releaseBundle: projectedReleaseBundle,
+      providerHub: projectedProviderHub,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1067,10 +1084,8 @@ export function projectWorkbenchContracts(results) {
     }),
     activeGoal: activeGoalControl,
     capabilities: projectCapabilities(capabilitiesData),
-    providerLanePreview: projectProviderLanePreview({
-      result: results.providerLanePreview,
-      preview: providerLanePreviewData
-    }),
+    providerHub: projectedProviderHub,
+    providerLanePreview: projectedProviderLanePreview,
     diagnosticsV1: projectDiagnostics(diagnosticsData),
     jobConsole: projectedJobConsole,
     evidenceTimeline: projectedEvidenceTimeline,
@@ -1318,6 +1333,7 @@ function projectDesktopShell({
   artifactIndex,
   evidenceTimeline,
   releaseBundle,
+  providerHub,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -1496,6 +1512,7 @@ function projectDesktopShell({
       evidenceRoute,
       releaseBundleRoute
     }),
+    providerHub,
     boundaries: {
       readOnly: valueState(true),
       shellCommandExecutionAvailable: valueState(false),
@@ -9621,6 +9638,230 @@ function projectProviderLanePreview({ result, preview }) {
       available: valueState(available)
     })),
     note: 'Provider Lane Preview renders agent-cli-lane-assignment-preview.v1 only. It separates worker, reviewer, and main-verifier lanes without assigning agents, executing provider CLIs, registering review, or passing main verification.'
+  };
+}
+
+function projectProviderHubPanel({
+  healthResult,
+  health,
+  capabilityResult,
+  capability,
+  laneResult,
+  lanePreview,
+  activeGoal
+}) {
+  const providers = Array.isArray(health?.providers) ? health.providers : [];
+  const providerGates = new Map(
+    (Array.isArray(capability?.providerGates) ? capability.providerGates : [])
+      .map((providerGate) => [providerGate?.providerId, providerGate])
+  );
+  const lanePreviews = Array.isArray(lanePreview?.lanePreviews) ? lanePreview.lanePreviews : [];
+  const boundaries = projectProviderHubBoundaries({ health, capability, lanePreview });
+  const evidenceAnchors = projectProviderHubEvidenceAnchors(activeGoal);
+  const activeProviderIds = health?.boundaries?.activeProviderIds ?? lanePreview?.activeProviderIds ?? [];
+
+  return {
+    state: health === null && capability === null && lanePreview === null ? 'missing' : 'available',
+    modelName: valueState(PROVIDER_HUB_PANEL_MODEL_NAME),
+    sourcePolicy: valueState('agent-cli-provider-health.v1 + agent-cli-capability-profile.v1 + agent-cli-lane-assignment-preview.v1 + goal-progress-ledger.v1 + goal-event-log.v1'),
+    goalId: valueState(firstNonEmptyString(
+      health?.context?.goalId,
+      capability?.context?.goalId,
+      lanePreview?.context?.goalId,
+      firstValue(activeGoal?.taskQueue?.goalId)
+    )),
+    routeStates: {
+      health: valueState(routeStateFromResult(healthResult)),
+      capabilities: valueState(routeStateFromResult(capabilityResult)),
+      lanePreview: valueState(routeStateFromResult(laneResult))
+    },
+    contracts: {
+      health: valueState(health?.contractName),
+      capabilities: valueState(capability?.contractName),
+      lanePreview: valueState(lanePreview?.contractName)
+    },
+    summary: {
+      activeProviderIds: arrayTextState(activeProviderIds),
+      activeProviderCount: valueState(health?.summary?.activeProviderCount ?? capability?.summary?.activeProviderCount ?? lanePreview?.summary?.activeProviderCount),
+      configuredProviderCount: valueState(health?.summary?.configuredProviderCount),
+      missingProviderCount: valueState(health?.summary?.missingProviderCount),
+      healthState: valueState(health?.summary?.state),
+      mappedRequirementCount: valueState(capability?.summary?.mappedRequirementCount),
+      mappedActionCount: valueState(capability?.summary?.mappedActionCount),
+      requiredRequirementIds: arrayTextState(capability?.summary?.requiredRequirementIds),
+      testRunMode: valueState(capability?.summary?.testRunMode),
+      laneCount: valueState(lanePreview?.summary?.laneCount),
+      independentReviewRequired: valueState(lanePreview?.summary?.independentReviewRequired),
+      mainVerifierLaneOperatorControlled: valueState(lanePreview?.summary?.mainVerifierLaneOperatorControlled)
+    },
+    providers: {
+      state: providers.length === 0 ? 'missing' : 'available',
+      count: valueState(providers.length),
+      items: providers.map((provider) => projectProviderHubProvider({
+        provider,
+        gateProfile: providerGates.get(provider?.providerId),
+        lanePreviews
+      }))
+    },
+    requirementGates: {
+      state: Array.isArray(capability?.requirements) && capability.requirements.length > 0 ? 'available' : 'missing',
+      items: (Array.isArray(capability?.requirements) ? capability.requirements : []).map((requirement) => ({
+        requirementId: valueState(requirement?.requirementId),
+        state: valueState(requirement?.state),
+        providerGateIds: arrayTextState(requirement?.providerGateIds),
+        toolGateIds: arrayTextState(requirement?.toolGateIds),
+        reason: valueState(requirement?.reason)
+      }))
+    },
+    actionMappings: {
+      state: Array.isArray(capability?.actionMappings) && capability.actionMappings.length > 0 ? 'available' : 'missing',
+      count: valueState(Array.isArray(capability?.actionMappings) ? capability.actionMappings.length : undefined),
+      items: (Array.isArray(capability?.actionMappings) ? capability.actionMappings : []).map((mapping) => ({
+        actionId: valueState(mapping?.actionId ?? mapping?.action_id),
+        requirementIds: arrayTextState(mapping?.requirementIds),
+        confirmationContract: valueState(mapping?.confirmationContract),
+        executionAvailable: valueState(mapping?.executionAvailable ?? mapping?.executionEnabled)
+      }))
+    },
+    evidenceAnchors,
+    boundaries,
+    note: 'Provider Hub displays provider availability, blockers, capability gates, lane separation, and explicit evidence refs from backend contracts only. It does not expose secret values, execute provider CLIs, dispatch prompts, invoke models, assign agents, approve review, pass main verification, or declare release readiness.'
+  };
+}
+
+function projectProviderHubProvider({ provider, gateProfile, lanePreviews }) {
+  const requiredEnv = Array.isArray(provider?.backendProfile?.requiredEnv)
+    ? provider.backendProfile.requiredEnv
+    : [];
+  const lanes = Array.isArray(provider?.lanes) ? provider.lanes : [];
+  const gates = Array.isArray(gateProfile?.gates) ? gateProfile.gates : [];
+  const laneCandidates = lanePreviews.flatMap((lane) => (
+    Array.isArray(lane?.candidateProviders)
+      ? lane.candidateProviders
+          .filter((candidate) => candidate?.providerId === provider?.providerId)
+          .map((candidate) => `${lane.role}: ${candidate.assignableInV38 === true ? 'assignable' : candidate.unavailableReason ?? 'blocked'}`)
+      : []
+  ));
+  const blockedReasons = uniqueNonEmptyStrings([
+    provider?.health?.blocker,
+    ...lanes.map((lane) => lane?.unavailableReason),
+    ...gates.filter((gate) => gate?.state === 'missing').map((gate) => gate?.gateId)
+  ]);
+
+  return {
+    providerId: valueState(provider?.providerId),
+    displayName: valueState(provider?.displayName),
+    providerKind: valueState(provider?.providerKind),
+    adapterId: valueState(provider?.adapterId),
+    localCommand: valueState(provider?.localCommand?.command),
+    healthState: valueState(provider?.health?.state),
+    healthBlocker: valueState(provider?.health?.blocker),
+    checkSource: valueState(provider?.health?.checkSource),
+    backendProfileRef: valueState(provider?.backendProfile?.profileRef),
+    backendProfileStatus: valueState(provider?.backendProfile?.status),
+    backendProfileSanitized: valueState(provider?.backendProfile?.sanitized),
+    requiredEnvPresence: {
+      state: requiredEnv.length === 0 ? 'missing' : 'available',
+      items: requiredEnv.map((entry) => ({
+        name: valueState(entry?.name),
+        present: valueState(entry?.present),
+        valueAvailable: valueState(entry?.valueAvailable)
+      }))
+    },
+    lanes: {
+      state: lanes.length === 0 ? 'missing' : 'available',
+      items: lanes.map((lane) => ({
+        laneId: valueState(lane?.laneId),
+        assignableInV38: valueState(lane?.assignableInV38),
+        unavailableReason: valueState(lane?.unavailableReason)
+      }))
+    },
+    capabilityGates: {
+      state: gates.length === 0 ? 'missing' : 'available',
+      disabledCount: valueState(gates.filter((gate) => gate?.state === 'disabled').length),
+      missingCount: valueState(gates.filter((gate) => gate?.state === 'missing').length),
+      items: gates.map((gate) => ({
+        gateId: valueState(gate?.gateId),
+        state: valueState(gate?.state),
+        requirementIds: arrayTextState(gate?.requirementIds),
+        sourceContract: valueState(gate?.sourceContract)
+      }))
+    },
+    lanePreviewCandidates: arrayTextState(laneCandidates),
+    blockedReasons: projectTextItems(blockedReasons),
+    boundaries: Object.entries(gateProfile?.boundaries ?? {}).map(([boundary, available]) => ({
+      boundary: valueState(boundary),
+      available: valueState(available)
+    }))
+  };
+}
+
+function projectProviderHubBoundaries({ health, capability, lanePreview }) {
+  const boundaryKeys = [
+    'providerCliExecutionAvailable',
+    'rendererProviderInvocationAvailable',
+    'promptDispatchAvailable',
+    'modelInvocationAvailable',
+    'genericShellRunnerAvailable',
+    'arbitraryCommandExecutionAvailable',
+    'commandProbeAvailable',
+    'capabilityProbeAvailable',
+    'envValueExposureAvailable',
+    'credentialMaterialAvailable',
+    'rawProviderConfigAvailable',
+    'automaticInstallAvailable',
+    'automaticOauthAvailable',
+    'actionExecutionAvailable',
+    'repoWriteAvailable',
+    'workspaceWritesAvailable',
+    'gitWriteAvailable',
+    'mergeAvailable',
+    'pushAvailable',
+    'tagAvailable',
+    'publishAvailable',
+    'selfApprovalAvailable',
+    'reviewerApprovalInferenceAvailable',
+    'mainVerificationInferenceAvailable'
+  ];
+  const sources = [health?.boundaries, capability?.boundaries, lanePreview?.boundaries]
+    .filter((source) => source !== null && source !== undefined);
+
+  return boundaryKeys.map((boundary) => {
+    const source = sources.find((candidate) => Object.prototype.hasOwnProperty.call(candidate, boundary));
+
+    return {
+      boundary: valueState(boundary),
+      available: valueState(source?.[boundary])
+    };
+  });
+}
+
+function projectProviderHubEvidenceAnchors(activeGoal) {
+  const tasks = activeGoal?.taskQueue?.items ?? [];
+  const items = tasks.map((task) => {
+    const refs = [
+      firstValue(task?.workerEvidenceRef),
+      firstValue(task?.reviewEvidenceRef),
+      firstValue(task?.mainVerificationRef)
+    ].filter((ref) => isNonEmptyString(ref));
+
+    return {
+      taskId: task?.taskId ?? valueState(undefined),
+      title: task?.title ?? valueState(undefined),
+      status: task?.status ?? valueState(undefined),
+      workerEvidenceRef: task?.workerEvidenceRef ?? valueState(undefined),
+      reviewEvidenceRef: task?.reviewEvidenceRef ?? valueState(undefined),
+      mainVerificationRef: task?.mainVerificationRef ?? valueState(undefined),
+      evidenceRefCount: valueState(refs.length)
+    };
+  });
+  const totalRefs = items.reduce((count, item) => count + (item.evidenceRefCount.value ?? 0), 0);
+
+  return {
+    state: items.length === 0 ? 'missing' : 'available',
+    count: valueState(totalRefs),
+    items,
+    sourcePolicy: valueState('goal-progress-ledger.v1 task evidence refs; evidence bodies are not read by Workbench')
   };
 }
 

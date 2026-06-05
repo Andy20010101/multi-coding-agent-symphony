@@ -238,6 +238,8 @@ GET /api/diagnostics
 
 `GET /api/providers/lane-preview` 返回 `agent-cli-lane-assignment-preview.v1`，用于查看 worker、reviewer、main-verifier lane 分离预览。当前只使用 `claude-code-cli` 和 `codex-cli` 作为 worker/reviewer provider candidates；main-verifier 是 operator-controlled lane。route 只展示候选 provider、独立 reviewer matrix、copy-only verification commands 和边界字段；不执行 provider CLI，不启动 agent，不自动分配，不登记 reviewer/main gate，不从前端状态推断 approval 或 main verified。
 
+Workbench 的 `Provider Hub` 面板和 Desktop Shell 的 `Provider Availability` card 消费这三条 provider route，并把 provider availability、blocked reasons、sanitized env presence、capability gates、lane separation 和 active goal evidence refs 放在同一处。面板只读取 backend contract 字段和 `goal-progress-ledger.v1` evidence refs；不读取 evidence 文件正文，不展示 env value，不执行 `claude`/`codex`，不登记 worker/reviewer/main gate，不把 provider health 转换成按钮或 runner。
+
 `GET /api/projects` 返回 `project-registry.v1`，列出从当前 cwd/repo-local metadata 解析出的 registered project。`GET /api/projects/current` 返回 `current-project-resolver.v1`，从 console cwd 解析 current project；可选 `repoPath` 只用于显式 repo path 解析。两个 route 都不写 project registry 数据库、不扫描全盘、不执行 git 写入、不调用模型、不创建 job queue。`/api/projects` 不接受 query 参数，`/api/projects/current` 只接受 `repoPath`。
 
 `GET /api/runtime/snapshot` 返回 `app-state-snapshot.v1`，把 freshness、current project、runtime health、active goal、current task、next action、review status、main verification status、release status、evidence refs 和 known blockers 聚合到同一份只读响应。Workbench 的 Runtime 面板和 `symphony runtime snapshot --json` 消费同一份 schema；healthy、missing project、missing goal、blocked 和 stale 都由后端 contract 字段表达。goal/task/release 字段来自 managed runbook、goal-status ledger、goal next、event/gate/release state 和 v33 runtime/project resolver；缺少 active goal 或 release state 时返回 `null` 和 blocker，不从文件名、branch、prompt 文本或前端状态补状态。route 只接受可选 `repoPath` 和 `goal` query，不登记 `goal update/review/gate/closeout`，不运行验证，不写 `.symphony`，不声明 release ready。
@@ -314,6 +316,14 @@ pnpm --silent symphony providers lanes --json
 ```
 
 预期结果：返回 `agent-cli-lane-assignment-preview.v1`；`activeProviderIds` 只包含 `claude-code-cli` 和 `codex-cli`；`lanePreviews` 包含 worker、reviewer 和 main-verifier；reviewer lane 要求 distinct worker actor；main-verifier lane 不使用 provider candidates，只显示 copy-only verification commands；`boundaries.providerCliExecutionAvailable`、`modelInvocationAvailable`、`selfApprovalAvailable`、`reviewerApprovalInferenceAvailable` 和 `mainVerificationInferenceAvailable` 都是 `false`。
+
+Provider Hub 面板：
+
+```sh
+pnpm workbench:build
+```
+
+预期结果：Workbench 中 `Provider Hub` 面板显示 active providers、health state、configured/missing count、mapped requirements、test run mode、provider blockers、sanitized env presence 和 evidence anchors；Desktop Shell 中 `Provider Availability` card 显示同一份 Provider Hub 摘要。面板不展示 secret value，不运行 provider CLI，不调用模型，不自动分配 worker/reviewer，不登记 review/main verification/release 状态。
 
 project registry：
 

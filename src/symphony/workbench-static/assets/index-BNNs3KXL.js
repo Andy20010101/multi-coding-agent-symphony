@@ -9936,6 +9936,7 @@ var RELEASE_EVIDENCE_DRAFT_MODEL_NAME = "ReleaseEvidenceDraftWriter";
 var TAG_EVIDENCE_DRAFT_MODEL_NAME = "TagEvidenceDraftWriter";
 var NEXT_VERSION_HANDOFF_DRAFT_MODEL_NAME = "NextVersionHandoffDraft";
 var EVIDENCE_REF_HELPER_NAME = "EvidenceRefHelper";
+var PROVIDER_HUB_PANEL_MODEL_NAME = "ProviderHubPanel";
 var V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = "v25-controlled-implementation-lane";
 var EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
 var EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
@@ -10797,6 +10798,8 @@ function projectWorkbenchContracts(results) {
 	const actionManifestData = dataFrom(results.actionManifest);
 	const actionAvailabilityData = dataFrom(results.actionAvailability);
 	const actionPreviewData = dataFrom(results.actionPreview);
+	const providerHealthData = dataFrom(results.providerHealth);
+	const providerCapabilitiesData = dataFrom(results.providerCapabilities);
 	const providerLanePreviewData = dataFrom(results.providerLanePreview);
 	const diagnosticsData = dataFrom(results.diagnostics);
 	const jobModelData = dataFrom(results.jobModel);
@@ -10921,6 +10924,19 @@ function projectWorkbenchContracts(results) {
 		result: results.releaseBundle,
 		bundle: releaseBundleData
 	});
+	const projectedProviderLanePreview = projectProviderLanePreview({
+		result: results.providerLanePreview,
+		preview: providerLanePreviewData
+	});
+	const projectedProviderHub = projectProviderHubPanel({
+		healthResult: results.providerHealth,
+		health: providerHealthData,
+		capabilityResult: results.providerCapabilities,
+		capability: providerCapabilitiesData,
+		laneResult: results.providerLanePreview,
+		lanePreview: providerLanePreviewData,
+		activeGoal: activeGoalControl
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -10951,6 +10967,7 @@ function projectWorkbenchContracts(results) {
 			artifactIndex: projectedArtifactIndex,
 			evidenceTimeline: projectedEvidenceTimeline,
 			releaseBundle: projectedReleaseBundle,
+			providerHub: projectedProviderHub,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11000,10 +11017,8 @@ function projectWorkbenchContracts(results) {
 		}),
 		activeGoal: activeGoalControl,
 		capabilities: projectCapabilities(capabilitiesData),
-		providerLanePreview: projectProviderLanePreview({
-			result: results.providerLanePreview,
-			preview: providerLanePreviewData
-		}),
+		providerHub: projectedProviderHub,
+		providerLanePreview: projectedProviderLanePreview,
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
 		jobConsole: projectedJobConsole,
 		evidenceTimeline: projectedEvidenceTimeline,
@@ -11210,7 +11225,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, routeStates }) {
+function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, providerHub, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const runtimeRoute = findProjectedRoute(routeStates, "runtimeSnapshot");
 	const goalRoute = findProjectedRoute(routeStates, "goalRunbook");
@@ -11379,6 +11394,7 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 			evidenceRoute,
 			releaseBundleRoute
 		}),
+		providerHub,
 		boundaries: {
 			readOnly: valueState(true),
 			shellCommandExecutionAvailable: valueState(false),
@@ -17445,6 +17461,202 @@ function projectProviderLanePreview({ result, preview }) {
 		note: "Provider Lane Preview renders agent-cli-lane-assignment-preview.v1 only. It separates worker, reviewer, and main-verifier lanes without assigning agents, executing provider CLIs, registering review, or passing main verification."
 	};
 }
+function projectProviderHubPanel({ healthResult, health, capabilityResult, capability, laneResult, lanePreview, activeGoal }) {
+	const providers = Array.isArray(health?.providers) ? health.providers : [];
+	const providerGates = new Map((Array.isArray(capability?.providerGates) ? capability.providerGates : []).map((providerGate) => [providerGate?.providerId, providerGate]));
+	const lanePreviews = Array.isArray(lanePreview?.lanePreviews) ? lanePreview.lanePreviews : [];
+	const boundaries = projectProviderHubBoundaries({
+		health,
+		capability,
+		lanePreview
+	});
+	const evidenceAnchors = projectProviderHubEvidenceAnchors(activeGoal);
+	const activeProviderIds = health?.boundaries?.activeProviderIds ?? lanePreview?.activeProviderIds ?? [];
+	return {
+		state: health === null && capability === null && lanePreview === null ? "missing" : "available",
+		modelName: valueState(PROVIDER_HUB_PANEL_MODEL_NAME),
+		sourcePolicy: valueState("agent-cli-provider-health.v1 + agent-cli-capability-profile.v1 + agent-cli-lane-assignment-preview.v1 + goal-progress-ledger.v1 + goal-event-log.v1"),
+		goalId: valueState(firstNonEmptyString(health?.context?.goalId, capability?.context?.goalId, lanePreview?.context?.goalId, firstValue(activeGoal?.taskQueue?.goalId))),
+		routeStates: {
+			health: valueState(routeStateFromResult(healthResult)),
+			capabilities: valueState(routeStateFromResult(capabilityResult)),
+			lanePreview: valueState(routeStateFromResult(laneResult))
+		},
+		contracts: {
+			health: valueState(health?.contractName),
+			capabilities: valueState(capability?.contractName),
+			lanePreview: valueState(lanePreview?.contractName)
+		},
+		summary: {
+			activeProviderIds: arrayTextState(activeProviderIds),
+			activeProviderCount: valueState(health?.summary?.activeProviderCount ?? capability?.summary?.activeProviderCount ?? lanePreview?.summary?.activeProviderCount),
+			configuredProviderCount: valueState(health?.summary?.configuredProviderCount),
+			missingProviderCount: valueState(health?.summary?.missingProviderCount),
+			healthState: valueState(health?.summary?.state),
+			mappedRequirementCount: valueState(capability?.summary?.mappedRequirementCount),
+			mappedActionCount: valueState(capability?.summary?.mappedActionCount),
+			requiredRequirementIds: arrayTextState(capability?.summary?.requiredRequirementIds),
+			testRunMode: valueState(capability?.summary?.testRunMode),
+			laneCount: valueState(lanePreview?.summary?.laneCount),
+			independentReviewRequired: valueState(lanePreview?.summary?.independentReviewRequired),
+			mainVerifierLaneOperatorControlled: valueState(lanePreview?.summary?.mainVerifierLaneOperatorControlled)
+		},
+		providers: {
+			state: providers.length === 0 ? "missing" : "available",
+			count: valueState(providers.length),
+			items: providers.map((provider) => projectProviderHubProvider({
+				provider,
+				gateProfile: providerGates.get(provider?.providerId),
+				lanePreviews
+			}))
+		},
+		requirementGates: {
+			state: Array.isArray(capability?.requirements) && capability.requirements.length > 0 ? "available" : "missing",
+			items: (Array.isArray(capability?.requirements) ? capability.requirements : []).map((requirement) => ({
+				requirementId: valueState(requirement?.requirementId),
+				state: valueState(requirement?.state),
+				providerGateIds: arrayTextState(requirement?.providerGateIds),
+				toolGateIds: arrayTextState(requirement?.toolGateIds),
+				reason: valueState(requirement?.reason)
+			}))
+		},
+		actionMappings: {
+			state: Array.isArray(capability?.actionMappings) && capability.actionMappings.length > 0 ? "available" : "missing",
+			count: valueState(Array.isArray(capability?.actionMappings) ? capability.actionMappings.length : void 0),
+			items: (Array.isArray(capability?.actionMappings) ? capability.actionMappings : []).map((mapping) => ({
+				actionId: valueState(mapping?.actionId ?? mapping?.action_id),
+				requirementIds: arrayTextState(mapping?.requirementIds),
+				confirmationContract: valueState(mapping?.confirmationContract),
+				executionAvailable: valueState(mapping?.executionAvailable ?? mapping?.executionEnabled)
+			}))
+		},
+		evidenceAnchors,
+		boundaries,
+		note: "Provider Hub displays provider availability, blockers, capability gates, lane separation, and explicit evidence refs from backend contracts only. It does not expose secret values, execute provider CLIs, dispatch prompts, invoke models, assign agents, approve review, pass main verification, or declare release readiness."
+	};
+}
+function projectProviderHubProvider({ provider, gateProfile, lanePreviews }) {
+	const requiredEnv = Array.isArray(provider?.backendProfile?.requiredEnv) ? provider.backendProfile.requiredEnv : [];
+	const lanes = Array.isArray(provider?.lanes) ? provider.lanes : [];
+	const gates = Array.isArray(gateProfile?.gates) ? gateProfile.gates : [];
+	const laneCandidates = lanePreviews.flatMap((lane) => Array.isArray(lane?.candidateProviders) ? lane.candidateProviders.filter((candidate) => candidate?.providerId === provider?.providerId).map((candidate) => `${lane.role}: ${candidate.assignableInV38 === true ? "assignable" : candidate.unavailableReason ?? "blocked"}`) : []);
+	const blockedReasons = uniqueNonEmptyStrings([
+		provider?.health?.blocker,
+		...lanes.map((lane) => lane?.unavailableReason),
+		...gates.filter((gate) => gate?.state === "missing").map((gate) => gate?.gateId)
+	]);
+	return {
+		providerId: valueState(provider?.providerId),
+		displayName: valueState(provider?.displayName),
+		providerKind: valueState(provider?.providerKind),
+		adapterId: valueState(provider?.adapterId),
+		localCommand: valueState(provider?.localCommand?.command),
+		healthState: valueState(provider?.health?.state),
+		healthBlocker: valueState(provider?.health?.blocker),
+		checkSource: valueState(provider?.health?.checkSource),
+		backendProfileRef: valueState(provider?.backendProfile?.profileRef),
+		backendProfileStatus: valueState(provider?.backendProfile?.status),
+		backendProfileSanitized: valueState(provider?.backendProfile?.sanitized),
+		requiredEnvPresence: {
+			state: requiredEnv.length === 0 ? "missing" : "available",
+			items: requiredEnv.map((entry) => ({
+				name: valueState(entry?.name),
+				present: valueState(entry?.present),
+				valueAvailable: valueState(entry?.valueAvailable)
+			}))
+		},
+		lanes: {
+			state: lanes.length === 0 ? "missing" : "available",
+			items: lanes.map((lane) => ({
+				laneId: valueState(lane?.laneId),
+				assignableInV38: valueState(lane?.assignableInV38),
+				unavailableReason: valueState(lane?.unavailableReason)
+			}))
+		},
+		capabilityGates: {
+			state: gates.length === 0 ? "missing" : "available",
+			disabledCount: valueState(gates.filter((gate) => gate?.state === "disabled").length),
+			missingCount: valueState(gates.filter((gate) => gate?.state === "missing").length),
+			items: gates.map((gate) => ({
+				gateId: valueState(gate?.gateId),
+				state: valueState(gate?.state),
+				requirementIds: arrayTextState(gate?.requirementIds),
+				sourceContract: valueState(gate?.sourceContract)
+			}))
+		},
+		lanePreviewCandidates: arrayTextState(laneCandidates),
+		blockedReasons: projectTextItems(blockedReasons),
+		boundaries: Object.entries(gateProfile?.boundaries ?? {}).map(([boundary, available]) => ({
+			boundary: valueState(boundary),
+			available: valueState(available)
+		}))
+	};
+}
+function projectProviderHubBoundaries({ health, capability, lanePreview }) {
+	const boundaryKeys = [
+		"providerCliExecutionAvailable",
+		"rendererProviderInvocationAvailable",
+		"promptDispatchAvailable",
+		"modelInvocationAvailable",
+		"genericShellRunnerAvailable",
+		"arbitraryCommandExecutionAvailable",
+		"commandProbeAvailable",
+		"capabilityProbeAvailable",
+		"envValueExposureAvailable",
+		"credentialMaterialAvailable",
+		"rawProviderConfigAvailable",
+		"automaticInstallAvailable",
+		"automaticOauthAvailable",
+		"actionExecutionAvailable",
+		"repoWriteAvailable",
+		"workspaceWritesAvailable",
+		"gitWriteAvailable",
+		"mergeAvailable",
+		"pushAvailable",
+		"tagAvailable",
+		"publishAvailable",
+		"selfApprovalAvailable",
+		"reviewerApprovalInferenceAvailable",
+		"mainVerificationInferenceAvailable"
+	];
+	const sources = [
+		health?.boundaries,
+		capability?.boundaries,
+		lanePreview?.boundaries
+	].filter((source) => source !== null && source !== void 0);
+	return boundaryKeys.map((boundary) => {
+		const source = sources.find((candidate) => Object.prototype.hasOwnProperty.call(candidate, boundary));
+		return {
+			boundary: valueState(boundary),
+			available: valueState(source?.[boundary])
+		};
+	});
+}
+function projectProviderHubEvidenceAnchors(activeGoal) {
+	const items = (activeGoal?.taskQueue?.items ?? []).map((task) => {
+		const refs = [
+			firstValue(task?.workerEvidenceRef),
+			firstValue(task?.reviewEvidenceRef),
+			firstValue(task?.mainVerificationRef)
+		].filter((ref) => isNonEmptyString(ref));
+		return {
+			taskId: task?.taskId ?? valueState(void 0),
+			title: task?.title ?? valueState(void 0),
+			status: task?.status ?? valueState(void 0),
+			workerEvidenceRef: task?.workerEvidenceRef ?? valueState(void 0),
+			reviewEvidenceRef: task?.reviewEvidenceRef ?? valueState(void 0),
+			mainVerificationRef: task?.mainVerificationRef ?? valueState(void 0),
+			evidenceRefCount: valueState(refs.length)
+		};
+	});
+	const totalRefs = items.reduce((count, item) => count + (item.evidenceRefCount.value ?? 0), 0);
+	return {
+		state: items.length === 0 ? "missing" : "available",
+		count: valueState(totalRefs),
+		items,
+		sourcePolicy: valueState("goal-progress-ledger.v1 task evidence refs; evidence bodies are not read by Workbench")
+	};
+}
 function projectDiagnostics(diagnostics) {
 	return {
 		state: diagnostics === null || diagnostics === void 0 ? "missing" : "available",
@@ -19274,6 +19486,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 							availabilityRoute: findRoute(model.routeStates, "actionAvailability"),
 							previewRoute: findRoute(model.routeStates, "actionPreview")
 						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubPanel, {
+							hub: model.providerHub,
+							route: findRoute(model.routeStates, "providerHealth")
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderLanePreviewPanel, {
 							preview: model.providerLanePreview,
 							route: findRoute(model.routeStates, "providerLanePreview")
@@ -19606,6 +19822,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopRunStateCard, { jobRun: desktopShell?.jobRun }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopArtifactReadinessCard, { artifactReadiness: desktopShell?.artifactReadiness }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopProviderHubCard, { providerHub: desktopShell?.providerHub }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDecisionCard, { shellDecision: desktopShell?.shellDecision }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopBoundaryCard, {
 							boundaries: desktopShell?.boundaries,
@@ -19936,6 +20153,58 @@ function DesktopArtifactPreviewList({ previews }) {
 				] })
 			] }, `${preview.kind?.text ?? "artifact"}-${index}`))
 		})]
+	});
+}
+function DesktopProviderHubCard({ providerHub }) {
+	const providers = providerHub?.providers?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		id: "desktop-provider-hub",
+		className: "desktop-card desktop-span-2",
+		"aria-labelledby": "desktop-provider-hub-title",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "desktop-card-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "provider hub"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+					id: "desktop-provider-hub-title",
+					children: "Provider Availability"
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(providerHub?.summary?.healthState?.text)}`,
+					children: providerHub?.summary?.healthState?.text ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["model", providerHub?.modelName],
+				["goal", providerHub?.goalId],
+				["active providers", providerHub?.summary?.activeProviderIds],
+				["configured", providerHub?.summary?.configuredProviderCount],
+				["missing", providerHub?.summary?.missingProviderCount],
+				["mapped requirements", providerHub?.summary?.mappedRequirementCount],
+				["lane count", providerHub?.summary?.laneCount],
+				["evidence refs", providerHub?.evidenceAnchors?.count],
+				["provider CLI execution", providerHub?.boundaries?.find((item) => item.boundary.text === "providerCliExecutionAvailable")?.available],
+				["model invocation", providerHub?.boundaries?.find((item) => item.boundary.text === "modelInvocationAvailable")?.available],
+				["secret values", providerHub?.boundaries?.find((item) => item.boundary.text === "envValueExposureAvailable")?.available],
+				["source", providerHub?.sourcePolicy]
+			] }),
+			providers.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Desktop Provider Hub 未暴露 provider 状态。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				className: "desktop-readonly-list desktop-artifact-preview-list",
+				"aria-label": "Desktop provider availability",
+				children: providers.slice(0, 2).map((provider, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: provider.displayName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: provider.healthState.text })] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: provider.healthBlocker.text }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["provider", provider.providerId],
+						["adapter", provider.adapterId],
+						["local command", provider.localCommand],
+						["lane candidates", provider.lanePreviewCandidates],
+						["blocked reasons", provider.blockedReasons]
+					] })
+				] }, `${provider.providerId.text}-${index}`))
+			})
+		]
 	});
 }
 function DesktopDecisionCard({ shellDecision }) {
@@ -22440,6 +22709,139 @@ function ActionRegistryPanel({ registry, manifestRoute, availabilityRoute, previ
 				children: registry?.note
 			})
 		]
+	});
+}
+function ProviderHubPanel({ hub, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "provider-hub-panel",
+		kicker: "v38 provider hub",
+		title: "Provider Hub",
+		state: hub?.state ?? "missing",
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["model", hub?.modelName],
+				["goal", hub?.goalId],
+				["source", hub?.sourcePolicy],
+				["health route", hub?.routeStates?.health],
+				["capabilities route", hub?.routeStates?.capabilities],
+				["lane route", hub?.routeStates?.lanePreview],
+				["active providers", hub?.summary?.activeProviderIds],
+				["health state", hub?.summary?.healthState],
+				["configured", hub?.summary?.configuredProviderCount],
+				["missing", hub?.summary?.missingProviderCount],
+				["mapped requirements", hub?.summary?.mappedRequirementCount],
+				["mapped actions", hub?.summary?.mappedActionCount],
+				["test run mode", hub?.summary?.testRunMode],
+				["independent review", hub?.summary?.independentReviewRequired],
+				["main verifier operator lane", hub?.summary?.mainVerifierLaneOperatorControlled]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubAvailabilityList, { providers: hub?.providers }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubRequirementList, { requirements: hub?.requirementGates }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubEvidenceAnchors, { anchors: hub?.evidenceAnchors }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: hub?.boundaries,
+					nameKey: "boundary",
+					valueKey: "available",
+					emptyCopy: "provider hub boundaries 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: hub?.note
+			})
+		]
+	});
+}
+function ProviderHubAvailabilityList({ providers }) {
+	if (providers?.state !== "available" || !Array.isArray(providers.items) || providers.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider availability 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "provider availability",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "action-registry-list",
+			"aria-label": "Provider Hub availability",
+			children: providers.items.map((provider, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["provider", provider.providerId],
+					["display", provider.displayName],
+					["adapter", provider.adapterId],
+					["local command", provider.localCommand],
+					["health", provider.healthState],
+					["blocker", provider.healthBlocker],
+					["backend profile", provider.backendProfileRef],
+					["profile status", provider.backendProfileStatus],
+					["sanitized", provider.backendProfileSanitized],
+					["lane candidates", provider.lanePreviewCandidates],
+					["disabled gates", provider.capabilityGates?.disabledCount],
+					["missing gates", provider.capabilityGates?.missingCount]
+				] }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubEnvPresenceList, { envPresence: provider.requiredEnvPresence }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubLaneList, { lanes: provider.lanes }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: provider.blockedReasons,
+					emptyCopy: "blocked reasons 为空。"
+				})
+			] }, `${provider.providerId.text}-${index}`))
+		})
+	});
+}
+function ProviderHubEnvPresenceList({ envPresence }) {
+	if (envPresence?.state !== "available" || !Array.isArray(envPresence.items) || envPresence.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "sanitized env presence 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		"aria-label": "Provider sanitized environment presence",
+		children: envPresence.items.map((entry, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: entry.name.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: entry.present.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["valueAvailable=", entry.valueAvailable.text] })
+		] }, `${entry.name.text}-${index}`))
+	});
+}
+function ProviderHubLaneList({ lanes }) {
+	if (lanes?.state !== "available" || !Array.isArray(lanes.items) || lanes.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider lanes 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "compact-list",
+		"aria-label": "Provider Hub lane assignability",
+		children: lanes.items.map((lane, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: lane.laneId.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: lane.assignableInV38.text }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: lane.unavailableReason.text })
+		] }, `${lane.laneId.text}-${index}`))
+	});
+}
+function ProviderHubRequirementList({ requirements }) {
+	if (requirements?.state !== "available" || !Array.isArray(requirements.items) || requirements.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider requirement gates 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "requirement gates",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "compact-list",
+			"aria-label": "Provider Hub requirement gates",
+			children: requirements.items.map((requirement, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: requirement.requirementId.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: requirement.state.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: requirement.providerGateIds.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: requirement.toolGateIds.text })
+			] }, `${requirement.requirementId.text}-${index}`))
+		})
+	});
+}
+function ProviderHubEvidenceAnchors({ anchors }) {
+	if (anchors?.state !== "available" || !Array.isArray(anchors.items) || anchors.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider hub evidence anchors 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+		title: "evidence anchors",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["evidence refs", anchors.count], ["source", anchors.sourcePolicy]] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "compact-list",
+			"aria-label": "Provider Hub evidence anchors",
+			children: anchors.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.taskId.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.status.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.workerEvidenceRef.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.reviewEvidenceRef.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.mainVerificationRef.text })
+			] }, `${item.taskId.text}-${index}`))
+		})]
 	});
 }
 function ProviderLanePreviewPanel({ preview, route }) {

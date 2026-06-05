@@ -375,6 +375,9 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, />evidence timeline</u);
       assert.match(desktopHtml, />local file open</u);
       assert.match(desktopHtml, /Safe artifact preview routes 未暴露/u);
+      assert.match(desktopHtml, /Provider Availability/u);
+      assert.match(desktopHtml, />active providers</u);
+      assert.match(desktopHtml, />provider CLI execution</u);
       assert.match(desktopHtml, /Tauri First/u);
       assert.match(desktopHtml, /No Runner Surface/u);
       assert.match(desktopHtml, /shell exec/u);
@@ -393,6 +396,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /DesktopDevelopmentStatusCard/u);
     assert.match(app, /DesktopDevelopmentStatusStrip/u);
     assert.match(app, /DesktopArtifactReadinessCard/u);
+    assert.match(app, /DesktopProviderHubCard/u);
     assert.match(app, /DesktopJobTransitionList/u);
     assert.match(app, /DesktopArtifactPreviewList/u);
     assert.match(css, /\.desktop-shell-route/u);
@@ -402,6 +406,23 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(css, /\.desktop-status\.olive/u);
     assert.match(css, /\.desktop-status\.amber/u);
     assert.doesNotMatch(app.slice(app.indexOf('function DesktopShellRoute'), app.indexOf('function GoldenPathPanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
+  });
+
+  it('renders the v38 Provider Hub panel without adding browser execution controls', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const providerHubSource = app.slice(
+      app.indexOf('function ProviderHubPanel'),
+      app.indexOf('function ProviderLanePreviewPanel')
+    );
+
+    assert.match(app, /<ProviderHubPanel/u);
+    assert.match(app, /ProviderHubAvailabilityList/u);
+    assert.match(app, /ProviderHubEvidenceAnchors/u);
+    assert.match(contracts, /ProviderHubPanel/u);
+    assert.match(contracts, /agent-cli-provider-health\.v1 \+ agent-cli-capability-profile\.v1 \+ agent-cli-lane-assignment-preview\.v1/u);
+    assert.match(contracts, /goal-progress-ledger\.v1 task evidence refs; evidence bodies are not read by Workbench/u);
+    assert.doesNotMatch(providerHubSource, /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b|exec|spawn|shell/u);
   });
 
   it('keeps the next action card and prompt drawer display-only', async () => {

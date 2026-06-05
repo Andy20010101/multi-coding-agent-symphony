@@ -41,7 +41,7 @@ Backend profile data must not include API keys, OAuth tokens, credential file co
 - task-2: Provider health check API. Read-only health state from `agent-cli-provider.v1` plus sanitized env presence only; no provider CLI execution, credential file read, prompt dispatch, or model invocation.
 - task-3: Capability profile mapping. `agent-cli-capability-profile.v1` maps action requirements such as `repo.write`, `model.invoke`, `test.run`, and `git.change` to provider/tool gates; no real runner, provider CLI probe, prompt dispatch, model invocation, repo write, merge, push, tag, or publish.
 - task-4: Worker/reviewer lane assignment preview. `agent-cli-lane-assignment-preview.v1` displays worker, reviewer, and operator-controlled main-verifier lane separation; no execution, auto assignment, self-approval, or main-verification inference.
-- task-5: Provider Hub panel and evidence. Workbench consumes backend contracts; renderer does not run provider CLIs.
+- task-5: Provider Hub panel and evidence. Workbench/Desktop aggregate provider health, capability gates, lane preview, blockers, sanitized env presence, and active goal evidence refs from backend contracts; renderer does not run provider CLIs, read evidence bodies, expose secret values, or infer approval/main verification/release readiness.
 
 ## v41 Boundary
 
