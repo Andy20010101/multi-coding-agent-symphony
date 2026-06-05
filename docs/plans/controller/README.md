@@ -42,6 +42,8 @@ Automation belongs in the thin supervisor. Context-heavy reasoning belongs in fr
 ## Files
 
 - `supervisor-loop-prompt.md`: startup prompt for the thin supervisor loop.
+- `supervisor-runner.md`: local dry-run runner state machine and command contract.
+- `supervisor-hooks.md`: hook points for state transitions, checkpointing, and timeout/dirty handling.
 - `master-once-prompt.md`: startup prompt for the controller Codex thread.
 - `context-management.md`: lease, context budget, rotation, and pause rules.
 - `v38-controller-state.md`: current checkpoint for v38 controller work.
