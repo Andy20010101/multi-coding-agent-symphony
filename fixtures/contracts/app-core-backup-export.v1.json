@@ -1,0 +1,100 @@
+{
+  "contractName": "app-core-backup-export.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-05T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v39-backup-diagnostics-migration-workspace",
+    "resolvedGoalId": "v39-backup-diagnostics-migration-workspace",
+    "taskId": "task-3",
+    "cwdRef": "multi-coding-agent-symphony",
+    "sourceContracts": [
+      "project-registry.v1",
+      "current-project-resolver.v1",
+      "app-state-snapshot.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "artifact-index.v1",
+      "evidence-bundle.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "exportRole": "manifest-hash-and-refs-only",
+    "canonicalArtifactSource": "ArtifactStore"
+  },
+  "manifest": {
+    "manifestHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "managedStateEntryCount": 1,
+    "artifactRefCount": 1,
+    "includedByteCount": 120,
+    "managedStateEntries": [
+      {
+        "ref": "goals/events/v39-backup-diagnostics-migration-workspace.ndjson",
+        "kind": "goal-event-journal",
+        "present": true,
+        "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "byteSize": 120,
+        "modifiedAt": "2026-06-05T00:00:00.000Z",
+        "scannedAt": "2026-06-05T00:00:00.000Z",
+        "copyPolicy": "hash-only-managed-state"
+      }
+    ],
+    "artifactRefs": [
+      {
+        "artifact_ref": "docs/plans/v39-task-3-worker-evidence-2026-06-02.md",
+        "content_hash": null,
+        "kind": "evidence",
+        "goal_id": "v39-backup-diagnostics-migration-workspace",
+        "task_id": "task-3",
+        "run_id": null,
+        "job_id": null,
+        "copyPolicy": "ref-and-hash-only"
+      }
+    ],
+    "excludedRepoContent": [
+      {
+        "ref": "src/",
+        "reason": "repo source is not copied into app core backup manifest"
+      },
+      {
+        "ref": "frontend/",
+        "reason": "Workbench source is rebuilt from git, not backup state"
+      },
+      {
+        "ref": "tests/",
+        "reason": "test sources are not app runtime state"
+      },
+      {
+        "ref": "docs/",
+        "reason": "repo docs may be referenced by evidence refs but are not copied"
+      },
+      {
+        "ref": ".git/",
+        "reason": "git object database is outside app backup bundle scope"
+      }
+    ]
+  },
+  "boundaries": {
+    "readOnly": true,
+    "writesBundleFile": false,
+    "copiesRepoContent": false,
+    "includesRepoSourcePayloads": false,
+    "includesGitObjectDatabase": false,
+    "artifactDownloadAvailable": false,
+    "localFileOpenAvailable": false,
+    "shellExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "releaseDecisionAvailable": false,
+    "exportPayloadPolicy": "manifest-hash-and-refs-only",
+    "repoContentPolicy": "excluded"
+  }
+}

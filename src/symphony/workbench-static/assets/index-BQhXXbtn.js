@@ -9920,6 +9920,7 @@ var ARTIFACT_INDEX_CONTRACT_NAME = "artifact-index.v1";
 var EVIDENCE_TIMELINE_CONTRACT_NAME = "evidence-timeline.v1";
 var RELEASE_BUNDLE_CONTRACT_NAME = "release-bundle.v1";
 var EVIDENCE_BUNDLE_CONTRACT_NAME = "evidence-bundle.v1";
+var APP_CORE_BACKUP_EXPORT_CONTRACT_NAME = "app-core-backup-export.v1";
 var PROJECT_REGISTRY_CONTRACT_NAME = "project-registry.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
@@ -10578,6 +10579,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/bundle",
 		method: "GET",
 		contractName: EVIDENCE_BUNDLE_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "backupExport",
+		label: "Backup Export",
+		path: "/api/backup/export",
+		method: "GET",
+		contractName: APP_CORE_BACKUP_EXPORT_CONTRACT_NAME
 	})
 ]);
 var GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE = Object.freeze({
@@ -10809,6 +10817,7 @@ function projectWorkbenchContracts(results) {
 	const artifactIndexData = dataFrom(results.artifactIndex);
 	const evidenceTimelineData = dataFrom(results.evidenceTimeline);
 	const releaseBundleData = dataFrom(results.releaseBundle);
+	const backupExportData = dataFrom(results.backupExport);
 	const latestRun = latestRunData?.run ?? null;
 	const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews) ? results.safeArtifactPreviews : [];
 	const routeStates = [
@@ -10924,6 +10933,10 @@ function projectWorkbenchContracts(results) {
 		result: results.releaseBundle,
 		bundle: releaseBundleData
 	});
+	const projectedBackupExport = projectBackupExport({
+		result: results.backupExport,
+		backupExport: backupExportData
+	});
 	const projectedProviderLanePreview = projectProviderLanePreview({
 		result: results.providerLanePreview,
 		preview: providerLanePreviewData
@@ -10967,6 +10980,7 @@ function projectWorkbenchContracts(results) {
 			artifactIndex: projectedArtifactIndex,
 			evidenceTimeline: projectedEvidenceTimeline,
 			releaseBundle: projectedReleaseBundle,
+			backupExport: projectedBackupExport,
 			providerHub: projectedProviderHub,
 			routeStates
 		}),
@@ -11023,6 +11037,7 @@ function projectWorkbenchContracts(results) {
 		jobConsole: projectedJobConsole,
 		evidenceTimeline: projectedEvidenceTimeline,
 		releaseBundle: projectedReleaseBundle,
+		backupExport: projectedBackupExport,
 		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
 			label: gap,
 			status: MISSING_TEXT
@@ -11225,7 +11240,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, providerHub, routeStates }) {
+function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, providerHub, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const runtimeRoute = findProjectedRoute(routeStates, "runtimeSnapshot");
 	const goalRoute = findProjectedRoute(routeStates, "goalRunbook");
@@ -11237,6 +11252,7 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 	const artifactRoute = findProjectedRoute(routeStates, "artifactIndex");
 	const evidenceRoute = findProjectedRoute(routeStates, "evidenceTimeline");
 	const releaseBundleRoute = findProjectedRoute(routeStates, "releaseBundle");
+	const backupExportRoute = findProjectedRoute(routeStates, "backupExport");
 	const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
 	const currentProject = currentProjectFromRegistry(projectRegistry);
 	const sidecarAttachState = firstValue(sidecarHost?.attachState);
@@ -11390,9 +11406,11 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 			artifactIndex,
 			evidenceTimeline,
 			releaseBundle,
+			backupExport,
 			artifactRoute,
 			evidenceRoute,
-			releaseBundleRoute
+			releaseBundleRoute,
+			backupExportRoute
 		}),
 		providerHub,
 		boundaries: {
@@ -11464,7 +11482,7 @@ function projectDesktopJobRun({ jobConsole, jobRoute, jobCreationRoute, jobTimel
 		}
 	};
 }
-function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, artifactRoute, evidenceRoute, releaseBundleRoute }) {
+function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, artifactRoute, evidenceRoute, releaseBundleRoute, backupExportRoute }) {
 	const previewItems = (artifactRefs?.items ?? []).map((artifact) => ({
 		kind: artifact.kind,
 		status: artifact.status,
@@ -11488,7 +11506,7 @@ function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidence
 			evidenceTimeline,
 			releaseBundle
 		})),
-		sourcePolicy: valueState("artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1"),
+		sourcePolicy: valueState("artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1"),
 		registeredRefs: valueState(artifactRefs?.count),
 		status: artifactRefs?.status?.status,
 		missing: artifactRefs?.status?.missing,
@@ -11513,10 +11531,16 @@ function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidence
 		releaseTaskCount: releaseBundle?.taskCount,
 		releaseReady: releaseBundle?.releaseReady,
 		releaseDecisionAvailable: releaseBundle?.boundaries?.releaseDecisionAvailable,
+		backupExportState: valueState(backupExport?.state),
+		backupManifestHash: backupExport?.manifestHash,
+		backupManagedStateEntryCount: backupExport?.managedStateEntryCount,
+		backupArtifactRefCount: backupExport?.artifactRefCount,
+		backupRepoContentPolicy: backupExport?.boundaries?.repoContentPolicy,
 		route: valueState(artifactRoute?.path),
 		routeState: valueState(routeStateFromRoute(artifactRoute)),
 		evidenceRouteState: valueState(routeStateFromRoute(evidenceRoute)),
 		releaseBundleRouteState: valueState(routeStateFromRoute(releaseBundleRoute)),
+		backupExportRouteState: valueState(routeStateFromRoute(backupExportRoute)),
 		boundaries: {
 			readOnly: artifactIndex?.boundaries?.readOnly ?? valueState(true),
 			canonicalSource: artifactIndex?.boundaries?.canonicalSource ?? valueState("ArtifactStore is canonical"),
@@ -18463,6 +18487,59 @@ function projectReleaseBundle({ result, bundle }) {
 		note: "Release Bundle 按 task 展示 worker/reviewer/main-verifier/release-manager evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。"
 	};
 }
+function projectBackupExport({ result, backupExport }) {
+	if (backupExport === null || backupExport === void 0) return {
+		state: result?.ok === true ? "empty" : "unavailable",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(void 0),
+		contractVersion: valueState(void 0),
+		generatedAt: valueState(void 0),
+		readOnly: valueState(void 0),
+		context: {},
+		manifestHash: valueState(void 0),
+		managedStateEntryCount: valueState(0),
+		artifactRefCount: valueState(0),
+		includedByteCount: valueState(0),
+		managedStateEntries: valueState([]),
+		artifactRefs: valueState([]),
+		excludedRepoContent: valueState([]),
+		note: "Backup export manifest 未暴露 / 不可用。"
+	};
+	const managedStateEntries = Array.isArray(backupExport.manifest?.managedStateEntries) ? backupExport.manifest.managedStateEntries : [];
+	const artifactRefs = Array.isArray(backupExport.manifest?.artifactRefs) ? backupExport.manifest.artifactRefs : [];
+	return {
+		state: backupExport.manifest?.manifestHash ? "available" : "empty",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(backupExport.contractName),
+		contractVersion: valueState(backupExport.contractVersion),
+		generatedAt: valueState(backupExport.generatedAt),
+		readOnly: valueState(backupExport.readOnly),
+		context: {
+			goalId: valueState(backupExport.context?.goalId),
+			resolvedGoalId: valueState(backupExport.context?.resolvedGoalId),
+			taskId: valueState(backupExport.context?.taskId),
+			exportRole: valueState(backupExport.context?.exportRole),
+			canonicalArtifactSource: valueState(backupExport.context?.canonicalArtifactSource)
+		},
+		manifestHash: valueState(backupExport.manifest?.manifestHash),
+		managedStateEntryCount: valueState(backupExport.manifest?.managedStateEntryCount ?? managedStateEntries.length),
+		artifactRefCount: valueState(backupExport.manifest?.artifactRefCount ?? artifactRefs.length),
+		includedByteCount: valueState(backupExport.manifest?.includedByteCount ?? 0),
+		managedStateEntries: valueState(managedStateEntries),
+		artifactRefs: valueState(artifactRefs),
+		excludedRepoContent: valueState(Array.isArray(backupExport.manifest?.excludedRepoContent) ? backupExport.manifest.excludedRepoContent : []),
+		boundaries: {
+			readOnly: valueState(backupExport.boundaries?.readOnly),
+			writesBundleFile: valueState(backupExport.boundaries?.writesBundleFile),
+			copiesRepoContent: valueState(backupExport.boundaries?.copiesRepoContent),
+			includesRepoSourcePayloads: valueState(backupExport.boundaries?.includesRepoSourcePayloads),
+			arbitraryPathReadAvailable: valueState(backupExport.boundaries?.arbitraryPathReadAvailable),
+			repoContentPolicy: valueState(backupExport.boundaries?.repoContentPolicy),
+			exportPayloadPolicy: valueState(backupExport.boundaries?.exportPayloadPolicy)
+		},
+		note: "Backup Export 只展示 app core state manifest、hash 和 refs。它不复制 repo source、docs、tests、.git 或 artifact 内容。"
+	};
+}
 Object.freeze({
 	missing: MISSING_TEXT,
 	unavailable: UNAVAILABLE_TEXT,
@@ -19605,13 +19682,20 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "evidence-grid",
 					"aria-label": "v36 evidence timeline 与 release bundle 只读 panels",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceTimelinePanel, {
-						evidenceTimeline: model.evidenceTimeline,
-						route: findRoute(model.routeStates, "evidenceTimeline")
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseBundlePanel, {
-						releaseBundle: model.releaseBundle,
-						route: findRoute(model.routeStates, "releaseBundle")
-					})]
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceTimelinePanel, {
+							evidenceTimeline: model.evidenceTimeline,
+							route: findRoute(model.routeStates, "evidenceTimeline")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseBundlePanel, {
+							releaseBundle: model.releaseBundle,
+							route: findRoute(model.routeStates, "releaseBundle")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BackupExportPanel, {
+							backupExport: model.backupExport,
+							route: findRoute(model.routeStates, "backupExport")
+						})
+					]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "support-grid",
@@ -20125,6 +20209,11 @@ function DesktopArtifactReadinessCard({ artifactReadiness }) {
 				["bundle", artifactReadiness?.releaseBundleState],
 				["bundle tasks", artifactReadiness?.releaseTaskCount],
 				["release state", artifactReadiness?.releaseReady],
+				["backup export", artifactReadiness?.backupExportState],
+				["backup manifest", artifactReadiness?.backupManifestHash],
+				["backup state entries", artifactReadiness?.backupManagedStateEntryCount],
+				["backup artifact refs", artifactReadiness?.backupArtifactRefCount],
+				["repo content policy", artifactReadiness?.backupRepoContentPolicy],
 				["local file open", artifactReadiness?.boundaries?.localFileOpenAvailable],
 				["source", artifactReadiness?.sourcePolicy]
 			] }),
@@ -21529,6 +21618,111 @@ function ReleaseBundleTaskList({ tasks }) {
 						" entries"
 					] })
 				]
+			})]
+		}, index))
+	});
+}
+function BackupExportPanel({ backupExport, route }) {
+	const managedStateEntries = backupExport?.managedStateEntries?.value ?? [];
+	const excludedRepoContent = backupExport?.excludedRepoContent?.value ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "backup-export-panel",
+		kicker: "v39 backup export",
+		title: "Backup Export",
+		state: routeStateText(route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", backupExport?.contractName],
+				["contractVersion", backupExport?.contractVersion],
+				["generatedAt", backupExport?.generatedAt],
+				["readOnly", backupExport?.readOnly],
+				["context.goalId", backupExport?.context?.goalId],
+				["context.resolvedGoalId", backupExport?.context?.resolvedGoalId],
+				["context.taskId", backupExport?.context?.taskId],
+				["context.exportRole", backupExport?.context?.exportRole],
+				["manifestHash", backupExport?.manifestHash],
+				["managedStateEntryCount", backupExport?.managedStateEntryCount],
+				["artifactRefCount", backupExport?.artifactRefCount],
+				["includedByteCount", backupExport?.includedByteCount],
+				["boundaries.writesBundleFile", backupExport?.boundaries?.writesBundleFile],
+				["boundaries.copiesRepoContent", backupExport?.boundaries?.copiesRepoContent],
+				["boundaries.repoContentPolicy", backupExport?.boundaries?.repoContentPolicy],
+				["boundaries.exportPayloadPolicy", backupExport?.boundaries?.exportPayloadPolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `managed state (${managedStateEntries.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BackupManagedStateList, { entries: managedStateEntries })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `excluded repo content (${excludedRepoContent.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BackupExcludedRepoContentList, { entries: excludedRepoContent })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: backupExport?.note ?? "Backup Export 只展示 app core state manifest、hash 和 refs。不复制 repo source、docs、tests、.git 或 artifact 内容。"
+			})
+		]
+	});
+}
+function BackupManagedStateList({ entries }) {
+	if (!Array.isArray(entries) || entries.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 managed state 条目"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("ul", {
+		className: "artifact-list",
+		children: [entries.slice(0, 8).map((entry, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-kind",
+					children: entry.kind ?? "-"
+				}),
+				" ",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-ref",
+					children: entry.ref ?? "-"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-meta",
+					children: [
+						"present=",
+						String(entry.present ?? false),
+						" ",
+						"bytes=",
+						entry.byteSize ?? 0,
+						" ",
+						"policy=",
+						entry.copyPolicy ?? "-"
+					]
+				})
+			]
+		}, index)), entries.length > 8 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [
+				"另外 ",
+				entries.length - 8,
+				" 个 managed state 条目"
+			]
+		}) : null]
+	});
+}
+function BackupExcludedRepoContentList({ entries }) {
+	if (!Array.isArray(entries) || entries.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 excluded repo content 条目"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "artifact-list",
+		children: entries.map((entry, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "artifact-ref",
+				children: entry.ref ?? "-"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "artifact-meta",
+				children: entry.reason ?? "-"
 			})]
 		}, index))
 	});

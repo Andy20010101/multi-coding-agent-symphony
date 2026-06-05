@@ -102,7 +102,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/artifacts', 'artifact-index.v1'],
         ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
-        ['GET', '/api/bundle', 'evidence-bundle.v1']
+        ['GET', '/api/bundle', 'evidence-bundle.v1'],
+        ['GET', '/api/backup/export', 'app-core-backup-export.v1']
       ]
     );
     assert.deepEqual(
@@ -140,6 +141,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
         ['GET', '/api/bundle', 'evidence-bundle.v1'],
+        ['GET', '/api/backup/export', 'app-core-backup-export.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
         ['GET', '/api/goals/<goal-id>/operations', 'goal-operation-runs.v1'],
@@ -434,7 +436,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.jobRun.boundaries.arbitraryCommandExecutionAvailable.value, false);
     assert.equal(model.artifactIndex.contractName.text, 'artifact-index.v1');
     assert.equal(model.artifactIndex.entries.count.value, 2);
-    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1');
+    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1');
     assert.equal(model.desktopShell.artifactReadiness.status.text, 'partial');
     assert.equal(model.desktopShell.artifactReadiness.missing.value, 1);
     assert.equal(model.desktopShell.artifactReadiness.safePreviewRoutes.value, 1);
