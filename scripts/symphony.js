@@ -109,6 +109,10 @@ import {
   buildGoalCloseoutReport,
   renderGoalCloseoutReportMarkdown
 } from '../src/symphony/goal-closeout-report.js';
+import {
+  SupervisorRunnerUsageError,
+  runSupervisorCli
+} from '../src/symphony/supervisor-runner.js';
 import { buildEvidenceBundle } from '../src/symphony/evidence-bundle.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
@@ -177,7 +181,8 @@ const KNOWN_COMMANDS = new Set([
   'new',
   'stage',
   'next',
-  'evidence'
+  'evidence',
+  'supervisor'
 ]);
 let productRunSequence = 0;
 
@@ -408,6 +413,21 @@ export async function runSymphonyCli({
         args: rest,
         stdout
       });
+    }
+
+    if (command === 'supervisor') {
+      try {
+        return await runSupervisorCli({
+          args: rest,
+          stdout
+        });
+      } catch (error) {
+        if (error instanceof SupervisorRunnerUsageError) {
+          throw new UsageError(error.message);
+        }
+
+        throw error;
+      }
     }
 
     if (command === 'adopt') {
