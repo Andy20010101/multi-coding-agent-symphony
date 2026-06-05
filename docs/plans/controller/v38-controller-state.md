@@ -1,6 +1,6 @@
 # v38 Controller State
 
-Date: 2026-06-04
+Date: 2026-06-05
 
 ## Current Goal
 
@@ -60,10 +60,10 @@ codex/controller-loop-ops
 Current controller state:
 
 ```text
-task-1 through task-4 are main-verified in the managed goal ledger.
-task-5 reviewer approved evidence exists and task-5 review event is registered.
-task-5 main verification was missing at fresh-controller reconciliation.
-task-5 main-verifier subagent is now dispatched and active.
+task-1 through task-5 are release-ready in the managed goal ledger.
+All fixture release gates are passed.
+Release readiness is declared.
+Latest release-ready source: goal-event-log.v1:evt_32261d4927aea700.
 controller command policy: use phase rotation; /goal continue is one-step compatibility only.
 after automatic compaction, the compacted controller thread must not continue review, verification, gates, or event registration.
 ```
@@ -99,6 +99,57 @@ git diff --check
 ```
 
 Do not run mutation, audit, doctor, real CLI, tag, push, or publish unless explicitly requested or explicitly listed in the current runbook.
+
+## Latest Closeout
+
+Date: 2026-06-05
+
+Command context:
+
+```text
+Received approval to continue v38 scoped closeout.
+This closeout followed the v38 runbook fixture releaseGates only.
+No repository tag/full release was requested.
+No mutation, audit, doctor, real CLI, tag, push, or publish command was run.
+```
+
+Release evidence:
+
+```text
+Evidence ref: docs/plans/v38-release-gates-evidence-2026-06-05.md.
+Evidence branch: codex/v38-task-5-provider-hub-panel-evidence.
+Evidence commit: 996044c77305ec355a31bcfa3aeba63252d0c768.
+Product gate commit before evidence file: 8372185077d922a48029f99561942bd2c00e2dc3.
+```
+
+Default gates run from the task-5 worktree:
+
+```text
+pnpm check: passed.
+pnpm test: passed, 1015 tests passed and 0 failed.
+pnpm workbench:build: passed.
+git diff --check: passed.
+```
+
+Registered release gate events:
+
+```text
+release.pnpm-check: evt_d60e9f5c7fa33186.
+release.pnpm-test: evt_b71ef02de191b436.
+release.workbench-build: evt_e050f9bfbfa56a5a.
+release.diff-check: evt_8785fb3b1c9e5d2b.
+release.docs-updated: evt_9c64796cd99cf686.
+release.ready-declared: evt_32261d4927aea700.
+```
+
+Post-closeout state:
+
+```text
+Managed goal next action: complete.
+Managed ledger releaseReady: true.
+Release ready source: goal-event-log.v1:evt_32261d4927aea700.
+All 5 v38 tasks are release-ready in the managed ledger.
+```
 
 ## Latest Reconciliation
 
