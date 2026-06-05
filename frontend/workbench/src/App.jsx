@@ -263,6 +263,10 @@ export function WorkbenchShell({
           </section>
 
           <section className="active-goal-grid" aria-label="v20 Active Goal supporting contracts">
+            <InboxCapturePanel
+              capture={model.inboxCapture}
+              route={findRoute(model.routeStates, 'inboxCapture')}
+            />
             <AppDataInventoryPanel
               inventory={model.appDataInventory}
               route={findRoute(model.routeStates, 'appDataInventory')}
@@ -272,6 +276,10 @@ export function WorkbenchShell({
               manifestRoute={findRoute(model.routeStates, 'actionManifest')}
               availabilityRoute={findRoute(model.routeStates, 'actionAvailability')}
               previewRoute={findRoute(model.routeStates, 'actionPreview')}
+            />
+            <GoalDraftHandoffPanel
+              handoff={model.activeGoal.goalDraftHandoff}
+              route={findRoute(model.routeStates, 'goalDraftHandoff')}
             />
             <ProviderHubPanel
               hub={model.providerHub}
@@ -284,6 +292,10 @@ export function WorkbenchShell({
             <AppSchemaMigrationPanel
               migration={model.appSchemaMigration}
               route={findRoute(model.routeStates, 'appSchemaMigration')}
+            />
+            <WorkflowRouterCategoriesPanel
+              router={model.workflowRouterCategories}
+              route={findRoute(model.routeStates, 'workflowRouterCategories')}
             />
             <NextActionCard
               nextAction={model.activeGoal.nextAction}
@@ -357,6 +369,10 @@ export function WorkbenchShell({
             <ReleaseBundlePanel
               releaseBundle={model.releaseBundle}
               route={findRoute(model.routeStates, 'releaseBundle')}
+            />
+            <AppCoreReleaseManagerPanel
+              releaseManager={model.appCoreReleaseManager}
+              route={findRoute(model.routeStates, 'appCoreReleaseManager')}
             />
             <BackupExportPanel
               backupExport={model.backupExport}
@@ -2352,6 +2368,112 @@ function ReleaseBundleTaskList({ tasks }) {
   );
 }
 
+function AppCoreReleaseManagerPanel({ releaseManager, route }) {
+  const capabilityItems = releaseManager?.capabilityChecklist?.items?.value ?? [];
+  const finalSections = releaseManager?.finalEvidenceDraft?.requiredSections?.value ?? [];
+  const releaseGates = releaseManager?.closeoutStatus?.releaseGateStatuses ?? [];
+
+  return (
+    <DataPanel
+      id="app-core-release-manager-panel"
+      kicker="v40 app core release manager"
+      title="App Core Release Manager"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', releaseManager?.contractName],
+        ['contractVersion', releaseManager?.contractVersion],
+        ['generatedAt', releaseManager?.generatedAt],
+        ['readOnly', releaseManager?.readOnly],
+        ['context.goalId', releaseManager?.context?.goalId],
+        ['context.resolvedGoalId', releaseManager?.context?.resolvedGoalId],
+        ['context.taskId', releaseManager?.context?.taskId],
+        ['context.managerRole', releaseManager?.context?.managerRole],
+        ['release.state', releaseManager?.releaseReadiness?.state],
+        ['release.reason', releaseManager?.releaseReadiness?.reason],
+        ['releaseReadyDeclared', releaseManager?.releaseReadiness?.releaseReadyDeclared],
+        ['releaseReadySource', releaseManager?.releaseReadiness?.releaseReadySource],
+        ['declarationAuthorized', releaseManager?.releaseReadiness?.declarationAuthorized],
+        ['declarationCommandAvailable', releaseManager?.releaseReadiness?.declarationCommandAvailable],
+        ['closeout.state', releaseManager?.closeoutStatus?.state],
+        ['closeout.missingCount', releaseManager?.closeoutStatus?.missingCount],
+        ['workerEvidenceComplete', releaseManager?.closeoutStatus?.workerEvidenceComplete],
+        ['reviewEvidenceComplete', releaseManager?.closeoutStatus?.reviewEvidenceComplete],
+        ['mainVerificationComplete', releaseManager?.closeoutStatus?.mainVerificationComplete],
+        ['capabilities passed', releaseManager?.capabilityChecklist?.passedCount],
+        ['capabilities warning', releaseManager?.capabilityChecklist?.warningCount],
+        ['capabilities blocked', releaseManager?.capabilityChecklist?.blockedCount],
+        ['final evidence ref', releaseManager?.finalEvidenceDraft?.evidenceRef],
+        ['final evidence state', releaseManager?.finalEvidenceDraft?.state],
+        ['final blocker count', releaseManager?.finalEvidenceDraft?.blockerCount],
+        ['source events', releaseManager?.finalEvidenceDraft?.sourceEventCount]
+      ]} />
+
+      <Subsection title={`v34-v39 capability checklist (${capabilityItems.length})`}>
+        <AppCoreCapabilityChecklist items={capabilityItems} />
+      </Subsection>
+
+      <Subsection title={`release gates (${releaseGates.length})`}>
+        <KeyValueList rows={releaseGates} nameKey="gate" valueKey="status" emptyCopy="release gates 未暴露。" />
+      </Subsection>
+
+      <Subsection title={`final evidence sections (${finalSections.length})`}>
+        <TextItemList items={finalSections} emptyCopy="final evidence sections 未暴露。" />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['writesEvidenceFile', releaseManager?.boundaries?.writesEvidenceFile],
+          ['emitsGoalEvent', releaseManager?.boundaries?.emitsGoalEvent],
+          ['closeoutExecutionAvailable', releaseManager?.boundaries?.closeoutExecutionAvailable],
+          ['releaseReadyDeclarationAvailable', releaseManager?.boundaries?.releaseReadyDeclarationAvailable],
+          ['releaseGateMutationAvailable', releaseManager?.boundaries?.releaseGateMutationAvailable],
+          ['shellExecutionAvailable', releaseManager?.boundaries?.shellExecutionAvailable],
+          ['modelInvocationAvailable', releaseManager?.boundaries?.modelInvocationAvailable],
+          ['arbitraryCommandExecutionAvailable', releaseManager?.boundaries?.arbitraryCommandExecutionAvailable],
+          ['gitWriteAvailable', releaseManager?.boundaries?.gitWriteAvailable],
+          ['mergeAvailable', releaseManager?.boundaries?.mergeAvailable],
+          ['pushAvailable', releaseManager?.boundaries?.pushAvailable],
+          ['tagAvailable', releaseManager?.boundaries?.tagAvailable],
+          ['publishAvailable', releaseManager?.boundaries?.publishAvailable],
+          ['selfApprovalAvailable', releaseManager?.boundaries?.selfApprovalAvailable],
+          ['frontendStatusInferenceAvailable', releaseManager?.boundaries?.frontendStatusInferenceAvailable],
+          ['statusSource', releaseManager?.boundaries?.statusSource],
+          ['evidencePolicy', releaseManager?.boundaries?.evidencePolicy]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{releaseManager?.note ?? 'App Core Release Manager 只读收口 v34-v39 checklist 和 final evidence draft。'}</p>
+    </DataPanel>
+  );
+}
+
+function AppCoreCapabilityChecklist({ items }) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return <p className="empty-list">暂无 app core capability 条目</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {items.map((item) => (
+        <li key={item.id} className="artifact-item">
+          <span className="artifact-kind">{item.version ?? '-'}</span>
+          {' '}
+          <span className="artifact-ref">{item.label ?? '-'}</span>
+          <span className="artifact-meta">
+            status={item.status ?? '-'}
+            {' '}source={item.sourceContract ?? '-'}
+            {' '}route={item.route ?? '-'}
+          </span>
+          <span className="artifact-meta">{item.evidence ?? '-'}</span>
+          {item.blocker ? <span className="artifact-meta">blocker={item.blocker}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function BackupExportPanel({ backupExport, route }) {
   const managedStateEntries = backupExport?.managedStateEntries?.value ?? [];
   const excludedRepoContent = backupExport?.excludedRepoContent?.value ?? [];
@@ -3777,6 +3899,97 @@ function ActionRegistryPanel({
   );
 }
 
+function InboxCapturePanel({ capture, route }) {
+  return (
+    <DataPanel
+      id="inbox-capture-panel"
+      kicker="v40 inbox capture"
+      title="Inbox Capture"
+      state={capture?.state ?? 'missing'}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', capture?.contractName],
+        ['contractVersion', capture?.contractVersion],
+        ['goalId', capture?.goalId],
+        ['taskId', capture?.taskId],
+        ['source', capture?.sourcePolicy],
+        ['appPath', capture?.appPath],
+        ['readOnly', capture?.readOnly]
+      ]} />
+
+      <Subsection title="intake surface">
+        <FieldList rows={[
+          ['route', capture?.intakeSurface?.route],
+          ['cliCommand', capture?.intakeSurface?.cliCommand],
+          ['workbenchPanel', capture?.intakeSurface?.workbenchPanel],
+          ['acceptsRawRequests', capture?.intakeSurface?.acceptsRawRequests],
+          ['requiresActiveWorkbenchGoal', capture?.intakeSurface?.requiresActiveWorkbenchGoal],
+          ['writesInPreview', capture?.intakeSurface?.writesInPreview]
+        ]} />
+      </Subsection>
+
+      <Subsection title="capture draft">
+        <FieldList rows={[
+          ['contract', capture?.captureDraft?.contractName],
+          ['persisted', capture?.captureDraft?.persisted],
+          ['requiredFields', capture?.captureDraft?.requiredFields],
+          ['optionalFields', capture?.captureDraft?.optionalFields],
+          ['bodyReadAvailable', capture?.captureDraft?.bodyReadAvailable],
+          ['nextContract', capture?.captureDraft?.nextContract]
+        ]} />
+      </Subsection>
+
+      <InboxCaptureTypeList items={capture?.captureItemTypes} />
+
+      <Subsection title="handoff">
+        <FieldList rows={[
+          ['routerContract', capture?.handoff?.routerContract],
+          ['goalDraftContract', capture?.handoff?.goalDraftContract],
+          ['workbenchGoalRequiredForCapture', capture?.handoff?.workbenchGoalRequiredForCapture],
+          ['workbenchGoalRequiredForGoalDraft', capture?.handoff?.workbenchGoalRequiredForGoalDraft]
+        ]} />
+        <TextItemList items={capture?.handoff?.allowedNextSteps} emptyCopy="allowed next steps 未暴露。" />
+      </Subsection>
+
+      <Subsection title="blocked inference sources">
+        <TextItemList items={capture?.handoff?.blockedInferenceSources} emptyCopy="blocked inference sources 未暴露。" />
+      </Subsection>
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={capture?.boundaries?.items} nameKey="key" valueKey="value" emptyCopy="inbox capture boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{capture?.note}</p>
+    </DataPanel>
+  );
+}
+
+function InboxCaptureTypeList({ items }) {
+  if (items?.state !== 'available' || !Array.isArray(items.items) || items.items.length === 0) {
+    return <EmptyBlock copy="capture item types 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="capture item types">
+      <ul className="action-registry-list" aria-label="Inbox capture item types">
+        {items.items.map((item, index) => (
+          <li key={`${item.itemType.text}-${index}`}>
+            <FieldList rows={[
+              ['itemType', item.itemType],
+              ['label', item.label],
+              ['summary', item.summary],
+              ['requiresWorkbenchGoal', item.requiresWorkbenchGoal],
+              ['routesImmediately', item.routesImmediately],
+              ['allowedBeforeGoalExists', item.allowedBeforeGoalExists]
+            ]} />
+          </li>
+        ))}
+      </ul>
+    </Subsection>
+  );
+}
+
 function AppDataInventoryPanel({ inventory, route }) {
   return (
     <DataPanel
@@ -3817,6 +4030,79 @@ function AppDataInventoryPanel({ inventory, route }) {
       </Subsection>
 
       <p className="panel-note">{inventory?.note}</p>
+    </DataPanel>
+  );
+}
+
+function GoalDraftHandoffPanel({ handoff, route }) {
+  return (
+    <DataPanel
+      id="goal-draft-handoff-panel"
+      kicker="v40 workflow router"
+      title="Goal Draft Handoff"
+      state={handoff?.state ?? 'missing'}
+      route={route}
+    >
+      <FieldList rows={[
+        ['modelName', handoff?.modelName],
+        ['contractName', handoff?.contractName],
+        ['goalId', handoff?.goalId],
+        ['taskId', handoff?.taskId],
+        ['category', handoff?.routing?.category],
+        ['draft state', handoff?.goalDraft?.state],
+        ['suggested goal', handoff?.goalDraft?.suggestedGoalId],
+        ['suggested title', handoff?.goalDraft?.suggestedTitle],
+        ['registration', handoff?.goalDraft?.registrationState],
+        ['operator review required', handoff?.goalDraft?.operatorReviewRequired],
+        ['sourcePolicy', handoff?.sourcePolicy]
+      ]} />
+
+      <Subsection title="runbook draft">
+        <FieldList rows={[
+          ['contractName', handoff?.runbookDraft?.contractName],
+          ['draftOnly', handoff?.runbookDraft?.draftOnly],
+          ['autoRegister', handoff?.runbookDraft?.autoRegister],
+          ['taskCount', handoff?.runbookDraft?.taskCount],
+          ['releaseGates', handoff?.runbookDraft?.releaseGates]
+        ]} />
+      </Subsection>
+
+      <Subsection title="copy-only commands">
+        <TextItemList items={handoff?.handoff?.copyOnlyCommands} emptyCopy="copy-only command 未暴露。" />
+      </Subsection>
+
+      <Subsection title="handoff checklist">
+        <TextItemList items={handoff?.handoff?.checklist} emptyCopy="handoff checklist 未暴露。" />
+      </Subsection>
+
+      <Subsection title="endpoint">
+        <FieldList rows={[
+          ['method', handoff?.endpoint?.method],
+          ['route', handoff?.endpoint?.route],
+          ['allowedQueryFields', handoff?.endpoint?.allowedQueryFields],
+          ['writesInPreview', handoff?.endpoint?.writesInPreview],
+          ['registersGoal', handoff?.endpoint?.registersGoal]
+        ]} />
+      </Subsection>
+
+      <Subsection title="boundaries">
+        <FieldList rows={[
+          ['readOnly', handoff?.boundaries?.readOnly],
+          ['draftOnly', handoff?.boundaries?.draftOnly],
+          ['writesFiles', handoff?.boundaries?.writesFiles],
+          ['registersGoal', handoff?.boundaries?.registersGoal],
+          ['runsGoalInit', handoff?.boundaries?.runsGoalInit],
+          ['arbitraryCommandExecutionAvailable', handoff?.boundaries?.arbitraryCommandExecutionAvailable],
+          ['modelInvocationAvailable', handoff?.boundaries?.modelInvocationAvailable],
+          ['gitWriteAvailable', handoff?.boundaries?.gitWriteAvailable],
+          ['selfApprovalAvailable', handoff?.boundaries?.selfApprovalAvailable],
+          ['releaseReadyDeclared', handoff?.boundaries?.releaseReadyDeclared],
+          ['statusSource', handoff?.boundaries?.statusSource]
+        ]} />
+      </Subsection>
+
+      <ActionRegistryBlockers blockers={handoff?.blockers} />
+      <p className="panel-note">{handoff?.note}</p>
     </DataPanel>
   );
 }
@@ -4334,6 +4620,99 @@ function SchemaMigrationStepList({ steps }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function WorkflowRouterCategoriesPanel({ router, route }) {
+  return (
+    <DataPanel
+      id="workflow-router-categories-panel"
+      kicker="v40 workflow router"
+      title="Workflow Router"
+      state={router?.state ?? 'missing'}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', router?.contractName],
+        ['contractVersion', router?.contractVersion],
+        ['goalId', router?.goalId],
+        ['taskId', router?.taskId],
+        ['source', router?.sourcePolicy],
+        ['scope', router?.scope],
+        ['category count', router?.categoryCount],
+        ['source contracts', router?.sourceContracts],
+        ['route goal', router?.routeContext?.goalId],
+        ['route task', router?.routeContext?.taskId]
+      ]} />
+
+      <Subsection title="decision policy">
+        <FieldList rows={[
+          ['default category', router?.decisionPolicy?.defaultCategoryId],
+          ['confidence source', router?.decisionPolicy?.confidenceSource],
+          ['human confirm for goal draft', router?.decisionPolicy?.requiresHumanConfirmationForGoalDraft],
+          ['writes route decision', router?.decisionPolicy?.writesRouteDecision],
+          ['model invocation required', router?.decisionPolicy?.modelInvocationRequired],
+          ['fallback category', router?.decisionPolicy?.fallbackCategoryId]
+        ]} />
+      </Subsection>
+
+      <WorkflowRouterCategoryList categories={router?.categories} />
+      <WorkflowRouterExampleList examples={router?.examples} />
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={router?.boundaries} nameKey="boundary" valueKey="available" emptyCopy="router boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{router?.note}</p>
+    </DataPanel>
+  );
+}
+
+function WorkflowRouterCategoryList({ categories }) {
+  if (categories?.state !== 'available' || !Array.isArray(categories.items) || categories.items.length === 0) {
+    return <EmptyBlock copy="workflow router categories 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="route categories">
+      <ul className="action-registry-list" aria-label="Workflow router categories">
+        {categories.items.map((category, index) => (
+          <li key={`${category.categoryId.text}-${index}`}>
+            <FieldList rows={[
+              ['category', category.categoryId],
+              ['label', category.label],
+              ['route kind', category.routeKind],
+              ['user path', category.userPath],
+              ['signals', category.requestSignals],
+              ['next step', category.nextStep],
+              ['allowed contracts', category.allowedContracts],
+              ['boundary', category.boundary]
+            ]} />
+          </li>
+        ))}
+      </ul>
+    </Subsection>
+  );
+}
+
+function WorkflowRouterExampleList({ examples }) {
+  if (examples?.state !== 'available' || !Array.isArray(examples.items) || examples.items.length === 0) {
+    return <EmptyBlock copy="workflow router examples 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="routing examples">
+      <ul className="compact-list" aria-label="Workflow router examples">
+        {examples.items.map((example, index) => (
+          <li key={`${example.exampleId.text}-${index}`}>
+            <strong>{example.selectedCategoryId.text}</strong>
+            <span>{example.inputKind.text}</span>
+            <span>{example.nextContract.text}</span>
+            <span>writesState={example.writesState.text}</span>
+          </li>
+        ))}
+      </ul>
+    </Subsection>
   );
 }
 
@@ -5033,12 +5412,16 @@ function NextVersionHandoffDraft({ draft }) {
       <Subsection title="implemented capabilities">
         <NextVersionCapabilityList capabilities={draft.implementedCapabilities} />
       </Subsection>
+      <Subsection title="native UX handoff scope">
+        <NativeUxHandoffDraft handoff={draft.nativeUxHandoff} />
+      </Subsection>
       <Subsection title="copy-only context commands">
         <TextItemList items={draft.copyOnlyCommands} emptyCopy="copy-only context commands 未暴露。" />
       </Subsection>
       <Subsection title="safety">
         <FieldList rows={[
           ['copyOnly', draft.safety.copyOnly],
+          ['nativeUxHandoffOnly', draft.safety.nativeUxHandoffOnly],
           ['createsManagedGoal', draft.safety.createsManagedGoal],
           ['entersNextVersion', draft.safety.entersNextVersion],
           ['runsShell', draft.safety.runsShell],
@@ -5061,6 +5444,70 @@ function NextVersionHandoffDraft({ draft }) {
       <pre className="prompt-preview-text"><code>{draft.markdown.text}</code></pre>
       <p className="panel-note">{draft.boundaryText.text}</p>
     </div>
+  );
+}
+
+function NativeUxHandoffDraft({ handoff }) {
+  if (handoff?.state === 'missing' || handoff === undefined || handoff === null) {
+    return <EmptyBlock copy="native UX handoff 未暴露。" />;
+  }
+
+  return (
+    <div className="native-ux-handoff-draft">
+      <FieldList rows={[
+        ['state', textValue(handoff.state)],
+        ['version', handoff.version],
+        ['goalId', handoff.goalId],
+        ['releaseName', handoff.releaseName],
+        ['targetCommit', handoff.targetCommit],
+        ['releaseReady', handoff.releaseReady],
+        ['closeoutMissingCount', handoff.closeoutMissingCount],
+        ['evidenceAnchorCount', handoff.evidenceAnchorCount],
+        ['copyOnly', handoff.safety.copyOnly],
+        ['generatesNativeBuild', handoff.safety.generatesNativeBuild],
+        ['createsInstaller', handoff.safety.createsInstaller],
+        ['signsOrNotarizes', handoff.safety.signsOrNotarizes],
+        ['publishesDistribution', handoff.safety.publishesDistribution],
+        ['autoUpdatesAvailable', handoff.safety.autoUpdatesAvailable],
+        ['invokesProvider', handoff.safety.invokesProvider],
+        ['opensLocalFiles', handoff.safety.opensLocalFiles]
+      ]} />
+      <Subsection title="surface scope">
+        <TextItemList items={handoff.scope} emptyCopy="surface scope 未暴露。" />
+      </Subsection>
+      <Subsection title="distribution channels">
+        <TextItemList items={handoff.distributionChannels} emptyCopy="distribution channels 未暴露。" />
+      </Subsection>
+      <Subsection title="starter work packages">
+        <NativeUxStarterWorkPackageList packages={handoff.starterWorkPackages} />
+      </Subsection>
+      <p className="panel-note">{handoff.note.text}</p>
+    </div>
+  );
+}
+
+function NativeUxStarterWorkPackageList({ packages }) {
+  if (packages?.state === 'missing' || packages === undefined || packages === null) {
+    return <EmptyBlock copy="starter work packages 未暴露。" />;
+  }
+
+  if (!Array.isArray(packages.items) || packages.items.length === 0) {
+    return <EmptyBlock copy="starter work packages 为空。" />;
+  }
+
+  return (
+    <ul className="native-ux-work-package-list">
+      {packages.items.map((item, index) => (
+        <li key={`${item.id.text}-${index}`}>
+          <FieldList rows={[
+            ['id', item.id],
+            ['title', item.title],
+            ['outcome', item.outcome],
+            ['source', item.source]
+          ]} />
+        </li>
+      ))}
+    </ul>
   );
 }
 

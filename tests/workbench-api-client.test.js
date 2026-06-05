@@ -54,6 +54,9 @@ import {
 import {
   buildAppSchemaMigrationContract
 } from '../src/symphony/app-schema-migration.js';
+import {
+  buildWorkflowRouterCategoriesContract
+} from '../src/symphony/workflow-router-categories.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
 const V19_GOAL_ID = 'v19-goal-runbook-next-action';
@@ -78,6 +81,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
+        ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
@@ -95,10 +99,12 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/manifest', 'action-manifest.v1'],
         ['GET', '/api/actions/availability', 'action-availability.v1'],
         ['GET', '/api/actions/preview', 'action-preview.v1'],
+        ['GET', '/api/workflows/goal-draft-handoff', 'goal-draft-handoff.v1'],
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
         ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
         ['GET', '/api/app-data/migration', 'app-schema-migration.v1'],
+        ['GET', '/api/workflow/router-categories', 'workflow-router-categories.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
@@ -108,6 +114,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/artifacts', 'artifact-index.v1'],
         ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
+        ['GET', '/api/release/app-core-manager', 'app-core-release-manager.v1'],
         ['GET', '/api/bundle', 'evidence-bundle.v1'],
         ['GET', '/api/backup/export', 'app-core-backup-export.v1'],
         ['GET', '/api/restore/validate', 'app-core-restore-validation.v1']
@@ -120,6 +127,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
+        ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
         ['GET', '/api/readiness', 'symphony.console-readiness'],
         ['GET', '/api/handoff', 'symphony.handoff-refs'],
         ['GET', '/api/runs', 'symphony.console-runs'],
@@ -137,10 +145,12 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/actions/manifest', 'action-manifest.v1'],
         ['GET', '/api/actions/availability', 'action-availability.v1'],
         ['GET', '/api/actions/preview', 'action-preview.v1'],
+        ['GET', '/api/workflows/goal-draft-handoff', 'goal-draft-handoff.v1'],
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
         ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
         ['GET', '/api/app-data/migration', 'app-schema-migration.v1'],
+        ['GET', '/api/workflow/router-categories', 'workflow-router-categories.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
         ['GET', '/api/jobs/create', 'job-creation.v1'],
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
@@ -150,6 +160,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/artifacts', 'artifact-index.v1'],
         ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
+        ['GET', '/api/release/app-core-manager', 'app-core-release-manager.v1'],
         ['GET', '/api/bundle', 'evidence-bundle.v1'],
         ['GET', '/api/backup/export', 'app-core-backup-export.v1'],
         ['GET', '/api/restore/validate', 'app-core-restore-validation.v1'],
@@ -199,6 +210,28 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(action.requiresPlanHash.value, true);
     assert.equal(action.writesInPreview.value, false);
     assert.equal(action.executionAvailable.value, false);
+  });
+
+  it('projects the v40 Goal Draft Handoff panel as draft-only', () => {
+    const handoffPayload = createGoalDraftHandoffPayload();
+    const model = projectWorkbenchContracts({
+      goalDraftHandoff: createWorkbenchResult('goalDraftHandoff', handoffPayload),
+      goalNextAction: createWorkbenchResult('goalNextAction', createV19NextActionPayload())
+    });
+    const handoff = model.activeGoal.goalDraftHandoff;
+
+    assert.equal(handoff.modelName.value, 'GoalDraftHandoffPanel');
+    assert.equal(handoff.state, 'draft-ready');
+    assert.equal(handoff.sourcePolicy.text, 'goal-draft-handoff.v1 + goal-runbook.v1 + goal-next-action.v1 + goal-progress-ledger.v1 + goal-prompt-pack.v1');
+    assert.equal(handoff.routing.category.value, 'workbench-goal');
+    assert.equal(handoff.goalDraft.suggestedGoalId.value, 'v40-personal-workflow-router-app-core-release-task-3-draft');
+    assert.equal(handoff.goalDraft.registrationState.value, 'not-registered');
+    assert.equal(handoff.runbookDraft.draftOnly.value, true);
+    assert.equal(handoff.runbookDraft.autoRegister.value, false);
+    assert.equal(handoff.endpoint.registersGoal.value, false);
+    assert.equal(handoff.boundaries.registersGoal.value, false);
+    assert.equal(handoff.boundaries.runsGoalInit.value, false);
+    assert.equal(handoff.boundaries.modelInvocationAvailable.value, false);
   });
 
   it('projects the v38 Provider Lane Preview panel from backend provider contracts only', () => {
@@ -253,6 +286,38 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(panel.confirmation.confirmAvailableFromBrowser.value, false);
     assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'writesInDryRunAvailable').available.value, false);
     assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'shellExecutionAvailable').available.value, false);
+    assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'releaseReadyDeclarationAvailable').available.value, false);
+  });
+
+  it('projects the v40 Workflow Router Categories panel without starting workflows', () => {
+    const router = buildWorkflowRouterCategoriesContract({
+      generatedAt: '2026-06-05T00:00:00.000Z'
+    });
+    const model = projectWorkbenchContracts({
+      workflowRouterCategories: createWorkbenchResult('workflowRouterCategories', router)
+    });
+    const panel = model.workflowRouterCategories;
+
+    assert.equal(panel.contractName.value, 'workflow-router-categories.v1');
+    assert.equal(panel.goalId.value, 'v40-personal-workflow-router-app-core-release');
+    assert.equal(panel.taskId.value, 'task-2');
+    assert.equal(panel.categoryCount.value, 6);
+    assert.deepEqual(panel.categories.items.map((category) => category.categoryId.value), [
+      'direct-answer',
+      'skill',
+      'automation',
+      'workbench-goal',
+      'research',
+      'ignore-skip'
+    ]);
+    assert.equal(panel.decisionPolicy.defaultCategoryId.value, 'workbench-goal');
+    assert.equal(panel.decisionPolicy.requiresHumanConfirmationForGoalDraft.value, true);
+    assert.equal(panel.decisionPolicy.writesRouteDecision.value, false);
+    assert.equal(panel.decisionPolicy.modelInvocationRequired.value, false);
+    assert.equal(panel.examples.items.every((example) => example.writesState.value === false), true);
+    assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'jobCreationAvailable').available.value, false);
+    assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'modelInvocationAvailable').available.value, false);
+    assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'arbitraryCommandExecutionAvailable').available.value, false);
     assert.equal(panel.boundaries.find((boundary) => boundary.boundary.value === 'releaseReadyDeclarationAvailable').available.value, false);
   });
 
@@ -3393,8 +3458,17 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(handoffDraft.releaseGateAnchors.items.some((item) => item.gate.value === 'release.pnpm-check' && item.status.value === 'passed'), true);
     assert.equal(handoffDraft.copyOnlyCommands.items.some((item) => item.value === `pnpm --silent symphony goal closeout --goal ${v32GoalId} --markdown`), true);
     assert.match(handoffDraft.markdown.value, /v33 start context draft/u);
+    assert.match(handoffDraft.markdown.value, /Native UX handoff scope:/u);
+    assert.equal(handoffDraft.nativeUxHandoff.state, 'available');
+    assert.equal(handoffDraft.nativeUxHandoff.scope.items.some((item) => /Menu bar companion/u.test(item.value)), true);
+    assert.equal(handoffDraft.nativeUxHandoff.scope.items.some((item) => /Notch companion/u.test(item.value)), true);
+    assert.equal(handoffDraft.nativeUxHandoff.distributionChannels.items.some((item) => /Internal colleague build/u.test(item.value)), true);
+    assert.equal(handoffDraft.nativeUxHandoff.starterWorkPackages.items.some((item) => item.id.value === 'distribution-evidence'), true);
+    assert.equal(handoffDraft.nativeUxHandoff.safety.generatesNativeBuild.value, false);
+    assert.equal(handoffDraft.nativeUxHandoff.safety.publishesDistribution.value, false);
     assert.match(handoffDraft.markdown.value, /Do not create a managed next-version goal from Workbench/u);
     assert.equal(handoffDraft.safety.createsManagedGoal.value, false);
+    assert.equal(handoffDraft.safety.nativeUxHandoffOnly.value, true);
     assert.equal(handoffDraft.safety.entersNextVersion.value, false);
     assert.equal(handoffDraft.safety.runsShell.value, false);
     assert.equal(handoffDraft.safety.invokesModel.value, false);
@@ -3402,6 +3476,32 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(handoffDraft.safety.downloadsArtifacts.value, false);
     assert.equal(handoffDraft.safety.declaresReleaseReady.value, false);
     assert.equal(handoffDraft.safety.v8TopLevelModel.value, false);
+
+    const v40GoalId = 'v40-personal-workflow-router-app-core-release';
+    const v40Model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchResult('goalRunbook', {
+        ...createV19RunbookPayload(),
+        goalId: v40GoalId,
+        goalTitle: 'v40 Personal Workflow Router + App Core Release Closeout'
+      }),
+      goalCloseout: createWorkbenchResult('goalCloseout', {
+        ...createV19CloseoutPayload(),
+        goalId: v40GoalId
+      }),
+      activeGoalProgress: createActiveGoalResult('activeGoalProgress', 'progress', 'goal-progress-ledger.v1', {
+        ...createV19ProgressPayload(),
+        goalId: v40GoalId,
+        goalTitle: 'v40 Personal Workflow Router + App Core Release Closeout'
+      })
+    });
+    const v40HandoffDraft = v40Model.activeGoal.closeoutGaps.nextVersionHandoffDraft;
+
+    assert.equal(v40HandoffDraft.currentVersion.value, 'v40');
+    assert.equal(v40HandoffDraft.nextVersion.value, 'v41');
+    assert.equal(v40HandoffDraft.nativeUxHandoff.version.value, 'v41');
+    assert.match(v40HandoffDraft.markdown.value, /v41 start context draft/u);
+    assert.match(v40HandoffDraft.markdown.value, /Menu bar companion/u);
+    assert.match(v40HandoffDraft.markdown.value, /Native distribution/u);
   });
 
   it('blocks release.ready registration when the release baseline is dirty or not on main', () => {
@@ -4744,6 +4844,86 @@ function createActionPreviewPayload() {
       gitWriteAvailable: false,
       publishAvailable: false,
       selfApprovalAvailable: false
+    }
+  };
+}
+
+function createGoalDraftHandoffPayload() {
+  return {
+    contractName: 'goal-draft-handoff.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-02T00:00:00.000Z',
+    readOnly: true,
+    context: {
+      goalId: 'v40-personal-workflow-router-app-core-release',
+      taskId: 'task-3',
+      sourceContracts: ['goal-runbook.v1', 'goal-next-action.v1', 'goal-progress-ledger.v1', 'goal-prompt-pack.v1'],
+      stateSource: 'explicit-backend-contracts',
+      handoffMode: 'draft-only'
+    },
+    routing: {
+      category: 'workbench-goal',
+      acceptedSignals: ['repeated-friction', 'project-scoped-work'],
+      excludedCategories: ['direct-answer', 'skill', 'automation', 'research', 'skip']
+    },
+    goalDraft: {
+      state: 'draft-ready',
+      draftOnly: true,
+      sourceGoalId: 'v40-personal-workflow-router-app-core-release',
+      sourceTaskId: 'task-3',
+      suggestedGoalId: 'v40-personal-workflow-router-app-core-release-task-3-draft',
+      suggestedTitle: 'Goal/runbook draft handoff follow-up',
+      registrationState: 'not-registered',
+      operatorReviewRequired: true
+    },
+    runbookDraft: {
+      contractName: 'goal-runbook.v1',
+      contractVersion: 1,
+      draftOnly: true,
+      autoRegister: false,
+      goalId: 'v40-personal-workflow-router-app-core-release-task-3-draft',
+      goalTitle: 'Goal/runbook draft handoff follow-up',
+      baseline: {
+        tag: 'v40-personal-workflow-router-app-core-release',
+        commit: null,
+        evidenceRef: null
+      },
+      tasks: [{
+        taskId: 'task-1',
+        title: 'Clarify Goal/runbook draft handoff',
+        branch: 'draft-task-1-clarify-scope'
+      }],
+      releaseGates: ['release.pnpm-check'],
+      rolePolicy: {
+        workerCannotApproveOwnTask: true
+      }
+    },
+    handoff: {
+      markdown: '# Goal Draft Handoff',
+      checklist: ['Check the suggested goal id and title before registration.'],
+      copyOnlyCommands: ['pnpm --silent symphony goal init --from-json <reviewed-draft-json> --goal v40-personal-workflow-router-app-core-release-task-3-draft --dry-run --json'],
+      nextRequiredAction: 'Review the draft JSON before registration.'
+    },
+    blockers: [],
+    endpoint: {
+      method: 'GET',
+      route: '/api/workflows/goal-draft-handoff',
+      allowedQueryFields: ['goal', 'task'],
+      writesInPreview: false,
+      registersGoal: false
+    },
+    boundaries: {
+      readOnly: true,
+      draftOnly: true,
+      writesFiles: false,
+      registersGoal: false,
+      runsGoalInit: false,
+      arbitraryCommandExecutionAvailable: false,
+      modelInvocationAvailable: false,
+      gitWriteAvailable: false,
+      selfApprovalAvailable: false,
+      releaseReadyDeclared: false,
+      statusSource: 'explicit-backend-contracts'
     }
   };
 }

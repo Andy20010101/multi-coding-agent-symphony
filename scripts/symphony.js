@@ -38,6 +38,11 @@ import {
   buildAppStateSnapshot
 } from '../src/symphony/app-state-snapshot.js';
 import {
+  buildInboxCaptureContract,
+  isUnsafeInboxContextRef,
+  renderInboxCaptureText
+} from '../src/symphony/inbox-capture-contract.js';
+import {
   buildActionManifestContract
 } from '../src/symphony/action-manifest.js';
 import {
@@ -186,6 +191,7 @@ const KNOWN_COMMANDS = new Set([
   'console',
   'diagnose',
   'runtime',
+  'inbox',
   'actions',
   'providers',
   'app-data',
@@ -372,6 +378,13 @@ export async function runSymphonyCli({
 
     if (command === 'runtime') {
       return await runSymphonyRuntime({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'inbox') {
+      return await runSymphonyInbox({
         args: rest,
         stdout
       });
@@ -2042,6 +2055,28 @@ async function runSymphonyActions({ args, stdout }) {
   }
 
   stdout.write(renderActionManifestText(manifest));
+  return EXIT_CODES.ok;
+}
+
+async function runSymphonyInbox({ args, stdout }) {
+  const options = parseInboxArgs(args);
+
+  if (options.help) {
+    stdout.write(inboxHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  const contract = buildInboxCaptureContract({
+    goalId: options.goalId,
+    taskId: options.taskId
+  });
+
+  if (options.json) {
+    writeJson(stdout, contract);
+    return EXIT_CODES.ok;
+  }
+
+  stdout.write(renderInboxCaptureText(contract));
   return EXIT_CODES.ok;
 }
 
@@ -4397,6 +4432,82 @@ function actionsHelpText() {
     '',
     'Prints the read-only v34 action manifest, availability, and preview contracts.',
     'The commands do not execute actions, create jobs, call models, read arbitrary files, or change git state.',
+    ''
+  ].join('\n');
+}
+
+function parseInboxArgs(args) {
+  const options = {
+    subcommand: null,
+    goalId: 'latest',
+    taskId: null,
+    json: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('inbox capture contracts are read-only; redirect stdout if you need a file');
+    }
+
+    if (value === '--confirm' || value === '--write' || value === '--prompt' || value === '--path' || value === '--command') {
+      throw new UsageError('inbox capture is a read-only contract preview; it does not write, execute, invoke models, or open paths');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown inbox option: ${value}`);
+    }
+
+    if (options.subcommand !== null) {
+      throw new UsageError(`unexpected inbox argument: ${value}`);
+    }
+
+    options.subcommand = value;
+  }
+
+  options.subcommand ??= 'capture';
+
+  if (options.subcommand !== 'capture') {
+    throw new UsageError('inbox subcommand must be capture');
+  }
+
+  if (isUnsafeInboxContextRef(options.goalId) || (options.taskId !== null && isUnsafeInboxContextRef(options.taskId))) {
+    throw new UsageError('inbox goal and task values must be safe refs');
+  }
+
+  return options;
+}
+
+function inboxHelpText() {
+  return [
+    'Usage: symphony inbox capture [--goal <goal-id>] [--task <task-id>] [--json]',
+    '',
+    'Prints the read-only v40 inbox capture contract.',
+    'The command does not persist capture items, force Workbench goal creation, execute shell commands, call models, open local files, change git state, self-approve, or declare release readiness.',
     ''
   ].join('\n');
 }

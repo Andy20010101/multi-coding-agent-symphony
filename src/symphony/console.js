@@ -78,8 +78,14 @@ import {
   buildAppCoreDiagnosticsBundle
 } from './app-core-diagnostics-bundle.js';
 import {
+  buildAppCoreReleaseManager
+} from './app-core-release-manager.js';
+import {
   buildAppCoreRestoreValidation
 } from './app-core-restore-validation.js';
+import {
+  buildGoalDraftHandoffContract
+} from './goal-draft-handoff.js';
 import {
   buildArtifactIndex
 } from './artifact-indexer.js';
@@ -106,11 +112,17 @@ import {
   buildAppSchemaMigrationContract
 } from './app-schema-migration.js';
 import {
+  buildWorkflowRouterCategoriesContract
+} from './workflow-router-categories.js';
+import {
   buildAppStateSnapshot
 } from './app-state-snapshot.js';
 import {
   buildAppDataInventory
 } from './app-data-inventory.js';
+import {
+  buildInboxCaptureContract
+} from './inbox-capture-contract.js';
 import {
   buildProjectRegistry,
   resolveCurrentProject
@@ -1076,6 +1088,22 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      if (url.pathname === '/api/workflow/router-categories') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-workflow-router-categories-request',
+            message: 'Workflow router categories do not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildWorkflowRouterCategoriesContract());
+        return;
+      }
+
       if (url.pathname === '/api/projects') {
         if (hasSearchParams(url.searchParams)) {
           writeApiErrorResponse(response, {
@@ -1180,6 +1208,80 @@ export function createSymphonyConsoleServer({
           startedAt: runtimeStartedAt,
           env,
           artifactStoreDir: join(stateDir, 'artifacts')
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/inbox/capture') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-inbox-capture-request',
+            message: 'Inbox capture route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(goalId)
+          || (taskId !== null && isUnsafeGoalRouteSegment(taskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-inbox-capture-request',
+            message: 'Inbox capture goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildInboxCaptureContract({
+          goalId,
+          taskId
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/workflows/goal-draft-handoff') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-goal-draft-handoff-request',
+            message: 'Goal draft handoff route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (isUnsafeGoalRouteSegment(goalId) || (taskId !== null && isUnsafeGoalRouteSegment(taskId))) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-goal-draft-handoff-request',
+            message: 'Goal draft handoff goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildGoalDraftHandoffContract({
+          stateDir,
+          goalId,
+          taskId
         }));
         return;
       }
@@ -1944,6 +2046,47 @@ export function createSymphonyConsoleServer({
           entries: bundleArtifactIndex.entries,
           goalEvents: Array.isArray(bundleGoalEvents.events) ? bundleGoalEvents.events : [],
           goalProgress
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/release/app-core-manager') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const releaseManagerGoalId = url.searchParams.get('goal') ?? 'latest';
+        const releaseManagerTaskId = url.searchParams.get('task') ?? 'task-4';
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-app-core-release-manager-request',
+            message: 'App core release manager route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(releaseManagerGoalId)
+          || isUnsafeGoalRouteSegment(releaseManagerTaskId)
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-app-core-release-manager-request',
+            message: 'App core release manager goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildAppCoreReleaseManager({
+          cwd,
+          stateDir,
+          goalId: releaseManagerGoalId,
+          taskId: releaseManagerTaskId,
+          env
         }));
         return;
       }

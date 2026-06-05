@@ -82,6 +82,9 @@ describe('v15 Workbench React/Vite shell', () => {
       'GoldenPathStepList',
       'ActionRegistryPanel',
       'ActionRegistryList',
+      'WorkflowRouterCategoriesPanel',
+      'WorkflowRouterCategoryList',
+      'WorkflowRouterExampleList',
       'NextActionCard',
       'PromptPreviewDrawer',
       'GoalOperationConsolePanel',
@@ -95,6 +98,8 @@ describe('v15 Workbench React/Vite shell', () => {
       'EvidenceMatrixPanel',
       'CapabilitiesPanel',
       'DiagnosticsV1Panel',
+      'AppCoreReleaseManagerPanel',
+      'AppCoreCapabilityChecklist',
       'CommandBlockList',
       'HandoffTaskList',
       'GoalTaskList',
@@ -131,6 +136,10 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /Active Goal Task Queue/u);
     assert.match(app, /Golden Path/u);
     assert.match(app, /v20 primary workflow/u);
+    assert.match(app, /Workflow Router/u);
+    assert.match(app, /route categories/u);
+    assert.match(app, /WorkflowRouterCategoryList/u);
+    assert.match(app, /WorkflowRouterExampleList/u);
     assert.match(app, /Next Action Card/u);
     assert.match(app, /Goal Operation Console/u);
     assert.match(app, /command preview/u);
@@ -148,6 +157,8 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /Closeout Gaps/u);
     assert.match(app, /Goal Events Timeline/u);
     assert.match(app, /Evidence Matrix/u);
+    assert.match(app, /App Core Release Manager/u);
+    assert.match(app, /v40 app core release manager/u);
     assert.match(app, /Capabilities Contract/u);
     assert.match(app, /Diagnostics Contract/u);
     assert.match(app, /phase \/ copy-only commands/u);
@@ -813,6 +824,11 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(contracts, /projectReleaseEvidenceDraft/u);
     assert.match(contracts, /NEXT_VERSION_HANDOFF_DRAFT_MODEL_NAME = 'NextVersionHandoffDraft'/u);
     assert.match(contracts, /projectNextVersionHandoffDraft/u);
+    assert.match(contracts, /NATIVE_UX_HANDOFF_SCOPE/u);
+    assert.match(contracts, /Menu bar companion/u);
+    assert.match(contracts, /Notch companion/u);
+    assert.match(contracts, /Native distribution/u);
+    assert.match(contracts, /projectNativeUxHandoffDraft/u);
     assert.match(contracts, /copyOnlyTagCommand/u);
     assert.match(contracts, /tagExecutionAvailable:\s*valueState\(false\)/u);
     assert.match(contracts, /currentBranch/u);
@@ -832,6 +848,9 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(panelBody, /release evidence draft/u);
     assert.match(panelBody, /tag evidence draft \/ prompt/u);
     assert.match(panelBody, /next-version handoff draft/u);
+    assert.match(panelBody, /native UX handoff scope/u);
+    assert.match(panelBody, /NativeUxHandoffDraft/u);
+    assert.match(panelBody, /NativeUxStarterWorkPackageList/u);
     assert.match(panelBody, /ReleaseVerificationChecklist/u);
     assert.match(panelBody, /ReleaseReadyGateRegistration/u);
     assert.match(panelBody, /ReleaseEvidenceDraft/u);
@@ -841,6 +860,8 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(panelBody, /tag command result fields/u);
     assert.match(panelBody, /createsManagedGoal/u);
     assert.match(panelBody, /entersNextVersion/u);
+    assert.match(panelBody, /nativeUxHandoffOnly/u);
+    assert.match(panelBody, /publishesDistribution/u);
     assert.match(panelBody, /<GoalEventFormList[\s\S]*forms=\{\{[\s\S]*items:\s*\[registration\.form\]/u);
     assert.doesNotMatch(panelBody, /child_process|exec\(|spawn\(|window\.open|navigator\.clipboard|git merge|git tag/u);
   });
@@ -923,6 +944,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/goals/latest/runbook',
       '/api/handoff',
       '/api/handoff/<ref>',
+      '/api/inbox/capture',
       '/api/jobs',
       '/api/jobs/control',
       '/api/jobs/create',
@@ -932,6 +954,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/providers/health',
       '/api/providers/lane-preview',
       '/api/readiness',
+      '/api/release/app-core-manager',
       '/api/release/bundle',
       '/api/restore/validate',
       '/api/runs',
@@ -939,7 +962,9 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/runs/<run-id>/timeline',
       '/api/runs/latest',
       '/api/runtime/snapshot',
-      '/api/summary'
+      '/api/summary',
+      '/api/workflow/router-categories',
+      '/api/workflows/goal-draft-handoff'
     ]);
   });
 

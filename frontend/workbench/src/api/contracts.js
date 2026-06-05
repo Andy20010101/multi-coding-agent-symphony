@@ -20,14 +20,17 @@ const CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = 'symphony.console-adoption-inspec
 const RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = 'release-baseline-resolver.v1';
 const APP_STATE_SNAPSHOT_CONTRACT_NAME = 'app-state-snapshot.v1';
 const APP_DATA_INVENTORY_CONTRACT_NAME = 'app-data-inventory.v1';
+const INBOX_CAPTURE_CONTRACT_NAME = 'inbox-capture.v1';
 const CAPABILITIES_CONTRACT_NAME = 'capabilities.v1';
 const ACTION_MANIFEST_CONTRACT_NAME = 'action-manifest.v1';
 const ACTION_AVAILABILITY_CONTRACT_NAME = 'action-availability.v1';
 const ACTION_PREVIEW_CONTRACT_NAME = 'action-preview.v1';
+const GOAL_DRAFT_HANDOFF_CONTRACT_NAME = 'goal-draft-handoff.v1';
 const AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = 'agent-cli-provider-health.v1';
 const AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = 'agent-cli-capability-profile.v1';
 const AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME = 'agent-cli-lane-assignment-preview.v1';
 const APP_SCHEMA_MIGRATION_CONTRACT_NAME = 'app-schema-migration.v1';
+const WORKFLOW_ROUTER_CATEGORIES_CONTRACT_NAME = 'workflow-router-categories.v1';
 const JOB_MODEL_CONTRACT_NAME = 'job-model.v1';
 const JOB_CREATION_CONTRACT_NAME = 'job-creation.v1';
 const JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = 'job-timeline-log-stream.v1';
@@ -40,6 +43,7 @@ const EVIDENCE_TIMELINE_CONTRACT_NAME = 'evidence-timeline.v1';
 const RELEASE_BUNDLE_CONTRACT_NAME = 'release-bundle.v1';
 const EVIDENCE_BUNDLE_CONTRACT_NAME = 'evidence-bundle.v1';
 const APP_CORE_BACKUP_EXPORT_CONTRACT_NAME = 'app-core-backup-export.v1';
+const APP_CORE_RELEASE_MANAGER_CONTRACT_NAME = 'app-core-release-manager.v1';
 const PROJECT_REGISTRY_CONTRACT_NAME = 'project-registry.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
@@ -67,6 +71,38 @@ const EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
   'artifact:<run-id>:<artifact-kind>',
   'artifacts/<managed-ref>',
   'managed-artifact:<managed-ref>'
+]);
+const NATIVE_UX_HANDOFF_SCOPE = Object.freeze([
+  'Menu bar companion: active goal, next action, job state, provider gates, and evidence refs.',
+  'Notch companion: glanceable running or blocked state, next operator action, and latest safe evidence anchor.',
+  'Native distribution: desktop packaging, signed build evidence, update boundary, and colleague install notes.',
+  'UX polish: capture-to-router entry, goal draft handoff, closeout state, and safe preview continuity across Web/Desktop/Menu Bar.'
+]);
+const NATIVE_UX_DISTRIBUTION_CHANNELS = Object.freeze([
+  'Local developer install with explicit sidecar health check.',
+  'Internal colleague build with release evidence and rollback instructions.',
+  'Unsigned dry-run package for QA only; signing and notarization require separate release gates.',
+  'No auto-update, cloud sync, provider invocation, tag, push, or publish from the handoff draft.'
+]);
+const NATIVE_UX_STARTER_WORK_PACKAGES = Object.freeze([
+  Object.freeze({
+    id: 'native-shell-entry',
+    title: 'Native shell entry points',
+    outcome: 'Menu bar and notch surfaces read the same App kernel state used by Web Workbench.',
+    source: 'v37 desktop shell + v40 router closeout'
+  }),
+  Object.freeze({
+    id: 'native-router-capture',
+    title: 'Capture and router UX',
+    outcome: 'Inbox items can remain direct answers, skill runs, automation, research, skipped items, or Workbench goal drafts.',
+    source: 'v40 task-1/task-2/task-3 contracts'
+  }),
+  Object.freeze({
+    id: 'distribution-evidence',
+    title: 'Distribution evidence pack',
+    outcome: 'Build, signing, install, rollback, and colleague handoff evidence use explicit release gates.',
+    source: 'v39 backup/diagnostics + v40 release closeout'
+  })
 ]);
 
 const GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
@@ -387,6 +423,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: APP_DATA_INVENTORY_CONTRACT_NAME
   }),
   Object.freeze({
+    id: 'inboxCapture',
+    label: 'Inbox Capture',
+    path: '/api/inbox/capture',
+    method: 'GET',
+    contractName: INBOX_CAPTURE_CONTRACT_NAME
+  }),
+  Object.freeze({
     id: 'readiness',
     label: 'Readiness',
     path: '/api/readiness',
@@ -511,6 +554,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: ACTION_PREVIEW_CONTRACT_NAME
   }),
   Object.freeze({
+    id: 'goalDraftHandoff',
+    label: 'Goal Draft Handoff',
+    path: '/api/workflows/goal-draft-handoff',
+    method: 'GET',
+    contractName: GOAL_DRAFT_HANDOFF_CONTRACT_NAME
+  }),
+  Object.freeze({
     id: 'providerHealth',
     label: 'Provider Health',
     path: '/api/providers/health',
@@ -537,6 +587,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/app-data/migration',
     method: 'GET',
     contractName: APP_SCHEMA_MIGRATION_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'workflowRouterCategories',
+    label: 'Workflow Router Categories',
+    path: '/api/workflow/router-categories',
+    method: 'GET',
+    contractName: WORKFLOW_ROUTER_CATEGORIES_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'jobModel',
@@ -600,6 +657,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/release/bundle',
     method: 'GET',
     contractName: RELEASE_BUNDLE_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'appCoreReleaseManager',
+    label: 'App Core Release Manager',
+    path: '/api/release/app-core-manager',
+    method: 'GET',
+    contractName: APP_CORE_RELEASE_MANAGER_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'evidenceBundle',
@@ -839,6 +903,7 @@ export function projectWorkbenchContracts(results) {
   const projectRegistryData = dataFrom(results.projectRegistry);
   const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
   const appDataInventoryData = dataFrom(results.appDataInventory);
+  const inboxCaptureData = dataFrom(results.inboxCapture);
   const readinessData = dataFrom(results.readiness);
   const handoffRefsData = dataFrom(results.handoffRefs);
   const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
@@ -863,10 +928,12 @@ export function projectWorkbenchContracts(results) {
   const actionManifestData = dataFrom(results.actionManifest);
   const actionAvailabilityData = dataFrom(results.actionAvailability);
   const actionPreviewData = dataFrom(results.actionPreview);
+  const goalDraftHandoffData = dataFrom(results.goalDraftHandoff);
   const providerHealthData = dataFrom(results.providerHealth);
   const providerCapabilitiesData = dataFrom(results.providerCapabilities);
   const providerLanePreviewData = dataFrom(results.providerLanePreview);
   const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
+  const workflowRouterCategoriesData = dataFrom(results.workflowRouterCategories);
   const diagnosticsData = dataFrom(results.diagnostics);
   const diagnosticsBundleData = dataFrom(results.diagnosticsBundle);
   const jobModelData = dataFrom(results.jobModel);
@@ -876,6 +943,7 @@ export function projectWorkbenchContracts(results) {
   const artifactIndexData = dataFrom(results.artifactIndex);
   const evidenceTimelineData = dataFrom(results.evidenceTimeline);
   const releaseBundleData = dataFrom(results.releaseBundle);
+  const appCoreReleaseManagerData = dataFrom(results.appCoreReleaseManager);
   const backupExportData = dataFrom(results.backupExport);
   const restoreValidationData = dataFrom(results.restoreValidation);
   const latestRun = latestRunData?.run ?? null;
@@ -970,6 +1038,11 @@ export function projectWorkbenchContracts(results) {
     preview: actionPreviewData,
     nextAction: goalNextActionData
   });
+  activeGoalControl.goalDraftHandoff = projectGoalDraftHandoffPanel({
+    result: results.goalDraftHandoff,
+    handoff: goalDraftHandoffData,
+    nextAction: goalNextActionData
+  });
   const routeContext = projectWorkbenchRouteContext({
     activeGoal: activeGoalControl,
     latestRun: projectedLatestRun
@@ -1034,6 +1107,10 @@ export function projectWorkbenchContracts(results) {
     result: results.releaseBundle,
     bundle: releaseBundleData
   });
+  const projectedAppCoreReleaseManager = projectAppCoreReleaseManager({
+    result: results.appCoreReleaseManager,
+    releaseManager: appCoreReleaseManagerData
+  });
   const projectedBackupExport = projectBackupExport({
     result: results.backupExport,
     backupExport: backupExportData
@@ -1091,6 +1168,7 @@ export function projectWorkbenchContracts(results) {
       artifactIndex: projectedArtifactIndex,
       evidenceTimeline: projectedEvidenceTimeline,
       releaseBundle: projectedReleaseBundle,
+      appCoreReleaseManager: projectedAppCoreReleaseManager,
       backupExport: projectedBackupExport,
       restoreValidation: projectedRestoreValidation,
       diagnosticsBundle: projectedDiagnosticsBundle,
@@ -1102,6 +1180,10 @@ export function projectWorkbenchContracts(results) {
     appDataInventory: projectAppDataInventory({
       result: results.appDataInventory,
       inventory: appDataInventoryData
+    }),
+    inboxCapture: projectInboxCapture({
+      result: results.inboxCapture,
+      capture: inboxCaptureData
     }),
     summary: projectSummary(summaryData),
     readiness: projectReadiness(readinessData, summaryData),
@@ -1147,6 +1229,7 @@ export function projectWorkbenchContracts(results) {
       nextAction: goalNextActionData
     }),
     activeGoal: activeGoalControl,
+    goalDraftHandoff: activeGoalControl.goalDraftHandoff,
     capabilities: projectCapabilities(capabilitiesData),
     providerHub: projectedProviderHub,
     providerLanePreview: projectedProviderLanePreview,
@@ -1154,11 +1237,17 @@ export function projectWorkbenchContracts(results) {
       result: results.appSchemaMigration,
       migration: appSchemaMigrationData
     }),
+    workflowRouterCategories: projectWorkflowRouterCategories({
+      result: results.workflowRouterCategories,
+      router: workflowRouterCategoriesData,
+      routeContext
+    }),
     diagnosticsV1: projectDiagnostics(diagnosticsData),
     diagnosticsBundle: projectedDiagnosticsBundle,
     jobConsole: projectedJobConsole,
     evidenceTimeline: projectedEvidenceTimeline,
     releaseBundle: projectedReleaseBundle,
+    appCoreReleaseManager: projectedAppCoreReleaseManager,
     backupExport: projectedBackupExport,
     restoreValidation: projectedRestoreValidation,
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
@@ -1439,6 +1528,67 @@ function projectAppDataInventory({ result, inventory }) {
     },
     boundaries: boundaryListState(inventory?.boundaries),
     note: 'App Data Inventory lists saved app data domains from backend contracts only. It does not read evidence bodies, execute shell commands, open local files, invoke models, mutate jobs, write git state, expose secrets, or declare release readiness.'
+  };
+}
+
+function projectInboxCapture({ result, capture }) {
+  const captureItemTypes = Array.isArray(capture?.captureItemTypes) ? capture.captureItemTypes : [];
+  const allowedNextSteps = Array.isArray(capture?.handoff?.allowedNextSteps) ? capture.handoff.allowedNextSteps : [];
+  const blockedInferenceSources = Array.isArray(capture?.handoff?.blockedInferenceSources)
+    ? capture.handoff.blockedInferenceSources
+    : [];
+
+  return {
+    state: result?.ok === true ? 'available' : 'missing',
+    modelName: valueState('InboxCapturePanel'),
+    contractName: valueState(capture?.contractName),
+    contractVersion: valueState(capture?.contractVersion),
+    generatedAt: valueState(capture?.generatedAt),
+    readOnly: valueState(capture?.readOnly),
+    goalId: valueState(capture?.context?.goalId),
+    taskId: valueState(capture?.context?.taskId),
+    sourcePolicy: valueState(capture?.context?.stateSource),
+    appPath: valueState(capture?.context?.appPath),
+    sourceContracts: projectTextItems(capture?.context?.sourceContracts),
+    intakeSurface: {
+      route: valueState(capture?.intakeSurface?.route),
+      cliCommand: valueState(capture?.intakeSurface?.cliCommand),
+      workbenchPanel: valueState(capture?.intakeSurface?.workbenchPanel),
+      acceptsRawRequests: valueState(capture?.intakeSurface?.acceptsRawRequests),
+      requiresActiveWorkbenchGoal: valueState(capture?.intakeSurface?.requiresActiveWorkbenchGoal),
+      writesInPreview: valueState(capture?.intakeSurface?.writesInPreview)
+    },
+    captureDraft: {
+      contractName: valueState(capture?.captureDraft?.contractName),
+      persisted: valueState(capture?.captureDraft?.persisted),
+      requiredFields: arrayTextState(capture?.captureDraft?.requiredFields),
+      optionalFields: arrayTextState(capture?.captureDraft?.optionalFields),
+      bodyReadAvailable: valueState(capture?.captureDraft?.bodyReadAvailable),
+      validationSource: valueState(capture?.captureDraft?.validationSource),
+      nextContract: valueState(capture?.captureDraft?.nextContract)
+    },
+    captureItemTypes: {
+      state: captureItemTypes.length > 0 ? 'available' : 'empty',
+      count: valueState(captureItemTypes.length),
+      items: captureItemTypes.map((item) => ({
+        itemType: valueState(item.itemType),
+        label: valueState(item.label),
+        summary: valueState(item.summary),
+        requiresWorkbenchGoal: valueState(item.requiresWorkbenchGoal),
+        routesImmediately: valueState(item.routesImmediately),
+        allowedBeforeGoalExists: valueState(item.allowedBeforeGoalExists)
+      }))
+    },
+    handoff: {
+      routerContract: valueState(capture?.handoff?.routerContract),
+      goalDraftContract: valueState(capture?.handoff?.goalDraftContract),
+      workbenchGoalRequiredForCapture: valueState(capture?.handoff?.workbenchGoalRequiredForCapture),
+      workbenchGoalRequiredForGoalDraft: valueState(capture?.handoff?.workbenchGoalRequiredForGoalDraft),
+      allowedNextSteps: projectTextItems(allowedNextSteps),
+      blockedInferenceSources: projectTextItems(blockedInferenceSources)
+    },
+    boundaries: boundaryListState(capture?.boundaries),
+    note: 'Inbox Capture shows the app entry contract for raw requests, project clues, ideas, and faults before Workbench routing. It is read-only and does not execute shell commands, invoke models, persist capture items, create goals, self-approve, main-verify, or declare release readiness.'
   };
 }
 
@@ -5473,6 +5623,90 @@ export function projectSubagentHandoffBoard({
   };
 }
 
+function projectGoalDraftHandoffPanel({
+  result,
+  handoff,
+  nextAction
+}) {
+  const blockers = Array.isArray(handoff?.blockers) ? handoff.blockers : [];
+  const draftTasks = Array.isArray(handoff?.runbookDraft?.tasks) ? handoff.runbookDraft.tasks : [];
+
+  return {
+    state: result?.ok === true
+      ? blockers.length > 0 ? 'blocked' : handoff?.goalDraft?.state ?? 'available'
+      : 'missing',
+    modelName: valueState('GoalDraftHandoffPanel'),
+    contractName: valueState(handoff?.contractName ?? GOAL_DRAFT_HANDOFF_CONTRACT_NAME),
+    contractVersion: valueState(handoff?.contractVersion),
+    goalId: valueState(handoff?.context?.goalId),
+    taskId: valueState(handoff?.context?.taskId ?? nextAction?.next?.taskId),
+    routeState: valueState(routeStateFromResult(result)),
+    sourcePolicy: valueState('goal-draft-handoff.v1 + goal-runbook.v1 + goal-next-action.v1 + goal-progress-ledger.v1 + goal-prompt-pack.v1'),
+    routing: {
+      category: valueState(handoff?.routing?.category),
+      acceptedSignals: arrayTextState(handoff?.routing?.acceptedSignals),
+      excludedCategories: arrayTextState(handoff?.routing?.excludedCategories)
+    },
+    goalDraft: {
+      state: valueState(handoff?.goalDraft?.state),
+      suggestedGoalId: valueState(handoff?.goalDraft?.suggestedGoalId),
+      suggestedTitle: valueState(handoff?.goalDraft?.suggestedTitle),
+      registrationState: valueState(handoff?.goalDraft?.registrationState),
+      operatorReviewRequired: valueState(handoff?.goalDraft?.operatorReviewRequired),
+      draftOnly: valueState(handoff?.goalDraft?.draftOnly)
+    },
+    runbookDraft: {
+      contractName: valueState(handoff?.runbookDraft?.contractName),
+      draftOnly: valueState(handoff?.runbookDraft?.draftOnly),
+      autoRegister: valueState(handoff?.runbookDraft?.autoRegister),
+      taskCount: valueState(draftTasks.length),
+      releaseGates: arrayTextState(handoff?.runbookDraft?.releaseGates)
+    },
+    handoff: {
+      markdown: valueState(handoff?.handoff?.markdown),
+      checklist: {
+        state: Array.isArray(handoff?.handoff?.checklist) && handoff.handoff.checklist.length > 0 ? 'available' : 'empty',
+        items: Array.isArray(handoff?.handoff?.checklist)
+          ? handoff.handoff.checklist.map((item) => textState(item))
+          : []
+      },
+      copyOnlyCommands: {
+        state: Array.isArray(handoff?.handoff?.copyOnlyCommands) && handoff.handoff.copyOnlyCommands.length > 0 ? 'available' : 'empty',
+        items: Array.isArray(handoff?.handoff?.copyOnlyCommands)
+          ? handoff.handoff.copyOnlyCommands.map((command) => textState(command))
+          : []
+      },
+      nextRequiredAction: valueState(handoff?.handoff?.nextRequiredAction)
+    },
+    endpoint: {
+      method: valueState(handoff?.endpoint?.method),
+      route: valueState(handoff?.endpoint?.route),
+      allowedQueryFields: arrayTextState(handoff?.endpoint?.allowedQueryFields),
+      writesInPreview: valueState(handoff?.endpoint?.writesInPreview),
+      registersGoal: valueState(handoff?.endpoint?.registersGoal)
+    },
+    boundaries: {
+      readOnly: valueState(handoff?.boundaries?.readOnly),
+      draftOnly: valueState(handoff?.boundaries?.draftOnly),
+      writesFiles: valueState(handoff?.boundaries?.writesFiles),
+      registersGoal: valueState(handoff?.boundaries?.registersGoal),
+      runsGoalInit: valueState(handoff?.boundaries?.runsGoalInit),
+      arbitraryCommandExecutionAvailable: valueState(handoff?.boundaries?.arbitraryCommandExecutionAvailable),
+      modelInvocationAvailable: valueState(handoff?.boundaries?.modelInvocationAvailable),
+      gitWriteAvailable: valueState(handoff?.boundaries?.gitWriteAvailable),
+      selfApprovalAvailable: valueState(handoff?.boundaries?.selfApprovalAvailable),
+      releaseReadyDeclared: valueState(handoff?.boundaries?.releaseReadyDeclared),
+      statusSource: valueState(handoff?.boundaries?.statusSource)
+    },
+    blockers: blockers.map((blocker) => ({
+      code: valueState(blocker?.code),
+      message: valueState(blocker?.message),
+      source: valueState(blocker?.source)
+    })),
+    note: 'Goal Draft Handoff is a display-only bridge from captured/project-scoped work to a reviewed goal/runbook draft. It does not register a goal, write files, run goal init, invoke models, or infer completion state.'
+  };
+}
+
 function projectSubagentHandoffTask({
   task,
   events,
@@ -7145,6 +7379,15 @@ function projectNextVersionHandoffDraft({
     releaseEvidenceDraft,
     tagEvidencePrompt
   });
+  const nativeUxHandoff = projectNativeUxHandoffDraft({
+    nextVersion,
+    commandGoalId,
+    releaseName,
+    target,
+    releaseReady: closeout?.summary?.releaseReady,
+    closeoutMissingCount: closeoutMissingItems.length,
+    evidenceRefs
+  });
   const implementedCapabilities = projectNextVersionImplementedCapabilities({
     releaseBaseline,
     verificationChecklist,
@@ -7185,6 +7428,17 @@ function projectNextVersionHandoffDraft({
     'Implemented Workbench capabilities:',
     ...implementedCapabilities.items.map((item) => `- ${item.name.value}: ${item.state.value}`),
     '',
+    'Native UX handoff scope:',
+    ...nativeUxHandoff.scope.items.map((item) => `- ${item.value}`),
+    '',
+    'Distribution channels:',
+    ...nativeUxHandoff.distributionChannels.items.map((item) => `- ${item.value}`),
+    '',
+    'Starter work packages:',
+    ...nativeUxHandoff.starterWorkPackages.items.map((item) => (
+      `- ${item.id.value}: ${item.title.value}; outcome=${item.outcome.value}; source=${item.source.value}`
+    )),
+    '',
     'Copy-only context commands:',
     ...copyOnlyCommands.map((command) => `- ${command}`),
     '',
@@ -7224,10 +7478,12 @@ function projectNextVersionHandoffDraft({
     taskAnchors,
     releaseGateAnchors,
     implementedCapabilities,
+    nativeUxHandoff,
     copyOnlyCommands: projectTextItems(copyOnlyCommands),
     markdown: valueState(handoffLines.join('\n')),
     safety: {
       copyOnly: valueState(true),
+      nativeUxHandoffOnly: valueState(true),
       createsManagedGoal: valueState(false),
       entersNextVersion: valueState(false),
       runsShell: valueState(false),
@@ -7246,7 +7502,51 @@ function projectNextVersionHandoffDraft({
       infersStateFromBranches: valueState(false),
       infersStateFromPrompts: valueState(false)
     },
-    boundaryText: valueState('Next-version handoff draft is a controlled preview generated from active goal closeout, release/event refs, run context, and implemented Workbench capability flags. It does not create v33 or move the operator into the next version.')
+    boundaryText: valueState(`Next-version handoff draft is a controlled preview generated from active goal closeout, release/event refs, run context, and implemented Workbench capability flags. It does not create ${nextVersion ?? 'the next version'} or move the operator into the next version.`)
+  };
+}
+
+function projectNativeUxHandoffDraft({
+  nextVersion,
+  commandGoalId,
+  releaseName,
+  target,
+  releaseReady,
+  closeoutMissingCount,
+  evidenceRefs
+}) {
+  return {
+    state: nextVersion === null ? 'partial' : 'available',
+    version: valueState(nextVersion),
+    goalId: valueState(commandGoalId),
+    releaseName: valueState(releaseName),
+    targetCommit: valueState(target.commit),
+    releaseReady: valueState(releaseReady),
+    closeoutMissingCount: valueState(closeoutMissingCount),
+    evidenceAnchorCount: valueState(evidenceRefs?.count?.value),
+    scope: projectTextItems(NATIVE_UX_HANDOFF_SCOPE),
+    distributionChannels: projectTextItems(NATIVE_UX_DISTRIBUTION_CHANNELS),
+    starterWorkPackages: {
+      state: 'available',
+      count: valueState(NATIVE_UX_STARTER_WORK_PACKAGES.length),
+      items: NATIVE_UX_STARTER_WORK_PACKAGES.map((item) => ({
+        id: valueState(item.id),
+        title: valueState(item.title),
+        outcome: valueState(item.outcome),
+        source: valueState(item.source)
+      }))
+    },
+    safety: {
+      copyOnly: valueState(true),
+      generatesNativeBuild: valueState(false),
+      createsInstaller: valueState(false),
+      signsOrNotarizes: valueState(false),
+      publishesDistribution: valueState(false),
+      autoUpdatesAvailable: valueState(false),
+      invokesProvider: valueState(false),
+      opensLocalFiles: valueState(false)
+    },
+    note: valueState('Native UX handoff is generated from closeout projections and evidence anchors. Build, signing, notarization, packaging, and distribution remain future controlled work with separate evidence gates.')
   };
 }
 
@@ -10110,6 +10410,69 @@ function projectAppSchemaMigration({ result, migration }) {
   };
 }
 
+function projectWorkflowRouterCategories({ result, router, routeContext }) {
+  const categories = Array.isArray(router?.categories) ? router.categories : [];
+  const examples = Array.isArray(router?.examples) ? router.examples : [];
+  const boundaries = Object.entries(router?.boundaries ?? {}).map(([boundary, available]) => ({
+    boundary: valueState(boundary),
+    available: valueState(available)
+  }));
+
+  return {
+    state: result?.ok === true ? (categories.length === 0 ? 'empty' : 'available') : result ? 'failed' : 'missing',
+    contractName: valueState(router?.contractName),
+    contractVersion: valueState(router?.contractVersion),
+    generatedAt: valueState(router?.generatedAt),
+    readOnly: valueState(router?.readOnly),
+    goalId: valueState(router?.context?.goalId),
+    taskId: valueState(router?.context?.taskId),
+    sourcePolicy: valueState(router?.context?.stateSource),
+    scope: valueState(router?.context?.scope),
+    routeContext: {
+      goalId: valueState(firstValue(routeContext?.goalId)),
+      taskId: valueState(firstValue(routeContext?.taskId)),
+      activeRole: valueState(firstValue(routeContext?.activeRole)),
+      activePhase: valueState(firstValue(routeContext?.activePhase))
+    },
+    sourceContracts: arrayTextState(router?.context?.sourceContracts),
+    categoryCount: valueState(categories.length),
+    categories: {
+      state: categories.length === 0 ? 'empty' : 'available',
+      items: categories.map((category) => ({
+        categoryId: valueState(category?.categoryId),
+        label: valueState(category?.label),
+        routeKind: valueState(category?.routeKind),
+        userPath: valueState(category?.userPath),
+        requestSignals: arrayTextState(category?.requestSignals),
+        nextStep: valueState(category?.nextStep),
+        allowedContracts: arrayTextState(category?.allowedContracts),
+        boundary: valueState(category?.boundary)
+      }))
+    },
+    decisionPolicy: {
+      defaultCategoryId: valueState(router?.decisionPolicy?.defaultCategoryId),
+      confidenceSource: valueState(router?.decisionPolicy?.confidenceSource),
+      requiresHumanConfirmationForGoalDraft: valueState(router?.decisionPolicy?.requiresHumanConfirmationForGoalDraft),
+      writesRouteDecision: valueState(router?.decisionPolicy?.writesRouteDecision),
+      modelInvocationRequired: valueState(router?.decisionPolicy?.modelInvocationRequired),
+      fallbackCategoryId: valueState(router?.decisionPolicy?.fallbackCategoryId)
+    },
+    examples: {
+      state: examples.length === 0 ? 'empty' : 'available',
+      items: examples.map((example) => ({
+        exampleId: valueState(example?.exampleId),
+        inputKind: valueState(example?.inputKind),
+        selectedCategoryId: valueState(example?.selectedCategoryId),
+        reason: valueState(example?.reason),
+        nextContract: valueState(example?.nextContract),
+        writesState: valueState(example?.writesState)
+      }))
+    },
+    boundaries,
+    note: 'Workflow Router Categories shows the v40 routing categories and boundary decisions from workflow-router-categories.v1. It does not create goals, create jobs, execute actions, fetch research, invoke models, run shell commands, write git state, or register approval, verification, or release events.'
+  };
+}
+
 function projectDiagnostics(diagnostics) {
   return {
     state: diagnostics === null || diagnostics === undefined ? 'missing' : 'available',
@@ -11200,6 +11563,122 @@ function projectReleaseBundle({ result, bundle }) {
       releaseDecisionAvailable: valueState(bundle.boundaries?.releaseDecisionAvailable)
     },
     note: 'Release Bundle 按 task 展示 worker/reviewer/main-verifier/release-manager evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。'
+  };
+}
+
+function projectAppCoreReleaseManager({ result, releaseManager }) {
+  if (releaseManager === null || releaseManager === undefined) {
+    return {
+      state: result?.ok === true ? 'empty' : 'unavailable',
+      errorEnvelope: result?.errorEnvelope ?? null,
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      generatedAt: valueState(undefined),
+      readOnly: valueState(undefined),
+      context: {},
+      releaseReadiness: {},
+      closeoutStatus: {},
+      capabilityChecklist: {
+        totalCount: valueState(0),
+        passedCount: valueState(0),
+        warningCount: valueState(0),
+        blockedCount: valueState(0),
+        items: valueState([])
+      },
+      finalEvidenceDraft: {},
+      sourceSummary: {},
+      boundaries: {},
+      note: 'App Core Release Manager 未暴露 / 不可用。'
+    };
+  }
+
+  return {
+    state: releaseManager.releaseReadiness?.state ?? 'available',
+    errorEnvelope: result?.errorEnvelope ?? null,
+    contractName: valueState(releaseManager.contractName),
+    contractVersion: valueState(releaseManager.contractVersion),
+    generatedAt: valueState(releaseManager.generatedAt),
+    readOnly: valueState(releaseManager.readOnly),
+    context: {
+      goalId: valueState(releaseManager.context?.goalId),
+      resolvedGoalId: valueState(releaseManager.context?.resolvedGoalId),
+      taskId: valueState(releaseManager.context?.taskId),
+      managerRole: valueState(releaseManager.context?.managerRole),
+      stateSource: valueState(releaseManager.context?.stateSource)
+    },
+    releaseReadiness: {
+      state: valueState(releaseManager.releaseReadiness?.state),
+      reason: valueState(releaseManager.releaseReadiness?.reason),
+      releaseReadyDeclared: valueState(releaseManager.releaseReadiness?.releaseReadyDeclared),
+      releaseReadySource: valueState(releaseManager.releaseReadiness?.releaseReadySource),
+      declarationAuthorized: valueState(releaseManager.releaseReadiness?.declarationAuthorized),
+      declarationCommandAvailable: valueState(releaseManager.releaseReadiness?.declarationCommandAvailable),
+      readyEventRequired: valueState(releaseManager.releaseReadiness?.readyEventRequired),
+      capabilitiesPassed: valueState(releaseManager.releaseReadiness?.capabilitiesPassed)
+    },
+    closeoutStatus: {
+      state: valueState(releaseManager.closeoutStatus?.state),
+      totalTasks: valueState(releaseManager.closeoutStatus?.totalTasks),
+      workerEvidenceComplete: valueState(releaseManager.closeoutStatus?.workerEvidenceComplete),
+      reviewEvidenceComplete: valueState(releaseManager.closeoutStatus?.reviewEvidenceComplete),
+      mainVerificationComplete: valueState(releaseManager.closeoutStatus?.mainVerificationComplete),
+      releaseReady: valueState(releaseManager.closeoutStatus?.releaseReady),
+      releaseReadySource: valueState(releaseManager.closeoutStatus?.releaseReadySource),
+      missingCount: valueState(releaseManager.closeoutStatus?.missingCount),
+      blocker: valueState(releaseManager.closeoutStatus?.blocker),
+      releaseGateStatuses: Object.entries(releaseManager.closeoutStatus?.releaseGateStatuses ?? {}).map(([gate, status]) => ({
+        gate: valueState(gate),
+        status: valueState(status)
+      }))
+    },
+    capabilityChecklist: {
+      totalCount: valueState(releaseManager.capabilityChecklist?.totalCount ?? 0),
+      passedCount: valueState(releaseManager.capabilityChecklist?.passedCount ?? 0),
+      warningCount: valueState(releaseManager.capabilityChecklist?.warningCount ?? 0),
+      blockedCount: valueState(releaseManager.capabilityChecklist?.blockedCount ?? 0),
+      sourcePolicy: valueState(releaseManager.capabilityChecklist?.sourcePolicy),
+      items: valueState(Array.isArray(releaseManager.capabilityChecklist?.items) ? releaseManager.capabilityChecklist.items : [])
+    },
+    finalEvidenceDraft: {
+      state: valueState(releaseManager.finalEvidenceDraft?.state),
+      evidenceRef: valueState(releaseManager.finalEvidenceDraft?.evidenceRef),
+      suggestedTitle: valueState(releaseManager.finalEvidenceDraft?.suggestedTitle),
+      blockerCount: valueState(releaseManager.finalEvidenceDraft?.blockerCount),
+      sourceEventCount: valueState(releaseManager.finalEvidenceDraft?.sourceEventCount),
+      releaseReadyDeclarationIncluded: valueState(releaseManager.finalEvidenceDraft?.releaseReadyDeclarationIncluded),
+      requiredSections: valueState(Array.isArray(releaseManager.finalEvidenceDraft?.requiredSections) ? releaseManager.finalEvidenceDraft.requiredSections : []),
+      note: valueState(releaseManager.finalEvidenceDraft?.note)
+    },
+    sourceSummary: {
+      runtimeStatus: valueState(releaseManager.sourceSummary?.runtimeStatus),
+      appStateContract: valueState(releaseManager.sourceSummary?.appStateContract),
+      providerState: valueState(releaseManager.sourceSummary?.providerState),
+      appDataDomainCount: valueState(releaseManager.sourceSummary?.appDataDomainCount),
+      evidenceRefCount: valueState(releaseManager.sourceSummary?.evidenceRefCount),
+      artifactEntryCount: valueState(releaseManager.sourceSummary?.artifactEntryCount),
+      goalEventCount: valueState(releaseManager.sourceSummary?.goalEventCount)
+    },
+    boundaries: {
+      readOnly: valueState(releaseManager.boundaries?.readOnly),
+      writesEvidenceFile: valueState(releaseManager.boundaries?.writesEvidenceFile),
+      emitsGoalEvent: valueState(releaseManager.boundaries?.emitsGoalEvent),
+      closeoutExecutionAvailable: valueState(releaseManager.boundaries?.closeoutExecutionAvailable),
+      releaseReadyDeclarationAvailable: valueState(releaseManager.boundaries?.releaseReadyDeclarationAvailable),
+      releaseGateMutationAvailable: valueState(releaseManager.boundaries?.releaseGateMutationAvailable),
+      shellExecutionAvailable: valueState(releaseManager.boundaries?.shellExecutionAvailable),
+      modelInvocationAvailable: valueState(releaseManager.boundaries?.modelInvocationAvailable),
+      arbitraryCommandExecutionAvailable: valueState(releaseManager.boundaries?.arbitraryCommandExecutionAvailable),
+      gitWriteAvailable: valueState(releaseManager.boundaries?.gitWriteAvailable),
+      mergeAvailable: valueState(releaseManager.boundaries?.mergeAvailable),
+      pushAvailable: valueState(releaseManager.boundaries?.pushAvailable),
+      tagAvailable: valueState(releaseManager.boundaries?.tagAvailable),
+      publishAvailable: valueState(releaseManager.boundaries?.publishAvailable),
+      selfApprovalAvailable: valueState(releaseManager.boundaries?.selfApprovalAvailable),
+      frontendStatusInferenceAvailable: valueState(releaseManager.boundaries?.frontendStatusInferenceAvailable),
+      statusSource: valueState(releaseManager.boundaries?.statusSource),
+      evidencePolicy: valueState(releaseManager.boundaries?.evidencePolicy)
+    },
+    note: releaseManager.note ?? 'App Core Release Manager 收口 v34-v39 checklist 和 final evidence draft。'
   };
 }
 

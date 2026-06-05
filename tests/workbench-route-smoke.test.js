@@ -29,8 +29,14 @@ import {
   validateActionPreviewContract
 } from '../src/symphony/action-preview.js';
 import {
+  validateGoalDraftHandoffContract
+} from '../src/symphony/goal-draft-handoff.js';
+import {
   validateAgentCliLaneAssignmentPreviewContract
 } from '../src/symphony/agent-cli-lane-assignment-preview.js';
+import {
+  validateWorkflowRouterCategoriesContract
+} from '../src/symphony/workflow-router-categories.js';
 import {
   validateDiagnosticsContract
 } from '../src/symphony/diagnostics.js';
@@ -466,6 +472,21 @@ describe('v16 Workbench route smoke and server parity', () => {
           }
         },
         {
+          path: '/api/workflows/goal-draft-handoff?goal=v20-goal-workbench-active-goal-surface&task=task-1',
+          contractName: 'goal-draft-handoff.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateGoalDraftHandoffContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.context.goalId, 'v20-goal-workbench-active-goal-surface');
+            assert.equal(payload.context.taskId, 'task-1');
+            assert.equal(payload.goalDraft.registrationState, 'not-registered');
+            assert.equal(payload.endpoint.writesInPreview, false);
+            assert.equal(payload.boundaries.registersGoal, false);
+          }
+        },
+        {
           path: '/api/providers/lane-preview',
           contractName: 'agent-cli-lane-assignment-preview.v1',
           assertPayload(payload) {
@@ -476,6 +497,26 @@ describe('v16 Workbench route smoke and server parity', () => {
             assert.deepEqual(payload.activeProviderIds, ['claude-code-cli', 'codex-cli']);
             assert.equal(payload.summary.autoApprovalAvailable, false);
             assert.equal(payload.boundaries.providerCliExecutionAvailable, false);
+          }
+        },
+        {
+          path: '/api/workflow/router-categories',
+          contractName: 'workflow-router-categories.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateWorkflowRouterCategoriesContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.deepEqual(payload.categories.map((category) => category.categoryId), [
+              'direct-answer',
+              'skill',
+              'automation',
+              'workbench-goal',
+              'research',
+              'ignore-skip'
+            ]);
+            assert.equal(payload.boundaries.jobCreationAvailable, false);
+            assert.equal(payload.boundaries.modelInvocationAvailable, false);
           }
         },
         {
@@ -612,6 +653,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/providers/capabilities',
         '/api/providers/health',
         '/api/providers/lane-preview',
+        '/api/workflow/router-categories',
         '/api/diagnostics',
         '/api/diagnostics/bundle',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`

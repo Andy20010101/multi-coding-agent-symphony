@@ -10,7 +10,7 @@ Workbench 消费 console server 暴露的本地 API，用于查看 app runtime s
 
 `symphony` CLI 是高级/脚本入口。需要 JSON 输出、CI 命令、dry-run/confirm 事件登记、兼容命令或低层诊断时，在终端运行 CLI；Workbench 只显示受控状态、表单和可复制命令。
 
-Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受控例外：浏览器可以请求 `symphony goal update/review/gate` 的 dry-run plan preview；确认时只能带同一组字段和 dry-run 返回的 `planHash` 调用匹配的 confirm path，向 managed goal event journal append 一个 event。v23 另外记录 Workbench goal operation registry，用于追踪 preview 和 confirm 的 operation id、status 与 timestamps，不把 registry 当成任务完成或审批证据。v29 的 implementation confirm 只接受 preview 返回的 plan context，确认后把 isolated workspace run 的结果、artifact refs、verifier summary 和失败原因写回同一个 operation registry。task-5 的 worker evidence handoff 从同一个 registry 读取已确认的 implementation run，预填 `worker.evidence-recorded` dry-run 表单和 prompt handoff，仍通过 `event-plan-preview` 与 `event-plan-confirm` 登记 worker evidence。v31 的 verification confirm 只接受 active goal/task 的固定 verification suite，运行结果写入 operation registry，显示状态、stdout/stderr 摘要、exit code 和 artifact refs；命令成功只是 operation evidence，不会自动登记 `main-verification` gate。Workbench 同页生成 main verification evidence draft，来源是 verification operation、goal/task/run refs、worker/review evidence refs 和 adoption refs；draft 只供 operator/reviewer 检查，不写文件、不读 evidence 正文、不登记 gate、不宣称 passed。draft ready 后，Workbench 会预填 `main.verification-passed` 的 `goal gate` 表单，仍必须先 dry-run，再用返回的 plan hash confirm。v32 的 release baseline resolver 读取 `/api/readiness` 暴露的 git/GitHub 命令输出，显示 current branch、main HEAD、origin/main、worktree cleanliness 和 PR/CI ref；dirty、非 main 或 main/origin 不一致时只显示 stop/fix guidance，并阻止 `release.ready` 表单。v32 的 release checklist 逐项列出 required release gates、copy-only validation command、latest explicit gate evidence ref，并为每个 gate 提供受控 `goal gate` dry-run / plan-hash confirm 表单。v32 的 release evidence draft 和 tag evidence draft 显示 release evidence ref、tag evidence ref、target commit、release notes summary、逐项 command/result 字段、tag recommendation 和 copy-only `git tag` command；这些字段只来自 closeout、release baseline resolver 和 event log，不写 evidence 文件，不运行 tag/push/publish。v32 的 next-version handoff draft 继续在 release closeout 内显示，从 closeout、release/tag evidence draft、event log、ledger、latest run 和 Workbench capability flags 生成 copy-only v33 起步上下文；它不创建 v33 goal，不进入下一版本，不读取 evidence 正文，不运行命令，不登记 release.ready。v39 的 App Data Inventory 只读取 `/api/app/data-inventory` 返回的 contract 字段，列出 registry、snapshot、job、artifact、settings、provider profile 和 evidence ref 的来源与边界；它不读取 evidence 正文、不打开本地文件、不执行 shell、不写入状态。
+Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受控例外：浏览器可以请求 `symphony goal update/review/gate` 的 dry-run plan preview；确认时只能带同一组字段和 dry-run 返回的 `planHash` 调用匹配的 confirm path，向 managed goal event journal append 一个 event。v23 另外记录 Workbench goal operation registry，用于追踪 preview 和 confirm 的 operation id、status 与 timestamps，不把 registry 当成任务完成或审批证据。v29 的 implementation confirm 只接受 preview 返回的 plan context，确认后把 isolated workspace run 的结果、artifact refs、verifier summary 和失败原因写回同一个 operation registry。task-5 的 worker evidence handoff 从同一个 registry 读取已确认的 implementation run，预填 `worker.evidence-recorded` dry-run 表单和 prompt handoff，仍通过 `event-plan-preview` 与 `event-plan-confirm` 登记 worker evidence。v31 的 verification confirm 只接受 active goal/task 的固定 verification suite，运行结果写入 operation registry，显示状态、stdout/stderr 摘要、exit code 和 artifact refs；命令成功只是 operation evidence，不会自动登记 `main-verification` gate。Workbench 同页生成 main verification evidence draft，来源是 verification operation、goal/task/run refs、worker/review evidence refs 和 adoption refs；draft 只供 operator/reviewer 检查，不写文件、不读 evidence 正文、不登记 gate、不宣称 passed。draft ready 后，Workbench 会预填 `main.verification-passed` 的 `goal gate` 表单，仍必须先 dry-run，再用返回的 plan hash confirm。v32 的 release baseline resolver 读取 `/api/readiness` 暴露的 git/GitHub 命令输出，显示 current branch、main HEAD、origin/main、worktree cleanliness 和 PR/CI ref；dirty、非 main 或 main/origin 不一致时只显示 stop/fix guidance，并阻止 `release.ready` 表单。v32 的 release checklist 逐项列出 required release gates、copy-only validation command、latest explicit gate evidence ref，并为每个 gate 提供受控 `goal gate` dry-run / plan-hash confirm 表单。v32 的 release evidence draft 和 tag evidence draft 显示 release evidence ref、tag evidence ref、target commit、release notes summary、逐项 command/result 字段、tag recommendation 和 copy-only `git tag` command；这些字段只来自 closeout、release baseline resolver 和 event log，不写 evidence 文件，不运行 tag/push/publish。v32 的 next-version handoff draft 继续在 release closeout 内显示，从 closeout、release/tag evidence draft、event log、ledger、latest run 和 Workbench capability flags 生成 copy-only v33 起步上下文；它不创建 v33 goal，不进入下一版本，不读取 evidence 正文，不运行命令，不登记 release.ready。v39 的 App Data Inventory 只读取 `/api/app/data-inventory` 返回的 contract 字段，列出 registry、snapshot、job、artifact、settings、provider profile 和 evidence ref 的来源与边界；它不读取 evidence 正文、不打开本地文件、不执行 shell、不写入状态。v40 的 Inbox Capture 只读取 `/api/inbox/capture` 返回的 contract 字段，列出 raw request、project clue、idea、fault 四类入口和后续 router/goal draft handoff；它不持久化 capture item、不强制进入 Workbench goal、不执行 shell、不调用模型、不创建 job、不登记审批或 release gate。
 
 - 浏览器只展示状态、contract 字段和可复制的命令文本。
 - 浏览器不执行 shell 命令，不写文件，不触发模型，不触发 agent。
@@ -185,6 +185,7 @@ GET /api/projects
 GET /api/projects/current
 GET /api/runtime/snapshot
 GET /api/app/data-inventory
+GET /api/inbox/capture
 GET /api/readiness
 GET /api/handoff
 GET /api/handoff/<ref>
@@ -228,6 +229,7 @@ GET /api/providers/health
 GET /api/providers/capabilities
 GET /api/providers/lane-preview
 GET /api/app-data/migration
+GET /api/workflow/router-categories
 GET /api/jobs
 GET /api/jobs/create
 GET /api/jobs/timeline
@@ -249,6 +251,8 @@ GET /api/restore/validate
 Workbench 的 `Provider Hub` 面板和 Desktop Shell 的 `Provider Availability` card 消费这三条 provider route，并把 provider availability、blocked reasons、sanitized env presence、capability gates、lane separation 和 active goal evidence refs 放在同一处。面板只读取 backend contract 字段和 `goal-progress-ledger.v1` evidence refs；不读取 evidence 文件正文，不展示 env value，不执行 `claude`/`codex`，不登记 worker/reviewer/main gate，不把 provider health 转换成按钮或 runner。
 
 `GET /api/app-data/migration` 返回 `app-schema-migration.v1`，用于查看 v39 schema version 和 dry-run migration preview。route 不接受 query 参数；Workbench 的 Schema Migration Preview 面板展示 currentVersion、targetVersion、affected app data、migration steps、confirmation action id 和 plan hash requirement。这个路径只展示 preview，不执行 confirm，不写 app data，不运行 shell，不调用模型，不打开本地文件，不改 git，不登记 reviewer/main/release gate。
+
+`GET /api/workflow/router-categories` 返回 `workflow-router-categories.v1`，用于查看 v40 workflow router 的六类入口：direct answer、skill、automation、workbench goal、research、ignore/skip。route 不接受 query 参数；Workbench 的 Workflow Router 面板展示 category id、route kind、request signals、next step、allowed contracts、routing examples 和边界字段。这个路径只展示分类和下一步判断，不创建 goal draft、不创建 job、不执行 action、不发起 research fetch、不调用模型、不运行 shell、不写 git、不登记 reviewer/main/release gate。
 
 `GET /api/projects` 返回 `project-registry.v1`，列出从当前 cwd/repo-local metadata 解析出的 registered project。`GET /api/projects/current` 返回 `current-project-resolver.v1`，从 console cwd 解析 current project；可选 `repoPath` 只用于显式 repo path 解析。两个 route 都不写 project registry 数据库、不扫描全盘、不执行 git 写入、不调用模型、不创建 job queue。`/api/projects` 不接受 query 参数，`/api/projects/current` 只接受 `repoPath`。
 
@@ -296,6 +300,15 @@ pnpm --silent symphony restore validate --goal <goal-id> --task <task-id> --json
 ```
 
 `app-core-restore-validation.v1` 校验 backup export manifest integrity、managed state hash、artifact ref hash 和兼容恢复路径。route 只接受 `goal` 和 `task`，不接受 `path`、`command`、`confirm`、`output`、`apply`、`overwrite` 或任意本地路径。Workbench 的 `Restore Validation` panel 和 Desktop Shell artifact readiness card 只展示 validation status、integrity、compatibility 和 overwrite default；默认不覆盖现有数据，不写 `.symphony`，不执行 restore apply，不登记 reviewer/main/release 事件。
+
+v40 task-3 增加只读 goal draft handoff：
+
+```text
+GET /api/workflows/goal-draft-handoff
+GET /api/workflows/goal-draft-handoff?goal=<goal-id>&task=<task-id>
+```
+
+`goal-draft-handoff.v1` 把重复摩擦或项目级工作整理成可检查的 goal/runbook draft。route 只接受安全的 `goal` 和 `task` query，不接受 prompt、path、command、confirm、planHash 或 output。Workbench 的 `Goal Draft Handoff` panel 显示来源 goal/task、router category、suggested goal id、runbook draft 摘要、copy-only dry-run command、checklist、blockers 和边界字段。这个路径不写文件、不运行 `goal init`、不注册 goal、不调用模型、不打开本地文件、不合并、不 push、不 tag、不发布、不登记 reviewer/main/release 事件。
 
 终端可用的同一份 health contract：
 

@@ -1,0 +1,163 @@
+{
+  "contractName": "workflow-router-categories.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-05T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v40-personal-workflow-router-app-core-release",
+    "taskId": "task-2",
+    "stateSource": "explicit-backend-contracts",
+    "scope": "v40-workflow-router-categories",
+    "sourceContracts": [
+      "app-state-snapshot.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "action-manifest.v1",
+      "job-model.v1"
+    ]
+  },
+  "categories": [
+    {
+      "categoryId": "direct-answer",
+      "label": "Direct answer",
+      "routeKind": "respond",
+      "userPath": "Answer in the current conversation.",
+      "requestSignals": ["single-question", "known-context", "no-durable-work"],
+      "nextStep": "Return the answer and stop; do not open Workbench.",
+      "allowedContracts": ["app-state-snapshot.v1"],
+      "boundary": "No goal, job, model dispatch, shell command, or filesystem write is required."
+    },
+    {
+      "categoryId": "skill",
+      "label": "Skill",
+      "routeKind": "codex-skill",
+      "userPath": "Use an installed skill workflow before deciding whether Workbench is needed.",
+      "requestSignals": ["named-skill", "document-workflow", "spreadsheet-workflow", "plugin-skill-fit"],
+      "nextStep": "Load the matching skill instructions and keep any writes inside the requested artifact scope.",
+      "allowedContracts": ["app-state-snapshot.v1"],
+      "boundary": "Skill routing is instruction selection only; it does not call models or execute tools by itself."
+    },
+    {
+      "categoryId": "automation",
+      "label": "Automation",
+      "routeKind": "controlled-action",
+      "userPath": "Use declared action/job contracts when a controlled operation already exists.",
+      "requestSignals": ["known-action-id", "repeatable-operation", "dry-run-confirm-available"],
+      "nextStep": "Preview the declared action and require explicit confirmation before any backend write.",
+      "allowedContracts": ["action-manifest.v1", "action-availability.v1", "action-preview.v1", "job-model.v1"],
+      "boundary": "Automation is limited to declared action/job contracts; it is not a generic shell runner."
+    },
+    {
+      "categoryId": "workbench-goal",
+      "label": "Workbench goal",
+      "routeKind": "goal-runbook",
+      "userPath": "Move project work into the active goal/runbook/next-action workflow.",
+      "requestSignals": ["multi-step-project", "repo-change", "review-required", "verification-required"],
+      "nextStep": "Use goal-status, goal next, goal prompt, and controlled goal update/review/gate flow.",
+      "allowedContracts": ["goal-runbook.v1", "goal-next-action.v1", "goal-progress-ledger.v1", "goal-event-log.v1"],
+      "boundary": "Workbench goal routing keeps reviewer and main-verifier boundaries; it cannot self-approve."
+    },
+    {
+      "categoryId": "research",
+      "label": "Research",
+      "routeKind": "source-backed-research",
+      "userPath": "Collect external or source-backed context before making a recommendation.",
+      "requestSignals": ["current-information", "external-source-needed", "comparison-needed"],
+      "nextStep": "Record sources and return findings; create a goal only after the user chooses durable work.",
+      "allowedContracts": ["app-state-snapshot.v1"],
+      "boundary": "Research does not write app state, create jobs, invoke provider CLIs, or register goal events."
+    },
+    {
+      "categoryId": "ignore-skip",
+      "label": "Ignore / skip",
+      "routeKind": "no-op",
+      "userPath": "Do nothing when the request is noise, duplicate, or explicitly skipped.",
+      "requestSignals": ["duplicate", "cancelled", "not-actionable", "explicit-skip"],
+      "nextStep": "Record no state and leave active goal status unchanged.",
+      "allowedContracts": [],
+      "boundary": "Skip is a no-op route; it must not mutate events, jobs, git, or release state."
+    }
+  ],
+  "decisionPolicy": {
+    "defaultCategoryId": "workbench-goal",
+    "confidenceSource": "deterministic-router-rules",
+    "requiresHumanConfirmationForGoalDraft": true,
+    "writesRouteDecision": false,
+    "modelInvocationRequired": false,
+    "fallbackCategoryId": "direct-answer"
+  },
+  "examples": [
+    {
+      "exampleId": "example-direct-answer",
+      "inputKind": "single factual or code question",
+      "selectedCategoryId": "direct-answer",
+      "reason": "The request can be answered without durable state, review, or verification.",
+      "nextContract": null,
+      "writesState": false
+    },
+    {
+      "exampleId": "example-skill",
+      "inputKind": "document or spreadsheet artifact work",
+      "selectedCategoryId": "skill",
+      "reason": "A local skill supplies the workflow and validation requirements.",
+      "nextContract": null,
+      "writesState": false
+    },
+    {
+      "exampleId": "example-automation",
+      "inputKind": "known controlled action",
+      "selectedCategoryId": "automation",
+      "reason": "The operation can be previewed through action and job contracts.",
+      "nextContract": "action-preview.v1",
+      "writesState": false
+    },
+    {
+      "exampleId": "example-workbench-goal",
+      "inputKind": "repository change needing review",
+      "selectedCategoryId": "workbench-goal",
+      "reason": "The work needs worker evidence, independent review, and main verification.",
+      "nextContract": "goal-next-action.v1",
+      "writesState": false
+    },
+    {
+      "exampleId": "example-research",
+      "inputKind": "current market or API information",
+      "selectedCategoryId": "research",
+      "reason": "The answer depends on current or external sources.",
+      "nextContract": null,
+      "writesState": false
+    },
+    {
+      "exampleId": "example-ignore-skip",
+      "inputKind": "duplicate or cancelled request",
+      "selectedCategoryId": "ignore-skip",
+      "reason": "No user-visible workflow should start.",
+      "nextContract": null,
+      "writesState": false
+    }
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "categoryDecisionWritesAvailable": false,
+    "actionExecutionAvailable": false,
+    "jobCreationAvailable": false,
+    "goalDraftWriteAvailable": false,
+    "workbenchGoalRegistrationAvailable": false,
+    "researchFetchAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "shellExecutionAvailable": false,
+    "localFileOpenAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "releaseReadyDeclarationAvailable": false,
+    "statusInferenceFromFrontendAvailable": false
+  }
+}

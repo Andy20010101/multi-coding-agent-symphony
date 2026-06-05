@@ -9905,14 +9905,17 @@ var CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = "symphony.console-adoption-inspect"
 var RELEASE_BASELINE_RESOLVER_CONTRACT_NAME = "release-baseline-resolver.v1";
 var APP_STATE_SNAPSHOT_CONTRACT_NAME = "app-state-snapshot.v1";
 var APP_DATA_INVENTORY_CONTRACT_NAME = "app-data-inventory.v1";
+var INBOX_CAPTURE_CONTRACT_NAME = "inbox-capture.v1";
 var CAPABILITIES_CONTRACT_NAME = "capabilities.v1";
 var ACTION_MANIFEST_CONTRACT_NAME = "action-manifest.v1";
 var ACTION_AVAILABILITY_CONTRACT_NAME = "action-availability.v1";
 var ACTION_PREVIEW_CONTRACT_NAME = "action-preview.v1";
+var GOAL_DRAFT_HANDOFF_CONTRACT_NAME = "goal-draft-handoff.v1";
 var AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = "agent-cli-provider-health.v1";
 var AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = "agent-cli-capability-profile.v1";
 var AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME = "agent-cli-lane-assignment-preview.v1";
 var APP_SCHEMA_MIGRATION_CONTRACT_NAME = "app-schema-migration.v1";
+var WORKFLOW_ROUTER_CATEGORIES_CONTRACT_NAME = "workflow-router-categories.v1";
 var JOB_MODEL_CONTRACT_NAME = "job-model.v1";
 var JOB_CREATION_CONTRACT_NAME = "job-creation.v1";
 var JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = "job-timeline-log-stream.v1";
@@ -9925,6 +9928,7 @@ var EVIDENCE_TIMELINE_CONTRACT_NAME = "evidence-timeline.v1";
 var RELEASE_BUNDLE_CONTRACT_NAME = "release-bundle.v1";
 var EVIDENCE_BUNDLE_CONTRACT_NAME = "evidence-bundle.v1";
 var APP_CORE_BACKUP_EXPORT_CONTRACT_NAME = "app-core-backup-export.v1";
+var APP_CORE_RELEASE_MANAGER_CONTRACT_NAME = "app-core-release-manager.v1";
 var PROJECT_REGISTRY_CONTRACT_NAME = "project-registry.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
@@ -9951,6 +9955,38 @@ var EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
 	"artifact:<run-id>:<artifact-kind>",
 	"artifacts/<managed-ref>",
 	"managed-artifact:<managed-ref>"
+]);
+var NATIVE_UX_HANDOFF_SCOPE = Object.freeze([
+	"Menu bar companion: active goal, next action, job state, provider gates, and evidence refs.",
+	"Notch companion: glanceable running or blocked state, next operator action, and latest safe evidence anchor.",
+	"Native distribution: desktop packaging, signed build evidence, update boundary, and colleague install notes.",
+	"UX polish: capture-to-router entry, goal draft handoff, closeout state, and safe preview continuity across Web/Desktop/Menu Bar."
+]);
+var NATIVE_UX_DISTRIBUTION_CHANNELS = Object.freeze([
+	"Local developer install with explicit sidecar health check.",
+	"Internal colleague build with release evidence and rollback instructions.",
+	"Unsigned dry-run package for QA only; signing and notarization require separate release gates.",
+	"No auto-update, cloud sync, provider invocation, tag, push, or publish from the handoff draft."
+]);
+var NATIVE_UX_STARTER_WORK_PACKAGES = Object.freeze([
+	Object.freeze({
+		id: "native-shell-entry",
+		title: "Native shell entry points",
+		outcome: "Menu bar and notch surfaces read the same App kernel state used by Web Workbench.",
+		source: "v37 desktop shell + v40 router closeout"
+	}),
+	Object.freeze({
+		id: "native-router-capture",
+		title: "Capture and router UX",
+		outcome: "Inbox items can remain direct answers, skill runs, automation, research, skipped items, or Workbench goal drafts.",
+		source: "v40 task-1/task-2/task-3 contracts"
+	}),
+	Object.freeze({
+		id: "distribution-evidence",
+		title: "Distribution evidence pack",
+		outcome: "Build, signing, install, rollback, and colleague handoff evidence use explicit release gates.",
+		source: "v39 backup/diagnostics + v40 release closeout"
+	})
 ]);
 var GOAL_EVENT_FORM_DEFINITIONS = Object.freeze([
 	Object.freeze({
@@ -10384,6 +10420,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: APP_DATA_INVENTORY_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "inboxCapture",
+		label: "Inbox Capture",
+		path: "/api/inbox/capture",
+		method: "GET",
+		contractName: INBOX_CAPTURE_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "readiness",
 		label: "Readiness",
 		path: "/api/readiness",
@@ -10508,6 +10551,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: ACTION_PREVIEW_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "goalDraftHandoff",
+		label: "Goal Draft Handoff",
+		path: "/api/workflows/goal-draft-handoff",
+		method: "GET",
+		contractName: GOAL_DRAFT_HANDOFF_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "providerHealth",
 		label: "Provider Health",
 		path: "/api/providers/health",
@@ -10534,6 +10584,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/app-data/migration",
 		method: "GET",
 		contractName: APP_SCHEMA_MIGRATION_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "workflowRouterCategories",
+		label: "Workflow Router Categories",
+		path: "/api/workflow/router-categories",
+		method: "GET",
+		contractName: WORKFLOW_ROUTER_CATEGORIES_CONTRACT_NAME
 	}),
 	Object.freeze({
 		id: "jobModel",
@@ -10597,6 +10654,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/release/bundle",
 		method: "GET",
 		contractName: RELEASE_BUNDLE_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "appCoreReleaseManager",
+		label: "App Core Release Manager",
+		path: "/api/release/app-core-manager",
+		method: "GET",
+		contractName: APP_CORE_RELEASE_MANAGER_CONTRACT_NAME
 	}),
 	Object.freeze({
 		id: "evidenceBundle",
@@ -10815,6 +10879,7 @@ function projectWorkbenchContracts(results) {
 	const projectRegistryData = dataFrom(results.projectRegistry);
 	const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
 	const appDataInventoryData = dataFrom(results.appDataInventory);
+	const inboxCaptureData = dataFrom(results.inboxCapture);
 	const readinessData = dataFrom(results.readiness);
 	const handoffRefsData = dataFrom(results.handoffRefs);
 	const guidedGoalHandoffData = dataFrom(results.guidedGoalHandoff);
@@ -10839,10 +10904,12 @@ function projectWorkbenchContracts(results) {
 	const actionManifestData = dataFrom(results.actionManifest);
 	const actionAvailabilityData = dataFrom(results.actionAvailability);
 	const actionPreviewData = dataFrom(results.actionPreview);
+	const goalDraftHandoffData = dataFrom(results.goalDraftHandoff);
 	const providerHealthData = dataFrom(results.providerHealth);
 	const providerCapabilitiesData = dataFrom(results.providerCapabilities);
 	const providerLanePreviewData = dataFrom(results.providerLanePreview);
 	const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
+	const workflowRouterCategoriesData = dataFrom(results.workflowRouterCategories);
 	const diagnosticsData = dataFrom(results.diagnostics);
 	const diagnosticsBundleData = dataFrom(results.diagnosticsBundle);
 	const jobModelData = dataFrom(results.jobModel);
@@ -10852,6 +10919,7 @@ function projectWorkbenchContracts(results) {
 	const artifactIndexData = dataFrom(results.artifactIndex);
 	const evidenceTimelineData = dataFrom(results.evidenceTimeline);
 	const releaseBundleData = dataFrom(results.releaseBundle);
+	const appCoreReleaseManagerData = dataFrom(results.appCoreReleaseManager);
 	const backupExportData = dataFrom(results.backupExport);
 	const restoreValidationData = dataFrom(results.restoreValidation);
 	const latestRun = latestRunData?.run ?? null;
@@ -10912,6 +10980,11 @@ function projectWorkbenchContracts(results) {
 		preview: actionPreviewData,
 		nextAction: goalNextActionData
 	});
+	activeGoalControl.goalDraftHandoff = projectGoalDraftHandoffPanel({
+		result: results.goalDraftHandoff,
+		handoff: goalDraftHandoffData,
+		nextAction: goalNextActionData
+	});
 	const routeContext = projectWorkbenchRouteContext({
 		activeGoal: activeGoalControl,
 		latestRun: projectedLatestRun
@@ -10969,6 +11042,10 @@ function projectWorkbenchContracts(results) {
 		result: results.releaseBundle,
 		bundle: releaseBundleData
 	});
+	const projectedAppCoreReleaseManager = projectAppCoreReleaseManager({
+		result: results.appCoreReleaseManager,
+		releaseManager: appCoreReleaseManagerData
+	});
 	const projectedBackupExport = projectBackupExport({
 		result: results.backupExport,
 		backupExport: backupExportData
@@ -11024,6 +11101,7 @@ function projectWorkbenchContracts(results) {
 			artifactIndex: projectedArtifactIndex,
 			evidenceTimeline: projectedEvidenceTimeline,
 			releaseBundle: projectedReleaseBundle,
+			appCoreReleaseManager: projectedAppCoreReleaseManager,
 			backupExport: projectedBackupExport,
 			restoreValidation: projectedRestoreValidation,
 			diagnosticsBundle: projectedDiagnosticsBundle,
@@ -11035,6 +11113,10 @@ function projectWorkbenchContracts(results) {
 		appDataInventory: projectAppDataInventory({
 			result: results.appDataInventory,
 			inventory: appDataInventoryData
+		}),
+		inboxCapture: projectInboxCapture({
+			result: results.inboxCapture,
+			capture: inboxCaptureData
 		}),
 		summary: projectSummary(summaryData),
 		readiness: projectReadiness(readinessData, summaryData),
@@ -11080,6 +11162,7 @@ function projectWorkbenchContracts(results) {
 			nextAction: goalNextActionData
 		}),
 		activeGoal: activeGoalControl,
+		goalDraftHandoff: activeGoalControl.goalDraftHandoff,
 		capabilities: projectCapabilities(capabilitiesData),
 		providerHub: projectedProviderHub,
 		providerLanePreview: projectedProviderLanePreview,
@@ -11087,11 +11170,17 @@ function projectWorkbenchContracts(results) {
 			result: results.appSchemaMigration,
 			migration: appSchemaMigrationData
 		}),
+		workflowRouterCategories: projectWorkflowRouterCategories({
+			result: results.workflowRouterCategories,
+			router: workflowRouterCategoriesData,
+			routeContext
+		}),
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
 		diagnosticsBundle: projectedDiagnosticsBundle,
 		jobConsole: projectedJobConsole,
 		evidenceTimeline: projectedEvidenceTimeline,
 		releaseBundle: projectedReleaseBundle,
+		appCoreReleaseManager: projectedAppCoreReleaseManager,
 		backupExport: projectedBackupExport,
 		restoreValidation: projectedRestoreValidation,
 		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
@@ -11348,6 +11437,63 @@ function projectAppDataInventory({ result, inventory }) {
 		},
 		boundaries: boundaryListState(inventory?.boundaries),
 		note: "App Data Inventory lists saved app data domains from backend contracts only. It does not read evidence bodies, execute shell commands, open local files, invoke models, mutate jobs, write git state, expose secrets, or declare release readiness."
+	};
+}
+function projectInboxCapture({ result, capture }) {
+	const captureItemTypes = Array.isArray(capture?.captureItemTypes) ? capture.captureItemTypes : [];
+	const allowedNextSteps = Array.isArray(capture?.handoff?.allowedNextSteps) ? capture.handoff.allowedNextSteps : [];
+	const blockedInferenceSources = Array.isArray(capture?.handoff?.blockedInferenceSources) ? capture.handoff.blockedInferenceSources : [];
+	return {
+		state: result?.ok === true ? "available" : "missing",
+		modelName: valueState("InboxCapturePanel"),
+		contractName: valueState(capture?.contractName),
+		contractVersion: valueState(capture?.contractVersion),
+		generatedAt: valueState(capture?.generatedAt),
+		readOnly: valueState(capture?.readOnly),
+		goalId: valueState(capture?.context?.goalId),
+		taskId: valueState(capture?.context?.taskId),
+		sourcePolicy: valueState(capture?.context?.stateSource),
+		appPath: valueState(capture?.context?.appPath),
+		sourceContracts: projectTextItems(capture?.context?.sourceContracts),
+		intakeSurface: {
+			route: valueState(capture?.intakeSurface?.route),
+			cliCommand: valueState(capture?.intakeSurface?.cliCommand),
+			workbenchPanel: valueState(capture?.intakeSurface?.workbenchPanel),
+			acceptsRawRequests: valueState(capture?.intakeSurface?.acceptsRawRequests),
+			requiresActiveWorkbenchGoal: valueState(capture?.intakeSurface?.requiresActiveWorkbenchGoal),
+			writesInPreview: valueState(capture?.intakeSurface?.writesInPreview)
+		},
+		captureDraft: {
+			contractName: valueState(capture?.captureDraft?.contractName),
+			persisted: valueState(capture?.captureDraft?.persisted),
+			requiredFields: arrayTextState(capture?.captureDraft?.requiredFields),
+			optionalFields: arrayTextState(capture?.captureDraft?.optionalFields),
+			bodyReadAvailable: valueState(capture?.captureDraft?.bodyReadAvailable),
+			validationSource: valueState(capture?.captureDraft?.validationSource),
+			nextContract: valueState(capture?.captureDraft?.nextContract)
+		},
+		captureItemTypes: {
+			state: captureItemTypes.length > 0 ? "available" : "empty",
+			count: valueState(captureItemTypes.length),
+			items: captureItemTypes.map((item) => ({
+				itemType: valueState(item.itemType),
+				label: valueState(item.label),
+				summary: valueState(item.summary),
+				requiresWorkbenchGoal: valueState(item.requiresWorkbenchGoal),
+				routesImmediately: valueState(item.routesImmediately),
+				allowedBeforeGoalExists: valueState(item.allowedBeforeGoalExists)
+			}))
+		},
+		handoff: {
+			routerContract: valueState(capture?.handoff?.routerContract),
+			goalDraftContract: valueState(capture?.handoff?.goalDraftContract),
+			workbenchGoalRequiredForCapture: valueState(capture?.handoff?.workbenchGoalRequiredForCapture),
+			workbenchGoalRequiredForGoalDraft: valueState(capture?.handoff?.workbenchGoalRequiredForGoalDraft),
+			allowedNextSteps: projectTextItems(allowedNextSteps),
+			blockedInferenceSources: projectTextItems(blockedInferenceSources)
+		},
+		boundaries: boundaryListState(capture?.boundaries),
+		note: "Inbox Capture shows the app entry contract for raw requests, project clues, ideas, and faults before Workbench routing. It is read-only and does not execute shell commands, invoke models, persist capture items, create goals, self-approve, main-verify, or declare release readiness."
 	};
 }
 function boundaryListState(boundaries) {
@@ -14270,6 +14416,78 @@ function projectSubagentHandoffBoard({ progressResult, progress, eventsResult, e
 		note: "Subagent Handoff Board uses goal events for worker started, goal-status/events for evidence and verdicts, goal next for the current handoff role, and goal closeout for missing handoff gaps. It does not read branch names, file names, commit messages, prompt text, or command text as task status."
 	};
 }
+function projectGoalDraftHandoffPanel({ result, handoff, nextAction }) {
+	const blockers = Array.isArray(handoff?.blockers) ? handoff.blockers : [];
+	const draftTasks = Array.isArray(handoff?.runbookDraft?.tasks) ? handoff.runbookDraft.tasks : [];
+	return {
+		state: result?.ok === true ? blockers.length > 0 ? "blocked" : handoff?.goalDraft?.state ?? "available" : "missing",
+		modelName: valueState("GoalDraftHandoffPanel"),
+		contractName: valueState(handoff?.contractName ?? GOAL_DRAFT_HANDOFF_CONTRACT_NAME),
+		contractVersion: valueState(handoff?.contractVersion),
+		goalId: valueState(handoff?.context?.goalId),
+		taskId: valueState(handoff?.context?.taskId ?? nextAction?.next?.taskId),
+		routeState: valueState(routeStateFromResult(result)),
+		sourcePolicy: valueState("goal-draft-handoff.v1 + goal-runbook.v1 + goal-next-action.v1 + goal-progress-ledger.v1 + goal-prompt-pack.v1"),
+		routing: {
+			category: valueState(handoff?.routing?.category),
+			acceptedSignals: arrayTextState(handoff?.routing?.acceptedSignals),
+			excludedCategories: arrayTextState(handoff?.routing?.excludedCategories)
+		},
+		goalDraft: {
+			state: valueState(handoff?.goalDraft?.state),
+			suggestedGoalId: valueState(handoff?.goalDraft?.suggestedGoalId),
+			suggestedTitle: valueState(handoff?.goalDraft?.suggestedTitle),
+			registrationState: valueState(handoff?.goalDraft?.registrationState),
+			operatorReviewRequired: valueState(handoff?.goalDraft?.operatorReviewRequired),
+			draftOnly: valueState(handoff?.goalDraft?.draftOnly)
+		},
+		runbookDraft: {
+			contractName: valueState(handoff?.runbookDraft?.contractName),
+			draftOnly: valueState(handoff?.runbookDraft?.draftOnly),
+			autoRegister: valueState(handoff?.runbookDraft?.autoRegister),
+			taskCount: valueState(draftTasks.length),
+			releaseGates: arrayTextState(handoff?.runbookDraft?.releaseGates)
+		},
+		handoff: {
+			markdown: valueState(handoff?.handoff?.markdown),
+			checklist: {
+				state: Array.isArray(handoff?.handoff?.checklist) && handoff.handoff.checklist.length > 0 ? "available" : "empty",
+				items: Array.isArray(handoff?.handoff?.checklist) ? handoff.handoff.checklist.map((item) => textState(item)) : []
+			},
+			copyOnlyCommands: {
+				state: Array.isArray(handoff?.handoff?.copyOnlyCommands) && handoff.handoff.copyOnlyCommands.length > 0 ? "available" : "empty",
+				items: Array.isArray(handoff?.handoff?.copyOnlyCommands) ? handoff.handoff.copyOnlyCommands.map((command) => textState(command)) : []
+			},
+			nextRequiredAction: valueState(handoff?.handoff?.nextRequiredAction)
+		},
+		endpoint: {
+			method: valueState(handoff?.endpoint?.method),
+			route: valueState(handoff?.endpoint?.route),
+			allowedQueryFields: arrayTextState(handoff?.endpoint?.allowedQueryFields),
+			writesInPreview: valueState(handoff?.endpoint?.writesInPreview),
+			registersGoal: valueState(handoff?.endpoint?.registersGoal)
+		},
+		boundaries: {
+			readOnly: valueState(handoff?.boundaries?.readOnly),
+			draftOnly: valueState(handoff?.boundaries?.draftOnly),
+			writesFiles: valueState(handoff?.boundaries?.writesFiles),
+			registersGoal: valueState(handoff?.boundaries?.registersGoal),
+			runsGoalInit: valueState(handoff?.boundaries?.runsGoalInit),
+			arbitraryCommandExecutionAvailable: valueState(handoff?.boundaries?.arbitraryCommandExecutionAvailable),
+			modelInvocationAvailable: valueState(handoff?.boundaries?.modelInvocationAvailable),
+			gitWriteAvailable: valueState(handoff?.boundaries?.gitWriteAvailable),
+			selfApprovalAvailable: valueState(handoff?.boundaries?.selfApprovalAvailable),
+			releaseReadyDeclared: valueState(handoff?.boundaries?.releaseReadyDeclared),
+			statusSource: valueState(handoff?.boundaries?.statusSource)
+		},
+		blockers: blockers.map((blocker) => ({
+			code: valueState(blocker?.code),
+			message: valueState(blocker?.message),
+			source: valueState(blocker?.source)
+		})),
+		note: "Goal Draft Handoff is a display-only bridge from captured/project-scoped work to a reviewed goal/runbook draft. It does not register a goal, write files, run goal init, invoke models, or infer completion state."
+	};
+}
 function projectSubagentHandoffTask({ task, events, activeNext, closeoutMissing }) {
 	const taskId = task?.taskId;
 	const taskEvents = events.filter((event) => event?.taskId === taskId);
@@ -15523,6 +15741,15 @@ function projectNextVersionHandoffDraft({ closeout, goalId, runbook, ledger, eve
 		releaseEvidenceDraft,
 		tagEvidencePrompt
 	});
+	const nativeUxHandoff = projectNativeUxHandoffDraft({
+		nextVersion,
+		commandGoalId,
+		releaseName,
+		target,
+		releaseReady: closeout?.summary?.releaseReady,
+		closeoutMissingCount: closeoutMissingItems.length,
+		evidenceRefs
+	});
 	const implementedCapabilities = projectNextVersionImplementedCapabilities({
 		releaseBaseline,
 		verificationChecklist,
@@ -15558,6 +15785,15 @@ function projectNextVersionHandoffDraft({ closeout, goalId, runbook, ledger, eve
 		"",
 		"Implemented Workbench capabilities:",
 		...implementedCapabilities.items.map((item) => `- ${item.name.value}: ${item.state.value}`),
+		"",
+		"Native UX handoff scope:",
+		...nativeUxHandoff.scope.items.map((item) => `- ${item.value}`),
+		"",
+		"Distribution channels:",
+		...nativeUxHandoff.distributionChannels.items.map((item) => `- ${item.value}`),
+		"",
+		"Starter work packages:",
+		...nativeUxHandoff.starterWorkPackages.items.map((item) => `- ${item.id.value}: ${item.title.value}; outcome=${item.outcome.value}; source=${item.source.value}`),
 		"",
 		"Copy-only context commands:",
 		...copyOnlyCommands.map((command) => `- ${command}`),
@@ -15597,10 +15833,12 @@ function projectNextVersionHandoffDraft({ closeout, goalId, runbook, ledger, eve
 		taskAnchors,
 		releaseGateAnchors,
 		implementedCapabilities,
+		nativeUxHandoff,
 		copyOnlyCommands: projectTextItems(copyOnlyCommands),
 		markdown: valueState(handoffLines.join("\n")),
 		safety: {
 			copyOnly: valueState(true),
+			nativeUxHandoffOnly: valueState(true),
 			createsManagedGoal: valueState(false),
 			entersNextVersion: valueState(false),
 			runsShell: valueState(false),
@@ -15619,7 +15857,42 @@ function projectNextVersionHandoffDraft({ closeout, goalId, runbook, ledger, eve
 			infersStateFromBranches: valueState(false),
 			infersStateFromPrompts: valueState(false)
 		},
-		boundaryText: valueState("Next-version handoff draft is a controlled preview generated from active goal closeout, release/event refs, run context, and implemented Workbench capability flags. It does not create v33 or move the operator into the next version.")
+		boundaryText: valueState(`Next-version handoff draft is a controlled preview generated from active goal closeout, release/event refs, run context, and implemented Workbench capability flags. It does not create ${nextVersion ?? "the next version"} or move the operator into the next version.`)
+	};
+}
+function projectNativeUxHandoffDraft({ nextVersion, commandGoalId, releaseName, target, releaseReady, closeoutMissingCount, evidenceRefs }) {
+	return {
+		state: nextVersion === null ? "partial" : "available",
+		version: valueState(nextVersion),
+		goalId: valueState(commandGoalId),
+		releaseName: valueState(releaseName),
+		targetCommit: valueState(target.commit),
+		releaseReady: valueState(releaseReady),
+		closeoutMissingCount: valueState(closeoutMissingCount),
+		evidenceAnchorCount: valueState(evidenceRefs?.count?.value),
+		scope: projectTextItems(NATIVE_UX_HANDOFF_SCOPE),
+		distributionChannels: projectTextItems(NATIVE_UX_DISTRIBUTION_CHANNELS),
+		starterWorkPackages: {
+			state: "available",
+			count: valueState(NATIVE_UX_STARTER_WORK_PACKAGES.length),
+			items: NATIVE_UX_STARTER_WORK_PACKAGES.map((item) => ({
+				id: valueState(item.id),
+				title: valueState(item.title),
+				outcome: valueState(item.outcome),
+				source: valueState(item.source)
+			}))
+		},
+		safety: {
+			copyOnly: valueState(true),
+			generatesNativeBuild: valueState(false),
+			createsInstaller: valueState(false),
+			signsOrNotarizes: valueState(false),
+			publishesDistribution: valueState(false),
+			autoUpdatesAvailable: valueState(false),
+			invokesProvider: valueState(false),
+			opensLocalFiles: valueState(false)
+		},
+		note: valueState("Native UX handoff is generated from closeout projections and evidence anchors. Build, signing, notarization, packaging, and distribution remain future controlled work with separate evidence gates.")
 	};
 }
 function projectNextVersionTaskAnchors({ ledger, runbook }) {
@@ -17880,6 +18153,67 @@ function projectAppSchemaMigration({ result, migration }) {
 		note: "App schema migration panel shows the dry-run preview and confirm requirements only; the browser route does not execute the migration or write app data."
 	};
 }
+function projectWorkflowRouterCategories({ result, router, routeContext }) {
+	const categories = Array.isArray(router?.categories) ? router.categories : [];
+	const examples = Array.isArray(router?.examples) ? router.examples : [];
+	const boundaries = Object.entries(router?.boundaries ?? {}).map(([boundary, available]) => ({
+		boundary: valueState(boundary),
+		available: valueState(available)
+	}));
+	return {
+		state: result?.ok === true ? categories.length === 0 ? "empty" : "available" : result ? "failed" : "missing",
+		contractName: valueState(router?.contractName),
+		contractVersion: valueState(router?.contractVersion),
+		generatedAt: valueState(router?.generatedAt),
+		readOnly: valueState(router?.readOnly),
+		goalId: valueState(router?.context?.goalId),
+		taskId: valueState(router?.context?.taskId),
+		sourcePolicy: valueState(router?.context?.stateSource),
+		scope: valueState(router?.context?.scope),
+		routeContext: {
+			goalId: valueState(firstValue(routeContext?.goalId)),
+			taskId: valueState(firstValue(routeContext?.taskId)),
+			activeRole: valueState(firstValue(routeContext?.activeRole)),
+			activePhase: valueState(firstValue(routeContext?.activePhase))
+		},
+		sourceContracts: arrayTextState(router?.context?.sourceContracts),
+		categoryCount: valueState(categories.length),
+		categories: {
+			state: categories.length === 0 ? "empty" : "available",
+			items: categories.map((category) => ({
+				categoryId: valueState(category?.categoryId),
+				label: valueState(category?.label),
+				routeKind: valueState(category?.routeKind),
+				userPath: valueState(category?.userPath),
+				requestSignals: arrayTextState(category?.requestSignals),
+				nextStep: valueState(category?.nextStep),
+				allowedContracts: arrayTextState(category?.allowedContracts),
+				boundary: valueState(category?.boundary)
+			}))
+		},
+		decisionPolicy: {
+			defaultCategoryId: valueState(router?.decisionPolicy?.defaultCategoryId),
+			confidenceSource: valueState(router?.decisionPolicy?.confidenceSource),
+			requiresHumanConfirmationForGoalDraft: valueState(router?.decisionPolicy?.requiresHumanConfirmationForGoalDraft),
+			writesRouteDecision: valueState(router?.decisionPolicy?.writesRouteDecision),
+			modelInvocationRequired: valueState(router?.decisionPolicy?.modelInvocationRequired),
+			fallbackCategoryId: valueState(router?.decisionPolicy?.fallbackCategoryId)
+		},
+		examples: {
+			state: examples.length === 0 ? "empty" : "available",
+			items: examples.map((example) => ({
+				exampleId: valueState(example?.exampleId),
+				inputKind: valueState(example?.inputKind),
+				selectedCategoryId: valueState(example?.selectedCategoryId),
+				reason: valueState(example?.reason),
+				nextContract: valueState(example?.nextContract),
+				writesState: valueState(example?.writesState)
+			}))
+		},
+		boundaries,
+		note: "Workflow Router Categories shows the v40 routing categories and boundary decisions from workflow-router-categories.v1. It does not create goals, create jobs, execute actions, fetch research, invoke models, run shell commands, write git state, or register approval, verification, or release events."
+	};
+}
 function projectDiagnostics(diagnostics) {
 	return {
 		state: diagnostics === null || diagnostics === void 0 ? "missing" : "available",
@@ -18775,6 +19109,118 @@ function projectReleaseBundle({ result, bundle }) {
 			releaseDecisionAvailable: valueState(bundle.boundaries?.releaseDecisionAvailable)
 		},
 		note: "Release Bundle 按 task 展示 worker/reviewer/main-verifier/release-manager evidence 分组。所有数据来自 ArtifactStore 和 goal events。此为只读视图，不是 release 授权。"
+	};
+}
+function projectAppCoreReleaseManager({ result, releaseManager }) {
+	if (releaseManager === null || releaseManager === void 0) return {
+		state: result?.ok === true ? "empty" : "unavailable",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(void 0),
+		contractVersion: valueState(void 0),
+		generatedAt: valueState(void 0),
+		readOnly: valueState(void 0),
+		context: {},
+		releaseReadiness: {},
+		closeoutStatus: {},
+		capabilityChecklist: {
+			totalCount: valueState(0),
+			passedCount: valueState(0),
+			warningCount: valueState(0),
+			blockedCount: valueState(0),
+			items: valueState([])
+		},
+		finalEvidenceDraft: {},
+		sourceSummary: {},
+		boundaries: {},
+		note: "App Core Release Manager 未暴露 / 不可用。"
+	};
+	return {
+		state: releaseManager.releaseReadiness?.state ?? "available",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(releaseManager.contractName),
+		contractVersion: valueState(releaseManager.contractVersion),
+		generatedAt: valueState(releaseManager.generatedAt),
+		readOnly: valueState(releaseManager.readOnly),
+		context: {
+			goalId: valueState(releaseManager.context?.goalId),
+			resolvedGoalId: valueState(releaseManager.context?.resolvedGoalId),
+			taskId: valueState(releaseManager.context?.taskId),
+			managerRole: valueState(releaseManager.context?.managerRole),
+			stateSource: valueState(releaseManager.context?.stateSource)
+		},
+		releaseReadiness: {
+			state: valueState(releaseManager.releaseReadiness?.state),
+			reason: valueState(releaseManager.releaseReadiness?.reason),
+			releaseReadyDeclared: valueState(releaseManager.releaseReadiness?.releaseReadyDeclared),
+			releaseReadySource: valueState(releaseManager.releaseReadiness?.releaseReadySource),
+			declarationAuthorized: valueState(releaseManager.releaseReadiness?.declarationAuthorized),
+			declarationCommandAvailable: valueState(releaseManager.releaseReadiness?.declarationCommandAvailable),
+			readyEventRequired: valueState(releaseManager.releaseReadiness?.readyEventRequired),
+			capabilitiesPassed: valueState(releaseManager.releaseReadiness?.capabilitiesPassed)
+		},
+		closeoutStatus: {
+			state: valueState(releaseManager.closeoutStatus?.state),
+			totalTasks: valueState(releaseManager.closeoutStatus?.totalTasks),
+			workerEvidenceComplete: valueState(releaseManager.closeoutStatus?.workerEvidenceComplete),
+			reviewEvidenceComplete: valueState(releaseManager.closeoutStatus?.reviewEvidenceComplete),
+			mainVerificationComplete: valueState(releaseManager.closeoutStatus?.mainVerificationComplete),
+			releaseReady: valueState(releaseManager.closeoutStatus?.releaseReady),
+			releaseReadySource: valueState(releaseManager.closeoutStatus?.releaseReadySource),
+			missingCount: valueState(releaseManager.closeoutStatus?.missingCount),
+			blocker: valueState(releaseManager.closeoutStatus?.blocker),
+			releaseGateStatuses: Object.entries(releaseManager.closeoutStatus?.releaseGateStatuses ?? {}).map(([gate, status]) => ({
+				gate: valueState(gate),
+				status: valueState(status)
+			}))
+		},
+		capabilityChecklist: {
+			totalCount: valueState(releaseManager.capabilityChecklist?.totalCount ?? 0),
+			passedCount: valueState(releaseManager.capabilityChecklist?.passedCount ?? 0),
+			warningCount: valueState(releaseManager.capabilityChecklist?.warningCount ?? 0),
+			blockedCount: valueState(releaseManager.capabilityChecklist?.blockedCount ?? 0),
+			sourcePolicy: valueState(releaseManager.capabilityChecklist?.sourcePolicy),
+			items: valueState(Array.isArray(releaseManager.capabilityChecklist?.items) ? releaseManager.capabilityChecklist.items : [])
+		},
+		finalEvidenceDraft: {
+			state: valueState(releaseManager.finalEvidenceDraft?.state),
+			evidenceRef: valueState(releaseManager.finalEvidenceDraft?.evidenceRef),
+			suggestedTitle: valueState(releaseManager.finalEvidenceDraft?.suggestedTitle),
+			blockerCount: valueState(releaseManager.finalEvidenceDraft?.blockerCount),
+			sourceEventCount: valueState(releaseManager.finalEvidenceDraft?.sourceEventCount),
+			releaseReadyDeclarationIncluded: valueState(releaseManager.finalEvidenceDraft?.releaseReadyDeclarationIncluded),
+			requiredSections: valueState(Array.isArray(releaseManager.finalEvidenceDraft?.requiredSections) ? releaseManager.finalEvidenceDraft.requiredSections : []),
+			note: valueState(releaseManager.finalEvidenceDraft?.note)
+		},
+		sourceSummary: {
+			runtimeStatus: valueState(releaseManager.sourceSummary?.runtimeStatus),
+			appStateContract: valueState(releaseManager.sourceSummary?.appStateContract),
+			providerState: valueState(releaseManager.sourceSummary?.providerState),
+			appDataDomainCount: valueState(releaseManager.sourceSummary?.appDataDomainCount),
+			evidenceRefCount: valueState(releaseManager.sourceSummary?.evidenceRefCount),
+			artifactEntryCount: valueState(releaseManager.sourceSummary?.artifactEntryCount),
+			goalEventCount: valueState(releaseManager.sourceSummary?.goalEventCount)
+		},
+		boundaries: {
+			readOnly: valueState(releaseManager.boundaries?.readOnly),
+			writesEvidenceFile: valueState(releaseManager.boundaries?.writesEvidenceFile),
+			emitsGoalEvent: valueState(releaseManager.boundaries?.emitsGoalEvent),
+			closeoutExecutionAvailable: valueState(releaseManager.boundaries?.closeoutExecutionAvailable),
+			releaseReadyDeclarationAvailable: valueState(releaseManager.boundaries?.releaseReadyDeclarationAvailable),
+			releaseGateMutationAvailable: valueState(releaseManager.boundaries?.releaseGateMutationAvailable),
+			shellExecutionAvailable: valueState(releaseManager.boundaries?.shellExecutionAvailable),
+			modelInvocationAvailable: valueState(releaseManager.boundaries?.modelInvocationAvailable),
+			arbitraryCommandExecutionAvailable: valueState(releaseManager.boundaries?.arbitraryCommandExecutionAvailable),
+			gitWriteAvailable: valueState(releaseManager.boundaries?.gitWriteAvailable),
+			mergeAvailable: valueState(releaseManager.boundaries?.mergeAvailable),
+			pushAvailable: valueState(releaseManager.boundaries?.pushAvailable),
+			tagAvailable: valueState(releaseManager.boundaries?.tagAvailable),
+			publishAvailable: valueState(releaseManager.boundaries?.publishAvailable),
+			selfApprovalAvailable: valueState(releaseManager.boundaries?.selfApprovalAvailable),
+			frontendStatusInferenceAvailable: valueState(releaseManager.boundaries?.frontendStatusInferenceAvailable),
+			statusSource: valueState(releaseManager.boundaries?.statusSource),
+			evidencePolicy: valueState(releaseManager.boundaries?.evidencePolicy)
+		},
+		note: releaseManager.note ?? "App Core Release Manager 收口 v34-v39 checklist 和 final evidence draft。"
 	};
 }
 function projectBackupExport({ result, backupExport }) {
@@ -19921,6 +20367,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					className: "active-goal-grid",
 					"aria-label": "v20 Active Goal supporting contracts",
 					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(InboxCapturePanel, {
+							capture: model.inboxCapture,
+							route: findRoute(model.routeStates, "inboxCapture")
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppDataInventoryPanel, {
 							inventory: model.appDataInventory,
 							route: findRoute(model.routeStates, "appDataInventory")
@@ -19930,6 +20380,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 							manifestRoute: findRoute(model.routeStates, "actionManifest"),
 							availabilityRoute: findRoute(model.routeStates, "actionAvailability"),
 							previewRoute: findRoute(model.routeStates, "actionPreview")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalDraftHandoffPanel, {
+							handoff: model.activeGoal.goalDraftHandoff,
+							route: findRoute(model.routeStates, "goalDraftHandoff")
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubPanel, {
 							hub: model.providerHub,
@@ -19942,6 +20396,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppSchemaMigrationPanel, {
 							migration: model.appSchemaMigration,
 							route: findRoute(model.routeStates, "appSchemaMigration")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkflowRouterCategoriesPanel, {
+							router: model.workflowRouterCategories,
+							route: findRoute(model.routeStates, "workflowRouterCategories")
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextActionCard, {
 							nextAction: model.activeGoal.nextAction,
@@ -20062,6 +20520,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseBundlePanel, {
 							releaseBundle: model.releaseBundle,
 							route: findRoute(model.routeStates, "releaseBundle")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppCoreReleaseManagerPanel, {
+							releaseManager: model.appCoreReleaseManager,
+							route: findRoute(model.routeStates, "appCoreReleaseManager")
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BackupExportPanel, {
 							backupExport: model.backupExport,
@@ -22011,6 +22473,138 @@ function ReleaseBundleTaskList({ tasks }) {
 		}, index))
 	});
 }
+function AppCoreReleaseManagerPanel({ releaseManager, route }) {
+	const capabilityItems = releaseManager?.capabilityChecklist?.items?.value ?? [];
+	const finalSections = releaseManager?.finalEvidenceDraft?.requiredSections?.value ?? [];
+	const releaseGates = releaseManager?.closeoutStatus?.releaseGateStatuses ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "app-core-release-manager-panel",
+		kicker: "v40 app core release manager",
+		title: "App Core Release Manager",
+		state: routeStateText(route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", releaseManager?.contractName],
+				["contractVersion", releaseManager?.contractVersion],
+				["generatedAt", releaseManager?.generatedAt],
+				["readOnly", releaseManager?.readOnly],
+				["context.goalId", releaseManager?.context?.goalId],
+				["context.resolvedGoalId", releaseManager?.context?.resolvedGoalId],
+				["context.taskId", releaseManager?.context?.taskId],
+				["context.managerRole", releaseManager?.context?.managerRole],
+				["release.state", releaseManager?.releaseReadiness?.state],
+				["release.reason", releaseManager?.releaseReadiness?.reason],
+				["releaseReadyDeclared", releaseManager?.releaseReadiness?.releaseReadyDeclared],
+				["releaseReadySource", releaseManager?.releaseReadiness?.releaseReadySource],
+				["declarationAuthorized", releaseManager?.releaseReadiness?.declarationAuthorized],
+				["declarationCommandAvailable", releaseManager?.releaseReadiness?.declarationCommandAvailable],
+				["closeout.state", releaseManager?.closeoutStatus?.state],
+				["closeout.missingCount", releaseManager?.closeoutStatus?.missingCount],
+				["workerEvidenceComplete", releaseManager?.closeoutStatus?.workerEvidenceComplete],
+				["reviewEvidenceComplete", releaseManager?.closeoutStatus?.reviewEvidenceComplete],
+				["mainVerificationComplete", releaseManager?.closeoutStatus?.mainVerificationComplete],
+				["capabilities passed", releaseManager?.capabilityChecklist?.passedCount],
+				["capabilities warning", releaseManager?.capabilityChecklist?.warningCount],
+				["capabilities blocked", releaseManager?.capabilityChecklist?.blockedCount],
+				["final evidence ref", releaseManager?.finalEvidenceDraft?.evidenceRef],
+				["final evidence state", releaseManager?.finalEvidenceDraft?.state],
+				["final blocker count", releaseManager?.finalEvidenceDraft?.blockerCount],
+				["source events", releaseManager?.finalEvidenceDraft?.sourceEventCount]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `v34-v39 capability checklist (${capabilityItems.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppCoreCapabilityChecklist, { items: capabilityItems })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `release gates (${releaseGates.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: releaseGates,
+					nameKey: "gate",
+					valueKey: "status",
+					emptyCopy: "release gates 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `final evidence sections (${finalSections.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: finalSections,
+					emptyCopy: "final evidence sections 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["writesEvidenceFile", releaseManager?.boundaries?.writesEvidenceFile],
+					["emitsGoalEvent", releaseManager?.boundaries?.emitsGoalEvent],
+					["closeoutExecutionAvailable", releaseManager?.boundaries?.closeoutExecutionAvailable],
+					["releaseReadyDeclarationAvailable", releaseManager?.boundaries?.releaseReadyDeclarationAvailable],
+					["releaseGateMutationAvailable", releaseManager?.boundaries?.releaseGateMutationAvailable],
+					["shellExecutionAvailable", releaseManager?.boundaries?.shellExecutionAvailable],
+					["modelInvocationAvailable", releaseManager?.boundaries?.modelInvocationAvailable],
+					["arbitraryCommandExecutionAvailable", releaseManager?.boundaries?.arbitraryCommandExecutionAvailable],
+					["gitWriteAvailable", releaseManager?.boundaries?.gitWriteAvailable],
+					["mergeAvailable", releaseManager?.boundaries?.mergeAvailable],
+					["pushAvailable", releaseManager?.boundaries?.pushAvailable],
+					["tagAvailable", releaseManager?.boundaries?.tagAvailable],
+					["publishAvailable", releaseManager?.boundaries?.publishAvailable],
+					["selfApprovalAvailable", releaseManager?.boundaries?.selfApprovalAvailable],
+					["frontendStatusInferenceAvailable", releaseManager?.boundaries?.frontendStatusInferenceAvailable],
+					["statusSource", releaseManager?.boundaries?.statusSource],
+					["evidencePolicy", releaseManager?.boundaries?.evidencePolicy]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: releaseManager?.note ?? "App Core Release Manager 只读收口 v34-v39 checklist 和 final evidence draft。"
+			})
+		]
+	});
+}
+function AppCoreCapabilityChecklist({ items }) {
+	if (!Array.isArray(items) || items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 app core capability 条目"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "artifact-list",
+		children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-kind",
+					children: item.version ?? "-"
+				}),
+				" ",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-ref",
+					children: item.label ?? "-"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-meta",
+					children: [
+						"status=",
+						item.status ?? "-",
+						" ",
+						"source=",
+						item.sourceContract ?? "-",
+						" ",
+						"route=",
+						item.route ?? "-"
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-meta",
+					children: item.evidence ?? "-"
+				}),
+				item.blocker ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-meta",
+					children: ["blocker=", item.blocker]
+				}) : null
+			]
+		}, item.id))
+	});
+}
 function BackupExportPanel({ backupExport, route }) {
 	const managedStateEntries = backupExport?.managedStateEntries?.value ?? [];
 	const excludedRepoContent = backupExport?.excludedRepoContent?.value ?? [];
@@ -23535,6 +24129,99 @@ function ActionRegistryPanel({ registry, manifestRoute, availabilityRoute, previ
 		]
 	});
 }
+function InboxCapturePanel({ capture, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "inbox-capture-panel",
+		kicker: "v40 inbox capture",
+		title: "Inbox Capture",
+		state: capture?.state ?? "missing",
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", capture?.contractName],
+				["contractVersion", capture?.contractVersion],
+				["goalId", capture?.goalId],
+				["taskId", capture?.taskId],
+				["source", capture?.sourcePolicy],
+				["appPath", capture?.appPath],
+				["readOnly", capture?.readOnly]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "intake surface",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["route", capture?.intakeSurface?.route],
+					["cliCommand", capture?.intakeSurface?.cliCommand],
+					["workbenchPanel", capture?.intakeSurface?.workbenchPanel],
+					["acceptsRawRequests", capture?.intakeSurface?.acceptsRawRequests],
+					["requiresActiveWorkbenchGoal", capture?.intakeSurface?.requiresActiveWorkbenchGoal],
+					["writesInPreview", capture?.intakeSurface?.writesInPreview]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "capture draft",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", capture?.captureDraft?.contractName],
+					["persisted", capture?.captureDraft?.persisted],
+					["requiredFields", capture?.captureDraft?.requiredFields],
+					["optionalFields", capture?.captureDraft?.optionalFields],
+					["bodyReadAvailable", capture?.captureDraft?.bodyReadAvailable],
+					["nextContract", capture?.captureDraft?.nextContract]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(InboxCaptureTypeList, { items: capture?.captureItemTypes }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "handoff",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["routerContract", capture?.handoff?.routerContract],
+					["goalDraftContract", capture?.handoff?.goalDraftContract],
+					["workbenchGoalRequiredForCapture", capture?.handoff?.workbenchGoalRequiredForCapture],
+					["workbenchGoalRequiredForGoalDraft", capture?.handoff?.workbenchGoalRequiredForGoalDraft]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: capture?.handoff?.allowedNextSteps,
+					emptyCopy: "allowed next steps 未暴露。"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "blocked inference sources",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: capture?.handoff?.blockedInferenceSources,
+					emptyCopy: "blocked inference sources 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: capture?.boundaries?.items,
+					nameKey: "key",
+					valueKey: "value",
+					emptyCopy: "inbox capture boundaries 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: capture?.note
+			})
+		]
+	});
+}
+function InboxCaptureTypeList({ items }) {
+	if (items?.state !== "available" || !Array.isArray(items.items) || items.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "capture item types 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "capture item types",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "action-registry-list",
+			"aria-label": "Inbox capture item types",
+			children: items.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["itemType", item.itemType],
+				["label", item.label],
+				["summary", item.summary],
+				["requiresWorkbenchGoal", item.requiresWorkbenchGoal],
+				["routesImmediately", item.routesImmediately],
+				["allowedBeforeGoalExists", item.allowedBeforeGoalExists]
+			] }) }, `${item.itemType.text}-${index}`))
+		})
+	});
+}
 function AppDataInventoryPanel({ inventory, route }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
 		id: "app-data-inventory-panel",
@@ -23579,6 +24266,85 @@ function AppDataInventoryPanel({ inventory, route }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: inventory?.note
+			})
+		]
+	});
+}
+function GoalDraftHandoffPanel({ handoff, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "goal-draft-handoff-panel",
+		kicker: "v40 workflow router",
+		title: "Goal Draft Handoff",
+		state: handoff?.state ?? "missing",
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", handoff?.modelName],
+				["contractName", handoff?.contractName],
+				["goalId", handoff?.goalId],
+				["taskId", handoff?.taskId],
+				["category", handoff?.routing?.category],
+				["draft state", handoff?.goalDraft?.state],
+				["suggested goal", handoff?.goalDraft?.suggestedGoalId],
+				["suggested title", handoff?.goalDraft?.suggestedTitle],
+				["registration", handoff?.goalDraft?.registrationState],
+				["operator review required", handoff?.goalDraft?.operatorReviewRequired],
+				["sourcePolicy", handoff?.sourcePolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "runbook draft",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contractName", handoff?.runbookDraft?.contractName],
+					["draftOnly", handoff?.runbookDraft?.draftOnly],
+					["autoRegister", handoff?.runbookDraft?.autoRegister],
+					["taskCount", handoff?.runbookDraft?.taskCount],
+					["releaseGates", handoff?.runbookDraft?.releaseGates]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "copy-only commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: handoff?.handoff?.copyOnlyCommands,
+					emptyCopy: "copy-only command 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "handoff checklist",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: handoff?.handoff?.checklist,
+					emptyCopy: "handoff checklist 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "endpoint",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["method", handoff?.endpoint?.method],
+					["route", handoff?.endpoint?.route],
+					["allowedQueryFields", handoff?.endpoint?.allowedQueryFields],
+					["writesInPreview", handoff?.endpoint?.writesInPreview],
+					["registersGoal", handoff?.endpoint?.registersGoal]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", handoff?.boundaries?.readOnly],
+					["draftOnly", handoff?.boundaries?.draftOnly],
+					["writesFiles", handoff?.boundaries?.writesFiles],
+					["registersGoal", handoff?.boundaries?.registersGoal],
+					["runsGoalInit", handoff?.boundaries?.runsGoalInit],
+					["arbitraryCommandExecutionAvailable", handoff?.boundaries?.arbitraryCommandExecutionAvailable],
+					["modelInvocationAvailable", handoff?.boundaries?.modelInvocationAvailable],
+					["gitWriteAvailable", handoff?.boundaries?.gitWriteAvailable],
+					["selfApprovalAvailable", handoff?.boundaries?.selfApprovalAvailable],
+					["releaseReadyDeclared", handoff?.boundaries?.releaseReadyDeclared],
+					["statusSource", handoff?.boundaries?.statusSource]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActionRegistryBlockers, { blockers: handoff?.blockers }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: handoff?.note
 			})
 		]
 	});
@@ -24046,6 +24812,91 @@ function SchemaMigrationStepList({ steps }) {
 			"; write on confirm: ",
 			step.writesOnConfirm.text
 		] })] }, `${step.stepId.text}-${index}`))
+	});
+}
+function WorkflowRouterCategoriesPanel({ router, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "workflow-router-categories-panel",
+		kicker: "v40 workflow router",
+		title: "Workflow Router",
+		state: router?.state ?? "missing",
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", router?.contractName],
+				["contractVersion", router?.contractVersion],
+				["goalId", router?.goalId],
+				["taskId", router?.taskId],
+				["source", router?.sourcePolicy],
+				["scope", router?.scope],
+				["category count", router?.categoryCount],
+				["source contracts", router?.sourceContracts],
+				["route goal", router?.routeContext?.goalId],
+				["route task", router?.routeContext?.taskId]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "decision policy",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["default category", router?.decisionPolicy?.defaultCategoryId],
+					["confidence source", router?.decisionPolicy?.confidenceSource],
+					["human confirm for goal draft", router?.decisionPolicy?.requiresHumanConfirmationForGoalDraft],
+					["writes route decision", router?.decisionPolicy?.writesRouteDecision],
+					["model invocation required", router?.decisionPolicy?.modelInvocationRequired],
+					["fallback category", router?.decisionPolicy?.fallbackCategoryId]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkflowRouterCategoryList, { categories: router?.categories }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkflowRouterExampleList, { examples: router?.examples }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValueList, {
+					rows: router?.boundaries,
+					nameKey: "boundary",
+					valueKey: "available",
+					emptyCopy: "router boundaries 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: router?.note
+			})
+		]
+	});
+}
+function WorkflowRouterCategoryList({ categories }) {
+	if (categories?.state !== "available" || !Array.isArray(categories.items) || categories.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "workflow router categories 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "route categories",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "action-registry-list",
+			"aria-label": "Workflow router categories",
+			children: categories.items.map((category, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["category", category.categoryId],
+				["label", category.label],
+				["route kind", category.routeKind],
+				["user path", category.userPath],
+				["signals", category.requestSignals],
+				["next step", category.nextStep],
+				["allowed contracts", category.allowedContracts],
+				["boundary", category.boundary]
+			] }) }, `${category.categoryId.text}-${index}`))
+		})
+	});
+}
+function WorkflowRouterExampleList({ examples }) {
+	if (examples?.state !== "available" || !Array.isArray(examples.items) || examples.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "workflow router examples 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+		title: "routing examples",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "compact-list",
+			"aria-label": "Workflow router examples",
+			children: examples.items.map((example, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: example.selectedCategoryId.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: example.inputKind.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: example.nextContract.text }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["writesState=", example.writesState.text] })
+			] }, `${example.exampleId.text}-${index}`))
+		})
 	});
 }
 function ReviewWorkspacePanel({ workspace, onGoalEventConfirmed }) {
@@ -24789,6 +25640,10 @@ function NextVersionHandoffDraft({ draft }) {
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NextVersionCapabilityList, { capabilities: draft.implementedCapabilities })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "native UX handoff scope",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NativeUxHandoffDraft, { handoff: draft.nativeUxHandoff })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "copy-only context commands",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
 					items: draft.copyOnlyCommands,
@@ -24799,6 +25654,7 @@ function NextVersionHandoffDraft({ draft }) {
 				title: "safety",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 					["copyOnly", draft.safety.copyOnly],
+					["nativeUxHandoffOnly", draft.safety.nativeUxHandoffOnly],
 					["createsManagedGoal", draft.safety.createsManagedGoal],
 					["entersNextVersion", draft.safety.entersNextVersion],
 					["runsShell", draft.safety.runsShell],
@@ -24827,6 +25683,67 @@ function NextVersionHandoffDraft({ draft }) {
 				children: draft.boundaryText.text
 			})
 		]
+	});
+}
+function NativeUxHandoffDraft({ handoff }) {
+	if (handoff?.state === "missing" || handoff === void 0 || handoff === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "native UX handoff 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "native-ux-handoff-draft",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["state", textValue(handoff.state)],
+				["version", handoff.version],
+				["goalId", handoff.goalId],
+				["releaseName", handoff.releaseName],
+				["targetCommit", handoff.targetCommit],
+				["releaseReady", handoff.releaseReady],
+				["closeoutMissingCount", handoff.closeoutMissingCount],
+				["evidenceAnchorCount", handoff.evidenceAnchorCount],
+				["copyOnly", handoff.safety.copyOnly],
+				["generatesNativeBuild", handoff.safety.generatesNativeBuild],
+				["createsInstaller", handoff.safety.createsInstaller],
+				["signsOrNotarizes", handoff.safety.signsOrNotarizes],
+				["publishesDistribution", handoff.safety.publishesDistribution],
+				["autoUpdatesAvailable", handoff.safety.autoUpdatesAvailable],
+				["invokesProvider", handoff.safety.invokesProvider],
+				["opensLocalFiles", handoff.safety.opensLocalFiles]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "surface scope",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: handoff.scope,
+					emptyCopy: "surface scope 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "distribution channels",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: handoff.distributionChannels,
+					emptyCopy: "distribution channels 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "starter work packages",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NativeUxStarterWorkPackageList, { packages: handoff.starterWorkPackages })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: handoff.note.text
+			})
+		]
+	});
+}
+function NativeUxStarterWorkPackageList({ packages }) {
+	if (packages?.state === "missing" || packages === void 0 || packages === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "starter work packages 未暴露。" });
+	if (!Array.isArray(packages.items) || packages.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "starter work packages 为空。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "native-ux-work-package-list",
+		children: packages.items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["id", item.id],
+			["title", item.title],
+			["outcome", item.outcome],
+			["source", item.source]
+		] }) }, `${item.id.text}-${index}`))
 	});
 }
 function NextVersionTaskAnchorList({ anchors }) {
