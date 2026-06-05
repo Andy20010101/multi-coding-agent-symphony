@@ -24,6 +24,8 @@ v39 task-3 adds `app-core-backup-export.v1`, exposed through `GET /api/backup/ex
 
 v39 task-4 adds `app-core-diagnostics-bundle.v1`, exposed through `GET /api/diagnostics/bundle` and `symphony diagnostics bundle --json`. The contract returns sanitized health, runtime and kernel versions, recent failures from explicit backend events or run state, goal gate status, and structured log refs. Workbench renders the same contract in the Diagnostics Bundle panel, and Desktop Shell carries diagnostics health/failure/log-ref counts. This path does not copy raw log bodies, secret values, repo source, artifact payloads, or arbitrary local paths; it does not execute shell commands, call models, write git state, self-approve, pass main verification, or declare release readiness.
 
+v39 task-5 adds `app-core-restore-validation.v1`, exposed through `GET /api/restore/validate` and `symphony restore validate --json`. The contract validates the backup export manifest shape, SHA-256 integrity fields, safe managed state refs, artifact ref hashes, and compatible restore path. Workbench renders the same contract in the Restore Validation panel, and Desktop Shell carries restore status, integrity, compatibility, and overwrite-default fields. This path does not read arbitrary bundle paths, apply restore data, overwrite managed state, execute shell commands, call models, write git state, self-approve, pass main verification, or declare release readiness.
+
 ## `app-core-backup-export.v1`
 
 `app-core-backup-export.v1` is the v39 task-3 backup/export contract. It is a manifest, not a file-copy operation.
@@ -72,6 +74,29 @@ The contract contains:
 - `boundaries`: explicit `false` values for raw logs, secret values, arbitrary path reads, shell/model execution, git writes, merge, push, tag, publish, self-approval, and release decisions.
 
 Workbench displays this contract in `Diagnostics Bundle`. Desktop Shell displays diagnostics health, recent failure count, and log-ref count inside artifact readiness. Both surfaces consume backend contract fields only.
+
+## `app-core-restore-validation.v1`
+
+`app-core-restore-validation.v1` is the v39 task-5 restore validation contract. It validates a backup export manifest and restore compatibility; it is not a restore apply operation.
+
+Routes and CLI:
+
+```text
+GET /api/restore/validate
+GET /api/restore/validate?goal=<goal-id>&task=<task-id>
+symphony restore validate --goal <goal-id> --task <task-id> --json
+```
+
+The route accepts only optional `goal` and `task` query parameters. The CLI accepts `--goal`, `--task`, `--state-dir`, and `--json`; it rejects `--output`, `--apply`, `--confirm`, and `--overwrite`.
+
+The contract contains:
+
+- `sourceBundle`: backup contract name/version, manifest hash, managed state count, artifact ref count, payload policy, and repo content policy.
+- `integrity`: validation status, manifest hash validity, backup contract validity, managed state hash counts, missing managed state refs, artifact ref validity, and check rows.
+- `compatibility`: supported backup contract, candidate contract, restore path, overwrite default, blockers, and warnings.
+- `boundaries`: explicit validation-only fields and `false` values for restore apply, managed state writes, arbitrary bundle path reads, shell/model execution, git writes, merge, push, tag, publish, self-approval, and release decisions.
+
+Workbench displays this contract in `Restore Validation`. Desktop Shell displays restore validation status, integrity status, compatibility status, and overwrite default inside artifact readiness. Both surfaces consume backend contract fields only.
 
 ## Shared Rules
 

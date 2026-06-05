@@ -931,6 +931,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/providers/lane-preview',
       '/api/readiness',
       '/api/release/bundle',
+      '/api/restore/validate',
       '/api/runs',
       '/api/runs/<run-id>/artifacts/<artifact-kind>/preview',
       '/api/runs/<run-id>/timeline',
