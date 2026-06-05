@@ -160,10 +160,11 @@ GET /api/runs/<run-id>/artifacts/<artifact-kind>/preview -> safe-artifact-previe
 GET /api/evidence/timeline -> evidence-timeline.v1 -> artifactReadiness.evidenceTimeline
 GET /api/release/bundle -> release-bundle.v1 -> artifactReadiness.releaseBundle
 GET /api/backup/export -> app-core-backup-export.v1 -> artifactReadiness.backupExport
+GET /api/restore/validate -> app-core-restore-validation.v1 -> artifactReadiness.restoreValidation
 GET /api/diagnostics/bundle -> app-core-diagnostics-bundle.v1 -> artifactReadiness.diagnosticsBundle
 ```
 
-桌面页显示 job id、status、queue state、action id、timestamps、blocker/failure、timeline/log counts、run-control transitions、artifact refs/status/missing、safe preview availability、evidence timeline readiness、release bundle state、backup export manifest state 和 diagnostics bundle state。transitions 是只读列表，不是按钮；safe preview 只展示后端 `safe-artifact-preview.v1` 的可用性和 inline safety 字段，不打开本地路径，也不从文件名或扩展名判断安全。backup export 只显示 app core state manifest hash、managed state refs、artifact refs 和 repo content exclusion policy，不复制 repo 内容。diagnostics bundle 只显示 sanitized health、recent failure count 和 structured log refs，不复制 raw logs 或 secret values。
+桌面页显示 job id、status、queue state、action id、timestamps、blocker/failure、timeline/log counts、run-control transitions、artifact refs/status/missing、safe preview availability、evidence timeline readiness、release bundle state、backup export manifest state、restore validation state 和 diagnostics bundle state。transitions 是只读列表，不是按钮；safe preview 只展示后端 `safe-artifact-preview.v1` 的可用性和 inline safety 字段，不打开本地路径，也不从文件名或扩展名判断安全。backup export 只显示 app core state manifest hash、managed state refs、artifact refs 和 repo content exclusion policy，不复制 repo 内容。restore validation 只显示 manifest integrity、compatible path 和 overwrite default，不执行 restore apply。diagnostics bundle 只显示 sanitized health、recent failure count 和 structured log refs，不复制 raw logs 或 secret values。
 
 Tauri host smoke：
 
@@ -234,6 +235,7 @@ GET /api/jobs/control
 GET /api/diagnostics
 GET /api/diagnostics/bundle
 GET /api/backup/export
+GET /api/restore/validate
 ```
 
 `GET /api/health` 返回 `local-runtime-health.v1`，用于确认本地 sidecar 已启动、当前进程 id、cwd/repo path、runtime 版本、v32 kernel source、startup time、read-only mode、`sidecarHost` 和 known blockers。这个 route 不接受 query 参数，不写 repo、不写 `.symphony`、不改 git、不执行 worker/reviewer/main verification/release、不调用模型、不创建 job queue。
@@ -284,6 +286,16 @@ pnpm --silent symphony diagnostics bundle --goal <goal-id> --task <task-id> --js
 ```
 
 `app-core-diagnostics-bundle.v1` 汇总 runtime health、contract versions、recent failures、gate status 和 structured log refs。recent failures 来自 explicit goal events 和 managed run state，message 会做 secret/path redaction；log refs 只指向 managed state，不复制 stdout/stderr/raw log bodies。route 只接受 `goal` 和 `task`，不接受 `path`、`command`、`confirm`、`output` 或任意本地路径。Workbench 的 `Diagnostics Bundle` panel 和 Desktop Shell artifact readiness card 只展示这些 contract 字段，不执行 shell、不调用模型、不写 git、不登记 reviewer/main/release 事件。
+
+v39 task-5 增加只读 restore validation：
+
+```text
+GET /api/restore/validate
+GET /api/restore/validate?goal=<goal-id>&task=<task-id>
+pnpm --silent symphony restore validate --goal <goal-id> --task <task-id> --json
+```
+
+`app-core-restore-validation.v1` 校验 backup export manifest integrity、managed state hash、artifact ref hash 和兼容恢复路径。route 只接受 `goal` 和 `task`，不接受 `path`、`command`、`confirm`、`output`、`apply`、`overwrite` 或任意本地路径。Workbench 的 `Restore Validation` panel 和 Desktop Shell artifact readiness card 只展示 validation status、integrity、compatibility 和 overwrite default；默认不覆盖现有数据，不写 `.symphony`，不执行 restore apply，不登记 reviewer/main/release 事件。
 
 终端可用的同一份 health contract：
 

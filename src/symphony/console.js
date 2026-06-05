@@ -78,6 +78,9 @@ import {
   buildAppCoreDiagnosticsBundle
 } from './app-core-diagnostics-bundle.js';
 import {
+  buildAppCoreRestoreValidation
+} from './app-core-restore-validation.js';
+import {
   buildArtifactIndex
 } from './artifact-indexer.js';
 import {
@@ -1981,6 +1984,46 @@ export function createSymphonyConsoleServer({
           stateDir,
           goalId: backupGoalId,
           taskId: backupTaskId
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/restore/validate') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const restoreGoalId = url.searchParams.get('goal') ?? 'latest';
+        const restoreTaskId = url.searchParams.get('task') ?? null;
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-restore-validation-request',
+            message: 'Restore validation route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(restoreGoalId)
+          || (restoreTaskId !== null && isUnsafeGoalRouteSegment(restoreTaskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-restore-validation-request',
+            message: 'Restore validation goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildAppCoreRestoreValidation({
+          cwd,
+          stateDir,
+          goalId: restoreGoalId,
+          taskId: restoreTaskId
         }));
         return;
       }

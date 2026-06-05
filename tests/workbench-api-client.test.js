@@ -109,7 +109,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
         ['GET', '/api/bundle', 'evidence-bundle.v1'],
-        ['GET', '/api/backup/export', 'app-core-backup-export.v1']
+        ['GET', '/api/backup/export', 'app-core-backup-export.v1'],
+        ['GET', '/api/restore/validate', 'app-core-restore-validation.v1']
       ]
     );
     assert.deepEqual(
@@ -151,6 +152,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
         ['GET', '/api/bundle', 'evidence-bundle.v1'],
         ['GET', '/api/backup/export', 'app-core-backup-export.v1'],
+        ['GET', '/api/restore/validate', 'app-core-restore-validation.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
         ['GET', '/api/goals/<goal-id>/operations', 'goal-operation-runs.v1'],
@@ -468,7 +470,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.jobRun.boundaries.arbitraryCommandExecutionAvailable.value, false);
     assert.equal(model.artifactIndex.contractName.text, 'artifact-index.v1');
     assert.equal(model.artifactIndex.entries.count.value, 2);
-    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-diagnostics-bundle.v1');
+    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-restore-validation.v1 + app-core-diagnostics-bundle.v1');
     assert.equal(model.desktopShell.artifactReadiness.status.text, 'partial');
     assert.equal(model.desktopShell.artifactReadiness.missing.value, 1);
     assert.equal(model.desktopShell.artifactReadiness.safePreviewRoutes.value, 1);
@@ -5976,6 +5978,66 @@ function createV17ReadonlyPayloadEntries({
         statusSource: 'explicit-events-and-backend-contracts',
         logPolicy: 'structured-refs-only'
       }
+    }],
+    ['/api/restore/validate', {
+      contractName: 'app-core-restore-validation.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-05T00:00:00.000Z',
+      readOnly: true,
+      context: {
+        goalId: 'latest',
+        resolvedGoalId: 'latest',
+        taskId: null,
+        cwdRef: 'multi-coding-agent-symphony',
+        sourceContracts: [],
+        stateSource: 'explicit-backend-contracts',
+        restoreRole: 'validate-only-no-overwrite'
+      },
+      sourceBundle: {
+        contractName: 'app-core-backup-export.v1',
+        contractVersion: 1,
+        manifestHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+        managedStateEntryCount: 1,
+        artifactRefCount: 0,
+        includedByteCount: 120,
+        exportPayloadPolicy: 'manifest-hash-and-refs-only',
+        repoContentPolicy: 'excluded'
+      },
+      integrity: {
+        status: 'ok',
+        manifestHashValid: true,
+        backupContractValid: true,
+        managedStateEntryCount: 1,
+        presentManagedStateCount: 1,
+        hashedManagedStateEntryCount: 1,
+        missingManagedStateRefs: [],
+        artifactRefCount: 0,
+        artifactRefsValid: true,
+        checks: []
+      },
+      compatibility: {
+        status: 'compatible',
+        supportedBackupContractName: 'app-core-backup-export.v1',
+        supportedBackupContractVersion: 1,
+        candidateContractName: 'app-core-backup-export.v1',
+        candidateContractVersion: 1,
+        compatibleRestorePath: 'validate-only-managed-state-refs',
+        overwriteDefault: false,
+        blockers: [],
+        warnings: []
+      },
+      boundaries: {
+        readOnly: true,
+        validationOnly: true,
+        confirmRestoreAvailable: false,
+        overwritesExistingData: false,
+        writesManagedState: false,
+        appliesRestore: false,
+        arbitraryPathReadAvailable: false,
+        restorePayloadPolicy: 'manifest-hash-and-refs-only',
+        restoreMode: 'validate-only'
+      },
+      status: 'valid'
     }]
   ];
 }

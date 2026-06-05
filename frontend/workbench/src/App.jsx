@@ -362,6 +362,10 @@ export function WorkbenchShell({
               backupExport={model.backupExport}
               route={findRoute(model.routeStates, 'backupExport')}
             />
+            <RestoreValidationPanel
+              restoreValidation={model.restoreValidation}
+              route={findRoute(model.routeStates, 'restoreValidation')}
+            />
             <DiagnosticsBundlePanel
               diagnosticsBundle={model.diagnosticsBundle}
               route={findRoute(model.routeStates, 'diagnosticsBundle')}
@@ -886,6 +890,11 @@ function DesktopArtifactReadinessCard({ artifactReadiness }) {
         ['backup state entries', artifactReadiness?.backupManagedStateEntryCount],
         ['backup artifact refs', artifactReadiness?.backupArtifactRefCount],
         ['repo content policy', artifactReadiness?.backupRepoContentPolicy],
+        ['restore validation', artifactReadiness?.restoreValidationState],
+        ['restore status', artifactReadiness?.restoreValidationStatus],
+        ['restore integrity', artifactReadiness?.restoreIntegrityStatus],
+        ['restore compatibility', artifactReadiness?.restoreCompatibilityStatus],
+        ['overwrite default', artifactReadiness?.restoreOverwriteDefault],
         ['diagnostics bundle', artifactReadiness?.diagnosticsBundleState],
         ['diagnostics health', artifactReadiness?.diagnosticsHealth],
         ['recent failures', artifactReadiness?.diagnosticsRecentFailures],
@@ -2422,6 +2431,104 @@ function BackupExcludedRepoContentList({ entries }) {
         <li key={index} className="artifact-item">
           <span className="artifact-ref">{entry.ref ?? '-'}</span>
           <span className="artifact-meta">{entry.reason ?? '-'}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RestoreValidationPanel({ restoreValidation, route }) {
+  const checks = restoreValidation?.integrity?.checks?.value ?? [];
+  const blockers = restoreValidation?.compatibility?.blockers?.value ?? [];
+  const warnings = restoreValidation?.compatibility?.warnings?.value ?? [];
+
+  return (
+    <DataPanel
+      id="restore-validation-panel"
+      kicker="v39 restore validation"
+      title="Restore Validation"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', restoreValidation?.contractName],
+        ['contractVersion', restoreValidation?.contractVersion],
+        ['generatedAt', restoreValidation?.generatedAt],
+        ['readOnly', restoreValidation?.readOnly],
+        ['status', restoreValidation?.status],
+        ['context.goalId', restoreValidation?.context?.goalId],
+        ['context.resolvedGoalId', restoreValidation?.context?.resolvedGoalId],
+        ['context.taskId', restoreValidation?.context?.taskId],
+        ['context.restoreRole', restoreValidation?.context?.restoreRole],
+        ['source.manifestHash', restoreValidation?.sourceBundle?.manifestHash],
+        ['source.managedStateEntries', restoreValidation?.sourceBundle?.managedStateEntryCount],
+        ['source.artifactRefs', restoreValidation?.sourceBundle?.artifactRefCount],
+        ['source.repoContentPolicy', restoreValidation?.sourceBundle?.repoContentPolicy],
+        ['integrity.status', restoreValidation?.integrity?.status],
+        ['integrity.manifestHashValid', restoreValidation?.integrity?.manifestHashValid],
+        ['integrity.backupContractValid', restoreValidation?.integrity?.backupContractValid],
+        ['integrity.presentManagedState', restoreValidation?.integrity?.presentManagedStateCount],
+        ['integrity.artifactRefsValid', restoreValidation?.integrity?.artifactRefsValid],
+        ['compatibility.status', restoreValidation?.compatibility?.status],
+        ['compatibility.path', restoreValidation?.compatibility?.compatibleRestorePath],
+        ['compatibility.overwriteDefault', restoreValidation?.compatibility?.overwriteDefault],
+        ['boundaries.validationOnly', restoreValidation?.boundaries?.validationOnly],
+        ['boundaries.confirmRestoreAvailable', restoreValidation?.boundaries?.confirmRestoreAvailable],
+        ['boundaries.overwritesExistingData', restoreValidation?.boundaries?.overwritesExistingData],
+        ['boundaries.appliesRestore', restoreValidation?.boundaries?.appliesRestore],
+        ['boundaries.restoreMode', restoreValidation?.boundaries?.restoreMode]
+      ]} />
+
+      <Subsection title={`integrity checks (${checks.length})`}>
+        <RestoreValidationCheckList checks={checks} />
+      </Subsection>
+
+      <Subsection title={`compatibility notes (${blockers.length + warnings.length})`}>
+        <RestoreCompatibilityList blockers={blockers} warnings={warnings} />
+      </Subsection>
+
+      <p className="panel-note">{restoreValidation?.note ?? 'Restore Validation 只校验 backup manifest integrity 和兼容恢复路径。默认不覆盖现有数据。'}</p>
+    </DataPanel>
+  );
+}
+
+function RestoreValidationCheckList({ checks }) {
+  if (!Array.isArray(checks) || checks.length === 0) {
+    return <p className="empty-list">暂无 integrity check</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {checks.map((check, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-kind">{check.status ?? '-'}</span>
+          {' '}
+          <span className="artifact-ref">{check.id ?? '-'}</span>
+          <span className="artifact-meta">{check.message ?? '-'}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RestoreCompatibilityList({ blockers, warnings }) {
+  const items = [
+    ...(Array.isArray(blockers) ? blockers.map((item) => ({ ...item, type: 'blocker' })) : []),
+    ...(Array.isArray(warnings) ? warnings.map((item) => ({ ...item, type: 'warning' })) : [])
+  ];
+
+  if (items.length === 0) {
+    return <p className="empty-list">无 blocker 或 warning</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {items.map((item, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-kind">{item.type}</span>
+          {' '}
+          <span className="artifact-ref">{item.code ?? '-'}</span>
+          <span className="artifact-meta">{item.message ?? '-'}</span>
         </li>
       ))}
     </ul>

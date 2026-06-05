@@ -125,6 +125,10 @@ import {
   buildAppCoreDiagnosticsBundle,
   renderAppCoreDiagnosticsBundleText
 } from '../src/symphony/app-core-diagnostics-bundle.js';
+import {
+  buildAppCoreRestoreValidation,
+  renderAppCoreRestoreValidationText
+} from '../src/symphony/app-core-restore-validation.js';
 import { classifyPrompt } from '../src/symphony/prompt-router.js';
 import {
   buildProjectFingerprint,
@@ -196,6 +200,7 @@ const KNOWN_COMMANDS = new Set([
   'evidence',
   'backup',
   'diagnostics',
+  'restore',
   'supervisor'
 ]);
 let productRunSequence = 0;
@@ -445,6 +450,13 @@ export async function runSymphonyCli({
 
     if (command === 'diagnostics') {
       return await runSymphonyDiagnosticsBundle({
+        args: rest,
+        stdout
+      });
+    }
+
+    if (command === 'restore') {
+      return await runSymphonyRestoreValidation({
         args: rest,
         stdout
       });
@@ -2786,6 +2798,112 @@ function diagnosticsBundleHelpText() {
     '',
     'Prints the read-only v39 app core diagnostics bundle.',
     'The command returns sanitized health, versions, recent failures, gate status, and structured log refs only; it does not copy raw logs, execute shell commands, call models, write git state, or declare release readiness.',
+    ''
+  ].join('\n');
+}
+
+async function runSymphonyRestoreValidation({ args, stdout }) {
+  const options = parseRestoreValidationArgs(args);
+
+  if (options.help) {
+    stdout.write(restoreValidationHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  if (options.subcommand === 'validate') {
+    const validation = await buildAppCoreRestoreValidation({
+      cwd: process.cwd(),
+      stateDir: options.stateDir,
+      goalId: options.goalId,
+      taskId: options.taskId
+    });
+
+    if (options.json) {
+      writeJson(stdout, validation);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderAppCoreRestoreValidationText(validation));
+    return EXIT_CODES.ok;
+  }
+
+  throw new UsageError('restore subcommand must be validate');
+}
+
+function parseRestoreValidationArgs(args) {
+  const options = {
+    subcommand: null,
+    stateDir: '.symphony',
+    goalId: 'latest',
+    taskId: null,
+    json: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--task') {
+      options.taskId = readRequiredValue(args, index, '--task');
+      index += 1;
+      continue;
+    }
+
+    if (['--output', '-o', '--apply', '--confirm', '--overwrite'].includes(value)) {
+      throw new UsageError('restore validate is validation-only; it does not write, apply, confirm, or overwrite app state');
+    }
+
+    if (!value.startsWith('--') && options.subcommand === null) {
+      options.subcommand = value;
+      continue;
+    }
+
+    throw new UsageError(`unknown restore option: ${value}`);
+  }
+
+  if (options.subcommand === null) {
+    options.subcommand = 'validate';
+  }
+
+  if (options.subcommand !== 'validate') {
+    throw new UsageError('restore subcommand must be validate');
+  }
+
+  if (isUnsafeActionsContextRef(options.goalId) || (options.taskId !== null && isUnsafeActionsContextRef(options.taskId))) {
+    throw new UsageError('restore goal and task values must be safe refs');
+  }
+
+  return options;
+}
+
+function restoreValidationHelpText() {
+  return [
+    'Usage: symphony restore validate [--goal <goal-id>] [--task <task-id>] [--state-dir <path>] [--json]',
+    '',
+    'Prints the read-only v39 app core restore validation result.',
+    'The command validates backup manifest integrity and restore compatibility only; it does not read arbitrary bundle paths, apply restore data, overwrite state, execute shell commands, call models, write git state, or declare release readiness.',
     ''
   ].join('\n');
 }

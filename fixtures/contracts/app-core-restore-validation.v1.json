@@ -1,0 +1,104 @@
+{
+  "contractName": "app-core-restore-validation.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-05T00:00:00.000Z",
+  "readOnly": true,
+  "context": {
+    "goalId": "v39-backup-diagnostics-migration-workspace",
+    "resolvedGoalId": "v39-backup-diagnostics-migration-workspace",
+    "taskId": "task-5",
+    "cwdRef": "multi-coding-agent-symphony",
+    "sourceContracts": [
+      "app-core-backup-export.v1",
+      "goal-runbook.v1",
+      "goal-next-action.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "artifact-index.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "restoreRole": "validate-only-no-overwrite"
+  },
+  "sourceBundle": {
+    "contractName": "app-core-backup-export.v1",
+    "contractVersion": 1,
+    "manifestHash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "managedStateEntryCount": 1,
+    "artifactRefCount": 1,
+    "includedByteCount": 120,
+    "exportPayloadPolicy": "manifest-hash-and-refs-only",
+    "repoContentPolicy": "excluded"
+  },
+  "integrity": {
+    "status": "ok",
+    "manifestHashValid": true,
+    "backupContractValid": true,
+    "managedStateEntryCount": 1,
+    "presentManagedStateCount": 1,
+    "hashedManagedStateEntryCount": 1,
+    "missingManagedStateRefs": [],
+    "artifactRefCount": 1,
+    "artifactRefsValid": true,
+    "checks": [
+      {
+        "id": "backup-contract-shape",
+        "status": "passed",
+        "message": "Backup export contract validates."
+      },
+      {
+        "id": "manifest-hash",
+        "status": "passed",
+        "message": "Manifest hash uses sha256 format."
+      },
+      {
+        "id": "managed-state-hashes",
+        "status": "passed",
+        "message": "Present managed state entries have sha256 hashes."
+      },
+      {
+        "id": "artifact-ref-hashes",
+        "status": "passed",
+        "message": "Artifact refs use safe refs and sha256 hashes."
+      }
+    ]
+  },
+  "compatibility": {
+    "status": "compatible",
+    "supportedBackupContractName": "app-core-backup-export.v1",
+    "supportedBackupContractVersion": 1,
+    "candidateContractName": "app-core-backup-export.v1",
+    "candidateContractVersion": 1,
+    "compatibleRestorePath": "validate-only-managed-state-refs",
+    "overwriteDefault": false,
+    "blockers": [],
+    "warnings": []
+  },
+  "boundaries": {
+    "readOnly": true,
+    "validationOnly": true,
+    "requiresExplicitConfirmForApply": true,
+    "confirmRestoreAvailable": false,
+    "overwritesExistingData": false,
+    "writesManagedState": false,
+    "appliesRestore": false,
+    "readsArbitraryBundlePath": false,
+    "writesBundleFile": false,
+    "copiesRepoContent": false,
+    "artifactDownloadAvailable": false,
+    "localFileOpenAvailable": false,
+    "shellExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "gitWriteAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false,
+    "releaseDecisionAvailable": false,
+    "restorePayloadPolicy": "manifest-hash-and-refs-only",
+    "restoreMode": "validate-only"
+  },
+  "status": "valid"
+}

@@ -34,6 +34,7 @@ const JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = 'job-timeline-log-stream.v1';
 const JOB_RUN_CONTROL_CONTRACT_NAME = 'job-run-control.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
 const APP_CORE_DIAGNOSTICS_BUNDLE_CONTRACT_NAME = 'app-core-diagnostics-bundle.v1';
+const APP_CORE_RESTORE_VALIDATION_CONTRACT_NAME = 'app-core-restore-validation.v1';
 const ARTIFACT_INDEX_CONTRACT_NAME = 'artifact-index.v1';
 const EVIDENCE_TIMELINE_CONTRACT_NAME = 'evidence-timeline.v1';
 const RELEASE_BUNDLE_CONTRACT_NAME = 'release-bundle.v1';
@@ -613,6 +614,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/backup/export',
     method: 'GET',
     contractName: APP_CORE_BACKUP_EXPORT_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'restoreValidation',
+    label: 'Restore Validation',
+    path: '/api/restore/validate',
+    method: 'GET',
+    contractName: APP_CORE_RESTORE_VALIDATION_CONTRACT_NAME
   })
 ]);
 
@@ -869,6 +877,7 @@ export function projectWorkbenchContracts(results) {
   const evidenceTimelineData = dataFrom(results.evidenceTimeline);
   const releaseBundleData = dataFrom(results.releaseBundle);
   const backupExportData = dataFrom(results.backupExport);
+  const restoreValidationData = dataFrom(results.restoreValidation);
   const latestRun = latestRunData?.run ?? null;
   const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews)
     ? results.safeArtifactPreviews
@@ -1029,6 +1038,10 @@ export function projectWorkbenchContracts(results) {
     result: results.backupExport,
     backupExport: backupExportData
   });
+  const projectedRestoreValidation = projectRestoreValidation({
+    result: results.restoreValidation,
+    restoreValidation: restoreValidationData
+  });
   const projectedDiagnosticsBundle = projectDiagnosticsBundle({
     result: results.diagnosticsBundle,
     diagnosticsBundle: diagnosticsBundleData
@@ -1079,6 +1092,7 @@ export function projectWorkbenchContracts(results) {
       evidenceTimeline: projectedEvidenceTimeline,
       releaseBundle: projectedReleaseBundle,
       backupExport: projectedBackupExport,
+      restoreValidation: projectedRestoreValidation,
       diagnosticsBundle: projectedDiagnosticsBundle,
       providerHub: projectedProviderHub,
       routeStates
@@ -1146,6 +1160,7 @@ export function projectWorkbenchContracts(results) {
     evidenceTimeline: projectedEvidenceTimeline,
     releaseBundle: projectedReleaseBundle,
     backupExport: projectedBackupExport,
+    restoreValidation: projectedRestoreValidation,
     deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
       label: gap,
       status: MISSING_TEXT
@@ -1474,6 +1489,7 @@ function projectDesktopShell({
   evidenceTimeline,
   releaseBundle,
   backupExport,
+  restoreValidation,
   diagnosticsBundle,
   providerHub,
   routeStates
@@ -1490,6 +1506,7 @@ function projectDesktopShell({
   const evidenceRoute = findProjectedRoute(routeStates, 'evidenceTimeline');
   const releaseBundleRoute = findProjectedRoute(routeStates, 'releaseBundle');
   const backupExportRoute = findProjectedRoute(routeStates, 'backupExport');
+  const restoreValidationRoute = findProjectedRoute(routeStates, 'restoreValidation');
   const diagnosticsBundleRoute = findProjectedRoute(routeStates, 'diagnosticsBundle');
   const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
   const currentProject = currentProjectFromRegistry(projectRegistry);
@@ -1653,11 +1670,13 @@ function projectDesktopShell({
       evidenceTimeline,
       releaseBundle,
       backupExport,
+      restoreValidation,
       diagnosticsBundle,
       artifactRoute,
       evidenceRoute,
       releaseBundleRoute,
       backupExportRoute,
+      restoreValidationRoute,
       diagnosticsBundleRoute
     }),
     providerHub,
@@ -1745,11 +1764,13 @@ function projectDesktopArtifactReadiness({
   evidenceTimeline,
   releaseBundle,
   backupExport,
+  restoreValidation,
   diagnosticsBundle,
   artifactRoute,
   evidenceRoute,
   releaseBundleRoute,
   backupExportRoute,
+  restoreValidationRoute,
   diagnosticsBundleRoute
 }) {
   const previewItems = (artifactRefs?.items ?? []).map((artifact) => ({
@@ -1776,7 +1797,7 @@ function projectDesktopArtifactReadiness({
       evidenceTimeline,
       releaseBundle
     })),
-    sourcePolicy: valueState('artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-diagnostics-bundle.v1'),
+    sourcePolicy: valueState('artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-restore-validation.v1 + app-core-diagnostics-bundle.v1'),
     registeredRefs: valueState(artifactRefs?.count),
     status: artifactRefs?.status?.status,
     missing: artifactRefs?.status?.missing,
@@ -1808,6 +1829,11 @@ function projectDesktopArtifactReadiness({
     backupManagedStateEntryCount: backupExport?.managedStateEntryCount,
     backupArtifactRefCount: backupExport?.artifactRefCount,
     backupRepoContentPolicy: backupExport?.boundaries?.repoContentPolicy,
+    restoreValidationState: valueState(restoreValidation?.state),
+    restoreValidationStatus: restoreValidation?.status,
+    restoreIntegrityStatus: restoreValidation?.integrity?.status,
+    restoreCompatibilityStatus: restoreValidation?.compatibility?.status,
+    restoreOverwriteDefault: restoreValidation?.compatibility?.overwriteDefault,
     diagnosticsBundleState: valueState(diagnosticsBundle?.state),
     diagnosticsHealth: diagnosticsBundle?.health?.status,
     diagnosticsRecentFailures: diagnosticsBundle?.recentFailureCount,
@@ -1817,6 +1843,7 @@ function projectDesktopArtifactReadiness({
     evidenceRouteState: valueState(routeStateFromRoute(evidenceRoute)),
     releaseBundleRouteState: valueState(routeStateFromRoute(releaseBundleRoute)),
     backupExportRouteState: valueState(routeStateFromRoute(backupExportRoute)),
+    restoreValidationRouteState: valueState(routeStateFromRoute(restoreValidationRoute)),
     diagnosticsBundleRouteState: valueState(routeStateFromRoute(diagnosticsBundleRoute)),
     boundaries: {
       readOnly: artifactIndex?.boundaries?.readOnly ?? valueState(true),
@@ -11235,6 +11262,84 @@ function projectBackupExport({ result, backupExport }) {
       exportPayloadPolicy: valueState(backupExport.boundaries?.exportPayloadPolicy)
     },
     note: 'Backup Export 只展示 app core state manifest、hash 和 refs。它不复制 repo source、docs、tests、.git 或 artifact 内容。'
+  };
+}
+
+function projectRestoreValidation({ result, restoreValidation }) {
+  if (restoreValidation === null || restoreValidation === undefined) {
+    return {
+      state: result?.ok === true ? 'empty' : 'unavailable',
+      errorEnvelope: result?.errorEnvelope ?? null,
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      generatedAt: valueState(undefined),
+      readOnly: valueState(undefined),
+      status: valueState(undefined),
+      context: {},
+      sourceBundle: {},
+      integrity: {},
+      compatibility: {
+        blockers: valueState([]),
+        warnings: valueState([])
+      },
+      boundaries: {},
+      note: 'Restore validation 未暴露 / 不可用。'
+    };
+  }
+
+  return {
+    state: restoreValidation.status ?? 'available',
+    errorEnvelope: result?.errorEnvelope ?? null,
+    contractName: valueState(restoreValidation.contractName),
+    contractVersion: valueState(restoreValidation.contractVersion),
+    generatedAt: valueState(restoreValidation.generatedAt),
+    readOnly: valueState(restoreValidation.readOnly),
+    status: valueState(restoreValidation.status),
+    context: {
+      goalId: valueState(restoreValidation.context?.goalId),
+      resolvedGoalId: valueState(restoreValidation.context?.resolvedGoalId),
+      taskId: valueState(restoreValidation.context?.taskId),
+      restoreRole: valueState(restoreValidation.context?.restoreRole),
+      stateSource: valueState(restoreValidation.context?.stateSource)
+    },
+    sourceBundle: {
+      contractName: valueState(restoreValidation.sourceBundle?.contractName),
+      contractVersion: valueState(restoreValidation.sourceBundle?.contractVersion),
+      manifestHash: valueState(restoreValidation.sourceBundle?.manifestHash),
+      managedStateEntryCount: valueState(restoreValidation.sourceBundle?.managedStateEntryCount ?? 0),
+      artifactRefCount: valueState(restoreValidation.sourceBundle?.artifactRefCount ?? 0),
+      exportPayloadPolicy: valueState(restoreValidation.sourceBundle?.exportPayloadPolicy),
+      repoContentPolicy: valueState(restoreValidation.sourceBundle?.repoContentPolicy)
+    },
+    integrity: {
+      status: valueState(restoreValidation.integrity?.status),
+      manifestHashValid: valueState(restoreValidation.integrity?.manifestHashValid),
+      backupContractValid: valueState(restoreValidation.integrity?.backupContractValid),
+      managedStateEntryCount: valueState(restoreValidation.integrity?.managedStateEntryCount ?? 0),
+      presentManagedStateCount: valueState(restoreValidation.integrity?.presentManagedStateCount ?? 0),
+      missingManagedStateRefs: valueState(Array.isArray(restoreValidation.integrity?.missingManagedStateRefs) ? restoreValidation.integrity.missingManagedStateRefs : []),
+      artifactRefsValid: valueState(restoreValidation.integrity?.artifactRefsValid),
+      checks: valueState(Array.isArray(restoreValidation.integrity?.checks) ? restoreValidation.integrity.checks : [])
+    },
+    compatibility: {
+      status: valueState(restoreValidation.compatibility?.status),
+      compatibleRestorePath: valueState(restoreValidation.compatibility?.compatibleRestorePath),
+      overwriteDefault: valueState(restoreValidation.compatibility?.overwriteDefault),
+      blockers: valueState(Array.isArray(restoreValidation.compatibility?.blockers) ? restoreValidation.compatibility.blockers : []),
+      warnings: valueState(Array.isArray(restoreValidation.compatibility?.warnings) ? restoreValidation.compatibility.warnings : [])
+    },
+    boundaries: {
+      readOnly: valueState(restoreValidation.boundaries?.readOnly),
+      validationOnly: valueState(restoreValidation.boundaries?.validationOnly),
+      confirmRestoreAvailable: valueState(restoreValidation.boundaries?.confirmRestoreAvailable),
+      overwritesExistingData: valueState(restoreValidation.boundaries?.overwritesExistingData),
+      writesManagedState: valueState(restoreValidation.boundaries?.writesManagedState),
+      appliesRestore: valueState(restoreValidation.boundaries?.appliesRestore),
+      arbitraryPathReadAvailable: valueState(restoreValidation.boundaries?.arbitraryPathReadAvailable),
+      restorePayloadPolicy: valueState(restoreValidation.boundaries?.restorePayloadPolicy),
+      restoreMode: valueState(restoreValidation.boundaries?.restoreMode)
+    },
+    note: 'Restore Validation 只校验 backup manifest integrity 和兼容恢复路径。默认不覆盖现有数据，不读取任意 bundle path，不执行 restore apply。'
   };
 }
 
