@@ -34,13 +34,13 @@ Use v37 release, tag, and GitHub Release evidence on `origin/main` as the v37 ba
 Active v38 branch:
 
 ```text
-codex/v38-task-1-provider-profile-contract
+codex/v38-task-5-provider-hub-panel-evidence
 ```
 
 Active v38 worktree:
 
 ```text
-/Users/andy/.codex/worktrees/0845/multi-coding-agent-symphony
+/Users/andy/.codex/worktrees/v38-task-5/multi-coding-agent-symphony
 ```
 
 Controller ops branch:
@@ -60,8 +60,12 @@ codex/controller-loop-ops
 Current controller state:
 
 ```text
-controller automation paused after context self-management failure; task-1 worker revision was dispatched then paused
-controller command policy: use explicit next commands; /goal continue is one-step compatibility only
+task-1 through task-4 are main-verified in the managed goal ledger.
+task-5 reviewer approved evidence exists and task-5 review event is registered.
+task-5 main verification is missing.
+next action is task-5 main-verifier.
+controller command policy: use phase rotation; /goal continue is one-step compatibility only.
+after automatic compaction, the compacted controller thread must not continue review, verification, gates, or event registration.
 ```
 
 ## Scope Decisions
@@ -96,7 +100,84 @@ git diff --check
 
 Do not run mutation, audit, doctor, real CLI, tag, push, or publish unless explicitly requested or explicitly listed in the current runbook.
 
-## Last Reconciliation
+## Latest Reconciliation
+
+Date: 2026-06-05
+
+Command context:
+
+```text
+User observed another controller thread auto-compacting while entering /goal review task-5.
+This shows the previous context prompt was too reactive and did not force rotation before the expensive review phase.
+During this controller-rule edit, task-5 review advanced in the managed ledger; the durable next action is now task-5 main verification.
+```
+
+Files reviewed:
+
+```text
+docs/plans/controller/context-management.md
+docs/plans/controller/master-once-prompt.md
+docs/plans/controller/README.md
+docs/plans/controller/v38-controller-state.md
+docs/plans/controller/subagent-dispatch-log.md
+```
+
+Git state before controller-rule edits:
+
+```text
+controller worktree branch: codex/controller-loop-ops
+controller HEAD: b1bafdb304aceb5c507ffdbd85d31eb590e39316
+origin/main: 7f0108b8c9c4658219f91aa8c687f3b1ae03cfd0
+```
+
+Managed goal status:
+
+```text
+pnpm --silent symphony goal-status --goal v38-provider-hub-capability-profiles --json
+returned 5 total tasks, 5 completed tasks, 0 blocked tasks, releaseReady false.
+task-1 status: main-verified, statusSource evt_548effa7b5868c34.
+task-2 status: main-verified, statusSource evt_21473cc906078ffe.
+task-3 status: main-verified, statusSource evt_c620c304a45ceb3c.
+task-4 status: main-verified, statusSource evt_2233de7321b33673, commit afaa644a6044d95679d4d59bdc794cf8b346a8f1.
+task-5 status: approved, statusSource evt_8c3b18b25e978e22, branch codex/v38-task-5-provider-hub-panel-evidence, commit b9711646c55117ce1a9a48fbed34dd1ecd70387d.
+task-5 mainVerificationRef is missing.
+```
+
+Next action from ledger:
+
+```text
+pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --json
+returned task-5 main-verifier main-verification because reviewer approved task-5 but main verification is missing.
+worker evidence ref: docs/plans/v38-task-5-worker-evidence-2026-06-02.md
+review evidence ref: docs/plans/v38-task-5-review-evidence-2026-06-02.md
+main verification ref: missing
+```
+
+Controller rule update:
+
+```text
+context-management.md now makes phase rotation mandatory before review, main verification, release closeout, gates, or broad evidence inspection after any prior non-reconcile phase.
+master-once-prompt.md now treats /goal run as an unattended state machine across fresh phase controllers, not one long controller thread.
+README.md now documents the same phase-rotation operating model.
+```
+
+Fresh controller handoff:
+
+```text
+Thread id: 019e955a-c1e7-7a23-8037-1f8eefae1d1f
+Command: /goal verify task-5 --fresh-controller
+Purpose: task-5 main-verifier/main-verification phase only.
+Status observed from controller supervisor: active; first response says it is reconciling from repository/controller docs and not using chat memory.
+The supervisor thread did not run task-5 verification, release closeout, mutation, audit, doctor, real CLI, tag, push, or publish.
+```
+
+Next suggested command:
+
+```text
+/goal status
+```
+
+## Historical Reconciliation 2026-06-04
 
 Command received:
 
@@ -216,7 +297,7 @@ task-1 main-verifier thread: 019e929e-de99-79d0-95ae-72806f6fb74c
 status: completed; main.verification-failed event evt_54b41ed97732c6be
 ```
 
-## Next Suggested Command
+## Historical Next Suggested Command
 
 ```text
 /goal status

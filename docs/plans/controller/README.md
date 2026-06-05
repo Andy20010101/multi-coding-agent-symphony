@@ -11,12 +11,12 @@ Use it when a Codex thread should act as a short-lived controller instead of a l
 ```text
 /goal command
   -> controller reads repo state, compact checkpoint, and targeted runbook fields
-  -> controller decides one next action
+  -> controller decides one next phase
   -> controller may create or steer one subagent thread
   -> subagent works in its own branch/worktree
   -> subagent reports with the fixed result format
   -> controller records evidence/checkpoint
-  -> controller stops
+  -> controller stops or hands the residual run lease to a fresh controller
 ```
 
 ## Files
@@ -36,7 +36,7 @@ Use these messages in the controller thread:
 /goal reconcile
 /goal step
 /goal continue
-/goal run v38-provider-hub-capability-profiles --until blocked --max-actions 8 --max-subagents 2
+/goal run v38-provider-hub-capability-profiles --until blocked --rotation phase --max-actions 8 --max-subagents 2
 /goal dispatch task-1 worker
 /goal review task-1
 /goal verify task-1
@@ -47,7 +47,7 @@ The controller should treat `/goal step` as: reconcile first, identify the next 
 
 The controller should treat `/goal continue` as a deprecated compatibility alias for `/goal step`. It must not suggest, queue, or self-trigger another bare `/goal continue`.
 
-The controller should treat `/goal run ... --max-actions <N> --max-subagents <M>` as: run a bounded state machine inside one lease, stopping early on any stop condition below.
+The controller should treat `/goal run ... --max-actions <N> --max-subagents <M>` as: run a bounded state machine across fresh phase controllers, stopping early on any stop condition below.
 
 The controller should treat `/goal autopilot --steps <N>` as deprecated. It may be accepted only as `/goal run` with explicit lease limits. It must not be implemented as repeated `/goal continue`.
 
@@ -68,8 +68,10 @@ Default limits:
 
 ```text
 max steps: 3
-max subagents started per command: 1
-max role advancement per task: one role at a time
+max subagents started per phase controller: 1
+max subagents started per user run command: explicit lease limit
+max role advancement per controller thread: one role phase
+max role advancement per user run command: multiple phases only through fresh-controller rotation
 max release stage: no release closeout unless explicitly requested
 ```
 
@@ -88,6 +90,7 @@ Autopilot may:
 - update the dispatch log and checkpoint;
 - inspect completed subagent results when they are already available;
 - register a goal event only when evidence is present and the dry-run plan hash is confirmed by the controller in the same turn.
+- hand the residual run lease to a fresh controller after checkpointing a completed phase.
 
 Autopilot must stop when:
 
@@ -97,12 +100,12 @@ Autopilot must stop when:
 - a test, build, or validation command fails;
 - the next action would require mutation, audit, doctor, real CLI, tag, push, publish, broad cleanup, or destructive git commands;
 - the next action depends on product or scope judgment not already written in the runbook/checkpoint;
-- context guard recommends `/compact` or a fresh controller thread.
+- context guard requires a fresh controller thread and the controller cannot create or hand off to one.
 
 Recommended unattended command:
 
 ```text
-/goal run v38-provider-hub-capability-profiles --until blocked --max-actions 8 --max-subagents 2
+/goal run v38-provider-hub-capability-profiles --until blocked --rotation phase --max-actions 8 --max-subagents 2
 ```
 
 ## Context Guard
@@ -120,13 +123,14 @@ confirm git status and active worktrees
 
 If the controller cannot justify its next action from files, command output, or explicit user input, it must stop and ask for `/goal reconcile`.
 
-Signals that the controller should checkpoint and recommend a fresh controller thread or manual `/compact`:
+Signals that the controller should checkpoint and rotate to a fresh controller:
 
 - `/status` reports low remaining context.
 - The thread has already dispatched or reviewed more than one subagent since the last checkpoint.
 - The last turn included long logs, large diffs, or broad file reads.
 - The controller refers to "memory" without a file, command, evidence, or checkpoint reference.
 - The visible transcript has been compacted and required details are missing.
+- The next action is review, main verification, release closeout, or gate execution after any prior non-reconcile phase in this thread.
 
 For this temporary system, the safe default is one bounded controller action per `/goal step`, followed by a checkpoint.
 
@@ -149,6 +153,8 @@ pnpm --silent symphony goal next --goal v38-provider-hub-capability-profiles --j
 
 Use `rg` and `sed -n` to read only the relevant section of a long document. Avoid `git branch -vv --all`, full `git diff`, full runbook docs, full evidence files, and large test output in the controller thread.
 
+Do not run broad repository searches from the controller thread. A controller search must name the smallest useful path and produce compact output.
+
 Checkpoint entries should be short:
 
 - command received;
@@ -161,7 +167,7 @@ Checkpoint entries should be short:
 
 Do not paste long command output into checkpoints. Summarize pass/fail and keep exact command names.
 
-If automatic compaction happens anyway, treat the current controller thread as disposable. Start a fresh controller thread with `master-once-prompt.md`; do not ask the compressed controller to reconstruct missing details from memory.
+If automatic compaction happens anyway, treat the current controller thread as disposable. Start a fresh controller thread with `master-once-prompt.md`; do not ask the compressed controller to reconstruct missing details from memory or continue review, verification, gates, or event registration.
 
 The controller must also read and apply `context-management.md`. That file is the authority for leases, pause propagation, subagent ownership, and controller rotation.
 

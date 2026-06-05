@@ -28,6 +28,10 @@ leaseId:
 maxControllerActions:
 maxSubagentPrompts:
 maxEventRegistrations:
+rotationMode:
+currentPhase:
+maxSubagentPromptsPerPhase:
+maxEventRegistrationsPerPhase:
 ownedThreadIds:
 allowedFiles:
 stopCondition:
@@ -38,12 +42,30 @@ Default lease limits:
 ```text
 /goal status: maxControllerActions=0, maxSubagentPrompts=0, maxEventRegistrations=0
 /goal step: maxControllerActions=1, maxSubagentPrompts=1, maxEventRegistrations=1
-/goal run --until blocked: maxControllerActions=8, maxSubagentPrompts=2, maxEventRegistrations=2
+/goal run --until blocked: maxControllerActions=8, maxSubagentPrompts=2, maxEventRegistrations=2, rotationMode=phase, maxSubagentPromptsPerPhase=1, maxEventRegistrationsPerPhase=1
 /goal autopilot --steps N: deprecated; treat as /goal run with explicit limits
 /goal continue: deprecated; treat as /goal step only
 ```
 
-When a lease ends, the controller must stop. It must not send itself another slash command, start another controller thread, or keep polling subagents unless the same lease explicitly allows it.
+When a lease ends, the controller must stop. It must not send itself another slash command or keep polling subagents.
+
+One user command may still make unattended progress only through phase rotation. In phase rotation, the current controller writes a checkpoint, records the residual lease, and starts or hands off to a fresh controller thread from `master-once-prompt.md`. The current controller does not perform the next phase itself.
+
+## Phase Contract
+
+A phase is one of:
+
+```text
+reconcile
+worker-dispatch-or-result
+reviewer-dispatch-or-result
+main-verifier-dispatch-or-result
+release-closeout
+```
+
+One controller thread may own at most one non-reconcile phase. It must not advance the same task from worker event to reviewer action, or from reviewer event to main verification action, in the same thread.
+
+For task-4 and later tasks, and for any thread that has already seen automatic compaction, phase rotation is mandatory before review, main verification, release gates, or broad evidence review.
 
 ## Context Budget
 
@@ -57,13 +79,22 @@ checkpoint update: 40 lines of new facts unless recording a required evidence/ev
 subagent result copied into controller thread: fixed result block plus at most 10 lines summary
 large file reads: forbidden in controller; delegate to subagents
 full diffs or full test logs: forbidden in controller
+broad `rg` or `git log` across `docs/plans` or the full repository: forbidden in controller
+tool output target: commands should return compact facts, not more than about 120 lines
 ```
 
-The controller must stop and write a checkpoint when any of these happens:
+The controller must rotate before starting an expensive phase when any of these is true:
 
 - it has dispatched or steered one subagent;
 - it has registered one goal event;
 - it has inspected one completed subagent result;
+- it has run validation commands beyond read-only reconciliation;
+- the previous turn included long logs, large diffs, broad search output, or multiple file reads;
+- the next phase is reviewer, main-verifier, release-closeout, or any gate execution.
+
+The controller must stop and write a checkpoint when any of these happens:
+
+- a phase ended;
 - it needs broad diff/test/evidence review;
 - a thread was compacted;
 - a user sends `PAUSE`, `STOP`, or changes the operating model;
@@ -71,12 +102,12 @@ The controller must stop and write a checkpoint when any of these happens:
 
 ## Rotation
 
-If context is low or compaction happened:
+If context is low, an expensive phase is next, a phase ended, or compaction happened:
 
 1. Write a compact checkpoint with current task, event ids, evidence refs, thread ids, dirty worktrees, blockers, and one explicit next command.
-2. Stop the current controller.
+2. Stop substantive work in the current controller.
 3. Do not send `/goal continue`.
-4. Start a fresh controller only from `master-once-prompt.md` and the checkpoint.
+4. For a user command with `rotationMode=phase`, start or hand off to a fresh controller from `master-once-prompt.md`, the checkpoint, and the residual lease. Otherwise, tell the user the exact next `/goal` command.
 
 The old controller must not keep control after a fresh controller exists. If the old controller receives a pause/stop instruction, it must report only already-completed actions and stop.
 
@@ -94,23 +125,16 @@ The controller must not poll a subagent indefinitely. After one poll window:
 
 ## Run Command Shape
 
-Use `/goal run` for unattended progress instead of repeated `/goal continue`.
+Use `/goal run` for unattended progress instead of repeated `/goal continue`. The run command must use phase rotation by default; it is not one long controller session.
 
 Example:
 
 ```text
-/goal run v38-provider-hub-capability-profiles --until blocked --max-actions 8 --max-subagents 2
+/goal run v38-provider-hub-capability-profiles --until blocked --rotation phase --max-actions 8 --max-subagents 2
 ```
 
-The run command is a state machine inside one lease. It must not implement progress by recursively sending slash commands. It stops when the lease is exhausted, a subagent is still running, a goal event was registered and the lease does not allow more, a blocker appears, or context rotation is required.
+The run command is a state machine across phase controllers. It must not implement progress by recursively sending slash commands in the same thread. It stops when the lease is exhausted, a subagent is still running, a blocker appears, a phase controller cannot create or hand off to a fresh controller, or release closeout would be required without explicit permission.
 
-## Current Pause
+## Current Rule Update
 
-As of 2026-06-04, the controller system is paused because context self-management failed:
-
-- old controller thread `019e921d-2b22-7421-b986-406ded4629c8` was archived;
-- verifier thread `019e9294-3d0d-7d53-baef-7f79474e2217` was archived;
-- replacement controller thread `019e9295-db02-7c33-ba5e-3f29571ee56b` was archived after dispatching worker revision;
-- worker thread `019e9206-5ad3-7db0-b032-fe5cb100f8e2` was paused after one evidence-file edit and before staging or committing.
-
-Do not resume controller automation until this file and `master-once-prompt.md` have been reviewed from a fresh controller thread.
+As of 2026-06-05, controller automation may resume only under phase rotation. A visible automatic compaction is treated as a failed controller lease: the compacted thread must stop, write or reference the latest checkpoint, and hand off to a fresh controller before doing review, verification, gates, or further event registration.
