@@ -4,9 +4,29 @@ Date: 2026-06-04
 
 This folder is a temporary Codex operating layer for this repository. It is not product code and is not part of the v38 Provider Hub implementation.
 
-Use it when a Codex thread should act as a short-lived controller instead of a long-running master session.
+Use it when Codex should make goal progress without turning one thread into a long-running master session.
 
-## Loop
+## Layers
+
+```text
+thin supervisor
+  -> polls compact ledger/thread state
+  -> creates one fresh controller per tick
+
+fresh controller
+  -> owns one goal phase
+  -> dispatches or consumes one role result
+  -> updates checkpoint and stops
+
+subagent
+  -> reads code, diffs, evidence, and logs
+  -> runs bounded validation
+  -> writes evidence and fixed result block
+```
+
+Automation belongs in the thin supervisor. Context-heavy reasoning belongs in fresh controllers and subagents that stop after one phase.
+
+## Controller Loop
 
 ```text
 /goal command
@@ -21,11 +41,40 @@ Use it when a Codex thread should act as a short-lived controller instead of a l
 
 ## Files
 
+- `supervisor-loop-prompt.md`: startup prompt for the thin supervisor loop.
 - `master-once-prompt.md`: startup prompt for the controller Codex thread.
 - `context-management.md`: lease, context budget, rotation, and pause rules.
 - `v38-controller-state.md`: current checkpoint for v38 controller work.
 - `subagent-result-format.md`: required result format for worker, reviewer, and verifier subagents.
 - `subagent-dispatch-log.md`: append-only log of controller dispatches and handoffs.
+
+## Supervisor Shape
+
+Use these messages in the supervisor thread:
+
+```text
+/supervisor status
+/supervisor tick
+/supervisor run v38-provider-hub-capability-profiles --until blocked --max-ticks 8
+```
+
+The supervisor is allowed to:
+
+- run compact ledger/status commands;
+- read checkpoint and dispatch-log summaries;
+- read thread status;
+- create one fresh controller per tick.
+
+Each supervisor tick gets one compact reconciliation pass. It must not poll repeatedly inside the same thread waiting for a controller, subagent, or better state.
+
+The supervisor is not allowed to:
+
+- read broad diffs, full evidence files, long logs, or implementation files;
+- run tests, builds, mutation, audit, doctor, real CLI, tag, push, publish, or model-provider CLI commands;
+- register events or decide verdicts;
+- continue a compacted controller.
+
+If a subagent completes, the supervisor creates a fresh controller to consume that result. It does not consume the result itself.
 
 ## Command Shape
 

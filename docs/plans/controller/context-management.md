@@ -18,7 +18,22 @@ Do not reconstruct missing facts from memory after compaction. If the checkpoint
 
 ## Lease Model
 
-Every controller command gets a lease. The lease is the only permission to mutate controller bookkeeping, dispatch subagents, poll subagents, or register goal events.
+Every supervisor and controller command gets a lease. The lease is the only permission to mutate controller bookkeeping, dispatch subagents, poll owned threads, create controllers, or register goal events.
+
+The supervisor lease and controller lease are separate. A supervisor may create a fresh controller, but must not do controller work. A controller may dispatch or consume one phase, but must not become a long-running supervisor.
+
+Supervisor lease fields:
+
+```text
+command:
+leaseId:
+maxSupervisorTicks:
+maxControllerThreadsCreated:
+ownedControllerThreadIds:
+ownedSubagentThreadIds:
+allowedFiles:
+stopCondition:
+```
 
 Lease fields:
 
@@ -40,6 +55,9 @@ stopCondition:
 Default lease limits:
 
 ```text
+/supervisor status: maxSupervisorTicks=0, maxControllerThreadsCreated=0
+/supervisor tick: maxSupervisorTicks=1, maxControllerThreadsCreated=1
+/supervisor run --until blocked: maxSupervisorTicks=8, maxControllerThreadsCreated=8
 /goal status: maxControllerActions=0, maxSubagentPrompts=0, maxEventRegistrations=0
 /goal step: maxControllerActions=1, maxSubagentPrompts=1, maxEventRegistrations=1
 /goal run --until blocked: maxControllerActions=8, maxSubagentPrompts=2, maxEventRegistrations=2, rotationMode=phase, maxSubagentPromptsPerPhase=1, maxEventRegistrationsPerPhase=1
@@ -50,6 +68,8 @@ Default lease limits:
 When a lease ends, the controller must stop. It must not send itself another slash command or keep polling subagents.
 
 One user command may still make unattended progress only through phase rotation. In phase rotation, the current controller writes a checkpoint, records the residual lease, and starts or hands off to a fresh controller thread from `master-once-prompt.md`. The current controller does not perform the next phase itself.
+
+For longer unattended progress, use the thin supervisor from `supervisor-loop-prompt.md`. The supervisor can create fresh controllers across ticks, but it must stay low-context and never perform verification, review, event registration, or release gates itself.
 
 ## Phase Contract
 
@@ -74,6 +94,8 @@ The controller should manage context by limiting what enters the thread, not by 
 Hard limits per controller turn:
 
 ```text
+supervisor final answer: 20 lines unless the user asks for detail
+supervisor copied thread output: status and final fixed result metadata only, never long logs
 controller final answer: 20 lines unless the user asks for detail
 checkpoint update: 40 lines of new facts unless recording a required evidence/event
 subagent result copied into controller thread: fixed result block plus at most 10 lines summary
