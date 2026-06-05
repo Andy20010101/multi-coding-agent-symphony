@@ -223,6 +223,7 @@ GET /api/actions/preview
 GET /api/providers/health
 GET /api/providers/capabilities
 GET /api/providers/lane-preview
+GET /api/app-data/migration
 GET /api/jobs
 GET /api/jobs/create
 GET /api/jobs/timeline
@@ -239,6 +240,8 @@ GET /api/diagnostics
 `GET /api/providers/lane-preview` 返回 `agent-cli-lane-assignment-preview.v1`，用于查看 worker、reviewer、main-verifier lane 分离预览。当前只使用 `claude-code-cli` 和 `codex-cli` 作为 worker/reviewer provider candidates；main-verifier 是 operator-controlled lane。route 只展示候选 provider、独立 reviewer matrix、copy-only verification commands 和边界字段；不执行 provider CLI，不启动 agent，不自动分配，不登记 reviewer/main gate，不从前端状态推断 approval 或 main verified。
 
 Workbench 的 `Provider Hub` 面板和 Desktop Shell 的 `Provider Availability` card 消费这三条 provider route，并把 provider availability、blocked reasons、sanitized env presence、capability gates、lane separation 和 active goal evidence refs 放在同一处。面板只读取 backend contract 字段和 `goal-progress-ledger.v1` evidence refs；不读取 evidence 文件正文，不展示 env value，不执行 `claude`/`codex`，不登记 worker/reviewer/main gate，不把 provider health 转换成按钮或 runner。
+
+`GET /api/app-data/migration` 返回 `app-schema-migration.v1`，用于查看 v39 schema version 和 dry-run migration preview。route 不接受 query 参数；Workbench 的 Schema Migration Preview 面板展示 currentVersion、targetVersion、affected app data、migration steps、confirmation action id 和 plan hash requirement。这个路径只展示 preview，不执行 confirm，不写 app data，不运行 shell，不调用模型，不打开本地文件，不改 git，不登记 reviewer/main/release gate。
 
 `GET /api/projects` 返回 `project-registry.v1`，列出从当前 cwd/repo-local metadata 解析出的 registered project。`GET /api/projects/current` 返回 `current-project-resolver.v1`，从 console cwd 解析 current project；可选 `repoPath` 只用于显式 repo path 解析。两个 route 都不写 project registry 数据库、不扫描全盘、不执行 git 写入、不调用模型、不创建 job queue。`/api/projects` 不接受 query 参数，`/api/projects/current` 只接受 `repoPath`。
 

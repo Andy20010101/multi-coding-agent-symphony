@@ -277,6 +277,10 @@ export function WorkbenchShell({
               preview={model.providerLanePreview}
               route={findRoute(model.routeStates, 'providerLanePreview')}
             />
+            <AppSchemaMigrationPanel
+              migration={model.appSchemaMigration}
+              route={findRoute(model.routeStates, 'appSchemaMigration')}
+            />
             <NextActionCard
               nextAction={model.activeGoal.nextAction}
               route={findRoute(model.routeStates, 'goalNextAction')}
@@ -3851,6 +3855,83 @@ function PromptPreviewDrawer({ promptPreview, route }) {
 
       <p className="panel-note">{promptPreview.note}</p>
     </aside>
+  );
+}
+
+function AppSchemaMigrationPanel({ migration, route }) {
+  return (
+    <DataPanel
+      id="app-schema-migration-panel"
+      kicker="v39 schema migration"
+      title="Schema Migration Preview"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', migration.contractName],
+        ['contractVersion', migration.contractVersion],
+        ['current version', migration.schema.currentVersion],
+        ['target version', migration.schema.targetVersion],
+        ['version field', migration.schema.versionField],
+        ['migration required', migration.schema.migrationRequired],
+        ['dry-run status', migration.dryRun.status],
+        ['dry-run default', migration.dryRun.defaultMode],
+        ['preview only', migration.dryRun.previewOnly],
+        ['writes attempted', migration.dryRun.writesAttempted],
+        ['confirm action', migration.confirmation.actionId],
+        ['confirm contract', migration.confirmation.confirmationContract],
+        ['requires plan hash', migration.confirmation.requiresPlanHash],
+        ['browser confirm available', migration.confirmation.confirmAvailableFromBrowser]
+      ]} />
+
+      <Subsection title="affected app data">
+        <SchemaMigrationAreaList areas={migration.dryRun.affectedAreas} />
+      </Subsection>
+
+      <Subsection title="migration steps">
+        <SchemaMigrationStepList steps={migration.dryRun.steps} />
+      </Subsection>
+
+      <Subsection title="boundaries">
+        <KeyValueList rows={migration.boundaries} nameKey="boundary" valueKey="available" emptyCopy="boundaries 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{migration.note}</p>
+    </DataPanel>
+  );
+}
+
+function SchemaMigrationAreaList({ areas }) {
+  if (!Array.isArray(areas) || areas.length === 0) {
+    return <EmptyBlock copy="affected app data 未暴露。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {areas.map((area, index) => (
+        <li key={`${area.area.text}-${index}`}>
+          <strong>{area.area.text}</strong>
+          <span>{area.currentVersion.text} -&gt; {area.targetVersion.text}; write on confirm: {area.writeRequiredOnConfirm.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SchemaMigrationStepList({ steps }) {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return <EmptyBlock copy="migration steps 未暴露。" />;
+  }
+
+  return (
+    <ul className="compact-list">
+      {steps.map((step, index) => (
+        <li key={`${step.stepId.text}-${index}`}>
+          <strong>{step.stepId.text}</strong>
+          <span>{step.status.text}; write on confirm: {step.writesOnConfirm.text}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -20,6 +20,8 @@ v38 task-4 adds `agent-cli-lane-assignment-preview.v1`, exposed through `GET /ap
 
 v38 task-5 adds the Workbench `ProviderHubPanel` projection and carries the same projection into `DesktopShellMvpViewModel.providerHub`. The projection combines `agent-cli-provider-health.v1`, `agent-cli-capability-profile.v1`, `agent-cli-lane-assignment-preview.v1`, `goal-progress-ledger.v1`, and `goal-event-log.v1` fields into provider availability, blocked reasons, sanitized env presence, provider/tool gates, lane separation, and evidence anchors. It is additive renderer state only; it does not define a new canonical contract, read evidence bodies, expose secret values, execute provider CLIs, dispatch prompts, call models, assign agents, approve review, pass main verification, write git state, or declare release readiness.
 
+v39 task-2 adds `app-schema-migration.v1`. The contract reports `appData.schemaVersion` current and target versions, migration-required state, affected app data areas from the v39 inventory, dry-run migration steps, `app.schema.migration.confirm`, and the `app-schema-migration-confirmation.v1` plan-hash requirement. `GET /api/app-data/migration` and `symphony app-data migration --json` return the preview only. They do not write app data, execute shell commands, read arbitrary paths, open local files, invoke models, change git state, confirm migration, approve review, pass main verification, or declare release readiness.
+
 ## Shared Rules
 
 - `contractVersion` is the version gate. v8.2 emits `"1"`.

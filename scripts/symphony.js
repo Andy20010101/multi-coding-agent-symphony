@@ -32,6 +32,9 @@ import {
   buildAgentCliLaneAssignmentPreviewContract
 } from '../src/symphony/agent-cli-lane-assignment-preview.js';
 import {
+  buildAppSchemaMigrationContract
+} from '../src/symphony/app-schema-migration.js';
+import {
   buildAppStateSnapshot
 } from '../src/symphony/app-state-snapshot.js';
 import {
@@ -173,6 +176,7 @@ const KNOWN_COMMANDS = new Set([
   'runtime',
   'actions',
   'providers',
+  'app-data',
   'handoff',
   'goal',
   'goal-status',
@@ -370,6 +374,13 @@ export async function runSymphonyCli({
         args: rest,
         stdout,
         env
+      });
+    }
+
+    if (command === 'app-data') {
+      return await runSymphonyAppData({
+        args: rest,
+        stdout
       });
     }
 
@@ -2047,6 +2058,25 @@ async function runSymphonyProviders({ args, stdout, env }) {
   return EXIT_CODES.ok;
 }
 
+async function runSymphonyAppData({ args, stdout }) {
+  const options = parseAppDataArgs(args);
+
+  if (options.help) {
+    stdout.write(appDataHelpText());
+    return EXIT_CODES.ok;
+  }
+
+  const migration = buildAppSchemaMigrationContract();
+
+  if (options.json) {
+    writeJson(stdout, migration);
+    return EXIT_CODES.ok;
+  }
+
+  stdout.write(renderAppSchemaMigrationText(migration));
+  return EXIT_CODES.ok;
+}
+
 async function runSymphonyHandoff({ args, stdout }) {
   const options = parseHandoffArgs(args);
 
@@ -2109,6 +2139,19 @@ function renderProviderLaneAssignmentPreviewText(preview) {
     `Active providers: ${preview.activeProviderIds.join(', ')}`,
     `Independent review required: ${preview.summary.independentReviewRequired}`,
     `Auto approval available: ${preview.summary.autoApprovalAvailable}`,
+    ''
+  ].join('\n');
+}
+
+function renderAppSchemaMigrationText(migration) {
+  return [
+    `App schema migration: ${migration.dryRun.status}`,
+    `Contract: ${migration.contractName}`,
+    `Version: ${migration.schema.currentVersion} -> ${migration.schema.targetVersion}`,
+    `Dry-run default: ${migration.dryRun.defaultMode}`,
+    `Writes attempted: ${migration.dryRun.writesAttempted}`,
+    `Confirm action: ${migration.confirmation.actionId}`,
+    `Affected areas: ${migration.dryRun.affectedAreas.map((area) => area.area).join(', ')}`,
     ''
   ].join('\n');
 }
@@ -4057,6 +4100,64 @@ function providersHelpText() {
     'capabilities maps action requirements to provider/tool gates.',
     'lanes previews worker/reviewer/main-verifier lane separation.',
     'The command does not execute provider CLIs, read credential files, call models, install providers, open OAuth, write git state, or run validations.',
+    ''
+  ].join('\n');
+}
+
+function parseAppDataArgs(args) {
+  const options = {
+    subcommand: null,
+    json: false,
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('app-data contracts are read-only; redirect stdout if you need a file');
+    }
+
+    if (value === '--confirm' || value === '--plan-hash' || value === '--path' || value === '--command') {
+      throw new UsageError('app-data migration is dry-run preview only from this command; confirm writes are not available here');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown app-data option: ${value}`);
+    }
+
+    if (options.subcommand !== null) {
+      throw new UsageError(`unexpected app-data argument: ${value}`);
+    }
+
+    options.subcommand = value;
+  }
+
+  options.subcommand ??= 'migration';
+
+  if (options.subcommand !== 'migration') {
+    throw new UsageError('app-data subcommand must be migration');
+  }
+
+  return options;
+}
+
+function appDataHelpText() {
+  return [
+    'Usage: symphony app-data migration [--json]',
+    '',
+    'Prints the read-only v39 app schema migration dry-run preview.',
+    'The command does not write app data, execute shell commands, read arbitrary files, call models, change git state, or confirm the migration.',
     ''
   ].join('\n');
 }

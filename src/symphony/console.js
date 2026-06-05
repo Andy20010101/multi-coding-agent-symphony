@@ -94,6 +94,9 @@ import {
   buildAgentCliLaneAssignmentPreviewContract
 } from './agent-cli-lane-assignment-preview.js';
 import {
+  buildAppSchemaMigrationContract
+} from './app-schema-migration.js';
+import {
   buildAppStateSnapshot
 } from './app-state-snapshot.js';
 import {
@@ -1042,6 +1045,22 @@ export function createSymphonyConsoleServer({
         writeJsonResponse(response, 200, buildAgentCliLaneAssignmentPreviewContract({
           env
         }));
+        return;
+      }
+
+      if (url.pathname === '/api/app-data/migration') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-app-schema-migration-request',
+            message: 'App schema migration preview does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildAppSchemaMigrationContract());
         return;
       }
 
