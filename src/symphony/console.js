@@ -97,6 +97,9 @@ import {
   buildAppStateSnapshot
 } from './app-state-snapshot.js';
 import {
+  buildAppDataInventory
+} from './app-data-inventory.js';
+import {
   buildProjectRegistry,
   resolveCurrentProject
 } from './project-registry.js';
@@ -1106,6 +1109,49 @@ export function createSymphonyConsoleServer({
           goalId: url.searchParams.get('goal') ?? undefined,
           stateDir,
           startedAt: runtimeStartedAt
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/app/data-inventory') {
+        const allowedParams = new Set(['goal', 'task']);
+        const unsupportedParams = Array.from(url.searchParams.keys()).filter((key) => !allowedParams.has(key));
+        const goalId = url.searchParams.get('goal') ?? 'latest';
+        const taskId = url.searchParams.get('task');
+
+        if (unsupportedParams.length > 0) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-app-data-inventory-request',
+            message: 'App data inventory route accepts only goal and task query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        if (
+          isUnsafeGoalRouteSegment(goalId)
+          || (taskId !== null && isUnsafeGoalRouteSegment(taskId))
+        ) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-app-data-inventory-request',
+            message: 'App data inventory goal and task query values must be safe refs.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildAppDataInventory({
+          cwd,
+          stateDir,
+          goalId,
+          taskId,
+          startedAt: runtimeStartedAt,
+          env,
+          artifactStoreDir: join(stateDir, 'artifacts')
         }));
         return;
       }
