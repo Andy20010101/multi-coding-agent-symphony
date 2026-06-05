@@ -109,9 +109,9 @@ Stop immediately when:
 
 If automatic compaction happens, write or reference the latest checkpoint and start a fresh supervisor from this prompt. Do not reconstruct missing details from chat.
 
-## Current v38 Scope
+## Current v41 Scope
 
-v38 scope is Agent CLI Provider Hub MVP.
+v41 scope is Controlled CLI Provider Runner + Backend Completion.
 
 Active providers:
 
@@ -120,20 +120,19 @@ claude-code-cli
 codex-cli
 ```
 
-Out of scope for v38:
+Out of scope for v41:
 
 ```text
 gemini-cli
 kiro-cli
 deepseek-agent-cli
-real CLI runner
 renderer-side provider invocation
 generic shell runner
 automatic provider install
 automatic OAuth login
 ```
 
-DeepSeek may appear only as a sanitized backend profile behind an existing local agent CLI. It is not an active v38 provider.
+Provider CLI execution is allowed only through the controlled backend runner implemented by the v41 task runbook. The supervisor must not run raw `claude`, raw `codex`, Kiro, Gemini, DeepSeek, or arbitrary shell commands. DeepSeek may appear only as a later sanitized backend profile reference and is not an active v41 provider.
 
 ## End Of Tick
 

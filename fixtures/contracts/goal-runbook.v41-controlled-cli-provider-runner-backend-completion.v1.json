@@ -1,0 +1,221 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v41-controlled-cli-provider-runner-backend-completion",
+  "goalTitle": "v41 Controlled CLI Provider Runner + Backend Completion",
+  "baseline": {
+    "tag": "v40",
+    "commit": "5ab2d72dd89c2db191d8aee769ef5ccb73ef6d8e",
+    "evidenceRef": "docs/plans/v40-release-evidence-2026-06-02.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "Controlled runner contract and provider allowlist",
+      "branch": "v41-task-1-controlled-runner-contract-provider-allowlist",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Controlled provider runner contract defines backend-owned command templates, allowed input fields, output fields, failure states, and safety boundaries.",
+        "Active provider ids are exactly claude-code-cli and codex-cli.",
+        "Gemini CLI, Kiro CLI, and DeepSeek are not active v41 provider ids.",
+        "DeepSeek may appear only as a later sanitized backend profile/ref, not as a runnable provider.",
+        "The contract rejects arbitrary shell command input, arbitrary provider ids, arbitrary local paths, secret values, and renderer-owned command construction.",
+        "Provider CLI execution is available only through a backend controlled runner.",
+        "Worker evidence path: docs/plans/v41-task-1-worker-evidence-2026-06-06.md.",
+        "Review evidence path: docs/plans/v41-task-1-review-evidence-2026-06-06.md.",
+        "Main verification evidence path: docs/plans/v41-task-1-main-verification-evidence-2026-06-06.md.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "State changes come only from explicit backend events, operation registry records, or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke providers directly, open arbitrary local files, merge, push, tag, publish, or self-approve."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v41-controlled-cli-provider-runner-backend-completion --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "Backend runner execution adapter",
+      "branch": "v41-task-2-backend-runner-execution-adapter",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Backend runner accepts only allowed provider ids, active goal id, task id, role, reviewed prompt/ref context, and controlled mode.",
+        "Command construction happens in backend code, not in UI, fixture input, browser query, or renderer state.",
+        "The runner rejects arbitrary command text, shell metacharacter expansion, arbitrary cwd/path, inactive provider ids, and secret-bearing input.",
+        "Direct provider execution from UI remains unavailable for claude, codex, Kiro, Gemini, DeepSeek, and shell commands.",
+        "Provider execution is bounded by timeout, cwd/workspace policy, env redaction, and failure-layer reporting.",
+        "Worker evidence path: docs/plans/v41-task-2-worker-evidence-2026-06-06.md.",
+        "Review evidence path: docs/plans/v41-task-2-review-evidence-2026-06-06.md.",
+        "Main verification evidence path: docs/plans/v41-task-2-main-verification-evidence-2026-06-06.md.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "State changes come only from explicit backend events, operation registry records, or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke providers directly, open arbitrary local files, merge, push, tag, publish, or self-approve."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v41-controlled-cli-provider-runner-backend-completion --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Runner operation registry and sanitized evidence",
+      "branch": "v41-task-3-runner-operation-registry-sanitized-evidence",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Operation registry records controlled runner lifecycle without treating command success as reviewer approval, main verification, or release readiness.",
+        "Registry records provider id, goal id, task id, role, run id, command template id, status, exit code, timing, artifact refs, redaction status, and failure layer.",
+        "Evidence refs point to sanitized summaries or artifacts.",
+        "Raw provider output, secret-looking values, API keys, OAuth tokens, credential files, and raw provider settings are not exposed.",
+        "Failure layer distinguishes schema, provider availability, command execution, timeout, redaction, workspace, and expected-check failures.",
+        "Worker evidence path: docs/plans/v41-task-3-worker-evidence-2026-06-06.md.",
+        "Review evidence path: docs/plans/v41-task-3-review-evidence-2026-06-06.md.",
+        "Main verification evidence path: docs/plans/v41-task-3-main-verification-evidence-2026-06-06.md.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "State changes come only from explicit backend events, operation registry records, or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke providers directly, open arbitrary local files, merge, push, tag, publish, or self-approve."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v41-controlled-cli-provider-runner-backend-completion --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Workbench preview and confirm binding",
+      "branch": "v41-task-4-workbench-preview-confirm-binding",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Preview returns provider id, active goal/task context, template id, safety fields, expected artifacts, and plan hash.",
+        "Confirm accepts only the previewed context plus plan hash.",
+        "UI cannot submit arbitrary command, provider binary, cwd, path, prompt text, secret, or inactive provider.",
+        "Workbench displays operation status and evidence refs from backend contracts.",
+        "Workbench does not infer reviewer approval, main verification, or release readiness from runner output.",
+        "Worker evidence path: docs/plans/v41-task-4-worker-evidence-2026-06-06.md.",
+        "Review evidence path: docs/plans/v41-task-4-review-evidence-2026-06-06.md.",
+        "Main verification evidence path: docs/plans/v41-task-4-main-verification-evidence-2026-06-06.md.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "State changes come only from explicit backend events, operation registry records, or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke providers directly, open arbitrary local files, merge, push, tag, publish, or self-approve."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v41-controlled-cli-provider-runner-backend-completion --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Backend completion closeout and controlled real CLI evidence",
+      "branch": "v41-task-5-backend-completion-controlled-real-cli-evidence",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "claude-code-cli and codex-cli runner paths are validated through backend-controlled calls or explicit unavailable evidence.",
+        "No raw claude, raw codex, Kiro, Gemini, DeepSeek, or arbitrary shell command is used as fallback evidence.",
+        "Runner evidence records provider id, task context, operation id, command template id, exit code or blocker, artifact refs, redaction status, and recovery notes.",
+        "If real provider CLI execution is required, it runs only through the controlled backend runner.",
+        "Release closeout remains gated by the fixture release gates and explicit release-ready event registration.",
+        "Worker evidence path: docs/plans/v41-task-5-worker-evidence-2026-06-06.md.",
+        "Review evidence path: docs/plans/v41-task-5-review-evidence-2026-06-06.md.",
+        "Main verification evidence path: docs/plans/v41-task-5-main-verification-evidence-2026-06-06.md.",
+        "The task is anchored to active goal/task/run/evidence context.",
+        "State changes come only from explicit backend events, operation registry records, or command outputs.",
+        "UI does not execute arbitrary shell commands, invoke providers directly, open arbitrary local files, merge, push, tag, publish, or self-approve."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v41-controlled-cli-provider-runner-backend-completion --json",
+        "pnpm --silent symphony goal closeout --goal v41-controlled-cli-provider-runner-backend-completion --markdown"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

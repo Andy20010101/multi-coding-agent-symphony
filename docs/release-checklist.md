@@ -79,6 +79,8 @@ pnpm smoke:kiro:help
 
 Expected result: help smokes verify local binaries only and must not invoke model APIs.
 
+For v41 controlled provider runner work, only `codex-cli` and `claude-code-cli` are active providers. The Kiro help smoke remains a historical optional repo-level check and is not a v41 active provider, runner target, or release gate.
+
 ## Security Gates
 
 Run the checks in [Security Checklist](security-checklist.md). At minimum:
@@ -107,6 +109,8 @@ Expected result: `doctor --real-cli` returns status `ok`, each enabled smoke ret
 Model precedence is `MCAS_*_MODEL` env, then `config/real-cli-release.json`, then adapter default. The checked-in release config pins Claude Code to `deepseek-v4-pro` and pins the Claude provider preflight value to `deepseek`; set `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` and `ANTHROPIC_API_KEY=<DeepSeek API key>` before running the Claude real lane. `MCAS_CLAUDE_MODEL=<provider-model>` or `MCAS_CLAUDE_PROVIDER=<auth-provider>` still override the release config. Claude release preflight fails if it would fall back to the adapter default `deepseek-claude-code` or if the effective provider differs from the configured provider.
 For Claude real smoke, the proof artifact must show `requestedModelProfile`, `observedModelProfile`, and `modelProfileStatus`; `mismatched` means local Claude settings or provider aliases changed the model actually launched.
 The Harness smoke must execute the standard `implement -> review -> qa` chain and write `diagnosticLayer` on failure so the failing layer is one of `schema`, `prompt`, `workspace`, or `expected-check`.
+
+For v41 scoped closeout, do not use Kiro, Gemini, DeepSeek, or raw provider CLI commands as real CLI evidence. If v41 task evidence requires real provider CLI execution, it must run only through the controlled backend runner for `claude-code-cli` or `codex-cli` and must record sanitized evidence or an explicit blocker.
 
 ## Optional CI Gate
 

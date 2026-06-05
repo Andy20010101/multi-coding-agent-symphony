@@ -1,13 +1,13 @@
 # Local Supervisor Runner
 
-Date: 2026-06-05
+Date: 2026-06-06
 
-This is a temporary local control-plane runner for v38+ goal work. It is not v38 product functionality.
+This temporary local control-plane runner can plan the next v41 controller handoff. It remains outside the v41 provider runner product scope.
 
 ## Command
 
 ```sh
-pnpm symphony supervisor run --goal v38-provider-hub-capability-profiles --max-cycles 20 --json
+pnpm symphony supervisor run --goal v41-controlled-cli-provider-runner-backend-completion --max-cycles 20 --json
 ```
 
 The current MVP is dry-run only. It reconciles managed goal state and returns the next controller action without creating Codex threads, running tests, registering events, or reading long artifacts.
@@ -43,12 +43,12 @@ When a completed thread result is supplied:
 
 ```sh
 pnpm symphony supervisor run \
-  --goal v38-provider-hub-capability-profiles \
+  --goal v41-controlled-cli-provider-runner-backend-completion \
   --completed-thread 019e955c-683a-7831-8851-7855ce7780ba \
   --task task-5 \
   --role main-verifier \
   --result-event main.verification-passed \
-  --evidence-ref docs/plans/v38-task-5-main-verification-evidence-2026-06-02.md \
+  --evidence-ref docs/plans/v41-task-5-main-verification-evidence-2026-06-06.md \
   --json
 ```
 
