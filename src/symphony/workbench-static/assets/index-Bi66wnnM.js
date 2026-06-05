@@ -9918,6 +9918,7 @@ var JOB_CREATION_CONTRACT_NAME = "job-creation.v1";
 var JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = "job-timeline-log-stream.v1";
 var JOB_RUN_CONTROL_CONTRACT_NAME = "job-run-control.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
+var APP_CORE_DIAGNOSTICS_BUNDLE_CONTRACT_NAME = "app-core-diagnostics-bundle.v1";
 var ARTIFACT_INDEX_CONTRACT_NAME = "artifact-index.v1";
 var EVIDENCE_TIMELINE_CONTRACT_NAME = "evidence-timeline.v1";
 var RELEASE_BUNDLE_CONTRACT_NAME = "release-bundle.v1";
@@ -10569,6 +10570,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: DIAGNOSTICS_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "diagnosticsBundle",
+		label: "Diagnostics Bundle",
+		path: "/api/diagnostics/bundle",
+		method: "GET",
+		contractName: APP_CORE_DIAGNOSTICS_BUNDLE_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "artifactIndex",
 		label: "Artifact Index",
 		path: "/api/artifacts",
@@ -10828,6 +10836,7 @@ function projectWorkbenchContracts(results) {
 	const providerLanePreviewData = dataFrom(results.providerLanePreview);
 	const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
 	const diagnosticsData = dataFrom(results.diagnostics);
+	const diagnosticsBundleData = dataFrom(results.diagnosticsBundle);
 	const jobModelData = dataFrom(results.jobModel);
 	const jobCreationData = dataFrom(results.jobCreation);
 	const jobTimelineData = dataFrom(results.jobTimeline);
@@ -10955,6 +10964,10 @@ function projectWorkbenchContracts(results) {
 		result: results.backupExport,
 		backupExport: backupExportData
 	});
+	const projectedDiagnosticsBundle = projectDiagnosticsBundle({
+		result: results.diagnosticsBundle,
+		diagnosticsBundle: diagnosticsBundleData
+	});
 	const projectedProviderLanePreview = projectProviderLanePreview({
 		result: results.providerLanePreview,
 		preview: providerLanePreviewData
@@ -10999,6 +11012,7 @@ function projectWorkbenchContracts(results) {
 			evidenceTimeline: projectedEvidenceTimeline,
 			releaseBundle: projectedReleaseBundle,
 			backupExport: projectedBackupExport,
+			diagnosticsBundle: projectedDiagnosticsBundle,
 			providerHub: projectedProviderHub,
 			routeStates
 		}),
@@ -11060,6 +11074,7 @@ function projectWorkbenchContracts(results) {
 			migration: appSchemaMigrationData
 		}),
 		diagnosticsV1: projectDiagnostics(diagnosticsData),
+		diagnosticsBundle: projectedDiagnosticsBundle,
 		jobConsole: projectedJobConsole,
 		evidenceTimeline: projectedEvidenceTimeline,
 		releaseBundle: projectedReleaseBundle,
@@ -11343,7 +11358,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, providerHub, routeStates }) {
+function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, diagnosticsBundle, providerHub, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const runtimeRoute = findProjectedRoute(routeStates, "runtimeSnapshot");
 	const goalRoute = findProjectedRoute(routeStates, "goalRunbook");
@@ -11356,6 +11371,7 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 	const evidenceRoute = findProjectedRoute(routeStates, "evidenceTimeline");
 	const releaseBundleRoute = findProjectedRoute(routeStates, "releaseBundle");
 	const backupExportRoute = findProjectedRoute(routeStates, "backupExport");
+	const diagnosticsBundleRoute = findProjectedRoute(routeStates, "diagnosticsBundle");
 	const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
 	const currentProject = currentProjectFromRegistry(projectRegistry);
 	const sidecarAttachState = firstValue(sidecarHost?.attachState);
@@ -11510,10 +11526,12 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 			evidenceTimeline,
 			releaseBundle,
 			backupExport,
+			diagnosticsBundle,
 			artifactRoute,
 			evidenceRoute,
 			releaseBundleRoute,
-			backupExportRoute
+			backupExportRoute,
+			diagnosticsBundleRoute
 		}),
 		providerHub,
 		boundaries: {
@@ -11585,7 +11603,7 @@ function projectDesktopJobRun({ jobConsole, jobRoute, jobCreationRoute, jobTimel
 		}
 	};
 }
-function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, artifactRoute, evidenceRoute, releaseBundleRoute, backupExportRoute }) {
+function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, diagnosticsBundle, artifactRoute, evidenceRoute, releaseBundleRoute, backupExportRoute, diagnosticsBundleRoute }) {
 	const previewItems = (artifactRefs?.items ?? []).map((artifact) => ({
 		kind: artifact.kind,
 		status: artifact.status,
@@ -11609,7 +11627,7 @@ function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidence
 			evidenceTimeline,
 			releaseBundle
 		})),
-		sourcePolicy: valueState("artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1"),
+		sourcePolicy: valueState("artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-diagnostics-bundle.v1"),
 		registeredRefs: valueState(artifactRefs?.count),
 		status: artifactRefs?.status?.status,
 		missing: artifactRefs?.status?.missing,
@@ -11639,11 +11657,16 @@ function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidence
 		backupManagedStateEntryCount: backupExport?.managedStateEntryCount,
 		backupArtifactRefCount: backupExport?.artifactRefCount,
 		backupRepoContentPolicy: backupExport?.boundaries?.repoContentPolicy,
+		diagnosticsBundleState: valueState(diagnosticsBundle?.state),
+		diagnosticsHealth: diagnosticsBundle?.health?.status,
+		diagnosticsRecentFailures: diagnosticsBundle?.recentFailureCount,
+		diagnosticsLogRefs: diagnosticsBundle?.sanitizedLogRefCount,
 		route: valueState(artifactRoute?.path),
 		routeState: valueState(routeStateFromRoute(artifactRoute)),
 		evidenceRouteState: valueState(routeStateFromRoute(evidenceRoute)),
 		releaseBundleRouteState: valueState(routeStateFromRoute(releaseBundleRoute)),
 		backupExportRouteState: valueState(routeStateFromRoute(backupExportRoute)),
+		diagnosticsBundleRouteState: valueState(routeStateFromRoute(diagnosticsBundleRoute)),
 		boundaries: {
 			readOnly: artifactIndex?.boundaries?.readOnly ?? valueState(true),
 			canonicalSource: artifactIndex?.boundaries?.canonicalSource ?? valueState("ArtifactStore is canonical"),
@@ -17847,6 +17870,97 @@ function projectDiagnostics(diagnostics) {
 		note: "Diagnostics panel 只展示 diagnostics.v1 的安全健康字段；浏览器端不会运行 shell、测试、audit、mutation 或模型调用。"
 	};
 }
+function projectDiagnosticsBundle({ result, diagnosticsBundle }) {
+	if (diagnosticsBundle === null || diagnosticsBundle === void 0) return {
+		state: result?.ok === true ? "empty" : "unavailable",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(void 0),
+		contractVersion: valueState(void 0),
+		generatedAt: valueState(void 0),
+		readOnly: valueState(void 0),
+		context: {},
+		health: {
+			status: valueState(void 0),
+			runtimeStatus: valueState(void 0),
+			runtimeVersion: valueState(void 0),
+			kernelVersion: valueState(void 0),
+			nodeVersion: valueState(void 0),
+			checkStatus: valueState(void 0),
+			checkTotal: valueState(0),
+			warnings: valueState(0),
+			errors: valueState(0)
+		},
+		gateStatus: {
+			state: valueState("missing"),
+			goalStatus: valueState("unknown"),
+			releaseReady: valueState(false),
+			taskCount: valueState(0),
+			mainVerifiedCount: valueState(0),
+			blockedCount: valueState(0),
+			gates: valueState([])
+		},
+		recentFailureCount: valueState(0),
+		recentFailures: valueState([]),
+		sanitizedLogRefCount: valueState(0),
+		sanitizedLogRefs: valueState([]),
+		boundaries: {},
+		note: "Diagnostics bundle 未暴露 / 不可用。"
+	};
+	const recentFailures = Array.isArray(diagnosticsBundle.recentFailures) ? diagnosticsBundle.recentFailures : [];
+	const logRefs = Array.isArray(diagnosticsBundle.sanitizedLogs?.refs) ? diagnosticsBundle.sanitizedLogs.refs : [];
+	const gates = Array.isArray(diagnosticsBundle.gateStatus?.gates) ? diagnosticsBundle.gateStatus.gates : [];
+	return {
+		state: diagnosticsBundle.health?.status ?? "available",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(diagnosticsBundle.contractName),
+		contractVersion: valueState(diagnosticsBundle.contractVersion),
+		generatedAt: valueState(diagnosticsBundle.generatedAt),
+		readOnly: valueState(diagnosticsBundle.readOnly),
+		context: {
+			goalId: valueState(diagnosticsBundle.context?.goalId),
+			resolvedGoalId: valueState(diagnosticsBundle.context?.resolvedGoalId),
+			taskId: valueState(diagnosticsBundle.context?.taskId),
+			diagnosticsRole: valueState(diagnosticsBundle.context?.diagnosticsRole),
+			stateSource: valueState(diagnosticsBundle.context?.stateSource)
+		},
+		health: {
+			status: valueState(diagnosticsBundle.health?.status),
+			runtimeStatus: valueState(diagnosticsBundle.health?.runtime?.status),
+			runtimeVersion: valueState(diagnosticsBundle.health?.runtime?.runtimeVersion),
+			kernelVersion: valueState(diagnosticsBundle.health?.runtime?.kernelVersion),
+			nodeVersion: valueState(diagnosticsBundle.health?.runtime?.nodeVersion),
+			checkStatus: valueState(diagnosticsBundle.health?.checks?.status),
+			checkTotal: valueState(diagnosticsBundle.health?.checks?.total ?? 0),
+			warnings: valueState(diagnosticsBundle.health?.checks?.warnings ?? 0),
+			errors: valueState(diagnosticsBundle.health?.checks?.errors ?? 0)
+		},
+		gateStatus: {
+			state: valueState(diagnosticsBundle.gateStatus?.state),
+			goalStatus: valueState(diagnosticsBundle.gateStatus?.goalStatus),
+			releaseReady: valueState(diagnosticsBundle.gateStatus?.releaseReady),
+			taskCount: valueState(diagnosticsBundle.gateStatus?.taskCount ?? 0),
+			mainVerifiedCount: valueState(diagnosticsBundle.gateStatus?.mainVerifiedCount ?? 0),
+			blockedCount: valueState(diagnosticsBundle.gateStatus?.blockedCount ?? 0),
+			gates: valueState(gates)
+		},
+		recentFailureCount: valueState(recentFailures.length),
+		recentFailures: valueState(recentFailures),
+		sanitizedLogRefCount: valueState(logRefs.length),
+		sanitizedLogRefs: valueState(logRefs),
+		boundaries: {
+			readOnly: valueState(diagnosticsBundle.boundaries?.readOnly),
+			includesSecretValues: valueState(diagnosticsBundle.boundaries?.includesSecretValues),
+			includesRawLogBodies: valueState(diagnosticsBundle.boundaries?.includesRawLogBodies),
+			arbitraryPathReadAvailable: valueState(diagnosticsBundle.boundaries?.arbitraryPathReadAvailable),
+			shellExecutionAvailable: valueState(diagnosticsBundle.boundaries?.shellExecutionAvailable),
+			modelInvocationAvailable: valueState(diagnosticsBundle.boundaries?.modelInvocationAvailable),
+			releaseDecisionAvailable: valueState(diagnosticsBundle.boundaries?.releaseDecisionAvailable),
+			logPolicy: valueState(diagnosticsBundle.boundaries?.logPolicy),
+			statusSource: valueState(diagnosticsBundle.boundaries?.statusSource)
+		},
+		note: "Diagnostics Bundle 只展示 sanitized health、versions、recent failures、gate status 和 structured log refs。浏览器端不读取 raw logs、不执行 shell、不登记 gate。"
+	};
+}
 function projectJobConsole({ jobModelResult, jobModel, jobCreationResult, jobCreation, jobTimelineResult, jobTimeline, jobRunControlResult, jobRunControl }) {
 	const jobModelOk = jobModelResult?.ok === true;
 	const jobCreationOk = jobCreationResult?.ok === true;
@@ -19854,6 +19968,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(BackupExportPanel, {
 							backupExport: model.backupExport,
 							route: findRoute(model.routeStates, "backupExport")
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnosticsBundlePanel, {
+							diagnosticsBundle: model.diagnosticsBundle,
+							route: findRoute(model.routeStates, "diagnosticsBundle")
 						})
 					]
 				}),
@@ -20374,6 +20492,10 @@ function DesktopArtifactReadinessCard({ artifactReadiness }) {
 				["backup state entries", artifactReadiness?.backupManagedStateEntryCount],
 				["backup artifact refs", artifactReadiness?.backupArtifactRefCount],
 				["repo content policy", artifactReadiness?.backupRepoContentPolicy],
+				["diagnostics bundle", artifactReadiness?.diagnosticsBundleState],
+				["diagnostics health", artifactReadiness?.diagnosticsHealth],
+				["recent failures", artifactReadiness?.diagnosticsRecentFailures],
+				["diagnostics log refs", artifactReadiness?.diagnosticsLogRefs],
 				["local file open", artifactReadiness?.boundaries?.localFileOpenAvailable],
 				["source", artifactReadiness?.sourcePolicy]
 			] }),
@@ -21884,6 +22006,129 @@ function BackupExcludedRepoContentList({ entries }) {
 				className: "artifact-meta",
 				children: entry.reason ?? "-"
 			})]
+		}, index))
+	});
+}
+function DiagnosticsBundlePanel({ diagnosticsBundle, route }) {
+	const failures = diagnosticsBundle?.recentFailures?.value ?? [];
+	const logRefs = diagnosticsBundle?.sanitizedLogRefs?.value ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "diagnostics-bundle-panel",
+		kicker: "v39 diagnostics bundle",
+		title: "Diagnostics Bundle",
+		state: routeStateText(route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", diagnosticsBundle?.contractName],
+				["contractVersion", diagnosticsBundle?.contractVersion],
+				["generatedAt", diagnosticsBundle?.generatedAt],
+				["readOnly", diagnosticsBundle?.readOnly],
+				["context.goalId", diagnosticsBundle?.context?.goalId],
+				["context.resolvedGoalId", diagnosticsBundle?.context?.resolvedGoalId],
+				["context.taskId", diagnosticsBundle?.context?.taskId],
+				["context.role", diagnosticsBundle?.context?.diagnosticsRole],
+				["health.status", diagnosticsBundle?.health?.status],
+				["runtime.status", diagnosticsBundle?.health?.runtimeStatus],
+				["runtime.version", diagnosticsBundle?.health?.runtimeVersion],
+				["kernel.version", diagnosticsBundle?.health?.kernelVersion],
+				["node.version", diagnosticsBundle?.health?.nodeVersion],
+				["checks.status", diagnosticsBundle?.health?.checkStatus],
+				["checks.total", diagnosticsBundle?.health?.checkTotal],
+				["checks.warnings", diagnosticsBundle?.health?.warnings],
+				["checks.errors", diagnosticsBundle?.health?.errors],
+				["gate.status", diagnosticsBundle?.gateStatus?.goalStatus],
+				["gate.releaseReady", diagnosticsBundle?.gateStatus?.releaseReady],
+				["gate.taskCount", diagnosticsBundle?.gateStatus?.taskCount],
+				["gate.mainVerified", diagnosticsBundle?.gateStatus?.mainVerifiedCount],
+				["gate.blocked", diagnosticsBundle?.gateStatus?.blockedCount],
+				["recentFailures", diagnosticsBundle?.recentFailureCount],
+				["sanitizedLogRefs", diagnosticsBundle?.sanitizedLogRefCount],
+				["boundaries.includesRawLogBodies", diagnosticsBundle?.boundaries?.includesRawLogBodies],
+				["boundaries.includesSecretValues", diagnosticsBundle?.boundaries?.includesSecretValues],
+				["boundaries.statusSource", diagnosticsBundle?.boundaries?.statusSource],
+				["boundaries.logPolicy", diagnosticsBundle?.boundaries?.logPolicy]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `recent failures (${failures.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnosticsFailureList, { failures })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: `sanitized log refs (${logRefs.length})`,
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnosticsLogRefList, { refs: logRefs })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: diagnosticsBundle?.note ?? "Diagnostics Bundle 只展示 sanitized health、versions、recent failures、gate status 和 log refs。"
+			})
+		]
+	});
+}
+function DiagnosticsFailureList({ failures }) {
+	if (!Array.isArray(failures) || failures.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 recent failure 条目"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "artifact-list",
+		children: failures.map((failure, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-kind",
+					children: failure.status ?? "-"
+				}),
+				" ",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-ref",
+					children: failure.message ?? "-"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-meta",
+					children: [
+						" ",
+						"source=",
+						failure.source ?? "-",
+						" task=",
+						failure.task_id ?? "-",
+						" run=",
+						failure.run_id ?? "-"
+					]
+				})
+			]
+		}, index))
+	});
+}
+function DiagnosticsLogRefList({ refs }) {
+	if (!Array.isArray(refs) || refs.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "empty-list",
+		children: "暂无 sanitized log ref"
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "artifact-list",
+		children: refs.slice(0, 8).map((ref, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+			className: "artifact-item",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-kind",
+					children: ref.kind ?? "-"
+				}),
+				" ",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "artifact-ref",
+					children: ref.uri ?? "-"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+					className: "artifact-meta",
+					children: [
+						" ",
+						"available=",
+						String(ref.available),
+						" note=",
+						ref.note ?? "-"
+					]
+				})
+			]
 		}, index))
 	});
 }

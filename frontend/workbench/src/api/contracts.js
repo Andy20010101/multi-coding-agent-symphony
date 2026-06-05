@@ -33,6 +33,7 @@ const JOB_CREATION_CONTRACT_NAME = 'job-creation.v1';
 const JOB_TIMELINE_LOG_STREAM_CONTRACT_NAME = 'job-timeline-log-stream.v1';
 const JOB_RUN_CONTROL_CONTRACT_NAME = 'job-run-control.v1';
 const DIAGNOSTICS_CONTRACT_NAME = 'diagnostics.v1';
+const APP_CORE_DIAGNOSTICS_BUNDLE_CONTRACT_NAME = 'app-core-diagnostics-bundle.v1';
 const ARTIFACT_INDEX_CONTRACT_NAME = 'artifact-index.v1';
 const EVIDENCE_TIMELINE_CONTRACT_NAME = 'evidence-timeline.v1';
 const RELEASE_BUNDLE_CONTRACT_NAME = 'release-bundle.v1';
@@ -572,6 +573,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: DIAGNOSTICS_CONTRACT_NAME
   }),
   Object.freeze({
+    id: 'diagnosticsBundle',
+    label: 'Diagnostics Bundle',
+    path: '/api/diagnostics/bundle',
+    method: 'GET',
+    contractName: APP_CORE_DIAGNOSTICS_BUNDLE_CONTRACT_NAME
+  }),
+  Object.freeze({
     id: 'artifactIndex',
     label: 'Artifact Index',
     path: '/api/artifacts',
@@ -852,6 +860,7 @@ export function projectWorkbenchContracts(results) {
   const providerLanePreviewData = dataFrom(results.providerLanePreview);
   const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
   const diagnosticsData = dataFrom(results.diagnostics);
+  const diagnosticsBundleData = dataFrom(results.diagnosticsBundle);
   const jobModelData = dataFrom(results.jobModel);
   const jobCreationData = dataFrom(results.jobCreation);
   const jobTimelineData = dataFrom(results.jobTimeline);
@@ -1020,6 +1029,10 @@ export function projectWorkbenchContracts(results) {
     result: results.backupExport,
     backupExport: backupExportData
   });
+  const projectedDiagnosticsBundle = projectDiagnosticsBundle({
+    result: results.diagnosticsBundle,
+    diagnosticsBundle: diagnosticsBundleData
+  });
   const projectedProviderLanePreview = projectProviderLanePreview({
     result: results.providerLanePreview,
     preview: providerLanePreviewData
@@ -1066,6 +1079,7 @@ export function projectWorkbenchContracts(results) {
       evidenceTimeline: projectedEvidenceTimeline,
       releaseBundle: projectedReleaseBundle,
       backupExport: projectedBackupExport,
+      diagnosticsBundle: projectedDiagnosticsBundle,
       providerHub: projectedProviderHub,
       routeStates
     }),
@@ -1127,6 +1141,7 @@ export function projectWorkbenchContracts(results) {
       migration: appSchemaMigrationData
     }),
     diagnosticsV1: projectDiagnostics(diagnosticsData),
+    diagnosticsBundle: projectedDiagnosticsBundle,
     jobConsole: projectedJobConsole,
     evidenceTimeline: projectedEvidenceTimeline,
     releaseBundle: projectedReleaseBundle,
@@ -1459,6 +1474,7 @@ function projectDesktopShell({
   evidenceTimeline,
   releaseBundle,
   backupExport,
+  diagnosticsBundle,
   providerHub,
   routeStates
 }) {
@@ -1474,6 +1490,7 @@ function projectDesktopShell({
   const evidenceRoute = findProjectedRoute(routeStates, 'evidenceTimeline');
   const releaseBundleRoute = findProjectedRoute(routeStates, 'releaseBundle');
   const backupExportRoute = findProjectedRoute(routeStates, 'backupExport');
+  const diagnosticsBundleRoute = findProjectedRoute(routeStates, 'diagnosticsBundle');
   const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
   const currentProject = currentProjectFromRegistry(projectRegistry);
   const sidecarAttachState = firstValue(sidecarHost?.attachState);
@@ -1636,10 +1653,12 @@ function projectDesktopShell({
       evidenceTimeline,
       releaseBundle,
       backupExport,
+      diagnosticsBundle,
       artifactRoute,
       evidenceRoute,
       releaseBundleRoute,
-      backupExportRoute
+      backupExportRoute,
+      diagnosticsBundleRoute
     }),
     providerHub,
     boundaries: {
@@ -1726,10 +1745,12 @@ function projectDesktopArtifactReadiness({
   evidenceTimeline,
   releaseBundle,
   backupExport,
+  diagnosticsBundle,
   artifactRoute,
   evidenceRoute,
   releaseBundleRoute,
-  backupExportRoute
+  backupExportRoute,
+  diagnosticsBundleRoute
 }) {
   const previewItems = (artifactRefs?.items ?? []).map((artifact) => ({
     kind: artifact.kind,
@@ -1755,7 +1776,7 @@ function projectDesktopArtifactReadiness({
       evidenceTimeline,
       releaseBundle
     })),
-    sourcePolicy: valueState('artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1'),
+    sourcePolicy: valueState('artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-diagnostics-bundle.v1'),
     registeredRefs: valueState(artifactRefs?.count),
     status: artifactRefs?.status?.status,
     missing: artifactRefs?.status?.missing,
@@ -1787,11 +1808,16 @@ function projectDesktopArtifactReadiness({
     backupManagedStateEntryCount: backupExport?.managedStateEntryCount,
     backupArtifactRefCount: backupExport?.artifactRefCount,
     backupRepoContentPolicy: backupExport?.boundaries?.repoContentPolicy,
+    diagnosticsBundleState: valueState(diagnosticsBundle?.state),
+    diagnosticsHealth: diagnosticsBundle?.health?.status,
+    diagnosticsRecentFailures: diagnosticsBundle?.recentFailureCount,
+    diagnosticsLogRefs: diagnosticsBundle?.sanitizedLogRefCount,
     route: valueState(artifactRoute?.path),
     routeState: valueState(routeStateFromRoute(artifactRoute)),
     evidenceRouteState: valueState(routeStateFromRoute(evidenceRoute)),
     releaseBundleRouteState: valueState(routeStateFromRoute(releaseBundleRoute)),
     backupExportRouteState: valueState(routeStateFromRoute(backupExportRoute)),
+    diagnosticsBundleRouteState: valueState(routeStateFromRoute(diagnosticsBundleRoute)),
     boundaries: {
       readOnly: artifactIndex?.boundaries?.readOnly ?? valueState(true),
       canonicalSource: artifactIndex?.boundaries?.canonicalSource ?? valueState('ArtifactStore is canonical'),
@@ -10069,6 +10095,108 @@ function projectDiagnostics(diagnostics) {
       available: valueState(available)
     })),
     note: 'Diagnostics panel 只展示 diagnostics.v1 的安全健康字段；浏览器端不会运行 shell、测试、audit、mutation 或模型调用。'
+  };
+}
+
+function projectDiagnosticsBundle({ result, diagnosticsBundle }) {
+  if (diagnosticsBundle === null || diagnosticsBundle === undefined) {
+    return {
+      state: result?.ok === true ? 'empty' : 'unavailable',
+      errorEnvelope: result?.errorEnvelope ?? null,
+      contractName: valueState(undefined),
+      contractVersion: valueState(undefined),
+      generatedAt: valueState(undefined),
+      readOnly: valueState(undefined),
+      context: {},
+      health: {
+        status: valueState(undefined),
+        runtimeStatus: valueState(undefined),
+        runtimeVersion: valueState(undefined),
+        kernelVersion: valueState(undefined),
+        nodeVersion: valueState(undefined),
+        checkStatus: valueState(undefined),
+        checkTotal: valueState(0),
+        warnings: valueState(0),
+        errors: valueState(0)
+      },
+      gateStatus: {
+        state: valueState('missing'),
+        goalStatus: valueState('unknown'),
+        releaseReady: valueState(false),
+        taskCount: valueState(0),
+        mainVerifiedCount: valueState(0),
+        blockedCount: valueState(0),
+        gates: valueState([])
+      },
+      recentFailureCount: valueState(0),
+      recentFailures: valueState([]),
+      sanitizedLogRefCount: valueState(0),
+      sanitizedLogRefs: valueState([]),
+      boundaries: {},
+      note: 'Diagnostics bundle 未暴露 / 不可用。'
+    };
+  }
+
+  const recentFailures = Array.isArray(diagnosticsBundle.recentFailures)
+    ? diagnosticsBundle.recentFailures
+    : [];
+  const logRefs = Array.isArray(diagnosticsBundle.sanitizedLogs?.refs)
+    ? diagnosticsBundle.sanitizedLogs.refs
+    : [];
+  const gates = Array.isArray(diagnosticsBundle.gateStatus?.gates)
+    ? diagnosticsBundle.gateStatus.gates
+    : [];
+
+  return {
+    state: diagnosticsBundle.health?.status ?? 'available',
+    errorEnvelope: result?.errorEnvelope ?? null,
+    contractName: valueState(diagnosticsBundle.contractName),
+    contractVersion: valueState(diagnosticsBundle.contractVersion),
+    generatedAt: valueState(diagnosticsBundle.generatedAt),
+    readOnly: valueState(diagnosticsBundle.readOnly),
+    context: {
+      goalId: valueState(diagnosticsBundle.context?.goalId),
+      resolvedGoalId: valueState(diagnosticsBundle.context?.resolvedGoalId),
+      taskId: valueState(diagnosticsBundle.context?.taskId),
+      diagnosticsRole: valueState(diagnosticsBundle.context?.diagnosticsRole),
+      stateSource: valueState(diagnosticsBundle.context?.stateSource)
+    },
+    health: {
+      status: valueState(diagnosticsBundle.health?.status),
+      runtimeStatus: valueState(diagnosticsBundle.health?.runtime?.status),
+      runtimeVersion: valueState(diagnosticsBundle.health?.runtime?.runtimeVersion),
+      kernelVersion: valueState(diagnosticsBundle.health?.runtime?.kernelVersion),
+      nodeVersion: valueState(diagnosticsBundle.health?.runtime?.nodeVersion),
+      checkStatus: valueState(diagnosticsBundle.health?.checks?.status),
+      checkTotal: valueState(diagnosticsBundle.health?.checks?.total ?? 0),
+      warnings: valueState(diagnosticsBundle.health?.checks?.warnings ?? 0),
+      errors: valueState(diagnosticsBundle.health?.checks?.errors ?? 0)
+    },
+    gateStatus: {
+      state: valueState(diagnosticsBundle.gateStatus?.state),
+      goalStatus: valueState(diagnosticsBundle.gateStatus?.goalStatus),
+      releaseReady: valueState(diagnosticsBundle.gateStatus?.releaseReady),
+      taskCount: valueState(diagnosticsBundle.gateStatus?.taskCount ?? 0),
+      mainVerifiedCount: valueState(diagnosticsBundle.gateStatus?.mainVerifiedCount ?? 0),
+      blockedCount: valueState(diagnosticsBundle.gateStatus?.blockedCount ?? 0),
+      gates: valueState(gates)
+    },
+    recentFailureCount: valueState(recentFailures.length),
+    recentFailures: valueState(recentFailures),
+    sanitizedLogRefCount: valueState(logRefs.length),
+    sanitizedLogRefs: valueState(logRefs),
+    boundaries: {
+      readOnly: valueState(diagnosticsBundle.boundaries?.readOnly),
+      includesSecretValues: valueState(diagnosticsBundle.boundaries?.includesSecretValues),
+      includesRawLogBodies: valueState(diagnosticsBundle.boundaries?.includesRawLogBodies),
+      arbitraryPathReadAvailable: valueState(diagnosticsBundle.boundaries?.arbitraryPathReadAvailable),
+      shellExecutionAvailable: valueState(diagnosticsBundle.boundaries?.shellExecutionAvailable),
+      modelInvocationAvailable: valueState(diagnosticsBundle.boundaries?.modelInvocationAvailable),
+      releaseDecisionAvailable: valueState(diagnosticsBundle.boundaries?.releaseDecisionAvailable),
+      logPolicy: valueState(diagnosticsBundle.boundaries?.logPolicy),
+      statusSource: valueState(diagnosticsBundle.boundaries?.statusSource)
+    },
+    note: 'Diagnostics Bundle 只展示 sanitized health、versions、recent failures、gate status 和 structured log refs。浏览器端不读取 raw logs、不执行 shell、不登记 gate。'
   };
 }
 

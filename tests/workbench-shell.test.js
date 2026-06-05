@@ -896,6 +896,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/bundle',
       '/api/capabilities',
       '/api/diagnostics',
+      '/api/diagnostics/bundle',
       '/api/evidence/timeline',
       '/api/goals',
       '/api/goals/${goalId}/verification-run-confirm',

@@ -362,6 +362,10 @@ export function WorkbenchShell({
               backupExport={model.backupExport}
               route={findRoute(model.routeStates, 'backupExport')}
             />
+            <DiagnosticsBundlePanel
+              diagnosticsBundle={model.diagnosticsBundle}
+              route={findRoute(model.routeStates, 'diagnosticsBundle')}
+            />
           </section>
 
           <section className="support-grid" aria-label="只读 contract 支撑信息">
@@ -882,6 +886,10 @@ function DesktopArtifactReadinessCard({ artifactReadiness }) {
         ['backup state entries', artifactReadiness?.backupManagedStateEntryCount],
         ['backup artifact refs', artifactReadiness?.backupArtifactRefCount],
         ['repo content policy', artifactReadiness?.backupRepoContentPolicy],
+        ['diagnostics bundle', artifactReadiness?.diagnosticsBundleState],
+        ['diagnostics health', artifactReadiness?.diagnosticsHealth],
+        ['recent failures', artifactReadiness?.diagnosticsRecentFailures],
+        ['diagnostics log refs', artifactReadiness?.diagnosticsLogRefs],
         ['local file open', artifactReadiness?.boundaries?.localFileOpenAvailable],
         ['source', artifactReadiness?.sourcePolicy]
       ]} />
@@ -2414,6 +2422,104 @@ function BackupExcludedRepoContentList({ entries }) {
         <li key={index} className="artifact-item">
           <span className="artifact-ref">{entry.ref ?? '-'}</span>
           <span className="artifact-meta">{entry.reason ?? '-'}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function DiagnosticsBundlePanel({ diagnosticsBundle, route }) {
+  const failures = diagnosticsBundle?.recentFailures?.value ?? [];
+  const logRefs = diagnosticsBundle?.sanitizedLogRefs?.value ?? [];
+
+  return (
+    <DataPanel
+      id="diagnostics-bundle-panel"
+      kicker="v39 diagnostics bundle"
+      title="Diagnostics Bundle"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', diagnosticsBundle?.contractName],
+        ['contractVersion', diagnosticsBundle?.contractVersion],
+        ['generatedAt', diagnosticsBundle?.generatedAt],
+        ['readOnly', diagnosticsBundle?.readOnly],
+        ['context.goalId', diagnosticsBundle?.context?.goalId],
+        ['context.resolvedGoalId', diagnosticsBundle?.context?.resolvedGoalId],
+        ['context.taskId', diagnosticsBundle?.context?.taskId],
+        ['context.role', diagnosticsBundle?.context?.diagnosticsRole],
+        ['health.status', diagnosticsBundle?.health?.status],
+        ['runtime.status', diagnosticsBundle?.health?.runtimeStatus],
+        ['runtime.version', diagnosticsBundle?.health?.runtimeVersion],
+        ['kernel.version', diagnosticsBundle?.health?.kernelVersion],
+        ['node.version', diagnosticsBundle?.health?.nodeVersion],
+        ['checks.status', diagnosticsBundle?.health?.checkStatus],
+        ['checks.total', diagnosticsBundle?.health?.checkTotal],
+        ['checks.warnings', diagnosticsBundle?.health?.warnings],
+        ['checks.errors', diagnosticsBundle?.health?.errors],
+        ['gate.status', diagnosticsBundle?.gateStatus?.goalStatus],
+        ['gate.releaseReady', diagnosticsBundle?.gateStatus?.releaseReady],
+        ['gate.taskCount', diagnosticsBundle?.gateStatus?.taskCount],
+        ['gate.mainVerified', diagnosticsBundle?.gateStatus?.mainVerifiedCount],
+        ['gate.blocked', diagnosticsBundle?.gateStatus?.blockedCount],
+        ['recentFailures', diagnosticsBundle?.recentFailureCount],
+        ['sanitizedLogRefs', diagnosticsBundle?.sanitizedLogRefCount],
+        ['boundaries.includesRawLogBodies', diagnosticsBundle?.boundaries?.includesRawLogBodies],
+        ['boundaries.includesSecretValues', diagnosticsBundle?.boundaries?.includesSecretValues],
+        ['boundaries.statusSource', diagnosticsBundle?.boundaries?.statusSource],
+        ['boundaries.logPolicy', diagnosticsBundle?.boundaries?.logPolicy]
+      ]} />
+
+      <Subsection title={`recent failures (${failures.length})`}>
+        <DiagnosticsFailureList failures={failures} />
+      </Subsection>
+
+      <Subsection title={`sanitized log refs (${logRefs.length})`}>
+        <DiagnosticsLogRefList refs={logRefs} />
+      </Subsection>
+
+      <p className="panel-note">{diagnosticsBundle?.note ?? 'Diagnostics Bundle 只展示 sanitized health、versions、recent failures、gate status 和 log refs。'}</p>
+    </DataPanel>
+  );
+}
+
+function DiagnosticsFailureList({ failures }) {
+  if (!Array.isArray(failures) || failures.length === 0) {
+    return <p className="empty-list">暂无 recent failure 条目</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {failures.map((failure, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-kind">{failure.status ?? '-'}</span>
+          {' '}
+          <span className="artifact-ref">{failure.message ?? '-'}</span>
+          <span className="artifact-meta">
+            {' '}source={failure.source ?? '-'} task={failure.task_id ?? '-'} run={failure.run_id ?? '-'}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function DiagnosticsLogRefList({ refs }) {
+  if (!Array.isArray(refs) || refs.length === 0) {
+    return <p className="empty-list">暂无 sanitized log ref</p>;
+  }
+
+  return (
+    <ul className="artifact-list">
+      {refs.slice(0, 8).map((ref, index) => (
+        <li key={index} className="artifact-item">
+          <span className="artifact-kind">{ref.kind ?? '-'}</span>
+          {' '}
+          <span className="artifact-ref">{ref.uri ?? '-'}</span>
+          <span className="artifact-meta">
+            {' '}available={String(ref.available)} note={ref.note ?? '-'}
+          </span>
         </li>
       ))}
     </ul>

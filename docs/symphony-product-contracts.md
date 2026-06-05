@@ -26,6 +26,8 @@ v39 task-2 adds `app-schema-migration.v1`. The contract reports `appData.schemaV
 
 v39 task-3 adds `app-core-backup-export.v1`, exposed through `GET /api/backup/export` and `symphony backup export --json`. The contract lists app core managed state refs, SHA-256 hashes, derived ArtifactStore refs, a manifest hash, and the repo content that is explicitly excluded from the backup export surface. Workbench renders the same contract in the Backup Export panel, and Desktop Shell carries the state/hash/count fields in `DesktopShellMvpViewModel.artifactReadiness`. This path does not copy repo source, docs, tests, `.git`, package manifests, lockfiles, artifact payloads, or arbitrary local paths; it does not write a bundle file, execute shell commands, call models, download artifacts, open files, write git state, self-approve, pass main verification, or declare release readiness.
 
+v39 task-4 adds `app-core-diagnostics-bundle.v1`, exposed through `GET /api/diagnostics/bundle` and `symphony diagnostics bundle --json`. The contract returns sanitized health, runtime and kernel versions, recent failures from explicit backend events or run state, goal gate status, and structured log refs. Workbench renders the same contract in the Diagnostics Bundle panel, and Desktop Shell carries diagnostics health/failure/log-ref counts. This path does not copy raw log bodies, secret values, repo source, artifact payloads, or arbitrary local paths; it does not execute shell commands, call models, write git state, self-approve, pass main verification, or declare release readiness.
+
 ## `app-core-backup-export.v1`
 
 `app-core-backup-export.v1` is the v39 task-3 backup/export contract. It is a manifest, not a file-copy operation.
@@ -49,6 +51,31 @@ The contract contains:
 - `boundaries`: explicit `false` values for bundle file writes, repo content copy, artifact download, local file open, arbitrary path reads, shell/model execution, git writes, merge, push, tag, publish, self-approval, and release decisions.
 
 Workbench displays this contract in `Backup Export`. Desktop Shell displays backup status fields inside artifact readiness. Both surfaces consume backend contract fields only.
+
+## `app-core-diagnostics-bundle.v1`
+
+`app-core-diagnostics-bundle.v1` is the v39 task-4 diagnostics contract. It is a sanitized support bundle, not a raw log export.
+
+Routes and CLI:
+
+```text
+GET /api/diagnostics/bundle
+GET /api/diagnostics/bundle?goal=<goal-id>&task=<task-id>
+symphony diagnostics bundle --goal <goal-id> --task <task-id> --json
+```
+
+The route accepts only optional `goal` and `task` query parameters. The CLI accepts `--goal`, `--task`, `--state-dir`, and `--json`; it rejects `--output` and writes only to stdout.
+
+The contract contains:
+
+- `health`: runtime and diagnostics status with check counts.
+- `versions`: runtime, kernel, Node, and source contract versions.
+- `gateStatus`: goal/task/release gate status from `goal-progress-ledger.v1` when available.
+- `recentFailures`: sanitized event/run failure summaries.
+- `sanitizedLogs.refs`: managed state refs for structured event/run logs; raw log bodies are not copied.
+- `boundaries`: explicit `false` values for raw logs, secret values, arbitrary path reads, shell/model execution, git writes, merge, push, tag, publish, self-approval, and release decisions.
+
+Workbench displays this contract in `Diagnostics Bundle`. Desktop Shell displays diagnostics health, recent failure count, and log-ref count inside artifact readiness. Both surfaces consume backend contract fields only.
 
 ## Shared Rules
 
@@ -90,6 +117,7 @@ Workbench displays this contract in `Backup Export`. Desktop Shell displays back
 - v38 `ProviderHubPanel` is a Workbench/Desktop projection over existing provider and goal evidence contracts. It can show provider availability, blocked reasons, sanitized env variable names with presence booleans, capability gates, lane previews, and ledger evidence refs. It cannot expose env values, API keys, OAuth tokens, credential file contents, raw provider settings, evidence document bodies, provider CLI execution, model invocation, prompt dispatch, automatic provider install, OAuth login, worker/reviewer assignment, approval, main verification, release readiness, git writes, push, tag, or publish.
 - v39 `app-data-inventory.v1` is a read-only inventory contract for long-lived App data. It can list registry, snapshots, job state, artifact index, settings pointers, provider profiles, and evidence refs with owning routes/contracts and boundary flags. It cannot create a second canonical store, read arbitrary paths, open files, download artifacts, read evidence bodies, execute shell commands, invoke models, mutate jobs, expose secrets, write git state, self-approve, pass main verification, or declare release readiness.
 - v39 `app-core-backup-export.v1` is a manifest/hash/ref contract for app core backup visibility. It can hash managed `.symphony` state files, list derived ArtifactStore refs, show a manifest hash, and show repo content exclusions. It cannot copy repo content, include source payloads, include `.git`, write a bundle file, download artifacts, open local files, read arbitrary paths, execute commands, invoke models, write git state, merge, push, tag, publish, self-approve, pass main verification, or declare release readiness.
+- v39 `app-core-diagnostics-bundle.v1` is a sanitized diagnostics contract for app core failure triage. It can show health, versions, recent failure summaries, explicit gate status, and structured log refs. It cannot include raw log bodies, secret values, repo source payloads, arbitrary path reads, shell execution, model invocation, git writes, merge, push, tag, publish, self-approval, main verification, or release readiness.
 - v18 `goal-event-log.v1` is the append-only source for worker evidence, independent review evidence, main verification evidence, release gate evidence, and release ready declaration.
 - v18 `goal-update-plan.v1` is the dry-run contract used by `symphony goal update`, `symphony goal review`, and `symphony goal gate` before confirm appends to the managed journal.
 - v18 keeps the `goal-progress-ledger.v1` contract name. The resolver reads `goal-event-log.v1`; with no events it returns the v17 planned/unknown template.

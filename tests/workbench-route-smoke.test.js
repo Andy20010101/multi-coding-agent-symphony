@@ -35,6 +35,9 @@ import {
   validateDiagnosticsContract
 } from '../src/symphony/diagnostics.js';
 import {
+  validateAppCoreDiagnosticsBundleContract
+} from '../src/symphony/app-core-diagnostics-bundle.js';
+import {
   DEFAULT_GOAL_PROGRESS_GOAL_ID,
   V18_GOAL_EVENT_JOURNAL_GOAL_ID,
   validateGoalProgressLedgerContract
@@ -485,6 +488,18 @@ describe('v16 Workbench route smoke and server parity', () => {
             });
             assert.equal(payload.boundaries.readOnlyApi, true);
           }
+        },
+        {
+          path: '/api/diagnostics/bundle',
+          contractName: 'app-core-diagnostics-bundle.v1',
+          assertPayload(payload) {
+            assert.deepEqual(validateAppCoreDiagnosticsBundleContract(payload), {
+              ok: true,
+              errors: []
+            });
+            assert.equal(payload.boundaries.includesRawLogBodies, false);
+            assert.equal(payload.boundaries.shellExecutionAvailable, false);
+          }
         }
       ];
 
@@ -598,6 +613,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/providers/health',
         '/api/providers/lane-preview',
         '/api/diagnostics',
+        '/api/diagnostics/bundle',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
       ];
       const methods = ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];

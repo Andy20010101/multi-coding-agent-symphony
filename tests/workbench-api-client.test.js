@@ -104,6 +104,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
         ['GET', '/api/jobs/control', 'job-run-control.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
+        ['GET', '/api/diagnostics/bundle', 'app-core-diagnostics-bundle.v1'],
         ['GET', '/api/artifacts', 'artifact-index.v1'],
         ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
@@ -144,6 +145,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/jobs/timeline', 'job-timeline-log-stream.v1'],
         ['GET', '/api/jobs/control', 'job-run-control.v1'],
         ['GET', '/api/diagnostics', 'diagnostics.v1'],
+        ['GET', '/api/diagnostics/bundle', 'app-core-diagnostics-bundle.v1'],
         ['GET', '/api/artifacts', 'artifact-index.v1'],
         ['GET', '/api/evidence/timeline', 'evidence-timeline.v1'],
         ['GET', '/api/release/bundle', 'release-bundle.v1'],
@@ -466,7 +468,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.jobRun.boundaries.arbitraryCommandExecutionAvailable.value, false);
     assert.equal(model.artifactIndex.contractName.text, 'artifact-index.v1');
     assert.equal(model.artifactIndex.entries.count.value, 2);
-    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1');
+    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-diagnostics-bundle.v1');
     assert.equal(model.desktopShell.artifactReadiness.status.text, 'partial');
     assert.equal(model.desktopShell.artifactReadiness.missing.value, 1);
     assert.equal(model.desktopShell.artifactReadiness.safePreviewRoutes.value, 1);
@@ -5919,6 +5921,60 @@ function createV17ReadonlyPayloadEntries({
         nonGetBlocked: true,
         workbenchFallbackProtected: true,
         arbitraryPathPreviewBlocked: true
+      }
+    }],
+    ['/api/diagnostics/bundle', {
+      contractName: 'app-core-diagnostics-bundle.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-05T00:00:00.000Z',
+      readOnly: true,
+      context: {
+        goalId: 'latest',
+        resolvedGoalId: 'latest',
+        taskId: null,
+        cwdRef: 'multi-coding-agent-symphony',
+        sourceContracts: [],
+        stateSource: 'explicit-backend-contracts',
+        diagnosticsRole: 'sanitized-health-and-refs-only'
+      },
+      health: {
+        status: 'ok',
+        runtime: {
+          status: 'ok',
+          runtimeVersion: 'v33-app-runtime-foundation.1',
+          kernelVersion: 'v32-release-manager-workspace-v2',
+          nodeVersion: 'v24.0.0'
+        },
+        checks: {
+          status: 'ok',
+          total: 1,
+          warnings: 0,
+          errors: 0
+        },
+        blockers: []
+      },
+      gateStatus: {
+        state: 'missing',
+        goalStatus: 'unknown',
+        releaseReady: false,
+        taskCount: 0,
+        mainVerifiedCount: 0,
+        blockedCount: 0,
+        gates: []
+      },
+      recentFailures: [],
+      sanitizedLogs: {
+        policy: 'structured-refs-only-no-log-bodies',
+        refs: []
+      },
+      boundaries: {
+        readOnly: true,
+        includesSecretValues: false,
+        includesRawLogBodies: false,
+        arbitraryPathReadAvailable: false,
+        shellExecutionAvailable: false,
+        statusSource: 'explicit-events-and-backend-contracts',
+        logPolicy: 'structured-refs-only'
       }
     }]
   ];
