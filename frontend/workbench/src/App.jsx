@@ -4,6 +4,7 @@ import {
   confirmControlledAdoptionPlan,
   confirmControlledAdoptionPlanFreeze,
   confirmControlledImplementationRunPlan,
+  confirmControlledProviderRunnerPlan,
   confirmControlledVerificationRun,
   confirmGoalEventPlan,
   fetchAdoptionInspection,
@@ -230,6 +231,10 @@ export function WorkbenchShell({
               preview={model.activeGoal.controlledImplementationPlanPreview}
               onControlledImplementationConfirmed={onRefreshWorkbenchContracts}
             />
+          </section>
+
+          <section className="provider-runner-preview-grid" aria-label="v41 controlled provider runner preview">
+            <ControlledProviderRunnerPreviewPanel preview={model.activeGoal.controlledProviderRunnerPreview} />
           </section>
 
           <section className="main-verification-readiness-grid" aria-label="v24 main verification readiness">
@@ -3746,6 +3751,218 @@ function ControlledImplementationPlanPreviewPanel({
 
       <p className="panel-note">{preview?.note}</p>
     </DataPanel>
+  );
+}
+
+function ControlledProviderRunnerPreviewPanel({ preview }) {
+  const [confirmState, setConfirmState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+  const confirmRoute = preview?.confirm?.endpoint?.route?.value;
+  const confirmBody = buildControlledProviderRunnerConfirmBody(preview);
+  const confirmAvailable = preview?.state === 'preview-ready'
+    && preview?.confirm?.available?.value === true
+    && typeof confirmRoute === 'string'
+    && confirmRoute.trim() !== ''
+    && confirmBody !== null;
+
+  async function handleConfirm() {
+    if (!confirmAvailable) {
+      setConfirmState({
+        phase: 'failed',
+        result: null,
+        error: 'provider runner confirm route unavailable'
+      });
+      return;
+    }
+
+    setConfirmState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await confirmControlledProviderRunnerPlan(confirmRoute, confirmBody);
+
+    if (result.ok) {
+      setConfirmState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+      return;
+    }
+
+    setConfirmState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  return (
+    <DataPanel
+      id="controlled-provider-runner-preview-panel"
+      kicker="v41 provider runner"
+      title="Controlled Provider Runner Preview"
+      state={preview?.state ?? 'unavailable'}
+    >
+      <FieldList rows={[
+        ['modelName', preview?.modelName],
+        ['routeState', preview?.routeState],
+        ['goalId', preview?.goalId],
+        ['taskId', preview?.taskId],
+        ['role', preview?.role],
+        ['providerId', preview?.providerId],
+        ['mode', preview?.mode],
+        ['canPreview', preview?.canPreview],
+        ['planId', preview?.plan?.planId],
+        ['planHash', preview?.plan?.planHash],
+        ['status', preview?.plan?.status],
+        ['commandTemplateId', preview?.plan?.commandTemplateId],
+        ['adapterId', preview?.plan?.adapterId]
+      ]} />
+
+      <Subsection title="reviewed context">
+        <FieldList rows={[
+          ['promptRef', preview?.reviewedContext?.promptRef],
+          ['evidenceRef', preview?.reviewedContext?.evidenceRef],
+          ['handoffRef', preview?.reviewedContext?.handoffRef],
+          ['cwdPolicy', preview?.reviewedContext?.cwdPolicy],
+          ['cwdRef', preview?.reviewedContext?.cwdRef],
+          ['timeoutMs', preview?.reviewedContext?.timeoutMs],
+          ['failureLayers', preview?.reviewedContext?.failureLayers]
+        ]} />
+      </Subsection>
+
+      <Subsection title="expected artifacts">
+        <OperationArtifactRefList artifactRefs={preview?.expectedArtifacts} />
+      </Subsection>
+
+      <Subsection title="confirm handoff">
+        <FieldList rows={[
+          ['available', preview?.confirm?.available],
+          ['endpoint.method', preview?.confirm?.endpoint?.method],
+          ['endpoint.route', preview?.confirm?.endpoint?.route],
+          ['endpoint.allowedBodyFields', preview?.confirm?.endpoint?.allowedBodyFields],
+          ['endpoint.requiresSamePreviewContext', preview?.confirm?.endpoint?.requiresSamePreviewContext],
+          ['endpoint.confirmUsesPlanHash', preview?.confirm?.endpoint?.confirmUsesPlanHash]
+        ]} />
+        <div className="goal-event-confirm-actions">
+          <button type="button" onClick={handleConfirm} disabled={!confirmAvailable || confirmState.phase === 'loading'}>
+            Confirm provider runner
+          </button>
+          <code>{confirmRoute ?? 'confirm route unavailable'}</code>
+        </div>
+        {confirmState.phase === 'failed' ? (
+          <p className="error-copy">confirm 错误摘要：{confirmState.error}</p>
+        ) : null}
+        {confirmState.phase === 'loading' ? (
+          <p className="empty-copy">正在通过 backend controlled provider runner 确认 plan hash。</p>
+        ) : null}
+        {confirmState.phase === 'ready' ? (
+          <FieldList rows={[
+            ['contractName', textValue(confirmState.result.contractName)],
+            ['status', textValue(confirmState.result.status)],
+            ['providerId', textValue(confirmState.result.providerId)],
+            ['commandTemplateId', textValue(confirmState.result.commandTemplateId)],
+            ['operationId', textValue(confirmState.result.operation?.operationId)],
+            ['redactionStatus', textValue(confirmState.result.operation?.redaction?.status)],
+            ['failureLayer', textValue(confirmState.result.operation?.failureLayer)],
+            ['rawProviderOutputAvailable', textValue(confirmState.result.output?.rawProviderOutputAvailable)]
+          ]} />
+        ) : null}
+      </Subsection>
+
+      <Subsection title="operation status">
+        <FieldList rows={[
+          ['state', textValue(preview?.operationStatus?.state)],
+          ['sourceContract', preview?.operationStatus?.sourceContract],
+          ['operationId', preview?.operationStatus?.operationId],
+          ['commandKind', preview?.operationStatus?.commandKind],
+          ['status', preview?.operationStatus?.status],
+          ['providerId', preview?.operationStatus?.providerId],
+          ['commandTemplateId', preview?.operationStatus?.commandTemplateId],
+          ['redactionStatus', preview?.operationStatus?.redactionStatus],
+          ['failureLayer', preview?.operationStatus?.failureLayer],
+          ['reviewerApproved', preview?.operationStatus?.reviewerApproved],
+          ['mainVerified', preview?.operationStatus?.mainVerified],
+          ['releaseReady', preview?.operationStatus?.releaseReady]
+        ]} />
+        <OperationArtifactRefList artifactRefs={preview?.operationStatus?.artifactRefs} />
+      </Subsection>
+
+      <Subsection title="endpoint">
+        <FieldList rows={[
+          ['method', preview?.endpoint?.method],
+          ['route', preview?.endpoint?.route],
+          ['allowedQueryFields', preview?.endpoint?.allowedQueryFields],
+          ['rejectsArbitraryCommand', preview?.endpoint?.rejectsArbitraryCommand],
+          ['rejectsProviderBinary', preview?.endpoint?.rejectsProviderBinary],
+          ['rejectsCwdPath', preview?.endpoint?.rejectsCwdPath],
+          ['rejectsPromptText', preview?.endpoint?.rejectsPromptText],
+          ['rejectsSecrets', preview?.endpoint?.rejectsSecrets],
+          ['rejectsInactiveProviders', preview?.endpoint?.rejectsInactiveProviders],
+          ['writesInPreview', preview?.endpoint?.writesInPreview]
+        ]} />
+      </Subsection>
+
+      <Subsection title="safety">
+        <FieldList rows={[
+          ['backendOwnedCommandTemplate', preview?.safety?.backendOwnedCommandTemplate],
+          ['planHashRequired', preview?.safety?.planHashRequired],
+          ['arbitraryCommandInputAvailable', preview?.safety?.arbitraryCommandInputAvailable],
+          ['providerBinaryInputAvailable', preview?.safety?.providerBinaryInputAvailable],
+          ['arbitraryCwdInputAvailable', preview?.safety?.arbitraryCwdInputAvailable],
+          ['promptTextInputAvailable', preview?.safety?.promptTextInputAvailable],
+          ['secretInputAvailable', preview?.safety?.secretInputAvailable],
+          ['rendererProviderInvocationAvailable', preview?.safety?.rendererProviderInvocationAvailable],
+          ['genericShellRunnerAvailable', preview?.safety?.genericShellRunnerAvailable],
+          ['reviewerApprovalInferenceAvailable', preview?.safety?.reviewerApprovalInferenceAvailable],
+          ['mainVerificationInferenceAvailable', preview?.safety?.mainVerificationInferenceAvailable],
+          ['releaseReadinessInferenceAvailable', preview?.safety?.releaseReadinessInferenceAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note}</p>
+    </DataPanel>
+  );
+}
+
+function buildControlledProviderRunnerConfirmBody(preview) {
+  const goalId = preview?.goalId?.value;
+  const taskId = preview?.taskId?.value;
+  const role = preview?.role?.value;
+  const providerId = preview?.providerId?.value;
+  const mode = preview?.mode?.value;
+  const planId = preview?.plan?.planId?.value;
+  const planHash = preview?.plan?.planHash?.value;
+
+  if (![goalId, taskId, role, providerId, mode, planId, planHash].every((value) => typeof value === 'string' && value.trim() !== '')) {
+    return null;
+  }
+
+  return stripEmptyValues({
+    goalId,
+    taskId,
+    role,
+    providerId,
+    mode,
+    promptRef: preview?.reviewedContext?.promptRef?.value,
+    evidenceRef: preview?.reviewedContext?.evidenceRef?.value,
+    handoffRef: preview?.reviewedContext?.handoffRef?.value,
+    planId,
+    planHash
+  });
+}
+
+function stripEmptyValues(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => typeof entry === 'string' && entry.trim() !== '')
   );
 }
 

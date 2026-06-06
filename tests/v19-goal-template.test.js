@@ -18,6 +18,7 @@ import {
 
 const GENERATED_AT = '2026-05-29T10:00:00.000Z';
 const MANAGED_GOAL_ID = 'v20-managed-progress-test';
+const V41_MANAGED_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 const RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.valid.v1.json';
 
 describe('v19 goal progress template bootstrap', () => {
@@ -162,6 +163,37 @@ describe('v19 goal progress template bootstrap', () => {
       assert.equal(exitCode, 0);
       assert.equal(output.stderrText(), '');
       assert.equal(JSON.parse(output.stdoutText()).goalId, MANAGED_GOAL_ID);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves goal-status from a checked-in managed runbook fixture without registration state', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v41-fixture-goal-status-'));
+    const stateDir = join(root, '.symphony');
+
+    try {
+      const output = createOutput();
+      const exitCode = await runSymphonyCli({
+        argv: ['goal-status', '--state-dir', stateDir, '--goal', V41_MANAGED_GOAL_ID, '--json'],
+        stdout: output.stdout,
+        stderr: output.stderr
+      });
+
+      assert.equal(exitCode, 0);
+      assert.equal(output.stderrText(), '');
+
+      const ledger = JSON.parse(output.stdoutText());
+
+      assert.deepEqual(validateGoalProgressLedgerContract(ledger), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(ledger.goalId, V41_MANAGED_GOAL_ID);
+      assert.equal(ledger.goalTitle, 'v41 Controlled CLI Provider Runner + Backend Completion');
+      assert.equal(ledger.summary.totalTasks, 5);
+      assert.equal(task(ledger, 'task-2').title, 'Backend runner execution adapter');
+      assert.equal(task(ledger, 'task-2').statusSource, 'goal-runbook.v1');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

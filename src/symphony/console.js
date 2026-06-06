@@ -115,6 +115,12 @@ import {
   buildWorkflowRouterCategoriesContract
 } from './workflow-router-categories.js';
 import {
+  ControlledProviderRunnerError,
+  V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID,
+  buildControlledProviderRunnerPlanPreview,
+  confirmControlledProviderRunnerPlan
+} from './controlled-provider-runner.js';
+import {
   buildAppStateSnapshot
 } from './app-state-snapshot.js';
 import {
@@ -894,6 +900,22 @@ export function createSymphonyConsoleServer({
 
     try {
       if (method === 'POST') {
+        const controlledProviderRunnerConfirmRequest = parseControlledProviderRunnerConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (controlledProviderRunnerConfirmRequest !== null) {
+          await writeControlledProviderRunnerConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            cwd,
+            runner,
+            request: controlledProviderRunnerConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
         const controlledVerificationRunConfirmRequest = parseControlledVerificationRunConfirmRequestPath(url.pathname, url.searchParams);
 
         if (controlledVerificationRunConfirmRequest !== null) {
@@ -976,7 +998,7 @@ export function createSymphonyConsoleServer({
         writeApiErrorResponse(response, {
           status: 405,
           code: 'method-not-allowed',
-          message: 'Console API is read-only except controlled goal event plan confirm, controlled implementation run confirm, controlled verification run confirm, controlled adoption plan freeze, and controlled adoption confirm.',
+          message: 'Console API is read-only except controlled goal event plan confirm, controlled implementation run confirm, controlled verification run confirm, controlled provider runner confirm, controlled adoption plan freeze, and controlled adoption confirm.',
           route: url.pathname,
           method
         });
@@ -1069,6 +1091,20 @@ export function createSymphonyConsoleServer({
         writeJsonResponse(response, 200, buildAgentCliLaneAssignmentPreviewContract({
           env
         }));
+        return;
+      }
+
+      const controlledProviderRunnerPreviewRequest = parseControlledProviderRunnerPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (controlledProviderRunnerPreviewRequest !== null) {
+        await writeControlledProviderRunnerPreviewResponse({
+          response,
+          stateDir,
+          cwd,
+          request: controlledProviderRunnerPreviewRequest,
+          route: url.pathname,
+          method
+        });
         return;
       }
 
@@ -2927,6 +2963,201 @@ async function writeControlledImplementationRunConfirmResponse({
   }
 }
 
+async function writeControlledProviderRunnerPreviewResponse({ response, stateDir, cwd, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-controlled-provider-runner-preview-request',
+      message: 'Controlled provider runner preview request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    if (request.goalId === V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID) {
+      resolvedGoalId = V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID;
+    } else {
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: 'goal-not-found',
+        message: 'Goal for controlled provider runner preview was not found.',
+        route,
+        method
+      });
+      return;
+    }
+  }
+
+  try {
+    writeJsonResponse(response, 200, buildControlledProviderRunnerPlanPreview(
+      buildControlledProviderRunnerRequestFromSearchParams({
+        goalId: resolvedGoalId,
+        searchParams: request.searchParams
+      }),
+      {
+        workspaceRoot: cwd,
+        allowedWorkspaceRoots: [cwd]
+      }
+    ));
+  } catch (error) {
+    if (error instanceof ControlledProviderRunnerError || error instanceof GoalEventPlanPreviewError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-controlled-provider-runner-preview-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails ?? {
+          failureLayer: error.failureLayer,
+          errors: error.errors
+        }
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeControlledProviderRunnerConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  cwd,
+  runner,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-controlled-provider-runner-confirm-request',
+      message: 'Controlled provider runner confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    if (request.goalId === V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID) {
+      resolvedGoalId = V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID;
+    } else {
+      writeApiErrorResponse(response, {
+        status: 404,
+        code: 'goal-not-found',
+        message: 'Goal for controlled provider runner confirm was not found.',
+        route,
+        method
+      });
+      return;
+    }
+  }
+
+  try {
+    const body = await readControlledProviderRunnerConfirmRequestBody(requestMessage);
+
+    if (body.goalId !== resolvedGoalId) {
+      throw new ControlledProviderRunnerError(
+        'Controlled provider runner confirm requires the same goal context returned by preview.',
+        {
+          failureLayer: 'schema',
+          errors: [`routeGoalId=${resolvedGoalId}`, `bodyGoalId=${body.goalId}`]
+        }
+      );
+    }
+
+    const confirmation = await confirmControlledProviderRunnerPlan(body, {
+      stateDir,
+      workspaceRoot: cwd,
+      allowedWorkspaceRoots: [cwd],
+      processRunner: runner
+    });
+
+    writeJsonResponse(response, 200, {
+      ...confirmation,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (error instanceof ControlledProviderRunnerError || error instanceof GoalOperationRunRegistryError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-controlled-provider-runner-confirm-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails ?? {
+          failureLayer: error.failureLayer,
+          errors: error.errors
+        }
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function writeControlledVerificationRunConfirmResponse({
   requestMessage,
   response,
@@ -4502,6 +4733,77 @@ function parseControlledImplementationRunConfirmRequestPath(pathname, searchPara
   };
 }
 
+function parseControlledProviderRunnerPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/provider-runner-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'controlled-provider-runner-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/provider-runner-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'controlled-provider-runner-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
+function parseControlledProviderRunnerConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/provider-runner-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-provider-runner-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/provider-runner-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'controlled-provider-runner-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
 function parseControlledVerificationRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
   const latestPath = '/api/goals/latest/verification-run-confirm';
 
@@ -5200,6 +5502,78 @@ async function readControlledImplementationRunConfirmRequestBody(request) {
   }
 
   return body;
+}
+
+async function readControlledProviderRunnerConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new ControlledProviderRunnerError('Controlled provider runner confirm requires application/json.', {
+      failureLayer: 'schema',
+      errors: ['invalid-content-type']
+    });
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new ControlledProviderRunnerError('Controlled provider runner confirm request body is too large.', {
+        failureLayer: 'schema',
+        errors: ['body-too-large']
+      });
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  try {
+    const body = JSON.parse(content);
+
+    if (!isPlainObject(body)) {
+      throw new ControlledProviderRunnerError('Controlled provider runner confirm requires a valid JSON object.', {
+        failureLayer: 'schema',
+        errors: ['invalid-json-body']
+      });
+    }
+
+    return body;
+  } catch (error) {
+    if (error instanceof ControlledProviderRunnerError) {
+      throw error;
+    }
+
+    throw new ControlledProviderRunnerError('Controlled provider runner confirm requires a valid JSON object.', {
+      failureLayer: 'schema',
+      errors: ['invalid-json']
+    });
+  }
+}
+
+function buildControlledProviderRunnerRequestFromSearchParams({ goalId, searchParams }) {
+  assertOnlySearchParams(searchParams, [
+    'task',
+    'role',
+    'provider',
+    'mode',
+    'promptRef',
+    'evidenceRef',
+    'handoffRef'
+  ]);
+
+  return {
+    providerId: requiredSingleSearchParam(searchParams, 'provider'),
+    goalId,
+    taskId: requiredSingleSearchParam(searchParams, 'task'),
+    role: requiredSingleSearchParam(searchParams, 'role'),
+    mode: optionalSingleSearchParam(searchParams, 'mode') ?? 'reviewed-prompt',
+    promptRef: optionalSingleSearchParam(searchParams, 'promptRef'),
+    evidenceRef: optionalSingleSearchParam(searchParams, 'evidenceRef'),
+    handoffRef: optionalSingleSearchParam(searchParams, 'handoffRef')
+  };
 }
 
 async function confirmControlledImplementationRunPlan({

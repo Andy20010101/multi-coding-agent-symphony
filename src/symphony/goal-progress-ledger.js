@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { readGoalEventJournal } from './goal-event-journal.js';
 
@@ -8,6 +9,7 @@ export const GOAL_PROGRESS_LEDGER_CONTRACT_VERSION = 1;
 export const DEFAULT_GOAL_PROGRESS_GOAL_ID = 'v17-readonly-goal-progress-console-contracts';
 export const V18_GOAL_EVENT_JOURNAL_GOAL_ID = 'v18-goal-event-journal-evidence-recorder';
 export const V19_GOAL_RUNBOOK_GOAL_ID = 'v19-goal-runbook-next-action';
+export const V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 
 export const GOAL_PROGRESS_TASK_STATUSES = Object.freeze([
   'not-started',
@@ -69,6 +71,10 @@ const V19_BASELINE = Object.freeze({
 });
 const MANAGED_GOAL_RUNBOOK_STATE_CONTRACT_NAME = 'managed-goal-runbook-state.v1';
 const MANAGED_ACTIVE_GOAL_POINTER_CONTRACT_NAME = 'managed-active-goal-pointer.v1';
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
+const CHECKED_IN_MANAGED_RUNBOOK_GOAL_IDS = new Set([
+  V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID
+]);
 
 const DEFAULT_TASKS = Object.freeze([
   Object.freeze({
@@ -577,6 +583,27 @@ async function readManagedRunbookForProgress({ stateDir, goalId }) {
     return isManagedRunbookProgressCandidate({ state, managedGoalId }) ? state.runbook : null;
   } catch (error) {
     if (error.code === 'ENOENT') {
+      if (!CHECKED_IN_MANAGED_RUNBOOK_GOAL_IDS.has(managedGoalId)) {
+        return null;
+      }
+
+      return readCheckedInRunbookForProgress(managedGoalId);
+    }
+
+    throw error;
+  }
+}
+
+async function readCheckedInRunbookForProgress(managedGoalId) {
+  try {
+    const runbook = JSON.parse(await readFile(
+      join(REPO_ROOT, 'fixtures', 'contracts', `goal-runbook.${managedGoalId}.v1.json`),
+      'utf8'
+    ));
+
+    return isRunbookProgressCandidate({ runbook, managedGoalId }) ? runbook : null;
+  } catch (error) {
+    if (error.code === 'ENOENT') {
       return null;
     }
 
@@ -609,7 +636,11 @@ function isManagedRunbookProgressCandidate({ state, managedGoalId }) {
 
   return isPlainObject(state) &&
     state.contractName === MANAGED_GOAL_RUNBOOK_STATE_CONTRACT_NAME &&
-    isPlainObject(runbook) &&
+    isRunbookProgressCandidate({ runbook, managedGoalId });
+}
+
+function isRunbookProgressCandidate({ runbook, managedGoalId }) {
+  return isPlainObject(runbook) &&
     runbook.goalId === managedGoalId &&
     isNonEmptyString(runbook.goalTitle) &&
     isPlainObject(runbook.baseline) &&

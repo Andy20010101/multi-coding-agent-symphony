@@ -1,0 +1,324 @@
+{
+  "contractName": "controlled-provider-runner.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-06T00:00:00.000Z",
+  "context": {
+    "goalId": "v41-controlled-cli-provider-runner-backend-completion",
+    "taskId": "task-1",
+    "sourceContracts": [
+      "agent-cli-provider.v1",
+      "agent-cli-provider-health.v1",
+      "agent-cli-capability-profile.v1",
+      "goal-runbook.v1",
+      "goal-operation-runs.v1",
+      "goal-event-log.v1",
+      "goal-update-plan.v1"
+    ],
+    "stateSource": "explicit-backend-contracts",
+    "scope": "v41-controlled-cli-provider-runner",
+    "sourceContext": "v38-provider-profile-health-capability-boundaries",
+    "activeGoalAnchored": true,
+    "activeTaskAnchored": true
+  },
+  "activeProviders": [
+    {
+      "providerId": "claude-code-cli",
+      "displayName": "Claude Code CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "claude-code",
+      "sourceProfileRef": "claude-code-cli.backend-profile",
+      "backendRunner": {
+        "available": true,
+        "executionAdapterImplemented": false,
+        "commandTemplateOwner": "backend",
+        "commandTemplateIds": [
+          "v41.provider-runner.claude-code-cli.worker",
+          "v41.provider-runner.claude-code-cli.reviewer"
+        ],
+        "rendererProviderInvocationAvailable": false,
+        "rawShellCommandAvailable": false,
+        "genericShellRunnerAvailable": false,
+        "arbitraryCommandInputAvailable": false,
+        "arbitraryPathInputAvailable": false,
+        "secretMaterialAvailable": false
+      }
+    },
+    {
+      "providerId": "codex-cli",
+      "displayName": "Codex CLI",
+      "providerKind": "agent-cli",
+      "adapterId": "codex",
+      "sourceProfileRef": "codex-cli.backend-profile",
+      "backendRunner": {
+        "available": true,
+        "executionAdapterImplemented": false,
+        "commandTemplateOwner": "backend",
+        "commandTemplateIds": [
+          "v41.provider-runner.codex-cli.worker",
+          "v41.provider-runner.codex-cli.reviewer"
+        ],
+        "rendererProviderInvocationAvailable": false,
+        "rawShellCommandAvailable": false,
+        "genericShellRunnerAvailable": false,
+        "arbitraryCommandInputAvailable": false,
+        "arbitraryPathInputAvailable": false,
+        "secretMaterialAvailable": false
+      }
+    }
+  ],
+  "inactiveProviders": [
+    {
+      "providerId": "gemini-cli",
+      "reason": "not-active-in-v41"
+    },
+    {
+      "providerId": "kiro-cli",
+      "reason": "not-active-in-v41"
+    },
+    {
+      "providerId": "deepseek",
+      "reason": "future-sanitized-backend-profile-reference-only"
+    }
+  ],
+  "runnerInput": {
+    "acceptedFields": [
+      "goalId",
+      "taskId",
+      "role",
+      "providerId",
+      "mode",
+      "promptRef",
+      "evidenceRef",
+      "runId"
+    ],
+    "rejectedFields": [
+      "command",
+      "rawCommand",
+      "commandLine",
+      "shell",
+      "args",
+      "argv",
+      "cwd",
+      "path",
+      "localPath",
+      "absolutePath",
+      "executablePath",
+      "commandPath",
+      "env",
+      "apiKey",
+      "authToken",
+      "oauthToken",
+      "secretValue",
+      "credentialFile",
+      "credentialFileContents",
+      "rawProviderSettings",
+      "rendererCommandTemplate"
+    ],
+    "requiredFields": [
+      "goalId",
+      "taskId",
+      "role",
+      "providerId",
+      "mode",
+      "promptRef",
+      "runId"
+    ],
+    "allowedRoles": [
+      "worker",
+      "reviewer"
+    ],
+    "controlledModes": [
+      "preview",
+      "confirmed-run"
+    ],
+    "commandTextInputAvailable": false,
+    "arbitraryProviderInputAvailable": false,
+    "arbitraryPathInputAvailable": false,
+    "secretValueInputAvailable": false,
+    "rendererCommandConstructionAvailable": false
+  },
+  "commandTemplates": [
+    {
+      "templateId": "v41.provider-runner.claude-code-cli.worker",
+      "providerId": "claude-code-cli",
+      "owner": "backend",
+      "commandRef": "claude",
+      "supportedRoles": [
+        "worker"
+      ],
+      "controlledModes": [
+        "preview",
+        "confirmed-run"
+      ],
+      "argvShape": "backend-owned-template",
+      "commandTextAvailable": false,
+      "rendererConstructionAvailable": false,
+      "shellExpansionAvailable": false,
+      "arbitraryArgsAvailable": false,
+      "arbitraryCwdAvailable": false
+    },
+    {
+      "templateId": "v41.provider-runner.claude-code-cli.reviewer",
+      "providerId": "claude-code-cli",
+      "owner": "backend",
+      "commandRef": "claude",
+      "supportedRoles": [
+        "reviewer"
+      ],
+      "controlledModes": [
+        "preview",
+        "confirmed-run"
+      ],
+      "argvShape": "backend-owned-template",
+      "commandTextAvailable": false,
+      "rendererConstructionAvailable": false,
+      "shellExpansionAvailable": false,
+      "arbitraryArgsAvailable": false,
+      "arbitraryCwdAvailable": false
+    },
+    {
+      "templateId": "v41.provider-runner.codex-cli.worker",
+      "providerId": "codex-cli",
+      "owner": "backend",
+      "commandRef": "codex",
+      "supportedRoles": [
+        "worker"
+      ],
+      "controlledModes": [
+        "preview",
+        "confirmed-run"
+      ],
+      "argvShape": "backend-owned-template",
+      "commandTextAvailable": false,
+      "rendererConstructionAvailable": false,
+      "shellExpansionAvailable": false,
+      "arbitraryArgsAvailable": false,
+      "arbitraryCwdAvailable": false
+    },
+    {
+      "templateId": "v41.provider-runner.codex-cli.reviewer",
+      "providerId": "codex-cli",
+      "owner": "backend",
+      "commandRef": "codex",
+      "supportedRoles": [
+        "reviewer"
+      ],
+      "controlledModes": [
+        "preview",
+        "confirmed-run"
+      ],
+      "argvShape": "backend-owned-template",
+      "commandTextAvailable": false,
+      "rendererConstructionAvailable": false,
+      "shellExpansionAvailable": false,
+      "arbitraryArgsAvailable": false,
+      "arbitraryCwdAvailable": false
+    }
+  ],
+  "runnerOutput": {
+    "fields": [
+      "providerId",
+      "goalId",
+      "taskId",
+      "role",
+      "runId",
+      "commandTemplateId",
+      "status",
+      "exitCode",
+      "startedAt",
+      "finishedAt",
+      "durationMs",
+      "artifactRefs",
+      "redactionStatus",
+      "failureLayer",
+      "sanitizedSummary"
+    ],
+    "statuses": [
+      "planned",
+      "running",
+      "succeeded",
+      "failed",
+      "blocked",
+      "timed-out"
+    ],
+    "rawProviderOutputAvailable": false,
+    "sanitizedSummaryRequired": true,
+    "redactionStatusRequired": true,
+    "artifactRefsOnly": true
+  },
+  "failureStates": [
+    {
+      "failureLayer": "schema",
+      "status": "failed",
+      "evidenceRequired": true,
+      "recoveryNoteRequired": true
+    },
+    {
+      "failureLayer": "provider-availability",
+      "status": "failed",
+      "evidenceRequired": true,
+      "recoveryNoteRequired": true
+    },
+    {
+      "failureLayer": "command-execution",
+      "status": "failed",
+      "evidenceRequired": true,
+      "recoveryNoteRequired": true
+    },
+    {
+      "failureLayer": "timeout",
+      "status": "timed-out",
+      "evidenceRequired": true,
+      "recoveryNoteRequired": true
+    },
+    {
+      "failureLayer": "redaction",
+      "status": "failed",
+      "evidenceRequired": true,
+      "recoveryNoteRequired": true
+    },
+    {
+      "failureLayer": "workspace",
+      "status": "failed",
+      "evidenceRequired": true,
+      "recoveryNoteRequired": true
+    },
+    {
+      "failureLayer": "expected-check",
+      "status": "failed",
+      "evidenceRequired": true,
+      "recoveryNoteRequired": true
+    }
+  ],
+  "boundaries": {
+    "activeProviderIds": [
+      "claude-code-cli",
+      "codex-cli"
+    ],
+    "providerCliExecutionAvailableOnlyThroughBackendRunner": true,
+    "task2ExecutionAdapterImplemented": false,
+    "commandTemplateOwner": "backend",
+    "rendererProviderInvocationAvailable": false,
+    "rendererCommandConstructionAvailable": false,
+    "rawShellCommandAvailable": false,
+    "genericShellRunnerAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "arbitraryPathReadAvailable": false,
+    "arbitraryCwdAvailable": false,
+    "promptDispatchFromRendererAvailable": false,
+    "modelInvocationFromRendererAvailable": false,
+    "automaticInstallAvailable": false,
+    "automaticOauthAvailable": false,
+    "envValueExposureAvailable": false,
+    "secretMaterialAvailable": false,
+    "credentialMaterialAvailable": false,
+    "credentialFileContentsAvailable": false,
+    "rawProviderSettingsAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "mergeAvailable": false,
+    "pushAvailable": false,
+    "tagAvailable": false,
+    "publishAvailable": false,
+    "selfApprovalAvailable": false
+  }
+}

@@ -26,6 +26,7 @@ import {
 } from '../frontend/workbench/src/api/client.js';
 import {
   CONTRACT_TEXT,
+  CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   READONLY_API_ROUTE_ALLOWLIST,
   createSafeArtifactPreviewRoutes,
   createRunTimelineRoute,
@@ -42,6 +43,10 @@ import {
 import {
   recordGoalOperationRun
 } from '../src/symphony/goal-operation-run-registry.js';
+import {
+  buildControlledProviderRunnerPlanPreview,
+  buildControlledProviderRunnerOperationRecord
+} from '../src/symphony/controlled-provider-runner.js';
 import {
   buildAgentCliProviderHealthContract
 } from '../src/symphony/agent-cli-provider-health.js';
@@ -67,6 +72,7 @@ const V28_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v28-workbench-v1-re
 const V29_GOAL_ID = 'v29-active-task-controlled-implementation-workspace';
 const V29_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v29-active-task-controlled-implementation-workspace.v1.json';
 const V30_GOAL_ID = 'v30-verified-adoption-workspace-v2';
+const V41_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
 const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
 const BACKEND_ACTIVE_GOAL_ID = 'v20-workbench-backend-event-test';
@@ -174,6 +180,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/<goal-id>/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/goals/<goal-id>/release-baseline', 'release-baseline-resolver.v1'],
         ['GET', '/api/goals/<goal-id>/implementation-plan-preview', 'controlled-implementation-plan-preview.v1'],
+        ['GET', '/api/goals/<goal-id>/provider-runner-preview', 'controlled-provider-runner-plan-preview.v1'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
         ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
@@ -264,6 +271,116 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(preview.assignmentMatrix.items.every((row) => row.workerProviderId.value !== row.reviewerProviderId.value), true);
     assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'providerCliExecutionAvailable').available.value, false);
     assert.equal(preview.boundaries.find((boundary) => boundary.boundary.value === 'selfApprovalAvailable').available.value, false);
+  });
+
+  it('projects the v41 controlled provider runner preview without command controls or status inference', () => {
+    const previewPayload = buildControlledProviderRunnerPlanPreview({
+      goalId: V41_GOAL_ID,
+      taskId: 'task-4',
+      role: 'worker',
+      providerId: 'codex-cli',
+      mode: 'reviewed-prompt',
+      handoffRef: `goal-prompt/${V41_GOAL_ID}/task-4/worker`
+    }, {
+      workspaceRoot: process.cwd(),
+      allowedWorkspaceRoots: [process.cwd()]
+    });
+    const operation = buildControlledProviderRunnerOperationRecord({
+      ...previewPayload.reviewedContext,
+      runId: 'provider-run-task-4-previewed',
+      status: 'completed',
+      startedAt: '2026-06-06T00:00:00.000Z',
+      finishedAt: '2026-06-06T00:00:01.000Z',
+      exitCode: 0,
+      signal: null,
+      durationMs: 1000,
+      timedOut: false,
+      stalled: false,
+      redaction: {
+        required: true,
+        status: 'applied'
+      },
+      output: {
+        stdoutPreview: 'ok',
+        stderrPreview: '',
+        rawProviderOutputAvailable: false
+      },
+      failure: null
+    });
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchRouteResult({
+        id: 'goalRunbook',
+        label: 'Goal Runbook',
+        path: `/api/goals/${V41_GOAL_ID}/runbook`,
+        method: 'GET',
+        contractName: 'goal-runbook.v1'
+      }, {
+        contractName: 'goal-runbook.v1',
+        contractVersion: 1,
+        goalId: V41_GOAL_ID,
+        goalTitle: 'v41 Controlled CLI Provider Runner + Backend Completion',
+        baseline: {},
+        tasks: [{
+          taskId: 'task-4',
+          title: 'Workbench preview and confirm binding',
+          roleOrder: ['worker', 'reviewer', 'main-verifier'],
+          acceptance: [],
+          expectedEvidence: {}
+        }],
+        releaseGates: []
+      }),
+      controlledProviderRunnerPreview: createWorkbenchRouteResult(CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE, previewPayload),
+      activeGoalOperations: createWorkbenchRouteResult({
+        id: 'activeGoalOperations',
+        label: 'Active Goal Operations',
+        path: `/api/goals/${V41_GOAL_ID}/operations`,
+        method: 'GET',
+        contractName: 'goal-operation-runs.v1'
+      }, {
+        contractName: 'goal-operation-runs.v1',
+        contractVersion: 1,
+        goalId: V41_GOAL_ID,
+        operationCount: 1,
+        latestOperationId: operation.operationId,
+        runs: [{
+          operationId: operation.operationId,
+          goalId: V41_GOAL_ID,
+          taskId: 'task-4',
+          role: 'worker',
+          commandKind: 'provider-runner',
+          commandName: 'controlled provider runner',
+          status: 'completed',
+          planHash: previewPayload.planHash,
+          source: 'workbench.provider-runner-confirm',
+          artifactRefs: operation.artifactRefs,
+          runResult: operation,
+          verifierSummary: {
+            status: 'completed',
+            providerId: 'codex-cli',
+            commandTemplateId: 'v41.codex-cli.reviewed-prompt.v1',
+            redactionStatus: 'applied',
+            failureLayer: null,
+            reviewerApproved: false,
+            mainVerified: false,
+            releaseReady: false
+          }
+        }]
+      })
+    });
+    const preview = model.activeGoal.controlledProviderRunnerPreview;
+
+    assert.equal(preview.state, 'preview-ready');
+    assert.equal(preview.providerId.value, 'codex-cli');
+    assert.equal(preview.plan.planHash.value, previewPayload.planHash);
+    assert.equal(preview.expectedArtifacts.count.value, 1);
+    assert.equal(preview.confirm.endpoint.confirmUsesPlanHash.value, true);
+    assert.equal(preview.endpoint.rejectsArbitraryCommand.value, true);
+    assert.equal(preview.safety.arbitraryCommandInputAvailable.value, false);
+    assert.equal(preview.safety.rendererProviderInvocationAvailable.value, false);
+    assert.equal(preview.operationStatus.commandKind.value, 'provider-runner');
+    assert.equal(preview.operationStatus.reviewerApproved.value, false);
+    assert.equal(preview.operationStatus.mainVerified.value, false);
+    assert.equal(preview.operationStatus.releaseReady.value, false);
   });
 
   it('projects the v39 Schema Migration Preview panel as dry-run only', () => {

@@ -9,7 +9,16 @@ export const GOAL_OPERATION_RUNS_CONTRACT_NAME = 'goal-operation-runs.v1';
 export const GOAL_OPERATION_RUNS_CONTRACT_VERSION = 1;
 export const MANAGED_GOAL_OPERATION_RUN_STORAGE = 'managed-goal-operation-run-registry';
 
-const COMMAND_KINDS = Object.freeze(['update', 'review', 'gate', 'implementation', 'adoption-plan', 'adoption-confirm', 'verification']);
+const COMMAND_KINDS = Object.freeze([
+  'update',
+  'review',
+  'gate',
+  'implementation',
+  'adoption-plan',
+  'adoption-confirm',
+  'verification',
+  'provider-runner'
+]);
 const ACTOR_ROLES = Object.freeze([
   'worker',
   'reviewer',
@@ -20,6 +29,7 @@ const ACTOR_ROLES = Object.freeze([
 const STATUSES = Object.freeze([
   'dry-run-planned',
   'running',
+  'completed',
   'confirmed',
   'failed'
 ]);
@@ -158,12 +168,12 @@ function normalizeOperationRun(options) {
 }
 
 function buildOperationRunRecord({ normalized, existing }) {
-  const existingIsTerminal = existing?.status === 'confirmed' || existing?.status === 'failed';
+  const existingIsTerminal = existing?.status === 'confirmed' || existing?.status === 'completed' || existing?.status === 'failed';
   const status = existingIsTerminal && normalized.status === 'dry-run-planned'
     ? existing.status
     : normalized.status;
   const startedAt = existing?.timestamps?.startedAt ?? normalized.recordedAt;
-  const completedAt = (status === 'confirmed' || status === 'failed') && normalized.status === status
+  const completedAt = (status === 'confirmed' || status === 'completed' || status === 'failed') && normalized.status === status
     ? normalized.recordedAt
     : existing?.timestamps?.completedAt ?? null;
   const eventIds = normalized.eventIds.length > 0

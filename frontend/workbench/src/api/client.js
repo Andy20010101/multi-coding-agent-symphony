@@ -11,11 +11,13 @@ import {
   RELEASE_BASELINE_ROUTE_TEMPLATE,
   GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
   CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
+  CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   ADOPTION_INSPECT_ROUTE_TEMPLATE,
   CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
   createAdoptionInspectRoute,
   createControlledImplementationPlanPreviewRoute,
+  createControlledProviderRunnerPreviewRoute,
   createGoalEventsRoute,
   createGoalOperationsRoute,
   createGoalProgressRoute,
@@ -31,6 +33,7 @@ const READONLY_ERROR_MESSAGE = '读取失败 / contract 未暴露 / 不可用';
 const GOAL_PLAN_PREVIEW_ERROR_MESSAGE = 'dry-run plan preview 未返回可用 contract';
 const GOAL_PLAN_CONFIRM_ERROR_MESSAGE = 'event confirm 未返回可用 contract';
 const CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE = 'implementation confirm 未返回可用 contract';
+const CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE = 'provider runner confirm 未返回可用 contract';
 const CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE = 'verification confirm 未返回可用 contract';
 const CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE = 'adoption plan freeze 未返回可用 contract';
 const CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE = 'adoption confirm 未返回可用 contract';
@@ -131,6 +134,7 @@ export async function fetchWorkbenchContracts(options = {}) {
   const activeReleaseBaselineRoute = createReleaseBaselineRoute(activeGoalId);
   const goalReviewerPromptRoute = createGoalReviewerPromptRoute(activeGoalId, results.goalNextAction?.data);
   const controlledImplementationPlanPreviewRoute = createControlledImplementationPlanPreviewRoute(activeGoalId, results.goalNextAction?.data);
+  const controlledProviderRunnerPreviewRoute = createControlledProviderRunnerPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
 
@@ -215,6 +219,17 @@ export async function fetchWorkbenchContracts(options = {}) {
         message: 'controlled implementation plan preview 未暴露 / 不适用'
       })
     : await fetchReadonlyRoute(controlledImplementationPlanPreviewRoute, options);
+
+  results.controlledProviderRunnerPreview = controlledProviderRunnerPreviewRoute === null
+    ? readonlySkipped({
+        route: {
+          ...CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
+          id: 'controlledProviderRunnerPreview',
+          label: 'Controlled Provider Runner Preview'
+        },
+        message: 'controlled provider runner preview 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(controlledProviderRunnerPreviewRoute, options);
 
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({
@@ -432,6 +447,77 @@ export async function confirmControlledImplementationRunPlan(path, body, {
       ok: false,
       httpStatus: response.status,
       message: CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmControlledProviderRunnerPlan(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'controlled-provider-runner-confirmation.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE,
       errorEnvelope: null
     };
   }

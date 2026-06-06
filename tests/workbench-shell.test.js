@@ -932,6 +932,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/goals/<goal-id>/operations',
       '/api/goals/<goal-id>/progress',
       '/api/goals/<goal-id>/prompt',
+      '/api/goals/<goal-id>/provider-runner-preview',
       '/api/goals/<goal-id>/release-baseline',
       '/api/goals/<goal-id>/runbook',
       '/api/goals/latest/closeout',

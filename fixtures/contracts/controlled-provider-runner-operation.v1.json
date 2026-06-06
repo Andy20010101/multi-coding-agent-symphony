@@ -1,0 +1,55 @@
+{
+  "contractName": "controlled-provider-runner-operation.v1",
+  "contractVersion": 1,
+  "operationId": "op_provider_fixture_v41_task_3",
+  "runId": "provider-run-fixture-v41-task-3",
+  "providerId": "claude-code-cli",
+  "goalId": "v41-controlled-cli-provider-runner-backend-completion",
+  "taskId": "task-3",
+  "role": "worker",
+  "mode": "reviewed-prompt",
+  "commandTemplateId": "v41.claude-code-cli.reviewed-prompt.v1",
+  "status": "completed",
+  "exitCode": 0,
+  "signal": null,
+  "timing": {
+    "startedAt": "2026-06-06T00:00:00.000Z",
+    "finishedAt": "2026-06-06T00:00:01.000Z",
+    "durationMs": 1000,
+    "timedOut": false,
+    "stalled": false
+  },
+  "artifactRefs": [
+    {
+      "kind": "sanitized-provider-run-summary",
+      "ref": "controlled-provider-run:provider-run-fixture-v41-task-3:summary",
+      "title": "Sanitized provider runner summary",
+      "status": "completed"
+    }
+  ],
+  "redaction": {
+    "required": true,
+    "status": "applied",
+    "rawProviderOutputAvailable": false,
+    "rawProviderSettingsAvailable": false
+  },
+  "failureLayer": null,
+  "failureReason": null,
+  "recoveryNotes": [
+    "claude-code-cli completed through the backend-controlled provider runner; no recovery action is needed for this operation."
+  ],
+  "outputSummary": {
+    "stdoutPreview": "sanitized provider run summary",
+    "stderrPreview": "",
+    "rawProviderOutputAvailable": false
+  },
+  "boundaries": {
+    "reviewerApproved": false,
+    "mainVerified": false,
+    "releaseReady": false,
+    "genericShellRunnerAvailable": false,
+    "rendererProviderInvocationAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "rawProviderSettingsAvailable": false
+  }
+}
