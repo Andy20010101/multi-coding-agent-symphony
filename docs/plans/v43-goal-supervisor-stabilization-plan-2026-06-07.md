@@ -24,6 +24,13 @@ Source evidence:
 - `docs/plans/app-core-v41-v42-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md`
 - `docs/release-checklist.md`
 
+Planning deliverables:
+
+- `docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md`
+- `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- `docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md`
+- `fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json`
+
 ## Positioning
 
 v43 is a stabilization release. It takes the experience from the temporary project-external supervisor and coding loop used during v41-v42, then turns the stable parts into project-internal planning for a controlled supervisor runtime.

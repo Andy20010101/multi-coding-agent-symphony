@@ -5,6 +5,7 @@ Date: 2026-06-07
 Goal id draft: `v43-goal-supervisor-stabilization`
 
 Plan doc: `docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md`
+Execution prompt doc: `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
 
 Fixture draft: `fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json`
 
@@ -40,6 +41,21 @@ task-1 app-thread-result-protocol
   -> task-4 daemon-heartbeat-progress
   -> release closeout only after explicit operator approval
 ```
+
+## Bootstrap Phase
+
+Recommended docs:
+
+- `docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md`
+- `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- `docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md`
+- `fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json`
+- `docs/plans/v42-goal-supervisor-runtime-context-loop-plan-2026-06-06.md`
+- `docs/plans/app-core-v41-v42-goal-runbooks/v42_goal-supervisor-runtime-context-loop_goal_runbook_latest.md`
+- `fixtures/contracts/goal-runbook.v42-goal-supervisor-runtime-context-loop.v1.json`
+- `docs/plans/controller/local-goal-supervisor-v42-mvp-notes-2026-06-06.md`
+
+This bootstrap phase registers and validates the v43 planning pack. It is not a managed fixture task. The managed implementation tasks still begin at `task-1`.
 
 ## Bootstrap Commands Draft
 
@@ -96,6 +112,8 @@ Every child must end with the existing result block shape from `docs/plans/contr
 Branch draft: `v43-task-1-app-thread-result-protocol`
 
 Worker evidence draft: `docs/plans/v43-task-1-worker-evidence-2026-06-07.md`
+Review evidence draft: `docs/plans/v43-task-1-review-evidence-2026-06-07.md`
+Main verification evidence draft: `docs/plans/v43-task-1-main-verification-evidence-2026-06-07.md`
 
 Implement only the contracts and replay coverage for App thread binding and result consumption:
 
@@ -113,6 +131,8 @@ Implement only the contracts and replay coverage for App thread binding and resu
 Branch draft: `v43-task-2-workspace-evidence-safety`
 
 Worker evidence draft: `docs/plans/v43-task-2-worker-evidence-2026-06-07.md`
+Review evidence draft: `docs/plans/v43-task-2-review-evidence-2026-06-07.md`
+Main verification evidence draft: `docs/plans/v43-task-2-main-verification-evidence-2026-06-07.md`
 
 Implement only workspace preparation and evidence safety:
 
@@ -129,6 +149,8 @@ Implement only workspace preparation and evidence safety:
 Branch draft: `v43-task-3-route-status-reconciliation`
 
 Worker evidence draft: `docs/plans/v43-task-3-worker-evidence-2026-06-07.md`
+Review evidence draft: `docs/plans/v43-task-3-review-evidence-2026-06-07.md`
+Main verification evidence draft: `docs/plans/v43-task-3-main-verification-evidence-2026-06-07.md`
 
 Implement only deterministic routing and status reconciliation:
 
@@ -144,6 +166,8 @@ Implement only deterministic routing and status reconciliation:
 Branch draft: `v43-task-4-daemon-heartbeat-progress`
 
 Worker evidence draft: `docs/plans/v43-task-4-worker-evidence-2026-06-07.md`
+Review evidence draft: `docs/plans/v43-task-4-review-evidence-2026-06-07.md`
+Main verification evidence draft: `docs/plans/v43-task-4-main-verification-evidence-2026-06-07.md`
 
 Implement only observability and restart-safe supervisor behavior:
 
