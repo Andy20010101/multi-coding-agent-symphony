@@ -60,3 +60,30 @@ No `daemon-start`, `daemon-stop`, `doctor`, release closeout, provider CLI, tag,
 ## Risks
 
 The current live daemon for this goal was started before task-B and has no launcher record. The new `daemon-start` command refuses to create a duplicate while that direct daemon is active unless the operator explicitly uses `--force`.
+
+## Revision After Review
+
+Local revision date: 2026-06-08
+Timezone: Asia/Shanghai
+Generated at UTC: 2026-06-07T18:16:11Z
+
+Reviewer finding addressed:
+
+- `daemon-start` could record a stale `<goal>.daemon.pid` value when a prior pid file existed before the PTY shell wrote the pid for the new launch.
+
+External runner changes:
+
+- `/Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs:3` imports `statSync` for pid file freshness checks.
+- `/Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs:690` to `708` clears the goal daemon pid file immediately before spawning the PTY launcher, then waits only for a pid file written after that launch started and matching the expected goal, daemon id, and supervisor script.
+- `/Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs:887` to `923` makes `waitForLauncherPid` ignore stale pid files, tolerate file races, and reject pids whose command line does not match the expected daemon command.
+- `/Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs:5799` to `5821` adds selftest coverage for a pre-existing launcher pid file. The selftest verifies both stale mtime rejection and command-line mismatch rejection before a pid can be recorded.
+
+Revision validation:
+
+- `node --check /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs` passed.
+- `node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest` passed and returned `staleLauncherPidIgnored: true`.
+- `node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs daemon-status --goal v43-plus-local-goal-supervisor-stability` passed. It still reported `status: not-started` and `startedThroughExpectedLauncher: false` while showing the pre-existing direct daemon health, so manual or old daemon freshness still does not satisfy launcher health.
+- `git diff --check` passed.
+- `pnpm --silent symphony goal-status --goal v43-plus-local-goal-supervisor-stability --json` still failed with exit code 64 and `goal not found` in this assigned worktree.
+
+No `daemon-start`, `daemon-stop`, `doctor`, release closeout, provider CLI, tag, push, publish, mutation, or audit command was run during this revision phase.
