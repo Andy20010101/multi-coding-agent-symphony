@@ -1,5 +1,11 @@
 import { buildGoalNextAction } from './goal-next-action-resolver.js';
 import { ACCEPTED_TERMINAL_EVENTS_BY_ROLE } from './app-thread-result-protocol.js';
+import {
+  buildRootCheckoutMutationGuard,
+  collectFileInventoryFromGitStatus,
+  inspectDependencyReadiness,
+  validateEvidenceLocation
+} from './workspace-evidence-safety.js';
 
 export const SUPERVISOR_RUNNER_CONTRACT_NAME = 'goal-supervisor-runner-plan.v1';
 export const SUPERVISOR_RUNNER_CONTRACT_VERSION = 1;
@@ -48,6 +54,11 @@ export async function buildSupervisorRunnerPlan({
   evidenceRef = null,
   resultTaskId = null,
   resultRole = null,
+  assignedWorktree = null,
+  rootCheckout = null,
+  runtimeWorkspaceRoots = [],
+  rootStatusBeforePorcelain = null,
+  rootStatusAfterPorcelain = null,
   generatedAt = new Date().toISOString()
 } = {}) {
   const next = await buildGoalNextAction({
@@ -55,10 +66,27 @@ export async function buildSupervisorRunnerPlan({
     goalId,
     generatedAt
   });
+  const workspaceSafety = await buildWorkspaceSafetyPlan({
+    assignedWorktree,
+    rootCheckout,
+    runtimeWorkspaceRoots,
+    rootStatusBeforePorcelain,
+    rootStatusAfterPorcelain,
+    evidenceRef
+  });
 
   const hooks = [
     hook('preTick', 'passed', 'Supervisor tick started.'),
     hook('postReconcile', 'passed', 'Goal next action resolved from managed ledger.'),
+    workspaceSafety === null
+      ? hook('preWorkspaceSafety', 'skipped', 'No assigned worktree was provided for workspace preflight.')
+      : hook(
+        'preWorkspaceSafety',
+        workspaceSafety.dispatchAllowed === true ? 'passed' : 'blocked',
+        workspaceSafety.dispatchAllowed === true
+          ? 'Assigned worktree passed dependency preflight.'
+          : workspaceSafety.blocker.reason
+      ),
     hook('preCreateController', 'pending', 'Controller creation is planned only in dry-run mode.')
   ];
 
@@ -71,6 +99,7 @@ export async function buildSupervisorRunnerPlan({
     evidenceRef,
     resultTaskId,
     resultRole,
+    workspaceSafety,
     mode
   });
 
@@ -113,6 +142,7 @@ function buildSupervisorCycle({
   evidenceRef,
   resultTaskId,
   resultRole,
+  workspaceSafety,
   mode
 }) {
   if (next.status === 'complete') {
@@ -164,6 +194,22 @@ function buildSupervisorCycle({
     current
   });
 
+  if (workspaceSafety !== null && workspaceSafety.dispatchAllowed !== true) {
+    return {
+      cycle: cycleIndex,
+      state: 'blocked',
+      goalNextStatus: next.status,
+      current,
+      workspaceSafety,
+      completedResult,
+      action: {
+        kind: 'block',
+        reason: workspaceSafety.blocker.reason
+      },
+      stopReason: workspaceSafety.blocker.stopReason
+    };
+  }
+
   if (completedResult !== null && completedResult.valid !== true) {
     return {
       cycle: cycleIndex,
@@ -179,6 +225,25 @@ function buildSupervisorCycle({
     };
   }
 
+  if (completedResult !== null
+    && workspaceSafety !== null
+    && workspaceSafety.evidenceLocation !== null
+    && workspaceSafety.evidenceLocation.valid !== true) {
+    return {
+      cycle: cycleIndex,
+      state: 'blocked',
+      goalNextStatus: next.status,
+      current,
+      workspaceSafety,
+      completedResult,
+      action: {
+        kind: 'block',
+        reason: `Completed result evidence failed workspace validation: ${workspaceSafety.evidenceLocation.blocker.reason}`
+      },
+      stopReason: 'completed-result-evidence-location-rejected'
+    };
+  }
+
   const command = controllerCommandForNext(current);
   const actionKind = completedResult === null
     ? 'create-fresh-controller'
@@ -189,6 +254,7 @@ function buildSupervisorCycle({
     state: completedResult === null ? 'next-phase-ready' : 'result-ready',
     goalNextStatus: next.status,
     current,
+    workspaceSafety,
     completedResult,
     action: {
       kind: actionKind,
@@ -310,6 +376,11 @@ function parseSupervisorArgs(args) {
   let evidenceRef = null;
   let resultTaskId = null;
   let resultRole = null;
+  let assignedWorktree = null;
+  let rootCheckout = null;
+  const runtimeWorkspaceRoots = [];
+  let rootStatusBeforePorcelain = null;
+  let rootStatusAfterPorcelain = null;
 
   for (let index = 0; index < rest.length; index += 1) {
     const value = rest[index];
@@ -372,6 +443,36 @@ function parseSupervisorArgs(args) {
       continue;
     }
 
+    if (value === '--worktree') {
+      assignedWorktree = readRequiredValue(rest, index, '--worktree');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--root-checkout') {
+      rootCheckout = readRequiredValue(rest, index, '--root-checkout');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--runtime-workspace-root') {
+      runtimeWorkspaceRoots.push(readRequiredValue(rest, index, '--runtime-workspace-root'));
+      index += 1;
+      continue;
+    }
+
+    if (value === '--root-status-before') {
+      rootStatusBeforePorcelain = readStringValue(rest, index, '--root-status-before');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--root-status-after') {
+      rootStatusAfterPorcelain = readStringValue(rest, index, '--root-status-after');
+      index += 1;
+      continue;
+    }
+
     if (value.startsWith('--')) {
       throw new SupervisorRunnerUsageError(`unknown supervisor option: ${value}`);
     }
@@ -390,14 +491,120 @@ function parseSupervisorArgs(args) {
     resultEvent,
     evidenceRef,
     resultTaskId,
-    resultRole
+    resultRole,
+    assignedWorktree,
+    rootCheckout,
+    runtimeWorkspaceRoots,
+    rootStatusBeforePorcelain,
+    rootStatusAfterPorcelain
   };
+}
+
+async function buildWorkspaceSafetyPlan({
+  assignedWorktree,
+  rootCheckout,
+  runtimeWorkspaceRoots,
+  rootStatusBeforePorcelain,
+  rootStatusAfterPorcelain,
+  evidenceRef
+}) {
+  if (!isNonEmptyString(assignedWorktree)) {
+    return null;
+  }
+
+  const dependencyPreflight = await inspectDependencyReadiness({
+    worktree: assignedWorktree
+  });
+  const evidenceLocation = isNonEmptyString(evidenceRef)
+    ? await validateEvidenceLocation({
+      assignedWorktree,
+      rootCheckout,
+      evidenceRef
+    })
+    : null;
+  const rootMutationGuard = buildOptionalRootMutationGuard({
+    rootCheckout,
+    beforePorcelain: rootStatusBeforePorcelain,
+    afterPorcelain: rootStatusAfterPorcelain
+  });
+  const dispatchAllowed = dependencyPreflight.dispatchAllowed === true
+    && (evidenceLocation === null || evidenceLocation.valid === true)
+    && (rootMutationGuard === null || rootMutationGuard.eventRegistrationAllowed === true);
+  const blocker = dependencyPreflight.dispatchAllowed !== true
+    ? {
+      id: 'workspace-dependency-preflight-blocked',
+      reason: `Assigned worktree is not dependency-ready: ${dependencyPreflight.status}`,
+      stopReason: 'workspace-dependency-preflight-blocked'
+    }
+    : evidenceLocation !== null && evidenceLocation.valid !== true
+      ? {
+        id: 'workspace-evidence-location-rejected',
+        reason: `Evidence location is invalid: ${evidenceLocation.blocker.reason}`,
+        stopReason: 'completed-result-evidence-location-rejected'
+      }
+      : rootMutationGuard !== null && rootMutationGuard.eventRegistrationAllowed !== true
+        ? {
+          id: 'root-checkout-mutated',
+          reason: rootMutationGuard.blocker.reason,
+          stopReason: 'root-checkout-mutation-rejected'
+        }
+      : null;
+
+  return {
+    contractName: 'supervisor-workspace-safety-plan.v1',
+    contractVersion: 1,
+    assignedWorktree: dependencyPreflight.worktree,
+    rootCheckout,
+    runtimeWorkspaceRoots,
+    dependencyPreflight,
+    evidenceLocation,
+    rootMutationGuard,
+    dispatchAllowed,
+    blocker
+  };
+}
+
+function buildOptionalRootMutationGuard({
+  rootCheckout,
+  beforePorcelain,
+  afterPorcelain
+}) {
+  if (!isNonEmptyString(rootCheckout)
+    || beforePorcelain === null
+    || afterPorcelain === null) {
+    return null;
+  }
+
+  const beforeInventory = collectFileInventoryFromGitStatus({
+    worktree: rootCheckout,
+    porcelain: beforePorcelain
+  });
+  const afterInventory = collectFileInventoryFromGitStatus({
+    worktree: rootCheckout,
+    porcelain: afterPorcelain
+  });
+
+  return buildRootCheckoutMutationGuard({
+    rootCheckout,
+    beforeInventory,
+    afterInventory
+  });
 }
 
 function readRequiredValue(args, index, optionName) {
   const value = args[index + 1];
 
   if (!isNonEmptyString(value) || value.startsWith('--')) {
+    throw new SupervisorRunnerUsageError(`${optionName} requires a value`);
+  }
+
+  return value;
+}
+
+function readStringValue(args, index, optionName) {
+  const value = args[index + 1];
+
+  if (typeof value !== 'string' || value.startsWith('--')) {
     throw new SupervisorRunnerUsageError(`${optionName} requires a value`);
   }
 

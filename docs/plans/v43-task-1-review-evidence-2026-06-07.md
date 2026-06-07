@@ -1,106 +1,68 @@
 # v43 task-1 independent review evidence
 
-## Findings
-
-1. `NEEDS_REVISION`: `recordThreadBinding` can mark a child active from a readback that is not bound to the requested thread. In `src/symphony/app-thread-result-protocol.js:146`, the function normalizes the binding thread id, but at `src/symphony/app-thread-result-protocol.js:191` it accepts any plain `readback` with `readable === true`. It does not require the stable capability shape from `readThread(threadId)`, and it does not compare `readback.capability.callShape.threadId` or `readback.response.id` with `binding.threadId` before returning `active: true` at `src/symphony/app-thread-result-protocol.js:214`. Reproduction run in the target worktree:
-
-   ```sh
-   node --input-type=module <<'NODE'
-   import { recordThreadBinding } from './src/symphony/app-thread-result-protocol.js';
-   const binding = {
-     goalId: 'v43-goal-supervisor-stabilization',
-     taskId: 'task-1',
-     role: 'worker',
-     requestId: 'request-task-1-worker',
-     threadId: 'thread-expected',
-     worktree: '/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol',
-     baseCommit: '5e645c5c68c72c489ff938ffa076e33725bc05f9'
-   };
-   const result = recordThreadBinding({
-     bindings: [],
-     binding,
-     readback: {
-       status: 'readable',
-       readable: true,
-       response: { id: 'thread-other' },
-       capability: { method: 'readThread', callShape: { threadId: 'thread-other' } }
-     }
-   });
-   console.log(JSON.stringify({
-     accepted: result.accepted,
-     active: result.active,
-     recordThreadId: result.record?.threadId,
-     readbackThreadId: result.record?.readCapability?.callShape?.threadId
-   }, null, 2));
-   NODE
-   ```
-
-   Output:
-
-   ```json
-   {
-     "accepted": true,
-     "active": true,
-     "recordThreadId": "thread-expected",
-     "readbackThreadId": "thread-other"
-   }
-   ```
-
-   This misses the task-1 requirement that active child state is only set after valid App readback, and it fails the review instruction to verify result/thread identity binding.
-
-2. `NEEDS_REVISION`: the canonical branch cannot carry the reviewed work into the documented main-verification path. `git rev-parse HEAD main` returned the same commit, `5e645c5c68c72c489ff938ffa076e33725bc05f9`, and `git status --short` showed the implementation as working-tree changes: `M src/symphony/supervisor-runner.js`, untracked `src/symphony/app-thread-result-protocol.js`, untracked `tests/v43-app-thread-result-protocol.test.js`, and untracked worker evidence. The worker evidence lists those files as changed at `docs/plans/v43-task-1-worker-evidence-2026-06-07.md:36`, while the main-verifier prompt requires `git merge --ff-only v43-task-1-app-thread-result-protocol` at `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md:141`. As currently delivered, that merge would bring no task-1 implementation.
+Goal: `v43-goal-supervisor-stabilization`
+Task: `task-1` - App thread and result protocol contracts
+Role: `reviewer`
+Thread: `019ea2c7-0ea2-7da1-8a0d-f0e4fc343285`
+Branch reviewed: `v43-task-1-app-thread-result-protocol`
+Worktree reviewed: `/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol`
+Base commit: `5e645c5c68c72c489ff938ffa076e33725bc05f9`
+Head commit reviewed: `0d4d452626da7c86483d37dd06fcc428660898ea`
+Worker evidence reviewed: `docs/plans/v43-task-1-worker-evidence-2026-06-07.md`
+Review date: `2026-06-07`
 
 ## Verdict
 
-`NEEDS_REVISION`
+`APPROVED`
 
-## Review Metadata
+No blocking findings remain after the worker revision.
 
-- Goal: `v43-goal-supervisor-stabilization`
-- Task: `task-1`
-- Role: `independent reviewer`
-- Branch reviewed: `v43-task-1-app-thread-result-protocol`
-- Worktree reviewed: `/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol`
-- Worker evidence read: `docs/plans/v43-task-1-worker-evidence-2026-06-07.md`
-- Review evidence path: `docs/plans/v43-task-1-review-evidence-2026-06-07.md`
+## Sources checked
 
-## Sources Checked
+- `docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md`
+- `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+- `docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md`
+- `docs/plans/v43-task-1-worker-evidence-2026-06-07.md`
+- `src/symphony/app-thread-result-protocol.js`
+- `src/symphony/supervisor-runner.js`
+- `tests/v43-app-thread-result-protocol.test.js`
+- `tests/v38-supervisor-runner.test.js`
 
-- `/Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md`
-- `/Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
-- `/Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
-- `/Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md`
-- `/Users/andy/Documents/project/multi-coding-agent-symphony/fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json`
-- `/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol/docs/plans/v43-task-1-worker-evidence-2026-06-07.md`
-- `/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol/src/symphony/app-thread-result-protocol.js`
-- `/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol/src/symphony/supervisor-runner.js`
-- `/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol/tests/v43-app-thread-result-protocol.test.js`
+## Review notes
 
-## Coverage Checked
+- Active child binding is gated on readable App readback. `recordThreadBinding` rejects duplicate bindings and unreadable readback before activation.
+- The revised identity check requires the replayable `readThread(threadId)` capability shape, requires `optionalParameters: []`, and rejects readbacks whose capability thread id does not match the binding thread id.
+- Readback responses that identify a different thread through `id`, `threadId`, `thread.id`, or `thread.threadId` are rejected before the binding can become active.
+- `readThreadThroughStableAdapter` calls the adapter with only `threadId` and records the same call shape for replay.
+- `notLoaded` stays a non-mutating wait state and does not become a failed child result.
+- Pending valid parsed results are selected before active-thread readback.
+- Result parsing covers raw result blocks, fenced JSON, invalid JSON, missing fields, wrong thread id, and missing blocks.
+- Correction behavior is bounded to one result-only prompt. Repeated invalid output, unreachable correction, or a queued correction behind an active child returns manual recovery.
+- Result consumption is append-only and idempotent for duplicate record ids.
+- Accepted terminal events include non-success outcomes for reviewer, main-verifier, and release-manager roles.
+- `src/symphony/supervisor-runner.js` now uses the shared accepted terminal event map, removing the local success-biased event list.
 
-- Duplicate binding rejection is covered in `tests/v43-app-thread-result-protocol.test.js`.
-- Unreadable thread id rejection is covered.
-- Missing result block, invalid JSON, missing required fields, markdown fenced payloads, and wrong result thread id are covered.
-- `notLoaded` remains `mutatesState: false`.
-- Pending valid recorded result is selected before live active-thread readback.
-- `consumeParsedResult` is append-only and idempotent for repeated record ids.
-- Reviewer, main-verifier, and release-manager accepted terminal events include non-success outcomes.
-- Correction is bounded to one result-only prompt before manual recovery.
-
-The gap is the readback identity check before activation, not the result-block parser's wrong-thread-id check.
-
-## Commands Run
+## Commands run
 
 | Command | Result |
 | --- | --- |
-| `pnpm check` | Exit `0` |
-| `pnpm test` | Exit `0`; `1093` tests passed, `0` failed |
-| `pnpm workbench:build` | Exit `0`; Vite build completed |
-| `git diff --check` | Exit `0` |
-| identity mismatch reproduction command above | Exit `0`; showed `accepted: true` with mismatched readback thread id |
+| `node --check src/symphony/app-thread-result-protocol.js && node --check src/symphony/supervisor-runner.js && node --test tests/v43-app-thread-result-protocol.test.js tests/v38-supervisor-runner.test.js` | Exit `0`. `12` tests passed, `0` failed. |
+| `git diff --check 5e645c5c68c72c489ff938ffa076e33725bc05f9...HEAD` | Exit `0`. No whitespace errors. |
+| `node --input-type=module <<'NODE' ... identity mismatch reproduction ... NODE` | Exit `0`. Returned `accepted: false`, `active: false`, `reason: thread-readback-capability-mismatch`. |
+| `pnpm --silent symphony goal-status --goal v43-goal-supervisor-stabilization --json` | Exit `0`. Returned `goal-progress-ledger.v1`; `totalTasks: 4`, `completedTasks: 0`, `releaseReady: false`. Local managed state has no registered worker event for task-1, which matches the no-event-registration boundary for this review. |
+| `pnpm --silent symphony goal next --goal v43-goal-supervisor-stabilization --json` | Exit `0`. Returned `goal-next-action.v1`; local managed state still says task-1 worker evidence is not registered. This review uses the leased worker result from the supervisor context, not a local event registration. |
+| `pnpm check` | Exit `0`. Repository syntax check passed. |
+| `pnpm workbench:build` | Exit `0`. Vite built the Workbench static bundle successfully. |
+| `pnpm test` | Exit `0`. `1094` tests passed, `0` failed. |
 
-## Boundary Notes
+## Boundary notes
 
-- I did not implement changes.
-- I did not register `reviewer.approved` or `reviewer.needs-revision`.
-- I did not run main verification or release gates beyond the required review checks.
+- I did not implement product code changes.
+- I did not register `reviewer.approved` or any other goal event.
+- I did not run main verification, release closeout, tag, push, publish, provider CLI, audit, doctor, or mutation commands.
+- The review target was the worker result worktree and evidence ref from the supervisor context: `/Users/andy/.codex/worktrees/v43-task-1-app-thread-result-protocol` and `docs/plans/v43-task-1-worker-evidence-2026-06-07.md`.
+
+## Residual risk
+
+The protocol is still a pure contract/helper layer for task-1. Later tasks need to wire this into workspace safety, route reconciliation, daemon progress, and actual event registration without weakening the same identity and evidence boundaries.
