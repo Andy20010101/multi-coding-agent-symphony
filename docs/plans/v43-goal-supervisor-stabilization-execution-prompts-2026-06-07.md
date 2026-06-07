@@ -7,7 +7,7 @@ Baseline: `v42 Goal Supervisor Runtime Context Loop`
 Use these prompts with `/goal`. The canonical planning flow is in:
 
 ```text
-docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md
+docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 ```
 
 ## Task 0 bootstrap prompt
@@ -19,7 +19,8 @@ docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md
 目标：
 - Plan doc：docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - Execution prompt doc：docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
-- Runbook draft：docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md
+- Global rules：docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
+- Runbook doc：docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - Goal-runbook fixture：fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
 - Goal id：v43-goal-supervisor-stabilization
 - 版本目标：Goal Supervisor Stabilization
@@ -58,7 +59,8 @@ Main verification evidence: `docs/plans/v43-task-1-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
-- docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md
+- docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
+- docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
 - docs/plans/v42-goal-supervisor-runtime-context-loop-plan-2026-06-06.md
 - docs/plans/app-core-v41-v42-goal-runbooks/v42_goal-supervisor-runtime-context-loop_goal_runbook_latest.md
@@ -171,7 +173,8 @@ Main verification evidence: `docs/plans/v43-task-2-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
-- docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md
+- docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
+- docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
 - docs/plans/controller/local-goal-supervisor-v42-mvp-notes-2026-06-06.md
 - 现有 workspace/worktree/evidence-location/state write 相关实现与测试。
@@ -275,7 +278,8 @@ Main verification evidence: `docs/plans/v43-task-3-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
-- docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md
+- docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
+- docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
 - docs/plans/controller/local-goal-supervisor-v42-mvp-notes-2026-06-06.md
 - goal-status / goal next / goal closeout / route engine / ledger reconciliation 相关实现与测试。
@@ -381,7 +385,8 @@ Main verification evidence: `docs/plans/v43-task-4-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
-- docs/plans/v43-goal-supervisor-stabilization-runbook-draft-2026-06-07.md
+- docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
+- docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
 - docs/plans/controller/local-goal-supervisor-v42-mvp-notes-2026-06-06.md
 - v41 controlled runner runbook/fixture 中 operation id、sanitized artifact ref、progress state 相关实现与测试。
