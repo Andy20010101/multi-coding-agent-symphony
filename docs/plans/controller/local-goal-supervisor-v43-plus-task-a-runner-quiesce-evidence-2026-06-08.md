@@ -2,6 +2,7 @@
 
 Task: blocked-state quiesce and approval resume
 Recorded at: `2026-06-08 01:54:07 CST`
+Updated at: `2026-06-08 02:00:00 CST`
 
 ## Scope
 
@@ -15,7 +16,7 @@ The repository change in this branch only records evidence for the temporary cod
 
 ## Runner snapshot
 
-- Script digest after task-A: `sha256 72153e523d75f1c9bf2951f3a858be1e812d1a1b8a011a5ee5b9d332fb72bb57`
+- Script digest after task-A and remaining-task bootstrap: `sha256 ff65ee3c14cd3f5e4b391dca3a91bec125e649ee60e66e7299b34dcf9e084673`
 - Branch used for evidence: `codex/v43-plus-task-a-runner-quiesce`
 - Repository base head before evidence commit: `3b656d7911a6a0f57edb3f5f8e53e559a1be76ba`
 
@@ -31,6 +32,8 @@ Changes made in the external runner:
 - daemon health can report `waiting-operator` without classifying the stopped pid as stale.
 - operator notifications include a `resumeCommand` and `requiresDaemonRestart` field.
 - the notice prompt shows the exact resume command and whether a daemon restart is required.
+- runtime workspace roots now include `/Users/andy/.codex/local-goal-supervisor`, so leased child threads can edit the temporary external runner when the active runbook explicitly asks for local goal supervisor changes.
+- bound child prompts now distinguish repo evidence edits from allowed project-external runner edits.
 
 For release closeout, the generated resume command is:
 
@@ -61,6 +64,7 @@ Selftest now includes:
 - same closeout approval block with phases `release-gate` and `release-prep` uses one operator notice key.
 - daemon tick quiesce applies to daemon ticks, not manual ticks.
 - daemon health status `waiting-operator` is not treated as stale by pid.
+- runtime workspace roots include the target repo, assigned worktree, local goal supervisor root, and result escrow root.
 
 Command:
 

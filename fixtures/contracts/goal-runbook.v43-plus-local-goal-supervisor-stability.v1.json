@@ -1,0 +1,152 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v43-plus-local-goal-supervisor-stability",
+  "goalTitle": "v43+ Local Goal Supervisor Stability",
+  "baseline": {
+    "tag": "v43",
+    "commit": "172140938503637dae909dc0daf87367ea5e9832",
+    "evidenceRef": "docs/plans/v43-github-release-evidence-2026-06-08.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "task-B daemon launcher and health wrapper",
+      "branch": "v43-plus-task-b-daemon-launcher",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "A runner command starts the daemon with the known-good PTY path.",
+        "The start command records pid, PTY log path, daemon id, goal id, interval, and max tick budget.",
+        "A stop command shuts down only the recorded daemon process.",
+        "Doctor reports whether the daemon was started through the expected launcher.",
+        "Manual ticks do not make doctor report a healthy daemon."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "node --check /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs",
+        "node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v43-plus-local-goal-supervisor-stability --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "task-C progress and stall classifier",
+      "branch": "v43-plus-task-c-progress-stall-classifier",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Active child records include latest readable turn status, update time when available, result escrow mtime, assigned worktree state, and latest relevant goal event.",
+        "A child with recent progress remains in wait state.",
+        "A child with no progress after the grace window reports an operator-visible stalled state.",
+        "Valid recorded results are consumed before lossy app-server notLoaded checks.",
+        "Duplicate dispatch stays blocked while an active lease exists."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "node --check /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs",
+        "node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v43-plus-local-goal-supervisor-stability --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "task-D evidence date, version snapshot, and worktree cleanup runbook",
+      "branch": "v43-plus-task-d-evidence-worktree-runbook",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Evidence names and bodies distinguish local run date, timezone, and UTC generated timestamp.",
+        "Major supervisor runs can cite runner script path, digest, selftest result, launcher command, and doctor output.",
+        "Worktree cleanup policy lists goal, branch, head, dirty state, merge state, and evidence state.",
+        "Cleanup cannot remove dirty or unmerged task worktrees."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "node --check /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs",
+        "node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v43-plus-local-goal-supervisor-stability --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "task-E project-internal supervisor migration spec",
+      "branch": "v43-plus-task-e-supervisor-migration-spec",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "The migration spec defines single state writer, app thread adapter, workspace manager, result protocol/parser, event registrar, route engine, progress observer, and operator notification bridge.",
+        "The spec preserves active provider policy: only claude-code-cli and codex-cli are active.",
+        "The spec does not add raw provider CLI execution, browser terminal automation, or tag/publish automation.",
+        "The temporary runner remains usable while project-internal work is planned."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "node --check /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs",
+        "node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v43-plus-local-goal-supervisor-stability --json",
+        "pnpm --silent symphony goal closeout --goal v43-plus-local-goal-supervisor-stability --markdown"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}
