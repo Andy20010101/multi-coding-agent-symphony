@@ -1,23 +1,14 @@
 import { buildGoalNextAction } from './goal-next-action-resolver.js';
+import { ACCEPTED_TERMINAL_EVENTS_BY_ROLE } from './app-thread-result-protocol.js';
 
 export const SUPERVISOR_RUNNER_CONTRACT_NAME = 'goal-supervisor-runner-plan.v1';
 export const SUPERVISOR_RUNNER_CONTRACT_VERSION = 1;
 
-const RESULT_EVENTS_BY_ROLE = Object.freeze({
-  worker: new Set([
-    'worker.evidence-recorded',
-    'worker.self-check-passed',
-    'worker.self-check-failed'
-  ]),
-  reviewer: new Set([
-    'reviewer.approved',
-    'reviewer.needs-revision'
-  ]),
-  'main-verifier': new Set([
-    'main.verification-passed',
-    'main.verification-failed'
-  ])
-});
+const RESULT_EVENTS_BY_ROLE = Object.freeze(
+  Object.fromEntries(
+    Object.entries(ACCEPTED_TERMINAL_EVENTS_BY_ROLE).map(([role, events]) => [role, new Set(events)])
+  )
+);
 
 export class SupervisorRunnerUsageError extends Error {
   constructor(message) {
