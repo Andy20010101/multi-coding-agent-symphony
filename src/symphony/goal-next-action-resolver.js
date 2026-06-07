@@ -24,6 +24,11 @@ const TASK_MAIN_VERIFICATION_EVENTS = Object.freeze([
   'main.verification-passed',
   'main.verification-failed'
 ]);
+const RELEASE_ROUTE_EVENTS = Object.freeze([
+  'release.gate-passed',
+  'release.gate-failed',
+  'release.ready-declared'
+]);
 const RELEASE_GATE_TO_LEDGER_ID = Object.freeze({
   'release.pnpm-check': 'pnpmCheck',
   'release.pnpm-test': 'pnpmTest',
@@ -140,11 +145,18 @@ export function resolveGoalNextAction({
       .map((task) => [task.taskId, task])
   );
 
+  const reconciliation = buildGoalRouteReconciliation({
+    runbook,
+    eventLog,
+    ledger,
+    ledgerTasks
+  });
+
   if (isReleaseComplete({ runbook, eventLog, ledger, ledgerTasks })) {
-    return buildCompleteNextAction({
+    return withRouteReconciliation(buildCompleteNextAction({
       goalId: runbook.goalId,
       reason: 'release.ready-declared is recorded and all runbook release gates have passed.'
-    });
+    }), reconciliation);
   }
 
   const blockedTask = runbook.tasks
@@ -163,13 +175,13 @@ export function resolveGoalNextAction({
         });
 
     if (blockedTaskRevisionAction?.next?.role === 'worker' && blockedTaskRevisionAction.next.phase === 'revision') {
-      return blockedTaskRevisionAction;
+      return withRouteReconciliation(blockedTaskRevisionAction, reconciliation);
     }
 
-    return buildBlockedNextAction({
+    return withRouteReconciliation(buildBlockedNextAction({
       goalId: runbook.goalId,
       reason: `${blockedTask.taskId} has an open blocker in goal-progress-ledger.v1.`
-    });
+    }), reconciliation);
   }
 
   for (const runbookTask of runbook.tasks) {
@@ -183,17 +195,18 @@ export function resolveGoalNextAction({
     });
 
     if (taskAction !== null) {
-      return taskAction;
+      return withRouteReconciliation(taskAction, reconciliation);
     }
   }
 
   const missingGate = firstMissingReleaseGate({
     runbook,
-    ledger
+    ledger,
+    eventLog
   });
 
   if (missingGate !== null) {
-    return buildReleaseManagerNextAction({
+    return withRouteReconciliation(buildReleaseManagerNextAction({
       goalId: runbook.goalId,
       phase: 'release-gate',
       reason: `${missingGate} is not passed in goal-progress-ledger.v1.`,
@@ -202,16 +215,16 @@ export function resolveGoalNextAction({
         gate: missingGate
       }),
       allowedEvents: ['release.gate-passed', 'release.gate-failed']
-    });
+    }), reconciliation);
   }
 
-  return buildReleaseManagerNextAction({
+  return withRouteReconciliation(buildReleaseManagerNextAction({
     goalId: runbook.goalId,
     phase: 'release-prep',
     reason: 'All runbook tasks are main-verified and release gates are passed, but release.ready-declared is missing.',
     copyOnlyCommands: [`symphony goal-status --goal ${runbook.goalId} --json`],
     allowedEvents: ['release.ready-declared']
-  });
+  }), reconciliation);
 }
 
 function resolveTaskNextAction({
@@ -321,6 +334,12 @@ function taskEventState(events, taskId) {
   };
 }
 
+function taskHasRouteEvents(taskEvents) {
+  return taskEvents.latestWorkerEvidence !== null ||
+    taskEvents.latestReviewVerdict !== null ||
+    taskEvents.latestMainVerification !== null;
+}
+
 function latestEventOfTypes(events, eventTypes) {
   return events
     .filter((event) => eventTypes.includes(event.eventType))
@@ -333,6 +352,10 @@ function hasWorkerEvidence({ ledgerTask, taskEvents }) {
 }
 
 function hasMainVerificationPassed({ ledgerTask, taskEvents }) {
+  if (taskHasRouteEvents(taskEvents)) {
+    return taskEvents.latestMainVerification?.eventType === 'main.verification-passed';
+  }
+
   if (taskEvents.latestMainVerification !== null) {
     return taskEvents.latestMainVerification.eventType === 'main.verification-passed';
   }
@@ -357,11 +380,9 @@ function isEventAfter(left, right) {
   return left.sequence > right.sequence;
 }
 
-function firstMissingReleaseGate({ runbook, ledger }) {
+function firstMissingReleaseGate({ runbook, ledger, eventLog }) {
   for (const gate of runbook.releaseGates) {
-    const ledgerGateId = RELEASE_GATE_TO_LEDGER_ID[gate];
-
-    if (!GOAL_PROGRESS_RELEASE_GATE_IDS.includes(ledgerGateId) || ledger.releaseGates[ledgerGateId] !== 'passed') {
+    if (releaseGatePassed({ gate, eventLog, ledger }) !== true) {
       return gate;
     }
   }
@@ -372,12 +393,189 @@ function firstMissingReleaseGate({ runbook, ledger }) {
 function isReleaseComplete({ runbook, eventLog, ledger, ledgerTasks }) {
   return eventLog.events.some((event) => event.eventType === 'release.ready-declared') &&
     runbook.releaseGates.every((gate) => {
-      const ledgerGateId = RELEASE_GATE_TO_LEDGER_ID[gate];
-
-      return GOAL_PROGRESS_RELEASE_GATE_IDS.includes(ledgerGateId) &&
-        ledger.releaseGates?.[ledgerGateId] === 'passed';
+      return releaseGatePassed({ gate, eventLog, ledger });
     }) &&
-    runbook.tasks.every((task) => ['main-verified', 'release-ready'].includes(ledgerTasks.get(task.taskId)?.status));
+    runbook.tasks.every((task) => hasMainVerificationPassed({
+      ledgerTask: ledgerTasks.get(task.taskId),
+      taskEvents: taskEventState(eventLog.events, task.taskId)
+    }));
+}
+
+function releaseGatePassed({ gate, eventLog, ledger }) {
+  const ledgerGateId = RELEASE_GATE_TO_LEDGER_ID[gate];
+
+  if (!GOAL_PROGRESS_RELEASE_GATE_IDS.includes(ledgerGateId)) {
+    return false;
+  }
+
+  const releaseEvents = Array.isArray(eventLog?.events)
+    ? eventLog.events.filter((event) => RELEASE_ROUTE_EVENTS.includes(event.eventType))
+    : [];
+  const hasReleaseEventState = releaseEvents.length > 0;
+
+  if (hasReleaseEventState) {
+    return latestReleaseGateStatus({
+      events: releaseEvents,
+      gate
+    }) === 'passed';
+  }
+
+  return ledger.releaseGates?.[ledgerGateId] === 'passed';
+}
+
+function latestReleaseGateStatus({ events, gate }) {
+  return events
+    .filter((event) => event.eventType === 'release.gate-passed' || event.eventType === 'release.gate-failed')
+    .filter((event) => releaseEventGateName(event) === gate)
+    .sort((left, right) => left.sequence - right.sequence)
+    .at(-1)?.gate?.status ?? null;
+}
+
+function releaseEventGateName(event) {
+  if (!isPlainObject(event?.gate)) {
+    return null;
+  }
+
+  const rawGateId = event.gate.id ?? event.gate.name;
+
+  return typeof rawGateId === 'string' && rawGateId.trim() !== '' ? rawGateId : null;
+}
+
+export function buildGoalRouteReconciliation({
+  runbook,
+  eventLog,
+  ledger,
+  ledgerTasks = null
+}) {
+  const warnings = [];
+  const events = Array.isArray(eventLog?.events) ? eventLog.events : [];
+  const resolvedLedgerTasks = ledgerTasks instanceof Map && ledgerTasks.size > 0
+    ? ledgerTasks
+    : new Map((Array.isArray(ledger?.tasks) ? ledger.tasks : []).map((task) => [task.taskId, task]));
+
+  for (const runbookTask of Array.isArray(runbook?.tasks) ? runbook.tasks : []) {
+    const taskEvents = taskEventState(events, runbookTask.taskId);
+
+    if (!taskHasRouteEvents(taskEvents)) {
+      continue;
+    }
+
+    const ledgerTask = resolvedLedgerTasks.get(runbookTask.taskId);
+
+    if (ledgerTask === undefined) {
+      warnings.push(routeWarning({
+        code: 'ledger-task-missing',
+        taskId: runbookTask.taskId,
+        eventSource: latestTaskRouteEvent(taskEvents),
+        ledgerSource: null,
+        message: `${runbookTask.taskId} has route events but no matching goal-status task entry.`
+      }));
+      continue;
+    }
+
+    if (taskEvents.latestMainVerification === null &&
+      ['main-verified', 'release-ready'].includes(ledgerTask.status)) {
+      warnings.push(routeWarning({
+        code: 'ledger-main-verification-without-event',
+        taskId: runbookTask.taskId,
+        eventSource: latestTaskRouteEvent(taskEvents),
+        ledgerSource: ledgerTask.statusSource ?? null,
+        message: `${runbookTask.taskId} is ${ledgerTask.status} in goal-status but has no main verification event.`
+      }));
+    }
+
+    if (taskEvents.latestMainVerification?.eventType === 'main.verification-failed' &&
+      ['main-verified', 'release-ready'].includes(ledgerTask.status)) {
+      warnings.push(routeWarning({
+        code: 'ledger-main-verification-disagrees-with-latest-event',
+        taskId: runbookTask.taskId,
+        eventSource: goalEventSource(taskEvents.latestMainVerification),
+        ledgerSource: ledgerTask.statusSource ?? null,
+        message: `${runbookTask.taskId} is ${ledgerTask.status} in goal-status but latest main verification failed.`
+      }));
+    }
+  }
+
+  for (const gate of Array.isArray(runbook?.releaseGates) ? runbook.releaseGates : []) {
+    const releaseEvents = events.filter((event) => RELEASE_ROUTE_EVENTS.includes(event.eventType));
+
+    if (releaseEvents.length === 0) {
+      continue;
+    }
+
+    const ledgerGateId = RELEASE_GATE_TO_LEDGER_ID[gate];
+    const eventGateStatus = latestReleaseGateStatus({
+      events: releaseEvents,
+      gate
+    });
+    const ledgerGateStatus = GOAL_PROGRESS_RELEASE_GATE_IDS.includes(ledgerGateId)
+      ? ledger?.releaseGates?.[ledgerGateId] ?? null
+      : null;
+
+    if (eventGateStatus !== 'passed' && ledgerGateStatus === 'passed') {
+      warnings.push(routeWarning({
+        code: 'ledger-release-gate-without-event',
+        taskId: 'release',
+        eventSource: latestReleaseRouteEvent(releaseEvents),
+        ledgerSource: `goal-progress-ledger.v1:${ledgerGateId}`,
+        message: `${gate} is passed in goal-status but lacks a passed release gate event.`
+      }));
+    }
+  }
+
+  return {
+    contractName: 'goal-route-reconciliation.v1',
+    contractVersion: 1,
+    status: warnings.length === 0 ? 'consistent' : 'warning',
+    warningCount: warnings.length,
+    warnings
+  };
+}
+
+function latestTaskRouteEvent(taskEvents) {
+  return [
+    taskEvents.latestWorkerEvidence,
+    taskEvents.latestReviewVerdict,
+    taskEvents.latestMainVerification
+  ]
+    .filter((event) => event !== null)
+    .sort((left, right) => left.sequence - right.sequence)
+    .at(-1) ?? null;
+}
+
+function latestReleaseRouteEvent(events) {
+  return events
+    .filter((event) => RELEASE_ROUTE_EVENTS.includes(event.eventType))
+    .sort((left, right) => left.sequence - right.sequence)
+    .at(-1) ?? null;
+}
+
+function goalEventSource(event) {
+  return event === null ? null : `goal-event-log.v1:${event.eventId}`;
+}
+
+function routeWarning({
+  code,
+  taskId,
+  eventSource,
+  ledgerSource,
+  message
+}) {
+  return {
+    code,
+    taskId,
+    eventSource: goalEventSource(eventSource),
+    ledgerSource,
+    message
+  };
+}
+
+function withRouteReconciliation(nextAction, reconciliation) {
+  return {
+    ...nextAction,
+    reconciliationWarnings: reconciliation?.warnings ?? [],
+    reconciliation
+  };
 }
 
 function buildTaskNextAction({
@@ -594,4 +792,10 @@ function safeErrorMessage(error) {
 
 function uniqueNonEmptyStrings(values) {
   return [...new Set(values.filter((value) => typeof value === 'string' && value.trim() !== ''))];
+}
+
+function isPlainObject(value) {
+  return value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value);
 }
