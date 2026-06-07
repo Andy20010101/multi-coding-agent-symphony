@@ -6,6 +6,8 @@ Goal id draft: `v43-goal-supervisor-stabilization`
 
 Plan doc: `docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md`
 
+Fixture draft: `fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json`
+
 Status: planning draft only. Do not use this document as evidence that v43 implementation has started.
 
 ## Tracked Historical Entry Point
@@ -48,9 +50,11 @@ git status -sb
 git checkout -b codex/v43-bootstrap
 ```
 
-After a fixture exists, register the goal with the normal dry-run then confirm flow:
+Validate the fixture draft, then register the goal with the normal dry-run then confirm flow when implementation is actually approved to start:
 
 ```sh
+node --input-type=module -e "import { readFile } from 'node:fs/promises'; import { assertGoalRunbookContract } from './src/symphony/goal-runbook-contracts.js'; const path='fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json'; const runbook=JSON.parse(await readFile(path,'utf8')); assertGoalRunbookContract(runbook); console.log(JSON.stringify({ ok:true, path, goalId:runbook.goalId, tasks:runbook.tasks.length, releaseGates:runbook.releaseGates }));"
+
 pnpm --silent symphony goal init \
   --from-json fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json \
   --goal v43-goal-supervisor-stabilization \
@@ -153,7 +157,7 @@ Implement only observability and restart-safe supervisor behavior:
 
 ## Scoped Closeout Draft
 
-v43 must explicitly choose its scoped closeout gate set in the fixture or runbook. Recommended default: inherit the v37-v42 scoped gate set unchanged unless a later task intentionally expands it. If the fixture keeps that scoped set, local evidence commands are:
+v43 explicitly inherits the scoped v37-v42 gate set in the current fixture draft. If later work expands that set, update both the fixture and this runbook together. Until then, local evidence commands are:
 
 ```sh
 pnpm check

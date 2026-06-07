@@ -239,7 +239,7 @@ Leave these for v44 or later:
 
 ## Release Gates Draft
 
-v43 must explicitly declare whether it inherits the scoped v37-v42 gate set or replaces it. The recommended default is to inherit the same scoped closeout pattern in the v43 fixture unless a later task intentionally expands it:
+v43 explicitly inherits the scoped v37-v42 gate set in the current fixture draft. If later work expands the gate set, update the fixture and runbook together:
 
 ```sh
 pnpm check
