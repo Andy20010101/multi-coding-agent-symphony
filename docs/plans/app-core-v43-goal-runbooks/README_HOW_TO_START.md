@@ -17,6 +17,7 @@ multi-coding-agent-symphony/
       v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
       v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
       v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
+      v43-planning-pr-brief-2026-06-07.md
   fixtures/
     contracts/
       goal-runbook.v43-goal-supervisor-stabilization.v1.json
@@ -51,6 +52,7 @@ Task support docs:
 
 - `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
 - `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
+- `docs/plans/v43-planning-pr-brief-2026-06-07.md`
 
 ## Register v43
 

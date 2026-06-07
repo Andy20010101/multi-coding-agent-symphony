@@ -30,6 +30,7 @@ Planning deliverables:
 - `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
 - `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
 - `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
+- `docs/plans/v43-planning-pr-brief-2026-06-07.md`
 - `docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md`
 - `docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md`
 - `docs/plans/app-core-v43-goal-runbooks/README_HOW_TO_START.md`
@@ -39,6 +40,7 @@ Task support docs:
 
 - Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
 - Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
+- PR brief: `docs/plans/v43-planning-pr-brief-2026-06-07.md`
 
 ## Positioning
 
