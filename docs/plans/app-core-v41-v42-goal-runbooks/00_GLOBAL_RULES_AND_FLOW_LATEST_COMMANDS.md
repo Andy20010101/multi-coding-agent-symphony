@@ -136,7 +136,7 @@ pnpm --silent symphony goal gate \
 
 ## Scoped Release Gates
 
-For v41 scoped closeout, the controlled runbook fixture `releaseGates` is the source of truth. When the fixture lists only:
+For v41-v42 scoped closeout, the controlled runbook fixture `releaseGates` is the source of truth. When the fixture lists only:
 
 ```text
 release.pnpm-check
@@ -155,7 +155,9 @@ pnpm workbench:build
 git diff --check
 ```
 
-Docs-updated evidence is written evidence tied to the task or closeout document. Do not run mutation, audit, doctor, tag, publish, raw `claude`, raw `codex`, Kiro, Gemini, DeepSeek, or arbitrary shell commands for v41 scoped closeout unless a later controlled fixture/schema explicitly adds that gate.
+Docs-updated evidence is written evidence tied to the task or closeout document. Do not run mutation, audit, doctor, tag, publish, raw `claude`, raw `codex`, Kiro, Gemini, DeepSeek, or arbitrary shell commands for v41-v42 scoped closeout unless a later controlled fixture/schema explicitly adds that gate.
+
+v43 and later must explicitly declare whether this scoped gate set continues unchanged or is replaced.
 
 ## v42 Boundary
 

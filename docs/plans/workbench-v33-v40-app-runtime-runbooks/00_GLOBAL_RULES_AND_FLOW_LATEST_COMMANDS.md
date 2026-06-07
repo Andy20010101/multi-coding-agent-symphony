@@ -204,9 +204,9 @@ git diff --check
 # Write main verification evidence and register main-verification gate.
 ```
 
-## v37-v41 scoped release gates
+## v37-v42 scoped release gates
 
-For v37-v41 scoped closeout, the controlled runbook fixture `releaseGates` is the source of truth. When the fixture lists only:
+For v37-v42 scoped closeout, the controlled runbook fixture `releaseGates` is the source of truth. When the fixture lists only:
 
 ```text
 release.pnpm-check
@@ -225,7 +225,9 @@ pnpm workbench:build
 git diff --check
 ```
 
-Docs-updated evidence is written evidence tied to the task or closeout document. Do not add `pnpm test:mutation:gate`, `pnpm audit --audit-level high`, or `pnpm mcas doctor` to a scoped v37-v41 closeout unless the active runbook fixture explicitly includes that gate or the operator requests a repository tag/full release validation.
+Docs-updated evidence is written evidence tied to the task or closeout document. Do not add `pnpm test:mutation:gate`, `pnpm audit --audit-level high`, or `pnpm mcas doctor` to a scoped v37-v42 closeout unless the active runbook fixture explicitly includes that gate or the operator requests a repository tag/full release validation.
+
+For v43 and later, the active version plan or runbook must explicitly say whether this scoped gate set continues unchanged or is replaced.
 
 ## Version sequence
 

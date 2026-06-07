@@ -28,3 +28,13 @@ Confirm only with the returned plan hash.
 - UI and renderer code must not execute provider CLIs directly.
 - Do not add a generic shell runner.
 - v42 is listed as the next module only; do not implement it during v41.
+
+## Post-v42 Reference
+
+For post-v42 planning, use the tracked v42 plan, runbook, fixture, release evidence, GitHub release evidence, and local supervisor MVP notes. Do not rely on untracked `.symphony` managed-goal state as the only historical entry point.
+
+Tracked v42 references:
+
+- `docs/plans/v42-goal-supervisor-runtime-context-loop-plan-2026-06-06.md`
+- `docs/plans/app-core-v41-v42-goal-runbooks/v42_goal-supervisor-runtime-context-loop_goal_runbook_latest.md`
+- `fixtures/contracts/goal-runbook.v42-goal-supervisor-runtime-context-loop.v1.json`

@@ -1,0 +1,221 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v42-goal-supervisor-runtime-context-loop",
+  "goalTitle": "v42 Goal Supervisor Runtime Context Loop",
+  "baseline": {
+    "tag": "v41",
+    "commit": "00387489fffa843ed5e694ede7b2c55951061323",
+    "evidenceRef": "docs/plans/v41-release-evidence-2026-06-06.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-0",
+      "title": "Bootstrap v42 runbook, fixture, and managed goal",
+      "branch": "codex/v42-bootstrap",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Tracked v42 plan, runbook, and fixture exist on main and point to the released v42 baseline.",
+        "The tracked v42 entry uses release evidence, GitHub release evidence, and local supervisor MVP notes as historical source material.",
+        "The fixture validates as goal-runbook.v1 and keeps the scoped release gate set limited to pnpm-check, pnpm-test, workbench-build, diff-check, and docs-updated.",
+        "Managed-goal replay is possible from the fixture, but v43 planning must use tracked repository files instead of untracked .symphony state as its primary entry point.",
+        "State changes remain event-backed and controlled."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "node --input-type=module -e \"import { readFile } from 'node:fs/promises'; import { assertGoalRunbookContract } from './src/symphony/goal-runbook-contracts.js'; const path='fixtures/contracts/goal-runbook.v42-goal-supervisor-runtime-context-loop.v1.json'; const runbook=JSON.parse(await readFile(path,'utf8')); assertGoalRunbookContract(runbook); console.log(JSON.stringify({ ok:true, path, goalId:runbook.goalId, tasks:runbook.tasks.length, releaseGates:runbook.releaseGates }));\"",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v42-goal-supervisor-runtime-context-loop --json",
+        "pnpm --silent symphony goal next --goal v42-goal-supervisor-runtime-context-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-1",
+      "title": "State store and route engine contracts",
+      "branch": "v42-task-1-state-store-route-engine-contracts",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Supervisor state records goal id, repo, active lease, requests, threads, results, checkpoints, blockers, operator notifications, context policy, model route, and updated-at metadata.",
+        "Route decisions use event sequence plus validated local results instead of only summarized ledger state.",
+        "Release closeout stays blocked until explicit operator authorization exists.",
+        "State writes follow a single-writer, atomic update model.",
+        "State changes remain event-backed and controlled."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v42-goal-supervisor-runtime-context-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "App thread adapter and result protocol",
+      "branch": "v42-task-2-app-thread-adapter-result-protocol",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "A created thread is not considered active until the App adapter can read it back.",
+        "Thread binding rejects duplicate bindings and unreadable thread ids.",
+        "Result parsing is append-only and idempotent.",
+        "Missing or malformed result blocks trigger one bounded correction path before recovery escalation.",
+        "App notLoaded remains a non-mutating wait state."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v42-goal-supervisor-runtime-context-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "Workspace manager and evidence-location gates",
+      "branch": "v42-task-3-workspace-manager-evidence-location-gates",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Workspace preparation records source task, source worktree, target worktree, copied files, deleted files, dependency setup, and base commit.",
+        "Worktrees are checked for dependency readiness before dispatch.",
+        "Root status is checked before and after each child phase.",
+        "Role results are rejected when evidence exists only in the root checkout or outside the assigned worktree.",
+        "Verification inventory includes tracked, staged, deleted, and untracked files."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v42-goal-supervisor-runtime-context-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "Daemon, heartbeat, operator notification, and progress monitor",
+      "branch": "v42-task-4-daemon-heartbeat-progress-monitor",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Daemon health is separated from manual tick freshness.",
+        "Heartbeat does not start duplicate work while an active lease exists.",
+        "Approval-required and blocked states include exact goal, task, role, phase, reason, and safe resume command.",
+        "A stale daemon with an active child yields a clear operator-visible poll or restart notification.",
+        "Progress projection reports active child age, latest tick, and retry or timeout policy."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v42-goal-supervisor-runtime-context-loop --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "Workbench and CLI projection",
+      "branch": "v42-task-5-workbench-cli-projection",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "CLI projection returns bounded JSON for supervisor status and next action.",
+        "Workbench projection displays active lease, thread id, task, role, phase, latest checkpoint, blockers, operator notifications, and safe resume command.",
+        "Projection does not run shell commands, create threads, register events, open local files, merge, push, tag, publish, or call providers.",
+        "Write actions remain controlled by existing goal event commands and explicit preview or confirm paths.",
+        "Release closeout stays visible as approval-required until explicit operator authorization exists."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v42-goal-supervisor-runtime-context-loop --json",
+        "pnpm --silent symphony goal closeout --goal v42-goal-supervisor-runtime-context-loop --markdown"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

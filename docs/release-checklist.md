@@ -18,7 +18,7 @@ pnpm mcas doctor
 
 Expected result: every command exits with code `0`. The Workbench build must refresh `src/symphony/workbench-static/` from the React/Vite source. The mutation gate runs Stryker against the hardened core modules and must stay above its configured break threshold. Passing these commands is local command evidence; release-ready still requires explicit goal gate events.
 
-For v37-v41 scoped closeout, use the active runbook fixture `releaseGates` as the source of truth. When the fixture lists `release.pnpm-check`, `release.pnpm-test`, `release.workbench-build`, `release.diff-check`, and `release.docs-updated`, the default local commands are:
+For v37-v42 scoped closeout, use the active runbook fixture `releaseGates` as the source of truth. When the fixture lists `release.pnpm-check`, `release.pnpm-test`, `release.workbench-build`, `release.diff-check`, and `release.docs-updated`, the default local commands are:
 
 ```sh
 pnpm check
@@ -27,7 +27,9 @@ pnpm workbench:build
 git diff --check
 ```
 
-Record docs-updated evidence in the task or closeout evidence file. Do not run `pnpm test:mutation:gate`, `pnpm audit --audit-level high`, or `pnpm mcas doctor` for a scoped v37-v41 closeout unless the runbook fixture explicitly includes that gate or the operator asks for repository tag/full release validation.
+Record docs-updated evidence in the task or closeout evidence file. Do not run `pnpm test:mutation:gate`, `pnpm audit --audit-level high`, or `pnpm mcas doctor` for a scoped v37-v42 closeout unless the runbook fixture explicitly includes that gate or the operator asks for repository tag/full release validation.
+
+For v43 and later, do not assume this scoped gate set automatically continues. The active version plan or runbook must say whether it inherits the v37-v42 scoped gates unchanged or overrides them.
 
 Workbench release closeout records these command results as explicit release gate events. Use the release checklist row for each gate, attach the release evidence ref, preview the `symphony goal gate` dry-run plan, then confirm with the returned plan hash. The docs-updated and tag-evidence gates still require written evidence refs; Workbench does not infer them from changed filenames.
 
