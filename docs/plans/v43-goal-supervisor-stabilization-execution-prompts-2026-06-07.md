@@ -19,6 +19,8 @@ docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_run
 目标：
 - Plan doc：docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - Execution prompt doc：docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
+- Replay/test matrix：docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
+- Evidence skeletons：docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
 - Global rules：docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
 - Runbook doc：docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - Goal-runbook fixture：fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
@@ -43,6 +45,8 @@ Branch: `v43-task-1-app-thread-result-protocol`
 Worker evidence: `docs/plans/v43-task-1-worker-evidence-2026-06-07.md`
 Review evidence: `docs/plans/v43-task-1-review-evidence-2026-06-07.md`
 Main verification evidence: `docs/plans/v43-task-1-main-verification-evidence-2026-06-07.md`
+Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ### Worker prompt
 
@@ -59,6 +63,8 @@ Main verification evidence: `docs/plans/v43-task-1-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
 - docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
 - docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
@@ -157,6 +163,8 @@ Branch: `v43-task-2-workspace-evidence-safety`
 Worker evidence: `docs/plans/v43-task-2-worker-evidence-2026-06-07.md`
 Review evidence: `docs/plans/v43-task-2-review-evidence-2026-06-07.md`
 Main verification evidence: `docs/plans/v43-task-2-main-verification-evidence-2026-06-07.md`
+Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ### Worker prompt
 
@@ -173,6 +181,8 @@ Main verification evidence: `docs/plans/v43-task-2-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
 - docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
 - docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
@@ -262,6 +272,8 @@ Branch: `v43-task-3-route-status-reconciliation`
 Worker evidence: `docs/plans/v43-task-3-worker-evidence-2026-06-07.md`
 Review evidence: `docs/plans/v43-task-3-review-evidence-2026-06-07.md`
 Main verification evidence: `docs/plans/v43-task-3-main-verification-evidence-2026-06-07.md`
+Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ### Worker prompt
 
@@ -278,6 +290,8 @@ Main verification evidence: `docs/plans/v43-task-3-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
 - docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
 - docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
@@ -369,6 +383,8 @@ Branch: `v43-task-4-daemon-heartbeat-progress`
 Worker evidence: `docs/plans/v43-task-4-worker-evidence-2026-06-07.md`
 Review evidence: `docs/plans/v43-task-4-review-evidence-2026-06-07.md`
 Main verification evidence: `docs/plans/v43-task-4-main-verification-evidence-2026-06-07.md`
+Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ### Worker prompt
 
@@ -385,6 +401,8 @@ Main verification evidence: `docs/plans/v43-task-4-main-verification-evidence-20
 先读：
 - docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
+- docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
 - docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
 - docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json

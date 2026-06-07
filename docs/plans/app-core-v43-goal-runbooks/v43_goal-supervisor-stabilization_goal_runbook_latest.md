@@ -47,6 +47,8 @@ Recommended docs:
 
 - Plan doc: `docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md`
 - Execution prompt doc: `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+- Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 - Global rules: `docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md`
 - Version runbook: `docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md`
 - Fixture: `fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json`
@@ -69,6 +71,8 @@ git checkout -b codex/v43-bootstrap
 目标：
 - Plan doc：docs/plans/v43-goal-supervisor-stabilization-plan-2026-06-07.md
 - Execution prompt doc：docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
+- Replay/test matrix：docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
+- Evidence skeletons：docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
 - Global rules：docs/plans/app-core-v43-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md
 - Runbook doc：docs/plans/app-core-v43-goal-runbooks/v43_goal-supervisor-stabilization_goal_runbook_latest.md
 - Goal-runbook fixture：fixtures/contracts/goal-runbook.v43-goal-supervisor-stabilization.v1.json
@@ -140,6 +144,8 @@ Stabilize child thread binding, `readThread(threadId)` readback, append-only res
 ### Prompt refs
 
 - Worker/reviewer/main verification prompts: `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+- Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ## task-2: Workspace and evidence safety
 
@@ -167,6 +173,8 @@ Add dependency preflight, deterministic setup or blocker handling, verified dirt
 ### Prompt refs
 
 - Worker/reviewer/main verification prompts: `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+- Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ## task-3: Route engine and status reconciliation
 
@@ -194,6 +202,8 @@ Drive next-action decisions from append-only events plus validated results, emit
 ### Prompt refs
 
 - Worker/reviewer/main verification prompts: `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+- Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ## task-4: Daemon, heartbeat, notifications, and progress visibility
 
@@ -221,6 +231,8 @@ Separate daemon health from manual ticks and runner progress, expose stale-child
 ### Prompt refs
 
 - Worker/reviewer/main verification prompts: `docs/plans/v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md`
+- Replay/test matrix: `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+- Evidence skeletons: `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ## Scoped Release Gates
 

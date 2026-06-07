@@ -15,6 +15,8 @@ multi-coding-agent-symphony/
         README_HOW_TO_START.md
       v43-goal-supervisor-stabilization-plan-2026-06-07.md
       v43-goal-supervisor-stabilization-execution-prompts-2026-06-07.md
+      v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md
+      v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md
   fixtures/
     contracts/
       goal-runbook.v43-goal-supervisor-stabilization.v1.json
@@ -44,6 +46,11 @@ Historical v42 inputs:
 - `docs/plans/controller/local-goal-supervisor-v42-mvp-notes-2026-06-06.md`
 
 Do not bootstrap v43 from untracked `.symphony` state alone.
+
+Task support docs:
+
+- `docs/plans/v43-goal-supervisor-stabilization-replay-test-matrix-2026-06-07.md`
+- `docs/plans/v43-goal-supervisor-stabilization-evidence-skeletons-2026-06-07.md`
 
 ## Register v43
 
