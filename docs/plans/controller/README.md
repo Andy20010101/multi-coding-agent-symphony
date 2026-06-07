@@ -45,6 +45,7 @@ Automation belongs in the thin supervisor. Context-heavy reasoning belongs in fr
 - `supervisor-runner.md`: local dry-run runner state machine and command contract.
 - `supervisor-hooks.md`: hook points for state transitions, checkpointing, and timeout/dirty handling.
 - `local-goal-supervisor-v43-plus-task-d-runner-snapshot-cleanup-runbook.md`: evidence clock, runner snapshot, and non-destructive worktree cleanup rules for the temporary external supervisor.
+- `local-goal-supervisor-v43-plus-task-e-project-internal-supervisor-migration-spec-2026-06-08.md`: migration spec for moving the temporary external supervisor toward a project-internal supervisor module without expanding provider or release automation scope.
 - `master-once-prompt.md`: startup prompt for the controller Codex thread.
 - `context-management.md`: lease, context budget, rotation, and pause rules.
 - `v38-controller-state.md`: current checkpoint for v38 controller work.
