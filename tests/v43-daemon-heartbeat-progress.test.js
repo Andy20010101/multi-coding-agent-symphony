@@ -114,6 +114,31 @@ describe('v43 daemon heartbeat and progress visibility', () => {
     assert.doesNotMatch(JSON.stringify(visibility), /do-not-print|secret-artifact-ref|sk-live-secret123456/u);
   });
 
+  it('redacts secret-looking provider status and recovery-note values', () => {
+    const visibility = buildSupervisorObservability({
+      goalId: FIXTURE_GOAL_ID,
+      generatedAt: GENERATED_AT,
+      providerId: 'codex-cli',
+      providerOperationId: 'op_v41_provider_9',
+      providerProgressAt: '2026-06-07T12:04:00.000Z',
+      providerStatus: 'SECRET=do-not-print password=hunter2 credential=abc123',
+      providerRecoveryNote: 'recover after PASSWORD=keep-out credential:"quoted-secret"'
+    });
+
+    assert.equal(
+      visibility.providerProgress.sanitizedStatus,
+      '[redacted] [redacted] [redacted]'
+    );
+    assert.equal(
+      visibility.providerProgress.recoveryNote,
+      'recover after [redacted] [redacted]'
+    );
+    assert.doesNotMatch(
+      JSON.stringify(visibility),
+      /SECRET|PASSWORD|credential|do-not-print|hunter2|abc123|keep-out|quoted-secret/iu
+    );
+  });
+
   it('reports a healthy daemon with an active child without creating duplicate work', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v43-active-child-'));
 

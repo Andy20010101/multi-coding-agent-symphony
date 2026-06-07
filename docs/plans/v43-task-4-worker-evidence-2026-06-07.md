@@ -3,7 +3,7 @@
 Goal: `v43-goal-supervisor-stabilization`
 Task: `task-4` - Daemon, heartbeat, notifications, and progress visibility
 Role: `worker`
-Thread: `019ea2f4-f245-75d0-879a-e7f27ec7225a`
+Thread: `019ea2ff-2da5-7cd2-9a25-b97be58e2b56`
 Branch: `v43-task-4-daemon-heartbeat-progress`
 Worktree: `/Users/andy/.codex/worktrees/v43-task-4-daemon-heartbeat-progress`
 Base commit: `6939d4dcd126df851f935d353e4ebe585eab96ea`
@@ -30,6 +30,7 @@ Date: `2026-06-08`
 - Blocked duplicate dispatch when an active lease or child thread is already present, including stale-daemon and healthy-daemon cases.
 - Added approval-required notifications with the exact command and flag supplied by the caller.
 - Added controlled provider progress projection using provider id, v41 operation id, timeout policy, sanitized status, sanitized artifact refs, and recovery note. Raw provider output is not exposed.
+- Revised provider progress redaction after review so `SECRET`, `PASSWORD`, and `credential` key/value text is removed from provider status and recovery notes before observability output is built.
 - Added a single documented restart path for stopped idle runner projection: `pnpm --silent symphony supervisor run --goal <goalId> --json`.
 
 ## Files changed
@@ -43,15 +44,17 @@ Date: `2026-06-08`
 - `tests/v43-daemon-heartbeat-progress.test.js` covers distinct daemon/manual/progress states, stale active-child no-duplicate-dispatch, approval-required notification, sanitized provider progress, and healthy active-child no-duplicate-dispatch.
 - CLI smoke confirmed the new supervisor flags produce a dry-run plan with `status: "blocked"`, `stopReason: "stale-daemon-active-child-needs-operator-inspection"`, and `duplicateDispatchAllowed: false` when a stale daemon still has an active child.
 - Provider progress test confirms `rawOutputExposed: false`, `rawOutputSuppressed: true`, drops secret-bearing artifact refs, and does not emit raw provider output or secret-looking values.
+- Revision regression confirms provider status `SECRET=do-not-print password=hunter2 credential=abc123` becomes `[redacted] [redacted] [redacted]`, and recovery note `PASSWORD=keep-out credential:"quoted-secret"` is redacted in the serialized observability model.
 
 ## Commands run with exact results
 
 | Command | Outcome |
 | --- | --- |
-| `node --test tests/v43-daemon-heartbeat-progress.test.js` | First run exit `1` because `latestSignalAgeMs` was misnamed; after fix, exit `0` with 5 tests passing. |
+| `node --test tests/v43-daemon-heartbeat-progress.test.js` | Revision run exit `0` with 6 tests passing. |
+| `node --input-type=module - <<'NODE' ... NODE` | Exit `0`. Reviewer reproducer now returned `{"status":"[redacted] [redacted] [redacted]","recoveryNote":"recover after [redacted]"}`. |
 | `pnpm check` | Exit `0`. `node --check` completed across source, scripts, plugins, and tests. |
-| `pnpm test` | Exit `0`. `1112` tests passed, `0` failed. |
-| `pnpm workbench:build` | Exit `0`. Vite built `src/symphony/workbench-static` in `74ms`. |
+| `pnpm test` | Exit `0`. `1113` tests passed, `0` failed. |
+| `pnpm workbench:build` | Exit `0`. Vite built `src/symphony/workbench-static` in `75ms`. |
 | `git diff --check` | Exit `0`. No whitespace errors. |
 | `pnpm --silent symphony goal-status --goal v43-goal-supervisor-stabilization --json` | Exit `64`. Returned `{"version":"1","status":"error","exitCode":64,"message":"goal not found"}` because this assigned worktree has no local `.symphony` goal state. I did not initialize or mutate supervisor state. |
 | `pnpm --silent symphony supervisor run --goal v19-fixture --json --daemon-pid 4242 --daemon-pid-alive true --daemon-health-at 2026-06-07T12:04:59.000Z --active-lease lease_task_4_worker --active-thread thread-task-4-worker` | Exit `0`. Returned `goal-supervisor-runner-plan.v1` with `status: "blocked"`, `doctorState: "daemon-stale"`, `heartbeatDecision.dispatchAllowed: false`, `heartbeatDecision.duplicateDispatchAllowed: false`, and a `stale-daemon-active-child` notification. |

@@ -796,7 +796,10 @@ function sanitizeStatus(value) {
 
   return value
     .trim()
-    .replace(/(sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_]*TOKEN[A-Za-z0-9_]*=)[^\s]+/giu, '[redacted]')
+    .replace(
+      /(?:sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|CREDENTIAL)[A-Za-z0-9_]*\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+))/giu,
+      '[redacted]'
+    )
     .slice(0, 240);
 }
 
