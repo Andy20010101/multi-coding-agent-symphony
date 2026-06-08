@@ -84,4 +84,4 @@ Historical blocked and recovery notices no longer stay in live state after the g
 ## Remaining Limit
 
 - This change does not yet define a bounded retention window or compaction policy for the audit log itself.
-- B7 still needs one fresh daemon-created blocked notice replay so the notice lifecycle is covered from creation through retirement in one run.
+- The fresh daemon-created blocked notice lifecycle replay is now recorded in `docs/plans/controller/local-goal-supervisor-v43-plus-operator-notice-replay-evidence-2026-06-08.md`.

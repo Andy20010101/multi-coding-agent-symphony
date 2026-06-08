@@ -65,8 +65,8 @@ node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs doct
 
 `doctor` continues to expose the current operator notifications list, and the same runner now has one shared path ready for new notice records instead of separate per-incident shapes.
 
-## Current Limit
+## Follow-up
 
-- This run did not create a fresh scratch blocked goal and watch a new notice thread appear through the daemon.
-- Historical live-state retention is now handled separately by `docs/plans/controller/local-goal-supervisor-v43-plus-operator-notice-retirement-evidence-2026-06-08.md`; this note covers payload shape and dedupe only.
-- One scratch or live replay is still useful to prove the shared path end to end with a newly created notice thread.
+- The fresh daemon-created blocked notice replay is now recorded in `docs/plans/controller/local-goal-supervisor-v43-plus-operator-notice-replay-evidence-2026-06-08.md`.
+- Historical live-state retirement is still documented separately in `docs/plans/controller/local-goal-supervisor-v43-plus-operator-notice-retirement-evidence-2026-06-08.md`.
+- This note remains the contract-shape and dedupe baseline; the replay file closes the earlier end-to-end gap.
