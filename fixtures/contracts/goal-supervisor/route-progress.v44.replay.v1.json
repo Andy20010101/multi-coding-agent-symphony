@@ -27,23 +27,19 @@
         "results": [
           {
             "valid": true,
-            "consumed": true,
             "result": {
               "taskId": "task-3",
               "role": "reviewer",
               "eventToRegister": "reviewer.needs-revision",
-              "consumed": true,
               "evidenceRef": "docs/plans/v44-task-3-review-evidence-2026-06-08.md"
             }
           },
           {
             "valid": true,
-            "consumed": true,
             "result": {
               "taskId": "task-3",
               "role": "worker",
               "eventToRegister": "worker.evidence-recorded",
-              "consumed": true,
               "evidenceRef": "docs/plans/v44-task-3-worker-evidence-2026-06-08.md"
             }
           }

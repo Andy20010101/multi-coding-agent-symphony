@@ -249,7 +249,7 @@ export function latestValidResultForCurrent({
       candidate.valid === true &&
       result?.taskId === normalizedCurrent.taskId &&
       result?.role === normalizedCurrent.role &&
-      isResultAlreadyRegistered(result) !== true
+      isResultPendingRegistration(candidate) === true
     ) {
       return {
         ...candidate,
@@ -498,8 +498,22 @@ function findLatestResultIndex(state, predicate) {
   return -1;
 }
 
-function isResultAlreadyRegistered(result) {
-  return result?.registered === true || result?.consumed === true;
+function isResultPendingRegistration(candidate) {
+  const result = candidate?.result ?? null;
+
+  if (
+    candidate?.registered === true ||
+    candidate?.consumed === true ||
+    result?.registered === true ||
+    result?.consumed === true
+  ) {
+    return false;
+  }
+
+  return candidate?.registered === false ||
+    candidate?.consumed === false ||
+    result?.registered === false ||
+    result?.consumed === false;
 }
 
 function isNonEmptyString(value) {

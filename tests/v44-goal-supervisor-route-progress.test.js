@@ -19,12 +19,21 @@ describe('v44 goal supervisor route engine and progress observer', () => {
   it('routes worker revision results back to reviewer after reviewer.needs-revision', async () => {
     const fixture = await readFixture();
     const scenario = scenarioByName(fixture, 'reviewer-needs-revision-worker-revision-routes-reviewer');
+    const historicalReviewerResult = latestValidResultForCurrent({
+      state: scenario.state,
+      current: {
+        taskId: 'task-3',
+        role: 'reviewer',
+        phase: 'review'
+      }
+    });
     const decision = decideGoalSupervisorRoute({
       state: scenario.state,
       goalNext: scenario.goalNext,
       nowMs: Date.parse(fixture.nowUtc)
     });
 
+    assert.equal(historicalReviewerResult, null);
     assert.equal(decision.readOnly, true);
     assert.equal(decision.willMutate, false);
     assert.equal(decision.state, scenario.expected.routeState);
@@ -32,6 +41,55 @@ describe('v44 goal supervisor route engine and progress observer', () => {
     assert.equal(decision.current.role, scenario.expected.currentRole);
     assert.equal(decision.current.phase, scenario.expected.currentPhase);
     assert.equal(decision.reason, scenario.expected.reason);
+  });
+
+  it('treats only explicitly unconsumed recorded results as pending registration', () => {
+    const historicalState = {
+      active: null,
+      threads: [],
+      results: [
+        {
+          valid: true,
+          result: {
+            taskId: 'task-3',
+            role: 'reviewer',
+            eventToRegister: 'reviewer.needs-revision'
+          }
+        }
+      ]
+    };
+    const pendingState = {
+      active: null,
+      threads: [],
+      results: [
+        {
+          valid: true,
+          result: {
+            taskId: 'task-3',
+            role: 'reviewer',
+            eventToRegister: 'reviewer.approved',
+            consumed: false
+          }
+        }
+      ]
+    };
+
+    assert.equal(latestValidResultForCurrent({
+      state: historicalState,
+      current: {
+        taskId: 'task-3',
+        role: 'reviewer',
+        phase: 'review'
+      }
+    }), null);
+    assert.equal(latestValidResultForCurrent({
+      state: pendingState,
+      current: {
+        taskId: 'task-3',
+        role: 'reviewer',
+        phase: 'review'
+      }
+    }).result.eventToRegister, 'reviewer.approved');
   });
 
   it('routes reviewer approval to main verification instead of treating it as main verification', async () => {
