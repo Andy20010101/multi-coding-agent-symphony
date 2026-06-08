@@ -79,6 +79,7 @@ Branch: `v43-plus-task-e-supervisor-migration-spec`
 Worker evidence: `docs/plans/controller/local-goal-supervisor-v43-plus-task-e-worker-evidence-2026-06-08.md`
 Review evidence: `docs/plans/controller/local-goal-supervisor-v43-plus-task-e-review-evidence-2026-06-08.md`
 Main verification evidence: `docs/plans/controller/local-goal-supervisor-v43-plus-task-e-main-verification-evidence-2026-06-08.md`
+Migration spec: `docs/plans/controller/local-goal-supervisor-v43-plus-task-e-project-internal-supervisor-migration-spec-2026-06-08.md`
 
 Acceptance:
 
