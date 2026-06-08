@@ -63,6 +63,8 @@ Branch: `v43-plus-task-d-evidence-worktree-runbook`
 Worker evidence: `docs/plans/controller/local-goal-supervisor-v43-plus-task-d-worker-evidence-2026-06-08.md`
 Review evidence: `docs/plans/controller/local-goal-supervisor-v43-plus-task-d-review-evidence-2026-06-08.md`
 Main verification evidence: `docs/plans/controller/local-goal-supervisor-v43-plus-task-d-main-verification-evidence-2026-06-08.md`
+Cleanup runbook: `docs/plans/controller/local-goal-supervisor-v43-plus-worktree-cleanup-runbook-2026-06-08.md`
+Cleanup evidence: `docs/plans/controller/local-goal-supervisor-v43-plus-worktree-cleanup-evidence-2026-06-08.md`
 
 Acceptance:
 

@@ -1,0 +1,217 @@
+{
+  "contractName": "local-goal-supervisor-runner-snapshot.v2",
+  "contractVersion": 2,
+  "goalId": "v43-plus-local-goal-supervisor-stability",
+  "generatedAtUtc": "2026-06-08T02:44:51.912Z",
+  "evidenceClock": {
+    "localRunDate": "2026-06-08",
+    "timezone": "Asia/Shanghai",
+    "generatedAtUtc": "2026-06-08T02:44:51.912Z"
+  },
+  "script": {
+    "path": "/Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs",
+    "digest": "sha256 0b296ea2a4b034800aba9b648b4a46c3b0381b2b10cb31704b89417179586022"
+  },
+  "selftest": {
+    "status": "passed",
+    "command": "node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest",
+    "contractName": "local-goal-supervisor-selftest.v1"
+  },
+  "launcher": {
+    "command": "node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs daemon-start --goal v43-plus-local-goal-supervisor-stability --interval-ms 10000 --max-ticks 5000",
+    "status": {
+      "contractName": "local-goal-supervisor-daemon-launcher-status.v1",
+      "status": "not-started",
+      "launcherKind": null,
+      "startedThroughExpectedLauncher": false,
+      "record": null,
+      "pid": null,
+      "health": {
+        "status": "stale",
+        "daemonActive": false,
+        "activityStatus": "no-recent-tick",
+        "startedAfterStop": false,
+        "hasDaemonClaim": true,
+        "staleByTime": true,
+        "staleByPid": true,
+        "daemonStoppedWithRecentProgress": false,
+        "staleAfterMs": 120000,
+        "latestTickAgeMs": 5284329,
+        "latestHealthAgeMs": 5284328,
+        "health": {
+          "status": "stopped",
+          "daemonId": "daemon_4bc7ce6c-2a90-4319-9b1b-6cb9fecf3f73",
+          "goalId": "v43-plus-local-goal-supervisor-stability",
+          "pid": 32504,
+          "launcher": "direct",
+          "startedAt": "2026-06-08T01:10:37.793Z",
+          "stoppedAt": "2026-06-08T01:16:48.826Z",
+          "updatedAt": "2026-06-08T01:16:48.826Z",
+          "lastTickAt": "2026-06-08T01:16:48.826Z",
+          "tickCount": 37,
+          "lastTickStatus": "complete",
+          "lastPlanStatus": "complete",
+          "waitingOperator": false,
+          "resumeCommand": null,
+          "intervalMs": 10000,
+          "maxTicks": 500
+        },
+        "pid": {
+          "path": "/Users/andy/.codex/local-goal-supervisor/state/v43-plus-local-goal-supervisor-stability.daemon.pid",
+          "pid": 32504,
+          "running": false
+        },
+        "latestDaemonStart": {
+          "recordedAt": "2026-06-08T01:10:37.934Z",
+          "type": "daemon-start",
+          "status": null,
+          "planStatus": null,
+          "current": null,
+          "action": null,
+          "threadId": null,
+          "daemonId": "daemon_4bc7ce6c-2a90-4319-9b1b-6cb9fecf3f73",
+          "tickSource": null,
+          "intervalMs": 10000,
+          "maxTicks": 500
+        },
+        "latestDaemonStop": {
+          "recordedAt": "2026-06-08T01:16:48.826Z",
+          "type": "daemon-stop",
+          "status": "stopped",
+          "planStatus": null,
+          "current": null,
+          "action": null,
+          "threadId": null,
+          "daemonId": "daemon_4bc7ce6c-2a90-4319-9b1b-6cb9fecf3f73",
+          "tickSource": null,
+          "intervalMs": null,
+          "maxTicks": null
+        },
+        "latestTick": {
+          "recordedAt": "2026-06-08T01:16:48.825Z",
+          "type": "tick",
+          "status": "complete",
+          "planStatus": "complete",
+          "current": null,
+          "action": {
+            "kind": "none"
+          },
+          "threadId": null,
+          "daemonId": "daemon_4bc7ce6c-2a90-4319-9b1b-6cb9fecf3f73",
+          "tickSource": "daemon",
+          "intervalMs": null,
+          "maxTicks": null
+        }
+      }
+    }
+  },
+  "doctor": {
+    "command": "node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs doctor --goal v43-plus-local-goal-supervisor-stability",
+    "outputPath": "/Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-doctor-2026-06-08.json",
+    "probeApp": false,
+    "status": "captured-and-written",
+    "digest": "sha256 7c121b7e24e2efa8fb54b60942ad05c32dc79bae264913aabbe9d252c8ac5c66",
+    "bytes": 22902,
+    "contractName": "local-goal-supervisor-doctor.v1",
+    "generatedAt": "2026-06-08T02:44:53.484Z",
+    "summary": {
+      "plan": {
+        "status": "blocked",
+        "reason": "Goal next reported complete while the supervisor still has an active or unreconciled lease. Reconcile the child result and clear the lease before accepting goal completion.",
+        "current": {
+          "taskId": "release",
+          "role": "release-manager",
+          "phase": "release-prep"
+        },
+        "action": {
+          "kind": "recovery-required",
+          "active": {
+            "requestId": "request_b7b1468c-0b28-461e-8d8c-ccfa819c5b42",
+            "goalId": "v43-plus-local-goal-supervisor-stability",
+            "taskId": "release",
+            "role": "release-manager",
+            "phase": "release-prep",
+            "branch": null,
+            "worktree": null,
+            "status": "thread-active",
+            "createdAt": "2026-06-08T01:15:06.115Z",
+            "threadId": "019ea4cc-3207-76f1-b59c-5722409e564b",
+            "resultEscrow": "/Users/andy/.codex/local-goal-supervisor/results/v43-plus-local-goal-supervisor-stability/019ea4cc-3207-76f1-b59c-5722409e564b.txt",
+            "updatedAt": "2026-06-08T01:15:06.200Z"
+          },
+          "liveThreadIds": [
+            "019ea4cc-3207-76f1-b59c-5722409e564b"
+          ]
+        }
+      },
+      "active": {
+        "threadId": "019ea4cc-3207-76f1-b59c-5722409e564b",
+        "requestId": "request_b7b1468c-0b28-461e-8d8c-ccfa819c5b42",
+        "taskId": "release",
+        "role": "release-manager",
+        "phase": "release-prep",
+        "worktree": null,
+        "branch": null,
+        "status": "thread-active",
+        "readable": "not-probed"
+      },
+      "activeProgress": {
+        "classification": "stalled",
+        "threadStatus": null,
+        "lastProgressAt": null,
+        "inactivityMs": null,
+        "resultEscrow": {
+          "exists": false,
+          "status": null,
+          "mtime": null,
+          "eventToRegister": null
+        },
+        "assignedWorktree": {
+          "path": "/Users/andy/Documents/project/multi-coding-agent-symphony",
+          "branch": "codex/v43-plus-task-a-runner-quiesce",
+          "head": "3908d431eac6e0238e3606d4d41ff8f921684ab3",
+          "dirty": true
+        },
+        "followUp": null,
+        "latestRelevantGoalEvent": {
+          "relevance": "goal-latest",
+          "eventId": "evt_4f245a9b55d1b352",
+          "taskId": null,
+          "eventType": "release.ready-declared",
+          "phase": "release-prep",
+          "occurredAt": "2026-06-08T01:16:42.306Z",
+          "recordedAt": "2026-06-08T01:16:42.306Z",
+          "evidenceRefs": [
+            "docs/plans/controller/local-goal-supervisor-v43-plus-release-gate-evidence-2026-06-08.md"
+          ]
+        }
+      },
+      "daemon": {
+        "status": "stale",
+        "daemonId": null,
+        "pid": {
+          "path": "/Users/andy/.codex/local-goal-supervisor/state/v43-plus-local-goal-supervisor-stability.daemon.pid",
+          "pid": 32504,
+          "running": false
+        },
+        "launcherStatus": "not-started"
+      },
+      "root": {
+        "path": "/Users/andy/Documents/project/multi-coding-agent-symphony",
+        "branch": "codex/v43-plus-task-a-runner-quiesce",
+        "head": "3908d431eac6e0238e3606d4d41ff8f921684ab3",
+        "dirty": true
+      },
+      "targetWorktree": {
+        "path": "/Users/andy/.codex/worktrees/v43-plus-task-e-supervisor-migration-spec",
+        "branch": "v43-plus-task-e-supervisor-migration-spec",
+        "head": "e27e5e424ca04c0adf8678f47263ce0d2a581c8b",
+        "dirty": false
+      },
+      "latestResultCount": 3,
+      "operatorNotificationCount": 5
+    },
+    "mtime": "2026-06-08T02:44:53.559Z"
+  },
+  "externalRunnerFixesSinceLastRelease": []
+}

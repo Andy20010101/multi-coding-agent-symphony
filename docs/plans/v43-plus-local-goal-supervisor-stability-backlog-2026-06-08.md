@@ -1,0 +1,59 @@
+# v43+ Local Goal Supervisor Stability Backlog
+
+Date: 2026-06-08
+
+Goal id: `v43-plus-local-goal-supervisor-stability`
+
+Scope:
+
+- This backlog tracks incidents in the temporary project-external coding system.
+- The implementation target stays outside this repository:
+
+```text
+/Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs
+```
+
+- Repository changes under this goal should stay limited to plans, runbooks, fixtures, protocol surface, and evidence unless an item is explicitly selected for project-internal productization.
+
+## How To Use This Backlog
+
+Each item should move through four states:
+
+1. `open`: reproduced or observed, not fixed.
+2. `active`: currently being fixed in the external runner or in a bounded repository support change.
+3. `watch`: fix landed, but replay coverage or repeated live runs are still needed.
+4. `harvested`: stable enough to move into the capability harvest matrix as a project candidate with a concrete boundary.
+
+`open` or `active` items belong to the temporary coding system first. Only `harvested` items should be considered for project-internal module scope.
+
+## Active Incidents
+
+| Id | Status | Area | Incident | Evidence | Next action |
+| --- | --- | --- | --- | --- | --- |
+| B1 | watch | single state writer | The release-prep child directly recorded `release.ready-declared` instead of returning a bounded result for runner consumption. This breaks the intended rule that the external runner is the only state writer. The runner now treats `goal next = complete` with a live lease as a recovery case: it blocks when no valid result exists, and it auto-retires the lease when a valid release-prep escrow result is present. Live replays confirmed both paths. | `docs/plans/controller/local-goal-supervisor-v43-plus-release-gate-evidence-2026-06-08.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-release-phase-replay-evidence-2026-06-08.md`; closeout ledger source `goal-event-log.v1:evt_4f245a9b55d1b352`; repository protocol coverage in `tests/v43-app-thread-result-protocol.test.js` | Close the source-side gap: make release-prep paths emit bounded results only, or explicitly reject direct child `release.ready-declared` writes that bypass runner result consumption. |
+| B2 | harvested | result protocol | Release-manager child results drifted across gate boundaries. `release.diff-check` recovery had to be rewritten because the result text mentioned `release.docs-updated`; `release.workbench-build` also needed manual escrow recovery before it could be consumed. The result contract is now phase-aware: `release-gate` only allows gate pass/fail events, and `release-prep` only allows `release.ready-declared`. Live replay confirmed both phases consume cleanly without manual escrow edits. | `docs/plans/controller/local-goal-supervisor-v43-plus-release-gate-evidence-2026-06-08.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-release-phase-replay-evidence-2026-06-08.md`; repository protocol coverage in `src/symphony/app-thread-result-protocol.js`; `tests/v43-app-thread-result-protocol.test.js` | Fold the phase-aware release-manager contract into the future project-internal app thread result protocol and supervisor event registrar module. |
+| B3 | watch | thread adapter | A correction attempt for the release-prep child failed with `No AppServerManager registered for conversationId`, so the runner could not steer the thread back into a bounded result path. The runner now declares thread follow-up capability at bind time and gates correction/recovery on that declaration: host-bound and manual-adopted threads are treated as no-follow-up, while daemon-created `codex-app-stdio` threads are follow-up-capable only within the same daemon/app-server session. Unsupported paths now return operator recovery instead of blindly calling `turn/start`. | live closeout recovery note; no valid result escrow file existed for thread `019ea4cc-3207-76f1-b59c-5722409e564b`; `docs/plans/controller/local-goal-supervisor-v43-plus-thread-adapter-followup-evidence-2026-06-08.md` | Add one live replay where a daemon-created thread keeps same-session follow-up, and one replay where a later tick sees session mismatch and chooses operator recovery without attempting a correction prompt. |
+| B4 | watch | result consumption order | v42 already fixed `record-result` precedence over lossy `notLoaded` app-server reads, and v43+ now proves that a valid release-prep escrow file can retire a stale active lease even after the ledger is already complete. The ordering is better, but unattended closeout still needs replay coverage for stale or unavailable thread readers. | `docs/plans/controller/local-goal-supervisor-v42-mvp-notes-2026-06-06.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-release-gate-evidence-2026-06-08.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-release-phase-replay-evidence-2026-06-08.md` | Add closeout-phase replays where a valid escrow result exists while the thread reader is stale, unreadable, or unavailable. |
+| B5 | watch | daemon lifecycle | blocked-state quiesce now stops repeated identical ticks, but the release closeout flow still depends on correct daemon restart semantics after approval and on clear separation between daemon health and manual tick progress. | `docs/plans/controller/local-goal-supervisor-v43-plus-task-a-runner-quiesce-evidence-2026-06-08.md` | Keep replay coverage for `waiting-operator`, daemon stop, and approved restart, then fold the PTY launcher work into the same health contract. |
+| B6 | watch | progress classifier | The runner now classifies active-child state explicitly instead of inferring it from scattered fields. `doctor` now surfaces one `activeProgress` panel with classification, thread status, result escrow state, assigned worktree head, follow-up capability, and latest relevant goal event. The classifier distinguishes recent progress, stalled/no-load wait, terminal-without-result, invalid-result, and completed-with-unconsumed-result states. | `docs/plans/controller/local-goal-supervisor-v43-plus-progress-classifier-evidence-2026-06-08.md`; `docs/plans/v43-plus-local-goal-supervisor-stability-plan-2026-06-08.md` task-2 | Add one replay that exercises `recent-progress -> stalled -> completed-unconsumed-result` on the same lease, then fold the same `activeProgress.classification` signal into monitor/heartbeat summaries. |
+| B7 | watch | operator approval | Operator-required actions now share one normalized notice payload with exact command, goal id, current task/role/phase, target worktree, restart requirement, and block reason. The runner also separates target thread id from notice-thread id, so future monitor and doctor output can reason about the blocked work item without confusing it with the App notice thread. Dedupe is now built into the shared notice helper, and resolved notices are retired out of `state.operatorNotifications` into append-only audit log entries instead of lingering in live state. | `docs/plans/controller/local-goal-supervisor-v43-plus-operator-notice-normalization-evidence-2026-06-08.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-operator-notice-retirement-evidence-2026-06-08.md`; `docs/plans/v43-plus-goal-supervisor-stability-prep-2026-06-08.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-task-a-runner-quiesce-evidence-2026-06-08.md` | Add one scratch or live replay that creates a fresh blocked notice through the daemon, confirms one block creates one notice thread, shows the normalized payload in doctor/context output, and then verifies retirement after the block is resolved. |
+| B8 | watch | external runner provenance | The temporary runner can change outside git history, so a later investigation can lose the exact script version that produced a run. `runner-snapshot` now captures doctor output directly, records snapshot/script/doctor digests, and can write the full doctor payload from the same command invocation. | `docs/plans/v43-plus-goal-supervisor-stability-prep-2026-06-08.md` medium priority item 6; `docs/plans/controller/local-goal-supervisor-v43-plus-runner-provenance-evidence-2026-06-08.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-2026-06-08.json`; `docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-doctor-2026-06-08.json` | Reuse the same snapshot pair at the start of the next major goal and confirm later evidence cites the snapshot instead of ad hoc script references. |
+| B9 | harvested | worktree hygiene | Historical task worktrees can only be cleaned safely after goal, branch, merge, dirty, and evidence state are reconciled. The cleanup-plan contract now states that automatic cleanup is disabled and explicit-only. One bounded live cleanup removed only fresh `removalAllowed: true` worktrees, deleted the corresponding merged local branches, and left dirty, detached, repo-root, and unmerged task worktrees in place. | `docs/plans/controller/local-goal-supervisor-v43-plus-worktree-cleanup-runbook-2026-06-08.md`; `docs/plans/controller/local-goal-supervisor-v43-plus-worktree-cleanup-evidence-2026-06-08.md`; `docs/plans/v43-plus-local-goal-supervisor-stability-plan-2026-06-08.md` task-3 | Harvest the explicit-only cleanup-plan contract and evidence recording boundary for the future project-internal workspace manager cleanup policy. |
+| B10 | open | migration boundary | The project still needs a clean split between temporary runner internals and the small set of stable capabilities worth moving into the repository. | `docs/plans/v43-plus-local-goal-supervisor-stability-plan-2026-06-08.md` task-4 | Use the capability harvest matrix to classify each incident as temporary-only, harvest candidate, or already stable enough for project scope. |
+
+## Recently Closed Or Downgraded
+
+| Id | Status | Area | What changed | Evidence |
+| --- | --- | --- | --- | --- |
+| C1 | watch | blocked-state quiesce | Repeated identical blocked daemon ticks were replaced with a `waiting-operator` stop condition and a reusable resume command. | `docs/plans/controller/local-goal-supervisor-v43-plus-task-a-runner-quiesce-evidence-2026-06-08.md` |
+| C2 | watch | runtime workspace roots | Child prompts can now distinguish repository evidence edits from allowed project-external runner edits, which removed one source of false out-of-scope edits for local runner tasks. | `docs/plans/controller/local-goal-supervisor-v43-plus-task-a-runner-quiesce-evidence-2026-06-08.md` |
+
+## Promotion Rule
+
+An item can move from this backlog into project scope only when all three conditions are true:
+
+1. The mechanism is not specific to one temporary script path or one local daemon launch trick.
+2. The input and output contract can be tested inside this repository without relying on operator memory.
+3. At least one replay or live run has shown the behavior working after the fix.
+
+Until then, the item stays in the temporary coding system lane even if the repository carries evidence or protocol fixtures for it.
