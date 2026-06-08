@@ -20,6 +20,11 @@ Scratch goal:
 - blocked active child thread id: `missing-b7-blocked-closeout`
 - daemon-created notice thread id: `019ea5f4-bff4-75e2-98af-387e7b48757c`
 
+Runner provenance baseline for the same external runner revision:
+
+- `docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-2026-06-08.json`
+- `docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-doctor-2026-06-08.json`
+
 ## Purpose
 
 - Create one fresh blocked approval notice through the daemon instead of relying on older retained state.
@@ -160,4 +165,5 @@ That proves the live notice disappears from state once the operator resolves the
 ## Boundary Note
 
 - A direct `codex_app.read_thread` readback for the created notice thread failed because the underlying rollout file was empty at read time. B7 acceptance in this replay therefore relied on daemon output, persisted state, `context`, `doctor`, and the append-only log instead of thread-store rendering.
+- This replay now cites the shared runner snapshot baseline above instead of carrying a standalone runner digest or ad hoc doctor reference.
 - This does not weaken the B7 notice contract itself. The replay still proves creation, dedupe, payload visibility, and retirement. The remaining unstable piece is the temporary App notice-thread transport, which is why B7 stays a harvest candidate rather than a project-internal ready-to-plan module.

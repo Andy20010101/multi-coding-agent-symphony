@@ -2,15 +2,15 @@
   "contractName": "local-goal-supervisor-runner-snapshot.v2",
   "contractVersion": 2,
   "goalId": "v43-plus-local-goal-supervisor-stability",
-  "generatedAtUtc": "2026-06-08T02:44:51.912Z",
+  "generatedAtUtc": "2026-06-08T06:50:20.626Z",
   "evidenceClock": {
     "localRunDate": "2026-06-08",
     "timezone": "Asia/Shanghai",
-    "generatedAtUtc": "2026-06-08T02:44:51.912Z"
+    "generatedAtUtc": "2026-06-08T06:50:20.626Z"
   },
   "script": {
     "path": "/Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs",
-    "digest": "sha256 0b296ea2a4b034800aba9b648b4a46c3b0381b2b10cb31704b89417179586022"
+    "digest": "sha256 f1d4b2c15ba346c10edb0c5a123739030267fde7aeae2fd6b531a44dd2ab109a"
   },
   "selftest": {
     "status": "passed",
@@ -36,8 +36,8 @@
         "staleByPid": true,
         "daemonStoppedWithRecentProgress": false,
         "staleAfterMs": 120000,
-        "latestTickAgeMs": 5284329,
-        "latestHealthAgeMs": 5284328,
+        "latestTickAgeMs": 20013321,
+        "latestHealthAgeMs": 20013320,
         "health": {
           "status": "stopped",
           "daemonId": "daemon_4bc7ce6c-2a90-4319-9b1b-6cb9fecf3f73",
@@ -110,82 +110,21 @@
     "outputPath": "/Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-doctor-2026-06-08.json",
     "probeApp": false,
     "status": "captured-and-written",
-    "digest": "sha256 7c121b7e24e2efa8fb54b60942ad05c32dc79bae264913aabbe9d252c8ac5c66",
-    "bytes": 22902,
+    "digest": "sha256 9e3c5ef94add2c58a1a119f5f54510a94f5ae51c862660113ca5248a737ac0ad",
+    "bytes": 8958,
     "contractName": "local-goal-supervisor-doctor.v1",
-    "generatedAt": "2026-06-08T02:44:53.484Z",
+    "generatedAt": "2026-06-08T06:50:22.440Z",
     "summary": {
       "plan": {
-        "status": "blocked",
-        "reason": "Goal next reported complete while the supervisor still has an active or unreconciled lease. Reconcile the child result and clear the lease before accepting goal completion.",
-        "current": {
-          "taskId": "release",
-          "role": "release-manager",
-          "phase": "release-prep"
-        },
+        "status": "complete",
+        "reason": "release.ready-declared is recorded and all runbook release gates have passed.",
+        "current": null,
         "action": {
-          "kind": "recovery-required",
-          "active": {
-            "requestId": "request_b7b1468c-0b28-461e-8d8c-ccfa819c5b42",
-            "goalId": "v43-plus-local-goal-supervisor-stability",
-            "taskId": "release",
-            "role": "release-manager",
-            "phase": "release-prep",
-            "branch": null,
-            "worktree": null,
-            "status": "thread-active",
-            "createdAt": "2026-06-08T01:15:06.115Z",
-            "threadId": "019ea4cc-3207-76f1-b59c-5722409e564b",
-            "resultEscrow": "/Users/andy/.codex/local-goal-supervisor/results/v43-plus-local-goal-supervisor-stability/019ea4cc-3207-76f1-b59c-5722409e564b.txt",
-            "updatedAt": "2026-06-08T01:15:06.200Z"
-          },
-          "liveThreadIds": [
-            "019ea4cc-3207-76f1-b59c-5722409e564b"
-          ]
+          "kind": "none"
         }
       },
-      "active": {
-        "threadId": "019ea4cc-3207-76f1-b59c-5722409e564b",
-        "requestId": "request_b7b1468c-0b28-461e-8d8c-ccfa819c5b42",
-        "taskId": "release",
-        "role": "release-manager",
-        "phase": "release-prep",
-        "worktree": null,
-        "branch": null,
-        "status": "thread-active",
-        "readable": "not-probed"
-      },
-      "activeProgress": {
-        "classification": "stalled",
-        "threadStatus": null,
-        "lastProgressAt": null,
-        "inactivityMs": null,
-        "resultEscrow": {
-          "exists": false,
-          "status": null,
-          "mtime": null,
-          "eventToRegister": null
-        },
-        "assignedWorktree": {
-          "path": "/Users/andy/Documents/project/multi-coding-agent-symphony",
-          "branch": "codex/v43-plus-task-a-runner-quiesce",
-          "head": "3908d431eac6e0238e3606d4d41ff8f921684ab3",
-          "dirty": true
-        },
-        "followUp": null,
-        "latestRelevantGoalEvent": {
-          "relevance": "goal-latest",
-          "eventId": "evt_4f245a9b55d1b352",
-          "taskId": null,
-          "eventType": "release.ready-declared",
-          "phase": "release-prep",
-          "occurredAt": "2026-06-08T01:16:42.306Z",
-          "recordedAt": "2026-06-08T01:16:42.306Z",
-          "evidenceRefs": [
-            "docs/plans/controller/local-goal-supervisor-v43-plus-release-gate-evidence-2026-06-08.md"
-          ]
-        }
-      },
+      "active": null,
+      "activeProgress": null,
       "daemon": {
         "status": "stale",
         "daemonId": null,
@@ -199,7 +138,7 @@
       "root": {
         "path": "/Users/andy/Documents/project/multi-coding-agent-symphony",
         "branch": "codex/v43-plus-task-a-runner-quiesce",
-        "head": "3908d431eac6e0238e3606d4d41ff8f921684ab3",
+        "head": "f84b1c4f9834923b1c8a60604c719190e447f8ad",
         "dirty": true
       },
       "targetWorktree": {
@@ -209,9 +148,12 @@
         "dirty": false
       },
       "latestResultCount": 3,
-      "operatorNotificationCount": 5
+      "operatorNotificationCount": 0
     },
-    "mtime": "2026-06-08T02:44:53.559Z"
+    "mtime": "2026-06-08T06:50:22.506Z"
   },
-  "externalRunnerFixesSinceLastRelease": []
+  "externalRunnerFixesSinceLastRelease": [
+    "B6 activeProgress surfaced through context and heartbeat summary",
+    "B7 operator notice payload exposed through context and live replayed through daemon"
+  ]
 }

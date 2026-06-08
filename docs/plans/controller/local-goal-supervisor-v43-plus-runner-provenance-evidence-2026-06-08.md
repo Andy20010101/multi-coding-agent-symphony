@@ -21,7 +21,7 @@ Captured snapshot artifacts:
 
 - Make major external-runner runs cite the exact script revision that produced the result.
 - Remove the manual gap where `runner-snapshot` only remembered a doctor command string but did not capture doctor output itself.
-- Keep one reusable provenance snapshot that can be attached to later evidence without re-explaining operator shell history.
+- Keep one reusable provenance snapshot that later evidence can cite without re-explaining operator shell history.
 
 ## Change Summary
 
@@ -43,14 +43,14 @@ Selftest now covers both paths:
 
 ## Captured Result
 
-The live snapshot produced on this run recorded:
+The refreshed snapshot pair produced on this run recorded:
 
 - snapshot contract: `local-goal-supervisor-runner-snapshot.v2`
-- snapshot UTC timestamp: `2026-06-08T02:44:51.912Z`
-- runner script digest: `sha256 0b296ea2a4b034800aba9b648b4a46c3b0381b2b10cb31704b89417179586022`
+- snapshot UTC timestamp: `2026-06-08T06:50:20.626Z`
+- runner script digest: `sha256 f1d4b2c15ba346c10edb0c5a123739030267fde7aeae2fd6b531a44dd2ab109a`
 - selftest status: `passed`
-- doctor payload digest: `sha256 7c121b7e24e2efa8fb54b60942ad05c32dc79bae264913aabbe9d252c8ac5c66`
-- doctor payload bytes: `22902`
+- doctor payload digest: `sha256 9e3c5ef94add2c58a1a119f5f54510a94f5ae51c862660113ca5248a737ac0ad`
+- doctor payload bytes: `8958`
 
 The same snapshot also preserved the launcher command that would restart the daemon:
 
@@ -60,13 +60,30 @@ node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs daem
 
 The captured doctor summary showed the current live state at snapshot time:
 
-- plan status: `blocked`
-- current phase: `release / release-manager / release-prep`
-- active progress classification: `stalled`
+- plan status: `complete`
+- active thread: none
+- active progress classification: none
 - daemon status: `stale`
+- root branch/head: `codex/v43-plus-task-a-runner-quiesce` at `f84b1c4f9834923b1c8a60604c719190e447f8ad`
 - target worktree branch/head: `v43-plus-task-e-supervisor-migration-spec` at `e27e5e424ca04c0adf8678f47263ce0d2a581c8b`
 
-That is the provenance trail B8 needed: the evidence now cites the exact runner bytes, the selftest status, the launcher command, and the doctor payload that described the run.
+The snapshot also recorded:
+
+- `externalRunnerFixesSinceLastRelease[0]`: `B6 activeProgress surfaced through context and heartbeat summary`
+- `externalRunnerFixesSinceLastRelease[1]`: `B7 operator notice payload exposed through context and live replayed through daemon`
+
+That is the provenance trail B8 needed: the evidence now cites the exact runner bytes, the selftest status, the launcher command, the doctor payload that described the run, and the bounded list of runner-only fixes carried after the last release.
+
+## Snapshot Reuse
+
+This refreshed pair is now the shared provenance baseline for later v43+ evidence on the same runner revision.
+
+The operator notice replay evidence now cites these same artifacts instead of restating standalone runner digest notes:
+
+- `docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-2026-06-08.json`
+- `docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-doctor-2026-06-08.json`
+
+That closes the earlier discipline gap where the snapshot existed as a one-off repair but later evidence still relied on ad hoc script references.
 
 ## Focused Validation
 
@@ -75,13 +92,12 @@ Commands run:
 ```text
 node --check /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs
 node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest
-node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs runner-snapshot --goal v43-plus-local-goal-supervisor-stability --doctor-output /Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-doctor-2026-06-08.json > /Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-2026-06-08.json
+node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs runner-snapshot --goal v43-plus-local-goal-supervisor-stability --doctor-output /Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-doctor-2026-06-08.json --fixes 'B6 activeProgress surfaced through context and heartbeat summary;B7 operator notice payload exposed through context and live replayed through daemon' > /Users/andy/Documents/project/multi-coding-agent-symphony/docs/plans/controller/local-goal-supervisor-v43-plus-runner-snapshot-2026-06-08.json
 ```
 
-`selftest` passed with the new B8 coverage in place. The live `runner-snapshot` command then wrote both the snapshot JSON and the full doctor JSON from one command invocation.
+`selftest` passed with the B8 coverage in place. The live `runner-snapshot` command then rewrote both the snapshot JSON and the full doctor JSON from one command invocation, and later evidence in this branch now cites that refreshed pair directly.
 
-## Current Limit
+## Remaining Limit
 
-- This change captures provenance for the current runner, but it does not resolve the still-blocked `release-prep` lease shown by the doctor snapshot.
+- Because the snapshot artifacts themselves are written into the repository during capture, the doctor payload sees the root checkout as dirty at snapshot time even though the underlying task state is otherwise clean.
 - The provenance contract is still attached to the temporary external runner path under `/Users/andy/.codex/local-goal-supervisor`.
-- One future major goal should reuse the same snapshot flow at start-of-run so B8 can move from `watch` to harvested evidence discipline instead of a one-off repair.
