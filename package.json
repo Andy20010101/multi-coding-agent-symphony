@@ -11,7 +11,7 @@
   },
   "scripts": {
     "test": "node --test --test-concurrency=8",
-    "check": "node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js",
+    "check": "node --check src/*.js src/adapters/*.js src/ensemble/*.js src/integrations/*.js src/intake/*.js src/symphony/*.js src/symphony/goal-supervisor/*.js src/trackers/*.js scripts/*.js plugins/eval-replay/*.js tests/*.test.js",
     "workbench:build": "vite build --config frontend/workbench/vite.config.js",
     "workbench:dev": "vite --host 127.0.0.1 --config frontend/workbench/vite.config.js",
     "desktop:shell:smoke": "node scripts/desktop-shell-smoke.js",
