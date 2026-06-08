@@ -15,7 +15,7 @@ Implementation target:
 ## Purpose
 
 - Make active-child progress classification explicit instead of inferring status from scattered state fields.
-- Put the active-child classifier into `doctor` so operator triage has one screen for thread state, escrow state, worktree head, and latest relevant goal event.
+- Put the active-child classifier into `doctor`, `context`, and `heartbeat-prompt` so operator triage and monitor summaries read the same state signal.
 
 ## Change Summary
 
@@ -29,7 +29,7 @@ The external runner now classifies active child state with explicit outcomes:
 - `result-invalid`
 - `waiting`
 
-The classifier now combines:
+The classifier combines:
 
 - latest observable turn status
 - age of the latest observable activity
@@ -37,7 +37,7 @@ The classifier now combines:
 - bounded result availability from the active thread
 - bounded result availability from the result escrow file
 
-`doctor` now emits `activeProgress` as a first-class field instead of only showing the active lease metadata.
+`doctor` emits `activeProgress` as a first-class field. `context` and the generated heartbeat summary now carry the same classifier output for monitor-side decisions.
 
 ## Focused Validation
 
@@ -46,25 +46,36 @@ Commands run:
 ```text
 node --check /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs
 node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs selftest
-node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs doctor --goal v43-plus-local-goal-supervisor-stability
+node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs context --goal b6-progress-replay-20260608
+node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs heartbeat-prompt --goal b6-progress-replay-20260608
+node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs doctor --goal b6-progress-replay-20260608 --probe-app
 ```
 
-`selftest` passed after adding:
+Replay fixtures used during this run:
 
-- completed terminal turn without a result block is detected as a terminal-no-result recovery case
-- completed child with a still-unconsumed bounded result block is classified as `completed-unconsumed-result`
-- recent progress and stalled progress continue to classify correctly
+- Scratch repo: `/tmp/mcas-b6-repo.VusbPr`
+- Scratch assigned worktree: `/tmp/mcas-b6-assigned.S09WvK`
+- Scratch active thread: `019ea5e2-627c-7702-9907-58aa3d5b1aa9`
 
-`doctor` now reports the active-child panel directly. In the current live state it showed:
+`selftest` now carries one deterministic same-lease replay under `sameLeaseProgressReplay` and passed with:
 
-- `classification`: `stalled`
-- `resultEscrow.exists`: `false`
-- `assignedWorktree.head`: `3908d431eac6e0238e3606d4d41ff8f921684ab3`
-- `latestRelevantGoalEvent.eventId`: `evt_4f245a9b55d1b352`
+- `sequence[0]`: `recent-progress`
+- `sequence[1]`: `stalled`
+- `sequence[2]`: `completed-unconsumed-result`
+- `contextClassification`: `waiting`
 
-That is the one-screen view B6 needed: latest thread progress classification, escrow state, assigned worktree head, and latest relevant ledger event are all in one structure.
+The live scratch goal then confirmed the monitor-facing outputs:
 
-## Current Limit
+- `context.activeProgress.classification`: `stalled`
+- `heartbeat-prompt` generated summary `activeProgress.classification`: `stalled`
+- `doctor --probe-app` on the same bound lease classified the completed thread as `completed-unconsumed-result`
+- `doctor --probe-app` also reported `resultAvailability.source: thread-result-block`
+- `assignedWorktree.head`: `75dffc7a5109a55220592ae7a90bcec615987fb3`
+- `assignedWorktree.dirty`: `false`
 
-- This run used selftest plus current-goal doctor output. It did not add a separate scratch replay that walks the same active lease through `recent-progress -> stalled -> completed-unconsumed-result`.
-- The classifier is implemented and surfaced, but one replay is still useful before moving B6 beyond `watch`.
+The bound App thread returned the expected final result block after `sleep 150`, and the runner saw it as an unconsumed completed result before any state registration.
+
+## Residual Note
+
+- An early projectless live probe during the in-progress turn did not produce stable app-server turn status, so the `recent-progress` leg is now locked by deterministic same-lease selftest coverage instead of app-server timing.
+- That probe inconsistency belongs to thread-read behavior, not to the classifier contract. The classifier contract itself now has deterministic replay plus live monitor/terminal proof.
