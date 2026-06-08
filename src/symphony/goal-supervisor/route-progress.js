@@ -16,7 +16,8 @@ export function decideGoalSupervisorRoute({
   goalNext,
   routeInput = null,
   allowCloseout = false,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  progressGraceMs = DEFAULT_PROGRESS_GRACE_MS
 }) {
   const normalizedState = normalizeState(state);
   const initialCurrent = normalizeCurrent(goalNext?.next ?? routeInput?.activeLease ?? normalizedState.active);
@@ -29,7 +30,8 @@ export function decideGoalSupervisorRoute({
     state: normalizedState,
     goalNext,
     routeInput,
-    nowMs
+    nowMs,
+    progressGraceMs
   });
 
   if (goalNext?.status === 'complete') {
