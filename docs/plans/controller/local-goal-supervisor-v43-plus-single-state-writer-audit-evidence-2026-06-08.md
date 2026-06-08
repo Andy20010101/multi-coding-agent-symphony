@@ -80,4 +80,11 @@ This change restores that distinction without moving the temporary runner into r
 
 ## Remaining Limit
 
-This evidence is still selftest-only. One bounded scratch replay or live replay should still be captured before B1 moves from `watch` to `harvested` in the stability backlog.
+The explicit matching-audit versus missing-audit branch is still covered through runner selftest rather than a repository-side replay fixture.
+
+That no longer blocks harvest:
+
+- this evidence covers both write-authority branches in selftest;
+- the release phase replay covers the live `goal next = complete` reconciliation path and confirms the runner does not silently retire a release-prep lease.
+
+The remaining gap is productization depth, not stability status. When the event registrar moves into repository scope, add a repository-side replay target for the missing-audit branch instead of relying only on external-runner selftest.
