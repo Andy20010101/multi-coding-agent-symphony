@@ -28,6 +28,16 @@ export const ACCEPTED_TERMINAL_EVENTS_BY_ROLE = Object.freeze({
   ])
 });
 
+export const ACCEPTED_TERMINAL_EVENTS_BY_RELEASE_MANAGER_PHASE = Object.freeze({
+  'release-gate': Object.freeze([
+    'release.gate-passed',
+    'release.gate-failed'
+  ]),
+  'release-prep': Object.freeze([
+    'release.ready-declared'
+  ])
+});
+
 const CHILD_RESULT_ROLES = Object.freeze(Object.keys(ACCEPTED_TERMINAL_EVENTS_BY_ROLE));
 const REQUIRED_RESULT_FIELDS = Object.freeze([
   'goalId',
@@ -458,6 +468,22 @@ export function acceptedTerminalEventsForRole(role) {
   return [...ACCEPTED_TERMINAL_EVENTS_BY_ROLE[role]];
 }
 
+export function acceptedTerminalEventsForContext({
+  role,
+  phase = null
+}) {
+  requiredRole(role);
+
+  if (role === 'release-manager' && isNonEmptyString(phase)) {
+    const accepted = ACCEPTED_TERMINAL_EVENTS_BY_RELEASE_MANAGER_PHASE[phase];
+    if (accepted !== undefined) {
+      return [...accepted];
+    }
+  }
+
+  return acceptedTerminalEventsForRole(role);
+}
+
 function parseBlockBody({
   block,
   blockIndex,
@@ -494,7 +520,10 @@ function parseBlockBody({
     blockIndex,
     appendOnly: true,
     consumed: false,
-    acceptedTerminalEvents: acceptedTerminalEventsForRole(payload.role),
+    acceptedTerminalEvents: acceptedTerminalEventsForContext({
+      role: payload.role,
+      phase: context.phase
+    }),
     ...payload
   };
 
@@ -597,8 +626,8 @@ function validateResultPayload(payload, context) {
 
   if (!CHILD_RESULT_ROLES.includes(payload.role)) {
     errors.push('invalid-role');
-  } else if (!ACCEPTED_TERMINAL_EVENTS_BY_ROLE[payload.role].includes(payload.eventToRegister)) {
-    errors.push(`invalid-event-for-role:${payload.eventToRegister}`);
+  } else if (!acceptedTerminalEventsForContext(context).includes(payload.eventToRegister)) {
+    errors.push(`invalid-event-for-context:${payload.eventToRegister}`);
   }
 
   if (!RESULT_STATUSES.includes(payload.status)) {
@@ -659,7 +688,7 @@ function buildCorrectionAction(context, reason) {
       `taskId: ${context.taskId}`,
       `role: ${context.role}`,
       `threadId: ${context.threadId}`,
-      `eventToRegister must be one of: ${acceptedTerminalEventsForRole(context.role).join(', ')}.`,
+      `eventToRegister must be one of: ${acceptedTerminalEventsForContext(context).join(', ')}.`,
       'Do not run commands, edit files, or add chat prose around the block.'
     ].join('\n'),
     audit: buildAuditRecord('correction-prompt', 'planned', context, reason)
@@ -676,6 +705,7 @@ function normalizeExpectedContext(expected) {
     taskId: requiredStringField(expected, 'taskId'),
     role: requiredRole(expected.role),
     threadId: requiredStringField(expected, 'threadId'),
+    phase: optionalStringField(expected, 'phase'),
     branch: optionalStringField(expected, 'branch'),
     worktree: optionalStringField(expected, 'worktree')
   };

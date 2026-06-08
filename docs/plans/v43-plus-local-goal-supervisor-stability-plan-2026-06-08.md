@@ -4,6 +4,11 @@ Date: 2026-06-08
 
 Goal id: `v43-plus-local-goal-supervisor-stability`
 
+Companion docs:
+
+- `docs/plans/v43-plus-local-goal-supervisor-stability-backlog-2026-06-08.md`
+- `docs/plans/v43-plus-capability-harvest-matrix-2026-06-08.md`
+
 Baseline:
 
 - v43 release is complete.
