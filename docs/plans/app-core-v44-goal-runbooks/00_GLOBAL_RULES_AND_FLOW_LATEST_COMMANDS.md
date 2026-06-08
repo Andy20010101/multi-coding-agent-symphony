@@ -14,6 +14,16 @@ goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal close
 
 v44 adds repository-owned supervisor core logic around result parsing, route decisions, progress state, and write previews. It does not replace the managed goal command spine.
 
+## task-0 Bootstrap
+
+Use the v44 fixture for managed-goal registration dry-run:
+
+```sh
+pnpm --silent symphony goal init --goal v44-project-internal-goal-supervisor-core --from-json fixtures/contracts/goal-runbook.v44-project-internal-goal-supervisor-core.v1.json --dry-run --json
+```
+
+The dry-run must return `validation.status: ok` and `writeIntent.writesInDryRun: false`. Do not run the confirm command unless the operator explicitly authorizes managed-goal registration.
+
 ## Runtime Boundary
 
 The live temporary automation path remains external:

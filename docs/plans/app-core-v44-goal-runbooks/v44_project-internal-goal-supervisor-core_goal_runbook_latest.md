@@ -13,6 +13,17 @@ Move the stable supervisor contracts from the temporary project-external runner 
 - `docs/plans/v43-plus-capability-harvest-matrix-2026-06-08.md`
 - `docs/plans/controller/local-goal-supervisor-v43-plus-task-e-project-internal-supervisor-migration-spec-2026-06-08.md`
 - `docs/plans/app-core-v44-goal-runbooks/00_GLOBAL_RULES_AND_FLOW_LATEST_COMMANDS.md`
+- `fixtures/contracts/goal-runbook.v44-project-internal-goal-supervisor-core.v1.json`
+
+## task-0 Bootstrap Input
+
+Managed-goal registration uses the tracked v44 fixture:
+
+```sh
+pnpm --silent symphony goal init --goal v44-project-internal-goal-supervisor-core --from-json fixtures/contracts/goal-runbook.v44-project-internal-goal-supervisor-core.v1.json --dry-run --json
+```
+
+The fixture contains task-1 through task-5. task-0 is the bootstrap work that creates and validates this registration input. Do not confirm managed-goal registration without explicit operator authorization.
 
 ## Tasks
 
