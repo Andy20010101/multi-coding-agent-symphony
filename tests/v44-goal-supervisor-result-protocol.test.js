@@ -4,9 +4,12 @@ import { readFile } from 'node:fs/promises';
 
 import {
   RELEASE_MANAGER_EVENTS_BY_PHASE,
+  RECORDED_RESULT_INTAKE_STATUSES,
   RESULT_REQUIRED_FIELDS,
   acceptedResultEventsForContext,
   formatResultBlock,
+  inspectRecordedResultIntake,
+  isPendingRecordedResultIntake,
   parseGoalSupervisorResultBlock
 } from '../src/symphony/goal-supervisor/result-protocol.js';
 
@@ -170,6 +173,65 @@ describe('v44 goal supervisor result protocol', () => {
     assert.equal(missingConcreteGate.reason, 'release-gate-result-must-cite-one-gate:0');
     assert.equal(prepWithGateMention.valid, false);
     assert.equal(prepWithGateMention.reason, 'release-prep-result-must-not-cite-gates:release.diff-check');
+  });
+
+  it('projects recorded result intake states behind the result protocol', async () => {
+    const { validResults, releaseGates } = await readFixture();
+    const sample = validResults[0];
+    const pending = inspectRecordedResultIntake({
+      source: 'result-escrow-file',
+      text: formatResultBlock(sample.fields),
+      expected: sample.expected,
+      releaseGates
+    });
+    const missing = inspectRecordedResultIntake({
+      source: 'result-escrow-file',
+      text: null,
+      expected: sample.expected,
+      releaseGates,
+      missingReason: 'missing-result-escrow'
+    });
+    const malformed = inspectRecordedResultIntake({
+      source: 'app-thread',
+      text: 'RESULT_BLOCK_START\nthis is not key value syntax\nRESULT_BLOCK_END',
+      expected: sample.expected,
+      releaseGates
+    });
+    const invalid = inspectRecordedResultIntake({
+      source: 'app-thread',
+      text: formatResultBlock({
+        ...sample.fields,
+        threadId: 'thread-from-another-phase'
+      }),
+      expected: sample.expected,
+      releaseGates
+    });
+    const consumed = inspectRecordedResultIntake({
+      source: 'result-escrow-file',
+      text: formatResultBlock(sample.fields),
+      expected: sample.expected,
+      releaseGates,
+      consumedResultIds: [pending.record.recordId]
+    });
+
+    assert.equal(pending.status, 'pending');
+    assert.deepEqual(RECORDED_RESULT_INTAKE_STATUSES, [
+      'pending',
+      'missing',
+      'invalid',
+      'unavailable',
+      'consumed'
+    ]);
+    assert.equal(isPendingRecordedResultIntake(pending), true);
+    assert.equal(missing.status, 'missing');
+    assert.equal(missing.reason, 'missing-result-escrow');
+    assert.equal(malformed.status, 'invalid');
+    assert.equal(malformed.reason, 'malformed-result-line');
+    assert.equal(invalid.status, 'invalid');
+    assert.equal(invalid.reason, 'context-mismatch:threadId');
+    assert.equal(consumed.status, 'consumed');
+    assert.equal(consumed.reason, 'recorded-result-already-registered');
+    assert.equal(isPendingRecordedResultIntake(consumed), false);
   });
 });
 

@@ -3,6 +3,11 @@ import {
   isActiveSupervisorLeaseForCurrent,
   isSupervisorResultReadyStatus
 } from './state-vocabulary.js';
+import {
+  isPendingRecordedResultIntake,
+  pendingResultFromRecordedResultIntake,
+  projectRecordedResultEntryForCurrent
+} from './result-protocol.js';
 
 export const GOAL_SUPERVISOR_ROUTE_ENGINE_CONTRACT_NAME = 'goal-supervisor-route-engine.v1';
 export const GOAL_SUPERVISOR_PROGRESS_OBSERVER_CONTRACT_NAME = 'goal-supervisor-progress-observer.v1';
@@ -73,11 +78,11 @@ export function decideGoalSupervisorRoute({
     });
   }
 
-  if (routeInput?.status === 'pending-result' && routeInput?.resultAvailability?.valid === true) {
+  if (routeInput?.status === 'pending-result' && isPendingRecordedResultIntake(routeInput.resultIntake ?? routeInput.resultAvailability)) {
     return routeDecision({
       state: 'pending-result',
       current,
-      pendingResult: resultFromAvailability(routeInput.resultAvailability),
+      pendingResult: pendingResultFromRecordedResultIntake(routeInput.resultIntake ?? routeInput.resultAvailability),
       action: { kind: 'register-recorded-result' },
       reason: routeInput.reason ?? 'valid-result-available',
       progress
@@ -151,8 +156,9 @@ export function observeGoalSupervisorProgress({
   const active = normalizedState.active;
   const thread = routeInput?.thread ?? null;
   const current = normalizeCurrent(active ?? routeInput?.activeLease ?? goalNext?.next ?? {});
-  const pendingResult = routeInput?.resultAvailability?.valid === true
-    ? resultFromAvailability(routeInput.resultAvailability)
+  const routeResultIntake = routeInput?.resultIntake ?? routeInput?.resultAvailability;
+  const pendingResult = isPendingRecordedResultIntake(routeResultIntake)
+    ? pendingResultFromRecordedResultIntake(routeResultIntake)
     : latestValidResultForCurrent({ state: normalizedState, current });
 
   if (goalNext?.status === 'complete' && !hasLiveSupervisorState(normalizedState) && pendingResult === null) {
@@ -243,17 +249,18 @@ export function latestValidResultForCurrent({
 
   for (let index = normalizedState.results.length - 1; index >= 0; index -= 1) {
     const candidate = normalizedState.results[index];
-    const result = candidate.result ?? null;
+    const projected = projectRecordedResultEntryForCurrent({
+      entry: candidate,
+      current: normalizedCurrent,
+      resultIndex: index
+    });
 
     if (
-      candidate.valid === true &&
-      result?.taskId === normalizedCurrent.taskId &&
-      result?.role === normalizedCurrent.role &&
-      isResultPendingRegistration(candidate) === true
+      isPendingRecordedResultIntake(projected) === true
     ) {
       return {
         ...candidate,
-        result,
+        result: projected.record,
         resultIndex: index
       };
     }
@@ -441,19 +448,6 @@ function normalizeCurrent(current) {
   };
 }
 
-function resultFromAvailability(availability) {
-  if (availability?.record !== null && availability?.record !== undefined) {
-    return {
-      valid: true,
-      source: availability.source,
-      threadId: availability.threadId,
-      result: availability.record
-    };
-  }
-
-  return null;
-}
-
 function latestTimestamp(values) {
   let latest = null;
   let latestMs = -Infinity;
@@ -480,24 +474,6 @@ function findLatestResultIndex(state, predicate) {
   }
 
   return -1;
-}
-
-function isResultPendingRegistration(candidate) {
-  const result = candidate?.result ?? null;
-
-  if (
-    candidate?.registered === true ||
-    candidate?.consumed === true ||
-    result?.registered === true ||
-    result?.consumed === true
-  ) {
-    return false;
-  }
-
-  return candidate?.registered === false ||
-    candidate?.consumed === false ||
-    result?.registered === false ||
-    result?.consumed === false;
 }
 
 function isNonEmptyString(value) {
