@@ -2,17 +2,13 @@ import {
   extractBoundedResultBlocks,
   parseGoalSupervisorResultBlock
 } from './result-protocol.js';
+import {
+  isLiveSupervisorStatus,
+  liveSupervisorThreadIds
+} from './state-vocabulary.js';
 
 export const GOAL_SUPERVISOR_APP_THREAD_ADAPTER_CONTRACT_NAME = 'goal-supervisor-app-thread-adapter.v1';
 export const GOAL_SUPERVISOR_RESULT_CONSUMER_CONTRACT_NAME = 'goal-supervisor-escrow-first-result-consumer.v1';
-
-const ACTIVE_LEASE_STATUSES = Object.freeze([
-  'thread-requested',
-  'thread-active',
-  'active',
-  'result-ready',
-  'result-invalid'
-]);
 
 const TERMINAL_TURN_STATUSES = Object.freeze([
   'completed',
@@ -264,12 +260,7 @@ export function duplicateDispatchGuard({
     };
   }
 
-  const liveThreadIds = Array.isArray(threads)
-    ? threads
-      .filter((thread) => ACTIVE_LEASE_STATUSES.includes(thread?.status))
-      .map((thread) => thread.threadId)
-      .filter(isNonEmptyString)
-    : [];
+  const liveThreadIds = liveSupervisorThreadIds(threads);
 
   if (liveThreadIds.length > 0) {
     return {
@@ -437,7 +428,7 @@ function normalizeActiveLease(active) {
 
   const status = isNonEmptyString(active.status) ? active.status : null;
   return {
-    live: ACTIVE_LEASE_STATUSES.includes(status),
+    live: isLiveSupervisorStatus(status),
     status,
     threadId: isNonEmptyString(active.threadId) ? active.threadId : null,
     taskId: isNonEmptyString(active.taskId) ? active.taskId : null,

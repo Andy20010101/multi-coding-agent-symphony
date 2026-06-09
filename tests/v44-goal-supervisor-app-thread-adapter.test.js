@@ -10,6 +10,10 @@ import {
   normalizeAppThreadRead
 } from '../src/symphony/goal-supervisor/app-thread-adapter.js';
 import { formatResultBlock } from '../src/symphony/goal-supervisor/result-protocol.js';
+import {
+  SUPERVISOR_LIVE_STATUSES,
+  isLiveSupervisorStatus
+} from '../src/symphony/goal-supervisor/state-vocabulary.js';
 
 const FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/app-thread-adapter.v44.replay.v1.json', import.meta.url);
 
@@ -110,6 +114,77 @@ describe('v44 goal supervisor app thread adapter', () => {
     assert.equal(guard.reason, 'active-lease-exists');
     assert.equal(routeInput.dispatchGuard.blocked, true);
     assert.equal(routeInput.actionKind, 'wait-active-thread');
+  });
+
+  it('uses the shared live status vocabulary for duplicate dispatch and wait routing', () => {
+    for (const status of SUPERVISOR_LIVE_STATUSES) {
+      assert.equal(isLiveSupervisorStatus(status), true);
+
+      const active = {
+        status,
+        threadId: `thread-${status}`,
+        taskId: 'task-2',
+        role: 'worker',
+        phase: 'implement'
+      };
+      const guard = duplicateDispatchGuard({
+        active,
+        threads: []
+      });
+      const routeInput = buildEscrowFirstRouteInput({
+        active,
+        threadRead: {
+          threadId: active.threadId,
+          thread: { status: { type: 'notLoaded' }, turns: [] }
+        },
+        escrow: null,
+        expected: {
+          goalId: 'v44-project-internal-goal-supervisor-core',
+          taskId: active.taskId,
+          role: active.role,
+          phase: active.phase,
+          threadId: active.threadId
+        }
+      });
+
+      assert.equal(guard.blocked, true, status);
+      assert.equal(guard.reason, 'active-lease-exists', status);
+      assert.equal(routeInput.dispatchGuard.blocked, true, status);
+      assert.equal(routeInput.actionKind, 'wait-active-thread', status);
+    }
+  });
+
+  it('does not treat non-live statuses as duplicate dispatch blockers', () => {
+    for (const status of ['completed', 'failed', 'cancelled', 'idle', 'result-consumed']) {
+      assert.equal(isLiveSupervisorStatus(status), false);
+      assert.deepEqual(duplicateDispatchGuard({
+        active: {
+          status,
+          threadId: `thread-${status}`,
+          taskId: 'task-2',
+          role: 'worker',
+          phase: 'implement'
+        },
+        threads: []
+      }), {
+        blocked: false,
+        reason: 'no-active-lease'
+      });
+    }
+  });
+
+  it('blocks duplicate dispatch when any known live app thread exists', () => {
+    const guard = duplicateDispatchGuard({
+      active: null,
+      threads: [
+        { threadId: 'thread-complete', status: 'completed' },
+        { threadId: 'thread-live', status: 'thread-active' }
+      ]
+    });
+
+    assert.equal(guard.blocked, true);
+    assert.equal(guard.reason, 'live-thread-exists');
+    assert.deepEqual(guard.liveThreadIds, ['thread-live']);
   });
 
   it('can inspect a valid result from a readable app thread when escrow is absent', () => {
