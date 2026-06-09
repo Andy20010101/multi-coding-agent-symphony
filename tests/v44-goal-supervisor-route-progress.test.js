@@ -264,6 +264,24 @@ describe('v44 goal supervisor route engine and progress observer', () => {
     }
   });
 
+  it('blocks complete when a live thread status exists without a thread id', async () => {
+    const fixture = await readFixture();
+    const decision = decideGoalSupervisorRoute({
+      state: {
+        active: null,
+        threads: [{ status: 'thread-active' }],
+        results: []
+      },
+      goalNext: { status: 'complete', reason: 'all tasks verified' },
+      nowMs: Date.parse(fixture.nowUtc),
+      progressGraceMs: fixture.progressGraceMs
+    });
+
+    assert.equal(decision.state, 'blocked');
+    assert.equal(decision.reason, 'goal-complete-with-live-supervisor-lease');
+    assert.equal(decision.action.kind, 'recovery-required');
+  });
+
   it('keeps result-ready complete leases on the pending-result path', async () => {
     const fixture = await readFixture();
     const decision = decideGoalSupervisorRoute({

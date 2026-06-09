@@ -31,8 +31,13 @@ export function liveSupervisorThreadIds(threads) {
     : [];
 }
 
+export function hasLiveSupervisorThread(threads) {
+  return Array.isArray(threads) &&
+    threads.some((thread) => isLiveSupervisorStatus(thread?.status));
+}
+
 export function hasLiveSupervisorState(state) {
-  return isLiveSupervisorLease(state?.active) || liveSupervisorThreadIds(state?.threads).length > 0;
+  return isLiveSupervisorLease(state?.active) || hasLiveSupervisorThread(state?.threads);
 }
 
 export function isActiveSupervisorLeaseForCurrent({ active, current }) {
