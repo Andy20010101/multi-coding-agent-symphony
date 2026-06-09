@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 import {
   GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_NAME,
+  GOAL_SUPERVISOR_CORE_PROJECTION_HANDOFF_METADATA,
   buildGoalSupervisorCoreProjection
 } from '../src/symphony/goal-supervisor/index.js';
 
@@ -50,8 +51,20 @@ describe('v44 goal supervisor core projection', () => {
     assert.equal(projection.progress.state, 'complete');
     assert.equal(projection.migrationHandoff.temporaryExternalRunner.path, fixture.externalRunnerPath);
     assert.equal(projection.migrationHandoff.temporaryExternalRunner.operationalFallback, true);
+    assert.equal(
+      projection.migrationHandoff.temporaryExternalRunner.rollbackAction,
+      `continue using ${fixture.externalRunnerPath}`
+    );
+    assert.match(projection.migrationHandoff.rollbackGuidance, /disagrees with live behavior/);
+    assert.match(projection.migrationHandoff.rollbackGuidance, /continue using the temporary external runner/);
     assert.ok(projection.migrationHandoff.repositoryOwnedAfterV44.includes('route-progress-projection'));
+    assert.ok(projection.migrationHandoff.repositoryOwnedAfterV44.includes('recorded-result-intake-projection'));
+    assert.ok(projection.migrationHandoff.repositoryOwnedAfterV44.includes('release-policy-model'));
     assert.ok(projection.migrationHandoff.remainsExternalAfterV44.includes('daemon-launcher-and-pty-process-ownership'));
+    assert.ok(projection.migrationHandoff.remainsExternalAfterV44.includes('provider-cli-execution'));
+    assert.ok(projection.migrationHandoff.remainsExternalAfterV44.includes('github-release-automation'));
+    assert.ok(projection.migrationHandoff.remainsExternalAfterV44.includes('release-closeout-execution-automation'));
+    assertNoExecutableRunnerFields(projection.migrationHandoff.temporaryExternalRunner);
     assert.equal(projection.boundaries.liveDaemonOwner, false);
     assert.equal(projection.boundaries.liveManagedGoalAppend, false);
   });
@@ -71,8 +84,26 @@ describe('v44 goal supervisor core projection', () => {
     assert.equal(projection.boundaries.tagPushPublishAutomation, false);
     assert.ok(projection.migrationHandoff.remainsExternalAfterV44.includes('tag-push-publish-release-automation'));
   });
+
+  it('keeps handoff metadata descriptor read-only and metadata-only', () => {
+    assert.equal(GOAL_SUPERVISOR_CORE_PROJECTION_HANDOFF_METADATA.readOnly, true);
+    assert.equal(GOAL_SUPERVISOR_CORE_PROJECTION_HANDOFF_METADATA.willMutate, false);
+    assert.equal(Object.isFrozen(GOAL_SUPERVISOR_CORE_PROJECTION_HANDOFF_METADATA), true);
+    assert.equal(Object.isFrozen(GOAL_SUPERVISOR_CORE_PROJECTION_HANDOFF_METADATA.remainsExternalAfterV44), true);
+    assert.throws(
+      () => GOAL_SUPERVISOR_CORE_PROJECTION_HANDOFF_METADATA.remainsExternalAfterV44.push('new-external-surface'),
+      TypeError
+    );
+    assertNoExecutableRunnerFields(GOAL_SUPERVISOR_CORE_PROJECTION_HANDOFF_METADATA.temporaryExternalRunner);
+  });
 });
 
 async function readFixture() {
   return JSON.parse(await readFile(FIXTURE_PATH, 'utf8'));
+}
+
+function assertNoExecutableRunnerFields(runnerMetadata) {
+  for (const field of ['adapter', 'args', 'command', 'doctorCommand', 'execute', 'launcher']) {
+    assert.equal(Object.hasOwn(runnerMetadata, field), false);
+  }
 }
