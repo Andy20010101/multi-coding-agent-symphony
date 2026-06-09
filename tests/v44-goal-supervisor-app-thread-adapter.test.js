@@ -67,6 +67,7 @@ describe('v44 goal supervisor app thread adapter', () => {
     assert.equal(routeInput.status, 'wait');
     assert.equal(routeInput.actionKind, 'wait-active-thread');
     assert.equal(routeInput.willMutate, false);
+    assert.equal(routeInput.resultIntake.status, 'unavailable');
     assert.equal(routeInput.resultAvailability.status, 'unavailable');
   });
 
@@ -86,11 +87,12 @@ describe('v44 goal supervisor app thread adapter', () => {
       releaseGates: fixture.releaseGates
     });
 
-    assert.equal(escrow.status, 'valid');
+    assert.equal(escrow.status, 'pending');
     assert.equal(routeInput.status, 'pending-result');
     assert.equal(routeInput.actionKind, 'consume-result');
     assert.equal(routeInput.reason, 'valid-escrow-result-preferred-before-thread-read');
-    assert.equal(routeInput.resultAvailability.source, 'result-escrow-file');
+    assert.equal(routeInput.resultIntake.source, 'result-escrow-file');
+    assert.equal(routeInput.resultAvailability, routeInput.resultIntake);
     assert.equal(routeInput.thread.status, 'unreadable');
     assert.equal(routeInput.dispatchGuard.blocked, true);
   });
@@ -222,7 +224,7 @@ describe('v44 goal supervisor app thread adapter', () => {
       expected
     });
 
-    assert.equal(availability.status, 'valid');
+    assert.equal(availability.status, 'pending');
     assert.equal(availability.source, 'app-thread');
     assert.equal(availability.record.threadId, expected.threadId);
   });

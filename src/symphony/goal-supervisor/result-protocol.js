@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 export const GOAL_SUPERVISOR_RESULT_PROTOCOL_CONTRACT_NAME = 'goal-supervisor-result-protocol.v1';
 export const GOAL_SUPERVISOR_RESULT_PROTOCOL_CONTRACT_VERSION = 1;
+export const GOAL_SUPERVISOR_RECORDED_RESULT_INTAKE_CONTRACT_NAME = 'goal-supervisor-recorded-result-intake.v1';
+export const GOAL_SUPERVISOR_RECORDED_RESULT_INTAKE_CONTRACT_VERSION = 1;
 export const RESULT_BLOCK_START = 'RESULT_BLOCK_START';
 export const RESULT_BLOCK_END = 'RESULT_BLOCK_END';
 
@@ -63,6 +65,13 @@ const RESULT_STATUSES = Object.freeze([
   'completed',
   'needs-revision',
   'blocked'
+]);
+export const RECORDED_RESULT_INTAKE_STATUSES = Object.freeze([
+  'pending',
+  'missing',
+  'invalid',
+  'unavailable',
+  'consumed'
 ]);
 const PLACEHOLDER_PATTERN = /^(?:<.*>|pending|todo|tbd|unknown|null|undefined|n\/a)$/iu;
 const COMMIT_PATTERN = /^[a-f0-9]{7,64}$/u;
@@ -132,6 +141,208 @@ export function parseGoalSupervisorResultBlock({
     blocks,
     record
   };
+}
+
+export function inspectRecordedResultIntake({
+  source,
+  text = null,
+  expected,
+  releaseGates = [],
+  path = null,
+  threadId = null,
+  available = true,
+  unavailableReason = 'result-source-unavailable',
+  missingReason = 'missing-result-block',
+  consumedResultIds = [],
+  registeredResultIds = [],
+  acceptedRecords = []
+}) {
+  const normalizedSource = requiredString(source, 'source');
+
+  if (available !== true) {
+    return recordedResultIntake({
+      source: normalizedSource,
+      status: 'unavailable',
+      reason: unavailableReason,
+      path,
+      threadId
+    });
+  }
+
+  if (!isNonEmptyString(text)) {
+    return recordedResultIntake({
+      source: normalizedSource,
+      status: 'missing',
+      reason: missingReason,
+      path,
+      threadId
+    });
+  }
+
+  const blocks = extractBoundedResultBlocks(text);
+  if (blocks.length === 0) {
+    return recordedResultIntake({
+      source: normalizedSource,
+      status: 'missing',
+      reason: 'missing-result-block',
+      path,
+      threadId
+    });
+  }
+
+  const parsed = parseGoalSupervisorResultBlock({
+    text,
+    expected,
+    releaseGates
+  });
+
+  if (parsed.valid !== true) {
+    return recordedResultIntake({
+      source: normalizedSource,
+      status: 'invalid',
+      reason: parsed.reason,
+      path,
+      threadId,
+      parsed
+    });
+  }
+
+  const consumed = recordedResultConsumptionState({
+    record: parsed.record,
+    consumedResultIds,
+    registeredResultIds,
+    acceptedRecords
+  });
+
+  if (consumed.consumed === true) {
+    return recordedResultIntake({
+      source: normalizedSource,
+      status: 'consumed',
+      reason: consumed.reason,
+      path,
+      threadId,
+      parsed,
+      record: parsed.record
+    });
+  }
+
+  return recordedResultIntake({
+    source: normalizedSource,
+    status: 'pending',
+    reason: 'valid-result-awaits-registration',
+    path,
+    threadId,
+    parsed,
+    record: parsed.record
+  });
+}
+
+export function selectRecordedResultIntake({
+  escrowIntake,
+  threadIntake
+}) {
+  if (isPendingRecordedResultIntake(escrowIntake) || escrowIntake?.status === 'consumed') {
+    return escrowIntake;
+  }
+
+  if (isPendingRecordedResultIntake(threadIntake)) {
+    return threadIntake;
+  }
+
+  if (escrowIntake?.status === 'invalid') {
+    return escrowIntake;
+  }
+
+  return threadIntake?.status === 'unavailable'
+    ? threadIntake
+    : escrowIntake;
+}
+
+export function isPendingRecordedResultIntake(intake) {
+  return intake?.contractName === GOAL_SUPERVISOR_RECORDED_RESULT_INTAKE_CONTRACT_NAME
+    && intake.status === 'pending'
+    && intake.record !== null;
+}
+
+export function pendingResultFromRecordedResultIntake(intake) {
+  if (!isPendingRecordedResultIntake(intake)) {
+    return null;
+  }
+
+  return {
+    valid: true,
+    source: intake.source,
+    threadId: intake.threadId,
+    result: intake.record
+  };
+}
+
+export function projectRecordedResultEntryForCurrent({
+  entry,
+  current,
+  resultIndex = null
+}) {
+  if (!isPlainObject(entry) || entry.valid !== true) {
+    return recordedResultIntake({
+      source: 'recorded-result-state',
+      status: 'invalid',
+      reason: 'invalid-recorded-result-entry'
+    });
+  }
+
+  const normalizedCurrent = normalizeResultCurrent(current);
+  const result = entry.result ?? entry.record ?? null;
+
+  if (!isPlainObject(result)) {
+    return recordedResultIntake({
+      source: 'recorded-result-state',
+      status: 'invalid',
+      reason: 'missing-recorded-result-payload'
+    });
+  }
+
+  if (result.taskId !== normalizedCurrent.taskId || result.role !== normalizedCurrent.role) {
+    return recordedResultIntake({
+      source: 'recorded-result-state',
+      status: 'missing',
+      reason: 'recorded-result-context-mismatch',
+      record: result,
+      resultIndex
+    });
+  }
+
+  const consumed = recordedResultConsumptionState({
+    record: result,
+    entry
+  });
+
+  if (consumed.consumed === true) {
+    return recordedResultIntake({
+      source: 'recorded-result-state',
+      status: 'consumed',
+      reason: consumed.reason,
+      record: result,
+      resultIndex
+    });
+  }
+
+  if (consumed.pending !== true) {
+    return recordedResultIntake({
+      source: 'recorded-result-state',
+      status: 'missing',
+      reason: 'recorded-result-not-pending-registration',
+      record: result,
+      resultIndex
+    });
+  }
+
+  return recordedResultIntake({
+    source: 'recorded-result-state',
+    status: 'pending',
+    reason: 'recorded-result-awaits-registration',
+    record: result,
+    resultIndex
+  });
 }
 
 export function extractBoundedResultBlocks(text) {
@@ -472,6 +683,94 @@ function invalidResult(reason, context, blocks, errors = [reason]) {
   };
 }
 
+function recordedResultIntake({
+  source,
+  status,
+  reason,
+  path = null,
+  threadId = null,
+  parsed = null,
+  record = null,
+  resultIndex = null
+}) {
+  if (!RECORDED_RESULT_INTAKE_STATUSES.includes(status)) {
+    throw new TypeError(`unsupported recorded result intake status: ${status}`);
+  }
+
+  return {
+    contractName: GOAL_SUPERVISOR_RECORDED_RESULT_INTAKE_CONTRACT_NAME,
+    contractVersion: GOAL_SUPERVISOR_RECORDED_RESULT_INTAKE_CONTRACT_VERSION,
+    readOnly: true,
+    willMutate: false,
+    source,
+    status,
+    valid: status === 'pending',
+    pending: status === 'pending',
+    registerable: status === 'pending',
+    reason,
+    path,
+    threadId,
+    parsed,
+    record,
+    resultIndex
+  };
+}
+
+function recordedResultConsumptionState({
+  record,
+  entry = null,
+  consumedResultIds = [],
+  registeredResultIds = [],
+  acceptedRecords = []
+}) {
+  const recordId = record?.recordId ?? null;
+
+  if (
+    entry?.registered === true ||
+    entry?.consumed === true ||
+    record?.registered === true ||
+    record?.consumed === true
+  ) {
+    return {
+      consumed: true,
+      pending: false,
+      reason: 'recorded-result-already-consumed'
+    };
+  }
+
+  if (
+    isNonEmptyString(recordId) &&
+    (
+      consumedResultIds.includes(recordId) ||
+      registeredResultIds.includes(recordId) ||
+      acceptedRecords.some((accepted) => accepted?.recordId === recordId)
+    )
+  ) {
+    return {
+      consumed: true,
+      pending: false,
+      reason: 'recorded-result-already-registered'
+    };
+  }
+
+  return {
+    consumed: false,
+    pending: entry?.registered === false ||
+      entry?.consumed === false ||
+      record?.registered === false ||
+      record?.consumed === false ||
+      entry === null,
+    reason: 'recorded-result-pending-registration'
+  };
+}
+
+function normalizeResultCurrent(current) {
+  return {
+    taskId: isNonEmptyString(current?.taskId) ? current.taskId : null,
+    role: isNonEmptyString(current?.role) ? current.role : null
+  };
+}
+
 function resultRecordId(payload) {
   const canonical = JSON.stringify(
     Object.fromEntries(RESULT_REQUIRED_FIELDS.map((field) => [field, payload[field]]))
@@ -539,6 +838,14 @@ function requiredStringField(object, field) {
   }
 
   return object[field];
+}
+
+function requiredString(value, field) {
+  if (!isNonEmptyString(value)) {
+    throw new TypeError(`${field} is required`);
+  }
+
+  return value;
 }
 
 function optionalStringField(object, field) {

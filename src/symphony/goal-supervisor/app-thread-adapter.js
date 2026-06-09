@@ -1,6 +1,7 @@
 import {
   extractBoundedResultBlocks,
-  parseGoalSupervisorResultBlock
+  inspectRecordedResultIntake,
+  selectRecordedResultIntake
 } from './result-protocol.js';
 import {
   isLiveSupervisorStatus,
@@ -88,55 +89,67 @@ export function normalizeAppThreadRead({
 export function inspectEscrowResultAvailability({
   escrow = null,
   expected,
-  releaseGates = []
+  releaseGates = [],
+  consumedResultIds = [],
+  registeredResultIds = [],
+  acceptedRecords = []
 }) {
   if (!isPlainObject(escrow) || !isNonEmptyString(escrow.text)) {
-    return resultAvailability({
+    return inspectRecordedResultIntake({
       source: 'result-escrow-file',
-      status: 'missing',
-      reason: 'missing-result-escrow',
+      text: null,
+      missingReason: 'missing-result-escrow',
       path: isNonEmptyString(escrow?.path) ? escrow.path : null
     });
   }
 
-  return inspectResultText({
+  return inspectRecordedResultIntake({
     source: 'result-escrow-file',
     text: escrow.text,
     path: escrow.path ?? null,
     expected,
-    releaseGates
+    releaseGates,
+    consumedResultIds,
+    registeredResultIds,
+    acceptedRecords
   });
 }
 
 export function inspectThreadResultAvailability({
   normalizedThread,
   expected,
-  releaseGates = []
+  releaseGates = [],
+  consumedResultIds = [],
+  registeredResultIds = [],
+  acceptedRecords = []
 }) {
   if (!isPlainObject(normalizedThread) || normalizedThread.readable !== true) {
-    return resultAvailability({
+    return inspectRecordedResultIntake({
       source: 'app-thread',
-      status: 'unavailable',
-      reason: normalizedThread?.reason ?? 'thread-not-readable',
+      available: false,
+      unavailableReason: normalizedThread?.reason ?? 'thread-not-readable',
       threadId: normalizedThread?.threadId ?? null
     });
   }
 
   if (!isNonEmptyString(normalizedThread.latestResultText)) {
-    return resultAvailability({
+    return inspectRecordedResultIntake({
       source: 'app-thread',
-      status: 'missing',
-      reason: 'missing-thread-result-block',
+      text: null,
+      missingReason: 'missing-thread-result-block',
       threadId: normalizedThread.threadId
     });
   }
 
-  return inspectResultText({
+  return inspectRecordedResultIntake({
     source: 'app-thread',
     text: normalizedThread.latestResultText,
     threadId: normalizedThread.threadId,
     expected,
-    releaseGates
+    releaseGates,
+    consumedResultIds,
+    registeredResultIds,
+    acceptedRecords
   });
 }
 
@@ -146,7 +159,10 @@ export function buildEscrowFirstRouteInput({
   threadRead = null,
   escrow = null,
   expected,
-  releaseGates = []
+  releaseGates = [],
+  consumedResultIds = [],
+  registeredResultIds = [],
+  acceptedRecords = []
 }) {
   const activeLease = normalizeActiveLease(active ?? state?.active ?? null);
   const threadId = activeLease.threadId ?? threadRead?.threadId ?? expected?.threadId ?? null;
@@ -158,10 +174,13 @@ export function buildEscrowFirstRouteInput({
   const escrowAvailability = inspectEscrowResultAvailability({
     escrow,
     expected,
-    releaseGates
+    releaseGates,
+    consumedResultIds,
+    registeredResultIds,
+    acceptedRecords
   });
 
-  if (escrowAvailability.status === 'valid') {
+  if (escrowAvailability.status === 'pending') {
     return routeInput({
       activeLease,
       dispatchGuard,
@@ -171,7 +190,11 @@ export function buildEscrowFirstRouteInput({
         error: threadRead?.error ?? null,
         readerCall: threadRead?.readerCall ?? null
       }),
-      resultAvailability: escrowAvailability,
+      resultIntake: escrowAvailability,
+      sourceIntakes: {
+        escrow: escrowAvailability,
+        thread: null
+      },
       actionKind: 'consume-result',
       status: 'pending-result',
       reason: 'valid-escrow-result-preferred-before-thread-read'
@@ -187,24 +210,30 @@ export function buildEscrowFirstRouteInput({
       readerCall: threadRead?.readerCall ?? null
     });
   const threadAvailability = normalizedThread === null
-    ? resultAvailability({
+    ? inspectRecordedResultIntake({
       source: 'app-thread',
-      status: 'unavailable',
-      reason: 'no-active-thread-id'
+      available: false,
+      unavailableReason: 'no-active-thread-id'
     })
     : inspectThreadResultAvailability({
       normalizedThread,
       expected,
-      releaseGates
+      releaseGates,
+      consumedResultIds,
+      registeredResultIds,
+      acceptedRecords
     });
 
-  if (threadAvailability.status === 'valid') {
+  if (threadAvailability.status === 'pending') {
     return routeInput({
       activeLease,
       dispatchGuard,
       thread: normalizedThread,
-      resultAvailability: threadAvailability,
-      escrowAvailability,
+      resultIntake: threadAvailability,
+      sourceIntakes: {
+        escrow: escrowAvailability,
+        thread: threadAvailability
+      },
       actionKind: 'consume-result',
       status: 'pending-result',
       reason: 'valid-thread-result-available'
@@ -216,12 +245,14 @@ export function buildEscrowFirstRouteInput({
       activeLease,
       dispatchGuard,
       thread: normalizedThread,
-      resultAvailability: mergeUnavailableResultAvailability({
-        escrowAvailability,
-        threadAvailability
+      resultIntake: selectRecordedResultIntake({
+        escrowIntake: escrowAvailability,
+        threadIntake: threadAvailability
       }),
-      escrowAvailability,
-      threadAvailability,
+      sourceIntakes: {
+        escrow: escrowAvailability,
+        thread: threadAvailability
+      },
       actionKind: 'wait-active-thread',
       status: 'wait',
       reason: normalizedThread?.waitInput === true
@@ -234,12 +265,14 @@ export function buildEscrowFirstRouteInput({
     activeLease,
     dispatchGuard,
     thread: normalizedThread,
-    resultAvailability: mergeUnavailableResultAvailability({
-      escrowAvailability,
-      threadAvailability
+    resultIntake: selectRecordedResultIntake({
+      escrowIntake: escrowAvailability,
+      threadIntake: threadAvailability
     }),
-    escrowAvailability,
-    threadAvailability,
+    sourceIntakes: {
+      escrow: escrowAvailability,
+      thread: threadAvailability
+    },
     actionKind: 'dispatch',
     status: 'dispatchable',
     reason: 'no-active-lease-or-valid-result'
@@ -277,49 +310,12 @@ export function duplicateDispatchGuard({
   };
 }
 
-function inspectResultText({
-  source,
-  text,
-  path = null,
-  threadId = null,
-  expected,
-  releaseGates
-}) {
-  const blocks = extractBoundedResultBlocks(text);
-  if (blocks.length === 0) {
-    return resultAvailability({
-      source,
-      status: 'missing',
-      reason: 'missing-result-block',
-      path,
-      threadId
-    });
-  }
-
-  const parsed = parseGoalSupervisorResultBlock({
-    text,
-    expected,
-    releaseGates
-  });
-
-  return resultAvailability({
-    source,
-    status: parsed.valid === true ? 'valid' : 'invalid',
-    reason: parsed.reason,
-    path,
-    threadId,
-    parsed,
-    record: parsed.record
-  });
-}
-
 function routeInput({
   activeLease,
   dispatchGuard,
   thread,
-  resultAvailability,
-  escrowAvailability = null,
-  threadAvailability = null,
+  resultIntake,
+  sourceIntakes = null,
   actionKind,
   status,
   reason
@@ -334,9 +330,9 @@ function routeInput({
     activeLease,
     dispatchGuard,
     thread,
-    resultAvailability,
-    escrowAvailability,
-    threadAvailability
+    resultIntake,
+    resultAvailability: resultIntake,
+    sourceIntakes
   };
 }
 
@@ -374,44 +370,6 @@ function normalizedThreadState({
     error,
     readerCall
   };
-}
-
-function resultAvailability({
-  source,
-  status,
-  reason,
-  path = null,
-  threadId = null,
-  parsed = null,
-  record = null
-}) {
-  return {
-    source,
-    status,
-    valid: status === 'valid',
-    reason,
-    path,
-    threadId,
-    parsed,
-    record
-  };
-}
-
-function mergeUnavailableResultAvailability({
-  escrowAvailability,
-  threadAvailability
-}) {
-  if (threadAvailability.status === 'valid') {
-    return threadAvailability;
-  }
-
-  if (escrowAvailability.status === 'invalid') {
-    return escrowAvailability;
-  }
-
-  return threadAvailability.status === 'unavailable'
-    ? threadAvailability
-    : escrowAvailability;
 }
 
 function normalizeActiveLease(active) {
