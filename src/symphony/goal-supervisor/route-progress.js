@@ -8,6 +8,7 @@ import {
   pendingResultFromRecordedResultIntake,
   projectRecordedResultEntryForCurrent
 } from './result-protocol.js';
+import { evaluateReleaseCloseoutAuthorization } from './release-policy.js';
 
 export const GOAL_SUPERVISOR_ROUTE_PROGRESS_PROJECTION_CONTRACT_NAME = 'goal-supervisor-route-progress-projection.v1';
 
@@ -113,12 +114,17 @@ function decideGoalSupervisorRoute({
     });
   }
 
-  if (current.role === 'release-manager' && allowCloseout !== true) {
+  const closeoutDecision = evaluateReleaseCloseoutAuthorization({
+    subject: current,
+    allowCloseout
+  });
+
+  if (closeoutDecision.denied) {
     return routeDecision({
       state: 'blocked',
       current,
       action: { kind: 'block' },
-      reason: 'release-closeout-requires-operator-authorization',
+      reason: closeoutDecision.reason,
       progress
     });
   }

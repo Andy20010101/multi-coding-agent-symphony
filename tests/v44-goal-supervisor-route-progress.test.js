@@ -266,6 +266,25 @@ describe('v44 goal supervisor route/progress projection', () => {
       nowMs: Date.parse(fixture.nowUtc),
       progressGraceMs: fixture.progressGraceMs
     });
+    const authorizedReleaseCloseout = projectGoalSupervisorRouteProgress({
+      state: {
+        active: null,
+        threads: [],
+        results: []
+      },
+      goalNext: {
+        status: 'action-required',
+        next: {
+          taskId: null,
+          role: 'release-manager',
+          phase: 'release-gate'
+        },
+        reason: 'release gate is passed'
+      },
+      allowCloseout: true,
+      nowMs: Date.parse(fixture.nowUtc),
+      progressGraceMs: fixture.progressGraceMs
+    });
 
     assert.equal(blockedGoalNext.state, 'blocked');
     assert.equal(blockedGoalNext.action.kind, 'block');
@@ -274,6 +293,8 @@ describe('v44 goal supervisor route/progress projection', () => {
     assert.equal(releaseCloseout.action.kind, 'block');
     assert.equal(releaseCloseout.reason, 'release-closeout-requires-operator-authorization');
     assert.equal(releaseCloseout.progress.state, 'waiting');
+    assert.equal(authorizedReleaseCloseout.state, 'dispatchable');
+    assert.equal(authorizedReleaseCloseout.action.kind, 'create-fresh-controller');
   });
 
   it('uses the shared live status vocabulary for complete-with-live-lease blocking', async () => {

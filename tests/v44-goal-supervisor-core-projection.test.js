@@ -68,6 +68,8 @@ describe('v44 goal supervisor core projection', () => {
     assert.equal(projection.route.state, 'blocked');
     assert.equal(projection.route.reason, 'release-closeout-requires-operator-authorization');
     assert.equal(projection.boundaries.releaseCloseoutWithoutOperatorAuthorization, false);
+    assert.equal(projection.boundaries.tagPushPublishAutomation, false);
+    assert.ok(projection.migrationHandoff.remainsExternalAfterV44.includes('tag-push-publish-release-automation'));
   });
 });
 

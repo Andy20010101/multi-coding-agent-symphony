@@ -2,6 +2,12 @@ import { buildGoalGatePlan } from '../goal-gate.js';
 import { getManagedGoalEventJournalPath } from '../goal-event-journal.js';
 import { buildGoalReviewPlan } from '../goal-review.js';
 import { buildGoalUpdatePlan } from '../goal-update.js';
+import {
+  evaluateReleaseRegistrarCloseoutAuthorization,
+  identifyReleaseGateForResult,
+  isReleaseManagerGateEvent,
+  normalizeReleaseGates
+} from './release-policy.js';
 
 export const GOAL_SUPERVISOR_EVENT_REGISTRAR_PREVIEW_CONTRACT_NAME = 'goal-supervisor-event-registrar-preview.v1';
 export const GOAL_SUPERVISOR_EVENT_REGISTRAR_PREVIEW_CONTRACT_VERSION = 1;
@@ -12,14 +18,6 @@ const SUPERVISOR_ACTOR_IDS = Object.freeze({
   'main-verifier': 'local-goal-supervisor-main-verifier',
   'release-manager': 'local-goal-supervisor-release-manager'
 });
-
-const DEFAULT_RELEASE_GATES = Object.freeze([
-  'release.pnpm-check',
-  'release.pnpm-test',
-  'release.workbench-build',
-  'release.diff-check',
-  'release.docs-updated'
-]);
 
 export async function buildGoalSupervisorEventRegistrarPreview(options = {}) {
   const normalized = normalizeEventRegistrarInput(options);
@@ -121,8 +119,13 @@ function normalizeEventRegistrarInput(options) {
   }
 
   const result = normalizeResult(options.result ?? options.pendingResult?.result ?? options.pendingResult?.record);
-  const releaseGates = normalizeReleaseGates(options.releaseGates);
-  const releaseGate = releaseGateForResult({ result, releaseGates });
+  const releaseGates = normalizeReleaseGates(options.releaseGates, {
+    useDefault: true
+  });
+  const releaseGate = identifyReleaseGateForResult({
+    result,
+    releaseGates
+  });
   const stateDir = isNonEmptyString(options.stateDir) ? options.stateDir : '.symphony';
 
   return {
@@ -170,13 +173,18 @@ function unsafePreviewReasons(normalized) {
     reasons.push('unsafe-write-requested');
   }
 
-  if (normalized.result.eventToRegister === 'release.ready-declared' && normalized.allowCloseout !== true) {
-    reasons.push('release-closeout-not-authorized');
+  const closeoutDecision = evaluateReleaseRegistrarCloseoutAuthorization({
+    result: normalized.result,
+    allowCloseout: normalized.allowCloseout
+  });
+
+  if (closeoutDecision.denied) {
+    reasons.push(...closeoutDecision.reasons);
   }
 
   if (
     normalized.result.role === 'release-manager' &&
-    ['release.gate-passed', 'release.gate-failed'].includes(normalized.result.eventToRegister) &&
+    isReleaseManagerGateEvent(normalized.result.eventToRegister) &&
     normalized.releaseGate === null
   ) {
     reasons.push('release-gate-not-identified');
@@ -228,7 +236,7 @@ async function buildDryRunEventPlan(normalized) {
     });
   }
 
-  if (result.role === 'release-manager' && ['release.gate-passed', 'release.gate-failed'].includes(result.eventToRegister)) {
+  if (result.role === 'release-manager' && isReleaseManagerGateEvent(result.eventToRegister)) {
     return buildGoalGatePlan({
       stateDir: normalized.stateDir,
       goalId: result.goalId,
@@ -447,17 +455,6 @@ function findMatchingRegistrationAudit({ audits, result, releaseGate }) {
   }) ?? null;
 }
 
-function releaseGateForResult({ result, releaseGates }) {
-  if (result.role !== 'release-manager' || !['release.gate-passed', 'release.gate-failed'].includes(result.eventToRegister)) {
-    return null;
-  }
-
-  const basis = `${result.commandsRun ?? ''}\n${result.validation ?? ''}`;
-  const matches = releaseGates.filter((gate) => basis.includes(gate));
-
-  return matches.length === 1 ? matches[0] : null;
-}
-
 function normalizeGoalEvents(value) {
   if (Array.isArray(value)) {
     return value.filter(isPlainObject);
@@ -472,14 +469,6 @@ function normalizeRegistrationAudits(value) {
   }
 
   return [];
-}
-
-function normalizeReleaseGates(value) {
-  if (!Array.isArray(value) || value.length === 0) {
-    return [...DEFAULT_RELEASE_GATES];
-  }
-
-  return value.filter(isNonEmptyString);
 }
 
 function evidenceRefsFor(ref) {
