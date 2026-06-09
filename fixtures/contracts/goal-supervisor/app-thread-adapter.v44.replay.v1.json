@@ -1,0 +1,76 @@
+{
+  "contractName": "goal-supervisor-app-thread-adapter-replay-fixtures.v1",
+  "contractVersion": 1,
+  "goalId": "v44-project-internal-goal-supervisor-core",
+  "generatedAtUtc": "2026-06-08T08:45:00.000Z",
+  "localRunDate": "2026-06-08",
+  "timezone": "Asia/Shanghai",
+  "releaseGates": [],
+  "scenarios": [
+    {
+      "name": "unreadable-thread-valid-escrow",
+      "expected": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "task-2",
+        "role": "worker",
+        "phase": "implement",
+        "threadId": "thread-unreadable-valid-escrow",
+        "branch": "v44-task-2-app-thread-adapter-result-consumer",
+        "worktree": "/Users/andy/.codex/worktrees/v44-task-2-app-thread-adapter-result-consumer",
+        "baseCommit": "76bc744f9c75a55a96de0605a3350d3ef392c1ab",
+        "evidenceRef": "docs/plans/v44-task-2-worker-evidence-2026-06-08.md"
+      },
+      "active": {
+        "status": "thread-active",
+        "threadId": "thread-unreadable-valid-escrow",
+        "taskId": "task-2",
+        "role": "worker",
+        "phase": "implement",
+        "requestId": "request-task-2"
+      },
+      "threadRead": {
+        "threadId": "thread-unreadable-valid-escrow",
+        "error": {
+          "message": "thread not loaded"
+        }
+      },
+      "escrow": {
+        "path": "/Users/andy/.codex/local-goal-supervisor/results/v44-project-internal-goal-supervisor-core/thread-unreadable-valid-escrow.txt",
+        "text": "RESULT_BLOCK_START\ngoalId: v44-project-internal-goal-supervisor-core\ntaskId: task-2\nrole: worker\nthreadId: thread-unreadable-valid-escrow\nbranch: v44-task-2-app-thread-adapter-result-consumer\nworktree: /Users/andy/.codex/worktrees/v44-task-2-app-thread-adapter-result-consumer\nbaseCommit: 76bc744f9c75a55a96de0605a3350d3ef392c1ab\nheadCommit: 76bc744f9c75a55a96de0605a3350d3ef392c1ab\nstatus: completed\neventToRegister: worker.evidence-recorded\nevidenceRef: docs/plans/v44-task-2-worker-evidence-2026-06-08.md\nfilesChanged: src/symphony/goal-supervisor/app-thread-adapter.js; tests/v44-goal-supervisor-app-thread-adapter.test.js; fixtures/contracts/goal-supervisor/app-thread-adapter.v44.replay.v1.json\ncommandsRun: node --test tests/v44-goal-supervisor-app-thread-adapter.test.js: passed\nvalidation: escrow result is available before the unreadable thread reader\nrisks: none\nblockers: none\nnextSuggestedAction: task-2 review\nRESULT_BLOCK_END"
+      }
+    },
+    {
+      "name": "unreadable-thread-without-valid-result",
+      "expected": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "task-2",
+        "role": "worker",
+        "phase": "implement",
+        "threadId": "thread-unreadable-no-result",
+        "branch": "v44-task-2-app-thread-adapter-result-consumer",
+        "worktree": "/Users/andy/.codex/worktrees/v44-task-2-app-thread-adapter-result-consumer",
+        "baseCommit": "76bc744f9c75a55a96de0605a3350d3ef392c1ab",
+        "evidenceRef": "docs/plans/v44-task-2-worker-evidence-2026-06-08.md"
+      },
+      "active": {
+        "status": "thread-active",
+        "threadId": "thread-unreadable-no-result",
+        "taskId": "task-2",
+        "role": "worker",
+        "phase": "implement",
+        "requestId": "request-task-2"
+      },
+      "threadRead": {
+        "threadId": "thread-unreadable-no-result",
+        "thread": {
+          "id": "thread-unreadable-no-result",
+          "status": {
+            "type": "notLoaded"
+          },
+          "turns": []
+        }
+      },
+      "escrow": null
+    }
+  ]
+}

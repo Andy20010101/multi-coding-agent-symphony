@@ -1,0 +1,114 @@
+{
+  "contractName": "goal-supervisor-result-protocol-replay-fixtures.v1",
+  "contractVersion": 1,
+  "goalId": "v44-project-internal-goal-supervisor-core",
+  "generatedAtUtc": "2026-06-08T07:58:33.317Z",
+  "localRunDate": "2026-06-08",
+  "timezone": "Asia/Shanghai",
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "validResults": [
+    {
+      "name": "task-1-worker",
+      "expected": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "task-1",
+        "role": "worker",
+        "phase": "implement",
+        "threadId": "019ea63e-3fbc-7a62-9d1b-6d4ca730ae94",
+        "branch": "v44-task-1-result-protocol-validator",
+        "worktree": "/Users/andy/.codex/worktrees/v44-task-1-result-protocol-validator",
+        "baseCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae",
+        "evidenceRef": "docs/plans/v44-task-1-worker-evidence-2026-06-08.md"
+      },
+      "fields": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "task-1",
+        "role": "worker",
+        "threadId": "019ea63e-3fbc-7a62-9d1b-6d4ca730ae94",
+        "branch": "v44-task-1-result-protocol-validator",
+        "worktree": "/Users/andy/.codex/worktrees/v44-task-1-result-protocol-validator",
+        "baseCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae",
+        "headCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae",
+        "status": "completed",
+        "eventToRegister": "worker.evidence-recorded",
+        "evidenceRef": "docs/plans/v44-task-1-worker-evidence-2026-06-08.md",
+        "filesChanged": "src/symphony/goal-supervisor/result-protocol.js; src/symphony/goal-supervisor/index.js; tests/v44-goal-supervisor-result-protocol.test.js; fixtures/contracts/goal-supervisor/result-protocol.v44.replay.v1.json; docs/plans/v44-task-1-worker-evidence-2026-06-08.md; package.json",
+        "commandsRun": "node --test tests/v44-goal-supervisor-result-protocol.test.js: passed",
+        "validation": "v44 result protocol replay fixture parsed as worker.evidence-recorded for the assigned thread",
+        "risks": "none",
+        "blockers": "none",
+        "nextSuggestedAction": "task-1 reviewer"
+      }
+    },
+    {
+      "name": "release-gate",
+      "expected": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "release",
+        "role": "release-manager",
+        "phase": "release-gate",
+        "threadId": "thread-release-gate",
+        "branch": "v44-release-manager",
+        "worktree": "/Users/andy/.codex/worktrees/v44-release-manager",
+        "baseCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae"
+      },
+      "fields": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "release",
+        "role": "release-manager",
+        "threadId": "thread-release-gate",
+        "branch": "v44-release-manager",
+        "worktree": "/Users/andy/.codex/worktrees/v44-release-manager",
+        "baseCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae",
+        "headCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae",
+        "status": "completed",
+        "eventToRegister": "release.gate-passed",
+        "evidenceRef": "docs/plans/v44-release-evidence-2026-06-08.md",
+        "filesChanged": "docs/plans/v44-release-evidence-2026-06-08.md",
+        "commandsRun": "pnpm check release.pnpm-check: passed",
+        "validation": "release.pnpm-check passed for the scoped v44 closeout gate set",
+        "risks": "none",
+        "blockers": "none",
+        "nextSuggestedAction": "continue release gates"
+      }
+    },
+    {
+      "name": "release-prep",
+      "expected": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "release",
+        "role": "release-manager",
+        "phase": "release-prep",
+        "threadId": "thread-release-prep",
+        "branch": "v44-release-manager",
+        "worktree": "/Users/andy/.codex/worktrees/v44-release-manager",
+        "baseCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae"
+      },
+      "fields": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "release",
+        "role": "release-manager",
+        "threadId": "thread-release-prep",
+        "branch": "v44-release-manager",
+        "worktree": "/Users/andy/.codex/worktrees/v44-release-manager",
+        "baseCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae",
+        "headCommit": "d1b75bd49505c2239555ad8a6ea4809a4c0614ae",
+        "status": "completed",
+        "eventToRegister": "release.ready-declared",
+        "evidenceRef": "docs/plans/v44-release-evidence-2026-06-08.md",
+        "filesChanged": "docs/plans/v44-release-evidence-2026-06-08.md",
+        "commandsRun": "scoped closeout evidence reviewed: passed",
+        "validation": "release prep is ready without citing a concrete release gate id",
+        "risks": "none",
+        "blockers": "none",
+        "nextSuggestedAction": "operator-authorized release closeout"
+      }
+    }
+  ]
+}

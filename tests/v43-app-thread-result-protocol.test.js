@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 
 import {
   ACCEPTED_TERMINAL_EVENTS_BY_ROLE,
+  ACCEPTED_TERMINAL_EVENTS_BY_RELEASE_MANAGER_PHASE,
   RESULT_BLOCK_END,
   RESULT_BLOCK_START,
+  acceptedTerminalEventsForContext,
   acceptedTerminalEventsForRole,
   consumeParsedResult,
   decideResultProtocolAction,
@@ -285,6 +287,73 @@ describe('v43 app thread result protocol', () => {
     ]);
     assert.equal(ACCEPTED_TERMINAL_EVENTS_BY_ROLE['release-manager'].includes('release.gate-failed'), true);
   });
+
+  it('narrows release-manager terminal events by phase when the context is known', () => {
+    assert.deepEqual(acceptedTerminalEventsForContext({
+      role: 'release-manager',
+      phase: 'release-gate'
+    }), [
+      'release.gate-passed',
+      'release.gate-failed'
+    ]);
+    assert.deepEqual(acceptedTerminalEventsForContext({
+      role: 'release-manager',
+      phase: 'release-prep'
+    }), [
+      'release.ready-declared'
+    ]);
+    assert.deepEqual(ACCEPTED_TERMINAL_EVENTS_BY_RELEASE_MANAGER_PHASE['release-prep'], [
+      'release.ready-declared'
+    ]);
+  });
+
+  it('rejects release-manager result events that do not match the active release phase', () => {
+    const releaseGateExpected = releaseManagerExpected('release-gate');
+    const releasePrepExpected = releaseManagerExpected('release-prep');
+    const readyDuringGate = parseChildResultBlock({
+      text: resultBlock(releaseManagerPayload({
+        threadId: releaseGateExpected.threadId,
+        eventToRegister: 'release.ready-declared',
+        validation: 'all scoped release gates are passed and closeout is ready'
+      })),
+      expected: releaseGateExpected
+    });
+    const gateDuringPrep = parseChildResultBlock({
+      text: resultBlock(releaseManagerPayload({
+        threadId: releasePrepExpected.threadId,
+        eventToRegister: 'release.gate-passed',
+        commandsRun: [
+          {
+            command: 'git diff --check',
+            status: 'passed'
+          }
+        ],
+        validation: 'release.diff-check passed'
+      })),
+      expected: releasePrepExpected
+    });
+    const validReady = parseChildResultBlock({
+      text: resultBlock(releaseManagerPayload({
+        threadId: releasePrepExpected.threadId,
+        eventToRegister: 'release.ready-declared',
+        commandsRun: [
+          {
+            command: 'pnpm --silent symphony goal closeout --goal v43-goal-supervisor-stabilization --json',
+            status: 'passed'
+          }
+        ],
+        validation: 'closeout is waiting only for release.ready-declared'
+      })),
+      expected: releasePrepExpected
+    });
+
+    assert.equal(readyDuringGate.valid, false);
+    assert.equal(readyDuringGate.reason, 'invalid-event-for-context:release.ready-declared');
+    assert.equal(gateDuringPrep.valid, false);
+    assert.equal(gateDuringPrep.reason, 'invalid-event-for-context:release.gate-passed');
+    assert.equal(validReady.valid, true);
+    assert.equal(validReady.record.eventToRegister, 'release.ready-declared');
+  });
 });
 
 function threadBinding() {
@@ -348,6 +417,50 @@ function validPayload(overrides = {}) {
     risks: [],
     blockers: [],
     nextSuggestedAction: 'reviewer',
+    ...overrides
+  };
+}
+
+function releaseManagerExpected(phase) {
+  return {
+    goalId: 'v43-goal-supervisor-stabilization',
+    taskId: 'release',
+    role: 'release-manager',
+    phase,
+    threadId: `thread-release-${phase}`,
+    branch: 'codex/v43-release-manager',
+    worktree: '/Users/andy/.codex/worktrees/v43-release-manager'
+  };
+}
+
+function releaseManagerPayload(overrides = {}) {
+  const phase = overrides.eventToRegister === 'release.ready-declared' ? 'release-prep' : 'release-gate';
+  const expected = releaseManagerExpected(phase);
+  return {
+    goalId: expected.goalId,
+    taskId: expected.taskId,
+    role: expected.role,
+    threadId: expected.threadId,
+    branch: expected.branch,
+    worktree: expected.worktree,
+    baseCommit: '172140938503637dae909dc0daf87367ea5e9832',
+    headCommit: '172140938503637dae909dc0daf87367ea5e9832',
+    status: 'completed',
+    eventToRegister: 'release.gate-passed',
+    evidenceRef: 'docs/plans/v43-release-evidence-2026-06-08.md',
+    filesChanged: [
+      'docs/plans/v43-release-evidence-2026-06-08.md'
+    ],
+    commandsRun: [
+      {
+        command: 'pnpm test',
+        status: 'passed'
+      }
+    ],
+    validation: 'release.pnpm-test passed',
+    risks: [],
+    blockers: [],
+    nextSuggestedAction: 'release-prep',
     ...overrides
   };
 }

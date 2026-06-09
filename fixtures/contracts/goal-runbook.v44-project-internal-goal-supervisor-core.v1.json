@@ -1,0 +1,187 @@
+{
+  "contractName": "goal-runbook.v1",
+  "contractVersion": 1,
+  "goalId": "v44-project-internal-goal-supervisor-core",
+  "goalTitle": "v44 Project-internal Goal Supervisor Core",
+  "baseline": {
+    "tag": "v43",
+    "commit": "172140938503637dae909dc0daf87367ea5e9832",
+    "evidenceRef": "docs/plans/v43-github-release-evidence-2026-06-08.md"
+  },
+  "tasks": [
+    {
+      "taskId": "task-1",
+      "title": "result protocol and role-aware validator",
+      "branch": "v44-task-1-result-protocol-validator",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Bounded result block parsing is repository-owned.",
+        "Required fields are explicit.",
+        "Release-manager phase validation stays strict.",
+        "Replay coverage exists for malformed, mismatched, and valid results."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "node --input-type=module -e \"import { readFile } from 'node:fs/promises'; import { assertGoalRunbookContract } from './src/symphony/goal-runbook-contracts.js'; const path='fixtures/contracts/goal-runbook.v44-project-internal-goal-supervisor-core.v1.json'; const runbook=JSON.parse(await readFile(path,'utf8')); assertGoalRunbookContract(runbook); console.log(JSON.stringify({ ok:true, path, goalId:runbook.goalId, tasks:runbook.tasks.length, releaseGates:runbook.releaseGates }));\"",
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v44-project-internal-goal-supervisor-core --json",
+        "pnpm --silent symphony goal next --goal v44-project-internal-goal-supervisor-core --json"
+      ]
+    },
+    {
+      "taskId": "task-2",
+      "title": "app thread adapter and escrow-first result consumer",
+      "branch": "v44-task-2-app-thread-adapter-result-consumer",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Read-only thread normalization exists in repository code.",
+        "A valid escrow result is preferred over lossy thread reads.",
+        "Duplicate dispatch remains blocked while an active lease exists.",
+        "Replay coverage proves unreadable-thread handling."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v44-project-internal-goal-supervisor-core --json"
+      ]
+    },
+    {
+      "taskId": "task-3",
+      "title": "route engine and progress observer parity",
+      "branch": "v44-task-3-route-progress-parity",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Route decisions are deterministic from managed inputs.",
+        "Progress states distinguish recent-progress, pending-result, stalled, and complete.",
+        "Reviewer approval is never treated as main verification.",
+        "Replay coverage proves revision and stalled-child routing."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v44-project-internal-goal-supervisor-core --json",
+        "pnpm --silent symphony goal next --goal v44-project-internal-goal-supervisor-core --json"
+      ]
+    },
+    {
+      "taskId": "task-4",
+      "title": "single state writer dry-run and event registrar preview",
+      "branch": "v44-task-4-state-writer-event-registrar",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "Write previews include exact target event and refusal reasons.",
+        "Missing-audit and unsafe-write states are rejected in preview.",
+        "No live managed goal event append is introduced by this task.",
+        "Tests cover trusted-registration and refusal paths."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed"
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v44-project-internal-goal-supervisor-core --json"
+      ]
+    },
+    {
+      "taskId": "task-5",
+      "title": "supervisor core projection and migration handoff",
+      "branch": "v44-task-5-core-projection-handoff",
+      "roleOrder": [
+        "worker",
+        "reviewer",
+        "main-verifier"
+      ],
+      "acceptance": [
+        "The repository-owned read-only projection can show route and progress state.",
+        "Docs clearly mark what remains external after v44.",
+        "Rollback guidance preserves the temporary runner as the operational fallback."
+      ],
+      "expectedEvidence": {
+        "worker": "worker.evidence-recorded",
+        "reviewer": [
+          "reviewer.approved",
+          "reviewer.needs-revision"
+        ],
+        "mainVerifier": "main.verification-passed",
+        "releaseManager": [
+          "release.gate-passed",
+          "release.ready-declared"
+        ]
+      },
+      "copyOnlyCommands": [
+        "pnpm check",
+        "pnpm test",
+        "pnpm workbench:build",
+        "git diff --check",
+        "pnpm --silent symphony goal-status --goal v44-project-internal-goal-supervisor-core --json",
+        "pnpm --silent symphony goal closeout --goal v44-project-internal-goal-supervisor-core --markdown"
+      ]
+    }
+  ],
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "rolePolicy": {
+    "workerCannotApproveOwnTask": true,
+    "reviewerApprovalRequiredBeforeMainVerification": true,
+    "mainVerificationRequiredBeforeReleaseReady": true
+  }
+}

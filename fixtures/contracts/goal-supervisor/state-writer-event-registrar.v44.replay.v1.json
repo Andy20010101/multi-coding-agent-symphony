@@ -1,0 +1,110 @@
+{
+  "contractName": "goal-supervisor-state-writer-event-registrar-replay-fixtures.v1",
+  "contractVersion": 1,
+  "goalId": "v44-project-internal-goal-supervisor-core",
+  "generatedAtUtc": "2026-06-08T09:35:00.000Z",
+  "localRunDate": "2026-06-08",
+  "timezone": "Asia/Shanghai",
+  "stateDir": ".symphony",
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "workerResult": {
+    "goalId": "v44-project-internal-goal-supervisor-core",
+    "taskId": "task-4",
+    "role": "worker",
+    "threadId": "019ea67e-a1e9-7db1-854c-3a850166eb65",
+    "branch": "v44-task-4-state-writer-event-registrar",
+    "worktree": "/Users/andy/.codex/worktrees/v44-task-4-state-writer-event-registrar",
+    "baseCommit": "15dea7aa77fb59c30964ddaaf6d6f2826d97c6b3",
+    "headCommit": "15dea7aa77fb59c30964ddaaf6d6f2826d97c6b3",
+    "status": "completed",
+    "eventToRegister": "worker.evidence-recorded",
+    "evidenceRef": "docs/plans/v44-task-4-worker-evidence-2026-06-08.md",
+    "filesChanged": "src/symphony/goal-supervisor/event-registrar.js; src/symphony/goal-supervisor/state-writer.js",
+    "commandsRun": "node --test tests/v44-goal-supervisor-state-writer-event-registrar.test.js: passed",
+    "validation": "state writer preview planned worker.evidence-recorded without appending",
+    "risks": "none",
+    "blockers": "none",
+    "nextSuggestedAction": "task-4 review"
+  },
+  "matchingGoalEvent": {
+    "eventId": "evt_task_4_worker_evidence",
+    "sequence": 12,
+    "goalId": "v44-project-internal-goal-supervisor-core",
+    "taskId": "task-4",
+    "eventType": "worker.evidence-recorded",
+    "phase": "implement",
+    "actor": {
+      "role": "worker",
+      "id": "local-goal-supervisor-worker"
+    },
+    "occurredAt": "2026-06-08T09:35:00.000Z",
+    "recordedAt": "2026-06-08T09:35:00.000Z",
+    "branch": "v44-task-4-state-writer-event-registrar",
+    "commit": "15dea7aa77fb59c30964ddaaf6d6f2826d97c6b3",
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v44-task-4-worker-evidence-2026-06-08.md",
+        "label": "Evidence for docs/plans/v44-task-4-worker-evidence-2026-06-08.md"
+      }
+    ],
+    "statement": "Worker evidence recorded for task-4."
+  },
+  "matchingRegistrationAudit": {
+    "type": "goal-event-registered",
+    "registration": {
+      "eventId": "evt_task_4_worker_evidence",
+      "goalId": "v44-project-internal-goal-supervisor-core",
+      "taskId": "task-4",
+      "ledgerTaskId": "task-4",
+      "role": "worker",
+      "eventToRegister": "worker.evidence-recorded",
+      "evidenceRef": "docs/plans/v44-task-4-worker-evidence-2026-06-08.md",
+      "releaseGate": null
+    }
+  },
+  "releaseGateResult": {
+    "goalId": "v44-project-internal-goal-supervisor-core",
+    "taskId": "release",
+    "role": "release-manager",
+    "threadId": "thread-release-gate",
+    "branch": "v44-release-manager",
+    "worktree": "/Users/andy/.codex/worktrees/v44-release-manager",
+    "baseCommit": "15dea7aa77fb59c30964ddaaf6d6f2826d97c6b3",
+    "headCommit": "15dea7aa77fb59c30964ddaaf6d6f2826d97c6b3",
+    "status": "completed",
+    "eventToRegister": "release.gate-passed",
+    "evidenceRef": "docs/plans/v44-release-evidence-2026-06-08.md",
+    "filesChanged": "docs/plans/v44-release-evidence-2026-06-08.md",
+    "commandsRun": "pnpm check release.pnpm-check: passed",
+    "validation": "release.pnpm-check passed for the scoped v44 closeout gate set",
+    "risks": "none",
+    "blockers": "none",
+    "nextSuggestedAction": "continue release gates"
+  },
+  "releaseReadyResult": {
+    "goalId": "v44-project-internal-goal-supervisor-core",
+    "taskId": "release",
+    "role": "release-manager",
+    "threadId": "thread-release-ready",
+    "branch": "v44-release-manager",
+    "worktree": "/Users/andy/.codex/worktrees/v44-release-manager",
+    "baseCommit": "15dea7aa77fb59c30964ddaaf6d6f2826d97c6b3",
+    "headCommit": "15dea7aa77fb59c30964ddaaf6d6f2826d97c6b3",
+    "status": "completed",
+    "eventToRegister": "release.ready-declared",
+    "evidenceRef": "docs/plans/v44-release-evidence-2026-06-08.md",
+    "filesChanged": "docs/plans/v44-release-evidence-2026-06-08.md",
+    "commandsRun": "scoped closeout evidence reviewed: passed",
+    "validation": "release prep is ready without citing a concrete release gate id",
+    "risks": "none",
+    "blockers": "none",
+    "nextSuggestedAction": "operator-authorized release closeout"
+  }
+}

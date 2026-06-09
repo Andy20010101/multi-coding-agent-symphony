@@ -1,0 +1,230 @@
+{
+  "contractName": "goal-supervisor-route-progress-replay-fixtures.v1",
+  "contractVersion": 1,
+  "goalId": "v44-project-internal-goal-supervisor-core",
+  "generatedAtUtc": "2026-06-08T09:20:00.000Z",
+  "localRunDate": "2026-06-08",
+  "timezone": "Asia/Shanghai",
+  "nowUtc": "2026-06-08T09:20:00.000Z",
+  "progressGraceMs": 900000,
+  "releaseGates": [],
+  "scenarios": [
+    {
+      "name": "reviewer-needs-revision-worker-revision-routes-reviewer",
+      "goalNext": {
+        "status": "action-required",
+        "next": {
+          "taskId": "task-3",
+          "role": "worker",
+          "phase": "revision"
+        },
+        "reason": "worker revision is requested"
+      },
+      "state": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "active": null,
+        "threads": [],
+        "results": [
+          {
+            "valid": true,
+            "result": {
+              "taskId": "task-3",
+              "role": "reviewer",
+              "eventToRegister": "reviewer.needs-revision",
+              "evidenceRef": "docs/plans/v44-task-3-review-evidence-2026-06-08.md"
+            }
+          },
+          {
+            "valid": true,
+            "result": {
+              "taskId": "task-3",
+              "role": "worker",
+              "eventToRegister": "worker.evidence-recorded",
+              "evidenceRef": "docs/plans/v44-task-3-worker-evidence-2026-06-08.md"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "routeState": "dispatchable",
+        "actionKind": "create-fresh-controller",
+        "currentRole": "reviewer",
+        "currentPhase": "review",
+        "reason": "worker-revision-recorded-after-reviewer-needs-revision"
+      }
+    },
+    {
+      "name": "reviewer-approval-after-main-failure-routes-main-verifier",
+      "goalNext": {
+        "status": "action-required",
+        "next": {
+          "taskId": "task-3",
+          "role": "worker",
+          "phase": "revision"
+        },
+        "reason": "worker revision is requested"
+      },
+      "state": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "active": null,
+        "threads": [],
+        "results": [
+          {
+            "valid": true,
+            "consumed": true,
+            "result": {
+              "taskId": "task-3",
+              "role": "main-verifier",
+              "eventToRegister": "main.verification-failed",
+              "consumed": true,
+              "evidenceRef": "docs/plans/v44-task-3-main-verification-evidence-2026-06-08.md"
+            }
+          },
+          {
+            "valid": true,
+            "consumed": true,
+            "result": {
+              "taskId": "task-3",
+              "role": "worker",
+              "eventToRegister": "worker.evidence-recorded",
+              "consumed": true,
+              "evidenceRef": "docs/plans/v44-task-3-worker-evidence-2026-06-08.md"
+            }
+          },
+          {
+            "valid": true,
+            "consumed": true,
+            "result": {
+              "taskId": "task-3",
+              "role": "reviewer",
+              "eventToRegister": "reviewer.approved",
+              "consumed": true,
+              "evidenceRef": "docs/plans/v44-task-3-review-evidence-2026-06-08.md"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "routeState": "dispatchable",
+        "actionKind": "create-fresh-controller",
+        "currentRole": "main-verifier",
+        "currentPhase": "main-verification",
+        "reason": "reviewer-approved-worker-revision-after-main-verification-failed"
+      }
+    },
+    {
+      "name": "active-child-stalled-routes-operator-recovery",
+      "goalNext": {
+        "status": "action-required",
+        "next": {
+          "taskId": "task-3",
+          "role": "worker",
+          "phase": "implement"
+        },
+        "reason": "worker implementation is active"
+      },
+      "state": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "active": {
+          "status": "active",
+          "threadId": "thread-stalled-worker",
+          "taskId": "task-3",
+          "role": "worker",
+          "phase": "implement",
+          "updatedAt": "2026-06-08T09:00:00.000Z"
+        },
+        "threads": [
+          {
+            "threadId": "thread-stalled-worker",
+            "status": "active",
+            "updatedAt": "2026-06-08T09:00:00.000Z"
+          }
+        ],
+        "results": []
+      },
+      "threadRead": {
+        "threadId": "thread-stalled-worker",
+        "thread": {
+          "id": "thread-stalled-worker",
+          "status": {
+            "type": "active"
+          },
+          "turns": [
+            {
+              "id": "turn-stalled",
+              "status": "inProgress",
+              "updatedAt": "2026-06-08T09:00:00.000Z",
+              "items": []
+            }
+          ]
+        }
+      },
+      "expected": {
+        "routeState": "stalled",
+        "progressState": "stalled",
+        "actionKind": "operator-thread-progress-recovery"
+      }
+    },
+    {
+      "name": "valid-escrow-result-is-pending-result",
+      "goalNext": {
+        "status": "action-required",
+        "next": {
+          "taskId": "task-3",
+          "role": "worker",
+          "phase": "implement"
+        },
+        "reason": "worker implementation result is ready"
+      },
+      "expectedResultContext": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "taskId": "task-3",
+        "role": "worker",
+        "phase": "implement",
+        "threadId": "thread-worker-result-ready",
+        "branch": "v44-task-3-route-progress-parity",
+        "worktree": "/Users/andy/.codex/worktrees/v44-task-3-route-progress-parity",
+        "baseCommit": "b0a4189246cf21aff5060e24536f167c90f0e118",
+        "evidenceRef": "docs/plans/v44-task-3-worker-evidence-2026-06-08.md"
+      },
+      "state": {
+        "goalId": "v44-project-internal-goal-supervisor-core",
+        "active": {
+          "status": "thread-active",
+          "threadId": "thread-worker-result-ready",
+          "taskId": "task-3",
+          "role": "worker",
+          "phase": "implement",
+          "updatedAt": "2026-06-08T09:19:00.000Z"
+        },
+        "threads": [
+          {
+            "threadId": "thread-worker-result-ready",
+            "status": "active",
+            "updatedAt": "2026-06-08T09:19:00.000Z"
+          }
+        ],
+        "results": []
+      },
+      "escrow": {
+        "path": "/Users/andy/.codex/local-goal-supervisor/results/v44-project-internal-goal-supervisor-core/thread-worker-result-ready.txt",
+        "text": "RESULT_BLOCK_START\ngoalId: v44-project-internal-goal-supervisor-core\ntaskId: task-3\nrole: worker\nthreadId: thread-worker-result-ready\nbranch: v44-task-3-route-progress-parity\nworktree: /Users/andy/.codex/worktrees/v44-task-3-route-progress-parity\nbaseCommit: b0a4189246cf21aff5060e24536f167c90f0e118\nheadCommit: b0a4189246cf21aff5060e24536f167c90f0e118\nstatus: completed\neventToRegister: worker.evidence-recorded\nevidenceRef: docs/plans/v44-task-3-worker-evidence-2026-06-08.md\nfilesChanged: src/symphony/goal-supervisor/route-progress.js; tests/v44-goal-supervisor-route-progress.test.js\ncommandsRun: node --test tests/v44-goal-supervisor-route-progress.test.js: passed\nvalidation: valid escrow result is ready for registration\nrisks: none\nblockers: none\nnextSuggestedAction: task-3 review\nRESULT_BLOCK_END"
+      },
+      "threadRead": {
+        "threadId": "thread-worker-result-ready",
+        "thread": {
+          "id": "thread-worker-result-ready",
+          "status": {
+            "type": "notLoaded"
+          },
+          "turns": []
+        }
+      },
+      "expected": {
+        "routeState": "pending-result",
+        "progressState": "pending-result",
+        "actionKind": "register-recorded-result"
+      }
+    }
+  ]
+}
