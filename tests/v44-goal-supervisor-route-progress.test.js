@@ -7,34 +7,24 @@ import {
   normalizeAppThreadRead
 } from '../src/symphony/goal-supervisor/app-thread-adapter.js';
 import {
-  currentAfterLocalWorkerRevision,
-  decideGoalSupervisorRoute,
-  latestValidResultForCurrent,
-  observeGoalSupervisorProgress
+  GOAL_SUPERVISOR_ROUTE_PROGRESS_PROJECTION_CONTRACT_NAME,
+  projectGoalSupervisorRouteProgress
 } from '../src/symphony/goal-supervisor/route-progress.js';
 import { SUPERVISOR_LIVE_STATUSES } from '../src/symphony/goal-supervisor/state-vocabulary.js';
 
 const FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/route-progress.v44.replay.v1.json', import.meta.url);
 
-describe('v44 goal supervisor route engine and progress observer', () => {
+describe('v44 goal supervisor route/progress projection', () => {
   it('routes worker revision results back to reviewer after reviewer.needs-revision', async () => {
     const fixture = await readFixture();
     const scenario = scenarioByName(fixture, 'reviewer-needs-revision-worker-revision-routes-reviewer');
-    const historicalReviewerResult = latestValidResultForCurrent({
-      state: scenario.state,
-      current: {
-        taskId: 'task-3',
-        role: 'reviewer',
-        phase: 'review'
-      }
-    });
-    const decision = decideGoalSupervisorRoute({
+    const decision = projectGoalSupervisorRouteProgress({
       state: scenario.state,
       goalNext: scenario.goalNext,
       nowMs: Date.parse(fixture.nowUtc)
     });
 
-    assert.equal(historicalReviewerResult, null);
+    assert.equal(decision.contractName, GOAL_SUPERVISOR_ROUTE_PROGRESS_PROJECTION_CONTRACT_NAME);
     assert.equal(decision.readOnly, true);
     assert.equal(decision.willMutate, false);
     assert.equal(decision.state, scenario.expected.routeState);
@@ -42,6 +32,7 @@ describe('v44 goal supervisor route engine and progress observer', () => {
     assert.equal(decision.current.role, scenario.expected.currentRole);
     assert.equal(decision.current.phase, scenario.expected.currentPhase);
     assert.equal(decision.reason, scenario.expected.reason);
+    assert.equal(decision.progress.state, 'waiting');
   });
 
   it('treats only explicitly unconsumed recorded results as pending registration', () => {
@@ -75,47 +66,47 @@ describe('v44 goal supervisor route engine and progress observer', () => {
       ]
     };
 
-    assert.equal(latestValidResultForCurrent({
+    const historicalDecision = projectGoalSupervisorRouteProgress({
       state: historicalState,
-      current: {
-        taskId: 'task-3',
-        role: 'reviewer',
-        phase: 'review'
+      goalNext: {
+        status: 'action-required',
+        next: {
+          taskId: 'task-3',
+          role: 'reviewer',
+          phase: 'review'
+        },
+        reason: 'reviewer approval is needed'
       }
-    }), null);
-    assert.equal(latestValidResultForCurrent({
+    });
+    const pendingDecision = projectGoalSupervisorRouteProgress({
       state: pendingState,
-      current: {
-        taskId: 'task-3',
-        role: 'reviewer',
-        phase: 'review'
+      goalNext: {
+        status: 'action-required',
+        next: {
+          taskId: 'task-3',
+          role: 'reviewer',
+          phase: 'review'
+        },
+        reason: 'reviewer approval is needed'
       }
-    }).result.eventToRegister, 'reviewer.approved');
+    });
+
+    assert.equal(historicalDecision.state, 'dispatchable');
+    assert.equal(historicalDecision.pendingResult, null);
+    assert.equal(pendingDecision.state, 'pending-result');
+    assert.equal(pendingDecision.pendingResult.result.eventToRegister, 'reviewer.approved');
+    assert.equal(pendingDecision.progress.state, 'pending-result');
   });
 
   it('routes reviewer approval to main verification instead of treating it as main verification', async () => {
     const fixture = await readFixture();
     const scenario = scenarioByName(fixture, 'reviewer-approval-after-main-failure-routes-main-verifier');
-    const override = currentAfterLocalWorkerRevision({
-      state: scenario.state,
-      current: scenario.goalNext.next
-    });
-    const reviewerPending = latestValidResultForCurrent({
-      state: scenario.state,
-      current: {
-        taskId: 'task-3',
-        role: 'main-verifier',
-        phase: 'main-verification'
-      }
-    });
-    const decision = decideGoalSupervisorRoute({
+    const decision = projectGoalSupervisorRouteProgress({
       state: scenario.state,
       goalNext: scenario.goalNext,
       nowMs: Date.parse(fixture.nowUtc)
     });
 
-    assert.equal(override.current.role, 'main-verifier');
-    assert.equal(reviewerPending, null);
     assert.equal(decision.state, scenario.expected.routeState);
     assert.equal(decision.action.kind, scenario.expected.actionKind);
     assert.equal(decision.current.role, scenario.expected.currentRole);
@@ -143,7 +134,7 @@ describe('v44 goal supervisor route engine and progress observer', () => {
         }
       })
     };
-    const recent = observeGoalSupervisorProgress({
+    const recent = projectGoalSupervisorRouteProgress({
       state: {
         active: {
           status: 'active',
@@ -164,7 +155,7 @@ describe('v44 goal supervisor route engine and progress observer', () => {
     const stalledRouteInput = {
       thread: normalizeAppThreadRead(stalled.threadRead)
     };
-    const stalledProgress = observeGoalSupervisorProgress({
+    const stalledDecision = projectGoalSupervisorRouteProgress({
       state: stalled.state,
       goalNext: stalled.goalNext,
       routeInput: stalledRouteInput,
@@ -178,14 +169,14 @@ describe('v44 goal supervisor route engine and progress observer', () => {
       expected: pending.expectedResultContext,
       releaseGates: fixture.releaseGates
     });
-    const pendingProgress = observeGoalSupervisorProgress({
+    const pendingDecision = projectGoalSupervisorRouteProgress({
       state: pending.state,
       goalNext: pending.goalNext,
       routeInput: pendingRouteInput,
       nowMs: Date.parse(fixture.nowUtc),
       progressGraceMs: fixture.progressGraceMs
     });
-    const complete = observeGoalSupervisorProgress({
+    const complete = projectGoalSupervisorRouteProgress({
       state: {
         active: null,
         threads: [],
@@ -196,17 +187,17 @@ describe('v44 goal supervisor route engine and progress observer', () => {
       progressGraceMs: fixture.progressGraceMs
     });
 
-    assert.equal(recent.state, 'recent-progress');
-    assert.equal(stalledProgress.state, 'stalled');
-    assert.equal(pendingProgress.state, 'pending-result');
-    assert.equal(complete.state, 'complete');
+    assert.equal(recent.progress.state, 'recent-progress');
+    assert.equal(stalledDecision.progress.state, 'stalled');
+    assert.equal(pendingDecision.progress.state, 'pending-result');
+    assert.equal(complete.progress.state, 'complete');
   });
 
   it('routes stalled active children to operator recovery and valid escrow to registration', async () => {
     const fixture = await readFixture();
     const stalled = scenarioByName(fixture, 'active-child-stalled-routes-operator-recovery');
     const pending = scenarioByName(fixture, 'valid-escrow-result-is-pending-result');
-    const stalledDecision = decideGoalSupervisorRoute({
+    const stalledDecision = projectGoalSupervisorRouteProgress({
       state: stalled.state,
       goalNext: stalled.goalNext,
       routeInput: { thread: normalizeAppThreadRead(stalled.threadRead) },
@@ -219,7 +210,7 @@ describe('v44 goal supervisor route engine and progress observer', () => {
       expected: pending.expectedResultContext,
       releaseGates: fixture.releaseGates
     });
-    const pendingDecision = decideGoalSupervisorRoute({
+    const pendingDecision = projectGoalSupervisorRouteProgress({
       state: pending.state,
       goalNext: pending.goalNext,
       routeInput: pendingRouteInput,
@@ -235,12 +226,62 @@ describe('v44 goal supervisor route engine and progress observer', () => {
     assert.equal(pendingDecision.pendingResult.result.eventToRegister, 'worker.evidence-recorded');
   });
 
+  it('keeps blocked goal-next and release closeout on blocked routes', async () => {
+    const fixture = await readFixture();
+    const blockedGoalNext = projectGoalSupervisorRouteProgress({
+      state: {
+        active: null,
+        threads: [],
+        results: []
+      },
+      goalNext: {
+        status: 'action-required',
+        next: {
+          taskId: 'task-4',
+          role: 'worker',
+          phase: 'implement',
+          blocked: true
+        },
+        reason: 'blocked by missing review evidence'
+      },
+      nowMs: Date.parse(fixture.nowUtc),
+      progressGraceMs: fixture.progressGraceMs
+    });
+    const releaseCloseout = projectGoalSupervisorRouteProgress({
+      state: {
+        active: null,
+        threads: [],
+        results: []
+      },
+      goalNext: {
+        status: 'action-required',
+        next: {
+          taskId: null,
+          role: 'release-manager',
+          phase: 'release-gate'
+        },
+        reason: 'release gate is not passed'
+      },
+      allowCloseout: false,
+      nowMs: Date.parse(fixture.nowUtc),
+      progressGraceMs: fixture.progressGraceMs
+    });
+
+    assert.equal(blockedGoalNext.state, 'blocked');
+    assert.equal(blockedGoalNext.action.kind, 'block');
+    assert.equal(blockedGoalNext.reason, 'blocked by missing review evidence');
+    assert.equal(releaseCloseout.state, 'blocked');
+    assert.equal(releaseCloseout.action.kind, 'block');
+    assert.equal(releaseCloseout.reason, 'release-closeout-requires-operator-authorization');
+    assert.equal(releaseCloseout.progress.state, 'waiting');
+  });
+
   it('uses the shared live status vocabulary for complete-with-live-lease blocking', async () => {
     const fixture = await readFixture();
     const blockingStatuses = SUPERVISOR_LIVE_STATUSES.filter((status) => status !== 'result-ready');
 
     for (const status of blockingStatuses) {
-      const decision = decideGoalSupervisorRoute({
+      const decision = projectGoalSupervisorRouteProgress({
         state: {
           active: {
             status,
@@ -266,7 +307,7 @@ describe('v44 goal supervisor route engine and progress observer', () => {
 
   it('blocks complete when a live thread status exists without a thread id', async () => {
     const fixture = await readFixture();
-    const decision = decideGoalSupervisorRoute({
+    const decision = projectGoalSupervisorRouteProgress({
       state: {
         active: null,
         threads: [{ status: 'thread-active' }],
@@ -284,7 +325,7 @@ describe('v44 goal supervisor route engine and progress observer', () => {
 
   it('keeps result-ready complete leases on the pending-result path', async () => {
     const fixture = await readFixture();
-    const decision = decideGoalSupervisorRoute({
+    const decision = projectGoalSupervisorRouteProgress({
       state: {
         active: {
           status: 'result-ready',

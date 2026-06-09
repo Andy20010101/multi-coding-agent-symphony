@@ -31,6 +31,7 @@ describe('v44 goal supervisor core projection', () => {
     assert.equal(projection.route.state, 'pending-result');
     assert.equal(projection.route.action.kind, 'register-recorded-result');
     assert.equal(projection.progress.state, 'pending-result');
+    assert.equal(projection.progress, projection.route.progress);
     assert.equal(projection.routeInput.reason, 'valid-escrow-result-preferred-before-thread-read');
     assert.equal(projection.routeInput.thread.status, 'notLoaded');
     assert.equal(projection.route.pendingResult.result.eventToRegister, 'worker.evidence-recorded');
