@@ -1,13 +1,11 @@
+import {
+  hasLiveSupervisorState,
+  isActiveSupervisorLeaseForCurrent,
+  isSupervisorResultReadyStatus
+} from './state-vocabulary.js';
+
 export const GOAL_SUPERVISOR_ROUTE_ENGINE_CONTRACT_NAME = 'goal-supervisor-route-engine.v1';
 export const GOAL_SUPERVISOR_PROGRESS_OBSERVER_CONTRACT_NAME = 'goal-supervisor-progress-observer.v1';
-
-const ACTIVE_STATUSES = Object.freeze([
-  'thread-requested',
-  'thread-active',
-  'active',
-  'result-ready',
-  'result-invalid'
-]);
 
 const DEFAULT_PROGRESS_GRACE_MS = 15 * 60 * 1000;
 
@@ -46,7 +44,7 @@ export function decideGoalSupervisorRoute({
       });
     }
 
-    if (hasLiveSupervisorLease(normalizedState)) {
+    if (hasLiveSupervisorState(normalizedState)) {
       return routeDecision({
         state: 'blocked',
         current: progress.current,
@@ -86,7 +84,7 @@ export function decideGoalSupervisorRoute({
     });
   }
 
-  if (hasActiveLeaseForCurrent({ active: normalizedState.active, current })) {
+  if (isActiveSupervisorLeaseForCurrent({ active: normalizedState.active, current })) {
     if (progress.state === 'stalled') {
       return routeDecision({
         state: 'stalled',
@@ -157,7 +155,7 @@ export function observeGoalSupervisorProgress({
     ? resultFromAvailability(routeInput.resultAvailability)
     : latestValidResultForCurrent({ state: normalizedState, current });
 
-  if (goalNext?.status === 'complete' && !hasLiveSupervisorLease(normalizedState) && pendingResult === null) {
+  if (goalNext?.status === 'complete' && !hasLiveSupervisorState(normalizedState) && pendingResult === null) {
     return progressSnapshot({
       state: 'complete',
       current: null,
@@ -168,7 +166,7 @@ export function observeGoalSupervisorProgress({
     });
   }
 
-  if (pendingResult !== null || active?.status === 'result-ready') {
+  if (pendingResult !== null || isSupervisorResultReadyStatus(active?.status)) {
     return progressSnapshot({
       state: 'pending-result',
       current,
@@ -454,22 +452,6 @@ function resultFromAvailability(availability) {
   }
 
   return null;
-}
-
-function hasLiveSupervisorLease(state) {
-  if (state.active !== null && ACTIVE_STATUSES.includes(state.active.status)) {
-    return true;
-  }
-
-  return state.threads.some((thread) => ACTIVE_STATUSES.includes(thread.status));
-}
-
-function hasActiveLeaseForCurrent({ active, current }) {
-  return active !== null &&
-    ACTIVE_STATUSES.includes(active.status) &&
-    active.taskId === current.taskId &&
-    active.role === current.role &&
-    active.phase === current.phase;
 }
 
 function latestTimestamp(values) {

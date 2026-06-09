@@ -12,6 +12,7 @@ import {
   latestValidResultForCurrent,
   observeGoalSupervisorProgress
 } from '../src/symphony/goal-supervisor/route-progress.js';
+import { SUPERVISOR_LIVE_STATUSES } from '../src/symphony/goal-supervisor/state-vocabulary.js';
 
 const FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/route-progress.v44.replay.v1.json', import.meta.url);
 
@@ -232,6 +233,78 @@ describe('v44 goal supervisor route engine and progress observer', () => {
     assert.equal(pendingDecision.progress.state, pending.expected.progressState);
     assert.equal(pendingDecision.action.kind, pending.expected.actionKind);
     assert.equal(pendingDecision.pendingResult.result.eventToRegister, 'worker.evidence-recorded');
+  });
+
+  it('uses the shared live status vocabulary for complete-with-live-lease blocking', async () => {
+    const fixture = await readFixture();
+    const blockingStatuses = SUPERVISOR_LIVE_STATUSES.filter((status) => status !== 'result-ready');
+
+    for (const status of blockingStatuses) {
+      const decision = decideGoalSupervisorRoute({
+        state: {
+          active: {
+            status,
+            threadId: `thread-${status}`,
+            taskId: 'task-3',
+            role: 'worker',
+            phase: 'implement',
+            updatedAt: fixture.nowUtc
+          },
+          threads: [],
+          results: []
+        },
+        goalNext: { status: 'complete', reason: 'all tasks verified' },
+        nowMs: Date.parse(fixture.nowUtc),
+        progressGraceMs: fixture.progressGraceMs
+      });
+
+      assert.equal(decision.state, 'blocked', status);
+      assert.equal(decision.reason, 'goal-complete-with-live-supervisor-lease', status);
+      assert.equal(decision.action.kind, 'recovery-required', status);
+    }
+  });
+
+  it('blocks complete when a live thread status exists without a thread id', async () => {
+    const fixture = await readFixture();
+    const decision = decideGoalSupervisorRoute({
+      state: {
+        active: null,
+        threads: [{ status: 'thread-active' }],
+        results: []
+      },
+      goalNext: { status: 'complete', reason: 'all tasks verified' },
+      nowMs: Date.parse(fixture.nowUtc),
+      progressGraceMs: fixture.progressGraceMs
+    });
+
+    assert.equal(decision.state, 'blocked');
+    assert.equal(decision.reason, 'goal-complete-with-live-supervisor-lease');
+    assert.equal(decision.action.kind, 'recovery-required');
+  });
+
+  it('keeps result-ready complete leases on the pending-result path', async () => {
+    const fixture = await readFixture();
+    const decision = decideGoalSupervisorRoute({
+      state: {
+        active: {
+          status: 'result-ready',
+          threadId: 'thread-result-ready',
+          taskId: 'task-3',
+          role: 'worker',
+          phase: 'implement',
+          updatedAt: fixture.nowUtc
+        },
+        threads: [],
+        results: []
+      },
+      goalNext: { status: 'complete', reason: 'all tasks verified' },
+      nowMs: Date.parse(fixture.nowUtc),
+      progressGraceMs: fixture.progressGraceMs
+    });
+
+    assert.equal(decision.state, 'pending-result');
+    assert.equal(decision.reason, 'goal-complete-with-unconsumed-result');
+    assert.equal(decision.action.kind, 'register-recorded-result');
   });
 });
 
