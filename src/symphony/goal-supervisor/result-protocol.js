@@ -1,4 +1,11 @@
 import { createHash } from 'node:crypto';
+import {
+  RELEASE_MANAGER_RESULT_EVENTS,
+  acceptedReleaseManagerEventsForPhase,
+  evaluateReleaseManagerResultBasis
+} from './release-policy.js';
+
+export { RELEASE_MANAGER_EVENTS_BY_PHASE } from './release-policy.js';
 
 export const GOAL_SUPERVISOR_RESULT_PROTOCOL_CONTRACT_NAME = 'goal-supervisor-result-protocol.v1';
 export const GOAL_SUPERVISOR_RESULT_PROTOCOL_CONTRACT_VERSION = 1;
@@ -42,22 +49,7 @@ export const RESULT_EVENTS_BY_ROLE = Object.freeze({
     'main.verification-passed',
     'main.verification-failed'
   ]),
-  'release-manager': Object.freeze([
-    'release.gate-passed',
-    'release.gate-failed',
-    'release.evidence-recorded',
-    'release.ready-declared'
-  ])
-});
-
-export const RELEASE_MANAGER_EVENTS_BY_PHASE = Object.freeze({
-  'release-gate': Object.freeze([
-    'release.gate-passed',
-    'release.gate-failed'
-  ]),
-  'release-prep': Object.freeze([
-    'release.ready-declared'
-  ])
+  'release-manager': RELEASE_MANAGER_RESULT_EVENTS
 });
 
 const RESULT_ROLES = Object.freeze(Object.keys(RESULT_EVENTS_BY_ROLE));
@@ -83,7 +75,7 @@ export function acceptedResultEventsForContext({
   requireResultRole(role);
 
   if (role === 'release-manager' && isNonEmptyString(phase)) {
-    return [...(RELEASE_MANAGER_EVENTS_BY_PHASE[phase] ?? [])];
+    return acceptedReleaseManagerEventsForPhase(phase);
   }
 
   return [...RESULT_EVENTS_BY_ROLE[role]];
@@ -605,28 +597,12 @@ function validateReleaseManagerBasis({
   context,
   releaseGates
 }) {
-  if (payload.role !== 'release-manager') {
-    return [];
-  }
-
-  const errors = [];
-  const basis = resultEvidenceBasis(payload);
-  const gateMentions = findReleaseGateMentions({
-    text: basis,
-    releaseGates
-  });
-
-  if (context.phase === 'release-gate' && ['release.gate-passed', 'release.gate-failed'].includes(payload.eventToRegister)) {
-    if (releaseGates.length > 0 && gateMentions.length !== 1) {
-      errors.push(`release-gate-result-must-cite-one-gate:${gateMentions.length}`);
-    }
-  }
-
-  if (payload.eventToRegister === 'release.ready-declared' && gateMentions.length > 0) {
-    errors.push(`release-prep-result-must-not-cite-gates:${gateMentions.join(',')}`);
-  }
-
-  return errors;
+  return evaluateReleaseManagerResultBasis({
+    payload,
+    phase: context.phase,
+    releaseGates,
+    basis: resultEvidenceBasis(payload)
+  }).reasons;
 }
 
 function normalizeExpectedContext(expected) {
@@ -777,17 +753,6 @@ function resultRecordId(payload) {
   );
 
   return `sha256:${createHash('sha256').update(canonical).digest('hex')}`;
-}
-
-function findReleaseGateMentions({
-  text,
-  releaseGates
-}) {
-  if (!Array.isArray(releaseGates) || releaseGates.length === 0) {
-    return [];
-  }
-
-  return releaseGates.filter((gate) => isNonEmptyString(gate) && text.includes(gate));
 }
 
 function resultEvidenceBasis(payload) {

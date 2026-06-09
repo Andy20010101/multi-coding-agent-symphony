@@ -1,5 +1,9 @@
 import { buildEscrowFirstRouteInput } from './app-thread-adapter.js';
 import { projectGoalSupervisorRouteProgress } from './route-progress.js';
+import {
+  deniedExternalReleaseAutomationSurfaces,
+  projectReleasePolicyBoundaries
+} from './release-policy.js';
 
 export const GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_NAME = 'goal-supervisor-core-projection.v1';
 export const GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_VERSION = 1;
@@ -20,7 +24,7 @@ const DEFAULT_EXTERNAL_SURFACES = Object.freeze([
   'external-runner-provenance-capture',
   'destructive-worktree-cleanup-execution',
   'live-managed-goal-event-append-confirmation',
-  'tag-push-publish-release-automation'
+  ...deniedExternalReleaseAutomationSurfaces()
 ]);
 
 export function buildGoalSupervisorCoreProjection({
@@ -77,8 +81,7 @@ export function buildGoalSupervisorCoreProjection({
       genericShellRunner: false,
       browserTerminalAutomation: false,
       liveManagedGoalAppend: false,
-      releaseCloseoutWithoutOperatorAuthorization: false,
-      tagPushPublishAutomation: false
+      ...projectReleasePolicyBoundaries()
     }
   };
 }

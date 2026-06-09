@@ -101,6 +101,19 @@ describe('v44 goal supervisor state writer and event registrar preview', () => {
     assert.deepEqual(preview.refusalReasons, ['release-closeout-not-authorized']);
     assert.equal(preview.eventPlan, null);
   });
+
+  it('uses release policy defaults when identifying registrar release gates', async () => {
+    const fixture = await readFixture();
+    const preview = await buildGoalSupervisorEventRegistrarPreview({
+      stateDir: fixture.stateDir,
+      result: fixture.releaseGateResult
+    });
+
+    assert.equal(preview.status, 'preview');
+    assert.equal(preview.targetEvent.gate.name, 'release.pnpm-check');
+    assert.equal(preview.targetEvent.gate.status, 'passed');
+    assert.deepEqual(preview.refusalReasons, []);
+  });
 });
 
 async function readFixture() {
