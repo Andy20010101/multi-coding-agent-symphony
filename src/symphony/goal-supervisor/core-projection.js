@@ -1,8 +1,5 @@
 import { buildEscrowFirstRouteInput } from './app-thread-adapter.js';
-import {
-  decideGoalSupervisorRoute,
-  observeGoalSupervisorProgress
-} from './route-progress.js';
+import { projectGoalSupervisorRouteProgress } from './route-progress.js';
 
 export const GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_NAME = 'goal-supervisor-core-projection.v1';
 export const GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_VERSION = 1;
@@ -49,14 +46,7 @@ export function buildGoalSupervisorCoreProjection({
     expected,
     releaseGates
   });
-  const progress = observeGoalSupervisorProgress({
-    state,
-    goalNext,
-    routeInput: resolvedRouteInput,
-    nowMs,
-    ...(progressGraceMs === undefined ? {} : { progressGraceMs })
-  });
-  const route = decideGoalSupervisorRoute({
+  const route = projectGoalSupervisorRouteProgress({
     state,
     goalNext,
     routeInput: resolvedRouteInput,
@@ -64,6 +54,7 @@ export function buildGoalSupervisorCoreProjection({
     nowMs,
     ...(progressGraceMs === undefined ? {} : { progressGraceMs })
   });
+  const progress = route.progress;
 
   return {
     contractName: GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_NAME,

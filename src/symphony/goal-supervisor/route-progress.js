@@ -9,12 +9,15 @@ import {
   projectRecordedResultEntryForCurrent
 } from './result-protocol.js';
 
-export const GOAL_SUPERVISOR_ROUTE_ENGINE_CONTRACT_NAME = 'goal-supervisor-route-engine.v1';
-export const GOAL_SUPERVISOR_PROGRESS_OBSERVER_CONTRACT_NAME = 'goal-supervisor-progress-observer.v1';
+export const GOAL_SUPERVISOR_ROUTE_PROGRESS_PROJECTION_CONTRACT_NAME = 'goal-supervisor-route-progress-projection.v1';
 
 const DEFAULT_PROGRESS_GRACE_MS = 15 * 60 * 1000;
 
-export function decideGoalSupervisorRoute({
+export function projectGoalSupervisorRouteProgress(input = {}) {
+  return decideGoalSupervisorRoute(input);
+}
+
+function decideGoalSupervisorRoute({
   state = {},
   goalNext,
   routeInput = null,
@@ -145,7 +148,7 @@ export function decideGoalSupervisorRoute({
   });
 }
 
-export function observeGoalSupervisorProgress({
+function observeGoalSupervisorProgress({
   state = {},
   goalNext = null,
   routeInput = null,
@@ -236,7 +239,7 @@ export function observeGoalSupervisorProgress({
   });
 }
 
-export function latestValidResultForCurrent({
+function latestValidResultForCurrent({
   state = {},
   current
 }) {
@@ -269,7 +272,7 @@ export function latestValidResultForCurrent({
   return null;
 }
 
-export function currentAfterLocalWorkerRevision({
+function currentAfterLocalWorkerRevision({
   state = {},
   current
 }) {
@@ -375,7 +378,7 @@ function routeDecision({
   progress
 }) {
   return {
-    contractName: GOAL_SUPERVISOR_ROUTE_ENGINE_CONTRACT_NAME,
+    contractName: GOAL_SUPERVISOR_ROUTE_PROGRESS_PROJECTION_CONTRACT_NAME,
     readOnly: true,
     willMutate: false,
     state,
@@ -397,7 +400,7 @@ function progressSnapshot({
   pendingResult = null
 }) {
   return {
-    contractName: GOAL_SUPERVISOR_PROGRESS_OBSERVER_CONTRACT_NAME,
+    contractName: GOAL_SUPERVISOR_ROUTE_PROGRESS_PROJECTION_CONTRACT_NAME,
     readOnly: true,
     willMutate: false,
     state,
