@@ -25,12 +25,18 @@ import {
 import {
   buildGoalSupervisorAppReadModel
 } from './app-read-model.js';
+import {
+  SESSION_CONTEXT_CONTRACT_NAME,
+  buildSessionContext
+} from './session-context.js';
 
 export async function buildGoalSupervisorAppReadModelFromContracts({
   stateDir = '.symphony',
   goalId = 'latest',
   generatedAt = new Date().toISOString(),
-  supervisorObservability = null
+  supervisorObservability = null,
+  sessionContext = null,
+  sessionHookOptions = {}
 } = {}) {
   const nowMs = Date.parse(generatedAt);
   const effectiveNowMs = Number.isFinite(nowMs) ? nowMs : Date.now();
@@ -63,6 +69,11 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     generatedAt
   });
   const active = activeLeaseFromObservability(observability);
+  const normalizedSessionContext = sessionContext ?? await buildSessionContext({
+    threadId: active?.threadId ?? null,
+    generatedAt,
+    ...sessionHookOptions
+  });
   const state = {
     goalId: goalNext.goalId ?? context?.goalId ?? goalId,
     active,
@@ -81,7 +92,7 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     goalId: context?.runbook?.goalId ?? goalNext.goalId ?? goalId,
     title: context?.runbook?.goalTitle ?? null,
     tasks: tasksFromContracts({ runbook: context?.runbook ?? null, ledger }),
-    sourceContracts: sourceContractsFor({ context, eventLog, ledger, goalNext, observability, coreProjection }),
+    sourceContracts: sourceContractsFor({ context, eventLog, ledger, goalNext, observability, coreProjection, sessionContext: normalizedSessionContext }),
     timelineEvents: timelineEventsFromEventLog(eventLog),
     state,
     goalNext,
@@ -89,6 +100,7 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     releaseGates: context?.runbook?.releaseGates ?? [],
     nowMs: effectiveNowMs,
     coreProjection,
+    sessionContext: normalizedSessionContext,
     ownership: {
       daemonState: observability.daemon?.state ?? 'external-orchestration-owner'
     },
@@ -131,14 +143,15 @@ function timelineEventsFromEventLog(eventLog) {
     }));
 }
 
-function sourceContractsFor({ context, eventLog, ledger, goalNext, observability, coreProjection }) {
+function sourceContractsFor({ context, eventLog, ledger, goalNext, observability, coreProjection, sessionContext }) {
   const contracts = [
     context === null ? null : GOAL_RUNBOOK_CONTRACT_NAME,
     eventLog === null ? null : GOAL_EVENT_LOG_CONTRACT_NAME,
     ledger === null ? null : GOAL_PROGRESS_LEDGER_CONTRACT_NAME,
     goalNext?.contractName ?? GOAL_NEXT_ACTION_CONTRACT_NAME,
     coreProjection?.contractName ?? GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_NAME,
-    observability?.contractName ?? SUPERVISOR_OBSERVABILITY_CONTRACT_NAME
+    observability?.contractName ?? SUPERVISOR_OBSERVABILITY_CONTRACT_NAME,
+    sessionContext?.contractName ?? SESSION_CONTEXT_CONTRACT_NAME
   ];
 
   return [...new Set(contracts.filter(nonEmptyString))];
