@@ -246,6 +246,9 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(dashboard.recommendedNextAction.actionId, 'checkpoint');
     assert.equal(dashboard.recommendedNextAction.targetTask, 'task-3');
     assert.equal(dashboard.recommendedNextAction.safePreview, 'Copy preview: summarize pending result only.');
+    assert.deepEqual(dashboard.recommendedNextAction.requiredConfirmationFields, ['evidenceRef']);
+    assert.deepEqual(dashboard.recommendedNextAction.mismatchList, ['pending result awaits operator registration']);
+    assert.equal(dashboard.recommendedNextAction.manualInterventionReason, 'operator-review-required');
     assert.equal(dashboard.activeLease.duplicateDispatchGuard, 'blocked: active lease still healthy');
     assert.deepEqual(dashboard.commandBoundary.blockedFamilies, ['child-dispatch', 'event-log-write']);
     assert.equal(dashboard.goalTimeline[0].hashState, 'linked');
@@ -4878,7 +4881,10 @@ function createGoalSupervisorAppReadModelPayload() {
         staleThresholdMs: 600000,
         activeLeaseAgeMs: 120000
       },
-      blockedFields: ['event-log-write']
+      blockedFields: ['event-log-write'],
+      requiredConfirmationFields: ['evidenceRef'],
+      mismatchList: ['pending result awaits operator registration'],
+      manualInterventionReason: 'operator-review-required'
     },
     activeLease: {
       leaseId: 'lease-live-task-3',

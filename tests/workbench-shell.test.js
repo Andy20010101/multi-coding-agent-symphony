@@ -450,6 +450,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(defaultHtml, /Supervisor Command Center/u);
       assert.match(defaultHtml, /class="workbench-shell supervisor-shell-route"/u);
       assert.match(defaultHtml, /supervisor read-only \/ fixture fallback/u);
+      assert.match(defaultHtml, /Command Boundary projected summary/u);
       assert.match(defaultHtml, /goal-supervisor-app-read-model\.v1/u);
       assert.match(defaultHtml, />goal id<\/dt><dd[^>]*>v44-4-workbench-supervisor-dashboard-prototype/u);
       assert.match(defaultHtml, />generated at<\/dt><dd[^>]*>2026-06-10T10:24:00\+08:00/u);
@@ -467,7 +468,7 @@ describe('v15 Workbench React/Vite shell', () => {
       const leaseIndex = defaultHtml.indexOf('Active Lease');
       const contextIndex = defaultHtml.indexOf('Context Status');
       const pendingIndex = defaultHtml.indexOf('Pending Result');
-      const boundaryIndex = defaultHtml.indexOf('Command Boundary');
+      const boundaryIndex = defaultHtml.indexOf('Command Boundary', pendingIndex);
       const timelineIndex = defaultHtml.indexOf('Goal Timeline');
       const gateIndex = defaultHtml.indexOf('Current Gate');
       const ownershipIndex = defaultHtml.indexOf('Ownership');
@@ -556,12 +557,15 @@ describe('v15 Workbench React/Vite shell', () => {
       const html = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
 
       assert.match(html, /Supervisor Command Center/u);
+      assert.match(html, />contract<\/dt><dd[^>]*>goal-supervisor-app-read-model\.v1/u);
+      assert.match(html, />version<\/dt><dd[^>]*>1/u);
       assert.match(html, />goal id<\/dt><dd[^>]*>v44-4-live-supervisor/u);
       assert.match(html, />active task<\/dt><dd[^>]*>task-3/u);
       assert.match(html, />active role<\/dt><dd[^>]*>worker/u);
       assert.match(html, />generated at<\/dt><dd[^>]*>2026-06-10T12:04:00\.000Z/u);
       assert.match(html, /Live read-only supervisor state from the goal supervisor route\./u);
       assert.match(html, /source: \/api\/goals\/latest\/supervisor/u);
+      assert.match(html, /Command Boundary projected summary/u);
       assert.match(html, /Checkpoint pending result/u);
       assert.match(html, /result-awaits-registration/u);
       assert.match(html, /Copy preview: summarize pending result only\./u);
@@ -572,6 +576,104 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /blocked-without-operator-authorization/u);
       assert.doesNotMatch(html, /Release-ready|Healthy active lease|Pending result|Stale transcript|Blocked gate|Missing context/u);
       assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+  });
+
+  it('binds the v44.4 supervisor core panels from projected live model states', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const scenarios = [
+        {
+          id: 'release-ready',
+          payload: createGoalSupervisorRenderPayloadVariant('release-ready'),
+          expected: [
+            /ready-declared/u,
+            /copy-release-handoff/u,
+            /authorized-by-read-model/u,
+            /Copy preview: release-ready status remains copy-only\./u
+          ]
+        },
+        {
+          id: 'active-lease',
+          payload: createGoalSupervisorRenderPayloadVariant('active-lease'),
+          expected: [
+            /lease-live-task-2/u,
+            /blocked: active lease still healthy/u,
+            />status<\/dt><dd[^>]*>healthy/u
+          ]
+        },
+        {
+          id: 'pending-result',
+          payload: createGoalSupervisorRenderPayloadVariant('pending-result'),
+          expected: [
+            /worker\.evidence-recorded/u,
+            /valid-result-awaits-registration/u,
+            /artifact:v44-4:pending-result/u
+          ]
+        },
+        {
+          id: 'stale-transcript',
+          payload: createGoalSupervisorRenderPayloadVariant('stale-transcript'),
+          expected: [
+            /lease-active-transcript-stale/u,
+            /lease active but transcript stale/u,
+            /recover-stale-context/u
+          ]
+        },
+        {
+          id: 'blocked-gate',
+          payload: createGoalSupervisorRenderPayloadVariant('blocked-gate'),
+          expected: [
+            /Blocked by current gate/u,
+            /missing main verification evidence ref/u,
+            /main-verification-evidence/u,
+            /operator-needed-for-gate-evidence/u
+          ]
+        },
+        {
+          id: 'empty-context',
+          payload: createGoalSupervisorRenderPayloadVariant('empty-context'),
+          expected: [
+            /missing contract field: contextStatus\.providerSummaries/u,
+            />status<\/dt><dd[^>]*>missing/u,
+            />transcript<\/dt><dd class="missing-value">/u
+          ]
+        }
+      ];
+
+      for (const scenario of scenarios) {
+        const viewState = {
+          phase: 'ready',
+          model: createWorkbenchRenderModelWithSupervisor(scenario.payload)
+        };
+        const html = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
+
+        assert.match(html, /Goal Snapshot/u, scenario.id);
+        assert.match(html, /Recommended Next Action/u, scenario.id);
+        assert.match(html, /Active Lease/u, scenario.id);
+        assert.match(html, /Pending Result/u, scenario.id);
+        assert.match(html, /Current Gate/u, scenario.id);
+        assert.match(html, /Command Boundary/u, scenario.id);
+        assert.match(html, /source: \/api\/goals\/latest\/supervisor/u, scenario.id);
+        assert.doesNotMatch(html, /supervisor-scenario/u, scenario.id);
+        assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u, scenario.id);
+
+        for (const expected of scenario.expected) {
+          assert.match(html, expected, scenario.id);
+        }
+      }
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -1331,13 +1433,13 @@ function createWorkbenchRenderModel() {
   return projectWorkbenchContracts(results);
 }
 
-function createWorkbenchRenderModelWithSupervisor() {
+function createWorkbenchRenderModelWithSupervisor(supervisorPayload = createGoalSupervisorRenderPayload()) {
   const results = Object.fromEntries(
     READONLY_API_ROUTES.map((route) => [route.id, unavailableRouteResult(route)])
   );
   const supervisorRoute = READONLY_API_ROUTES.find((route) => route.id === 'goalSupervisor');
 
-  results.goalSupervisor = readonlyRouteResult(supervisorRoute, createGoalSupervisorRenderPayload());
+  results.goalSupervisor = readonlyRouteResult(supervisorRoute, supervisorPayload);
   results.guidedGoalHandoff = unavailableRouteResult(GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE);
   results.latestRunTimeline = unavailableRouteResult(RUN_TIMELINE_ROUTE_TEMPLATE);
   results.activeGoalProgress = unavailableRouteResult({
@@ -1363,6 +1465,151 @@ function createWorkbenchRenderModelWithSupervisor() {
   results.safeArtifactPreviews = [];
 
   return projectWorkbenchContracts(results);
+}
+
+function createGoalSupervisorRenderPayloadVariant(id) {
+  const base = createGoalSupervisorRenderPayload();
+
+  if (id === 'release-ready') {
+    return {
+      ...base,
+      goalSnapshot: {
+        ...base.goalSnapshot,
+        activeTask: 'release',
+        activeRole: 'release-manager',
+        completedCount: 4,
+        totalTaskCount: 4,
+        blockerCount: 0,
+        releaseReadiness: 'ready-declared'
+      },
+      recommendedNextAction: {
+        ...base.recommendedNextAction,
+        actionId: 'copy-release-handoff',
+        label: 'Prepare release handoff',
+        reason: 'release-ready-declared',
+        taskId: 'release',
+        targetRole: 'release-manager',
+        safeCommandPreview: 'Copy preview: release-ready status remains copy-only.',
+        blockedFields: ['tag', 'publish', 'release closeout']
+      },
+      currentGate: {
+        ...base.currentGate,
+        status: 'authorized-by-read-model',
+        blockingReason: null,
+        evidenceRequirement: 'release evidence refs present',
+        closeoutAuthorizationState: 'blocked-without-workbench-closeout'
+      },
+      commandBoundary: {
+        ...base.commandBoundary,
+        safeCommandPreview: 'Copy preview: release-ready status remains copy-only.'
+      }
+    };
+  }
+
+  if (id === 'active-lease') {
+    return {
+      ...base,
+      goalSnapshot: {
+        ...base.goalSnapshot,
+        activeTask: 'task-2',
+        blockerCount: 0
+      },
+      recommendedNextAction: {
+        ...base.recommendedNextAction,
+        actionId: 'wait',
+        label: 'Wait for active thread',
+        reason: 'active-tool-call-in-progress',
+        taskId: 'task-2',
+        waitPolicy: {
+          staleThresholdMs: 600000,
+          activeLeaseAgeMs: 45000
+        }
+      },
+      activeLease: {
+        ...base.activeLease,
+        leaseId: 'lease-live-task-2',
+        threadId: '019ea62d-live-task-2',
+        taskId: 'task-2',
+        status: 'healthy',
+        ageMs: 45000
+      },
+      pendingResult: {
+        ...base.pendingResult,
+        status: 'unavailable',
+        eventToRegister: null,
+        evidenceRef: null,
+        parserReason: null,
+        missing: true
+      }
+    };
+  }
+
+  if (id === 'pending-result') {
+    return base;
+  }
+
+  if (id === 'stale-transcript') {
+    return {
+      ...base,
+      recommendedNextAction: {
+        ...base.recommendedNextAction,
+        actionId: 'recover-stale-context',
+        label: 'Open handoff checkpoint',
+        reason: 'lease-active-transcript-stale',
+        mismatchList: ['lease active but transcript stale'],
+        manualInterventionReason: 'recover-stale-context'
+      },
+      contextStatus: {
+        ...base.contextStatus,
+        transcriptAvailability: 'stale-summary',
+        staleTranscriptState: {
+          stale: true,
+          reason: 'lease-active-transcript-stale'
+        },
+        contextUtilization: {
+          ratio: 0.89
+        },
+        driftMarkers: ['lease active but transcript stale']
+      }
+    };
+  }
+
+  if (id === 'blocked-gate') {
+    return {
+      ...base,
+      goalSnapshot: {
+        ...base.goalSnapshot,
+        releaseReadiness: 'blocked',
+        blockerCount: 1
+      },
+      recommendedNextAction: {
+        ...base.recommendedNextAction,
+        actionId: 'block',
+        label: 'Blocked by current gate',
+        reason: 'missing main verification evidence ref',
+        blockedFields: ['main-verification-evidence'],
+        requiredConfirmationFields: ['evidenceRef'],
+        mismatchList: ['main-verification-evidence'],
+        manualInterventionReason: 'operator-needed-for-gate-evidence'
+      },
+      currentGate: {
+        ...base.currentGate,
+        status: 'blocked',
+        evidenceRequirement: 'main-verification-evidence',
+        blockingReason: 'missing main verification evidence ref'
+      }
+    };
+  }
+
+  if (id === 'empty-context') {
+    return {
+      ...base,
+      contextStatus: {},
+      pendingResult: null
+    };
+  }
+
+  return base;
 }
 
 function readonlyRouteResult(route, data) {

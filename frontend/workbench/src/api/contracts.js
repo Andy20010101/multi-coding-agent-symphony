@@ -11138,9 +11138,14 @@ function projectSupervisorRecommendedNextAction(recommendedNextAction, commandBo
     targetTask: action.targetTask ?? action.taskId ?? null,
     state: action.state ?? action.actionId ?? null,
     checkpointRef: action.checkpointRef ?? null,
-    waitPolicy: supervisorWaitPolicyText(action.waitPolicy),
-    staleThreshold: supervisorStaleThresholdText(action.waitPolicy),
+    waitPolicy: supervisorWaitPolicyText(action.waitPolicy ?? action.wait),
+    staleThreshold: action.staleThreshold ?? supervisorStaleThresholdText(action.waitPolicy ?? action.wait),
     blockedFields: Array.isArray(action.blockedFields) ? action.blockedFields : [],
+    requiredConfirmationFields: Array.isArray(action.requiredConfirmationFields)
+      ? action.requiredConfirmationFields
+      : [],
+    mismatchList: Array.isArray(action.mismatchList) ? action.mismatchList : [],
+    manualInterventionReason: action.manualInterventionReason ?? null,
     safePreview: action.safePreview ?? action.safeCommandPreview ?? commandBoundary.safePreview ?? null
   };
 }

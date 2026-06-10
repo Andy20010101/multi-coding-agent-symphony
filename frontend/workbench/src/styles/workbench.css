@@ -813,6 +813,7 @@ h4 {
 
 .supervisor-topbar,
 .supervisor-fixture-note,
+.supervisor-boundary-summary,
 .supervisor-card,
 .supervisor-scenario {
   border: 1px solid #cbd6d0;
@@ -826,7 +827,7 @@ h4 {
 
 .supervisor-topbar .field-list {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 6px;
   margin: 0;
 }
@@ -913,6 +914,41 @@ h4 {
 .supervisor-fixture-note span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.supervisor-boundary-summary {
+  display: grid;
+  grid-template-columns: minmax(128px, 0.18fr) minmax(0, 0.82fr);
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+}
+
+.supervisor-boundary-summary strong {
+  color: #253b35;
+  font-size: 0.78rem;
+  line-height: 1.1;
+}
+
+.supervisor-boundary-summary .field-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.supervisor-boundary-summary .field-row {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.44fr) minmax(0, 0.56fr);
+  gap: 5px;
+  min-width: 0;
+  border-top: 0;
+  padding: 0;
+}
+
+.supervisor-boundary-summary .field-row dt,
+.supervisor-boundary-summary .field-row dd {
+  font-size: 0.68rem;
+  line-height: 1.15;
 }
 
 .supervisor-dashboard-grid {
@@ -1055,6 +1091,7 @@ h4 {
 
   .supervisor-shell-route .workbench-header,
   .supervisor-fixture-note,
+  .supervisor-boundary-summary,
   .supervisor-dashboard-grid,
   .supervisor-timeline-list {
     grid-template-columns: 1fr;
@@ -1079,6 +1116,7 @@ h4 {
   }
 
   .supervisor-topbar .field-list,
+  .supervisor-boundary-summary .field-list,
   .supervisor-scenario-nav,
   .supervisor-card .field-list {
     grid-template-columns: 1fr;

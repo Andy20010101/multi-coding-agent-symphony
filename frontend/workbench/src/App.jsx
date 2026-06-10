@@ -1242,11 +1242,16 @@ function SupervisorDashboard({
     label: SUPERVISOR_DASHBOARD_FIXTURES[scenarioId]?.label ?? scenarioId
   }));
   const fixtureMode = dashboard.sourceMode !== 'live';
+  const copyPreviewsEnabled = dashboard.readOnly === true
+    && dashboard.willMutate === false
+    && dashboard.commandBoundary.executionAvailable === false;
 
   return (
     <section className="supervisor-dashboard-route" aria-label="Supervisor Command Center">
       <div className="supervisor-topbar" aria-label="Supervisor read-only metadata">
         <FieldList rows={[
+          ['contract', textValue(dashboard.contractName)],
+          ['version', textValue(dashboard.contractVersion)],
           ['goal id', textValue(dashboard.goalSnapshot.goalId)],
           ['active task', textValue(dashboard.goalSnapshot.activeTask)],
           ['active role', textValue(dashboard.goalSnapshot.activeRole)],
@@ -1255,6 +1260,8 @@ function SupervisorDashboard({
           ['willMutate', textValue(dashboard.willMutate)]
         ]} />
       </div>
+
+      <CommandBoundarySummary commandBoundary={dashboard.commandBoundary} />
 
       {fixtureMode ? (
         <nav className="supervisor-scenario-nav" aria-label="Supervisor fixture scenarios">
@@ -1283,16 +1290,31 @@ function SupervisorDashboard({
         <RecommendedNextActionCard
           recommendedNextAction={dashboard.recommendedNextAction}
           commandBoundary={dashboard.commandBoundary}
+          copyPreviewsEnabled={copyPreviewsEnabled}
         />
         <ActiveLeasePanel activeLease={dashboard.activeLease} contextStatus={dashboard.contextStatus} />
         <ContextStatusPanel contextStatus={dashboard.contextStatus} />
         <PendingResultPanel pendingResult={dashboard.pendingResult} />
-        <CommandBoundaryPanel commandBoundary={dashboard.commandBoundary} />
+        <CommandBoundaryPanel commandBoundary={dashboard.commandBoundary} copyPreviewsEnabled={copyPreviewsEnabled} />
         <GoalTimeline goalTimeline={dashboard.goalTimeline} />
         <CurrentGateCard currentGate={dashboard.currentGate} />
         <OwnershipPanel ownership={dashboard.ownership} />
       </div>
     </section>
+  );
+}
+
+function CommandBoundarySummary({ commandBoundary }) {
+  return (
+    <div className="supervisor-boundary-summary" aria-label="Command Boundary projected summary">
+      <strong>Command Boundary</strong>
+      <FieldList rows={[
+        ['state', textValue(commandBoundary.state)],
+        ['executionAvailable', textValue(commandBoundary.executionAvailable)],
+        ['copyOnly', textValue(commandBoundary.copyOnly)],
+        ['blocked families', textValue(commandBoundary.blockedFamilies.length)]
+      ]} />
+    </div>
   );
 }
 
@@ -1309,7 +1331,7 @@ function GoalSnapshotSummary({ goalSnapshot }) {
         ['title', textValue(goalSnapshot.title)],
         ['active task', textValue(goalSnapshot.activeTask)],
         ['active role', textValue(goalSnapshot.activeRole)],
-        ['completed / total', textValue(`${goalSnapshot.completedTasks} / ${goalSnapshot.totalTasks}`)],
+        ['completed / total', supervisorTaskCountValue(goalSnapshot)],
         ['blockers', textValue(goalSnapshot.blockerCount)],
         ['release readiness', textValue(goalSnapshot.releaseReadiness)],
         ['generated', textValue(goalSnapshot.generatedAt)]
@@ -1321,8 +1343,11 @@ function GoalSnapshotSummary({ goalSnapshot }) {
   );
 }
 
-function RecommendedNextActionCard({ recommendedNextAction, commandBoundary }) {
-  const previewVisible = commandBoundary.copyOnly === true && commandBoundary.executionAvailable === false;
+function RecommendedNextActionCard({ recommendedNextAction, commandBoundary, copyPreviewsEnabled = false }) {
+  const previewVisible = copyPreviewsEnabled
+    && commandBoundary.copyOnly === true
+    && commandBoundary.executionAvailable === false
+    && isNonEmptyText(recommendedNextAction.safePreview);
 
   return (
     <SupervisorCard
@@ -1337,12 +1362,19 @@ function RecommendedNextActionCard({ recommendedNextAction, commandBoundary }) {
         ['reason', textValue(recommendedNextAction.reason)],
         ['target role', textValue(recommendedNextAction.targetRole)],
         ['target task', textValue(recommendedNextAction.targetTask)],
+        ['action state', textValue(recommendedNextAction.state)],
         ['checkpoint', textValue(recommendedNextAction.checkpointRef)],
         ['wait policy', textValue(recommendedNextAction.waitPolicy)],
         ['stale threshold', textValue(recommendedNextAction.staleThreshold)]
       ]} />
       <Subsection title="blocked fields">
         <CompactList items={recommendedNextAction.blockedFields} />
+      </Subsection>
+      <Subsection title="required confirmation">
+        <CompactList items={recommendedNextAction.requiredConfirmationFields} />
+      </Subsection>
+      <Subsection title="mismatch / intervention">
+        <CompactList items={supervisorActionMismatchItems(recommendedNextAction)} />
       </Subsection>
       {previewVisible ? <CopyPreviewText text={recommendedNextAction.safePreview} /> : null}
     </SupervisorCard>
@@ -1426,7 +1458,11 @@ function PendingResultPanel({ pendingResult }) {
   );
 }
 
-function CommandBoundaryPanel({ commandBoundary }) {
+function CommandBoundaryPanel({ commandBoundary, copyPreviewsEnabled = false }) {
+  const previewVisible = copyPreviewsEnabled
+    && commandBoundary.copyOnly === true
+    && isNonEmptyText(commandBoundary.safePreview);
+
   return (
     <SupervisorCard
       className="supervisor-card-boundary"
@@ -1448,7 +1484,7 @@ function CommandBoundaryPanel({ commandBoundary }) {
       <Subsection title="confirmation fields">
         <CompactList items={commandBoundary.confirmationFields} />
       </Subsection>
-      {commandBoundary.copyOnly === true ? <CopyPreviewText text={commandBoundary.safePreview} /> : null}
+      {previewVisible ? <CopyPreviewText text={commandBoundary.safePreview} /> : null}
     </SupervisorCard>
   );
 }
@@ -1534,6 +1570,24 @@ function SupervisorCard({ className, kicker, title, state, children }) {
       {children}
     </article>
   );
+}
+
+function supervisorTaskCountValue(goalSnapshot) {
+  const completed = goalSnapshot.completedTasks;
+  const total = goalSnapshot.totalTasks;
+
+  if (completed === null || completed === undefined || total === null || total === undefined) {
+    return textValue(null);
+  }
+
+  return textValue(`${completed} / ${total}`);
+}
+
+function supervisorActionMismatchItems(recommendedNextAction) {
+  return [
+    ...(Array.isArray(recommendedNextAction.mismatchList) ? recommendedNextAction.mismatchList : []),
+    recommendedNextAction.manualInterventionReason
+  ].filter(isNonEmptyText);
 }
 
 function CopyPreviewText({ text }) {

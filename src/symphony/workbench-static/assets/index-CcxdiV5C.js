@@ -10920,6 +10920,7 @@ function projectWorkbenchContracts(results) {
 	const goalOperationsData = dataFrom(results.goalOperations);
 	const goalRunbookData = dataFrom(results.goalRunbook);
 	const goalNextActionData = dataFrom(results.goalNextAction);
+	const goalSupervisorData = dataFrom(results.goalSupervisor);
 	const goalPromptPackData = dataFrom(results.goalPromptPack);
 	const goalReviewerPromptPackData = dataFrom(results.goalReviewerPromptPack);
 	const goalCloseoutData = dataFrom(results.goalCloseout);
@@ -11197,6 +11198,10 @@ function projectWorkbenchContracts(results) {
 			result: results.goalOperations,
 			operations: goalOperationsData,
 			nextAction: goalNextActionData
+		}),
+		supervisorDashboard: projectSupervisorDashboard({
+			result: results.goalSupervisor,
+			supervisor: goalSupervisorData
 		}),
 		activeGoal: activeGoalControl,
 		goalDraftHandoff: activeGoalControl.goalDraftHandoff,
@@ -18730,6 +18735,235 @@ function projectErrorEnvelope(envelope) {
 		method: valueState(error?.method)
 	};
 }
+function projectSupervisorDashboard({ result, supervisor }) {
+	const route = projectRouteState(result?.routeDescriptor ?? READONLY_API_ROUTES.find((candidate) => candidate.id === "goalSupervisor"), result);
+	if (supervisor?.contractName !== GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME) return {
+		state: "unavailable",
+		summary: route.error ?? "goal supervisor read model 未暴露 / 不可用",
+		route
+	};
+	const commandBoundary = projectSupervisorCommandBoundary(supervisor.commandBoundary);
+	return {
+		state: "available",
+		id: "live-supervisor",
+		label: "Live supervisor",
+		summary: "Live read-only supervisor state from the goal supervisor route.",
+		sourceMode: "live",
+		source: route.path,
+		route,
+		contractName: supervisor.contractName,
+		contractVersion: supervisor.contractVersion,
+		generatedAt: supervisor.generatedAt,
+		readOnly: supervisor.readOnly,
+		willMutate: supervisor.willMutate,
+		goalSnapshot: projectSupervisorGoalSnapshot(supervisor.goalSnapshot, supervisor.generatedAt),
+		recommendedNextAction: projectSupervisorRecommendedNextAction(supervisor.recommendedNextAction, commandBoundary),
+		activeLease: projectSupervisorActiveLease(supervisor.activeLease),
+		contextStatus: projectSupervisorContextStatus(supervisor.contextStatus),
+		pendingResult: projectSupervisorPendingResult(supervisor.pendingResult),
+		currentGate: projectSupervisorCurrentGate(supervisor.currentGate),
+		ownership: projectSupervisorOwnership(supervisor.ownership),
+		commandBoundary,
+		goalTimeline: projectSupervisorTimeline(supervisor.goalTimeline)
+	};
+}
+function projectSupervisorGoalSnapshot(goalSnapshot, generatedAt) {
+	const snapshot = goalSnapshot ?? {};
+	return {
+		goalId: snapshot.goalId ?? null,
+		title: snapshot.title ?? null,
+		activeTask: snapshot.activeTask ?? null,
+		activeRole: snapshot.activeRole ?? null,
+		completedTasks: snapshot.completedTasks ?? snapshot.completedCount ?? null,
+		totalTasks: snapshot.totalTasks ?? snapshot.totalTaskCount ?? null,
+		blockerCount: snapshot.blockerCount ?? null,
+		releaseReadiness: snapshot.releaseReadiness ?? null,
+		sourceContracts: Array.isArray(snapshot.sourceContracts) ? snapshot.sourceContracts : [],
+		generatedAt: snapshot.generatedAt ?? generatedAt ?? null
+	};
+}
+function projectSupervisorRecommendedNextAction(recommendedNextAction, commandBoundary) {
+	const action = recommendedNextAction ?? {};
+	return {
+		actionId: action.actionId ?? null,
+		label: action.label ?? null,
+		reason: action.reason ?? null,
+		targetRole: action.targetRole ?? null,
+		targetTask: action.targetTask ?? action.taskId ?? null,
+		state: action.state ?? action.actionId ?? null,
+		checkpointRef: action.checkpointRef ?? null,
+		waitPolicy: supervisorWaitPolicyText(action.waitPolicy ?? action.wait),
+		staleThreshold: action.staleThreshold ?? supervisorStaleThresholdText(action.waitPolicy ?? action.wait),
+		blockedFields: Array.isArray(action.blockedFields) ? action.blockedFields : [],
+		requiredConfirmationFields: Array.isArray(action.requiredConfirmationFields) ? action.requiredConfirmationFields : [],
+		mismatchList: Array.isArray(action.mismatchList) ? action.mismatchList : [],
+		manualInterventionReason: action.manualInterventionReason ?? null,
+		safePreview: action.safePreview ?? action.safeCommandPreview ?? commandBoundary.safePreview ?? null
+	};
+}
+function projectSupervisorActiveLease(activeLease) {
+	const lease = activeLease ?? {};
+	return {
+		leaseId: lease.leaseId ?? null,
+		threadId: lease.threadId ?? null,
+		taskId: lease.taskId ?? null,
+		role: lease.role ?? null,
+		phase: lease.phase ?? null,
+		status: lease.status ?? null,
+		startedAt: lease.startedAt ?? null,
+		updatedAt: lease.updatedAt ?? null,
+		age: supervisorAgeText(lease.age ?? lease.ageMs),
+		duplicateDispatchGuard: supervisorDispatchGuardText(lease.duplicateDispatchGuard)
+	};
+}
+function projectSupervisorContextStatus(contextStatus) {
+	const context = contextStatus ?? {};
+	return {
+		state: supervisorContextState(context),
+		providers: supervisorProviderSummaryTexts(context.sessionSourceSummaries ?? context.providers),
+		transcriptAvailability: context.transcriptAvailability ?? null,
+		exchangeCount: context.exchangeCount ?? null,
+		latestTurn: supervisorObjectSummaryText(context.latestTurnState),
+		latestToolCall: supervisorObjectSummaryText(context.latestToolCall),
+		tokenUsage: supervisorTokenUsageText(context.tokenUsage),
+		utilization: supervisorContextUtilizationText(context.contextUtilization),
+		transcriptState: supervisorTranscriptStateText(context),
+		resultBlockEvidence: supervisorResultBlockEvidenceText(context.resultBlockEvidence),
+		driftMarkers: Array.isArray(context.driftMarkers) && context.driftMarkers.length > 0 ? context.driftMarkers : ["none"]
+	};
+}
+function projectSupervisorPendingResult(pendingResult) {
+	const result = pendingResult ?? {};
+	return {
+		status: result.status ?? "missing",
+		source: result.source ?? null,
+		eventToRegister: result.eventToRegister ?? null,
+		evidenceRef: result.evidenceRef ?? null,
+		parserReason: result.parserReason ?? null,
+		staleMarker: result.staleMarker ?? (result.stale === true ? "stale" : "fresh"),
+		missingMarker: result.missingMarker ?? (result.missing === true ? "missing" : "none")
+	};
+}
+function projectSupervisorCommandBoundary(commandBoundary) {
+	const boundary = commandBoundary ?? {};
+	return {
+		state: boundary.state ?? "disabled",
+		executionAvailable: boundary.executionAvailable === true,
+		copyOnly: boundary.copyOnly === true,
+		allowedFamilies: Array.isArray(boundary.allowedFamilies) ? boundary.allowedFamilies : Array.isArray(boundary.allowedCommandFamilies) ? boundary.allowedCommandFamilies : [],
+		blockedFamilies: Array.isArray(boundary.blockedFamilies) ? boundary.blockedFamilies : Array.isArray(boundary.blockedCommandFamilies) ? boundary.blockedCommandFamilies : [],
+		confirmationFields: Array.isArray(boundary.confirmationFields) ? boundary.confirmationFields : [],
+		safePreview: boundary.safePreview ?? boundary.safeCommandPreview ?? null
+	};
+}
+function projectSupervisorCurrentGate(currentGate) {
+	const gate = currentGate ?? {};
+	return {
+		gateId: gate.gateId ?? null,
+		status: gate.status ?? null,
+		requiredCommandFamily: gate.requiredCommandFamily ?? null,
+		blockingReason: gate.blockingReason ?? null,
+		evidenceRequirement: gate.evidenceRequirement ?? null,
+		closeoutAuthorization: gate.closeoutAuthorization ?? gate.closeoutAuthorizationState ?? null
+	};
+}
+function projectSupervisorOwnership(ownership) {
+	const owner = ownership ?? {};
+	return {
+		orchestrationOwner: owner.orchestrationOwner ?? null,
+		deliveryBoundary: owner.deliveryBoundary ?? null,
+		activePr: owner.activePr ?? null,
+		branch: owner.branch ?? null,
+		rollbackBoundary: owner.rollbackBoundary ?? null,
+		daemonState: owner.daemonState ?? null,
+		controllerInterventionReason: owner.controllerInterventionReason ?? null
+	};
+}
+function projectSupervisorTimeline(goalTimeline) {
+	if (!Array.isArray(goalTimeline)) return [];
+	return goalTimeline.map((event, index) => ({
+		eventId: event?.eventId ?? `event-${index}`,
+		taskId: event?.taskId ?? null,
+		role: event?.role ?? null,
+		status: event?.status ?? null,
+		evidenceRef: event?.evidenceRef ?? null,
+		timestamp: event?.timestamp ?? event?.occurredAt ?? null,
+		hashState: event?.hashState ?? event?.hashChainState ?? null
+	}));
+}
+function supervisorWaitPolicyText(waitPolicy) {
+	if (waitPolicy === null || waitPolicy === void 0) return null;
+	if (typeof waitPolicy !== "object" || Array.isArray(waitPolicy)) return String(waitPolicy);
+	return Object.entries(waitPolicy).filter(([, value]) => value !== null && value !== void 0 && value !== "").map(([key, value]) => `${key}: ${value}`).join(", ") || null;
+}
+function supervisorStaleThresholdText(waitPolicy) {
+	if (waitPolicy === null || waitPolicy === void 0 || typeof waitPolicy !== "object" || Array.isArray(waitPolicy)) return null;
+	return supervisorDurationText(waitPolicy.staleThresholdMs);
+}
+function supervisorAgeText(age) {
+	if (typeof age === "string") return age;
+	return supervisorDurationText(age);
+}
+function supervisorDurationText(value) {
+	if (!Number.isFinite(value)) return null;
+	if (value < 1e3) return `${value}ms`;
+	if (value < 6e4) return `${Math.round(value / 1e3)}s`;
+	return `${Math.round(value / 6e4)}m`;
+}
+function supervisorDispatchGuardText(duplicateDispatchGuard) {
+	if (typeof duplicateDispatchGuard === "string") return duplicateDispatchGuard;
+	if (duplicateDispatchGuard === null || duplicateDispatchGuard === void 0 || typeof duplicateDispatchGuard !== "object") return null;
+	const state = duplicateDispatchGuard.blocked === true ? "blocked" : "available";
+	const reason = duplicateDispatchGuard.reason ?? null;
+	return reason === null ? state : `${state}: ${reason}`;
+}
+function supervisorContextState(context) {
+	if (context?.missingTranscriptState?.missing === true) return "missing";
+	if (context?.staleTranscriptState?.stale === true) return "stale";
+	if (context?.transcriptAvailability === void 0 || context?.transcriptAvailability === null) return "missing";
+	return "available";
+}
+function supervisorProviderSummaryTexts(providerSummaries) {
+	if (!Array.isArray(providerSummaries)) return [];
+	return providerSummaries.map((provider) => {
+		if (typeof provider === "string") return provider;
+		return [
+			provider?.provider,
+			provider?.status,
+			provider?.threadId
+		].filter(isNonEmptyString).join(": ");
+	}).filter(isNonEmptyString);
+}
+function supervisorObjectSummaryText(value) {
+	if (value === null || value === void 0) return null;
+	if (typeof value !== "object" || Array.isArray(value)) return String(value);
+	return Object.entries(value).filter(([, entryValue]) => entryValue !== null && entryValue !== void 0 && entryValue !== "").map(([key, entryValue]) => `${key}: ${entryValue}`).join(", ") || null;
+}
+function supervisorTokenUsageText(tokenUsage) {
+	if (tokenUsage === null || tokenUsage === void 0) return null;
+	if (typeof tokenUsage !== "object" || Array.isArray(tokenUsage)) return String(tokenUsage);
+	const used = tokenUsage.usedTokens ?? tokenUsage.used ?? tokenUsage.inputTokens ?? null;
+	const limit = tokenUsage.limitTokens ?? tokenUsage.limit ?? tokenUsage.contextWindow ?? null;
+	if (used !== null && limit !== null) return `${used} / ${limit}`;
+	return supervisorObjectSummaryText(tokenUsage);
+}
+function supervisorContextUtilizationText(contextUtilization) {
+	if (contextUtilization === null || contextUtilization === void 0) return null;
+	if (typeof contextUtilization !== "object" || Array.isArray(contextUtilization)) return String(contextUtilization);
+	if (Number.isFinite(contextUtilization.percent)) return `${contextUtilization.percent}%`;
+	if (Number.isFinite(contextUtilization.ratio)) return `${Math.round(contextUtilization.ratio * 100)}%`;
+	return supervisorObjectSummaryText(contextUtilization);
+}
+function supervisorTranscriptStateText(context) {
+	if (context?.missingTranscriptState?.missing === true) return `missing${context.missingTranscriptState.reason ? `: ${context.missingTranscriptState.reason}` : ""}`;
+	if (context?.staleTranscriptState?.stale === true) return `stale${context.staleTranscriptState.reason ? `: ${context.staleTranscriptState.reason}` : ""}`;
+	return "fresh";
+}
+function supervisorResultBlockEvidenceText(resultBlockEvidence) {
+	if (resultBlockEvidence === null || resultBlockEvidence === void 0) return null;
+	if (typeof resultBlockEvidence !== "object" || Array.isArray(resultBlockEvidence)) return String(resultBlockEvidence);
+	return firstNonEmptyString(resultBlockEvidence.evidenceRef, resultBlockEvidence.sourceRef, resultBlockEvidence.status);
+}
 function projectRouteState(route, result) {
 	if (result?.skipped === true) return {
 		id: route.id,
@@ -20314,6 +20548,353 @@ function isErrorEnvelope(data) {
 	return data?.contractName === "error-envelope.v1" && data?.ok === false && typeof data?.error?.message === "string";
 }
 //#endregion
+//#region frontend/workbench/src/fixtures/supervisorDashboardFixtures.js
+var BASE_TIMELINE = Object.freeze([
+	Object.freeze({
+		eventId: "evt-task-1-worker-evidence",
+		taskId: "task-1",
+		role: "worker",
+		status: "evidence-recorded",
+		evidenceRef: "artifact:v44-4:task-1-worker-evidence",
+		timestamp: "2026-06-10T09:14:00+08:00",
+		hashState: "linked"
+	}),
+	Object.freeze({
+		eventId: "evt-task-1-reviewer-approved",
+		taskId: "task-1",
+		role: "reviewer",
+		status: "approved",
+		evidenceRef: "artifact:v44-4:task-1-review",
+		timestamp: "2026-06-10T09:42:00+08:00",
+		hashState: "linked"
+	}),
+	Object.freeze({
+		eventId: "evt-task-2-active",
+		taskId: "task-2",
+		role: "worker",
+		status: "active",
+		evidenceRef: "artifact:v44-4:task-2-active",
+		timestamp: "2026-06-10T10:02:00+08:00",
+		hashState: "pending"
+	})
+]);
+var BASE_COMMAND_BOUNDARY = Object.freeze({
+	state: "disabled",
+	executionAvailable: false,
+	copyOnly: true,
+	allowedFamilies: ["status guidance", "handoff prompt preview"],
+	blockedFamilies: [
+		"event registration",
+		"child dispatch",
+		"daemon control",
+		"provider CLI",
+		"tag",
+		"publish",
+		"release closeout"
+	],
+	confirmationFields: ["none accepted in Workbench prototype"],
+	safePreview: "Copy preview: summarize the current fixture state for an operator handoff. No command is executed."
+});
+function createBaseDashboard(overrides = {}) {
+	return {
+		id: "release-ready",
+		label: "Release-ready",
+		summary: "Release readiness is explicit, but delivery actions stay blocked.",
+		contractName: "goal-supervisor-app-read-model.v1",
+		contractVersion: "1",
+		generatedAt: "2026-06-10T10:24:00+08:00",
+		readOnly: true,
+		willMutate: false,
+		goalSnapshot: {
+			goalId: "v44-4-workbench-supervisor-dashboard-prototype",
+			title: "Workbench supervisor dashboard prototype",
+			activeTask: "task-1",
+			activeRole: "release-manager",
+			completedTasks: 6,
+			totalTasks: 6,
+			blockerCount: 0,
+			releaseReadiness: "ready-declared",
+			sourceContracts: [
+				"goal-supervisor-app-read-model.v1",
+				"goal-progress-ledger.v1",
+				"goal-event-log.v1"
+			],
+			generatedAt: "2026-06-10T10:24:00+08:00"
+		},
+		recommendedNextAction: {
+			actionId: "copy-release-handoff",
+			label: "Prepare reviewer handoff",
+			reason: "Release readiness is present in the fixture model; Workbench still cannot tag, publish, or close out.",
+			targetRole: "release-manager",
+			targetTask: "release",
+			state: "checkpoint",
+			checkpointRef: "checkpoint:v44-4-release-ready",
+			waitPolicy: "none",
+			staleThreshold: "15m",
+			blockedFields: ["tag command", "publish command"],
+			safePreview: "Copy preview: hand off release-ready status with evidence refs and blocked release families."
+		},
+		activeLease: {
+			leaseId: "lease-release-ready-empty",
+			threadId: "none",
+			taskId: "release",
+			role: "release-manager",
+			phase: "review",
+			status: "idle",
+			startedAt: "2026-06-10T10:12:00+08:00",
+			updatedAt: "2026-06-10T10:24:00+08:00",
+			age: "12m",
+			duplicateDispatchGuard: "no active child dispatch from Workbench"
+		},
+		contextStatus: {
+			state: "available",
+			providers: ["codex: summary available", "claude: not active"],
+			transcriptAvailability: "readable summary",
+			exchangeCount: 42,
+			latestTurn: "release-manager evidence check",
+			latestToolCall: "none exposed",
+			tokenUsage: "62k / 200k",
+			utilization: "31%",
+			transcriptState: "fresh",
+			resultBlockEvidence: "artifact:v44-4:release-ready-context",
+			driftMarkers: ["none"]
+		},
+		pendingResult: {
+			status: "consumed",
+			source: "fixture result escrow",
+			eventToRegister: "none",
+			evidenceRef: "artifact:v44-4:release-ready",
+			parserReason: "already handled",
+			staleMarker: "fresh",
+			missingMarker: "none"
+		},
+		currentGate: {
+			gateId: "release.ready",
+			status: "authorized-by-fixture",
+			requiredCommandFamily: "release gate event",
+			blockingReason: "none",
+			evidenceRequirement: "release evidence refs already attached",
+			closeoutAuthorization: "not available from Workbench"
+		},
+		ownership: {
+			orchestrationOwner: "supervisor daemon",
+			deliveryBoundary: "PR review owns merge and rollback",
+			activePr: "fixture PR #44",
+			branch: "codex/v44-4-pr1-fixture-dashboard-prototype",
+			rollbackBoundary: "remove fixture route and components",
+			daemonState: "observed only",
+			controllerInterventionReason: "none"
+		},
+		commandBoundary: BASE_COMMAND_BOUNDARY,
+		goalTimeline: BASE_TIMELINE,
+		...overrides
+	};
+}
+var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
+	"release-ready": Object.freeze(createBaseDashboard()),
+	"healthy-active-lease": Object.freeze(createBaseDashboard({
+		id: "healthy-active-lease",
+		label: "Healthy active lease",
+		summary: "Active child lease is recent and duplicate dispatch is visibly unavailable.",
+		generatedAt: "2026-06-10T10:31:00+08:00",
+		goalSnapshot: {
+			goalId: "v44-4-workbench-supervisor-dashboard-prototype",
+			title: "Workbench supervisor dashboard prototype",
+			activeTask: "task-2",
+			activeRole: "worker",
+			completedTasks: 2,
+			totalTasks: 6,
+			blockerCount: 0,
+			releaseReadiness: "not-ready",
+			sourceContracts: ["goal-supervisor-app-read-model.v1", "session-context-summary.v1"],
+			generatedAt: "2026-06-10T10:31:00+08:00"
+		},
+		recommendedNextAction: {
+			actionId: "wait-active-lease",
+			label: "Wait for active lease",
+			reason: "Child thread is fresh and transcript summary is readable; duplicate dispatch remains blocked.",
+			targetRole: "worker",
+			targetTask: "task-2",
+			state: "wait",
+			checkpointRef: "none",
+			waitPolicy: "poll after 2m",
+			staleThreshold: "10m",
+			blockedFields: ["dispatch child"],
+			safePreview: "Copy preview: ask worker for checkpoint only if lease becomes stale."
+		},
+		activeLease: {
+			leaseId: "lease-task-2-worker-001",
+			threadId: "019ea62d-worker-task-2",
+			taskId: "task-2",
+			role: "worker",
+			phase: "implement",
+			status: "healthy",
+			startedAt: "2026-06-10T10:20:00+08:00",
+			updatedAt: "2026-06-10T10:30:20+08:00",
+			age: "40s",
+			duplicateDispatchGuard: "blocked while lease is healthy"
+		}
+	})),
+	"pending-result": Object.freeze(createBaseDashboard({
+		id: "pending-result",
+		label: "Pending result",
+		summary: "Pending result exposes event intent and evidence ref without a registration control.",
+		recommendedNextAction: {
+			actionId: "checkpoint-pending-result",
+			label: "Checkpoint pending result",
+			reason: "A parsed result is waiting for operator review; Workbench does not append events.",
+			targetRole: "controller",
+			targetTask: "task-3",
+			state: "checkpoint",
+			checkpointRef: "checkpoint:pending-result-task-3",
+			waitPolicy: "none",
+			staleThreshold: "20m",
+			blockedFields: ["event append", "confirmation hash"],
+			safePreview: "Copy preview: include event id, evidence ref, and parser status for manual review."
+		},
+		pendingResult: {
+			status: "pending",
+			source: "fixture result escrow",
+			eventToRegister: "worker.evidence-recorded",
+			evidenceRef: "artifact:v44-4:pending-worker-evidence",
+			parserReason: "parser accepted event fields; registration remains unavailable",
+			staleMarker: "fresh",
+			missingMarker: "none"
+		}
+	})),
+	"stale-transcript": Object.freeze(createBaseDashboard({
+		id: "stale-transcript",
+		label: "Stale transcript",
+		summary: "Transcript summary is stale while the lease still appears active.",
+		recommendedNextAction: {
+			actionId: "recover-stale-context",
+			label: "Open handoff checkpoint",
+			reason: "Lease update is older than the stale threshold and transcript exchange count has not moved.",
+			targetRole: "worker",
+			targetTask: "task-4",
+			state: "recover-drift",
+			checkpointRef: "checkpoint:stale-transcript-task-4",
+			waitPolicy: "do not wait past stale threshold",
+			staleThreshold: "10m",
+			blockedFields: ["dispatch replacement child"],
+			safePreview: "Copy preview: request a checkpoint from the active worker thread."
+		},
+		activeLease: {
+			leaseId: "lease-task-4-worker-019",
+			threadId: "019ea62d-stale-task-4",
+			taskId: "task-4",
+			role: "worker",
+			phase: "implement",
+			status: "active",
+			startedAt: "2026-06-10T09:44:00+08:00",
+			updatedAt: "2026-06-10T10:01:00+08:00",
+			age: "23m",
+			duplicateDispatchGuard: "blocked until supervisor resolves stale transcript"
+		},
+		contextStatus: {
+			state: "stale",
+			providers: ["codex: summary stale", "claude: not active"],
+			transcriptAvailability: "stale transcript summary",
+			exchangeCount: 18,
+			latestTurn: "worker checkpoint requested",
+			latestToolCall: "none exposed",
+			tokenUsage: "178k / 200k",
+			utilization: "89%",
+			transcriptState: "stale",
+			resultBlockEvidence: "artifact:v44-4:stale-context",
+			driftMarkers: ["lease active but transcript stale"]
+		}
+	})),
+	"blocked-gate": Object.freeze(createBaseDashboard({
+		id: "blocked-gate",
+		label: "Blocked gate",
+		summary: "Current gate names the blocking evidence requirement.",
+		goalSnapshot: {
+			goalId: "v44-4-workbench-supervisor-dashboard-prototype",
+			title: "Workbench supervisor dashboard prototype",
+			activeTask: "task-5",
+			activeRole: "main-verifier",
+			completedTasks: 4,
+			totalTasks: 6,
+			blockerCount: 1,
+			releaseReadiness: "blocked",
+			sourceContracts: ["goal-supervisor-app-read-model.v1", "goal-event-log.v1"],
+			generatedAt: "2026-06-10T10:37:00+08:00"
+		},
+		recommendedNextAction: {
+			actionId: "block-main-gate",
+			label: "Resolve gate blocker",
+			reason: "Main verification evidence is missing, so closeout stays blocked.",
+			targetRole: "main-verifier",
+			targetTask: "task-5",
+			state: "block",
+			checkpointRef: "none",
+			waitPolicy: "blocked until evidence exists",
+			staleThreshold: "none",
+			blockedFields: ["main verification evidence ref", "closeout authorization"],
+			safePreview: "Copy preview: list missing evidence and gate requirement."
+		},
+		currentGate: {
+			gateId: "main.verification",
+			status: "blocked",
+			requiredCommandFamily: "main verification gate event",
+			blockingReason: "missing main verification evidence ref",
+			evidenceRequirement: "artifact ref for verification command output",
+			closeoutAuthorization: "blocked"
+		},
+		commandBoundary: Object.freeze({
+			...BASE_COMMAND_BOUNDARY,
+			state: "confirm-required",
+			confirmationFields: [
+				"main verification evidence ref",
+				"verifier id",
+				"gate status"
+			]
+		})
+	})),
+	"missing-empty-context": Object.freeze(createBaseDashboard({
+		id: "missing-empty-context",
+		label: "Missing context",
+		summary: "Missing context remains neutral and names the absent contract field.",
+		recommendedNextAction: {
+			actionId: "wait-missing-context",
+			label: "Wait for context projection",
+			reason: "contextStatus.providerSummaries is empty; the fixture does not infer success or failure.",
+			targetRole: "controller",
+			targetTask: "task-6",
+			state: "wait",
+			checkpointRef: "none",
+			waitPolicy: "wait for next read model generation",
+			staleThreshold: "unknown",
+			blockedFields: ["contextStatus.providerSummaries"],
+			safePreview: "Copy preview: report missing contextStatus.providerSummaries."
+		},
+		contextStatus: {
+			state: "missing",
+			providers: [],
+			transcriptAvailability: "missing transcript",
+			exchangeCount: 0,
+			latestTurn: "missing",
+			latestToolCall: "missing",
+			tokenUsage: "missing",
+			utilization: "missing",
+			transcriptState: "missing",
+			resultBlockEvidence: "missing",
+			driftMarkers: ["missing contract field: contextStatus.providerSummaries"]
+		},
+		pendingResult: {
+			status: "missing",
+			source: "fixture result escrow",
+			eventToRegister: "missing",
+			evidenceRef: "missing",
+			parserReason: "pendingResult absent from fixture read model",
+			staleMarker: "unknown",
+			missingMarker: "pendingResult"
+		}
+	}))
+});
+var SUPERVISOR_DASHBOARD_SCENARIOS = Object.freeze(Object.keys(SUPERVISOR_DASHBOARD_FIXTURES));
+//#endregion
 //#region node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react-jsx-runtime.production.js
 /**
 * @license React
@@ -20364,6 +20945,11 @@ var WORKBENCH_NAV_ITEMS = Object.freeze([
 		id: "desktop",
 		label: "Desktop",
 		route: "/workbench/desktop/"
+	}),
+	Object.freeze({
+		id: "supervisor",
+		label: "Supervisor",
+		route: "/workbench/supervisor/"
 	}),
 	Object.freeze({
 		id: "runtime",
@@ -20497,7 +21083,7 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 		routeContext
 	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
-		className: workbenchRoute === "desktop" ? "workbench-shell desktop-shell-route" : "workbench-shell",
+		className: workbenchShellClassName(workbenchRoute),
 		"aria-labelledby": "workbench-title",
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
@@ -20507,15 +21093,15 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "eyebrow",
-							children: workbenchRoute === "desktop" ? "v37 Desktop Shell MVP" : "v28 Workbench v1"
+							children: workbenchRouteEyebrow(workbenchRoute)
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
 							id: "workbench-title",
-							children: workbenchRoute === "desktop" ? "Symphony Desktop Shell" : "Symphony Workbench"
+							children: workbenchRouteTitle(workbenchRoute)
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: workbenchRoute === "desktop" ? "只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。" : "围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。"
+							children: workbenchRoute === "supervisor" ? "Read-only supervisor state: goal snapshot, active lease, context, pending result, command boundary, timeline, gate, and ownership. Fixture scenarios remain available when live data is unavailable." : workbenchRoute === "desktop" ? "只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。" : "围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -20529,11 +21115,11 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 							routeCounts.total,
 							" routes 已读取"
 						] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: workbenchRoute === "desktop" ? "contract-backed" : "confirm 后会刷新 goal-status / events / next action" })
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: workbenchRouteStatusText(workbenchRoute) })
 					]
 				})]
 			}),
-			workbenchRoute === "desktop" ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+			workbenchRoute === "desktop" || workbenchRoute === "supervisor" ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkbenchStateHeader, { header: stateHeader }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkbenchNavigation, {
 					currentRoute: workbenchRoute,
@@ -20541,15 +21127,19 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkbenchRouteContextBar, { context: routeContext })
 			] }),
-			viewState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShellState, {
+			workbenchRoute !== "supervisor" && viewState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShellState, {
 				title: "读取中",
 				copy: "正在读取 summary、readiness、runs 与 latest run 只读 contract。"
 			}) : null,
-			viewState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShellState, {
+			workbenchRoute !== "supervisor" && viewState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShellState, {
 				title: "读取失败",
 				copy: "错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。"
 			}) : null,
-			model === null ? null : workbenchRoute === "desktop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopShellRoute, {
+			workbenchRoute === "supervisor" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorDashboard, {
+				dashboard: selectedSupervisorDashboard(model),
+				routeState: selectedSupervisorDashboardRouteState(model),
+				refreshHandler: onRefreshWorkbenchContracts
+			}) : model === null ? null : workbenchRoute === "desktop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopShellRoute, {
 				desktopShell: model.desktopShell,
 				routeContext
 			}) : workbenchRoute === "prompts" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspaceRoute, {
@@ -21625,6 +22215,334 @@ function WorkbenchRouteEvidenceList({ evidenceRefs }) {
 			["label", item.label],
 			["source", item.source]
 		] }) }, `${item.ref.text}-${index}`))
+	});
+}
+function SupervisorDashboard({ dashboard, routeState, refreshHandler = () => void 0 }) {
+	const scenarioLinks = SUPERVISOR_DASHBOARD_SCENARIOS.map((scenarioId) => ({
+		id: scenarioId,
+		href: `/workbench/supervisor/?scenario=${encodeURIComponent(scenarioId)}`,
+		label: SUPERVISOR_DASHBOARD_FIXTURES[scenarioId]?.label ?? scenarioId
+	}));
+	const fixtureMode = dashboard.sourceMode !== "live";
+	const copyPreviewsEnabled = dashboard.readOnly === true && dashboard.willMutate === false && dashboard.commandBoundary.executionAvailable === false;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "supervisor-dashboard-route",
+		"aria-label": "Supervisor Command Center",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "supervisor-topbar",
+				"aria-label": "Supervisor read-only metadata",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", textValue(dashboard.contractName)],
+					["version", textValue(dashboard.contractVersion)],
+					["goal id", textValue(dashboard.goalSnapshot.goalId)],
+					["active task", textValue(dashboard.goalSnapshot.activeTask)],
+					["active role", textValue(dashboard.goalSnapshot.activeRole)],
+					["generated at", textValue(dashboard.generatedAt)],
+					["readOnly", textValue(dashboard.readOnly)],
+					["willMutate", textValue(dashboard.willMutate)]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundarySummary, { commandBoundary: dashboard.commandBoundary }),
+			fixtureMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", {
+				className: "supervisor-scenario-nav",
+				"aria-label": "Supervisor fixture scenarios",
+				children: scenarioLinks.map((scenario) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
+					className: scenario.id === dashboard.id ? "supervisor-scenario active" : "supervisor-scenario",
+					href: scenario.href,
+					"aria-current": scenario.id === dashboard.id ? "page" : void 0,
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: scenario.label }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: scenario.id })]
+				}, scenario.id))
+			}) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "supervisor-fixture-note",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: dashboard.summary }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["source: ", routeState.source] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["refresh handler: ", typeof refreshHandler === "function" ? "existing Workbench read refresh only" : "none"] })
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "supervisor-dashboard-grid",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalSnapshotSummary, { goalSnapshot: dashboard.goalSnapshot }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecommendedNextActionCard, {
+						recommendedNextAction: dashboard.recommendedNextAction,
+						commandBoundary: dashboard.commandBoundary,
+						copyPreviewsEnabled
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveLeasePanel, {
+						activeLease: dashboard.activeLease,
+						contextStatus: dashboard.contextStatus
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContextStatusPanel, { contextStatus: dashboard.contextStatus }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PendingResultPanel, { pendingResult: dashboard.pendingResult }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundaryPanel, {
+						commandBoundary: dashboard.commandBoundary,
+						copyPreviewsEnabled
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalTimeline, { goalTimeline: dashboard.goalTimeline }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CurrentGateCard, { currentGate: dashboard.currentGate }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipPanel, { ownership: dashboard.ownership })
+				]
+			})
+		]
+	});
+}
+function CommandBoundarySummary({ commandBoundary }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "supervisor-boundary-summary",
+		"aria-label": "Command Boundary projected summary",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Command Boundary" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["state", textValue(commandBoundary.state)],
+			["executionAvailable", textValue(commandBoundary.executionAvailable)],
+			["copyOnly", textValue(commandBoundary.copyOnly)],
+			["blocked families", textValue(commandBoundary.blockedFamilies.length)]
+		] })]
+	});
+}
+function GoalSnapshotSummary({ goalSnapshot }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
+		className: "supervisor-card-goal",
+		kicker: "goal snapshot",
+		title: "Goal Snapshot",
+		state: goalSnapshot.releaseReadiness,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["goal id", textValue(goalSnapshot.goalId)],
+			["title", textValue(goalSnapshot.title)],
+			["active task", textValue(goalSnapshot.activeTask)],
+			["active role", textValue(goalSnapshot.activeRole)],
+			["completed / total", supervisorTaskCountValue(goalSnapshot)],
+			["blockers", textValue(goalSnapshot.blockerCount)],
+			["release readiness", textValue(goalSnapshot.releaseReadiness)],
+			["generated", textValue(goalSnapshot.generatedAt)]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+			title: "source contracts",
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: goalSnapshot.sourceContracts })
+		})]
+	});
+}
+function RecommendedNextActionCard({ recommendedNextAction, commandBoundary, copyPreviewsEnabled = false }) {
+	const previewVisible = copyPreviewsEnabled && commandBoundary.copyOnly === true && commandBoundary.executionAvailable === false && isNonEmptyText(recommendedNextAction.safePreview);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
+		className: "supervisor-card-action",
+		kicker: "recommended next action",
+		title: "Recommended Next Action",
+		state: recommendedNextAction.state,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["action id", textValue(recommendedNextAction.actionId)],
+				["label", textValue(recommendedNextAction.label)],
+				["reason", textValue(recommendedNextAction.reason)],
+				["target role", textValue(recommendedNextAction.targetRole)],
+				["target task", textValue(recommendedNextAction.targetTask)],
+				["action state", textValue(recommendedNextAction.state)],
+				["checkpoint", textValue(recommendedNextAction.checkpointRef)],
+				["wait policy", textValue(recommendedNextAction.waitPolicy)],
+				["stale threshold", textValue(recommendedNextAction.staleThreshold)]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "blocked fields",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: recommendedNextAction.blockedFields })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "required confirmation",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: recommendedNextAction.requiredConfirmationFields })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "mismatch / intervention",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: supervisorActionMismatchItems(recommendedNextAction) })
+			}),
+			previewVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CopyPreviewText, { text: recommendedNextAction.safePreview }) : null
+		]
+	});
+}
+function ActiveLeasePanel({ activeLease, contextStatus }) {
+	const driftVisible = contextStatus.driftMarkers.some((marker) => marker !== "none");
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
+		className: "supervisor-card-lease",
+		kicker: "active lease",
+		title: "Active Lease",
+		state: activeLease.status,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["lease id", textValue(activeLease.leaseId)],
+			["thread id", textValue(activeLease.threadId)],
+			["task id", textValue(activeLease.taskId)],
+			["role", textValue(activeLease.role)],
+			["phase", textValue(activeLease.phase)],
+			["status", textValue(activeLease.status)],
+			["started", textValue(activeLease.startedAt)],
+			["updated", textValue(activeLease.updatedAt)],
+			["age", textValue(activeLease.age)],
+			["duplicate dispatch guard", textValue(activeLease.duplicateDispatchGuard)]
+		] }), driftVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+			className: "supervisor-warning",
+			children: ["drift warning: ", contextStatus.driftMarkers.join(" / ")]
+		}) : null]
+	});
+}
+function ContextStatusPanel({ contextStatus }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
+		className: "supervisor-card-context",
+		kicker: "context status",
+		title: "Context Status",
+		state: contextStatus.state,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["transcript", textValue(contextStatus.transcriptAvailability)],
+				["exchange count", textValue(contextStatus.exchangeCount)],
+				["latest turn", textValue(contextStatus.latestTurn)],
+				["latest tool call", textValue(contextStatus.latestToolCall)],
+				["token usage", textValue(contextStatus.tokenUsage)],
+				["context utilization", textValue(contextStatus.utilization)],
+				["transcript state", textValue(contextStatus.transcriptState)],
+				["result-block evidence", textValue(contextStatus.resultBlockEvidence)]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "provider summaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: contextStatus.providers.length === 0 ? ["missing contract field: contextStatus.providerSummaries"] : contextStatus.providers })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "drift markers",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: contextStatus.driftMarkers })
+			})
+		]
+	});
+}
+function PendingResultPanel({ pendingResult }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
+		className: "supervisor-card-pending",
+		kicker: "pending result",
+		title: "Pending Result",
+		state: pendingResult.status,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["status", textValue(pendingResult.status)],
+			["source", textValue(pendingResult.source)],
+			["event to register", textValue(pendingResult.eventToRegister)],
+			["evidence ref", textValue(pendingResult.evidenceRef)],
+			["parser reason", textValue(pendingResult.parserReason)],
+			["stale marker", textValue(pendingResult.staleMarker)],
+			["missing marker", textValue(pendingResult.missingMarker)]
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "panel-note",
+			children: "No event append control is rendered in this fixture prototype."
+		})]
+	});
+}
+function CommandBoundaryPanel({ commandBoundary, copyPreviewsEnabled = false }) {
+	const previewVisible = copyPreviewsEnabled && commandBoundary.copyOnly === true && isNonEmptyText(commandBoundary.safePreview);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
+		className: "supervisor-card-boundary",
+		kicker: "command boundary",
+		title: "Command Boundary",
+		state: commandBoundary.state,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["state", textValue(commandBoundary.state)],
+				["executionAvailable", textValue(commandBoundary.executionAvailable)],
+				["copyOnly", textValue(commandBoundary.copyOnly)]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "allowed families",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: commandBoundary.allowedFamilies })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "blocked families",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: commandBoundary.blockedFamilies })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "confirmation fields",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: commandBoundary.confirmationFields })
+			}),
+			previewVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CopyPreviewText, { text: commandBoundary.safePreview }) : null
+		]
+	});
+}
+function GoalTimeline({ goalTimeline }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorCard, {
+		className: "supervisor-card-timeline",
+		kicker: "goal timeline",
+		title: "Goal Timeline",
+		state: `${goalTimeline.length} events`,
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
+			className: "supervisor-timeline-list",
+			children: goalTimeline.map((event) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["event id", textValue(event.eventId)],
+				["task", textValue(event.taskId)],
+				["role", textValue(event.role)],
+				["status", textValue(event.status)],
+				["evidence ref", textValue(event.evidenceRef)],
+				["timestamp", textValue(event.timestamp)],
+				["hash state", textValue(event.hashState)]
+			] }) }, event.eventId))
+		})
+	});
+}
+function CurrentGateCard({ currentGate }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorCard, {
+		className: "supervisor-card-gate",
+		kicker: "current gate",
+		title: "Current Gate",
+		state: currentGate.status,
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["gate id", textValue(currentGate.gateId)],
+			["status", textValue(currentGate.status)],
+			["required family", textValue(currentGate.requiredCommandFamily)],
+			["blocking reason", textValue(currentGate.blockingReason)],
+			["evidence requirement", textValue(currentGate.evidenceRequirement)],
+			["closeout authorization", textValue(currentGate.closeoutAuthorization)]
+		] })
+	});
+}
+function OwnershipPanel({ ownership }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorCard, {
+		className: "supervisor-card-ownership",
+		kicker: "ownership",
+		title: "Ownership",
+		state: ownership.daemonState,
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["orchestration owner", textValue(ownership.orchestrationOwner)],
+			["delivery boundary", textValue(ownership.deliveryBoundary)],
+			["active PR", textValue(ownership.activePr)],
+			["branch", textValue(ownership.branch)],
+			["rollback boundary", textValue(ownership.rollbackBoundary)],
+			["daemon state", textValue(ownership.daemonState)],
+			["controller intervention", textValue(ownership.controllerInterventionReason)]
+		] })
+	});
+}
+function SupervisorCard({ className, kicker, title, state, children }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: `supervisor-card ${className}`,
+		"aria-labelledby": `${className}-title`,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+			className: "supervisor-card-header",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "section-kicker",
+				children: kicker
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				id: `${className}-title`,
+				children: title
+			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: "panel-state",
+				children: state
+			})]
+		}), children]
+	});
+}
+function supervisorTaskCountValue(goalSnapshot) {
+	const completed = goalSnapshot.completedTasks;
+	const total = goalSnapshot.totalTasks;
+	if (completed === null || completed === void 0 || total === null || total === void 0) return textValue(null);
+	return textValue(`${completed} / ${total}`);
+}
+function supervisorActionMismatchItems(recommendedNextAction) {
+	return [...Array.isArray(recommendedNextAction.mismatchList) ? recommendedNextAction.mismatchList : [], recommendedNextAction.manualInterventionReason].filter(isNonEmptyText);
+}
+function CopyPreviewText({ text }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+		className: "copy-preview-text",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Copy preview" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: text })]
 	});
 }
 function PromptWorkspaceRoute({ model, routeContext, onWorkbenchContextChanged = () => void 0 }) {
@@ -28896,12 +29814,50 @@ function EmptyBlock({ copy }) {
 function findRoute(routes, id) {
 	return routes.find((route) => route.id === id) ?? null;
 }
+function selectedSupervisorDashboard(model) {
+	if (model?.supervisorDashboard?.state === "available") return model.supervisorDashboard;
+	return {
+		...SUPERVISOR_DASHBOARD_FIXTURES[currentWorkbenchSearchParams().get("scenario") ?? "release-ready"] ?? SUPERVISOR_DASHBOARD_FIXTURES["release-ready"],
+		sourceMode: "fixture"
+	};
+}
+function selectedSupervisorDashboardRouteState(model) {
+	if (model?.supervisorDashboard?.state === "available") return {
+		state: model.supervisorDashboard.route?.state ?? "ready",
+		source: model.supervisorDashboard.source ?? model.supervisorDashboard.route?.path ?? "goal supervisor route"
+	};
+	return {
+		state: model?.supervisorDashboard?.route?.state ?? "fixture",
+		source: "frontend/workbench/src/fixtures/supervisorDashboardFixtures.js"
+	};
+}
 function currentWorkbenchRoute() {
 	const pathname = typeof globalThis.location?.pathname === "string" ? globalThis.location.pathname : "/workbench/";
 	const normalized = pathname.endsWith("/") ? pathname : `${pathname}/`;
+	if (normalized === "/workbench/supervisor/") return "supervisor";
 	if (normalized === "/workbench/prompts/") return "prompts";
 	if (normalized === "/workbench/desktop/") return "desktop";
 	return "home";
+}
+function workbenchShellClassName(route) {
+	if (route === "desktop") return "workbench-shell desktop-shell-route";
+	if (route === "supervisor") return "workbench-shell supervisor-shell-route";
+	return "workbench-shell";
+}
+function workbenchRouteEyebrow(route) {
+	if (route === "desktop") return "v37 Desktop Shell MVP";
+	if (route === "supervisor") return "v44.4 fixture prototype";
+	return "v28 Workbench v1";
+}
+function workbenchRouteTitle(route) {
+	if (route === "desktop") return "Symphony Desktop Shell";
+	if (route === "supervisor") return "Supervisor Command Center";
+	return "Symphony Workbench";
+}
+function workbenchRouteStatusText(route) {
+	if (route === "desktop") return "contract-backed";
+	if (route === "supervisor") return "supervisor read-only / fixture fallback";
+	return "confirm 后会刷新 goal-status / events / next action";
 }
 function buildWorkbenchStateHeader({ model, phase, routeCounts, routeContext }) {
 	const activeGoal = model?.activeGoal;
@@ -28962,6 +29918,7 @@ function workbenchNavItemClassName(item, currentRoute) {
 	return workbenchNavItemActive(item, currentRoute) ? "workbench-nav-item active" : "workbench-nav-item";
 }
 function workbenchNavItemActive(item, currentRoute) {
+	if (item.route === "/workbench/supervisor/") return currentRoute === "supervisor";
 	if (item.route === "/workbench/prompts/") return currentRoute === "prompts";
 	if (item.route === "/workbench/desktop/") return currentRoute === "desktop";
 	return currentRoute === "home" && item.id === "active-goal";
