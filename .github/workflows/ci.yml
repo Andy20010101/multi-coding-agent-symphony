@@ -3,10 +3,16 @@ name: CI
 on:
   push:
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
   workflow_dispatch:
     inputs:
       run_mutation_gate:
-        description: Run the mutation gate even when no relevant changed files are detected
+        description: Run the mutation stage gate
         required: false
         default: "false"
         type: choice
@@ -23,7 +29,263 @@ on:
           - "true"
 
 jobs:
-  verify:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.detect.outputs.docs_only }}
+      planning_only: ${{ steps.detect.outputs.planning_only }}
+      code_changed: ${{ steps.detect.outputs.code_changed }}
+      frontend_changed: ${{ steps.detect.outputs.frontend_changed }}
+      frontend_renderer_changed: ${{ steps.detect.outputs.frontend_renderer_changed }}
+      app_contract_changed: ${{ steps.detect.outputs.app_contract_changed }}
+      contract_supervisor_changed: ${{ steps.detect.outputs.contract_supervisor_changed }}
+      workflow_package_changed: ${{ steps.detect.outputs.workflow_package_changed }}
+      contract_impacting: ${{ steps.detect.outputs.contract_impacting }}
+      run_code_checks: ${{ steps.detect.outputs.run_code_checks }}
+      run_build: ${{ steps.detect.outputs.run_build }}
+      run_doctor: ${{ steps.detect.outputs.run_doctor }}
+      run_mutation_stage: ${{ steps.detect.outputs.run_mutation_stage }}
+      run_real_cli: ${{ steps.detect.outputs.run_real_cli }}
+      base_sha: ${{ steps.detect.outputs.base_sha }}
+      head_sha: ${{ steps.detect.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: detect
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.sha }}
+          REAL_CLI_VAR_ENABLED: ${{ vars.MCAS_RUN_REAL_CODEX == '1' }}
+        run: |
+          set -euo pipefail
+
+          changed_files="$RUNNER_TEMP/changed-files.txt"
+          : > "$changed_files"
+
+          run_mutation_input="false"
+          run_real_input="false"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            run_mutation_input="$(jq -r '.inputs.run_mutation_gate // "false"' "$GITHUB_EVENT_PATH")"
+            run_real_input="$(jq -r '.inputs.run_real_codex // "false"' "$GITHUB_EVENT_PATH")"
+          fi
+
+          base=""
+          head="$HEAD_SHA"
+          diff_known="false"
+          default_branch="$(jq -r '.repository.default_branch // "main"' "$GITHUB_EVENT_PATH")"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$(jq -r '.pull_request.base.sha // ""' "$GITHUB_EVENT_PATH")"
+            head="$(jq -r '.pull_request.head.sha // ""' "$GITHUB_EVENT_PATH")"
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            base="$(jq -r '.before // ""' "$GITHUB_EVENT_PATH")"
+            head="$HEAD_SHA"
+          fi
+
+          if [[ "$EVENT_NAME" == "push" && ( -z "$base" || "$base" =~ ^0+$ ) && -n "$default_branch" ]]; then
+            git fetch --no-tags origin "$default_branch:refs/remotes/origin/$default_branch" || true
+            if git rev-parse --verify "origin/$default_branch^{commit}" > /dev/null 2>&1; then
+              base="$(git merge-base "origin/$default_branch" "$head" || true)"
+            fi
+          fi
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            :
+          elif [[ -n "$base" && -n "$head" && ! "$base" =~ ^0+$ ]] \
+            && git cat-file -e "$base^{commit}" \
+            && git cat-file -e "$head^{commit}"; then
+            git diff --name-only "$base" "$head" | sed '/^$/d' > "$changed_files"
+            diff_known="true"
+          else
+            echo "__unknown__" > "$changed_files"
+          fi
+
+          total=0
+          docs_count=0
+          planning_count=0
+          code_changed="false"
+          frontend_changed="false"
+          frontend_renderer_changed="false"
+          app_contract_changed="false"
+          contract_supervisor_changed="false"
+          workflow_package_changed="false"
+          unknown_change="false"
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            total=$((total + 1))
+
+            if [[ "$file" == "__unknown__" ]]; then
+              unknown_change="true"
+              continue
+            fi
+
+            docs_file="false"
+            if [[ "$file" == docs/* || "$file" == tests/docs/* || "$file" == *.md || "$file" == AGENTS.md ]]; then
+              docs_file="true"
+              docs_count=$((docs_count + 1))
+            fi
+            if [[ "$file" == docs/plans/* ]]; then
+              planning_count=$((planning_count + 1))
+            fi
+            if [[ "$docs_file" != "true" ]]; then
+              code_changed="true"
+            fi
+
+            case "$file" in
+              frontend/workbench/*)
+                frontend_changed="true"
+                frontend_renderer_changed="true"
+                ;;
+            esac
+
+            case "$file" in
+              frontend/workbench/src/api/contracts.js|src/symphony/console.js|tests/workbench-api-client.test.js)
+                app_contract_changed="true"
+                ;;
+            esac
+
+            case "$file" in
+              src/symphony/goal-supervisor/*|src/symphony/supervisor-runner.js|src/symphony/console.js)
+                contract_supervisor_changed="true"
+                ;;
+            esac
+
+            case "$file" in
+              .github/workflows/*|package.json|pnpm-lock.yaml)
+                workflow_package_changed="true"
+                ;;
+            esac
+          done < "$changed_files"
+
+          docs_only="false"
+          planning_only="false"
+          if [[ "$unknown_change" != "true" && "$total" -gt 0 && "$docs_count" -eq "$total" ]]; then
+            docs_only="true"
+          fi
+          if [[ "$unknown_change" != "true" && "$total" -gt 0 && "$planning_count" -eq "$total" ]]; then
+            planning_only="true"
+          fi
+
+          contract_impacting="false"
+          if [[ "$app_contract_changed" == "true" || "$contract_supervisor_changed" == "true" || "$workflow_package_changed" == "true" ]]; then
+            contract_impacting="true"
+          fi
+
+          run_code_checks="false"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || "$unknown_change" == "true" || "$code_changed" == "true" || "$frontend_changed" == "true" || "$contract_impacting" == "true" ]]; then
+            run_code_checks="true"
+          fi
+          if [[ "$docs_only" == "true" || "$planning_only" == "true" ]]; then
+            run_code_checks="false"
+          fi
+
+          run_build="false"
+          if [[ "$frontend_renderer_changed" == "true" ]]; then
+            run_build="true"
+          fi
+
+          run_doctor="false"
+          if [[ "$run_code_checks" == "true" ]]; then
+            if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+              run_doctor="true"
+            elif [[ "$EVENT_NAME" == "push" && "${GITHUB_REF_NAME:-}" == "main" ]]; then
+              run_doctor="true"
+            fi
+          fi
+
+          mutation_label="false"
+          if [[ "$EVENT_NAME" == "pull_request" ]] \
+            && jq -r '.pull_request.labels[]?.name // empty' "$GITHUB_EVENT_PATH" \
+              | grep -Eiq '^(run-mutation-gate|mutation-stage|mutation-gate)$'; then
+            mutation_label="true"
+          fi
+
+          run_mutation_stage="false"
+          if [[ "$run_mutation_input" == "true" ]]; then
+            run_mutation_stage="true"
+          elif [[ "$EVENT_NAME" == "pull_request" && "$contract_impacting" == "true" && "$mutation_label" == "true" ]]; then
+            run_mutation_stage="true"
+          fi
+
+          run_real_cli="false"
+          if [[ "$REAL_CLI_VAR_ENABLED" == "true" || "$run_real_input" == "true" ]]; then
+            run_real_cli="true"
+          fi
+
+          if [[ "$diff_known" != "true" ]]; then
+            base=""
+          fi
+
+          {
+            echo "docs_only=$docs_only"
+            echo "planning_only=$planning_only"
+            echo "code_changed=$code_changed"
+            echo "frontend_changed=$frontend_changed"
+            echo "frontend_renderer_changed=$frontend_renderer_changed"
+            echo "app_contract_changed=$app_contract_changed"
+            echo "contract_supervisor_changed=$contract_supervisor_changed"
+            echo "workflow_package_changed=$workflow_package_changed"
+            echo "contract_impacting=$contract_impacting"
+            echo "run_code_checks=$run_code_checks"
+            echo "run_build=$run_build"
+            echo "run_doctor=$run_doctor"
+            echo "run_mutation_stage=$run_mutation_stage"
+            echo "run_real_cli=$run_real_cli"
+            echo "base_sha=$base"
+            echo "head_sha=$head"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Path-aware CI"
+            echo ""
+            echo "- docs_only: $docs_only"
+            echo "- planning_only: $planning_only"
+            echo "- code_changed: $code_changed"
+            echo "- frontend_renderer_changed: $frontend_renderer_changed"
+            echo "- app_contract_changed: $app_contract_changed"
+            echo "- contract_supervisor_changed: $contract_supervisor_changed"
+            echo "- workflow_package_changed: $workflow_package_changed"
+            echo "- run_code_checks: $run_code_checks"
+            echo "- run_build: $run_build"
+            echo "- run_doctor: $run_doctor"
+            echo "- run_mutation_stage: $run_mutation_stage"
+            echo "- run_real_cli: $run_real_cli"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  docs:
+    name: docs
+    needs: changes
+    if: ${{ needs.changes.outputs.docs_only == 'true' || needs.changes.outputs.planning_only == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check whitespace
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]] \
+            && git cat-file -e "$BASE_SHA^{commit}" \
+            && git cat-file -e "$HEAD_SHA^{commit}"; then
+            git diff --check "$BASE_SHA" "$HEAD_SHA"
+          else
+            git diff --check
+          fi
+
+  code_focused:
+    name: code-focused
+    needs: changes
+    if: ${{ needs.changes.outputs.run_code_checks == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -38,70 +300,154 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm test
-      - run: git diff --check
-      - run: pnpm mcas doctor
 
-      - name: Detect mutation gate scope
-        id: mutation_scope
+      - name: Check whitespace
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          HEAD_SHA: ${{ github.sha }}
-          RUN_MUTATION_GATE: ${{ inputs.run_mutation_gate || 'false' }}
+          BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
         run: |
           set -euo pipefail
-
-          if [[ "$RUN_MUTATION_GATE" == "true" ]]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            base="$(jq -r '.pull_request.base.sha // ""' "$GITHUB_EVENT_PATH")"
-            head="$(jq -r '.pull_request.head.sha // ""' "$GITHUB_EVENT_PATH")"
-          elif [[ "$EVENT_NAME" == "push" ]]; then
-            base="$(jq -r '.before // ""' "$GITHUB_EVENT_PATH")"
-            head="$HEAD_SHA"
+          if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]] \
+            && git cat-file -e "$BASE_SHA^{commit}" \
+            && git cat-file -e "$HEAD_SHA^{commit}"; then
+            git diff --check "$BASE_SHA" "$HEAD_SHA"
           else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            git diff --check
           fi
 
-          if [[ -z "$base" || -z "$head" || "$base" =~ ^0+$ ]]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+      - name: Main/manual doctor
+        if: ${{ needs.changes.outputs.run_doctor == 'true' }}
+        run: pnpm mcas doctor
 
-          if ! git cat-file -e "$base^{commit}" || ! git cat-file -e "$head^{commit}"; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+  build:
+    name: build
+    needs: changes
+    if: ${{ needs.changes.outputs.run_build == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
 
-          git diff --name-only "$base" "$head" > "$RUNNER_TEMP/mutation-changed-files.txt"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
 
-          if grep -Eq '^(src/|tests/|fixtures/|package\.json$|pnpm-lock\.yaml$|\.github/workflows/ci\.yml$)' "$RUNNER_TEMP/mutation-changed-files.txt"; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm workbench:build
 
+  mutation_stage:
+    name: mutation-stage
+    needs: changes
+    if: ${{ needs.changes.outputs.run_mutation_stage == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
       - run: pnpm test:mutation:gate
-        if: ${{ steps.mutation_scope.outputs.run == 'true' }}
+
+  real_cli:
+    name: real-cli
+    needs: changes
+    if: ${{ needs.changes.outputs.run_real_cli == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
 
       - name: Optional real CLI preflight
-        if: ${{ vars.MCAS_RUN_REAL_CODEX == '1' || inputs.run_real_codex == 'true' }}
         env:
           MCAS_RUN_REAL_CODEX: "1"
         run: pnpm mcas doctor --real-cli --adapter codex --require-gates --proof-dir tmp/real-cli-proofs
 
       - name: Optional real Codex Harness smoke
-        if: ${{ vars.MCAS_RUN_REAL_CODEX == '1' || inputs.run_real_codex == 'true' }}
         env:
           MCAS_RUN_REAL_CODEX: "1"
           MCAS_REAL_CLI_PROOF_DIR: tmp/real-cli-proofs
         run: pnpm smoke:harness:codex:real
+
+  verify:
+    name: verify
+    needs:
+      - changes
+      - docs
+      - code_focused
+      - build
+      - mutation_stage
+      - real_cli
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required checks
+        shell: bash
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DOCS_RESULT: ${{ needs.docs.result }}
+          CODE_RESULT: ${{ needs.code_focused.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          MUTATION_RESULT: ${{ needs.mutation_stage.result }}
+          REAL_CLI_RESULT: ${{ needs.real_cli.result }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          PLANNING_ONLY: ${{ needs.changes.outputs.planning_only }}
+          RUN_CODE_CHECKS: ${{ needs.changes.outputs.run_code_checks }}
+          RUN_BUILD: ${{ needs.changes.outputs.run_build }}
+          RUN_MUTATION_STAGE: ${{ needs.changes.outputs.run_mutation_stage }}
+          RUN_REAL_CLI: ${{ needs.changes.outputs.run_real_cli }}
+        run: |
+          set -euo pipefail
+
+          failed="false"
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "changes failed with result: $CHANGES_RESULT"
+            failed="true"
+          fi
+
+          for item in \
+            "docs:$DOCS_RESULT" \
+            "code-focused:$CODE_RESULT" \
+            "build:$BUILD_RESULT" \
+            "mutation-stage:$MUTATION_RESULT" \
+            "real-cli:$REAL_CLI_RESULT"; do
+            job="${item%%:*}"
+            result="${item#*:}"
+            case "$result" in
+              success|skipped)
+                ;;
+              *)
+                echo "$job failed with result: $result"
+                failed="true"
+                ;;
+            esac
+          done
+
+          {
+            echo "### Verify summary"
+            echo ""
+            echo "- docs_only: $DOCS_ONLY"
+            echo "- planning_only: $PLANNING_ONLY"
+            echo "- run_code_checks: $RUN_CODE_CHECKS"
+            echo "- run_build: $RUN_BUILD"
+            echo "- run_mutation_stage: $RUN_MUTATION_STAGE"
+            echo "- run_real_cli: $RUN_REAL_CLI"
+            echo "- docs result: $DOCS_RESULT"
+            echo "- code-focused result: $CODE_RESULT"
+            echo "- build result: $BUILD_RESULT"
+            echo "- mutation-stage result: $MUTATION_RESULT"
+            echo "- real-cli result: $REAL_CLI_RESULT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$failed" == "true" ]]; then
+            exit 1
+          fi
