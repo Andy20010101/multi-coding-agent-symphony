@@ -9,7 +9,7 @@ import {
 } from '../response.js';
 
 export function createGoalRoutes({
-  buildGoalSupervisorAppReadModelFromContracts
+  goalSupervisorService
 }) {
   return [{
     id: 'goal-supervisor',
@@ -28,7 +28,7 @@ export function createGoalRoutes({
         return;
       }
 
-      writeJsonResponse(response, 200, await buildGoalSupervisorAppReadModelFromContracts({
+      writeJsonResponse(response, 200, await goalSupervisorService.buildSupervisorReadModel({
         stateDir,
         goalId: request.goalId
       }));
