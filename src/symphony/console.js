@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { lstat, open, readFile, realpath, stat } from 'node:fs/promises';
+import { lstat, open, realpath, stat } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { NodeProcessRunner } from '../process-runner.js';
 import { redactSecrets } from '../redaction.js';
@@ -94,9 +93,6 @@ import {
   validateSearchFilters
 } from './safe-preview-search.js';
 import {
-  buildErrorEnvelope
-} from './error-envelope.js';
-import {
   buildLocalRuntimeHealth
 } from './local-runtime-health.js';
 import {
@@ -184,13 +180,29 @@ import {
 import {
   buildGoalSupervisorAppReadModelFromContracts
 } from './goal-supervisor/index.js';
+import {
+  GoalEventPlanPreviewError,
+  assertOnlySearchParams,
+  groupSearchParamValues,
+  hasSearchParams,
+  isMissingFileError,
+  isUnsafeArtifactRouteSegment,
+  isUnsafeGoalRouteSegment,
+  isUnsafeHandoffRef,
+  isWorkbenchRoute,
+  optionalSingleSearchParam,
+  requiredSingleSearchParam,
+  safeDecodePathSegment,
+  writeApiErrorResponse,
+  writeHtmlResponse,
+  writeJsonResponse,
+  writeWorkbenchStaticResponse
+} from './console/index.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
 const MAX_ARTIFACT_PREVIEW_BYTES = 200 * 1024;
 const DEFAULT_READINESS_TIMEOUT_MS = 3000;
-const WORKBENCH_STATIC_ROOT = fileURLToPath(new URL('./workbench-static/', import.meta.url));
-const WORKBENCH_ROUTE_PREFIX = '/workbench';
 const RUN_FILTERS = Object.freeze(['all', 'passed', 'failed', 'dry-run', 'real', 'scan', 'verify', 'adoption']);
 const COMMAND_GROUP_ORDER = Object.freeze(['Inspect', 'Adoptions', 'Verify', 'Artifacts', 'Real-agent gates']);
 const RISK_SEVERITY_RANK = Object.freeze({ high: 3, medium: 2, low: 1 });
@@ -4434,10 +4446,6 @@ function isBlockedArtifactPreviewPath(path) {
     parts.some((part) => BLOCKED_ARTIFACT_PREVIEW_SEGMENTS.includes(part));
 }
 
-function isMissingFileError(error) {
-  return error?.code === 'ENOENT' || error?.code === 'ENOTDIR';
-}
-
 function parseArtifactRequestPath(pathname, searchParams = new URLSearchParams()) {
   const previewMatch = /^\/api\/runs\/([^/]+)\/artifacts\/([^/]+)\/preview$/u.exec(pathname);
 
@@ -4493,10 +4501,6 @@ function parseArtifactRequestMatch({ match, safePreview, searchParams, ref }) {
     artifactKind: decodedArtifactKind.value,
     safePreview
   };
-}
-
-function isUnsafeArtifactRouteSegment(value) {
-  return value === '' || value.includes('/') || value.includes('\\') || value.includes('..');
 }
 
 function parseGoalProgressRequestPath(pathname, searchParams = new URLSearchParams()) {
@@ -5160,18 +5164,6 @@ async function resolveGoalEventPlanPreviewGoalId({ stateDir, goalId }) {
   }
 
   return getGoalProgressTemplate(goalId) === null ? null : goalId;
-}
-
-class GoalEventPlanPreviewError extends Error {
-  constructor(code, message, safeDetails) {
-    super(message);
-    this.name = 'GoalEventPlanPreviewError';
-    this.code = code;
-
-    if (safeDetails !== undefined) {
-      this.safeDetails = safeDetails;
-    }
-  }
 }
 
 async function buildGoalEventPlanPreview({ stateDir, goalId, searchParams }) {
@@ -7913,91 +7905,6 @@ function addGoalEventPlanPreviewSummary(plan, operationRun) {
   };
 }
 
-function assertOnlySearchParams(searchParams, allowedKeys) {
-  const allowed = new Set(allowedKeys);
-  const unsupported = Array.from(searchParams.keys()).filter((key) => !allowed.has(key));
-
-  if (unsupported.length > 0) {
-    throw new GoalEventPlanPreviewError(
-      'invalid-goal-preview-request',
-      'Goal event plan preview received unsupported query parameters.',
-      { parameter: unsupported[0] }
-    );
-  }
-
-  for (const [key, values] of groupSearchParamValues(searchParams)) {
-    if (key !== 'evidenceRef' && values.length > 1) {
-      throw new GoalEventPlanPreviewError(
-        'invalid-goal-preview-request',
-        'Goal event plan preview accepts repeated values only for evidenceRef.',
-        { parameter: key }
-      );
-    }
-  }
-
-  for (const blockedKey of ['confirm', 'planHash', 'plan-hash', 'dryRun', 'dry-run']) {
-    if (searchParams.has(blockedKey)) {
-      throw new GoalEventPlanPreviewError(
-        'invalid-goal-preview-request',
-        'Goal event plan preview is dry-run only and does not accept confirm or plan hash parameters.',
-        { parameter: blockedKey }
-      );
-    }
-  }
-}
-
-function requiredSingleSearchParam(searchParams, key) {
-  const value = optionalSingleSearchParam(searchParams, key);
-
-  if (value === undefined) {
-    throw new GoalEventPlanPreviewError(
-      'invalid-goal-preview-request',
-      `Goal event plan preview requires ${key}.`,
-      { parameter: key }
-    );
-  }
-
-  return value;
-}
-
-function optionalSingleSearchParam(searchParams, key) {
-  const values = searchParams.getAll(key);
-
-  if (values.length === 0) {
-    return undefined;
-  }
-
-  if (values.length > 1) {
-    throw new GoalEventPlanPreviewError(
-      'invalid-goal-preview-request',
-      'Goal event plan preview received repeated single-value query parameters.',
-      { parameter: key }
-    );
-  }
-
-  const trimmed = values[0].trim();
-
-  if (trimmed === '') {
-    throw new GoalEventPlanPreviewError(
-      'invalid-goal-preview-request',
-      'Goal event plan preview query parameters must be non-empty.',
-      { parameter: key }
-    );
-  }
-
-  return trimmed;
-}
-
-function groupSearchParamValues(searchParams) {
-  const groups = new Map();
-
-  for (const [key, value] of searchParams.entries()) {
-    groups.set(key, [...(groups.get(key) ?? []), value]);
-  }
-
-  return groups.entries();
-}
-
 function buildPreviewBlocker(searchParams) {
   const blockerId = optionalSingleSearchParam(searchParams, 'blockerId');
   const reason = optionalSingleSearchParam(searchParams, 'blockerReason');
@@ -8012,10 +7919,6 @@ function buildPreviewBlocker(searchParams) {
     reason,
     severity
   });
-}
-
-function isUnsafeGoalRouteSegment(value) {
-  return value === '' || value.includes('/') || value.includes('\\') || value.includes('..');
 }
 
 function parseHandoffRequestPath(pathname, searchParams = new URLSearchParams()) {
@@ -8094,28 +7997,6 @@ function parseAdoptionInspectRequestPath(pathname, searchParams = new URLSearchP
     kind: 'inspect',
     adoptionId: decoded.value
   };
-}
-
-function safeDecodePathSegment(value) {
-  try {
-    return {
-      ok: true,
-      value: decodeURIComponent(value)
-    };
-  } catch {
-    return {
-      ok: false,
-      value
-    };
-  }
-}
-
-function isUnsafeHandoffRef(ref) {
-  return ref === '' || ref.includes('/') || ref.includes('\\') || ref.includes('..');
-}
-
-function hasSearchParams(searchParams) {
-  return Array.from(searchParams.keys()).length > 0;
 }
 
 function parseRunTimelineRequestPath(pathname) {
@@ -9969,175 +9850,6 @@ function commandOutput(check) {
   return redactSecrets(`${check.stdout ?? ''}\n${check.stderr ?? ''}`);
 }
 
-async function writeWorkbenchStaticResponse({ response, pathname }) {
-  const decision = resolveWorkbenchStaticRequest(pathname);
-
-  if (decision.statusCode !== 200) {
-    writeJsonResponse(response, decision.statusCode, {
-      status: decision.status,
-      message: decision.message
-    });
-    return;
-  }
-
-  try {
-    const metadata = await stat(decision.filePath);
-
-    if (!metadata.isFile()) {
-      writeJsonResponse(response, 404, {
-        status: 'missing',
-        message: 'workbench static file not found'
-      });
-      return;
-    }
-
-    await writeWorkbenchFileResponse({
-      response,
-      filePath: decision.filePath,
-      relativePath: decision.relativePath
-    });
-  } catch (error) {
-    if (decision.fallbackToIndex === true && isMissingFileError(error)) {
-      const indexPath = resolve(WORKBENCH_STATIC_ROOT, 'index.html');
-      await writeWorkbenchFileResponse({
-        response,
-        filePath: indexPath,
-        relativePath: 'index.html'
-      });
-      return;
-    }
-
-    if (isMissingFileError(error)) {
-      writeJsonResponse(response, 404, {
-        status: 'missing',
-        message: 'workbench static file not found'
-      });
-      return;
-    }
-
-    throw error;
-  }
-}
-
-function resolveWorkbenchStaticRequest(pathname) {
-  const rootPath = resolve(WORKBENCH_STATIC_ROOT);
-  const rawRelativePath = pathname === WORKBENCH_ROUTE_PREFIX
-    ? ''
-    : pathname.slice(`${WORKBENCH_ROUTE_PREFIX}/`.length);
-
-  if (pathname.includes('\\') || /%5c/iu.test(pathname)) {
-    return forbiddenWorkbenchPath('workbench static path is outside the allowed directory');
-  }
-
-  let decodedRelativePath;
-
-  try {
-    decodedRelativePath = decodeURIComponent(rawRelativePath);
-  } catch {
-    return {
-      statusCode: 400,
-      status: 'invalid-path',
-      message: 'workbench static path is invalid'
-    };
-  }
-
-  if (isUnsafeWorkbenchStaticPath(decodedRelativePath)) {
-    return forbiddenWorkbenchPath('workbench static path is outside the allowed directory');
-  }
-
-  if (isRejectedLocalFileProbe(decodedRelativePath)) {
-    return {
-      statusCode: 404,
-      status: 'missing',
-      message: 'workbench static file not found'
-    };
-  }
-
-  const relativePath = decodedRelativePath === '' ? 'index.html' : decodedRelativePath;
-  const filePath = resolve(rootPath, relativePath);
-
-  if (!isPathInsideRoot({ rootPath, filePath })) {
-    return forbiddenWorkbenchPath('workbench static path is outside the allowed directory');
-  }
-
-  return {
-    statusCode: 200,
-    filePath,
-    relativePath,
-    fallbackToIndex: shouldFallbackToWorkbenchIndex(relativePath)
-  };
-}
-
-function isWorkbenchRoute(pathname) {
-  return pathname === WORKBENCH_ROUTE_PREFIX || pathname.startsWith(`${WORKBENCH_ROUTE_PREFIX}/`);
-}
-
-function forbiddenWorkbenchPath(message) {
-  return {
-    statusCode: 403,
-    status: 'forbidden',
-    message
-  };
-}
-
-function isUnsafeWorkbenchStaticPath(relativePath) {
-  if (relativePath.includes('\0')
-    || relativePath.startsWith('/')
-    || /^[A-Za-z]:\//u.test(relativePath)
-    || relativePath.split('/').some((part) => part === '..')) {
-    return true;
-  }
-
-  return false;
-}
-
-function isRejectedLocalFileProbe(relativePath) {
-  const [firstPart] = relativePath.split('/');
-
-  return firstPart === 'src'
-    || firstPart === 'docs'
-    || firstPart === 'package.json'
-    || firstPart === 'pnpm-lock.yaml';
-}
-
-function isPathInsideRoot({ rootPath, filePath }) {
-  return filePath === rootPath || filePath.startsWith(`${rootPath}${sep}`);
-}
-
-function shouldFallbackToWorkbenchIndex(relativePath) {
-  return relativePath !== 'index.html'
-    && !relativePath.startsWith('assets/')
-    && relativePath !== 'assets'
-    && extname(relativePath) === '';
-}
-
-async function writeWorkbenchFileResponse({ response, filePath, relativePath }) {
-  const content = await readFile(filePath);
-
-  response.writeHead(200, {
-    'content-type': workbenchContentType(relativePath),
-    'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff'
-  });
-  response.end(content);
-}
-
-function workbenchContentType(relativePath) {
-  switch (extname(relativePath).toLowerCase()) {
-    case '.html':
-      return 'text/html; charset=utf-8';
-    case '.js':
-    case '.mjs':
-      return 'text/javascript; charset=utf-8';
-    case '.css':
-      return 'text/css; charset=utf-8';
-    case '.json':
-      return 'application/json; charset=utf-8';
-    default:
-      return 'application/octet-stream';
-  }
-}
-
 function parseGithubAccount(output) {
   const accountMatch = /account\s+([^\s]+)/iu.exec(output);
 
@@ -10148,40 +9860,6 @@ function parseGithubAccount(output) {
   const loggedInMatch = /Logged in to [^\s]+ as ([^\s]+)/iu.exec(output);
 
   return loggedInMatch?.[1];
-}
-
-function writeHtmlResponse(response, html) {
-  response.writeHead(200, {
-    'content-type': 'text/html; charset=utf-8',
-    'cache-control': 'no-store'
-  });
-  response.end(html);
-}
-
-function writeJsonResponse(response, statusCode, value) {
-  response.writeHead(statusCode, {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store'
-  });
-  response.end(`${JSON.stringify(value, null, 2)}\n`);
-}
-
-function writeApiErrorResponse(response, {
-  status,
-  code,
-  message,
-  route,
-  method,
-  safeDetails
-}) {
-  writeJsonResponse(response, status, buildErrorEnvelope({
-    code,
-    message,
-    status,
-    route,
-    method,
-    safeDetails
-  }));
 }
 
 function stripUndefined(value) {
