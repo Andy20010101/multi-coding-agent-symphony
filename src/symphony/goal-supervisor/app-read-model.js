@@ -1,30 +1,12 @@
 import { buildGoalSupervisorCoreProjection } from './core-projection.js';
+import {
+  chooseGoalSupervisorPolicyDecision,
+  projectGoalSupervisorCommandBoundary
+} from './policy.js';
 
 export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME = 'goal-supervisor-app-read-model.v1';
 export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_VERSION = 1;
-
-export const GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT = Object.freeze({
-  state: 'disabled',
-  executionAvailable: false,
-  copyOnly: true,
-  allowedCommandFamilies: Object.freeze([]),
-  blockedCommandFamilies: Object.freeze([
-    'provider-cli',
-    'real-cli',
-    'generic-shell',
-    'daemon-launch',
-    'child-dispatch',
-    'goal-ledger-write',
-    'event-log-write',
-    'mutation-gate',
-    'audit',
-    'tag',
-    'push-release',
-    'publish-release',
-    'github-release',
-    'release-closeout'
-  ])
-});
+export { GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT } from './policy.js';
 
 export function buildGoalSupervisorAppReadModel({
   goalId = null,
@@ -67,7 +49,7 @@ export function buildGoalSupervisorAppReadModel({
   });
   const generatedAt = new Date(nowMs).toISOString();
   const normalizedGoalId = firstNonEmptyString(goalId, projection.goalId, goalNext?.goalId, state?.goalId);
-  const normalizedCommandBoundary = normalizeCommandBoundary(commandBoundary);
+  const normalizedCommandBoundary = projectGoalSupervisorCommandBoundary({ commandBoundary });
   const normalizedContext = normalizeContextStatus(sessionContext, projection);
   const normalizedPendingResult = normalizePendingResult({
     projection,
@@ -106,7 +88,7 @@ export function buildGoalSupervisorAppReadModel({
     activeLease: normalizedActiveLease,
     pendingResult: normalizedPendingResult,
     currentGate: normalizedGate,
-    recommendedNextAction: recommendedNextAction ?? chooseRecommendedNextAction({
+    recommendedNextAction: recommendedNextAction ?? chooseGoalSupervisorPolicyDecision({
       projection,
       pendingResult: normalizedPendingResult,
       activeLease: normalizedActiveLease,
@@ -347,144 +329,16 @@ function normalizeContextStatus(sessionContext, projection) {
     missingTranscriptState: isPlainObject(context.missingTranscriptState)
       ? { ...context.missingTranscriptState }
       : { missing: transcriptAvailability === 'missing' || transcriptAvailability === 'unavailable', reason: null },
+    checkpointRef: nonEmptyString(context.checkpointRef) ? context.checkpointRef : null,
     resultBlockEvidence: isPlainObject(context.resultBlockEvidence)
       ? {
           status: context.resultBlockEvidence.status ?? 'missing',
-          present: context.resultBlockEvidence.present === true
+          present: context.resultBlockEvidence.present === true,
+          evidenceRef: nonEmptyString(context.resultBlockEvidence.evidenceRef) ? context.resultBlockEvidence.evidenceRef : null,
+          sourceRef: nonEmptyString(context.resultBlockEvidence.sourceRef) ? context.resultBlockEvidence.sourceRef : null
         }
       : { status: 'missing', present: false },
     driftMarkers: Array.isArray(context.driftMarkers) ? context.driftMarkers.filter(nonEmptyString) : []
-  };
-}
-
-function normalizeCommandBoundary(commandBoundary) {
-  if (!isPlainObject(commandBoundary)) {
-    return copyCommandBoundary(GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT);
-  }
-
-  return {
-    state: commandBoundary.state ?? GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT.state,
-    executionAvailable: commandBoundary.executionAvailable === true,
-    copyOnly: commandBoundary.copyOnly !== false,
-    allowedCommandFamilies: Array.isArray(commandBoundary.allowedCommandFamilies)
-      ? commandBoundary.allowedCommandFamilies.filter(nonEmptyString)
-      : [],
-    blockedCommandFamilies: Array.isArray(commandBoundary.blockedCommandFamilies)
-      ? commandBoundary.blockedCommandFamilies.filter(nonEmptyString)
-      : [...GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT.blockedCommandFamilies],
-    safeCommandPreview: commandBoundary.safeCommandPreview ?? null,
-    confirmationFields: Array.isArray(commandBoundary.confirmationFields)
-      ? commandBoundary.confirmationFields.filter(nonEmptyString)
-      : []
-  };
-}
-
-function chooseRecommendedNextAction({
-  projection,
-  pendingResult,
-  activeLease,
-  currentGate,
-  contextStatus,
-  commandBoundary
-}) {
-  const current = projection.current ?? projection.route?.current ?? {};
-
-  if (currentGate.status === 'blocked') {
-    return nextAction({
-      actionId: 'block',
-      label: 'Block until gate is authorized',
-      reason: currentGate.blockingReason ?? 'current-gate-blocked',
-      current,
-      commandBoundary
-    });
-  }
-
-  if (pendingResult.status === 'pending') {
-    return nextAction({
-      actionId: 'checkpoint',
-      label: 'Checkpoint pending result',
-      reason: pendingResult.parserReason ?? 'result-awaits-registration',
-      current,
-      commandBoundary
-    });
-  }
-
-  if (contextStatus.missingTranscriptState?.missing === true && activeLease.threadId !== null) {
-    return nextAction({
-      actionId: 'block',
-      label: 'Block on missing transcript',
-      reason: contextStatus.missingTranscriptState.reason ?? 'transcript-missing-with-active-lease',
-      current,
-      commandBoundary
-    });
-  }
-
-  if (projection.progress?.state === 'stalled' || contextStatus.staleTranscriptState?.stale === true) {
-    return nextAction({
-      actionId: 'open-handoff-thread',
-      label: 'Open handoff thread',
-      reason: contextStatus.staleTranscriptState?.reason ?? projection.progress?.reason ?? 'transcript-stale',
-      current,
-      commandBoundary
-    });
-  }
-
-  if (activeLease.duplicateDispatchGuard.blocked === true && projection.progress?.state === 'recent-progress') {
-    return nextAction({
-      actionId: 'wait',
-      label: 'Wait for active thread',
-      reason: projection.progress.reason,
-      current,
-      commandBoundary
-    });
-  }
-
-  if (projection.route?.state === 'dispatchable') {
-    return nextAction({
-      actionId: 'open-handoff-thread',
-      label: 'Prepare next role handoff',
-      reason: projection.route.reason,
-      current,
-      commandBoundary
-    });
-  }
-
-  return nextAction({
-    actionId: projection.route?.state === 'complete' ? 'checkpoint' : 'wait',
-    label: projection.route?.state === 'complete' ? 'Checkpoint completion' : 'Wait for state change',
-    reason: projection.route?.reason ?? 'no-action-ready',
-    current,
-    commandBoundary
-  });
-}
-
-function nextAction({
-  actionId,
-  label,
-  reason,
-  current,
-  commandBoundary
-}) {
-  return {
-    actionId,
-    label,
-    reason,
-    targetRole: current?.role ?? null,
-    taskId: current?.taskId ?? null,
-    safeCommandPreview: commandBoundary.safeCommandPreview ?? null,
-    requiredConfirmationFields: commandBoundary.state === 'confirm-required'
-      ? commandBoundary.confirmationFields
-      : []
-  };
-}
-
-function copyCommandBoundary(boundary) {
-  return {
-    state: boundary.state,
-    executionAvailable: boundary.executionAvailable,
-    copyOnly: boundary.copyOnly,
-    allowedCommandFamilies: [...boundary.allowedCommandFamilies],
-    blockedCommandFamilies: [...boundary.blockedCommandFamilies]
   };
 }
 

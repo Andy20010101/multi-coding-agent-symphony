@@ -9,10 +9,12 @@ import {
   GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT,
   GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
   buildGoalSupervisorAppReadModel,
-  buildGoalSupervisorAppReadModelFromContracts
+  buildGoalSupervisorAppReadModelFromContracts,
+  projectGoalSupervisorCommandBoundary
 } from '../src/symphony/goal-supervisor/index.js';
 
 const FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/app-read-model.v44-3.pr1.v1.json', import.meta.url);
+const POLICY_FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/app-read-model.v44-3.pr4.v1.json', import.meta.url);
 
 describe('v44.3 goal supervisor app read model contract', () => {
   it('renders every required app-facing object without raw transcript text', async () => {
@@ -71,6 +73,8 @@ describe('v44.3 goal supervisor app read model contract', () => {
     assert.match(dryRunModel.commandBoundary.safeCommandPreview, /goal dispatch task-1 worker --fresh-controller/u);
     assert.equal(confirmModel.commandBoundary.state, 'confirm-required');
     assert.equal(confirmModel.commandBoundary.executionAvailable, false);
+    assert.equal(confirmModel.commandBoundary.confirmation.ready, true);
+    assert.equal(confirmModel.commandBoundary.confirmation.planHash, 'sha256:1111111111111111111111111111111111111111111111111111111111111111');
     assert.deepEqual(confirmModel.recommendedNextAction.requiredConfirmationFields, [
       'planHash',
       'goalId',
@@ -79,6 +83,88 @@ describe('v44.3 goal supervisor app read model contract', () => {
       'evidenceRef',
       'reason'
     ]);
+  });
+
+  it('replays context-aware policy decisions for every PR-4 action', async () => {
+    const fixture = await readPolicyFixture();
+    const seenActions = new Set();
+
+    for (const scenario of fixture.scenarios) {
+      const model = buildGoalSupervisorAppReadModel({
+        ...fixture.baseInput,
+        ...scenario.input,
+        nowMs: Date.parse(fixture.nowUtc),
+        progressGraceMs: fixture.progressGraceMs
+      });
+
+      seenActions.add(model.recommendedNextAction.actionId);
+      assert.equal(model.recommendedNextAction.actionId, scenario.expected.actionId, scenario.name);
+      assert.equal(model.recommendedNextAction.reason, scenario.expected.reason, scenario.name);
+      assert.equal(model.commandBoundary.executionAvailable, false, scenario.name);
+      assert.equal(model.commandBoundary.copyOnly, true, scenario.name);
+
+      if (scenario.expected.checkpointRef !== undefined) {
+        assert.equal(model.recommendedNextAction.checkpointRef, scenario.expected.checkpointRef, scenario.name);
+      }
+
+      if (scenario.expected.mismatch !== undefined) {
+        assert.ok(model.recommendedNextAction.mismatchList.includes(scenario.expected.mismatch), scenario.name);
+      }
+
+      if (scenario.expected.blockedField !== undefined) {
+        assert.ok(model.recommendedNextAction.blockedFields.includes(scenario.expected.blockedField), scenario.name);
+      }
+
+      if (scenario.expected.commandBoundaryState !== undefined) {
+        assert.equal(model.commandBoundary.state, scenario.expected.commandBoundaryState, scenario.name);
+        assert.equal(model.commandBoundary.allowedCommandFamilies.includes('provider-cli'), false, scenario.name);
+        assert.equal(model.commandBoundary.blockedCommandFamilies.includes('provider-cli'), true, scenario.name);
+      }
+    }
+
+    assert.deepEqual([...seenActions].sort(), [
+      'block',
+      'checkpoint',
+      'compact',
+      'continue',
+      'open-handoff-thread',
+      'recover-drift',
+      'wait'
+    ]);
+  });
+
+  it('projects command previews as copy-only and blocks incomplete confirmations', async () => {
+    const fixture = await readPolicyFixture();
+    const confirmBoundary = projectGoalSupervisorCommandBoundary({
+      commandBoundary: fixture.confirmRequiredPreview
+    });
+    const incompleteModel = buildGoalSupervisorAppReadModel({
+      ...fixture.baseInput,
+      commandBoundary: fixture.incompleteConfirmRequiredPreview,
+      sessionContext: {
+        transcriptAvailability: 'missing',
+        missingTranscriptState: {
+          missing: false,
+          reason: null
+        }
+      },
+      nowMs: Date.parse(fixture.nowUtc)
+    });
+
+    assert.equal(confirmBoundary.state, 'confirm-required');
+    assert.equal(confirmBoundary.executionAvailable, false);
+    assert.equal(confirmBoundary.copyOnly, true);
+    assert.equal(confirmBoundary.confirmation.ready, true);
+    assert.equal(confirmBoundary.allowedCommandFamilies.includes('provider-cli'), false);
+    assert.equal(confirmBoundary.blockedCommandFamilies.includes('provider-cli'), true);
+    assert.ok(confirmBoundary.confirmationFields.includes('planHash'));
+    assert.ok(confirmBoundary.confirmationFields.includes('evidenceRef'));
+
+    assert.equal(incompleteModel.recommendedNextAction.actionId, 'block');
+    assert.equal(incompleteModel.recommendedNextAction.reason, 'confirm-required-command-missing-context');
+    assert.ok(incompleteModel.recommendedNextAction.blockedFields.includes('planHash'));
+    assert.ok(incompleteModel.recommendedNextAction.blockedFields.includes('evidenceRef'));
+    assert.equal(incompleteModel.commandBoundary.executionAvailable, false);
   });
 
   it('composes existing goal contracts and supervisor observability into one read model', async () => {
@@ -149,6 +235,10 @@ describe('v44.3 goal supervisor app read model contract', () => {
 
 async function readFixture() {
   return JSON.parse(await readFile(FIXTURE_PATH, 'utf8'));
+}
+
+async function readPolicyFixture() {
+  return JSON.parse(await readFile(POLICY_FIXTURE_PATH, 'utf8'));
 }
 
 function assertTopLevelContract(model, label) {
