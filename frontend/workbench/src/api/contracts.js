@@ -11172,15 +11172,20 @@ function projectSupervisorContextStatus(contextStatus) {
 
   return {
     state: supervisorContextState(context),
-    providers: supervisorProviderSummaryTexts(context.sessionSourceSummaries ?? context.providers),
+    providers: supervisorProviderSummaryTexts(
+      context.sessionSourceSummaries
+        ?? context.providerSummaries
+        ?? context.providers
+    ),
     transcriptAvailability: context.transcriptAvailability ?? null,
     exchangeCount: context.exchangeCount ?? null,
-    latestTurn: supervisorObjectSummaryText(context.latestTurnState),
+    latestTurn: supervisorObjectSummaryText(context.latestTurnState ?? context.latestTurn),
     latestToolCall: supervisorObjectSummaryText(context.latestToolCall),
-    tokenUsage: supervisorTokenUsageText(context.tokenUsage),
-    utilization: supervisorContextUtilizationText(context.contextUtilization),
+    tokenUsage: supervisorTokenUsageText(context.tokenUsage ?? context.tokenState),
+    utilization: supervisorContextUtilizationText(context.contextUtilization ?? context.utilization),
     transcriptState: supervisorTranscriptStateText(context),
     resultBlockEvidence: supervisorResultBlockEvidenceText(context.resultBlockEvidence),
+    checkpointRef: context.checkpointRef ?? context.resultBlockEvidence?.checkpointRef ?? null,
     driftMarkers: Array.isArray(context.driftMarkers) && context.driftMarkers.length > 0
       ? context.driftMarkers
       : ['none']
@@ -11189,6 +11194,7 @@ function projectSupervisorContextStatus(contextStatus) {
 
 function projectSupervisorPendingResult(pendingResult) {
   const result = pendingResult ?? {};
+  const missing = pendingResult === null || pendingResult === undefined || result.missing === true;
 
   return {
     status: result.status ?? 'missing',
@@ -11196,8 +11202,8 @@ function projectSupervisorPendingResult(pendingResult) {
     eventToRegister: result.eventToRegister ?? null,
     evidenceRef: result.evidenceRef ?? null,
     parserReason: result.parserReason ?? null,
-    staleMarker: result.staleMarker ?? (result.stale === true ? 'stale' : 'fresh'),
-    missingMarker: result.missingMarker ?? (result.missing === true ? 'missing' : 'none')
+    staleMarker: result.staleMarker ?? (missing ? 'unknown' : result.stale === true ? 'stale' : 'fresh'),
+    missingMarker: result.missingMarker ?? (missing ? 'pendingResult' : 'none')
   };
 }
 
@@ -11214,7 +11220,9 @@ function projectSupervisorCommandBoundary(commandBoundary) {
     blockedFamilies: Array.isArray(boundary.blockedFamilies)
       ? boundary.blockedFamilies
       : Array.isArray(boundary.blockedCommandFamilies) ? boundary.blockedCommandFamilies : [],
-    confirmationFields: Array.isArray(boundary.confirmationFields) ? boundary.confirmationFields : [],
+    confirmationFields: Array.isArray(boundary.confirmationFields)
+      ? boundary.confirmationFields
+      : Array.isArray(boundary.confirmation?.fields) ? boundary.confirmation.fields : [],
     safePreview: boundary.safePreview ?? boundary.safeCommandPreview ?? null
   };
 }

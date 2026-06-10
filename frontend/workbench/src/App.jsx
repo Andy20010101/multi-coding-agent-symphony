@@ -1244,7 +1244,8 @@ function SupervisorDashboard({
   const fixtureMode = dashboard.sourceMode !== 'live';
   const copyPreviewsEnabled = dashboard.readOnly === true
     && dashboard.willMutate === false
-    && dashboard.commandBoundary.executionAvailable === false;
+    && dashboard.commandBoundary.executionAvailable === false
+    && dashboard.commandBoundary.copyOnly === true;
 
   return (
     <section className="supervisor-dashboard-route" aria-label="Supervisor Command Center">
@@ -1261,6 +1262,7 @@ function SupervisorDashboard({
         ]} />
       </div>
 
+      <OwnershipSummary ownership={dashboard.ownership} />
       <CommandBoundarySummary commandBoundary={dashboard.commandBoundary} />
 
       {fixtureMode ? (
@@ -1301,6 +1303,22 @@ function SupervisorDashboard({
         <OwnershipPanel ownership={dashboard.ownership} />
       </div>
     </section>
+  );
+}
+
+function OwnershipSummary({ ownership }) {
+  return (
+    <div className="supervisor-ownership-summary" aria-label="Ownership projected summary">
+      <strong>Ownership</strong>
+      <FieldList rows={[
+        ['orchestration owner', textValue(ownership.orchestrationOwner)],
+        ['daemon state', textValue(ownership.daemonState)],
+        ['delivery boundary', textValue(ownership.deliveryBoundary)],
+        ['active PR', textValue(ownership.activePr)],
+        ['branch', textValue(ownership.branch)],
+        ['controller intervention', textValue(ownership.controllerInterventionReason)]
+      ]} />
+    </div>
   );
 }
 
@@ -1424,7 +1442,8 @@ function ContextStatusPanel({ contextStatus }) {
         ['token usage', textValue(contextStatus.tokenUsage)],
         ['context utilization', textValue(contextStatus.utilization)],
         ['transcript state', textValue(contextStatus.transcriptState)],
-        ['result-block evidence', textValue(contextStatus.resultBlockEvidence)]
+        ['result-block evidence', textValue(contextStatus.resultBlockEvidence)],
+        ['checkpoint ref', textValue(contextStatus.checkpointRef)]
       ]} />
       <Subsection title="provider summaries">
         <CompactList items={contextStatus.providers.length === 0 ? ['missing contract field: contextStatus.providerSummaries'] : contextStatus.providers} />
@@ -1476,10 +1495,10 @@ function CommandBoundaryPanel({ commandBoundary, copyPreviewsEnabled = false }) 
         ['copyOnly', textValue(commandBoundary.copyOnly)]
       ]} />
       <Subsection title="allowed families">
-        <CompactList items={commandBoundary.allowedFamilies} />
+        <CommandFamilyList items={commandBoundary.allowedFamilies} />
       </Subsection>
       <Subsection title="blocked families">
-        <CompactList items={commandBoundary.blockedFamilies} />
+        <CommandFamilyList items={commandBoundary.blockedFamilies} blocked />
       </Subsection>
       <Subsection title="confirmation fields">
         <CompactList items={commandBoundary.confirmationFields} />
@@ -1497,21 +1516,25 @@ function GoalTimeline({ goalTimeline }) {
       title="Goal Timeline"
       state={`${goalTimeline.length} events`}
     >
-      <ol className="supervisor-timeline-list">
-        {goalTimeline.map((event) => (
-          <li key={event.eventId}>
-            <FieldList rows={[
-              ['event id', textValue(event.eventId)],
-              ['task', textValue(event.taskId)],
-              ['role', textValue(event.role)],
-              ['status', textValue(event.status)],
-              ['evidence ref', textValue(event.evidenceRef)],
-              ['timestamp', textValue(event.timestamp)],
-              ['hash state', textValue(event.hashState)]
-            ]} />
-          </li>
-        ))}
-      </ol>
+      {goalTimeline.length === 0 ? (
+        <EmptyBlock copy="goal timeline 未暴露。" />
+      ) : (
+        <ol className="supervisor-timeline-list">
+          {goalTimeline.map((event) => (
+            <li key={event.eventId}>
+              <FieldList rows={[
+                ['event id', textValue(event.eventId)],
+                ['task', textValue(event.taskId)],
+                ['role', textValue(event.role)],
+                ['status', textValue(event.status)],
+                ['evidence ref', textValue(event.evidenceRef)],
+                ['timestamp', textValue(event.timestamp)],
+                ['hash state', textValue(event.hashState)]
+              ]} />
+            </li>
+          ))}
+        </ol>
+      )}
     </SupervisorCard>
   );
 }
@@ -7645,6 +7668,26 @@ function CompactList({ items }) {
 
   return (
     <ul className="compact-list">
+      {normalizedItems.map((item) => (
+        <li key={item}>
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CommandFamilyList({ items, blocked = false }) {
+  const normalizedItems = Array.isArray(items)
+    ? items.filter((item) => typeof item === 'string' && item.trim() !== '')
+    : [];
+
+  if (normalizedItems.length === 0) {
+    return <EmptyBlock copy="未暴露。" />;
+  }
+
+  return (
+    <ul className={blocked ? 'command-family-list blocked-command-family-list' : 'command-family-list'}>
       {normalizedItems.map((item) => (
         <li key={item}>
           <span>{item}</span>

@@ -451,6 +451,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(defaultHtml, /class="workbench-shell supervisor-shell-route"/u);
       assert.match(defaultHtml, /supervisor read-only \/ fixture fallback/u);
       assert.match(defaultHtml, /Command Boundary projected summary/u);
+      assert.match(defaultHtml, /Ownership projected summary/u);
       assert.match(defaultHtml, /goal-supervisor-app-read-model\.v1/u);
       assert.match(defaultHtml, />goal id<\/dt><dd[^>]*>v44-4-workbench-supervisor-dashboard-prototype/u);
       assert.match(defaultHtml, />generated at<\/dt><dd[^>]*>2026-06-10T10:24:00\+08:00/u);
@@ -471,7 +472,7 @@ describe('v15 Workbench React/Vite shell', () => {
       const boundaryIndex = defaultHtml.indexOf('Command Boundary', pendingIndex);
       const timelineIndex = defaultHtml.indexOf('Goal Timeline');
       const gateIndex = defaultHtml.indexOf('Current Gate');
-      const ownershipIndex = defaultHtml.indexOf('Ownership');
+      const ownershipIndex = defaultHtml.indexOf('supervisor-card-ownership-title');
 
       for (const index of [goalIndex, actionIndex, leaseIndex, contextIndex, pendingIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
         assert.notEqual(index, -1);
@@ -490,6 +491,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(defaultHtml, /tag/u);
       assert.match(defaultHtml, /publish/u);
       assert.match(defaultHtml, /release closeout/u);
+      assert.doesNotMatch(defaultHtml, /href="(?:artifact:|docs\/plans\/|file:)/u);
       assert.match(leaseHtml, /lease-task-2-worker-001/u);
       assert.match(leaseHtml, /readable summary/u);
       assert.match(leaseHtml, /blocked while lease is healthy/u);
@@ -504,6 +506,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(blockedHtml, /closeout authorization<\/dt><dd[^>]*>blocked/u);
       assert.match(missingHtml, /missing contract field: contextStatus\.providerSummaries/u);
       assert.match(missingHtml, /pendingResult absent from fixture read model/u);
+      assert.match(missingHtml, /goal timeline 未暴露/u);
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -533,6 +536,9 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(fixtureSource, /blocked-gate/u);
     assert.match(fixtureSource, /missing-empty-context/u);
     assert.match(css, /\.supervisor-dashboard-grid[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/u);
+    assert.match(css, /\.supervisor-ownership-summary/u);
+    assert.match(css, /\.command-family-list[\s\S]*flex-wrap:\s*wrap/u);
+    assert.match(css, /\.blocked-command-family-list li/u);
     assert.match(css, /@media \(max-width: 920px\)[\s\S]*\.supervisor-dashboard-grid,[\s\S]*\.supervisor-timeline-list[\s\S]*grid-template-columns:\s*1fr/u);
     assert.doesNotMatch(supervisorSource, /fetch\(|confirmGoalEventPlan|GoalEventPlanPreview|<button\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|claude\/projects/u);
     assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
@@ -570,10 +576,16 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /result-awaits-registration/u);
       assert.match(html, /Copy preview: summarize pending result only\./u);
       assert.match(html, /blocked: active lease still healthy/u);
+      assert.match(html, /local-goal-supervisor-daemon/u);
+      assert.match(html, /external-orchestration-owner/u);
+      assert.match(html, /42000 \/ 200000/u);
+      assert.match(html, /21%/u);
       assert.match(html, /child-dispatch/u);
       assert.match(html, /event-log-write/u);
+      assert.match(html, /class="command-family-list blocked-command-family-list"/u);
       assert.match(html, /evt-live-task-3/u);
       assert.match(html, /blocked-without-operator-authorization/u);
+      assert.doesNotMatch(html, /href="(?:artifact:|docs\/plans\/|file:)/u);
       assert.doesNotMatch(html, /Release-ready|Healthy active lease|Pending result|Stale transcript|Blocked gate|Missing context/u);
       assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u);
     } finally {
@@ -648,7 +660,8 @@ describe('v15 Workbench React/Vite shell', () => {
           expected: [
             /missing contract field: contextStatus\.providerSummaries/u,
             />status<\/dt><dd[^>]*>missing/u,
-            />transcript<\/dt><dd class="missing-value">/u
+            />transcript<\/dt><dd class="missing-value">/u,
+            /goal timeline 未暴露/u
           ]
         }
       ];
@@ -665,8 +678,11 @@ describe('v15 Workbench React/Vite shell', () => {
         assert.match(html, /Active Lease/u, scenario.id);
         assert.match(html, /Pending Result/u, scenario.id);
         assert.match(html, /Current Gate/u, scenario.id);
+        assert.match(html, /Context Status/u, scenario.id);
+        assert.match(html, /Ownership/u, scenario.id);
         assert.match(html, /Command Boundary/u, scenario.id);
         assert.match(html, /source: \/api\/goals\/latest\/supervisor/u, scenario.id);
+        assert.doesNotMatch(html, /href="(?:artifact:|docs\/plans\/|file:)/u, scenario.id);
         assert.doesNotMatch(html, /supervisor-scenario/u, scenario.id);
         assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u, scenario.id);
 
@@ -1605,7 +1621,8 @@ function createGoalSupervisorRenderPayloadVariant(id) {
     return {
       ...base,
       contextStatus: {},
-      pendingResult: null
+      pendingResult: null,
+      goalTimeline: []
     };
   }
 

@@ -326,7 +326,8 @@ export const SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
       parserReason: 'pendingResult absent from fixture read model',
       staleMarker: 'unknown',
       missingMarker: 'pendingResult'
-    }
+    },
+    goalTimeline: []
   }))
 });
 
