@@ -5,16 +5,17 @@ Timezone: Asia/Shanghai
 Goal: `v44-3-app-contract-context-supervisor`
 Snapshot branch: `codex/v44-3-pr5-closeout-snapshot`
 Snapshot base: `26353f904937d8161302ca9fcf753f7d9dec7d11`
+Release-gate evidence refresh base: `916364a0b59c67d250766a06635c572e6dcdb5c2`
 
 ## State
 
 v44.3 has the backend app contract, read-only API and CLI surface, session context adapters, and conservative policy/command-boundary projection needed for a future Workbench or app shell to read supervisor state without reading runner internals or transcript files directly.
 
-This snapshot does not declare release readiness. It does not create a tag, publish a release, create a GitHub Release, run release closeout automation, or register any goal event. It is delivered through the normal PR branch and merge workflow only.
+The original PR-5 snapshot did not declare release readiness. This refreshed snapshot records the PR-5 merge, the release-gate static bundle fix, and the local release-gate command results needed for controlled `symphony goal gate` registration. It does not create a tag, publish a release, create a GitHub Release, or run release closeout automation.
 
 ## PR and commit record
 
-GitHub PR delivery has merged PR-0, PR-CI, and PR-1 through PR-4 into `main`. PR-5 is this docs-only closeout snapshot; it will receive its own merge commit when this PR is merged.
+GitHub PR delivery has merged PR-0, PR-CI, and PR-1 through PR-5 into `main`. Release-gate verification then found that `pnpm workbench:build` refreshed the committed Workbench static bundle, so PR #27 synced the generated asset before release gate registration.
 
 | Scope | GitHub PR | Branch / delivered head | Merge commit | Evidence |
 | --- | --- | --- | --- | --- |
@@ -24,7 +25,8 @@ GitHub PR delivery has merged PR-0, PR-CI, and PR-1 through PR-4 into `main`. PR
 | PR-2 projection API and CLI | #23 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/23` | `codex/v44-3-pr2-projection-api-cli` / `1fc6914` | `e339343ddae7f116b479763ce63ff8254e3e195e` | `docs/plans/v44-3-task-2-main-verification-evidence-2026-06-10.md` |
 | PR-3 session hook runtime | #24 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/24` | `codex/v44-3-pr3-session-hook-runtime` / `973bc70` | `13815f1f0743c2c853f85849427455b57bac14a2` | `docs/plans/v44-3-task-3-main-verification-evidence-2026-06-10.md` |
 | PR-4 context policy and command boundaries | #25 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/25` | `codex/v44-3-pr4-context-policy-command-boundaries` / `fee0ece` | `9283b365514394fc1443c184460b2c2cef90f331` | `docs/plans/v44-3-task-4-main-verification-evidence-2026-06-10.md` |
-| PR-5 closeout snapshot | pending PR for `codex/v44-3-pr5-closeout-snapshot` | this branch | pending | this document |
+| PR-5 closeout snapshot | #26 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/26` | `codex/v44-3-pr5-closeout-snapshot` / `26ea94f` | `d962cf653c169053812218a857d8858bee1ffdad` | this document |
+| Release-gate static bundle sync | #27 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/27` | `codex/v44-3-workbench-static-sync` / `90cddf8` | `916364a0b59c67d250766a06635c572e6dcdb5c2` | `src/symphony/workbench-static/index.html`; `src/symphony/workbench-static/assets/index-Ke5XVraX.js` |
 
 PR-2 includes delivery commit `1fc6914`, which updates `tests/workbench-shell.test.js` so the static Workbench API allowlist includes the new supervisor routes. PR-3 and PR-4 include merge commits from latest `main` so the stacked branches do not reverse that fix.
 
@@ -92,7 +94,7 @@ Current policy:
 - Mutation stage runs only by manual `workflow_dispatch` input or by a mutation label on a contract-impacting pull request.
 - Real CLI remains opt-in through workflow input or repository variable.
 
-This PR-5 snapshot is docs-only. Mutation, audit, doctor, provider CLI, real CLI, tag, release push, publish, GitHub Release, and release closeout commands are intentionally outside this phase.
+The PR-5 snapshot was docs-only. PR #27 was limited to the Vite-generated Workbench static JS bundle and HTML entrypoint reference. Mutation, audit, doctor, provider CLI, real CLI, tag, release push, publish, GitHub Release, and release closeout commands remain outside this phase.
 
 PR delivery CI status:
 
@@ -102,6 +104,8 @@ PR delivery CI status:
 | PR-2 #23 | `changes`, `code-focused`, `build`, and `verify` passed after the allowlist test fix; `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
 | PR-3 #24 | `changes`, `code-focused`, and `verify` passed; `build`, `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
 | PR-4 #25 | `changes`, `code-focused`, and `verify` passed; `build`, `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
+| PR-5 #26 | `changes`, `docs`, and `verify` passed; `build`, `code-focused`, `mutation-stage`, and `real-cli` were skipped by path policy. |
+| Release-gate fix #27 | `changes`, `code-focused`, and `verify` passed; `build`, `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
 
 ## Verification record
 
@@ -157,7 +161,20 @@ Delivery coordinator commands run after PR-1 through PR-4 were merged:
 - `pnpm test`
 - `git diff --check origin/main...HEAD`
 
-Commands intentionally not run for this PR-5 snapshot:
+Release-gate refresh commands run after PR #26 and PR #27 were merged:
+
+- `gh pr view 26 --json state,mergedAt,mergeCommit,headRefName,title,url`
+- `gh pr view 27 --json state,mergedAt,mergeCommit,headRefName,title,url`
+- `gh pr checks 26`
+- `gh pr checks 27`
+- `pnpm check`
+- `pnpm test`
+- `pnpm workbench:build`
+- `git diff --check`
+- `git status --short --branch`
+- `gh pr view 27 --json state,mergedAt,mergeCommit,title,url`
+
+Commands intentionally not run for PR-5 or the release-gate refresh:
 
 - `pnpm test:mutation:gate`
 - `pnpm mcas doctor`
@@ -165,7 +182,6 @@ Commands intentionally not run for this PR-5 snapshot:
 - provider CLI or real CLI commands
 - daemon start or stop commands
 - child dispatch commands
-- goal event registration commands
 - tag, publish, GitHub Release, or release closeout commands
 
 ## Remaining risks
@@ -174,9 +190,7 @@ Provider JSONL schema drift may keep some `sessionContext.v1` fields as `missing
 
 The policy ordering is deliberately conservative. Gate blocks and incomplete confirm-required previews are evaluated before pending result checkpointing, and pending result or compact decisions are evaluated before drift recovery.
 
-The Workbench has only a backend route allowlist update for this contract. A future UI PR still needs to decide how to present the read model without reintroducing direct ledger, event log, runner, or transcript reads.
-
-PR-5 cannot record its own eventual merge commit before it is merged. Capture that value from GitHub after this PR lands if release packaging needs a complete PR-5 row.
+The Workbench has only a backend route allowlist update and regenerated static bundle for this contract. A future UI PR still needs to decide how to present the read model without reintroducing direct ledger, event log, runner, or transcript reads.
 
 ## Rollback path
 
