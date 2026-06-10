@@ -943,8 +943,8 @@ h4 {
 .supervisor-ownership-summary .field-row,
 .supervisor-boundary-summary .field-row {
   display: grid;
-  grid-template-columns: minmax(74px, 0.42fr) minmax(0, 0.58fr);
-  gap: 5px;
+  grid-template-columns: 1fr;
+  gap: 2px;
   min-width: 0;
   border-top: 0;
   padding: 0;
@@ -1152,10 +1152,41 @@ h4 {
     padding-top: 12px;
   }
 
+  .supervisor-topbar {
+    order: 1;
+  }
+
+  .supervisor-boundary-summary {
+    order: 2;
+  }
+
+  .supervisor-ownership-summary {
+    order: 3;
+    display: none;
+  }
+
+  .supervisor-scenario-nav {
+    order: 4;
+  }
+
+  .supervisor-fixture-note {
+    order: 5;
+  }
+
+  .supervisor-dashboard-grid {
+    order: 6;
+  }
+
   .supervisor-topbar .field-list,
   .supervisor-ownership-summary .field-list,
-  .supervisor-boundary-summary .field-list,
-  .supervisor-scenario-nav,
+  .supervisor-boundary-summary .field-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .supervisor-scenario-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .supervisor-card .field-list {
     grid-template-columns: 1fr;
   }
