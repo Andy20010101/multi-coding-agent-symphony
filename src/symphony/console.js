@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { createServer } from 'node:http';
 import { lstat, open, realpath, stat } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 
@@ -198,6 +197,15 @@ import {
   writeJsonResponse,
   writeWorkbenchStaticResponse
 } from './console/index.js';
+import { createConsoleRouteRegistry } from './console/route-registry.js';
+import {
+  createConsoleHttpServer,
+  startConsoleHttpServer,
+  writeConsoleMethodNotAllowedResponse
+} from './console/server.js';
+import { createGoalRoutes } from './console/routes/goals.js';
+import { createReadinessRoutes } from './console/routes/readiness.js';
+import { createSummaryRoutes } from './console/routes/summary.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
@@ -909,11 +917,42 @@ export function createSymphonyConsoleServer({
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS,
   runtimeStartedAt = new Date().toISOString()
 } = {}) {
-  return createServer(async (request, response) => {
+  const appRouteRegistry = createConsoleRouteRegistry({
+    routes: [
+      createSummaryRoutes({
+        buildConsoleSnapshot
+      }),
+      createReadinessRoutes({
+        buildConsoleReadiness,
+        buildLocalRuntimeHealth
+      }),
+      createGoalRoutes({
+        buildGoalSupervisorAppReadModelFromContracts
+      })
+    ]
+  });
+
+  return createConsoleHttpServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     const method = request.method ?? 'UNKNOWN';
 
     try {
+      const appRouteHandled = await appRouteRegistry.handle({
+        response,
+        url,
+        method,
+        stateDir,
+        cwd,
+        env,
+        runner,
+        readinessTimeoutMs,
+        runtimeStartedAt
+      });
+
+      if (appRouteHandled) {
+        return;
+      }
+
       if (method === 'POST') {
         const controlledProviderRunnerConfirmRequest = parseControlledProviderRunnerConfirmRequestPath(url.pathname, url.searchParams);
 
@@ -1010,10 +1049,8 @@ export function createSymphonyConsoleServer({
           return;
         }
 
-        writeApiErrorResponse(response, {
-          status: 405,
-          code: 'method-not-allowed',
-          message: 'Console API is read-only except controlled goal event plan confirm, controlled implementation run confirm, controlled verification run confirm, controlled provider runner confirm, controlled adoption plan freeze, and controlled adoption confirm.',
+        writeConsoleMethodNotAllowedResponse({
+          response,
           route: url.pathname,
           method
         });
@@ -1021,10 +1058,8 @@ export function createSymphonyConsoleServer({
       }
 
       if (method !== 'GET') {
-        writeApiErrorResponse(response, {
-          status: 405,
-          code: 'method-not-allowed',
-          message: 'Console API is read-only.',
+        writeConsoleMethodNotAllowedResponse({
+          response,
           route: url.pathname,
           method
         });
@@ -1033,25 +1068,6 @@ export function createSymphonyConsoleServer({
 
       if (url.pathname === '/') {
         writeHtmlResponse(response, renderConsoleHtml());
-        return;
-      }
-
-      if (url.pathname === '/api/health') {
-        if (hasSearchParams(url.searchParams)) {
-          writeApiErrorResponse(response, {
-            status: 400,
-            code: 'invalid-health-request',
-            message: 'Runtime health does not accept query parameters.',
-            route: url.pathname,
-            method
-          });
-          return;
-        }
-
-        writeJsonResponse(response, 200, await buildLocalRuntimeHealth({
-          cwd,
-          startedAt: runtimeStartedAt
-        }));
         return;
       }
 
@@ -1337,22 +1353,6 @@ export function createSymphonyConsoleServer({
         return;
       }
 
-      if (url.pathname === '/api/summary') {
-        writeJsonResponse(response, 200, await buildConsoleSnapshot({ stateDir }));
-        return;
-      }
-
-      if (url.pathname === '/api/readiness') {
-        writeJsonResponse(response, 200, await buildConsoleReadiness({
-          stateDir,
-          cwd,
-          env,
-          runner,
-          timeoutMs: readinessTimeoutMs
-        }));
-        return;
-      }
-
       if (url.pathname === '/api/goals') {
         if (hasSearchParams(url.searchParams)) {
           writeApiErrorResponse(response, {
@@ -1407,19 +1407,6 @@ export function createSymphonyConsoleServer({
           response,
           stateDir,
           request: goalOperationsRequest,
-          route: url.pathname,
-          method
-        });
-        return;
-      }
-
-      const goalSupervisorRequest = parseGoalSupervisorRequestPath(url.pathname, url.searchParams);
-
-      if (goalSupervisorRequest !== null) {
-        await writeGoalSupervisorResponse({
-          response,
-          stateDir,
-          request: goalSupervisorRequest,
           route: url.pathname,
           method
         });
@@ -2438,23 +2425,11 @@ export async function startSymphonyConsoleServer({
     readinessTimeoutMs
   });
 
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, host, () => {
-      server.off('error', reject);
-      resolve();
-    });
-  });
-
-  const address = server.address();
-  const actualPort = typeof address === 'object' && address !== null ? address.port : port;
-
-  return {
+  return await startConsoleHttpServer({
     server,
     host,
-    port: actualPort,
-    url: `http://${host}:${actualPort}/`
-  };
+    port
+  });
 }
 
 async function writeGoalProgressResponse({ response, stateDir, request, route, method }) {
@@ -2619,18 +2594,6 @@ async function writeGoalOperationsResponse({ response, stateDir, request, route,
 
     throw error;
   }
-}
-
-async function writeGoalSupervisorResponse({ response, stateDir, request, route, method }) {
-  if (request.kind === 'invalid') {
-    writeInvalidGoalRunbookControlResponse({ response, route, method });
-    return;
-  }
-
-  writeJsonResponse(response, 200, await buildGoalSupervisorAppReadModelFromContracts({
-    stateDir,
-    goalId: request.goalId
-  }));
 }
 
 async function writeGoalEventPlanPreviewResponse({ response, stateDir, request, route, method }) {
@@ -4621,14 +4584,6 @@ function parseGoalOperationsRequestPath(pathname, searchParams = new URLSearchPa
     kind: 'goal-operations',
     goalId: decoded.value
   };
-}
-
-function parseGoalSupervisorRequestPath(pathname, searchParams = new URLSearchParams()) {
-  return parseGoalRunbookControlRequestPath({
-    pathname,
-    searchParams,
-    suffix: 'supervisor'
-  });
 }
 
 function parseGoalEventPlanPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
