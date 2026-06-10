@@ -228,6 +228,32 @@ describe('v15 Workbench read-only API client', () => {
     }
   });
 
+  it('projects the goal supervisor app read model into the Workbench supervisor dashboard', () => {
+    const supervisor = createGoalSupervisorAppReadModelPayload();
+    const model = projectWorkbenchContracts({
+      goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
+    });
+    const dashboard = model.supervisorDashboard;
+
+    assert.equal(dashboard.state, 'available');
+    assert.equal(dashboard.source, '/api/goals/latest/supervisor');
+    assert.equal(dashboard.contractName, 'goal-supervisor-app-read-model.v1');
+    assert.equal(dashboard.readOnly, true);
+    assert.equal(dashboard.willMutate, false);
+    assert.equal(dashboard.goalSnapshot.goalId, 'v44-4-live-supervisor');
+    assert.equal(dashboard.goalSnapshot.completedTasks, 2);
+    assert.equal(dashboard.goalSnapshot.totalTasks, 4);
+    assert.equal(dashboard.recommendedNextAction.actionId, 'checkpoint');
+    assert.equal(dashboard.recommendedNextAction.targetTask, 'task-3');
+    assert.equal(dashboard.recommendedNextAction.safePreview, 'Copy preview: summarize pending result only.');
+    assert.equal(dashboard.activeLease.duplicateDispatchGuard, 'blocked: active lease still healthy');
+    assert.deepEqual(dashboard.commandBoundary.blockedFamilies, ['child-dispatch', 'event-log-write']);
+    assert.equal(dashboard.goalTimeline[0].hashState, 'linked');
+    assert.equal(dashboard.currentGate.closeoutAuthorization, 'blocked-without-operator-authorization');
+    assert.equal(dashboard.ownership.branch, 'codex/v44-4-pr2-supervisor-route-api-client');
+    assert.equal(model.routeStates.find((route) => route.id === 'goalSupervisor').state, 'ready');
+  });
+
   it('projects the Workbench Action Registry panel from backend action contracts only', () => {
     const manifest = createActionManifestPayload();
     const availability = createActionAvailabilityPayload();
@@ -4818,6 +4844,141 @@ function createWorkbenchResult(routeId, data) {
     routeDescriptor: route,
     httpStatus: 200,
     data
+  };
+}
+
+function createGoalSupervisorAppReadModelPayload() {
+  return {
+    contractName: 'goal-supervisor-app-read-model.v1',
+    contractVersion: 1,
+    readOnly: true,
+    willMutate: false,
+    generatedAt: '2026-06-10T12:04:00.000Z',
+    goalSnapshot: {
+      goalId: 'v44-4-live-supervisor',
+      title: 'Live supervisor route projection',
+      totalTaskCount: 4,
+      completedCount: 2,
+      activeTask: 'task-3',
+      activeRole: 'worker',
+      releaseReadiness: 'not-ready',
+      blockerCount: 1,
+      sourceContracts: ['goal-supervisor-app-read-model.v1', 'goal-progress-ledger.v1'],
+      generatedAt: '2026-06-10T12:04:00.000Z'
+    },
+    recommendedNextAction: {
+      actionId: 'checkpoint',
+      label: 'Checkpoint pending result',
+      reason: 'result-awaits-registration',
+      targetRole: 'worker',
+      taskId: 'task-3',
+      safeCommandPreview: 'Copy preview: summarize pending result only.',
+      checkpointRef: 'artifact:v44-4:pending-result',
+      waitPolicy: {
+        staleThresholdMs: 600000,
+        activeLeaseAgeMs: 120000
+      },
+      blockedFields: ['event-log-write']
+    },
+    activeLease: {
+      leaseId: 'lease-live-task-3',
+      threadId: '019ea62d-live-task-3',
+      taskId: 'task-3',
+      role: 'worker',
+      phase: 'implement',
+      status: 'healthy',
+      startedAt: '2026-06-10T11:50:00.000Z',
+      updatedAt: '2026-06-10T12:02:00.000Z',
+      ageMs: 120000,
+      duplicateDispatchGuard: {
+        blocked: true,
+        reason: 'active lease still healthy'
+      }
+    },
+    contextStatus: {
+      sessionSourceSummaries: [{
+        provider: 'codex',
+        status: 'available',
+        threadId: '019ea62d-live-task-3',
+        latestTurnAt: '2026-06-10T12:02:00.000Z'
+      }],
+      transcriptAvailability: 'readable-summary',
+      exchangeCount: 18,
+      latestToolCall: {
+        name: 'node --test',
+        status: 'completed',
+        updatedAt: '2026-06-10T12:01:00.000Z'
+      },
+      latestTurnState: {
+        status: 'completed'
+      },
+      tokenUsage: {
+        usedTokens: 42000,
+        limitTokens: 200000
+      },
+      contextUtilization: {
+        ratio: 0.21
+      },
+      staleTranscriptState: {
+        stale: false,
+        reason: null
+      },
+      missingTranscriptState: {
+        missing: false,
+        reason: null
+      },
+      resultBlockEvidence: {
+        status: 'present',
+        present: true,
+        evidenceRef: 'artifact:v44-4:pending-result'
+      },
+      driftMarkers: []
+    },
+    pendingResult: {
+      source: 'result-intake',
+      status: 'pending',
+      eventToRegister: 'worker.evidence-recorded',
+      evidenceRef: 'artifact:v44-4:pending-result',
+      parserReason: 'valid-result-awaits-registration',
+      stale: false,
+      missing: false,
+      resultId: 'result-live-task-3'
+    },
+    currentGate: {
+      gateId: 'release.ready',
+      requiredCommandFamily: 'release-gate',
+      status: 'blocked',
+      evidenceRequirement: 'main verification evidence',
+      blockingReason: 'missing main verification evidence ref',
+      closeoutAuthorizationState: 'blocked-without-operator-authorization'
+    },
+    ownership: {
+      orchestrationOwner: 'local-goal-supervisor-daemon',
+      deliveryBoundary: 'pull-request',
+      activePr: '#44',
+      branch: 'codex/v44-4-pr2-supervisor-route-api-client',
+      rollbackBoundary: 'revert PR-2',
+      daemonState: 'external-orchestration-owner',
+      controllerInterventionReason: null
+    },
+    commandBoundary: {
+      state: 'disabled',
+      executionAvailable: false,
+      copyOnly: true,
+      allowedCommandFamilies: [],
+      blockedCommandFamilies: ['child-dispatch', 'event-log-write'],
+      safeCommandPreview: null,
+      confirmationFields: []
+    },
+    goalTimeline: [{
+      eventId: 'evt-live-task-3',
+      taskId: 'task-3',
+      role: 'worker',
+      status: 'pending',
+      evidenceRef: 'artifact:v44-4:pending-result',
+      hashChainState: 'linked',
+      occurredAt: '2026-06-10T12:03:00.000Z'
+    }]
   };
 }
 

@@ -947,6 +947,7 @@ export function projectWorkbenchContracts(results) {
   const goalOperationsData = dataFrom(results.goalOperations);
   const goalRunbookData = dataFrom(results.goalRunbook);
   const goalNextActionData = dataFrom(results.goalNextAction);
+  const goalSupervisorData = dataFrom(results.goalSupervisor);
   const goalPromptPackData = dataFrom(results.goalPromptPack);
   const goalReviewerPromptPackData = dataFrom(results.goalReviewerPromptPack);
   const goalCloseoutData = dataFrom(results.goalCloseout);
@@ -1270,6 +1271,10 @@ export function projectWorkbenchContracts(results) {
       result: results.goalOperations,
       operations: goalOperationsData,
       nextAction: goalNextActionData
+    }),
+    supervisorDashboard: projectSupervisorDashboard({
+      result: results.goalSupervisor,
+      supervisor: goalSupervisorData
     }),
     activeGoal: activeGoalControl,
     goalDraftHandoff: activeGoalControl.goalDraftHandoff,
@@ -11056,6 +11061,378 @@ function projectErrorEnvelope(envelope) {
     route: valueState(error?.route),
     method: valueState(error?.method)
   };
+}
+
+function projectSupervisorDashboard({
+  result,
+  supervisor
+}) {
+  const route = projectRouteState(
+    result?.routeDescriptor ?? READONLY_API_ROUTES.find((candidate) => candidate.id === 'goalSupervisor'),
+    result
+  );
+
+  if (supervisor?.contractName !== GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME) {
+    return {
+      state: 'unavailable',
+      summary: route.error ?? 'goal supervisor read model 未暴露 / 不可用',
+      route
+    };
+  }
+
+  const commandBoundary = projectSupervisorCommandBoundary(supervisor.commandBoundary);
+
+  return {
+    state: 'available',
+    id: 'live-supervisor',
+    label: 'Live supervisor',
+    summary: 'Live read-only supervisor state from the goal supervisor route.',
+    sourceMode: 'live',
+    source: route.path,
+    route,
+    contractName: supervisor.contractName,
+    contractVersion: supervisor.contractVersion,
+    generatedAt: supervisor.generatedAt,
+    readOnly: supervisor.readOnly,
+    willMutate: supervisor.willMutate,
+    goalSnapshot: projectSupervisorGoalSnapshot(supervisor.goalSnapshot, supervisor.generatedAt),
+    recommendedNextAction: projectSupervisorRecommendedNextAction(
+      supervisor.recommendedNextAction,
+      commandBoundary
+    ),
+    activeLease: projectSupervisorActiveLease(supervisor.activeLease),
+    contextStatus: projectSupervisorContextStatus(supervisor.contextStatus),
+    pendingResult: projectSupervisorPendingResult(supervisor.pendingResult),
+    currentGate: projectSupervisorCurrentGate(supervisor.currentGate),
+    ownership: projectSupervisorOwnership(supervisor.ownership),
+    commandBoundary,
+    goalTimeline: projectSupervisorTimeline(supervisor.goalTimeline)
+  };
+}
+
+function projectSupervisorGoalSnapshot(goalSnapshot, generatedAt) {
+  const snapshot = goalSnapshot ?? {};
+
+  return {
+    goalId: snapshot.goalId ?? null,
+    title: snapshot.title ?? null,
+    activeTask: snapshot.activeTask ?? null,
+    activeRole: snapshot.activeRole ?? null,
+    completedTasks: snapshot.completedTasks ?? snapshot.completedCount ?? null,
+    totalTasks: snapshot.totalTasks ?? snapshot.totalTaskCount ?? null,
+    blockerCount: snapshot.blockerCount ?? null,
+    releaseReadiness: snapshot.releaseReadiness ?? null,
+    sourceContracts: Array.isArray(snapshot.sourceContracts) ? snapshot.sourceContracts : [],
+    generatedAt: snapshot.generatedAt ?? generatedAt ?? null
+  };
+}
+
+function projectSupervisorRecommendedNextAction(recommendedNextAction, commandBoundary) {
+  const action = recommendedNextAction ?? {};
+
+  return {
+    actionId: action.actionId ?? null,
+    label: action.label ?? null,
+    reason: action.reason ?? null,
+    targetRole: action.targetRole ?? null,
+    targetTask: action.targetTask ?? action.taskId ?? null,
+    state: action.state ?? action.actionId ?? null,
+    checkpointRef: action.checkpointRef ?? null,
+    waitPolicy: supervisorWaitPolicyText(action.waitPolicy),
+    staleThreshold: supervisorStaleThresholdText(action.waitPolicy),
+    blockedFields: Array.isArray(action.blockedFields) ? action.blockedFields : [],
+    safePreview: action.safePreview ?? action.safeCommandPreview ?? commandBoundary.safePreview ?? null
+  };
+}
+
+function projectSupervisorActiveLease(activeLease) {
+  const lease = activeLease ?? {};
+
+  return {
+    leaseId: lease.leaseId ?? null,
+    threadId: lease.threadId ?? null,
+    taskId: lease.taskId ?? null,
+    role: lease.role ?? null,
+    phase: lease.phase ?? null,
+    status: lease.status ?? null,
+    startedAt: lease.startedAt ?? null,
+    updatedAt: lease.updatedAt ?? null,
+    age: supervisorAgeText(lease.age ?? lease.ageMs),
+    duplicateDispatchGuard: supervisorDispatchGuardText(lease.duplicateDispatchGuard)
+  };
+}
+
+function projectSupervisorContextStatus(contextStatus) {
+  const context = contextStatus ?? {};
+
+  return {
+    state: supervisorContextState(context),
+    providers: supervisorProviderSummaryTexts(context.sessionSourceSummaries ?? context.providers),
+    transcriptAvailability: context.transcriptAvailability ?? null,
+    exchangeCount: context.exchangeCount ?? null,
+    latestTurn: supervisorObjectSummaryText(context.latestTurnState),
+    latestToolCall: supervisorObjectSummaryText(context.latestToolCall),
+    tokenUsage: supervisorTokenUsageText(context.tokenUsage),
+    utilization: supervisorContextUtilizationText(context.contextUtilization),
+    transcriptState: supervisorTranscriptStateText(context),
+    resultBlockEvidence: supervisorResultBlockEvidenceText(context.resultBlockEvidence),
+    driftMarkers: Array.isArray(context.driftMarkers) && context.driftMarkers.length > 0
+      ? context.driftMarkers
+      : ['none']
+  };
+}
+
+function projectSupervisorPendingResult(pendingResult) {
+  const result = pendingResult ?? {};
+
+  return {
+    status: result.status ?? 'missing',
+    source: result.source ?? null,
+    eventToRegister: result.eventToRegister ?? null,
+    evidenceRef: result.evidenceRef ?? null,
+    parserReason: result.parserReason ?? null,
+    staleMarker: result.staleMarker ?? (result.stale === true ? 'stale' : 'fresh'),
+    missingMarker: result.missingMarker ?? (result.missing === true ? 'missing' : 'none')
+  };
+}
+
+function projectSupervisorCommandBoundary(commandBoundary) {
+  const boundary = commandBoundary ?? {};
+
+  return {
+    state: boundary.state ?? 'disabled',
+    executionAvailable: boundary.executionAvailable === true,
+    copyOnly: boundary.copyOnly === true,
+    allowedFamilies: Array.isArray(boundary.allowedFamilies)
+      ? boundary.allowedFamilies
+      : Array.isArray(boundary.allowedCommandFamilies) ? boundary.allowedCommandFamilies : [],
+    blockedFamilies: Array.isArray(boundary.blockedFamilies)
+      ? boundary.blockedFamilies
+      : Array.isArray(boundary.blockedCommandFamilies) ? boundary.blockedCommandFamilies : [],
+    confirmationFields: Array.isArray(boundary.confirmationFields) ? boundary.confirmationFields : [],
+    safePreview: boundary.safePreview ?? boundary.safeCommandPreview ?? null
+  };
+}
+
+function projectSupervisorCurrentGate(currentGate) {
+  const gate = currentGate ?? {};
+
+  return {
+    gateId: gate.gateId ?? null,
+    status: gate.status ?? null,
+    requiredCommandFamily: gate.requiredCommandFamily ?? null,
+    blockingReason: gate.blockingReason ?? null,
+    evidenceRequirement: gate.evidenceRequirement ?? null,
+    closeoutAuthorization: gate.closeoutAuthorization ?? gate.closeoutAuthorizationState ?? null
+  };
+}
+
+function projectSupervisorOwnership(ownership) {
+  const owner = ownership ?? {};
+
+  return {
+    orchestrationOwner: owner.orchestrationOwner ?? null,
+    deliveryBoundary: owner.deliveryBoundary ?? null,
+    activePr: owner.activePr ?? null,
+    branch: owner.branch ?? null,
+    rollbackBoundary: owner.rollbackBoundary ?? null,
+    daemonState: owner.daemonState ?? null,
+    controllerInterventionReason: owner.controllerInterventionReason ?? null
+  };
+}
+
+function projectSupervisorTimeline(goalTimeline) {
+  if (!Array.isArray(goalTimeline)) {
+    return [];
+  }
+
+  return goalTimeline.map((event, index) => ({
+    eventId: event?.eventId ?? `event-${index}`,
+    taskId: event?.taskId ?? null,
+    role: event?.role ?? null,
+    status: event?.status ?? null,
+    evidenceRef: event?.evidenceRef ?? null,
+    timestamp: event?.timestamp ?? event?.occurredAt ?? null,
+    hashState: event?.hashState ?? event?.hashChainState ?? null
+  }));
+}
+
+function supervisorWaitPolicyText(waitPolicy) {
+  if (waitPolicy === null || waitPolicy === undefined) {
+    return null;
+  }
+
+  if (typeof waitPolicy !== 'object' || Array.isArray(waitPolicy)) {
+    return String(waitPolicy);
+  }
+
+  return Object.entries(waitPolicy)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(', ') || null;
+}
+
+function supervisorStaleThresholdText(waitPolicy) {
+  if (waitPolicy === null || waitPolicy === undefined || typeof waitPolicy !== 'object' || Array.isArray(waitPolicy)) {
+    return null;
+  }
+
+  return supervisorDurationText(waitPolicy.staleThresholdMs);
+}
+
+function supervisorAgeText(age) {
+  if (typeof age === 'string') {
+    return age;
+  }
+
+  return supervisorDurationText(age);
+}
+
+function supervisorDurationText(value) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  if (value < 1000) {
+    return `${value}ms`;
+  }
+
+  if (value < 60000) {
+    return `${Math.round(value / 1000)}s`;
+  }
+
+  return `${Math.round(value / 60000)}m`;
+}
+
+function supervisorDispatchGuardText(duplicateDispatchGuard) {
+  if (typeof duplicateDispatchGuard === 'string') {
+    return duplicateDispatchGuard;
+  }
+
+  if (duplicateDispatchGuard === null || duplicateDispatchGuard === undefined || typeof duplicateDispatchGuard !== 'object') {
+    return null;
+  }
+
+  const state = duplicateDispatchGuard.blocked === true ? 'blocked' : 'available';
+  const reason = duplicateDispatchGuard.reason ?? null;
+
+  return reason === null ? state : `${state}: ${reason}`;
+}
+
+function supervisorContextState(context) {
+  if (context?.missingTranscriptState?.missing === true) {
+    return 'missing';
+  }
+
+  if (context?.staleTranscriptState?.stale === true) {
+    return 'stale';
+  }
+
+  if (context?.transcriptAvailability === undefined || context?.transcriptAvailability === null) {
+    return 'missing';
+  }
+
+  return 'available';
+}
+
+function supervisorProviderSummaryTexts(providerSummaries) {
+  if (!Array.isArray(providerSummaries)) {
+    return [];
+  }
+
+  return providerSummaries.map((provider) => {
+    if (typeof provider === 'string') {
+      return provider;
+    }
+
+    return [
+      provider?.provider,
+      provider?.status,
+      provider?.threadId
+    ].filter(isNonEmptyString).join(': ');
+  }).filter(isNonEmptyString);
+}
+
+function supervisorObjectSummaryText(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return String(value);
+  }
+
+  return Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== null && entryValue !== undefined && entryValue !== '')
+    .map(([key, entryValue]) => `${key}: ${entryValue}`)
+    .join(', ') || null;
+}
+
+function supervisorTokenUsageText(tokenUsage) {
+  if (tokenUsage === null || tokenUsage === undefined) {
+    return null;
+  }
+
+  if (typeof tokenUsage !== 'object' || Array.isArray(tokenUsage)) {
+    return String(tokenUsage);
+  }
+
+  const used = tokenUsage.usedTokens ?? tokenUsage.used ?? tokenUsage.inputTokens ?? null;
+  const limit = tokenUsage.limitTokens ?? tokenUsage.limit ?? tokenUsage.contextWindow ?? null;
+
+  if (used !== null && limit !== null) {
+    return `${used} / ${limit}`;
+  }
+
+  return supervisorObjectSummaryText(tokenUsage);
+}
+
+function supervisorContextUtilizationText(contextUtilization) {
+  if (contextUtilization === null || contextUtilization === undefined) {
+    return null;
+  }
+
+  if (typeof contextUtilization !== 'object' || Array.isArray(contextUtilization)) {
+    return String(contextUtilization);
+  }
+
+  if (Number.isFinite(contextUtilization.percent)) {
+    return `${contextUtilization.percent}%`;
+  }
+
+  if (Number.isFinite(contextUtilization.ratio)) {
+    return `${Math.round(contextUtilization.ratio * 100)}%`;
+  }
+
+  return supervisorObjectSummaryText(contextUtilization);
+}
+
+function supervisorTranscriptStateText(context) {
+  if (context?.missingTranscriptState?.missing === true) {
+    return `missing${context.missingTranscriptState.reason ? `: ${context.missingTranscriptState.reason}` : ''}`;
+  }
+
+  if (context?.staleTranscriptState?.stale === true) {
+    return `stale${context.staleTranscriptState.reason ? `: ${context.staleTranscriptState.reason}` : ''}`;
+  }
+
+  return 'fresh';
+}
+
+function supervisorResultBlockEvidenceText(resultBlockEvidence) {
+  if (resultBlockEvidence === null || resultBlockEvidence === undefined) {
+    return null;
+  }
+
+  if (typeof resultBlockEvidence !== 'object' || Array.isArray(resultBlockEvidence)) {
+    return String(resultBlockEvidence);
+  }
+
+  return firstNonEmptyString(
+    resultBlockEvidence.evidenceRef,
+    resultBlockEvidence.sourceRef,
+    resultBlockEvidence.status
+  );
 }
 
 function projectRouteState(route, result) {

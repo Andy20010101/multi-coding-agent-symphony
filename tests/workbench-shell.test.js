@@ -449,7 +449,7 @@ describe('v15 Workbench React/Vite shell', () => {
 
       assert.match(defaultHtml, /Supervisor Command Center/u);
       assert.match(defaultHtml, /class="workbench-shell supervisor-shell-route"/u);
-      assert.match(defaultHtml, /fixture-only \/ no live supervisor API/u);
+      assert.match(defaultHtml, /supervisor read-only \/ fixture fallback/u);
       assert.match(defaultHtml, /goal-supervisor-app-read-model\.v1/u);
       assert.match(defaultHtml, />goal id<\/dt><dd[^>]*>v44-4-workbench-supervisor-dashboard-prototype/u);
       assert.match(defaultHtml, />generated at<\/dt><dd[^>]*>2026-06-10T10:24:00\+08:00/u);
@@ -523,7 +523,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(app, new RegExp(`function ${componentName}\\b`, 'u'));
     }
 
-    assert.match(app, /selectedSupervisorDashboardFixture/u);
+    assert.match(app, /selectedSupervisorDashboard/u);
     assert.match(app, /\/workbench\/supervisor\//u);
     assert.match(fixtureSource, /release-ready/u);
     assert.match(fixtureSource, /healthy-active-lease/u);
@@ -535,6 +535,47 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(css, /@media \(max-width: 920px\)[\s\S]*\.supervisor-dashboard-grid,[\s\S]*\.supervisor-timeline-list[\s\S]*grid-template-columns:\s*1fr/u);
     assert.doesNotMatch(supervisorSource, /fetch\(|confirmGoalEventPlan|GoalEventPlanPreview|<button\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|claude\/projects/u);
     assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
+  });
+
+  it('renders the v44.4 Supervisor Command Center from the projected read-only API model when available', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const viewState = {
+        phase: 'ready',
+        model: createWorkbenchRenderModelWithSupervisor()
+      };
+      const html = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
+
+      assert.match(html, /Supervisor Command Center/u);
+      assert.match(html, />goal id<\/dt><dd[^>]*>v44-4-live-supervisor/u);
+      assert.match(html, />active task<\/dt><dd[^>]*>task-3/u);
+      assert.match(html, />active role<\/dt><dd[^>]*>worker/u);
+      assert.match(html, />generated at<\/dt><dd[^>]*>2026-06-10T12:04:00\.000Z/u);
+      assert.match(html, /Live read-only supervisor state from the goal supervisor route\./u);
+      assert.match(html, /source: \/api\/goals\/latest\/supervisor/u);
+      assert.match(html, /Checkpoint pending result/u);
+      assert.match(html, /result-awaits-registration/u);
+      assert.match(html, /Copy preview: summarize pending result only\./u);
+      assert.match(html, /blocked: active lease still healthy/u);
+      assert.match(html, /child-dispatch/u);
+      assert.match(html, /event-log-write/u);
+      assert.match(html, /evt-live-task-3/u);
+      assert.match(html, /blocked-without-operator-authorization/u);
+      assert.doesNotMatch(html, /Release-ready|Healthy active lease|Pending result|Stale transcript|Blocked gate|Missing context/u);
+      assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
   });
 
   it('renders the v38 Provider Hub panel without adding browser execution controls', async () => {
@@ -1288,6 +1329,186 @@ function createWorkbenchRenderModel() {
   results.safeArtifactPreviews = [];
 
   return projectWorkbenchContracts(results);
+}
+
+function createWorkbenchRenderModelWithSupervisor() {
+  const results = Object.fromEntries(
+    READONLY_API_ROUTES.map((route) => [route.id, unavailableRouteResult(route)])
+  );
+  const supervisorRoute = READONLY_API_ROUTES.find((route) => route.id === 'goalSupervisor');
+
+  results.goalSupervisor = readonlyRouteResult(supervisorRoute, createGoalSupervisorRenderPayload());
+  results.guidedGoalHandoff = unavailableRouteResult(GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE);
+  results.latestRunTimeline = unavailableRouteResult(RUN_TIMELINE_ROUTE_TEMPLATE);
+  results.activeGoalProgress = unavailableRouteResult({
+    ...GOAL_PROGRESS_ROUTE_TEMPLATE,
+    id: 'activeGoalProgress',
+    label: 'Active Goal Progress'
+  });
+  results.activeGoalEvents = unavailableRouteResult({
+    ...GOAL_EVENTS_ROUTE_TEMPLATE,
+    id: 'activeGoalEvents',
+    label: 'Active Goal Events'
+  });
+  results.activeGoalOperations = unavailableRouteResult({
+    ...GOAL_OPERATIONS_ROUTE_TEMPLATE,
+    id: 'activeGoalOperations',
+    label: 'Active Goal Operations'
+  });
+  results.goalReviewerPromptPack = unavailableRouteResult({
+    ...GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
+    id: 'goalReviewerPromptPack',
+    label: 'Goal Reviewer Prompt Pack'
+  });
+  results.safeArtifactPreviews = [];
+
+  return projectWorkbenchContracts(results);
+}
+
+function readonlyRouteResult(route, data) {
+  assert.notEqual(route, undefined);
+
+  return {
+    ok: true,
+    route: route.path,
+    method: route.method,
+    routeDescriptor: route,
+    httpStatus: 200,
+    data
+  };
+}
+
+function createGoalSupervisorRenderPayload() {
+  return {
+    contractName: 'goal-supervisor-app-read-model.v1',
+    contractVersion: 1,
+    readOnly: true,
+    willMutate: false,
+    generatedAt: '2026-06-10T12:04:00.000Z',
+    goalSnapshot: {
+      goalId: 'v44-4-live-supervisor',
+      title: 'Live supervisor route projection',
+      totalTaskCount: 4,
+      completedCount: 2,
+      activeTask: 'task-3',
+      activeRole: 'worker',
+      releaseReadiness: 'not-ready',
+      blockerCount: 1,
+      sourceContracts: ['goal-supervisor-app-read-model.v1', 'goal-progress-ledger.v1'],
+      generatedAt: '2026-06-10T12:04:00.000Z'
+    },
+    recommendedNextAction: {
+      actionId: 'checkpoint',
+      label: 'Checkpoint pending result',
+      reason: 'result-awaits-registration',
+      taskId: 'task-3',
+      targetRole: 'worker',
+      safeCommandPreview: 'Copy preview: summarize pending result only.',
+      checkpointRef: 'artifact:v44-4:pending-result',
+      waitPolicy: {
+        staleThresholdMs: 600000,
+        activeLeaseAgeMs: 120000
+      },
+      blockedFields: ['event-log-write']
+    },
+    activeLease: {
+      leaseId: 'lease-live-task-3',
+      threadId: '019ea62d-live-task-3',
+      taskId: 'task-3',
+      role: 'worker',
+      phase: 'implement',
+      status: 'healthy',
+      startedAt: '2026-06-10T11:50:00.000Z',
+      updatedAt: '2026-06-10T12:02:00.000Z',
+      ageMs: 120000,
+      duplicateDispatchGuard: {
+        blocked: true,
+        reason: 'active lease still healthy'
+      }
+    },
+    contextStatus: {
+      sessionSourceSummaries: [{
+        provider: 'codex',
+        status: 'available',
+        threadId: '019ea62d-live-task-3',
+        latestTurnAt: '2026-06-10T12:02:00.000Z'
+      }],
+      transcriptAvailability: 'readable-summary',
+      exchangeCount: 18,
+      latestToolCall: {
+        name: 'node --test',
+        status: 'completed'
+      },
+      latestTurnState: {
+        status: 'completed'
+      },
+      tokenUsage: {
+        usedTokens: 42000,
+        limitTokens: 200000
+      },
+      contextUtilization: {
+        ratio: 0.21
+      },
+      staleTranscriptState: {
+        stale: false,
+        reason: null
+      },
+      missingTranscriptState: {
+        missing: false,
+        reason: null
+      },
+      resultBlockEvidence: {
+        status: 'present',
+        present: true,
+        evidenceRef: 'artifact:v44-4:pending-result'
+      },
+      driftMarkers: []
+    },
+    pendingResult: {
+      source: 'result-intake',
+      status: 'pending',
+      eventToRegister: 'worker.evidence-recorded',
+      evidenceRef: 'artifact:v44-4:pending-result',
+      parserReason: 'valid-result-awaits-registration',
+      stale: false,
+      missing: false
+    },
+    currentGate: {
+      gateId: 'release.ready',
+      requiredCommandFamily: 'release-gate',
+      status: 'blocked',
+      evidenceRequirement: 'main verification evidence',
+      blockingReason: 'missing main verification evidence ref',
+      closeoutAuthorizationState: 'blocked-without-operator-authorization'
+    },
+    ownership: {
+      orchestrationOwner: 'local-goal-supervisor-daemon',
+      deliveryBoundary: 'pull-request',
+      activePr: '#44',
+      branch: 'codex/v44-4-pr2-supervisor-route-api-client',
+      rollbackBoundary: 'revert PR-2',
+      daemonState: 'external-orchestration-owner',
+      controllerInterventionReason: null
+    },
+    commandBoundary: {
+      state: 'disabled',
+      executionAvailable: false,
+      copyOnly: true,
+      allowedCommandFamilies: [],
+      blockedCommandFamilies: ['child-dispatch', 'event-log-write'],
+      safeCommandPreview: null,
+      confirmationFields: []
+    },
+    goalTimeline: [{
+      eventId: 'evt-live-task-3',
+      taskId: 'task-3',
+      role: 'worker',
+      status: 'pending',
+      evidenceRef: 'artifact:v44-4:pending-result',
+      hashChainState: 'linked',
+      occurredAt: '2026-06-10T12:03:00.000Z'
+    }]
+  };
 }
 
 function createWorkbenchRenderRouteContext() {
