@@ -121,6 +121,9 @@ import {
   SupervisorRunnerUsageError,
   runSupervisorCli
 } from '../src/symphony/supervisor-runner.js';
+import {
+  buildGoalSupervisorAppReadModelFromContracts
+} from '../src/symphony/goal-supervisor/index.js';
 import { buildEvidenceBundle } from '../src/symphony/evidence-bundle.js';
 import {
   buildAppCoreBackupExport,
@@ -476,6 +479,18 @@ export async function runSymphonyCli({
     }
 
     if (command === 'supervisor') {
+      if (rest[0] === 'status') {
+        const options = parseGoalSupervisorStatusArgs(rest.slice(1));
+
+        if (options.help) {
+          stdout.write(goalSupervisorStatusHelpText());
+          return EXIT_CODES.ok;
+        }
+
+        writeJson(stdout, await buildGoalSupervisorAppReadModelFromContracts(options));
+        return EXIT_CODES.ok;
+      }
+
       try {
         return await runSupervisorCli({
           args: rest,
@@ -5198,6 +5213,70 @@ function parseGoalNextArgs(args) {
   return options;
 }
 
+function parseGoalSupervisorStatusArgs(args) {
+  const options = {
+    stateDir: '.symphony',
+    goalId: 'latest',
+    help: false
+  };
+
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+
+    if (value === '--help') {
+      options.help = true;
+      continue;
+    }
+
+    if (value === '--json') {
+      continue;
+    }
+
+    if (value === '--format') {
+      const format = readRequiredValue(args, index, '--format');
+
+      if (format !== 'json') {
+        throw new UsageError('supervisor status prints JSON only');
+      }
+
+      index += 1;
+      continue;
+    }
+
+    if (value === '--goal') {
+      options.goalId = readRequiredValue(args, index, '--goal');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--state-dir') {
+      options.stateDir = readRequiredValue(args, index, '--state-dir');
+      index += 1;
+      continue;
+    }
+
+    if (value === '--confirm' || value === '--dry-run' || value === '--plan-hash' || value === '--allow-closeout') {
+      throw new UsageError('supervisor status is read-only and does not accept write-flow or release flags');
+    }
+
+    if (value === '--output' || value === '-o') {
+      throw new UsageError('supervisor status does not write files; redirect stdout if you need a file');
+    }
+
+    if (value === '--markdown' || value === '--human') {
+      throw new UsageError('supervisor status prints JSON only');
+    }
+
+    if (value.startsWith('--')) {
+      throw new UsageError(`unknown supervisor status option: ${value}`);
+    }
+
+    throw new UsageError(`unexpected supervisor status argument: ${value}`);
+  }
+
+  return options;
+}
+
 function parseGoalCloseoutArgs(args) {
   const options = {
     stateDir: '.symphony',
@@ -5460,6 +5539,16 @@ function goalNextHelpText() {
     '',
     'Prints read-only goal-next-action.v1 from the managed runbook, event log, and ledger.',
     'The command does not execute prompts, run release gates, write evidence docs, register events, or call models.',
+    ''
+  ].join('\n');
+}
+
+function goalSupervisorStatusHelpText() {
+  return [
+    'Usage: symphony supervisor status --goal <goal-id|latest> --json',
+    '',
+    'Prints read-only goal-supervisor-app-read-model.v1 from backend goal contracts and supervisor observability.',
+    'The command does not dispatch children, register events, run gates, call providers, or execute release closeout.',
     ''
   ].join('\n');
 }

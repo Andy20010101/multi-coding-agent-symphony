@@ -98,6 +98,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/latest/operations', 'goal-operation-runs.v1'],
         ['GET', '/api/goals/latest/runbook', 'goal-runbook.v1'],
         ['GET', '/api/goals/latest/next', 'goal-next-action.v1'],
+        ['GET', '/api/goals/latest/supervisor', 'goal-supervisor-app-read-model.v1'],
         ['GET', '/api/goals/latest/prompt', 'goal-prompt-pack.v1'],
         ['GET', '/api/goals/latest/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/goals/latest/release-baseline', 'release-baseline-resolver.v1'],
@@ -144,6 +145,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/latest/operations', 'goal-operation-runs.v1'],
         ['GET', '/api/goals/latest/runbook', 'goal-runbook.v1'],
         ['GET', '/api/goals/latest/next', 'goal-next-action.v1'],
+        ['GET', '/api/goals/latest/supervisor', 'goal-supervisor-app-read-model.v1'],
         ['GET', '/api/goals/latest/prompt', 'goal-prompt-pack.v1'],
         ['GET', '/api/goals/latest/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/goals/latest/release-baseline', 'release-baseline-resolver.v1'],
@@ -176,6 +178,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/<goal-id>/progress', 'goal-progress-ledger.v1'],
         ['GET', '/api/goals/<goal-id>/runbook', 'goal-runbook.v1'],
         ['GET', '/api/goals/<goal-id>/next', 'goal-next-action.v1'],
+        ['GET', '/api/goals/<goal-id>/supervisor', 'goal-supervisor-app-read-model.v1'],
         ['GET', '/api/goals/<goal-id>/prompt', 'goal-prompt-pack.v1'],
         ['GET', '/api/goals/<goal-id>/closeout', 'goal-closeout-report.v1'],
         ['GET', '/api/goals/<goal-id>/release-baseline', 'release-baseline-resolver.v1'],
@@ -186,6 +189,43 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
       ]
     );
+  });
+
+  it('serves the goal supervisor app read model as a read-only GET route', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-workbench-supervisor-route-'));
+    const server = createSymphonyConsoleServer({
+      stateDir: join(root, '.symphony'),
+      cwd: root,
+      env: { HOME: root }
+    });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const response = await fetch(`${baseUrl}/api/goals/v19-fixture/supervisor`);
+      const model = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(model.contractName, 'goal-supervisor-app-read-model.v1');
+      assert.equal(model.readOnly, true);
+      assert.equal(model.willMutate, false);
+      assert.equal(model.goalSnapshot.goalId, 'v19-fixture');
+      assert.ok(model.goalSnapshot.sourceContracts.includes('goal-runbook.v1'));
+      assert.ok(model.goalSnapshot.sourceContracts.includes('goal-progress-ledger.v1'));
+      assert.ok(model.goalSnapshot.sourceContracts.includes('goal-supervisor-observability.v1'));
+      assert.equal(model.commandBoundary.state, 'disabled');
+      assert.equal(model.commandBoundary.executionAvailable, false);
+      assert.equal(model.commandBoundary.blockedCommandFamilies.includes('child-dispatch'), true);
+      assert.equal(JSON.stringify(model).includes('rawTranscript'), false);
+
+      const rejected = await fetch(`${baseUrl}/api/goals/v19-fixture/supervisor`, { method: 'POST' });
+      const error = await rejected.json();
+
+      assert.equal(rejected.status, 405);
+      assert.equal(error.contractName, 'error-envelope.v1');
+      assert.equal(error.error.code, 'method-not-allowed');
+    } finally {
+      await cleanupManagedActiveGoalWorkbenchServer({ root, server });
+    }
   });
 
   it('projects the Workbench Action Registry panel from backend action contracts only', () => {
