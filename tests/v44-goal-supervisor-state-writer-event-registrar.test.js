@@ -21,8 +21,19 @@ describe('v44 goal supervisor state writer and event registrar preview', () => {
     assert.equal(preview.readOnly, true);
     assert.equal(preview.willMutate, false);
     assert.equal(preview.writer.singleWriter, true);
+    assert.deepEqual(preview.writer.operationVocabulary, ['managed-goal-event-registration-preview']);
     assert.equal(preview.status, 'preview');
     assert.deepEqual(preview.refusalReasons, []);
+    assert.equal(preview.registration.action, 'would-register-goal-event');
+    assert.equal(preview.registration.wouldAppend.writesInDryRun, false);
+    assert.equal(preview.registration.wouldAppend.executorAvailable, false);
+    assert.equal(preview.auditRequirement.required, true);
+    assert.equal(preview.auditRequirement.matched, false);
+    assert.equal(preview.auditRequirement.source, 'planned-goal-event-registration-audit');
+    assert.equal(preview.refusal.refused, false);
+    assert.equal(preview.operations[0].kind, 'managed-goal-event-registration-preview');
+    assert.equal(preview.operations[0].registration.action, 'would-register-goal-event');
+    assert.equal(preview.operations[0].auditRequirement.required, true);
     assert.equal(preview.eventRegistrar.targetEvent.goalId, fixture.goalId);
     assert.equal(preview.eventRegistrar.targetEvent.taskId, 'task-4');
     assert.equal(preview.eventRegistrar.targetEvent.eventType, 'worker.evidence-recorded');
@@ -47,10 +58,31 @@ describe('v44 goal supervisor state writer and event registrar preview', () => {
 
     assert.equal(preview.status, 'trusted-registration');
     assert.equal(preview.reason, 'matching-goal-event-and-registration-audit');
+    assert.equal(preview.registrationDecision.action, 'trust-existing-goal-event-registration');
+    assert.equal(preview.registrationDecision.auditMatched, true);
     assert.equal(preview.targetEvent.eventId, fixture.matchingGoalEvent.eventId);
     assert.equal(preview.registrationAudit.matched, true);
     assert.equal(preview.eventPlan, null);
     assert.deepEqual(preview.refusalReasons, []);
+  });
+
+  it('projects trusted registrations through the writer without a new event plan', async () => {
+    const fixture = await readFixture();
+    const preview = await buildGoalSupervisorStateWriterPreview({
+      stateDir: fixture.stateDir,
+      result: fixture.workerResult,
+      goalEvents: [fixture.matchingGoalEvent],
+      registrationAudits: [fixture.matchingRegistrationAudit],
+      releaseGates: fixture.releaseGates
+    });
+
+    assert.equal(preview.status, 'trusted-registration');
+    assert.equal(preview.registration.action, 'already-registered-with-audit');
+    assert.equal(preview.registration.alreadyRecorded, true);
+    assert.equal(preview.registration.wouldAppend, null);
+    assert.equal(preview.auditRequirement.matched, true);
+    assert.equal(preview.operations[0].registration.alreadyRecorded, true);
+    assert.equal(preview.operations[0].registration.eventPlan, null);
   });
 
   it('refuses an existing event when the single-writer registration audit is missing', async () => {
@@ -65,6 +97,9 @@ describe('v44 goal supervisor state writer and event registrar preview', () => {
 
     assert.equal(preview.status, 'refused');
     assert.equal(preview.reason, 'missing-registration-audit');
+    assert.equal(preview.registrationDecision.action, 'refuse-goal-event-registration-preview');
+    assert.equal(preview.registrationDecision.auditRequired, true);
+    assert.equal(preview.registrationDecision.auditMatched, false);
     assert.deepEqual(preview.refusalReasons, ['missing-registration-audit']);
     assert.equal(preview.targetEvent.eventType, 'worker.evidence-recorded');
     assert.equal(preview.eventPlan, null);
@@ -82,6 +117,11 @@ describe('v44 goal supervisor state writer and event registrar preview', () => {
     assert.equal(preview.status, 'refused');
     assert.equal(preview.reason, 'unsafe-write-requested');
     assert.deepEqual(preview.refusalReasons, ['unsafe-write-requested']);
+    assert.equal(preview.registration.action, 'refused');
+    assert.equal(preview.refusal.refused, true);
+    assert.deepEqual(preview.refusal.reasons, ['unsafe-write-requested']);
+    assert.equal(preview.operations[0].refusal.refused, true);
+    assert.equal(preview.operations[0].registration.wouldAppend, null);
     assert.equal(preview.eventRegistrar.eventPlan, null);
     assert.equal(preview.boundaries.confirmExecutorAvailable, false);
     assert.equal(preview.boundaries.liveManagedGoalAppendIntroduced, false);
@@ -98,6 +138,8 @@ describe('v44 goal supervisor state writer and event registrar preview', () => {
 
     assert.equal(preview.status, 'refused');
     assert.equal(preview.reason, 'release-closeout-not-authorized');
+    assert.equal(preview.registrationDecision.action, 'refuse-goal-event-registration-preview');
+    assert.equal(preview.registrationDecision.refused, true);
     assert.deepEqual(preview.refusalReasons, ['release-closeout-not-authorized']);
     assert.equal(preview.eventPlan, null);
   });
@@ -110,6 +152,7 @@ describe('v44 goal supervisor state writer and event registrar preview', () => {
     });
 
     assert.equal(preview.status, 'preview');
+    assert.equal(preview.registrationDecision.action, 'would-register-goal-event');
     assert.equal(preview.targetEvent.gate.name, 'release.pnpm-check');
     assert.equal(preview.targetEvent.gate.status, 'passed');
     assert.deepEqual(preview.refusalReasons, []);

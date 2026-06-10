@@ -301,6 +301,14 @@ function previewEnvelope({
     },
     targetEvent,
     registrationAudit,
+    registrationDecision: buildRegistrationDecision({
+      status,
+      reason,
+      targetEvent,
+      registrationAudit,
+      eventPlan,
+      refusalReasons
+    }),
     eventPlan: eventPlan === null ? null : summarizeEventPlan(eventPlan),
     boundaries: {
       dryRunOnly: true,
@@ -310,6 +318,40 @@ function previewEnvelope({
       appendMustUseExistingGoalContracts: true
     }
   };
+}
+
+function buildRegistrationDecision({
+  status,
+  reason,
+  targetEvent,
+  registrationAudit,
+  eventPlan,
+  refusalReasons
+}) {
+  return {
+    action: registrationDecisionAction(status),
+    status,
+    reason,
+    refused: status === 'refused',
+    refusalReasons,
+    targetEventReady: targetEvent !== null,
+    planReady: eventPlan !== null,
+    auditRequired: registrationAudit?.required === true,
+    auditMatched: registrationAudit?.matched === true,
+    appendExecutorAvailable: false
+  };
+}
+
+function registrationDecisionAction(status) {
+  if (status === 'preview') {
+    return 'would-register-goal-event';
+  }
+
+  if (status === 'trusted-registration') {
+    return 'trust-existing-goal-event-registration';
+  }
+
+  return 'refuse-goal-event-registration-preview';
 }
 
 function refusedPreview({
