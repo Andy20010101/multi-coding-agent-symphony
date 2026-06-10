@@ -15,15 +15,15 @@ Worker evidence: `docs/plans/v44-3-app-contract-context-supervisor-closeout-snap
 
 Approved.
 
-The PR-5 diff is a docs-only closeout snapshot under `docs/plans/`, which matches the runbook's allowed area for task-5. The snapshot records the v44.3 state without declaring release readiness, registering goal events, running release closeout, creating a tag, publishing a release, pushing, or adding automation.
+The PR-5 diff is a docs-only closeout snapshot under `docs/plans/`, which matches the runbook's allowed area for task-5. The snapshot records the v44.3 state without declaring release readiness, registering goal events, running release closeout, creating a tag, publishing a release, pushing release artifacts, or adding automation.
 
 ## Review Notes
 
 The snapshot covers the runbook's required content: PR and commit record, final contract objects, API and CLI route names, session hook boundaries, CI and mutation gate state, commands run and intentionally not run, remaining risks, and rollback path.
 
-The commit record matches the local history in this checkout. PR-0 and PR-CI are represented by GitHub merge commits. PR-1 through PR-4 are represented as linear implementation, review, and main-verification commits, and the snapshot explicitly states that no separate GitHub merge commits for PR-1 through PR-4 are present in this checkout.
+At review time, PR-0 and PR-CI were represented by GitHub merge commits, while PR-1 through PR-4 were represented as linear implementation, review, and main-verification commits. During PR delivery, PR-1 through PR-4 were merged through GitHub as #22 through #25; the closeout snapshot has been updated with those PR URLs and merge commits.
 
-The boundary language is conservative. The document states that PR-5 is docs-only and keeps mutation, audit, doctor, provider CLI, real CLI, daemon control, child dispatch, goal event registration, tag, push, publish, GitHub Release, and release closeout outside the phase.
+The boundary language is conservative. The document states that PR-5 is docs-only and keeps mutation, audit, doctor, provider CLI, real CLI, daemon control, child dispatch, goal event registration, tag, release push, publish, GitHub Release, and release closeout outside the phase.
 
 ## Commands Run
 
@@ -39,13 +39,13 @@ The boundary language is conservative. The document states that PR-5 is docs-onl
 | `git log --oneline --decorate --reverse 720348f64ed4ad4bfd4518e7d16e252ac88f77a4..HEAD` | Exit 0. Confirmed the commit sequence cited by the snapshot. |
 | `test -f docs/plans/v44-3-task-1-main-verification-evidence-2026-06-10.md && test -f docs/plans/v44-3-task-2-main-verification-evidence-2026-06-10.md && test -f docs/plans/v44-3-task-3-main-verification-evidence-2026-06-10.md && test -f docs/plans/v44-3-task-4-main-verification-evidence-2026-06-10.md && echo evidence-files-present` | Exit 0. Confirmed cited prior main-verification evidence files are present. |
 | `rg -n "goal-supervisor-app-read-model|latest/supervisor|supervisor status|sessionContext|commandBoundary|buildGoalSupervisorAppReadModel|buildGoalSupervisorPolicy|allow-closeout|releaseReady" src/symphony/goal-supervisor src/symphony/console.js scripts/symphony.js frontend/workbench/src/api/contracts.js tests/v44-goal-supervisor-app-read-model.test.js tests/v44-3-goal-supervisor-session-context.test.js tests/workbench-api-client.test.js` | Exit 0. Confirmed the snapshot's route, CLI, session context, and command-boundary claims are backed by repository symbols and tests. |
-| `rg -n "declare release readiness|release readiness|releaseReady|tag|publish|GitHub Release|release closeout|goal closeout|worker.evidence-recorded|reviewer.approved|main.verification-passed" docs/plans/v44-3-app-contract-context-supervisor-closeout-snapshot-2026-06-10.md` | Exit 0. Confirmed the snapshot states no release readiness declaration, no tag, no publish, no push, no release closeout, and no goal event registration. |
+| `rg -n "declare release readiness|release readiness|releaseReady|tag|publish|GitHub Release|release closeout|goal closeout|worker.evidence-recorded|reviewer.approved|main.verification-passed" docs/plans/v44-3-app-contract-context-supervisor-closeout-snapshot-2026-06-10.md` | Exit 0. Confirmed the snapshot states no release readiness declaration, no tag, no publish, no release push, no release closeout, and no goal event registration. |
 | `git status --short --branch` | Exit 0. Clean before writing reviewer evidence. |
 
 ## Commands Not Run
 
-No mutation gate, audit, doctor, provider CLI, real CLI, daemon start or stop, child dispatch, goal event registration, tag, push, publish, GitHub Release, or release closeout commands were run during this review.
+No mutation gate, audit, doctor, provider CLI, real CLI, daemon start or stop, child dispatch, goal event registration, tag, release push, publish, GitHub Release, or release closeout commands were run during this review.
 
 ## Risks
 
-No review-blocking risk found. The remaining release-note risk is already called out in the snapshot: PR-1 through PR-4 have linear task commits in this checkout rather than separate GitHub merge commits.
+No review-blocking risk found. The prior release-note gap for PR-1 through PR-4 GitHub merge commits has been closed by PR delivery and is recorded in the updated snapshot.

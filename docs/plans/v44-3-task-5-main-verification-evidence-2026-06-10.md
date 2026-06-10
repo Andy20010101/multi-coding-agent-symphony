@@ -21,7 +21,7 @@ The task-5 worker produced a docs-only closeout snapshot in the assigned worktre
 
 The closeout snapshot records the v44.3 state required by the runbook: PR and commit record, final contract objects, API and CLI route names, session hook boundaries, CI and mutation gate state, commands run and intentionally not run, remaining risks, and rollback path.
 
-The snapshot does not declare release readiness, create a tag, publish a release, push a branch, run release closeout automation, register a goal event, start or stop a daemon, dispatch a child thread, run mutation, run audit, run doctor, or invoke provider or real CLI commands.
+The snapshot does not declare release readiness, create a tag, publish a release, push release artifacts, run release closeout automation, register a goal event, start or stop a daemon, dispatch a child thread, run mutation, run audit, run doctor, or invoke provider or real CLI commands.
 
 ## Commands Run
 
@@ -45,8 +45,8 @@ The snapshot does not declare release readiness, create a tag, publish a release
 
 ## Commands Not Run
 
-No mutation gate, audit, doctor, provider CLI, real CLI, daemon start or stop, child dispatch, goal event registration, tag, push, publish, GitHub Release, or release closeout commands were run during this main verification.
+No mutation gate, audit, doctor, provider CLI, real CLI, daemon start or stop, child dispatch, goal event registration, tag, release push, publish, GitHub Release, or release closeout commands were run during this main verification.
 
 ## Risks
 
-No main-verification-blocking risk found. The remaining release-note risk is already recorded in the snapshot: PR-1 through PR-4 are linear task commits in this checkout rather than separate GitHub merge commits.
+No main-verification-blocking risk found. The prior release-note gap for PR-1 through PR-4 GitHub merge commits has been closed by PR delivery and is recorded in the updated snapshot.

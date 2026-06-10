@@ -10,20 +10,23 @@ Snapshot base: `26353f904937d8161302ca9fcf753f7d9dec7d11`
 
 v44.3 has the backend app contract, read-only API and CLI surface, session context adapters, and conservative policy/command-boundary projection needed for a future Workbench or app shell to read supervisor state without reading runner internals or transcript files directly.
 
-This snapshot does not declare release readiness. It does not create a tag, publish a release, push a branch, run release closeout automation, or register any goal event.
+This snapshot does not declare release readiness. It does not create a tag, publish a release, create a GitHub Release, run release closeout automation, or register any goal event. It is delivered through the normal PR branch and merge workflow only.
 
 ## PR and commit record
 
-The local history contains actual GitHub merge commits for the runbook and path-aware CI prep, then the PR-1 through PR-4 implementation sequence as linear commits in the integration worktree. No separate GitHub merge commits for PR-1 through PR-4 are present in this checkout.
+GitHub PR delivery has merged PR-0, PR-CI, and PR-1 through PR-4 into `main`. PR-5 is this docs-only closeout snapshot; it will receive its own merge commit when this PR is merged.
 
-| Scope | Commit record in this checkout | Evidence |
-| --- | --- | --- |
-| PR-0 runbook | `3197624` - Merge pull request #20 from `codex/v44-3-app-contract-context-runbook` | `docs/plans/v44-3-app-contract-context-supervisor-runbook-2026-06-10.md` |
-| PR-CI path-aware stage gates | `abd7e1f` - Merge pull request #21 from `codex/v44-3-pr-ci-path-aware-stage-gates` | `.github/workflows/ci.yml` |
-| PR-1 app-facing contracts and fixtures | `cf7391c` implementation, `22c8355` review evidence, `6a5919c` main verification evidence | `docs/plans/v44-3-task-1-main-verification-evidence-2026-06-10.md` |
-| PR-2 projection API and CLI | `91e3355` implementation, `14f6e08` review evidence, `3fb1781` main verification evidence | `docs/plans/v44-3-task-2-main-verification-evidence-2026-06-10.md` |
-| PR-3 session hook runtime | `130a4fc` implementation, `bfa7967` review evidence, `8a15b9a` main verification evidence | `docs/plans/v44-3-task-3-main-verification-evidence-2026-06-10.md` |
-| PR-4 context policy and command boundaries | `102b53a` implementation, `85d4835` review evidence, `26353f9` main verification evidence | `docs/plans/v44-3-task-4-main-verification-evidence-2026-06-10.md` |
+| Scope | GitHub PR | Branch / delivered head | Merge commit | Evidence |
+| --- | --- | --- | --- | --- |
+| PR-0 runbook | #20 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/20` | `codex/v44-3-app-contract-context-runbook` | `3197624` | `docs/plans/v44-3-app-contract-context-supervisor-runbook-2026-06-10.md` |
+| PR-CI path-aware stage gates | #21 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/21` | `codex/v44-3-pr-ci-path-aware-stage-gates` | `abd7e1f` | `.github/workflows/ci.yml` |
+| PR-1 app-facing contracts and fixtures | #22 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/22` | `codex/v44-3-pr1-app-facing-contracts-fixtures` / `6a5919c` | `4799e687673fda4700334a9dfd98eccc81fba22c` | `docs/plans/v44-3-task-1-main-verification-evidence-2026-06-10.md` |
+| PR-2 projection API and CLI | #23 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/23` | `codex/v44-3-pr2-projection-api-cli` / `1fc6914` | `e339343ddae7f116b479763ce63ff8254e3e195e` | `docs/plans/v44-3-task-2-main-verification-evidence-2026-06-10.md` |
+| PR-3 session hook runtime | #24 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/24` | `codex/v44-3-pr3-session-hook-runtime` / `973bc70` | `13815f1f0743c2c853f85849427455b57bac14a2` | `docs/plans/v44-3-task-3-main-verification-evidence-2026-06-10.md` |
+| PR-4 context policy and command boundaries | #25 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/25` | `codex/v44-3-pr4-context-policy-command-boundaries` / `fee0ece` | `9283b365514394fc1443c184460b2c2cef90f331` | `docs/plans/v44-3-task-4-main-verification-evidence-2026-06-10.md` |
+| PR-5 closeout snapshot | pending PR for `codex/v44-3-pr5-closeout-snapshot` | this branch | pending | this document |
+
+PR-2 includes delivery commit `1fc6914`, which updates `tests/workbench-shell.test.js` so the static Workbench API allowlist includes the new supervisor routes. PR-3 and PR-4 include merge commits from latest `main` so the stacked branches do not reverse that fix.
 
 ## Final contract objects
 
@@ -89,7 +92,16 @@ Current policy:
 - Mutation stage runs only by manual `workflow_dispatch` input or by a mutation label on a contract-impacting pull request.
 - Real CLI remains opt-in through workflow input or repository variable.
 
-This PR-5 snapshot is docs-only. Mutation, audit, doctor, provider CLI, real CLI, tag, push, publish, GitHub Release, and release closeout commands are intentionally outside this phase.
+This PR-5 snapshot is docs-only. Mutation, audit, doctor, provider CLI, real CLI, tag, release push, publish, GitHub Release, and release closeout commands are intentionally outside this phase.
+
+PR delivery CI status:
+
+| Scope | CI result |
+| --- | --- |
+| PR-1 #22 | `changes`, `code-focused`, and `verify` passed; `build`, `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
+| PR-2 #23 | `changes`, `code-focused`, `build`, and `verify` passed after the allowlist test fix; `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
+| PR-3 #24 | `changes`, `code-focused`, and `verify` passed; `build`, `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
+| PR-4 #25 | `changes`, `code-focused`, and `verify` passed; `build`, `docs`, `mutation-stage`, and `real-cli` were skipped by path policy. |
 
 ## Verification record
 
@@ -121,6 +133,30 @@ Commands run for this PR-5 snapshot:
 - `sed -n '2500,2660p' src/symphony/console.js`
 - `sed -n '450,520p' scripts/symphony.js`
 
+Delivery coordinator commands run after PR-1 through PR-4 were merged:
+
+- `git status --short --branch`
+- `git rev-parse HEAD origin/main`
+- `pnpm --silent symphony goal-status --goal v44-3-app-contract-context-supervisor --json`
+- `pnpm --silent symphony goal next --goal v44-3-app-contract-context-supervisor --json`
+- `node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs status --goal v44-3-app-contract-context-supervisor`
+- `node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs plan --goal v44-3-app-contract-context-supervisor`
+- `node /Users/andy/.codex/local-goal-supervisor/bin/local-goal-supervisor.mjs daemon-status --goal v44-3-app-contract-context-supervisor`
+- `gh pr checks 22 --watch --interval 10`
+- `gh pr checks 23 --watch --interval 10`
+- `gh pr checks 24 --watch --interval 10`
+- `gh pr checks 25 --watch --interval 10`
+- `gh pr merge 22 --merge`
+- `gh pr merge 23 --merge`
+- `gh pr merge 24 --merge`
+- `gh pr merge 25 --merge`
+- `node --test tests/workbench-shell.test.js tests/workbench-api-client.test.js tests/v44-goal-supervisor-app-read-model.test.js`
+- `node --test tests/v44-3-goal-supervisor-session-context.test.js tests/v44-goal-supervisor-app-read-model.test.js tests/workbench-api-client.test.js tests/workbench-shell.test.js`
+- `node --test tests/v44-goal-supervisor-app-read-model.test.js tests/v44-3-goal-supervisor-session-context.test.js tests/workbench-api-client.test.js tests/workbench-shell.test.js`
+- `pnpm check`
+- `pnpm test`
+- `git diff --check origin/main...HEAD`
+
 Commands intentionally not run for this PR-5 snapshot:
 
 - `pnpm test:mutation:gate`
@@ -130,7 +166,7 @@ Commands intentionally not run for this PR-5 snapshot:
 - daemon start or stop commands
 - child dispatch commands
 - goal event registration commands
-- tag, push, publish, GitHub Release, or release closeout commands
+- tag, publish, GitHub Release, or release closeout commands
 
 ## Remaining risks
 
@@ -140,11 +176,11 @@ The policy ordering is deliberately conservative. Gate blocks and incomplete con
 
 The Workbench has only a backend route allowlist update for this contract. A future UI PR still needs to decide how to present the read model without reintroducing direct ledger, event log, runner, or transcript reads.
 
-The PR-1 through PR-4 entries in this local history are linear task commits, not separate GitHub merge commits in this checkout. If release notes need GitHub PR numbers for those scopes, collect them from GitHub before release packaging.
+PR-5 cannot record its own eventual merge commit before it is merged. Capture that value from GitHub after this PR lands if release packaging needs a complete PR-5 row.
 
 ## Rollback path
 
-To roll back v44.3 app-contract behavior while preserving earlier releases, revert the PR-4 policy commit range first, then PR-3 session-context runtime, then PR-2 API/CLI exposure, then PR-1 contract and fixtures. The route allowlist entry in `frontend/workbench/src/api/contracts.js` should be reverted with PR-2.
+To roll back v44.3 app-contract behavior while preserving earlier releases, revert merge commit `9283b365514394fc1443c184460b2c2cef90f331` first, then `13815f1f0743c2c853f85849427455b57bac14a2`, then `e339343ddae7f116b479763ce63ff8254e3e195e`, then `4799e687673fda4700334a9dfd98eccc81fba22c`. The route allowlist entry in `frontend/workbench/src/api/contracts.js` should be reverted with PR-2.
 
 If only the snapshot is wrong, revert this document. It does not affect runtime behavior.
 
