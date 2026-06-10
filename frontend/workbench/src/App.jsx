@@ -164,7 +164,7 @@ export function WorkbenchShell({
           <h1 id="workbench-title">{workbenchRouteTitle(workbenchRoute)}</h1>
           <p className="header-summary">
             {workbenchRoute === 'supervisor'
-              ? 'Fixture-driven read-only supervisor state: goal snapshot, active lease, context, pending result, command boundary, timeline, gate, and ownership.'
+              ? 'Read-only supervisor state: goal snapshot, active lease, context, pending result, command boundary, timeline, gate, and ownership. Fixture scenarios remain available when live data is unavailable.'
               : workbenchRoute === 'desktop'
               ? '只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。'
               : '围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。'}
@@ -190,11 +190,8 @@ export function WorkbenchShell({
 
       {workbenchRoute === 'supervisor' ? (
         <SupervisorDashboard
-          dashboard={selectedSupervisorDashboardFixture()}
-          routeState={{
-            state: 'fixture',
-            source: 'frontend/workbench/src/fixtures/supervisorDashboardFixtures.js'
-          }}
+          dashboard={selectedSupervisorDashboard(model)}
+          routeState={selectedSupervisorDashboardRouteState(model)}
           refreshHandler={onRefreshWorkbenchContracts}
         />
       ) : model === null ? null : (
@@ -1244,10 +1241,11 @@ function SupervisorDashboard({
     href: `/workbench/supervisor/?scenario=${encodeURIComponent(scenarioId)}`,
     label: SUPERVISOR_DASHBOARD_FIXTURES[scenarioId]?.label ?? scenarioId
   }));
+  const fixtureMode = dashboard.sourceMode !== 'live';
 
   return (
     <section className="supervisor-dashboard-route" aria-label="Supervisor Command Center">
-      <div className="supervisor-topbar" aria-label="Supervisor fixture metadata">
+      <div className="supervisor-topbar" aria-label="Supervisor read-only metadata">
         <FieldList rows={[
           ['goal id', textValue(dashboard.goalSnapshot.goalId)],
           ['active task', textValue(dashboard.goalSnapshot.activeTask)],
@@ -1258,19 +1256,21 @@ function SupervisorDashboard({
         ]} />
       </div>
 
-      <nav className="supervisor-scenario-nav" aria-label="Supervisor fixture scenarios">
-        {scenarioLinks.map((scenario) => (
-          <a
-            key={scenario.id}
-            className={scenario.id === dashboard.id ? 'supervisor-scenario active' : 'supervisor-scenario'}
-            href={scenario.href}
-            aria-current={scenario.id === dashboard.id ? 'page' : undefined}
-          >
-            <strong>{scenario.label}</strong>
-            <span>{scenario.id}</span>
-          </a>
-        ))}
-      </nav>
+      {fixtureMode ? (
+        <nav className="supervisor-scenario-nav" aria-label="Supervisor fixture scenarios">
+          {scenarioLinks.map((scenario) => (
+            <a
+              key={scenario.id}
+              className={scenario.id === dashboard.id ? 'supervisor-scenario active' : 'supervisor-scenario'}
+              href={scenario.href}
+              aria-current={scenario.id === dashboard.id ? 'page' : undefined}
+            >
+              <strong>{scenario.label}</strong>
+              <span>{scenario.id}</span>
+            </a>
+          ))}
+        </nav>
+      ) : null}
 
       <div className="supervisor-fixture-note">
         <span>{dashboard.summary}</span>
@@ -9471,10 +9471,31 @@ function findRoute(routes, id) {
   return routes.find((route) => route.id === id) ?? null;
 }
 
-function selectedSupervisorDashboardFixture() {
+function selectedSupervisorDashboard(model) {
+  if (model?.supervisorDashboard?.state === 'available') {
+    return model.supervisorDashboard;
+  }
+
   const scenarioId = currentWorkbenchSearchParams().get('scenario') ?? 'release-ready';
 
-  return SUPERVISOR_DASHBOARD_FIXTURES[scenarioId] ?? SUPERVISOR_DASHBOARD_FIXTURES['release-ready'];
+  return {
+    ...(SUPERVISOR_DASHBOARD_FIXTURES[scenarioId] ?? SUPERVISOR_DASHBOARD_FIXTURES['release-ready']),
+    sourceMode: 'fixture'
+  };
+}
+
+function selectedSupervisorDashboardRouteState(model) {
+  if (model?.supervisorDashboard?.state === 'available') {
+    return {
+      state: model.supervisorDashboard.route?.state ?? 'ready',
+      source: model.supervisorDashboard.source ?? model.supervisorDashboard.route?.path ?? 'goal supervisor route'
+    };
+  }
+
+  return {
+    state: model?.supervisorDashboard?.route?.state ?? 'fixture',
+    source: 'frontend/workbench/src/fixtures/supervisorDashboardFixtures.js'
+  };
 }
 
 function currentWorkbenchRoute() {
@@ -9540,7 +9561,7 @@ function workbenchRouteStatusText(route) {
   }
 
   if (route === 'supervisor') {
-    return 'fixture-only / no live supervisor API';
+    return 'supervisor read-only / fixture fallback';
   }
 
   return 'confirm 后会刷新 goal-status / events / next action';
