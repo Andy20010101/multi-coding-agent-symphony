@@ -9896,6 +9896,7 @@ var GOAL_OPERATION_RUNS_CONTRACT_NAME = "goal-operation-runs.v1";
 var GOAL_UPDATE_PLAN_CONTRACT_NAME = "goal-update-plan.v1";
 var GOAL_RUNBOOK_CONTRACT_NAME = "goal-runbook.v1";
 var GOAL_NEXT_ACTION_CONTRACT_NAME = "goal-next-action.v1";
+var GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME = "goal-supervisor-app-read-model.v1";
 var GOAL_PROMPT_PACK_CONTRACT_NAME = "goal-prompt-pack.v1";
 var GOAL_CLOSEOUT_REPORT_CONTRACT_NAME = "goal-closeout-report.v1";
 var CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME = "controlled-implementation-plan-preview.v1";
@@ -10501,6 +10502,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: GOAL_NEXT_ACTION_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "goalSupervisor",
+		label: "Goal Supervisor",
+		path: "/api/goals/latest/supervisor",
+		method: "GET",
+		contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "goalPromptPack",
 		label: "Goal Prompt Pack",
 		path: "/api/goals/latest/prompt",
@@ -10748,6 +10756,14 @@ var GOAL_NEXT_ACTION_ROUTE_TEMPLATE = Object.freeze({
 	contractName: GOAL_NEXT_ACTION_CONTRACT_NAME,
 	acceptErrorContract: true
 });
+var GOAL_SUPERVISOR_ROUTE_TEMPLATE = Object.freeze({
+	id: "goalSupervisorById",
+	label: "Goal Supervisor By Id",
+	path: "/api/goals/<goal-id>/supervisor",
+	method: "GET",
+	contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+	acceptErrorContract: true
+});
 var GOAL_PROMPT_PACK_ROUTE_TEMPLATE = Object.freeze({
 	id: "goalPromptPackById",
 	label: "Goal Prompt Pack By Id",
@@ -10818,6 +10834,7 @@ var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
 	GOAL_PROGRESS_ROUTE_TEMPLATE,
 	GOAL_RUNBOOK_ROUTE_TEMPLATE,
 	GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
+	GOAL_SUPERVISOR_ROUTE_TEMPLATE,
 	GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
 	GOAL_CLOSEOUT_ROUTE_TEMPLATE,
 	RELEASE_BASELINE_ROUTE_TEMPLATE,
