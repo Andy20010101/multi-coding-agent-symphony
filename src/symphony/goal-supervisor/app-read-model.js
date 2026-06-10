@@ -134,7 +134,7 @@ function buildGoalSnapshot({
   currentGate
 }) {
   const normalizedTasks = Array.isArray(tasks) ? tasks.filter(isPlainObject) : [];
-  const completedCount = normalizedTasks.filter((task) => task.status === 'completed').length;
+  const completedCount = normalizedTasks.filter(isCompletedTaskStatus).length;
   const current = projection.current ?? projection.route?.current ?? {};
   const blockerCount = [
     projection.route?.state === 'blocked',
@@ -499,4 +499,13 @@ function isPlainObject(value) {
   return value !== null &&
     typeof value === 'object' &&
     !Array.isArray(value);
+}
+
+function isCompletedTaskStatus(task) {
+  return [
+    'completed',
+    'main-verified',
+    'release-ready',
+    'merged-to-main'
+  ].includes(task.status);
 }

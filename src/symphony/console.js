@@ -181,6 +181,9 @@ import {
 import {
   buildStageCommandSummary
 } from './stage.js';
+import {
+  buildGoalSupervisorAppReadModelFromContracts
+} from './goal-supervisor/index.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
@@ -1398,6 +1401,19 @@ export function createSymphonyConsoleServer({
         return;
       }
 
+      const goalSupervisorRequest = parseGoalSupervisorRequestPath(url.pathname, url.searchParams);
+
+      if (goalSupervisorRequest !== null) {
+        await writeGoalSupervisorResponse({
+          response,
+          stateDir,
+          request: goalSupervisorRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
       const goalEventPlanPreviewRequest = parseGoalEventPlanPreviewRequestPath(url.pathname, url.searchParams);
 
       if (goalEventPlanPreviewRequest !== null) {
@@ -2591,6 +2607,18 @@ async function writeGoalOperationsResponse({ response, stateDir, request, route,
 
     throw error;
   }
+}
+
+async function writeGoalSupervisorResponse({ response, stateDir, request, route, method }) {
+  if (request.kind === 'invalid') {
+    writeInvalidGoalRunbookControlResponse({ response, route, method });
+    return;
+  }
+
+  writeJsonResponse(response, 200, await buildGoalSupervisorAppReadModelFromContracts({
+    stateDir,
+    goalId: request.goalId
+  }));
 }
 
 async function writeGoalEventPlanPreviewResponse({ response, stateDir, request, route, method }) {
@@ -4589,6 +4617,14 @@ function parseGoalOperationsRequestPath(pathname, searchParams = new URLSearchPa
     kind: 'goal-operations',
     goalId: decoded.value
   };
+}
+
+function parseGoalSupervisorRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseGoalRunbookControlRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'supervisor'
+  });
 }
 
 function parseGoalEventPlanPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
