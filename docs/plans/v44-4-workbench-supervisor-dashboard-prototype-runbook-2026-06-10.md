@@ -200,6 +200,67 @@ The UI should use these component names so later PRs can divide review cleanly:
 
 Projection helpers may live in `frontend/workbench/src/api/contracts.js` for the prototype if that matches the current Workbench pattern. If the implementation extracts dashboard-specific helpers, keep the file under `frontend/workbench/src/api/` and update tests at the same boundary.
 
+## Field Mapping Rules
+
+The dashboard should render the v44.3 read model directly. It may normalize missing values for display, but it must not infer supervisor state from frontend strings, branch names, file names, PR titles, prompt text, or command text.
+
+Top-level metadata:
+
+- Show `contractName`, `contractVersion`, `generatedAt`, `readOnly`, and `willMutate` in the route header.
+- If `readOnly !== true` or `willMutate !== false`, show the route as unsafe and hide copy previews. Do not convert that state into a local recovery action.
+- Route state comes from the Workbench fetch result. Do not treat a successful React render as proof that the supervisor state is healthy.
+
+`goalSnapshot`:
+
+- Show goal id, title, task counts, active task, active role, release readiness, blocker count, source contracts, and generated timestamp.
+- If release readiness is missing, render it as missing. Do not show ready from a green badge, PR merge, branch name, or tag.
+- If blocker count is positive, raise the panel severity and keep the blocker count visible near the top of the panel.
+
+`recommendedNextAction`:
+
+- Support `continue`, `wait`, `checkpoint`, `compact`, `open-handoff-thread`, `recover-drift`, and `block`.
+- Show action id, label, reason, target role/task, checkpoint ref, wait policy, stale threshold, blocked fields, and safe command preview when present.
+- `continue` and `wait` are status guidance, not buttons. `checkpoint`, `compact`, and `open-handoff-thread` may show copy-only prompt or command text only when the read model marks it copy-only.
+- `recover-drift` and `block` must name the mismatch or blocker. Do not simplify them into a generic error.
+
+`activeLease`:
+
+- Show lease id, thread id, task id, role, phase, status, timestamps, age, and duplicate-dispatch guard.
+- A healthy active lease should make duplicate dispatch visibly unavailable.
+- If lease state and context status disagree, show a drift warning instead of choosing one source as truth.
+
+`pendingResult`:
+
+- Show source, status, event to register, evidence ref, parser reason, stale marker, and missing marker.
+- `pending` should highlight the checkpoint path. `invalid` should show the parser reason. `consumed` should show already handled. `missing` and `unavailable` are neutral or blocked states, not success.
+- Never render a register, apply, or confirm button.
+
+`contextStatus`:
+
+- Show provider summaries, transcript availability, exchange count, latest turn/tool call, token usage, context utilization, stale/missing transcript state, result-block evidence, and drift markers.
+- Unknown provider fields stay missing.
+- Raw transcript text and raw provider output must not appear in the UI.
+- Near-limit context should make checkpoint or compact guidance visible when the read model provides it.
+
+`commandBoundary`:
+
+- Show state, execution availability, copy-only flag, allowed command families, blocked command families, confirmation fields, and safe command preview.
+- `executionAvailable` must remain false when the backend says false.
+- Use labels such as `Copy` or `Copy preview`. Do not use `Run`, `Execute`, `Start`, `Dispatch`, `Apply`, `Release`, `Publish`, `Tag`, or `Closeout` inside this panel.
+- If state is `disabled`, previews are explanatory text only. If state is `dry-run`, preview text may be copy-only. If state is `confirm-required`, show the required fields but do not create a confirm action.
+
+`goalTimeline`:
+
+- Show task and gate events in backend order unless the backend explicitly provides a display order.
+- Show event id, task id, role, status, evidence ref, timestamp, and hash-chain state when present.
+- Evidence refs render as text identifiers. They must not open local files or fetch evidence bodies.
+
+`ownership`:
+
+- Show orchestration owner, delivery boundary, active PR, branch, rollback boundary, daemon state, and controller intervention reason.
+- If daemon owns orchestration, the UI must not imply manual takeover.
+- If PR owns review, merge, and rollback, keep the PR boundary visible before any copy-only recovery text.
+
 ## Fixture and Mock Scenarios
 
 PR-1 should build fixture-driven UI before wiring the live route deeper into the shell. The fixtures can live under `frontend/workbench/src/fixtures/` or `fixtures/contracts/goal-supervisor/` if tests reuse backend replay data. Pick one location and document it in the PR.
@@ -216,6 +277,75 @@ Required scenarios:
 | `missing/empty context` | Context status shows missing transcript or empty provider summary without inferring failure or success. Empty copy names the missing contract field. |
 
 Fixture assertions should check text that operators need, not CSS implementation details. Use source-level tests only for hard boundaries such as no event registration, no CLI execution, no daemon controls, and no direct JSONL paths.
+
+## Visual Direction
+
+The dashboard should feel like a Workbench operating surface, not a landing page or marketing dashboard.
+
+Use:
+
+- high information density with clear grouping;
+- compact cards with stable dimensions and predictable wrapping;
+- subtle borders and low-glare surfaces that match existing Workbench styles;
+- system font stack and existing Workbench spacing/color conventions where possible;
+- badges for state, not paragraphs explaining the feature;
+- copy-only controls only where the read model provides safe preview text.
+
+Avoid:
+
+- oversized hero sections;
+- decorative gradients, orbs, 3D objects, or glass effects;
+- new global design systems in v44.4;
+- broad App shell refactors while adding the supervisor route;
+- UI text that claims a command has run, a gate has passed, or release is ready unless the read model says so.
+
+Design references are directional only:
+
+- Linear for dense state clarity;
+- Raycast for compact command/copy affordances;
+- Xcode for inspector-style grouping and operational hierarchy.
+
+Do not copy brand visuals or introduce dependencies to mimic these products.
+
+## Design Exploration Input
+
+If an external design tool is used before PR-1 or PR-2, use it only for visual exploration and a UI brief. Do not paste generated HTML or CSS into production React.
+
+Prompt baseline:
+
+```text
+Design a macOS-style Workbench page for a Supervisor Command Center.
+
+The page reads goal-supervisor-app-read-model.v1 through a read-only API.
+It displays goalSnapshot, goalTimeline, activeLease, pendingResult, currentGate,
+recommendedNextAction, ownership, contextStatus, and commandBoundary.
+
+The UI must not execute commands, start provider CLIs, dispatch children,
+write goal ledger or event log files, tag, publish, or run release closeout.
+Command previews are copy-only. Missing or stale transcript state must not look
+successful.
+
+Show a 1440x900 main layout, a mobile stack, ready/missing/stale/blocked states,
+and a component map for the React Workbench implementation.
+```
+
+Any design output becomes an input to the runbook. The implementation still has to follow the repository's React/Vite Workbench patterns and the source-level tests.
+
+## Later UI Inputs
+
+The supervisor dashboard may eventually feed a compact Desktop Shell card, but v44.4 should not make that a required PR unless the Workbench route lands cleanly and the user explicitly expands scope.
+
+If a later PR adds the compact card, it should show only:
+
+- recommended action;
+- reason;
+- active lease state;
+- context health;
+- command boundary state;
+- pending result state;
+- current gate state.
+
+That card must follow the same no-execution boundary as the full dashboard.
 
 ## PR Order
 
@@ -456,3 +586,4 @@ git diff --check
 Current PR-0 result:
 
 - `git diff --check`: passed, no whitespace errors.
+- Additional Pro UI runbook input from the root checkout was summarized into `Field Mapping Rules`, `Visual Direction`, `Design Exploration Input`, and `Later UI Inputs`; the source file was not copied into PR-0.
