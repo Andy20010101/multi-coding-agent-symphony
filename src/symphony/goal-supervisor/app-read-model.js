@@ -338,6 +338,7 @@ function normalizeContextStatus(sessionContext, projection) {
     transcriptAvailability,
     exchangeCount: Number.isInteger(context.exchangeCount) ? context.exchangeCount : (routeThread?.turnCount ?? 0),
     latestToolCall,
+    latestTurnState: isPlainObject(context.latestTurnState) ? { ...context.latestTurnState } : { status: 'missing' },
     tokenUsage: isPlainObject(context.tokenUsage) ? { ...context.tokenUsage } : null,
     contextUtilization: isPlainObject(context.contextUtilization) ? { ...context.contextUtilization } : null,
     staleTranscriptState: isPlainObject(context.staleTranscriptState)
@@ -346,6 +347,12 @@ function normalizeContextStatus(sessionContext, projection) {
     missingTranscriptState: isPlainObject(context.missingTranscriptState)
       ? { ...context.missingTranscriptState }
       : { missing: transcriptAvailability === 'missing' || transcriptAvailability === 'unavailable', reason: null },
+    resultBlockEvidence: isPlainObject(context.resultBlockEvidence)
+      ? {
+          status: context.resultBlockEvidence.status ?? 'missing',
+          present: context.resultBlockEvidence.present === true
+        }
+      : { status: 'missing', present: false },
     driftMarkers: Array.isArray(context.driftMarkers) ? context.driftMarkers.filter(nonEmptyString) : []
   };
 }

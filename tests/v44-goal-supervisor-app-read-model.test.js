@@ -101,7 +101,8 @@ describe('v44.3 goal supervisor app read model contract', () => {
         'goal-progress-ledger.v1',
         'goal-next-action.v1',
         'goal-supervisor-core-projection.v1',
-        'goal-supervisor-observability.v1'
+        'goal-supervisor-observability.v1',
+        'sessionContext.v1'
       ]);
       assert.equal(model.recommendedNextAction.actionId, 'open-handoff-thread');
       assert.equal(model.commandBoundary.state, 'disabled');

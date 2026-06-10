@@ -5,4 +5,5 @@ export * from './core-projection.js';
 export * from './event-registrar.js';
 export * from './result-protocol.js';
 export * from './route-progress.js';
+export * from './session-context.js';
 export * from './state-writer.js';
