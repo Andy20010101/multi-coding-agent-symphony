@@ -1,4 +1,5 @@
 export * from './app-thread-adapter.js';
+export * from './app-read-model.js';
 export * from './core-projection.js';
 export * from './event-registrar.js';
 export * from './result-protocol.js';

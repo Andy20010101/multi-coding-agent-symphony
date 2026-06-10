@@ -1,0 +1,615 @@
+{
+  "contractName": "goal-supervisor-app-read-model-replay-fixtures.v1",
+  "contractVersion": 1,
+  "goalId": "v44-3-app-contract-context-supervisor",
+  "generatedAtUtc": "2026-06-10T03:30:00.000Z",
+  "nowUtc": "2026-06-10T03:30:00.000Z",
+  "progressGraceMs": 900000,
+  "releaseGates": [
+    "release.pnpm-check",
+    "release.pnpm-test",
+    "release.workbench-build",
+    "release.diff-check",
+    "release.docs-updated"
+  ],
+  "baseInput": {
+    "goalId": "v44-3-app-contract-context-supervisor",
+    "title": "v44.3 app contract and context supervisor",
+    "tasks": [
+      {
+        "taskId": "task-1",
+        "status": "active"
+      },
+      {
+        "taskId": "task-2",
+        "status": "planned"
+      }
+    ],
+    "sourceContracts": [
+      "goal-runbook.v1",
+      "goal-progress-ledger.v1",
+      "goal-event-log.v1",
+      "goal-next-action.v1",
+      "goal-supervisor-core-projection.v1"
+    ],
+    "ownership": {
+      "orchestrationOwner": "local-goal-supervisor-daemon",
+      "deliveryBoundary": "pull-request",
+      "rollbackBoundary": "pull-request",
+      "daemonState": "external-orchestration-owner"
+    },
+    "branch": "codex/v44-3-pr1-app-facing-contracts-fixtures"
+  },
+  "scenarios": [
+    {
+      "name": "dispatchable next action",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "title": "v44.3 app contract and context supervisor",
+        "tasks": [
+          {
+            "taskId": "task-1",
+            "status": "active"
+          },
+          {
+            "taskId": "task-2",
+            "status": "planned"
+          }
+        ],
+        "sourceContracts": [
+          "goal-runbook.v1",
+          "goal-progress-ledger.v1",
+          "goal-event-log.v1",
+          "goal-next-action.v1",
+          "goal-supervisor-core-projection.v1"
+        ],
+        "ownership": {
+          "orchestrationOwner": "local-goal-supervisor-daemon",
+          "deliveryBoundary": "pull-request",
+          "rollbackBoundary": "pull-request",
+          "daemonState": "external-orchestration-owner"
+        },
+        "branch": "codex/v44-3-pr1-app-facing-contracts-fixtures",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": null,
+          "threads": [],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is next"
+        },
+        "sessionContext": {
+          "transcriptAvailability": "missing",
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "open-handoff-thread",
+        "commandBoundaryState": "disabled",
+        "pendingResultStatus": "missing",
+        "transcriptAvailability": "missing"
+      }
+    },
+    {
+      "name": "active lease with recent transcript",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": {
+            "leaseId": "lease-task-1-worker",
+            "status": "thread-active",
+            "threadId": "thread-task-1-worker",
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement",
+            "createdAt": "2026-06-10T03:10:00.000Z",
+            "updatedAt": "2026-06-10T03:27:00.000Z"
+          },
+          "threads": [
+            {
+              "threadId": "thread-task-1-worker",
+              "status": "active",
+              "updatedAt": "2026-06-10T03:27:00.000Z"
+            }
+          ],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is active"
+        },
+        "expected": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "taskId": "task-1",
+          "role": "worker",
+          "phase": "implement",
+          "threadId": "thread-task-1-worker",
+          "branch": "codex/v44-3-pr1-app-facing-contracts-fixtures",
+          "worktree": "/Users/andy/.codex/worktrees/codex_v44-3-pr1-app-facing-contracts-fixtures",
+          "baseCommit": "abd7e1fc3cec4c48ced851cbb7cb5500ade99599",
+          "evidenceRef": "docs/plans/v44-3-task-1-worker-evidence-2026-06-10.md"
+        },
+        "threadRead": {
+          "threadId": "thread-task-1-worker",
+          "thread": {
+            "id": "thread-task-1-worker",
+            "status": {
+              "type": "loaded"
+            },
+            "turns": [
+              {
+                "id": "turn-1",
+                "status": "inProgress",
+                "updatedAt": "2026-06-10T03:27:00.000Z",
+                "items": [
+                  {
+                    "type": "toolCall",
+                    "name": "functions.exec_command"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "sessionContext": {
+          "sessionSourceSummaries": [
+            {
+              "provider": "codex",
+              "status": "readable",
+              "threadId": "thread-task-1-worker",
+              "latestTurnAt": "2026-06-10T03:27:00.000Z"
+            }
+          ],
+          "transcriptAvailability": "readable",
+          "exchangeCount": 4,
+          "latestToolCall": {
+            "name": "functions.exec_command",
+            "status": "completed",
+            "updatedAt": "2026-06-10T03:27:00.000Z"
+          },
+          "staleTranscriptState": {
+            "stale": false,
+            "reason": null
+          },
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "wait",
+        "commandBoundaryState": "disabled",
+        "pendingResultStatus": "missing",
+        "transcriptAvailability": "readable"
+      }
+    },
+    {
+      "name": "active lease with stale transcript",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": {
+            "leaseId": "lease-task-1-worker",
+            "status": "thread-active",
+            "threadId": "thread-task-1-worker",
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement",
+            "createdAt": "2026-06-10T02:30:00.000Z",
+            "updatedAt": "2026-06-10T02:45:00.000Z"
+          },
+          "threads": [
+            {
+              "threadId": "thread-task-1-worker",
+              "status": "active",
+              "updatedAt": "2026-06-10T02:45:00.000Z"
+            }
+          ],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is active"
+        },
+        "expected": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "taskId": "task-1",
+          "role": "worker",
+          "phase": "implement",
+          "threadId": "thread-task-1-worker",
+          "branch": "codex/v44-3-pr1-app-facing-contracts-fixtures",
+          "worktree": "/Users/andy/.codex/worktrees/codex_v44-3-pr1-app-facing-contracts-fixtures",
+          "baseCommit": "abd7e1fc3cec4c48ced851cbb7cb5500ade99599",
+          "evidenceRef": "docs/plans/v44-3-task-1-worker-evidence-2026-06-10.md"
+        },
+        "threadRead": {
+          "threadId": "thread-task-1-worker",
+          "thread": {
+            "id": "thread-task-1-worker",
+            "status": {
+              "type": "loaded"
+            },
+            "turns": [
+              {
+                "id": "turn-old",
+                "status": "inProgress",
+                "updatedAt": "2026-06-10T02:45:00.000Z",
+                "items": []
+              }
+            ]
+          }
+        },
+        "sessionContext": {
+          "transcriptAvailability": "readable",
+          "exchangeCount": 3,
+          "staleTranscriptState": {
+            "stale": true,
+            "reason": "active-child-progress-age-exceeded-grace-window"
+          },
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "open-handoff-thread",
+        "commandBoundaryState": "disabled",
+        "pendingResultStatus": "missing",
+        "transcriptAvailability": "readable"
+      }
+    },
+    {
+      "name": "pending escrow result",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": {
+            "leaseId": "lease-task-1-worker",
+            "status": "thread-active",
+            "threadId": "thread-task-1-worker",
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement",
+            "updatedAt": "2026-06-10T03:20:00.000Z"
+          },
+          "threads": [],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is active"
+        },
+        "expected": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "taskId": "task-1",
+          "role": "worker",
+          "phase": "implement",
+          "threadId": "thread-task-1-worker",
+          "branch": "codex/v44-3-pr1-app-facing-contracts-fixtures",
+          "worktree": "/Users/andy/.codex/worktrees/codex_v44-3-pr1-app-facing-contracts-fixtures",
+          "baseCommit": "abd7e1fc3cec4c48ced851cbb7cb5500ade99599",
+          "evidenceRef": "docs/plans/v44-3-task-1-worker-evidence-2026-06-10.md"
+        },
+        "escrow": {
+          "path": "/Users/andy/.codex/local-goal-supervisor/results/v44-3-app-contract-context-supervisor/thread-task-1-worker.txt",
+          "text": "RESULT_BLOCK_START\ngoalId: v44-3-app-contract-context-supervisor\ntaskId: task-1\nrole: worker\nthreadId: thread-task-1-worker\nbranch: codex/v44-3-pr1-app-facing-contracts-fixtures\nworktree: /Users/andy/.codex/worktrees/codex_v44-3-pr1-app-facing-contracts-fixtures\nbaseCommit: abd7e1fc3cec4c48ced851cbb7cb5500ade99599\nheadCommit: abd7e1fc3cec4c48ced851cbb7cb5500ade99599\nstatus: completed\neventToRegister: worker.evidence-recorded\nevidenceRef: docs/plans/v44-3-task-1-worker-evidence-2026-06-10.md\nfilesChanged: src/symphony/goal-supervisor/app-read-model.js; tests/v44-goal-supervisor-app-read-model.test.js\ncommandsRun: node --test tests/v44-goal-supervisor-app-read-model.test.js: passed\nvalidation: app read model contract fixtures replayed\nrisks: none\nblockers: none\nnextSuggestedAction: task-1 review\nRESULT_BLOCK_END"
+        },
+        "threadRead": {
+          "threadId": "thread-task-1-worker",
+          "thread": {
+            "id": "thread-task-1-worker",
+            "status": {
+              "type": "notLoaded"
+            },
+            "turns": []
+          }
+        },
+        "sessionContext": {
+          "transcriptAvailability": "notLoaded",
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "checkpoint",
+        "commandBoundaryState": "disabled",
+        "pendingResultStatus": "pending",
+        "transcriptAvailability": "notLoaded"
+      }
+    },
+    {
+      "name": "missing transcript",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": {
+            "leaseId": "lease-task-1-worker",
+            "status": "thread-active",
+            "threadId": "thread-task-1-worker",
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement",
+            "updatedAt": "2026-06-10T03:27:00.000Z"
+          },
+          "threads": [],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is active"
+        },
+        "expected": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "taskId": "task-1",
+          "role": "worker",
+          "phase": "implement",
+          "threadId": "thread-task-1-worker",
+          "branch": "codex/v44-3-pr1-app-facing-contracts-fixtures",
+          "worktree": "/Users/andy/.codex/worktrees/codex_v44-3-pr1-app-facing-contracts-fixtures",
+          "baseCommit": "abd7e1fc3cec4c48ced851cbb7cb5500ade99599",
+          "evidenceRef": "docs/plans/v44-3-task-1-worker-evidence-2026-06-10.md"
+        },
+        "threadRead": {
+          "threadId": "thread-task-1-worker",
+          "error": {
+            "message": "thread not found"
+          }
+        },
+        "sessionContext": {
+          "transcriptAvailability": "missing",
+          "missingTranscriptState": {
+            "missing": true,
+            "reason": "thread-not-found"
+          }
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "block",
+        "commandBoundaryState": "disabled",
+        "pendingResultStatus": "unavailable",
+        "transcriptAvailability": "missing"
+      }
+    },
+    {
+      "name": "release closeout blocked",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": null,
+          "threads": [],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "release",
+            "role": "release-manager",
+            "phase": "release-prep"
+          },
+          "reason": "release closeout requires explicit authorization"
+        },
+        "sessionContext": {
+          "transcriptAvailability": "missing",
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "block",
+        "commandBoundaryState": "disabled",
+        "pendingResultStatus": "missing",
+        "transcriptAvailability": "missing"
+      }
+    },
+    {
+      "name": "command boundary disabled",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": null,
+          "threads": [],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is next"
+        },
+        "sessionContext": {
+          "transcriptAvailability": "missing",
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "open-handoff-thread",
+        "commandBoundaryState": "disabled",
+        "pendingResultStatus": "missing",
+        "transcriptAvailability": "missing"
+      }
+    },
+    {
+      "name": "dry-run command preview",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": null,
+          "threads": [],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is next"
+        },
+        "sessionContext": {
+          "transcriptAvailability": "missing",
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        },
+        "commandBoundary": {
+          "state": "dry-run",
+          "executionAvailable": false,
+          "copyOnly": true,
+          "allowedCommandFamilies": [
+            "child-dispatch-preview"
+          ],
+          "blockedCommandFamilies": [
+            "provider-cli",
+            "real-cli",
+            "generic-shell",
+            "daemon-launch",
+            "child-dispatch",
+            "goal-ledger-write",
+            "event-log-write",
+            "mutation-gate",
+            "audit",
+            "tag",
+            "push-release",
+            "publish-release",
+            "github-release",
+            "release-closeout"
+          ],
+          "safeCommandPreview": "/goal dispatch task-1 worker --fresh-controller"
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "open-handoff-thread",
+        "commandBoundaryState": "dry-run",
+        "pendingResultStatus": "missing",
+        "transcriptAvailability": "missing"
+      }
+    },
+    {
+      "name": "confirm-required command preview",
+      "input": {
+        "goalId": "v44-3-app-contract-context-supervisor",
+        "state": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "active": null,
+          "threads": [],
+          "results": []
+        },
+        "goalNext": {
+          "goalId": "v44-3-app-contract-context-supervisor",
+          "status": "action-required",
+          "next": {
+            "taskId": "task-1",
+            "role": "worker",
+            "phase": "implement"
+          },
+          "reason": "task-1 worker implementation is next"
+        },
+        "sessionContext": {
+          "transcriptAvailability": "missing",
+          "missingTranscriptState": {
+            "missing": false,
+            "reason": null
+          }
+        },
+        "commandBoundary": {
+          "state": "confirm-required",
+          "executionAvailable": false,
+          "copyOnly": true,
+          "allowedCommandFamilies": [
+            "child-dispatch-preview"
+          ],
+          "blockedCommandFamilies": [
+            "provider-cli",
+            "real-cli",
+            "generic-shell",
+            "daemon-launch",
+            "child-dispatch",
+            "goal-ledger-write",
+            "event-log-write",
+            "mutation-gate",
+            "audit",
+            "tag",
+            "push-release",
+            "publish-release",
+            "github-release",
+            "release-closeout"
+          ],
+          "safeCommandPreview": "/goal dispatch task-1 worker --fresh-controller",
+          "confirmationFields": [
+            "planHash",
+            "goalId",
+            "taskId",
+            "actor",
+            "evidenceRef",
+            "reason"
+          ]
+        }
+      },
+      "expected": {
+        "recommendedNextActionId": "open-handoff-thread",
+        "commandBoundaryState": "confirm-required",
+        "pendingResultStatus": "missing",
+        "transcriptAvailability": "missing"
+      }
+    }
+  ]
+}
