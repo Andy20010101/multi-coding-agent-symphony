@@ -14,6 +14,10 @@ import {
   fetchPromptWorkspaceRunbook,
   fetchWorkbenchContracts
 } from './api/client.js';
+import {
+  SUPERVISOR_DASHBOARD_FIXTURES,
+  SUPERVISOR_DASHBOARD_SCENARIOS
+} from './fixtures/supervisorDashboardFixtures.js';
 
 const initialState = {
   phase: 'loading',
@@ -24,6 +28,7 @@ const GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-c
 const GOAL_OPERATION_POLL_INTERVAL_MS = 2500;
 const WORKBENCH_NAV_ITEMS = Object.freeze([
   Object.freeze({ id: 'desktop', label: 'Desktop', route: '/workbench/desktop/' }),
+  Object.freeze({ id: 'supervisor', label: 'Supervisor', route: '/workbench/supervisor/' }),
   Object.freeze({ id: 'runtime', label: 'Runtime', targetId: 'runtime-snapshot-panel' }),
   Object.freeze({ id: 'active-goal', label: 'Active Goal', targetId: 'active-goal-runbook-panel' }),
   Object.freeze({ id: 'prompt-handoff', label: 'Prompt Handoff', route: '/workbench/prompts/' }),
@@ -152,13 +157,15 @@ export function WorkbenchShell({
   });
 
   return (
-    <main className={workbenchRoute === 'desktop' ? 'workbench-shell desktop-shell-route' : 'workbench-shell'} aria-labelledby="workbench-title">
+    <main className={workbenchShellClassName(workbenchRoute)} aria-labelledby="workbench-title">
       <header className="workbench-header">
         <div className="header-copy">
-          <p className="eyebrow">{workbenchRoute === 'desktop' ? 'v37 Desktop Shell MVP' : 'v28 Workbench v1'}</p>
-          <h1 id="workbench-title">{workbenchRoute === 'desktop' ? 'Symphony Desktop Shell' : 'Symphony Workbench'}</h1>
+          <p className="eyebrow">{workbenchRouteEyebrow(workbenchRoute)}</p>
+          <h1 id="workbench-title">{workbenchRouteTitle(workbenchRoute)}</h1>
           <p className="header-summary">
-            {workbenchRoute === 'desktop'
+            {workbenchRoute === 'supervisor'
+              ? 'Fixture-driven read-only supervisor state: goal snapshot, active lease, context, pending result, command boundary, timeline, gate, and ownership.'
+              : workbenchRoute === 'desktop'
               ? '只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。'
               : '围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。'}
           </p>
@@ -166,11 +173,11 @@ export function WorkbenchShell({
         <div className="status-strip" aria-label="当前只读状态">
           <span>{phaseText(viewState.phase)}</span>
           <span>{routeCounts.ready}/{routeCounts.total} routes 已读取</span>
-          <span>{workbenchRoute === 'desktop' ? 'contract-backed' : 'confirm 后会刷新 goal-status / events / next action'}</span>
+          <span>{workbenchRouteStatusText(workbenchRoute)}</span>
         </div>
       </header>
 
-      {workbenchRoute === 'desktop' ? null : (
+      {workbenchRoute === 'desktop' || workbenchRoute === 'supervisor' ? null : (
         <>
           <WorkbenchStateHeader header={stateHeader} />
           <WorkbenchNavigation currentRoute={workbenchRoute} routeContext={routeContext} />
@@ -178,10 +185,19 @@ export function WorkbenchShell({
         </>
       )}
 
-      {viewState.phase === 'loading' ? <ShellState title="读取中" copy="正在读取 summary、readiness、runs 与 latest run 只读 contract。" /> : null}
-      {viewState.phase === 'failed' ? <ShellState title="读取失败" copy="错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。" /> : null}
+      {workbenchRoute !== 'supervisor' && viewState.phase === 'loading' ? <ShellState title="读取中" copy="正在读取 summary、readiness、runs 与 latest run 只读 contract。" /> : null}
+      {workbenchRoute !== 'supervisor' && viewState.phase === 'failed' ? <ShellState title="读取失败" copy="错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。" /> : null}
 
-      {model === null ? null : (
+      {workbenchRoute === 'supervisor' ? (
+        <SupervisorDashboard
+          dashboard={selectedSupervisorDashboardFixture()}
+          routeState={{
+            state: 'fixture',
+            source: 'frontend/workbench/src/fixtures/supervisorDashboardFixtures.js'
+          }}
+          refreshHandler={onRefreshWorkbenchContracts}
+        />
+      ) : model === null ? null : (
         workbenchRoute === 'desktop' ? (
           <DesktopShellRoute
             desktopShell={model.desktopShell}
@@ -1215,6 +1231,317 @@ function WorkbenchRouteEvidenceList({ evidenceRefs }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function SupervisorDashboard({
+  dashboard,
+  routeState,
+  refreshHandler = () => undefined
+}) {
+  const scenarioLinks = SUPERVISOR_DASHBOARD_SCENARIOS.map((scenarioId) => ({
+    id: scenarioId,
+    href: `/workbench/supervisor/?scenario=${encodeURIComponent(scenarioId)}`,
+    label: SUPERVISOR_DASHBOARD_FIXTURES[scenarioId]?.label ?? scenarioId
+  }));
+
+  return (
+    <section className="supervisor-dashboard-route" aria-label="Supervisor Command Center">
+      <div className="supervisor-topbar" aria-label="Supervisor fixture metadata">
+        <FieldList rows={[
+          ['goal id', textValue(dashboard.goalSnapshot.goalId)],
+          ['active task', textValue(dashboard.goalSnapshot.activeTask)],
+          ['active role', textValue(dashboard.goalSnapshot.activeRole)],
+          ['generated at', textValue(dashboard.generatedAt)],
+          ['readOnly', textValue(dashboard.readOnly)],
+          ['willMutate', textValue(dashboard.willMutate)]
+        ]} />
+      </div>
+
+      <nav className="supervisor-scenario-nav" aria-label="Supervisor fixture scenarios">
+        {scenarioLinks.map((scenario) => (
+          <a
+            key={scenario.id}
+            className={scenario.id === dashboard.id ? 'supervisor-scenario active' : 'supervisor-scenario'}
+            href={scenario.href}
+            aria-current={scenario.id === dashboard.id ? 'page' : undefined}
+          >
+            <strong>{scenario.label}</strong>
+            <span>{scenario.id}</span>
+          </a>
+        ))}
+      </nav>
+
+      <div className="supervisor-fixture-note">
+        <span>{dashboard.summary}</span>
+        <span>source: {routeState.source}</span>
+        <span>refresh handler: {typeof refreshHandler === 'function' ? 'existing Workbench read refresh only' : 'none'}</span>
+      </div>
+
+      <div className="supervisor-dashboard-grid">
+        <GoalSnapshotSummary goalSnapshot={dashboard.goalSnapshot} />
+        <RecommendedNextActionCard
+          recommendedNextAction={dashboard.recommendedNextAction}
+          commandBoundary={dashboard.commandBoundary}
+        />
+        <ActiveLeasePanel activeLease={dashboard.activeLease} contextStatus={dashboard.contextStatus} />
+        <ContextStatusPanel contextStatus={dashboard.contextStatus} />
+        <PendingResultPanel pendingResult={dashboard.pendingResult} />
+        <CommandBoundaryPanel commandBoundary={dashboard.commandBoundary} />
+        <GoalTimeline goalTimeline={dashboard.goalTimeline} />
+        <CurrentGateCard currentGate={dashboard.currentGate} />
+        <OwnershipPanel ownership={dashboard.ownership} />
+      </div>
+    </section>
+  );
+}
+
+function GoalSnapshotSummary({ goalSnapshot }) {
+  return (
+    <SupervisorCard
+      className="supervisor-card-goal"
+      kicker="goal snapshot"
+      title="Goal Snapshot"
+      state={goalSnapshot.releaseReadiness}
+    >
+      <FieldList rows={[
+        ['goal id', textValue(goalSnapshot.goalId)],
+        ['title', textValue(goalSnapshot.title)],
+        ['active task', textValue(goalSnapshot.activeTask)],
+        ['active role', textValue(goalSnapshot.activeRole)],
+        ['completed / total', textValue(`${goalSnapshot.completedTasks} / ${goalSnapshot.totalTasks}`)],
+        ['blockers', textValue(goalSnapshot.blockerCount)],
+        ['release readiness', textValue(goalSnapshot.releaseReadiness)],
+        ['generated', textValue(goalSnapshot.generatedAt)]
+      ]} />
+      <Subsection title="source contracts">
+        <CompactList items={goalSnapshot.sourceContracts} />
+      </Subsection>
+    </SupervisorCard>
+  );
+}
+
+function RecommendedNextActionCard({ recommendedNextAction, commandBoundary }) {
+  const previewVisible = commandBoundary.copyOnly === true && commandBoundary.executionAvailable === false;
+
+  return (
+    <SupervisorCard
+      className="supervisor-card-action"
+      kicker="recommended next action"
+      title="Recommended Next Action"
+      state={recommendedNextAction.state}
+    >
+      <FieldList rows={[
+        ['action id', textValue(recommendedNextAction.actionId)],
+        ['label', textValue(recommendedNextAction.label)],
+        ['reason', textValue(recommendedNextAction.reason)],
+        ['target role', textValue(recommendedNextAction.targetRole)],
+        ['target task', textValue(recommendedNextAction.targetTask)],
+        ['checkpoint', textValue(recommendedNextAction.checkpointRef)],
+        ['wait policy', textValue(recommendedNextAction.waitPolicy)],
+        ['stale threshold', textValue(recommendedNextAction.staleThreshold)]
+      ]} />
+      <Subsection title="blocked fields">
+        <CompactList items={recommendedNextAction.blockedFields} />
+      </Subsection>
+      {previewVisible ? <CopyPreviewText text={recommendedNextAction.safePreview} /> : null}
+    </SupervisorCard>
+  );
+}
+
+function ActiveLeasePanel({ activeLease, contextStatus }) {
+  const driftVisible = contextStatus.driftMarkers.some((marker) => marker !== 'none');
+
+  return (
+    <SupervisorCard
+      className="supervisor-card-lease"
+      kicker="active lease"
+      title="Active Lease"
+      state={activeLease.status}
+    >
+      <FieldList rows={[
+        ['lease id', textValue(activeLease.leaseId)],
+        ['thread id', textValue(activeLease.threadId)],
+        ['task id', textValue(activeLease.taskId)],
+        ['role', textValue(activeLease.role)],
+        ['phase', textValue(activeLease.phase)],
+        ['status', textValue(activeLease.status)],
+        ['started', textValue(activeLease.startedAt)],
+        ['updated', textValue(activeLease.updatedAt)],
+        ['age', textValue(activeLease.age)],
+        ['duplicate dispatch guard', textValue(activeLease.duplicateDispatchGuard)]
+      ]} />
+      {driftVisible ? <p className="supervisor-warning">drift warning: {contextStatus.driftMarkers.join(' / ')}</p> : null}
+    </SupervisorCard>
+  );
+}
+
+function ContextStatusPanel({ contextStatus }) {
+  return (
+    <SupervisorCard
+      className="supervisor-card-context"
+      kicker="context status"
+      title="Context Status"
+      state={contextStatus.state}
+    >
+      <FieldList rows={[
+        ['transcript', textValue(contextStatus.transcriptAvailability)],
+        ['exchange count', textValue(contextStatus.exchangeCount)],
+        ['latest turn', textValue(contextStatus.latestTurn)],
+        ['latest tool call', textValue(contextStatus.latestToolCall)],
+        ['token usage', textValue(contextStatus.tokenUsage)],
+        ['context utilization', textValue(contextStatus.utilization)],
+        ['transcript state', textValue(contextStatus.transcriptState)],
+        ['result-block evidence', textValue(contextStatus.resultBlockEvidence)]
+      ]} />
+      <Subsection title="provider summaries">
+        <CompactList items={contextStatus.providers.length === 0 ? ['missing contract field: contextStatus.providerSummaries'] : contextStatus.providers} />
+      </Subsection>
+      <Subsection title="drift markers">
+        <CompactList items={contextStatus.driftMarkers} />
+      </Subsection>
+    </SupervisorCard>
+  );
+}
+
+function PendingResultPanel({ pendingResult }) {
+  return (
+    <SupervisorCard
+      className="supervisor-card-pending"
+      kicker="pending result"
+      title="Pending Result"
+      state={pendingResult.status}
+    >
+      <FieldList rows={[
+        ['status', textValue(pendingResult.status)],
+        ['source', textValue(pendingResult.source)],
+        ['event to register', textValue(pendingResult.eventToRegister)],
+        ['evidence ref', textValue(pendingResult.evidenceRef)],
+        ['parser reason', textValue(pendingResult.parserReason)],
+        ['stale marker', textValue(pendingResult.staleMarker)],
+        ['missing marker', textValue(pendingResult.missingMarker)]
+      ]} />
+      <p className="panel-note">No event append control is rendered in this fixture prototype.</p>
+    </SupervisorCard>
+  );
+}
+
+function CommandBoundaryPanel({ commandBoundary }) {
+  return (
+    <SupervisorCard
+      className="supervisor-card-boundary"
+      kicker="command boundary"
+      title="Command Boundary"
+      state={commandBoundary.state}
+    >
+      <FieldList rows={[
+        ['state', textValue(commandBoundary.state)],
+        ['executionAvailable', textValue(commandBoundary.executionAvailable)],
+        ['copyOnly', textValue(commandBoundary.copyOnly)]
+      ]} />
+      <Subsection title="allowed families">
+        <CompactList items={commandBoundary.allowedFamilies} />
+      </Subsection>
+      <Subsection title="blocked families">
+        <CompactList items={commandBoundary.blockedFamilies} />
+      </Subsection>
+      <Subsection title="confirmation fields">
+        <CompactList items={commandBoundary.confirmationFields} />
+      </Subsection>
+      {commandBoundary.copyOnly === true ? <CopyPreviewText text={commandBoundary.safePreview} /> : null}
+    </SupervisorCard>
+  );
+}
+
+function GoalTimeline({ goalTimeline }) {
+  return (
+    <SupervisorCard
+      className="supervisor-card-timeline"
+      kicker="goal timeline"
+      title="Goal Timeline"
+      state={`${goalTimeline.length} events`}
+    >
+      <ol className="supervisor-timeline-list">
+        {goalTimeline.map((event) => (
+          <li key={event.eventId}>
+            <FieldList rows={[
+              ['event id', textValue(event.eventId)],
+              ['task', textValue(event.taskId)],
+              ['role', textValue(event.role)],
+              ['status', textValue(event.status)],
+              ['evidence ref', textValue(event.evidenceRef)],
+              ['timestamp', textValue(event.timestamp)],
+              ['hash state', textValue(event.hashState)]
+            ]} />
+          </li>
+        ))}
+      </ol>
+    </SupervisorCard>
+  );
+}
+
+function CurrentGateCard({ currentGate }) {
+  return (
+    <SupervisorCard
+      className="supervisor-card-gate"
+      kicker="current gate"
+      title="Current Gate"
+      state={currentGate.status}
+    >
+      <FieldList rows={[
+        ['gate id', textValue(currentGate.gateId)],
+        ['status', textValue(currentGate.status)],
+        ['required family', textValue(currentGate.requiredCommandFamily)],
+        ['blocking reason', textValue(currentGate.blockingReason)],
+        ['evidence requirement', textValue(currentGate.evidenceRequirement)],
+        ['closeout authorization', textValue(currentGate.closeoutAuthorization)]
+      ]} />
+    </SupervisorCard>
+  );
+}
+
+function OwnershipPanel({ ownership }) {
+  return (
+    <SupervisorCard
+      className="supervisor-card-ownership"
+      kicker="ownership"
+      title="Ownership"
+      state={ownership.daemonState}
+    >
+      <FieldList rows={[
+        ['orchestration owner', textValue(ownership.orchestrationOwner)],
+        ['delivery boundary', textValue(ownership.deliveryBoundary)],
+        ['active PR', textValue(ownership.activePr)],
+        ['branch', textValue(ownership.branch)],
+        ['rollback boundary', textValue(ownership.rollbackBoundary)],
+        ['daemon state', textValue(ownership.daemonState)],
+        ['controller intervention', textValue(ownership.controllerInterventionReason)]
+      ]} />
+    </SupervisorCard>
+  );
+}
+
+function SupervisorCard({ className, kicker, title, state, children }) {
+  return (
+    <article className={`supervisor-card ${className}`} aria-labelledby={`${className}-title`}>
+      <header className="supervisor-card-header">
+        <div>
+          <p className="section-kicker">{kicker}</p>
+          <h2 id={`${className}-title`}>{title}</h2>
+        </div>
+        <span className="panel-state">{state}</span>
+      </header>
+      {children}
+    </article>
+  );
+}
+
+function CopyPreviewText({ text }) {
+  return (
+    <p className="copy-preview-text">
+      <strong>Copy preview</strong>
+      <span>{text}</span>
+    </p>
   );
 }
 
@@ -9144,11 +9471,21 @@ function findRoute(routes, id) {
   return routes.find((route) => route.id === id) ?? null;
 }
 
+function selectedSupervisorDashboardFixture() {
+  const scenarioId = currentWorkbenchSearchParams().get('scenario') ?? 'release-ready';
+
+  return SUPERVISOR_DASHBOARD_FIXTURES[scenarioId] ?? SUPERVISOR_DASHBOARD_FIXTURES['release-ready'];
+}
+
 function currentWorkbenchRoute() {
   const pathname = typeof globalThis.location?.pathname === 'string'
     ? globalThis.location.pathname
     : '/workbench/';
   const normalized = pathname.endsWith('/') ? pathname : `${pathname}/`;
+
+  if (normalized === '/workbench/supervisor/') {
+    return 'supervisor';
+  }
 
   if (normalized === '/workbench/prompts/') {
     return 'prompts';
@@ -9159,6 +9496,54 @@ function currentWorkbenchRoute() {
   }
 
   return 'home';
+}
+
+function workbenchShellClassName(route) {
+  if (route === 'desktop') {
+    return 'workbench-shell desktop-shell-route';
+  }
+
+  if (route === 'supervisor') {
+    return 'workbench-shell supervisor-shell-route';
+  }
+
+  return 'workbench-shell';
+}
+
+function workbenchRouteEyebrow(route) {
+  if (route === 'desktop') {
+    return 'v37 Desktop Shell MVP';
+  }
+
+  if (route === 'supervisor') {
+    return 'v44.4 fixture prototype';
+  }
+
+  return 'v28 Workbench v1';
+}
+
+function workbenchRouteTitle(route) {
+  if (route === 'desktop') {
+    return 'Symphony Desktop Shell';
+  }
+
+  if (route === 'supervisor') {
+    return 'Supervisor Command Center';
+  }
+
+  return 'Symphony Workbench';
+}
+
+function workbenchRouteStatusText(route) {
+  if (route === 'desktop') {
+    return 'contract-backed';
+  }
+
+  if (route === 'supervisor') {
+    return 'fixture-only / no live supervisor API';
+  }
+
+  return 'confirm 后会刷新 goal-status / events / next action';
 }
 
 function buildWorkbenchStateHeader({ model, phase, routeCounts, routeContext }) {
@@ -9230,6 +9615,10 @@ function workbenchNavItemClassName(item, currentRoute) {
 }
 
 function workbenchNavItemActive(item, currentRoute) {
+  if (item.route === '/workbench/supervisor/') {
+    return currentRoute === 'supervisor';
+  }
+
   if (item.route === '/workbench/prompts/') {
     return currentRoute === 'prompts';
   }

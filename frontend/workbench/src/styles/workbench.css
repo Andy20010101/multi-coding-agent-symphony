@@ -759,6 +759,346 @@ h4 {
   font-weight: 800;
 }
 
+.supervisor-shell-route {
+  background: #f4f6f4;
+}
+
+.supervisor-shell-route .workbench-header,
+.supervisor-dashboard-route {
+  width: min(1240px, calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.supervisor-shell-route .workbench-header {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 14px;
+  align-items: center;
+  padding: 12px 0 8px;
+}
+
+.supervisor-shell-route h1 {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.supervisor-shell-route .header-summary {
+  max-width: 780px;
+  margin-top: 5px;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.supervisor-shell-route .status-strip {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.supervisor-shell-route .status-strip span {
+  min-height: 24px;
+  justify-content: flex-start;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+}
+
+.supervisor-dashboard-route {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.supervisor-dashboard-route > * {
+  min-width: 0;
+}
+
+.supervisor-topbar,
+.supervisor-fixture-note,
+.supervisor-card,
+.supervisor-scenario {
+  border: 1px solid #cbd6d0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.supervisor-topbar {
+  padding: 6px 8px;
+}
+
+.supervisor-topbar .field-list {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.supervisor-topbar .field-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  border: 1px solid #dce3df;
+  border-radius: 8px;
+  padding: 4px 7px;
+  background: #f7f9f7;
+}
+
+.supervisor-topbar .field-row dt,
+.supervisor-card .field-row dt {
+  color: #66706d;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.supervisor-topbar .field-row dd {
+  margin: 0;
+  color: #17241f;
+  font-size: 0.7rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.supervisor-scenario-nav {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.supervisor-scenario {
+  display: grid;
+  gap: 2px;
+  min-height: 34px;
+  padding: 5px 7px;
+  color: #2f5146;
+  text-decoration: none;
+}
+
+.supervisor-scenario strong,
+.supervisor-scenario span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.supervisor-scenario strong {
+  font-size: 0.72rem;
+}
+
+.supervisor-scenario span {
+  color: #717b76;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.supervisor-scenario.active,
+.supervisor-scenario:hover,
+.supervisor-scenario:focus-visible {
+  border-color: #51786c;
+  background: #edf5f1;
+  color: #1f463a;
+}
+
+.supervisor-fixture-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  color: #52625c;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.supervisor-fixture-note span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.supervisor-dashboard-grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.supervisor-card {
+  min-width: 0;
+  padding: 8px;
+}
+
+.supervisor-card-header {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.supervisor-card-header > div {
+  min-width: 0;
+}
+
+.supervisor-card h2 {
+  font-size: 0.9rem;
+}
+
+.supervisor-card .section-kicker {
+  margin-bottom: 3px;
+  font-size: 0.64rem;
+}
+
+.supervisor-card .panel-state {
+  min-height: 22px;
+  border-radius: 8px;
+  padding: 2px 7px;
+  background: #f2f4f0;
+  color: #4a5c38;
+  font-size: 0.66rem;
+}
+
+.supervisor-card .field-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 8px;
+  margin: 0;
+}
+
+.supervisor-card .field-row {
+  grid-template-columns: minmax(84px, 0.4fr) minmax(0, 0.6fr);
+  gap: 5px;
+  padding: 3px 0;
+}
+
+.supervisor-card .field-row dd {
+  font-size: 0.7rem;
+  line-height: 1.15;
+}
+
+.supervisor-card .panel-subsection {
+  margin-top: 6px;
+}
+
+.supervisor-card .panel-subsection h3 {
+  margin-bottom: 4px;
+  color: #6b5638;
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.supervisor-card .compact-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.supervisor-card .compact-list li {
+  border-color: #e0e2dc;
+  padding: 3px 6px;
+  background: #fafaf7;
+  font-size: 0.68rem;
+}
+
+.copy-preview-text,
+.supervisor-warning {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0;
+  border: 1px solid #d9c491;
+  border-radius: 8px;
+  padding: 5px 7px;
+  background: #fff8e7;
+  color: #6d4c1f;
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.copy-preview-text strong {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.supervisor-warning {
+  background: #fff3dc;
+  color: #7a4319;
+  font-weight: 800;
+}
+
+.supervisor-card-timeline {
+  grid-column: 1 / -1;
+}
+
+.supervisor-timeline-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.supervisor-timeline-list li {
+  min-width: 0;
+  border: 1px solid #dde4df;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fafcf9;
+}
+
+@media (max-width: 920px) {
+  .supervisor-shell-route .workbench-header,
+  .supervisor-dashboard-route {
+    width: min(1240px, calc(100% - 24px));
+  }
+
+  .supervisor-shell-route .workbench-header,
+  .supervisor-fixture-note,
+  .supervisor-dashboard-grid,
+  .supervisor-timeline-list {
+    grid-template-columns: 1fr;
+  }
+
+  .supervisor-topbar .field-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .supervisor-scenario-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .supervisor-card-timeline {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .supervisor-shell-route .workbench-header {
+    padding-top: 12px;
+  }
+
+  .supervisor-topbar .field-list,
+  .supervisor-scenario-nav,
+  .supervisor-card .field-list {
+    grid-template-columns: 1fr;
+  }
+
+  .supervisor-card .field-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .supervisor-card-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .supervisor-card .panel-state {
+    width: fit-content;
+  }
+}
+
 .desktop-project-list small {
   display: -webkit-box;
   margin-top: 4px;

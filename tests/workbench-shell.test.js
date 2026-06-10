@@ -27,6 +27,7 @@ const frontendFiles = [
   'frontend/workbench/src/App.jsx',
   'frontend/workbench/src/api/client.js',
   'frontend/workbench/src/api/contracts.js',
+  'frontend/workbench/src/fixtures/supervisorDashboardFixtures.js',
   'frontend/workbench/src/styles/workbench.css'
 ];
 
@@ -417,6 +418,123 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(css, /\.desktop-status\.olive/u);
     assert.match(css, /\.desktop-status\.amber/u);
     assert.doesNotMatch(app.slice(app.indexOf('function DesktopShellRoute'), app.indexOf('function GoldenPathPanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
+  });
+
+  it('renders the v44.4 fixture Supervisor Command Center without execution controls', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
+    const fixtureSource = await readFile('frontend/workbench/src/fixtures/supervisorDashboardFixtures.js', 'utf8');
+    const supervisorSource = app.slice(
+      app.indexOf('function SupervisorDashboard'),
+      app.indexOf('function PromptWorkspaceRoute')
+    );
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const viewState = createWorkbenchRenderViewState();
+      const defaultHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
+      const pendingHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=pending-result', viewState);
+      const leaseHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=healthy-active-lease', viewState);
+      const staleHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=stale-transcript', viewState);
+      const blockedHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=blocked-gate', viewState);
+      const missingHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=missing-empty-context', viewState);
+
+      assert.match(defaultHtml, /Supervisor Command Center/u);
+      assert.match(defaultHtml, /class="workbench-shell supervisor-shell-route"/u);
+      assert.match(defaultHtml, /fixture-only \/ no live supervisor API/u);
+      assert.match(defaultHtml, /goal-supervisor-app-read-model\.v1/u);
+      assert.match(defaultHtml, />goal id<\/dt><dd[^>]*>v44-4-workbench-supervisor-dashboard-prototype/u);
+      assert.match(defaultHtml, />generated at<\/dt><dd[^>]*>2026-06-10T10:24:00\+08:00/u);
+      assert.match(defaultHtml, />readOnly<\/dt><dd[^>]*>true/u);
+      assert.match(defaultHtml, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.match(defaultHtml, /Release-ready/u);
+      assert.match(defaultHtml, /Healthy active lease/u);
+      assert.match(defaultHtml, /Pending result/u);
+      assert.match(defaultHtml, /Stale transcript/u);
+      assert.match(defaultHtml, /Blocked gate/u);
+      assert.match(defaultHtml, /Missing context/u);
+
+      const goalIndex = defaultHtml.indexOf('Goal Snapshot');
+      const actionIndex = defaultHtml.indexOf('Recommended Next Action');
+      const leaseIndex = defaultHtml.indexOf('Active Lease');
+      const contextIndex = defaultHtml.indexOf('Context Status');
+      const pendingIndex = defaultHtml.indexOf('Pending Result');
+      const boundaryIndex = defaultHtml.indexOf('Command Boundary');
+      const timelineIndex = defaultHtml.indexOf('Goal Timeline');
+      const gateIndex = defaultHtml.indexOf('Current Gate');
+      const ownershipIndex = defaultHtml.indexOf('Ownership');
+
+      for (const index of [goalIndex, actionIndex, leaseIndex, contextIndex, pendingIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
+        assert.notEqual(index, -1);
+      }
+
+      assert.equal(goalIndex < actionIndex, true);
+      assert.equal(actionIndex < leaseIndex, true);
+      assert.equal(leaseIndex < contextIndex, true);
+      assert.equal(contextIndex < pendingIndex, true);
+      assert.equal(pendingIndex < boundaryIndex, true);
+      assert.equal(boundaryIndex < timelineIndex, true);
+      assert.equal(timelineIndex < gateIndex, true);
+      assert.equal(gateIndex < ownershipIndex, true);
+
+      assert.match(defaultHtml, /ready-declared/u);
+      assert.match(defaultHtml, /tag/u);
+      assert.match(defaultHtml, /publish/u);
+      assert.match(defaultHtml, /release closeout/u);
+      assert.match(leaseHtml, /lease-task-2-worker-001/u);
+      assert.match(leaseHtml, /readable summary/u);
+      assert.match(leaseHtml, /blocked while lease is healthy/u);
+      assert.match(pendingHtml, /worker\.evidence-recorded/u);
+      assert.match(pendingHtml, /artifact:v44-4:pending-worker-evidence/u);
+      assert.match(pendingHtml, /parser accepted event fields/u);
+      assert.doesNotMatch(pendingHtml, />Register<|>Apply<|>Execute</u);
+      assert.match(staleHtml, /stale transcript summary/u);
+      assert.match(staleHtml, /recover-stale-context/u);
+      assert.match(staleHtml, /lease active but transcript stale/u);
+      assert.match(blockedHtml, /missing main verification evidence ref/u);
+      assert.match(blockedHtml, /closeout authorization<\/dt><dd[^>]*>blocked/u);
+      assert.match(missingHtml, /missing contract field: contextStatus\.providerSummaries/u);
+      assert.match(missingHtml, /pendingResult absent from fixture read model/u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+
+    for (const componentName of [
+      'SupervisorDashboard',
+      'GoalSnapshotSummary',
+      'CurrentGateCard',
+      'RecommendedNextActionCard',
+      'ActiveLeasePanel',
+      'PendingResultPanel',
+      'GoalTimeline',
+      'ContextStatusPanel',
+      'OwnershipPanel',
+      'CommandBoundaryPanel'
+    ]) {
+      assert.match(app, new RegExp(`function ${componentName}\\b`, 'u'));
+    }
+
+    assert.match(app, /selectedSupervisorDashboardFixture/u);
+    assert.match(app, /\/workbench\/supervisor\//u);
+    assert.match(fixtureSource, /release-ready/u);
+    assert.match(fixtureSource, /healthy-active-lease/u);
+    assert.match(fixtureSource, /pending-result/u);
+    assert.match(fixtureSource, /stale-transcript/u);
+    assert.match(fixtureSource, /blocked-gate/u);
+    assert.match(fixtureSource, /missing-empty-context/u);
+    assert.match(css, /\.supervisor-dashboard-grid[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/u);
+    assert.match(css, /@media \(max-width: 920px\)[\s\S]*\.supervisor-dashboard-grid,[\s\S]*\.supervisor-timeline-list[\s\S]*grid-template-columns:\s*1fr/u);
+    assert.doesNotMatch(supervisorSource, /fetch\(|confirmGoalEventPlan|GoalEventPlanPreview|<button\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|claude\/projects/u);
+    assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
   });
 
   it('renders the v38 Provider Hub panel without adding browser execution controls', async () => {
