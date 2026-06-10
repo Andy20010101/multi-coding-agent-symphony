@@ -196,7 +196,7 @@
         }
       },
       "expected": {
-        "recommendedNextActionId": "wait",
+        "recommendedNextActionId": "continue",
         "commandBoundaryState": "disabled",
         "pendingResultStatus": "missing",
         "transcriptAvailability": "readable"
@@ -594,6 +594,14 @@
             "release-closeout"
           ],
           "safeCommandPreview": "/goal dispatch task-1 worker --fresh-controller",
+          "confirmation": {
+            "planHash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "goalId": "v44-3-app-contract-context-supervisor",
+            "taskId": "task-1",
+            "actor": "local-goal-supervisor",
+            "evidenceRef": "docs/plans/v44-3-task-1-worker-evidence-2026-06-10.md",
+            "reason": "existing controlled command preview requires explicit confirmation"
+          },
           "confirmationFields": [
             "planHash",
             "goalId",

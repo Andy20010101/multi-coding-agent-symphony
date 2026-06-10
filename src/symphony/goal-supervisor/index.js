@@ -3,6 +3,7 @@ export * from './app-read-model.js';
 export * from './app-read-model-pipeline.js';
 export * from './core-projection.js';
 export * from './event-registrar.js';
+export * from './policy.js';
 export * from './result-protocol.js';
 export * from './route-progress.js';
 export * from './session-context.js';
