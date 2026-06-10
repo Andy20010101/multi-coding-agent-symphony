@@ -257,6 +257,106 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.routeStates.find((route) => route.id === 'goalSupervisor').state, 'ready');
   });
 
+  it('projects v44.4 supervisor remaining panels without inferring from local files', () => {
+    const supervisor = {
+      ...createGoalSupervisorAppReadModelPayload(),
+      contextStatus: {
+        providerSummaries: [{
+          provider: 'codex',
+          status: 'near-limit',
+          threadId: '019ea62d-token-watch'
+        }],
+        transcriptAvailability: 'summary-present',
+        exchangeCount: 31,
+        latestTurn: {
+          status: 'waiting-for-checkpoint'
+        },
+        latestToolCall: {
+          name: 'pnpm check',
+          status: 'completed'
+        },
+        tokenState: {
+          used: 188000,
+          limit: 200000
+        },
+        utilization: {
+          ratio: 0.94
+        },
+        staleTranscriptState: {
+          stale: true,
+          reason: 'transcript-stale-threshold-exceeded'
+        },
+        missingTranscriptState: {
+          missing: false,
+          reason: null
+        },
+        resultBlockEvidence: {
+          evidenceRef: 'artifact:v44-4:token-watch'
+        },
+        checkpointRef: 'checkpoint:v44-4-token-watch',
+        driftMarkers: ['lease active but transcript stale']
+      },
+      pendingResult: null,
+      commandBoundary: {
+        state: 'confirm-required',
+        executionAvailable: false,
+        copyOnly: true,
+        allowedCommandFamilies: ['handoff-prompt-preview', 'status-guidance'],
+        blockedCommandFamilies: [
+          'child-dispatch',
+          'event-log-write',
+          'daemon-control',
+          'provider-cli',
+          'tag',
+          'publish',
+          'release-closeout'
+        ],
+        safeCommandPreview: 'Copy preview: checkpoint only.',
+        confirmation: {
+          fields: ['evidenceRef', 'verifierId']
+        }
+      },
+      ownership: {
+        orchestrationOwner: 'supervisor-daemon',
+        deliveryBoundary: 'pull-request-review',
+        activePr: '#128',
+        branch: 'codex/v44-4-pr4-supervisor-remaining-panels',
+        rollbackBoundary: 'revert PR-4 UI binding',
+        daemonState: 'observed-only',
+        controllerInterventionReason: 'operator checkpoint required'
+      },
+      goalTimeline: []
+    };
+    const model = projectWorkbenchContracts({
+      goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
+    });
+    const dashboard = model.supervisorDashboard;
+
+    assert.equal(dashboard.contextStatus.state, 'stale');
+    assert.deepEqual(dashboard.contextStatus.providers, ['codex: near-limit: 019ea62d-token-watch']);
+    assert.equal(dashboard.contextStatus.tokenUsage, '188000 / 200000');
+    assert.equal(dashboard.contextStatus.utilization, '94%');
+    assert.equal(dashboard.contextStatus.transcriptState, 'stale: transcript-stale-threshold-exceeded');
+    assert.equal(dashboard.contextStatus.checkpointRef, 'checkpoint:v44-4-token-watch');
+    assert.equal(dashboard.pendingResult.status, 'missing');
+    assert.equal(dashboard.pendingResult.staleMarker, 'unknown');
+    assert.equal(dashboard.pendingResult.missingMarker, 'pendingResult');
+    assert.deepEqual(dashboard.commandBoundary.blockedFamilies, [
+      'child-dispatch',
+      'event-log-write',
+      'daemon-control',
+      'provider-cli',
+      'tag',
+      'publish',
+      'release-closeout'
+    ]);
+    assert.deepEqual(dashboard.commandBoundary.confirmationFields, ['evidenceRef', 'verifierId']);
+    assert.equal(dashboard.ownership.orchestrationOwner, 'supervisor-daemon');
+    assert.equal(dashboard.ownership.daemonState, 'observed-only');
+    assert.equal(dashboard.ownership.activePr, '#128');
+    assert.deepEqual(dashboard.goalTimeline, []);
+  });
+
   it('projects the Workbench Action Registry panel from backend action contracts only', () => {
     const manifest = createActionManifestPayload();
     const availability = createActionAvailabilityPayload();

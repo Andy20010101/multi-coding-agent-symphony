@@ -813,6 +813,7 @@ h4 {
 
 .supervisor-topbar,
 .supervisor-fixture-note,
+.supervisor-ownership-summary,
 .supervisor-boundary-summary,
 .supervisor-card,
 .supervisor-scenario {
@@ -916,6 +917,7 @@ h4 {
   overflow-wrap: anywhere;
 }
 
+.supervisor-ownership-summary,
 .supervisor-boundary-summary {
   display: grid;
   grid-template-columns: minmax(128px, 0.18fr) minmax(0, 0.82fr);
@@ -924,27 +926,32 @@ h4 {
   padding: 6px 8px;
 }
 
+.supervisor-ownership-summary strong,
 .supervisor-boundary-summary strong {
   color: #253b35;
   font-size: 0.78rem;
   line-height: 1.1;
 }
 
+.supervisor-ownership-summary .field-list,
 .supervisor-boundary-summary .field-list {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 6px;
 }
 
+.supervisor-ownership-summary .field-row,
 .supervisor-boundary-summary .field-row {
   display: grid;
-  grid-template-columns: minmax(88px, 0.44fr) minmax(0, 0.56fr);
+  grid-template-columns: minmax(74px, 0.42fr) minmax(0, 0.58fr);
   gap: 5px;
   min-width: 0;
   border-top: 0;
   padding: 0;
 }
 
+.supervisor-ownership-summary .field-row dt,
+.supervisor-ownership-summary .field-row dd,
 .supervisor-boundary-summary .field-row dt,
 .supervisor-boundary-summary .field-row dd {
   font-size: 0.68rem;
@@ -1037,6 +1044,35 @@ h4 {
   font-size: 0.68rem;
 }
 
+.command-family-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.command-family-list li {
+  min-width: min(100%, 104px);
+  max-width: 100%;
+  border: 1px solid #d5ddd8;
+  border-radius: 8px;
+  padding: 4px 7px;
+  background: #f7faf8;
+  color: #2e443d;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.blocked-command-family-list li {
+  border-color: #dfc9b7;
+  background: #fff8f1;
+  color: #6c3e20;
+}
+
 .copy-preview-text,
 .supervisor-warning {
   display: grid;
@@ -1091,6 +1127,7 @@ h4 {
 
   .supervisor-shell-route .workbench-header,
   .supervisor-fixture-note,
+  .supervisor-ownership-summary,
   .supervisor-boundary-summary,
   .supervisor-dashboard-grid,
   .supervisor-timeline-list {
@@ -1116,6 +1153,7 @@ h4 {
   }
 
   .supervisor-topbar .field-list,
+  .supervisor-ownership-summary .field-list,
   .supervisor-boundary-summary .field-list,
   .supervisor-scenario-nav,
   .supervisor-card .field-list {

@@ -18820,28 +18820,30 @@ function projectSupervisorContextStatus(contextStatus) {
 	const context = contextStatus ?? {};
 	return {
 		state: supervisorContextState(context),
-		providers: supervisorProviderSummaryTexts(context.sessionSourceSummaries ?? context.providers),
+		providers: supervisorProviderSummaryTexts(context.sessionSourceSummaries ?? context.providerSummaries ?? context.providers),
 		transcriptAvailability: context.transcriptAvailability ?? null,
 		exchangeCount: context.exchangeCount ?? null,
-		latestTurn: supervisorObjectSummaryText(context.latestTurnState),
+		latestTurn: supervisorObjectSummaryText(context.latestTurnState ?? context.latestTurn),
 		latestToolCall: supervisorObjectSummaryText(context.latestToolCall),
-		tokenUsage: supervisorTokenUsageText(context.tokenUsage),
-		utilization: supervisorContextUtilizationText(context.contextUtilization),
+		tokenUsage: supervisorTokenUsageText(context.tokenUsage ?? context.tokenState),
+		utilization: supervisorContextUtilizationText(context.contextUtilization ?? context.utilization),
 		transcriptState: supervisorTranscriptStateText(context),
 		resultBlockEvidence: supervisorResultBlockEvidenceText(context.resultBlockEvidence),
+		checkpointRef: context.checkpointRef ?? context.resultBlockEvidence?.checkpointRef ?? null,
 		driftMarkers: Array.isArray(context.driftMarkers) && context.driftMarkers.length > 0 ? context.driftMarkers : ["none"]
 	};
 }
 function projectSupervisorPendingResult(pendingResult) {
 	const result = pendingResult ?? {};
+	const missing = pendingResult === null || pendingResult === void 0 || result.missing === true;
 	return {
 		status: result.status ?? "missing",
 		source: result.source ?? null,
 		eventToRegister: result.eventToRegister ?? null,
 		evidenceRef: result.evidenceRef ?? null,
 		parserReason: result.parserReason ?? null,
-		staleMarker: result.staleMarker ?? (result.stale === true ? "stale" : "fresh"),
-		missingMarker: result.missingMarker ?? (result.missing === true ? "missing" : "none")
+		staleMarker: result.staleMarker ?? (missing ? "unknown" : result.stale === true ? "stale" : "fresh"),
+		missingMarker: result.missingMarker ?? (missing ? "pendingResult" : "none")
 	};
 }
 function projectSupervisorCommandBoundary(commandBoundary) {
@@ -18852,7 +18854,7 @@ function projectSupervisorCommandBoundary(commandBoundary) {
 		copyOnly: boundary.copyOnly === true,
 		allowedFamilies: Array.isArray(boundary.allowedFamilies) ? boundary.allowedFamilies : Array.isArray(boundary.allowedCommandFamilies) ? boundary.allowedCommandFamilies : [],
 		blockedFamilies: Array.isArray(boundary.blockedFamilies) ? boundary.blockedFamilies : Array.isArray(boundary.blockedCommandFamilies) ? boundary.blockedCommandFamilies : [],
-		confirmationFields: Array.isArray(boundary.confirmationFields) ? boundary.confirmationFields : [],
+		confirmationFields: Array.isArray(boundary.confirmationFields) ? boundary.confirmationFields : Array.isArray(boundary.confirmation?.fields) ? boundary.confirmation.fields : [],
 		safePreview: boundary.safePreview ?? boundary.safeCommandPreview ?? null
 	};
 }
@@ -20890,7 +20892,8 @@ var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
 			parserReason: "pendingResult absent from fixture read model",
 			staleMarker: "unknown",
 			missingMarker: "pendingResult"
-		}
+		},
+		goalTimeline: []
 	}))
 });
 var SUPERVISOR_DASHBOARD_SCENARIOS = Object.freeze(Object.keys(SUPERVISOR_DASHBOARD_FIXTURES));
@@ -22224,7 +22227,7 @@ function SupervisorDashboard({ dashboard, routeState, refreshHandler = () => voi
 		label: SUPERVISOR_DASHBOARD_FIXTURES[scenarioId]?.label ?? scenarioId
 	}));
 	const fixtureMode = dashboard.sourceMode !== "live";
-	const copyPreviewsEnabled = dashboard.readOnly === true && dashboard.willMutate === false && dashboard.commandBoundary.executionAvailable === false;
+	const copyPreviewsEnabled = dashboard.readOnly === true && dashboard.willMutate === false && dashboard.commandBoundary.executionAvailable === false && dashboard.commandBoundary.copyOnly === true;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "supervisor-dashboard-route",
 		"aria-label": "Supervisor Command Center",
@@ -22243,6 +22246,7 @@ function SupervisorDashboard({ dashboard, routeState, refreshHandler = () => voi
 					["willMutate", textValue(dashboard.willMutate)]
 				] })
 			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipSummary, { ownership: dashboard.ownership }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundarySummary, { commandBoundary: dashboard.commandBoundary }),
 			fixtureMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", {
 				className: "supervisor-scenario-nav",
@@ -22287,6 +22291,20 @@ function SupervisorDashboard({ dashboard, routeState, refreshHandler = () => voi
 				]
 			})
 		]
+	});
+}
+function OwnershipSummary({ ownership }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "supervisor-ownership-summary",
+		"aria-label": "Ownership projected summary",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Ownership" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["orchestration owner", textValue(ownership.orchestrationOwner)],
+			["daemon state", textValue(ownership.daemonState)],
+			["delivery boundary", textValue(ownership.deliveryBoundary)],
+			["active PR", textValue(ownership.activePr)],
+			["branch", textValue(ownership.branch)],
+			["controller intervention", textValue(ownership.controllerInterventionReason)]
+		] })]
 	});
 }
 function CommandBoundarySummary({ commandBoundary }) {
@@ -22396,7 +22414,8 @@ function ContextStatusPanel({ contextStatus }) {
 				["token usage", textValue(contextStatus.tokenUsage)],
 				["context utilization", textValue(contextStatus.utilization)],
 				["transcript state", textValue(contextStatus.transcriptState)],
-				["result-block evidence", textValue(contextStatus.resultBlockEvidence)]
+				["result-block evidence", textValue(contextStatus.resultBlockEvidence)],
+				["checkpoint ref", textValue(contextStatus.checkpointRef)]
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "provider summaries",
@@ -22444,11 +22463,14 @@ function CommandBoundaryPanel({ commandBoundary, copyPreviewsEnabled = false }) 
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "allowed families",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: commandBoundary.allowedFamilies })
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandFamilyList, { items: commandBoundary.allowedFamilies })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "blocked families",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: commandBoundary.blockedFamilies })
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandFamilyList, {
+					items: commandBoundary.blockedFamilies,
+					blocked: true
+				})
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "confirmation fields",
@@ -22464,7 +22486,7 @@ function GoalTimeline({ goalTimeline }) {
 		kicker: "goal timeline",
 		title: "Goal Timeline",
 		state: `${goalTimeline.length} events`,
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
+		children: goalTimeline.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "goal timeline 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
 			className: "supervisor-timeline-list",
 			children: goalTimeline.map((event) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 				["event id", textValue(event.eventId)],
@@ -28540,6 +28562,14 @@ function CompactList({ items }) {
 	if (normalizedItems.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "未暴露。" });
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "compact-list",
+		children: normalizedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item }) }, item))
+	});
+}
+function CommandFamilyList({ items, blocked = false }) {
+	const normalizedItems = Array.isArray(items) ? items.filter((item) => typeof item === "string" && item.trim() !== "") : [];
+	if (normalizedItems.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: blocked ? "command-family-list blocked-command-family-list" : "command-family-list",
 		children: normalizedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item }) }, item))
 	});
 }
