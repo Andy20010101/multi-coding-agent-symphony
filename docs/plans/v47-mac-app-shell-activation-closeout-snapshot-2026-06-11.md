@@ -48,7 +48,7 @@ Reconcile before PR-4 edits:
 
 v47 was reopened after PR-4 for one visual-debt item: `/workbench/desktop/` still used its own gradient/shadow/pill style while the v46 supervisor route and the prototype share the Warm Engineering command-center language.
 
-PR-5 on `codex/v47-app-home-visual-alignment` (branched from `a7ce856`) aligns the App Home first screen with the v46 baseline:
+PR-5 is draft PR #48 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/48` on `codex/v47-app-home-visual-alignment` (branched from `a7ce856`). It aligns the App Home first screen with the v46 baseline:
 
 - `frontend/workbench/src/styles/workbench.css`: the desktop route section now uses the v46 palette (warm off-white canvas, white/warm-gray panels, 1px hard borders, 0-4px radius, no shadows), serif panel headings, and monospace for IDs, paths, commands, and state values.
 - `frontend/workbench/src/App.jsx`: one markup change removes the supervisor summary card span so the first row tiles 3x2 without grid holes. No data, route, contract, or boundary behavior changed.
