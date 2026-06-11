@@ -31,6 +31,7 @@ The native host boundary remains small:
 | PR-2 startup and unavailable-state projection | #44 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/44` | `codex/v47-startup-unavailable-state-projection` | `e516038e1ef95a3cda9a292c301acf519b5586e6` | 2026-06-11T06:34:32Z | Workbench projection/rendering, generated Workbench asset refresh, focused tests |
 | PR-3 desktop host boundary and smoke hardening | #45 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/45` | `codex/v47-desktop-host-boundary-hardening` | `a0194cc86bfab30820b83115870c31fde40b6361` | 2026-06-11T07:51:30Z | `scripts/desktop-shell-smoke.js`, `desktop/shell/README.md` |
 | PR-4 acceptance and closeout snapshot | #46 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/46` | `codex/v47-acceptance-closeout-snapshot` | `1ffdaff93e30d05321995bcc4b55a7b826ce60b2` | 2026-06-11T08:14:49Z | `docs/qa/v47-mac-app-shell-activation-acceptance.md`, this snapshot |
+| PR-5 App Home visual alignment | #48 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/48` | `codex/v47-app-home-visual-alignment` | `46548164bbc3b0db811be93b77a6ad1700b2454f` | 2026-06-11T10:07:34Z | Workbench App Home source, CSS, generated Workbench assets, v47 docs, QA screenshot evidence |
 
 Reconcile before PR-4 edits:
 
@@ -48,7 +49,7 @@ Reconcile before PR-4 edits:
 
 v47 was reopened after PR-4 for one visual-debt item: `/workbench/desktop/` still used its own gradient/shadow/pill style while the v46 supervisor route and the prototype share the Warm Engineering command-center language.
 
-PR-5 is draft PR #48 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/48` on `codex/v47-app-home-visual-alignment` (branched from `a7ce856`). It aligns the App Home first screen with the v46 baseline:
+PR-5 merged as PR #48 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/48` on `codex/v47-app-home-visual-alignment` (branched from `a7ce856`, merged at `46548164bbc3b0db811be93b77a6ad1700b2454f`). It aligns the App Home first screen with the v46 baseline:
 
 - `frontend/workbench/src/styles/workbench.css`: the desktop route section now uses the v46 palette (warm off-white canvas, white/warm-gray panels, 1px hard borders, 0-4px radius, no shadows), serif panel headings, and monospace for IDs, paths, commands, and state values.
 - `frontend/workbench/src/App.jsx`: one markup change removes the supervisor summary card span so the first row tiles 3x2 without grid holes. No data, route, contract, or boundary behavior changed.
@@ -57,7 +58,9 @@ PR-5 is draft PR #48 `https://github.com/Andy20010101/multi-coding-agent-symphon
 
 All v47 boundaries hold: no execution controls, no provider launch, no goal mutation, no child dispatch, no git/tag/release surface, no Tauri host change, no context/session observability, and no direct frontend reads of runner state, ledgers, or event logs. Missing/unavailable/stale/route-failed states remain visible.
 
-PR-5 validation: `pnpm workbench:build`, `node --test tests/workbench-shell.test.js tests/workbench-api-client.test.js` (89 tests, 0 failures), `pnpm check`, and `git diff --check` all passed; browser screenshots at 1440 and 390 widths were reviewed for overlap and actionable-looking controls. Merge information is recorded by the controller at merge time.
+PR-5 validation: `pnpm workbench:build`, `node --test tests/workbench-shell.test.js tests/workbench-api-client.test.js` (89 tests, 0 failures), `pnpm check`, and `git diff --check` all passed; browser screenshots at 1440 and 390 widths were reviewed for overlap and actionable-looking controls. Controller closeout confirmed PR #48 was ready, reviewed, CI-clean, and merged into `main` at `46548164bbc3b0db811be93b77a6ad1700b2454f`.
+
+This final closeout evidence patch is documentation-only. It records the PR-5 merge result before tagging `v47`; it does not expand v47 runtime scope, app controls, packaging claims, or release automation.
 
 ## Acceptance evidence
 
