@@ -11903,8 +11903,9 @@ function projectDesktopRouteProvenance({ routeStates, runtimeSnapshot }) {
 			error: valueState(route?.error)
 		};
 	});
+	const itemRouteStates = items.map((item) => item.routeState.value);
 	return {
-		state: valueState(items.some((item) => item.routeState.value === "failed") ? "failed" : items.some((item) => item.routeState.value === "unavailable") ? "partial" : "available"),
+		state: valueState(itemRouteStates.includes("failed") ? "failed" : itemRouteStates.some((state) => state !== "ready") ? "partial" : "available"),
 		items,
 		sourcePolicy: valueState("route state projection from existing Workbench read-only API results")
 	};
@@ -11932,16 +11933,88 @@ function projectDesktopBoundaryFlags() {
 	};
 }
 function projectDesktopAppStateFlags({ backendHealth, sidecarState, workspace, activeGoalStatus, supervisorSummary, runtimeSnapshot, routeProvenance }) {
+	const backendRouteState = backendHealth?.routeState?.value ?? "missing";
+	const projectRouteState = workspace?.routeState?.value ?? "missing";
+	const activeGoalRouteState = activeGoalStatus?.routeState?.value ?? "missing";
+	const supervisorRouteState = supervisorSummary?.routeState?.value ?? "missing";
+	const failedRouteLabels = (routeProvenance?.items ?? []).filter((item) => item.routeState.value === "failed").map((item) => item.label.value);
+	const backendUnavailable = backendRouteState !== "ready";
+	const sidecarMissing = sidecarState === "missing";
+	const projectMissing = workspace?.project?.state === "missing";
+	const activeGoalMissing = activeGoalStatus?.goalId?.state === "missing";
+	const supervisorModelUnavailable = supervisorSummary?.state?.value !== "available";
+	const staleSnapshot = runtimeSnapshot?.state === "stale" || backendHealth?.freshness?.value === "stale";
+	const routeFailed = failedRouteLabels.length > 0;
 	return {
-		backendUnavailable: valueState(backendHealth?.routeState?.value !== "ready"),
-		sidecarMissing: valueState(sidecarState === "missing"),
-		projectMissing: valueState(workspace?.project?.state === "missing"),
-		activeGoalMissing: valueState(activeGoalStatus?.goalId?.state === "missing"),
-		supervisorModelUnavailable: valueState(supervisorSummary?.state?.value !== "available"),
-		staleSnapshot: valueState(runtimeSnapshot?.state === "stale"),
-		routeFailed: valueState(routeProvenance?.items?.some((item) => item.routeState.value === "failed") === true),
+		backendUnavailable: desktopAppStateFlag({
+			value: backendUnavailable,
+			state: desktopUnavailableStateFromRoute(backendRouteState),
+			reason: `runtime snapshot route ${backendRouteState}`,
+			source: "app-state-snapshot.v1 /api/runtime/snapshot",
+			routeState: backendRouteState
+		}),
+		sidecarMissing: desktopAppStateFlag({
+			value: sidecarMissing,
+			state: "missing",
+			reason: sidecarMissing ? "sidecar-host-lifecycle.v1 not exposed by runtime snapshot" : `sidecar ${sidecarState}`,
+			source: "sidecar-host-lifecycle.v1",
+			routeState: backendRouteState
+		}),
+		projectMissing: desktopAppStateFlag({
+			value: projectMissing,
+			state: "missing",
+			reason: projectMissing ? `current project missing; project route ${projectRouteState}` : "current project exposed",
+			source: "app-state-snapshot.v1 current_project + project-registry.v1",
+			routeState: projectRouteState
+		}),
+		activeGoalMissing: desktopAppStateFlag({
+			value: activeGoalMissing,
+			state: "missing",
+			reason: activeGoalMissing ? `active goal id missing; goal route ${activeGoalRouteState}` : "active goal id exposed",
+			source: "app-state-snapshot.v1 active_goal + goal-runbook.v1",
+			routeState: activeGoalRouteState
+		}),
+		supervisorModelUnavailable: desktopAppStateFlag({
+			value: supervisorModelUnavailable,
+			state: supervisorRouteState === "failed" ? "failed" : "unavailable",
+			reason: supervisorModelUnavailable ? `supervisor model ${supervisorSummary?.state?.value ?? "missing"}; route ${supervisorRouteState}` : "supervisor model exposed",
+			source: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+			routeState: supervisorRouteState
+		}),
+		staleSnapshot: desktopAppStateFlag({
+			value: staleSnapshot,
+			state: "stale",
+			reason: staleSnapshot ? `runtime freshness ${backendHealth?.freshness?.value ?? runtimeSnapshot?.state}` : "runtime snapshot current",
+			source: "app-state-snapshot.v1 freshness",
+			routeState: backendRouteState
+		}),
+		routeFailed: desktopAppStateFlag({
+			value: routeFailed,
+			state: "failed",
+			reason: routeFailed ? failedRouteLabels.join(", ") : "required desktop routes ready or non-failed",
+			source: "route state projection",
+			routeState: routeProvenance?.state?.value ?? "missing"
+		}),
 		sourcePolicy: valueState("visible App Home state flags derived from route states and read-only projections")
 	};
+}
+function desktopAppStateFlag({ value, state, reason, source, routeState }) {
+	const active = value === true;
+	const status = active ? state : "ready";
+	return {
+		state: active ? status : "available",
+		text: active ? `true / ${status}` : "false / ready",
+		value: active,
+		status: valueState(status),
+		reason: valueState(reason),
+		source: valueState(source),
+		routeState: valueState(routeState)
+	};
+}
+function desktopUnavailableStateFromRoute(routeState) {
+	if (routeState === "failed") return "failed";
+	if (routeState === "skipped" || routeState === "missing") return "missing";
+	return "unavailable";
 }
 function desktopRouteSourceText(route, projectedState) {
 	if (route?.state === "ready" && projectedState === "stale") return "stale snapshot";
@@ -22637,10 +22710,10 @@ function DesktopAppStateStrip({ appStates }) {
 				["sidecar missing", appStates?.sidecarMissing],
 				["project missing", appStates?.projectMissing],
 				["active goal missing", appStates?.activeGoalMissing],
-				["supervisor unavailable", appStates?.supervisorModelUnavailable],
+				["supervisor model unavailable", appStates?.supervisorModelUnavailable],
 				["stale snapshot", appStates?.staleSnapshot],
 				["route failed", appStates?.routeFailed]
-			].map(([label, state]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: label }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: formatState(state) })] }, label))
+			].map(([label, state]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: label }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("dd", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: formatState(state) }), state?.reason?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: formatState(state.reason) }) : null] })] }, label))
 		})
 	});
 }
