@@ -251,6 +251,39 @@ git diff --check
 
 Run `pnpm test` if PR-1 through PR-3 touch shared projection helpers, shared route state, or generated Workbench assets in a way that affects other routes.
 
+### PR-5 App Home visual alignment (reopened)
+
+Purpose: align the `/workbench/desktop/` App Home first screen with the v46 Warm Engineering / Supervisor Command Center visual language after PR-1 through PR-4 merged. The v46 supervisor route and the prototype use the warm off-white command-center style; before this PR the App Home still rendered as a separate gradient/shadow/pill engineering-status style.
+
+Branch: `codex/v47-app-home-visual-alignment`.
+
+Allowed files:
+
+- `frontend/workbench/src/App.jsx` (App Home UI/IA only)
+- `frontend/workbench/src/styles/workbench.css` (desktop route styles only)
+- `src/symphony/workbench-static/` after `pnpm workbench:build`
+- `tests/workbench-shell.test.js` if assertions need to follow markup
+- v47 runbook, acceptance, and closeout documentation
+- `docs/qa/evidence/v47-app-home-visual-alignment-2026-06-11/`
+
+Rules:
+
+- Visual change only: warm off-white canvas, white/warm-gray panels, 1px hard borders, 0-4px radius, no shadows, monospace for IDs/data/paths/commands, serif panel headings, desktop two-column console layout, mobile single column.
+- Keep all v47 missing/unavailable/stale/route-failed states visible.
+- No new execution controls, provider launch, goal mutation, child dispatch, git/tag/release surface, Tauri host change, or context/session observability.
+- Evidence refs and command previews stay inert text.
+
+Required checks:
+
+```text
+pnpm workbench:build
+node --test tests/workbench-shell.test.js tests/workbench-api-client.test.js
+pnpm check
+git diff --check
+```
+
+Verify desktop and mobile viewports in a browser before merge.
+
 ## QA Notes
 
 Acceptance should verify these user-visible claims:

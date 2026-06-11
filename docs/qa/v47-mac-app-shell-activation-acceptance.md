@@ -36,6 +36,26 @@ Scope: `/workbench/desktop/`, Tauri shell host boundary, and v47 closeout docume
 
 `pnpm test` is not required for PR-4 unless this branch changes shared projection helpers, shared route state, generated Workbench assets, runtime code, or tests. PR-4 changes only the two v47 documentation files.
 
+## Reopened PR-5: App Home visual alignment (2026-06-11)
+
+PR-5 reopens v47 to align the `/workbench/desktop/` App Home visual language with the v46 Warm Engineering / Supervisor Command Center baseline. It changes only App Home UI structure and the desktop route section of `frontend/workbench/src/styles/workbench.css`, plus generated Workbench assets and this documentation.
+
+| Claim | Evidence | Acceptance condition |
+| --- | --- | --- |
+| The App Home first screen uses the v46 Warm Engineering language. | `.desktop-shell-route` in `frontend/workbench/src/styles/workbench.css` defines the same palette values as `.v46-supervisor-shell` (`#f8f3eb` canvas, `#fffaf2`/`#efe4d7` surfaces, `#ded0be` borders, `#c76645`/`#2f7d65`/`#d99b32` accents), serif panel headings, monospace ID/path/command/state values, 1px borders, 4px radius, and no box shadows. Screenshots under `docs/qa/evidence/v47-app-home-visual-alignment-2026-06-11/`. | Desktop renders a warm two-column read-only command center matching the v46 supervisor look. The previous gradient background, drop shadows, pill badges, and 800/900 font weights are gone. |
+| Layout holds on desktop and mobile without overlap. | `desktop-1440x900.png`, `desktop-1440-fullpage.png`, and `mobile-390x844.png` in the evidence directory. First-row cards tile 3x2, the lower grid uses dense flow without holes, and at narrow widths the route is a single column with span resets. | No overlapping panels, no horizontal overflow, no empty grid holes at 1440 and 390 widths. |
+| The alignment adds no actionable surface. | The PR-5 diff touches only `DesktopSupervisorSummaryCard` markup (class removal) in `frontend/workbench/src/App.jsx` and desktop CSS. The existing `tests/workbench-shell.test.js` scan for `fetch(`, forms, textareas, `window.open`, and clipboard calls in the desktop route body still passes. | All missing/unavailable/stale/route-failed states stay visible, and evidence refs and command previews remain inert text. |
+
+PR-5 validation on `codex/v47-app-home-visual-alignment`:
+
+| Command | Result |
+| --- | --- |
+| `pnpm workbench:build` | Passed. Regenerated `src/symphony/workbench-static/` assets. |
+| `node --test tests/workbench-shell.test.js tests/workbench-api-client.test.js` | Passed: 89 tests, 0 failures, including `renders the v47 Desktop App Home route as a native-first read-only surface`. |
+| `pnpm check` | Passed. |
+| `git diff --check` | Passed. |
+| Headless Chrome screenshots of `/workbench/desktop/` served by `symphony console` at 1440x900, 1440 full page, and 390x844 | Captured to the evidence directory and reviewed for overlap, density, and absence of actionable-looking controls. |
+
 ## Failure recovery
 
 If the desktop route no longer opens the App Home surface, inspect `desktop/shell/src-tauri/tauri.conf.json`, `frontend/workbench/src/App.jsx`, and `tests/workbench-shell.test.js` before changing Tauri host commands.

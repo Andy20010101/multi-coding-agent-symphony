@@ -905,7 +905,7 @@ function DesktopNextActionCard({ nextActionDetail }) {
 
 function DesktopSupervisorSummaryCard({ supervisorSummary }) {
   return (
-    <article className="desktop-card desktop-span-2" aria-labelledby="desktop-supervisor-summary-title">
+    <article className="desktop-card" aria-labelledby="desktop-supervisor-summary-title">
       <header className="desktop-card-header">
         <div>
           <p className="section-kicker">supervisor summary</p>
