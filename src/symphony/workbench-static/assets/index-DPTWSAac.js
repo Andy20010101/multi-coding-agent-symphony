@@ -20896,7 +20896,7 @@ var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
 		goalTimeline: []
 	}))
 });
-var SUPERVISOR_DASHBOARD_SCENARIOS = Object.freeze(Object.keys(SUPERVISOR_DASHBOARD_FIXTURES));
+Object.freeze(Object.keys(SUPERVISOR_DASHBOARD_FIXTURES));
 //#endregion
 //#region node_modules/.pnpm/react@19.2.6/node_modules/react/cjs/react-jsx-runtime.production.js
 /**
@@ -20932,10 +20932,762 @@ var require_react_jsx_runtime_production = /* @__PURE__ */ __commonJSMin(((expor
 	exports.jsxs = jsxProd;
 }));
 //#endregion
-//#region frontend/workbench/src/App.jsx
+//#region frontend/workbench/src/v46SupervisorWorkbench.jsx
 var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = require_react_jsx_runtime_production();
 })))();
+var CANONICAL_BLOCKED_MUTATION_FAMILIES = Object.freeze([
+	"daemon-control",
+	"provider-cli",
+	"real-cli",
+	"release-closeout",
+	"git-tag"
+]);
+var DEFAULT_HEALTH = Object.freeze({
+	state: "healthy",
+	observedOnly: true,
+	daemonState: "observed only",
+	contextState: "fresh",
+	gateState: "frontend baseline",
+	duplicateDispatchAllowed: false,
+	reason: "local read-only sample"
+});
+var SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
+	contractName: "supervisor-dashboard-state.v46",
+	contractVersion: 1,
+	source: "local-sample-fallback",
+	routeSource: "frontend/workbench/src/v46SupervisorWorkbench.jsx",
+	goalId: "v45-backend-entrypoint-decomposition",
+	generatedAt: "2026-06-10T13:24:00+08:00",
+	readOnly: true,
+	willMutate: false,
+	activeTask: "v46 frontend baseline planning",
+	activeRole: "supervisor-monitor",
+	health: DEFAULT_HEALTH,
+	currentGate: Object.freeze({
+		gate: "frontend baseline",
+		condition: "OpenDesign focused-v2 handoff accepted as visual baseline",
+		nextArtifact: "v46 Workbench frontend runbook implementation slice"
+	}),
+	recommendedNextAction: Object.freeze({
+		status: "confirm-required",
+		text: "Draft v46 Workbench frontend runbook after OpenDesign exploration."
+	}),
+	activeLease: Object.freeze({
+		leaseId: "lease-v46-ui-prototype-004",
+		threadId: "019eb1-ui-prototype-claude-warm-v4",
+		health: "healthy"
+	}),
+	context: Object.freeze({
+		utilizationPercent: 62,
+		chips: Object.freeze([
+			"focused-v2 handoff loaded",
+			"static model",
+			"no network reads",
+			"copyOnly boundary"
+		])
+	}),
+	pendingResult: Object.freeze({
+		label: "none / NULL",
+		output: null,
+		contract: "[ EMPTY ]",
+		reason: "NULL"
+	}),
+	commandBoundary: Object.freeze({
+		state: "disabled",
+		executionAvailable: false,
+		copyOnly: true,
+		blockedCommandFamilies: Object.freeze([
+			"provider-cli",
+			"real-cli",
+			"child-dispatch",
+			"event-log-write",
+			"tag",
+			"release-closeout"
+		]),
+		blockedMutationFamilies: Object.freeze([...CANONICAL_BLOCKED_MUTATION_FAMILIES])
+	}),
+	timeline: Object.freeze([
+		Object.freeze({
+			index: "01",
+			title: "OpenDesign artifact received",
+			copy: "Focused v2 package defines the static supervisor workbench baseline and read-only constraints."
+		}),
+		Object.freeze({
+			index: "02",
+			title: "Preflight completed",
+			copy: "Repository commands, Vite entry point, and existing workbench supervisor route were inspected before implementation."
+		}),
+		Object.freeze({
+			index: "03",
+			title: "Static model attached",
+			copy: "The supervisor path now renders from an immutable local view model before any live state connection."
+		}),
+		Object.freeze({
+			index: "04",
+			title: "Next integration remains separate",
+			copy: "Real supervisor state can replace the local model after route contracts define the same fields."
+		})
+	]),
+	ownership: Object.freeze([
+		Object.freeze({
+			name: "daemon",
+			responsibility: "Owns background observation and lease projection outside the browser."
+		}),
+		Object.freeze({
+			name: "controller",
+			responsibility: "Owns implementation sequencing, verification, and recovery decisions."
+		}),
+		Object.freeze({
+			name: "supervisor-monitor",
+			responsibility: "Owns this read-only view and does not write state."
+		})
+	])
+});
+function projectSupervisorDashboardToWorkbenchView(dashboard, routeState = null) {
+	if (dashboard === null || typeof dashboard !== "object") return SUPERVISOR_WORKBENCH_VIEW;
+	if (isLiveSupervisorDashboard(dashboard, routeState) && !hasReadOnlySafety(dashboard)) return rejectedLiveSupervisorView(dashboard, routeState);
+	const goalSnapshot = objectValue(dashboard.goalSnapshot);
+	const currentGate = objectValue(dashboard.currentGate);
+	const nextAction = objectValue(dashboard.recommendedNextAction);
+	const activeLease = objectValue(dashboard.activeLease);
+	const contextStatus = objectValue(dashboard.contextStatus);
+	const pendingResult = objectValue(dashboard.pendingResult);
+	const commandBoundary = objectValue(dashboard.commandBoundary);
+	const ownership = objectValue(dashboard.ownership);
+	const timeline = Array.isArray(dashboard.goalTimeline) ? dashboard.goalTimeline : [];
+	return Object.freeze({
+		contractName: "supervisor-dashboard-state.v46",
+		contractVersion: 1,
+		source: textValue$1(dashboard.contractName ?? dashboard.sourceMode ?? dashboard.source ?? "goal-supervisor-app-read-model.v1"),
+		routeSource: textValue$1(routeState?.source ?? dashboard.route?.path ?? dashboard.source ?? "goal supervisor route"),
+		goalId: textValue$1(goalSnapshot.goalId ?? dashboard.goalId ?? SUPERVISOR_WORKBENCH_VIEW.goalId),
+		generatedAt: textValue$1(dashboard.generatedAt ?? goalSnapshot.generatedAt ?? SUPERVISOR_WORKBENCH_VIEW.generatedAt),
+		readOnly: true,
+		willMutate: false,
+		activeTask: textValue$1(goalSnapshot.activeTask ?? "NULL"),
+		activeRole: textValue$1(goalSnapshot.activeRole ?? ownership.orchestrationOwner ?? "supervisor-monitor"),
+		health: supervisorHealth(dashboard, activeLease, contextStatus, currentGate, ownership),
+		currentGate: Object.freeze({
+			gate: textValue$1(currentGate.gateId ?? currentGate.status ?? "unknown"),
+			condition: textValue$1(currentGate.blockingReason ?? currentGate.evidenceRequirement ?? routeState?.state ?? "observed from supervisor read model"),
+			nextArtifact: textValue$1(nextAction.label ?? nextAction.actionId ?? "pendingResult.output")
+		}),
+		recommendedNextAction: Object.freeze({
+			status: textValue$1(nextAction.state ?? nextAction.actionId ?? "confirm-required"),
+			text: textValue$1(nextAction.reason ?? nextAction.label ?? SUPERVISOR_WORKBENCH_VIEW.recommendedNextAction.text)
+		}),
+		activeLease: Object.freeze({
+			leaseId: textValue$1(activeLease.leaseId ?? "NULL"),
+			threadId: textValue$1(activeLease.threadId ?? "NULL"),
+			health: textValue$1(activeLease.status ?? activeLease.phase ?? "observed-only")
+		}),
+		context: Object.freeze({
+			utilizationPercent: utilizationPercent(contextStatus.utilization),
+			chips: Object.freeze(contextChips(contextStatus))
+		}),
+		pendingResult: Object.freeze({
+			label: textValue$1(pendingResult.status ?? "none / NULL"),
+			output: null,
+			contract: textValue$1(pendingResult.eventToRegister ?? pendingResult.evidenceRef ?? "[ EMPTY ]"),
+			reason: textValue$1(pendingResult.parserReason ?? pendingResult.source ?? "NULL")
+		}),
+		commandBoundary: commandBoundaryView(commandBoundary),
+		timeline: Object.freeze(timeline.length > 0 ? timeline.map((event, index) => Object.freeze({
+			index: textValue$1(event.index ?? event.eventId ?? `T-${String(index + 1).padStart(2, "0")}`),
+			title: textValue$1(event.status ?? event.title ?? "observed event"),
+			copy: textValue$1(event.evidenceRef ?? event.copy ?? event.timestamp ?? "event projected from supervisor read model")
+		})) : SUPERVISOR_WORKBENCH_VIEW.timeline),
+		ownership: Object.freeze([
+			Object.freeze({
+				name: "daemon",
+				responsibility: textValue$1(ownership.daemonState ?? "Owns background observation and lease projection outside the browser.")
+			}),
+			Object.freeze({
+				name: "controller",
+				responsibility: textValue$1(ownership.deliveryBoundary ?? ownership.controllerInterventionReason ?? "Owns implementation sequencing, verification, and recovery decisions.")
+			}),
+			Object.freeze({
+				name: "supervisor-monitor",
+				responsibility: textValue$1(ownership.orchestrationOwner ?? "Owns this read-only view and does not write state.")
+			})
+		])
+	});
+}
+function isLiveSupervisorDashboard(dashboard, routeState) {
+	return dashboard.sourceMode === "live" || textValue$1(routeState?.source ?? "").startsWith(`/api`);
+}
+function hasReadOnlySafety(dashboard) {
+	return dashboard.readOnly === true && dashboard.willMutate === false;
+}
+function rejectedLiveSupervisorView(dashboard, routeState) {
+	const goalSnapshot = objectValue(dashboard.goalSnapshot);
+	const activeLease = objectValue(dashboard.activeLease);
+	return Object.freeze({
+		...SUPERVISOR_WORKBENCH_VIEW,
+		source: textValue$1(dashboard.contractName ?? dashboard.source ?? "goal-supervisor-app-read-model.v1"),
+		routeSource: textValue$1(routeState?.source ?? dashboard.route?.path ?? dashboard.source ?? "goal supervisor route"),
+		goalId: textValue$1(goalSnapshot.goalId ?? dashboard.goalId ?? SUPERVISOR_WORKBENCH_VIEW.goalId),
+		generatedAt: textValue$1(dashboard.generatedAt ?? goalSnapshot.generatedAt ?? SUPERVISOR_WORKBENCH_VIEW.generatedAt),
+		activeTask: textValue$1(goalSnapshot.activeTask ?? "NULL"),
+		activeRole: textValue$1(goalSnapshot.activeRole ?? "supervisor-monitor"),
+		health: Object.freeze({
+			state: "blocked",
+			observedOnly: true,
+			daemonState: "not accepted by UI adapter",
+			contextState: "unknown",
+			gateState: "safety contract failed",
+			duplicateDispatchAllowed: false,
+			reason: "invalid live safety contract; readOnly must be true and willMutate must be false"
+		}),
+		currentGate: Object.freeze({
+			gate: "safety contract failed",
+			condition: "Live supervisor state did not satisfy the v46 read-only acceptance gate",
+			nextArtifact: "quarantined supervisor state evidence"
+		}),
+		recommendedNextAction: Object.freeze({
+			status: "blocked",
+			text: "Keep the supervisor workbench in local read-only fallback until the live state satisfies readOnly=true and willMutate=false."
+		}),
+		activeLease: Object.freeze({
+			leaseId: textValue$1(activeLease.leaseId ?? "NULL"),
+			threadId: textValue$1(activeLease.threadId ?? "NULL"),
+			health: "not accepted"
+		}),
+		pendingResult: Object.freeze({
+			label: "invalid live safety contract",
+			output: null,
+			contract: "[ EMPTY ]",
+			reason: "readOnly/willMutate rejected"
+		}),
+		commandBoundary: defaultCommandBoundary()
+	});
+}
+function objectValue(value) {
+	return value !== null && typeof value === "object" ? value : {};
+}
+function textValue$1(value) {
+	if (value === null || value === void 0 || value === "") return "NULL";
+	if (Array.isArray(value)) return value.length === 0 ? "[ EMPTY ]" : value.join(", ");
+	return String(value);
+}
+function supervisorHealth(dashboard, activeLease, contextStatus, currentGate, ownership) {
+	const activeLeaseStatus = textValue$1(activeLease.status ?? activeLease.phase ?? "observed-only");
+	const contextState = contextStateValue(contextStatus);
+	const gateState = textValue$1(currentGate.status ?? currentGate.gateId ?? "unknown");
+	const state = healthStateValue({
+		dashboard,
+		activeLease,
+		activeLeaseStatus,
+		contextStatus,
+		contextState,
+		currentGate
+	});
+	return Object.freeze({
+		state,
+		observedOnly: true,
+		daemonState: textValue$1(ownership.daemonState ?? dashboard.daemonState ?? "observed only"),
+		contextState,
+		gateState,
+		duplicateDispatchAllowed: false,
+		reason: healthReasonValue({
+			state,
+			activeLeaseStatus,
+			contextStatus,
+			currentGate
+		})
+	});
+}
+function healthStateValue({ dashboard, activeLease, activeLeaseStatus, contextStatus, contextState, currentGate }) {
+	if (currentGate.status === "blocked") return "blocked";
+	if (objectValue(contextStatus.staleTranscriptState).stale === true || contextState === "stale") return "stale";
+	if (objectValue(contextStatus.missingTranscriptState).missing === true || contextState === "missing") return "missing";
+	if ([
+		"healthy",
+		"active",
+		"available"
+	].includes(activeLeaseStatus) || activeLease.status === "healthy") return "healthy";
+	if (dashboard.readOnly === true && dashboard.willMutate === false) return "observed-only";
+	return "unknown";
+}
+function contextStateValue(contextStatus) {
+	if (typeof contextStatus.state === "string") {
+		if (contextStatus.state === "available") return "fresh";
+		return contextStatus.state;
+	}
+	if (objectValue(contextStatus.staleTranscriptState).stale === true) return "stale";
+	if (objectValue(contextStatus.missingTranscriptState).missing === true) return "missing";
+	return "unknown";
+}
+function healthReasonValue({ state, activeLeaseStatus, contextStatus, currentGate }) {
+	if (currentGate.blockingReason) return textValue$1(currentGate.blockingReason);
+	const staleReason = objectValue(contextStatus.staleTranscriptState).reason;
+	if (staleReason) return textValue$1(staleReason);
+	const missingReason = objectValue(contextStatus.missingTranscriptState).reason;
+	if (missingReason) return textValue$1(missingReason);
+	return `observed-only / ${state}; active lease ${activeLeaseStatus}`;
+}
+function healthLabel(health) {
+	if (health === null || typeof health !== "object") return textValue$1(health);
+	return health.observedOnly === true ? `observed-only / ${textValue$1(health.state)}` : textValue$1(health.state);
+}
+function utilizationPercent(value) {
+	if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.min(100, value));
+	const parsed = Number.parseInt(String(value ?? ""), 10);
+	return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0;
+}
+function contextChips(contextStatus) {
+	const chips = [
+		contextStatus.state,
+		contextStatus.transcriptAvailability,
+		contextStatus.tokenUsage
+	].filter((value) => value !== null && value !== void 0 && value !== "");
+	return chips.length > 0 ? chips.map(textValue$1) : ["missing contract field: contextStatus.providerSummaries"];
+}
+function commandBoundaryView(commandBoundary) {
+	const rawFamilies = rawBoundaryFamilies(commandBoundary);
+	return Object.freeze({
+		state: textValue$1(commandBoundary.state ?? "disabled"),
+		executionAvailable: false,
+		copyOnly: true,
+		blockedCommandFamilies: Object.freeze(rawFamilies),
+		blockedMutationFamilies: Object.freeze(canonicalBoundaryFamilies(rawFamilies))
+	});
+}
+function defaultCommandBoundary() {
+	return Object.freeze({
+		state: "disabled",
+		executionAvailable: false,
+		copyOnly: true,
+		blockedCommandFamilies: Object.freeze([]),
+		blockedMutationFamilies: Object.freeze([...CANONICAL_BLOCKED_MUTATION_FAMILIES])
+	});
+}
+function rawBoundaryFamilies(commandBoundary) {
+	return uniqueTextValues(Array.isArray(commandBoundary.blockedMutationFamilies) ? commandBoundary.blockedMutationFamilies : Array.isArray(commandBoundary.blockedCommandFamilies) ? commandBoundary.blockedCommandFamilies : Array.isArray(commandBoundary.blockedFamilies) ? commandBoundary.blockedFamilies : []);
+}
+function canonicalBoundaryFamilies(rawFamilies) {
+	const canonical = uniqueTextValues([...rawFamilies.map(canonicalBoundaryFamily).filter((family) => family !== null), ...CANONICAL_BLOCKED_MUTATION_FAMILIES]);
+	return CANONICAL_BLOCKED_MUTATION_FAMILIES.filter((family) => canonical.includes(family));
+}
+function canonicalBoundaryFamily(family) {
+	const compact = textValue$1(family).toLowerCase().replace(/_/gu, "-").replace(/\s+/gu, "-").replace(/^blocked-/u, "");
+	if ([
+		"daemon-control",
+		"daemon-launch",
+		"child-dispatch",
+		"goal-ledger-write",
+		"event-log-write",
+		"event-registration",
+		"mutation-gate",
+		"audit"
+	].includes(compact)) return "daemon-control";
+	if (["provider-cli", "provider-cli-control"].includes(compact)) return "provider-cli";
+	if ([
+		"real-cli",
+		"generic-shell",
+		"shell"
+	].includes(compact)) return "real-cli";
+	if ([
+		"release-closeout",
+		"release-closeout-blocked",
+		"push-release",
+		"publish-release",
+		"github-release",
+		"publish",
+		"closeout"
+	].includes(compact)) return "release-closeout";
+	if (["tag", "git-tag"].includes(compact)) return "git-tag";
+	return null;
+}
+function uniqueTextValues(values) {
+	return [...new Set(values.map(textValue$1).filter((value) => value !== "NULL" && value !== "[ EMPTY ]"))];
+}
+function contractLabel(view) {
+	const version = view.contractVersion === null || view.contractVersion === void 0 ? "unknown" : view.contractVersion;
+	return version === "unknown" ? view.contractName : `${view.contractName} / ${version}`;
+}
+function sourceSummary(view) {
+	return view.source;
+}
+function commandBoundarySummary(boundary) {
+	if (boundary.executionAvailable === false && boundary.copyOnly === true) return "execution unavailable; copyOnly true";
+	return "copyOnly true";
+}
+var SIDEBAR_ITEMS = Object.freeze([
+	Object.freeze({
+		label: "Overview",
+		tone: "selected"
+	}),
+	Object.freeze({
+		label: "Active Lease",
+		tone: "observed"
+	}),
+	Object.freeze({
+		label: "Current Gate",
+		tone: "neutral"
+	}),
+	Object.freeze({
+		label: "Command Boundary",
+		tone: "warn"
+	}),
+	Object.freeze({
+		label: "Context Status",
+		tone: "neutral"
+	}),
+	Object.freeze({
+		label: "Timeline",
+		tone: "neutral"
+	}),
+	Object.freeze({
+		label: "Ownership",
+		tone: "neutral"
+	})
+]);
+function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
+		className: "v46-supervisor-shell",
+		"aria-labelledby": "v46-supervisor-title",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorSidebar, { items: SIDEBAR_ITEMS }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+			className: "v46-supervisor-workspace",
+			"aria-label": "Workbench Supervisor Dashboard",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusHeader, { view }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "v46-dashboard-grid",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalSnapshotPanel, { view }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveLeasePanel, { lease: view.activeLease }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CurrentGatePanel, { gate: view.currentGate }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecommendedNextActionBand, { action: view.recommendedNextAction }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContextStatusPanel, { context: view.context }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundaryPanel, { boundary: view.commandBoundary }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PendingResultPanel, { pendingResult: view.pendingResult }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalTimelinePanel, { timeline: view.timeline }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipPanel, { ownership: view.ownership })
+				]
+			})]
+		})]
+	});
+}
+function SupervisorSidebar({ items }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
+		className: "v46-sidebar",
+		"data-od-id": "sidebar",
+		"aria-label": "Supervisor sections",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "v46-sidebar-head",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Workbench" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "supervisor monitor" })]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "v46-sidebar-list",
+			children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: `v46-sidebar-item ${item.tone}`,
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "v46-sidebar-icon",
+					"aria-hidden": "true",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SidebarIcon, { label: item.label })
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "v46-sidebar-label",
+					children: item.label
+				})]
+			}, item.label))
+		})]
+	});
+}
+function SidebarIcon({ label }) {
+	if (label === "Overview") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+		viewBox: "0 0 24 24",
+		fill: "none",
+		strokeWidth: "1.8",
+		strokeLinecap: "round",
+		strokeLinejoin: "round",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", {
+				x: "3.5",
+				y: "3.5",
+				width: "7",
+				height: "7"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", {
+				x: "13.5",
+				y: "3.5",
+				width: "7",
+				height: "7"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", {
+				x: "3.5",
+				y: "13.5",
+				width: "7",
+				height: "7"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", {
+				x: "13.5",
+				y: "13.5",
+				width: "7",
+				height: "7"
+			})
+		]
+	});
+	if (label === "Active Lease") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+		viewBox: "0 0 24 24",
+		fill: "none",
+		strokeWidth: "1.8",
+		strokeLinecap: "round",
+		strokeLinejoin: "round",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M12 3.2 19 6v5.5c0 4.4-2.8 7.5-7 9.3-4.2-1.8-7-4.9-7-9.3V6l7-2.8Z" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "m8.8 12.1 2.1 2.1 4.4-5" })]
+	});
+	if (label === "Current Gate") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+		viewBox: "0 0 24 24",
+		fill: "none",
+		strokeWidth: "1.8",
+		strokeLinecap: "round",
+		strokeLinejoin: "round",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M5 21V4" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M5 5h12l-2 4 2 4H5" })]
+	});
+	if (label === "Command Boundary") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+		viewBox: "0 0 24 24",
+		fill: "none",
+		strokeWidth: "1.8",
+		strokeLinecap: "round",
+		strokeLinejoin: "round",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M7 7H5v10h2" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M17 7h2v10h-2" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M10 12h4" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M12 9v6" })
+		]
+	});
+	if (label === "Context Status") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+		viewBox: "0 0 24 24",
+		fill: "none",
+		strokeWidth: "1.8",
+		strokeLinecap: "round",
+		strokeLinejoin: "round",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M4.5 18a7.5 7.5 0 1 1 15 0" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "m12 14 4-4" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M8 18h8" })
+		]
+	});
+	if (label === "Timeline") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+		viewBox: "0 0 24 24",
+		fill: "none",
+		strokeWidth: "1.8",
+		strokeLinecap: "round",
+		strokeLinejoin: "round",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+			cx: "12",
+			cy: "12",
+			r: "8.5"
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M12 7.5V12l3 2" })]
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", {
+		viewBox: "0 0 24 24",
+		fill: "none",
+		strokeWidth: "1.8",
+		strokeLinecap: "round",
+		strokeLinejoin: "round",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+				cx: "8",
+				cy: "8",
+				r: "3"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("circle", {
+				cx: "16",
+				cy: "8",
+				r: "3"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M3.8 19c.7-3 2.3-4.5 4.2-4.5s3.5 1.5 4.2 4.5" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M11.8 19c.7-3 2.3-4.5 4.2-4.5s3.5 1.5 4.2 4.5" })
+		]
+	});
+}
+function StatusHeader({ view }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+		className: "v46-status-header",
+		"data-od-id": "status-header",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "v46-goal-line",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Goal ID:" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+				id: "v46-supervisor-title",
+				children: view.goalId
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("dl", {
+			className: "v46-status-chips",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusChip, {
+					label: "generated",
+					value: view.generatedAt
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusChip, {
+					label: "readOnly",
+					value: String(view.readOnly)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusChip, {
+					label: "willMutate",
+					value: String(view.willMutate)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusChip, {
+					label: "role",
+					value: view.activeRole
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusChip, {
+					label: "contract",
+					value: contractLabel(view)
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusChip, {
+					label: "health",
+					value: healthLabel(view.health)
+				})
+			]
+		})]
+	});
+}
+function StatusChip({ label, value }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: label }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: value })] });
+}
+function GoalSnapshotPanel({ view }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Panel, {
+		className: "v46-goal-panel",
+		odId: "goal-snapshot",
+		title: "Goal Snapshot",
+		meta: sourceSummary(view),
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["active task", view.activeTask],
+			["goal id", view.goalId],
+			["mutation", view.willMutate === false ? "disabled by supervisor boundary" : "unknown"]
+		] })
+	});
+}
+function ActiveLeasePanel({ lease }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
+		className: "v46-lease-panel",
+		odId: "active-lease",
+		title: "Active Lease",
+		meta: lease.health,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "v46-lease-id",
+			children: lease.leaseId
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["thread id", lease.threadId],
+			["lease health", lease.health],
+			["telemetry", "strong active lease observed"]
+		] })]
+	});
+}
+function CurrentGatePanel({ gate }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Panel, {
+		className: "v46-gate-panel",
+		odId: "current-gate",
+		title: "Current Gate",
+		meta: gate.gate,
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["gate", gate.gate],
+			["condition", gate.condition],
+			["next artifact", gate.nextArtifact]
+		] })
+	});
+}
+function RecommendedNextActionBand({ action }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "v46-recommended-band",
+		"data-od-id": "recommended-next-action",
+		"aria-label": "Recommended Next Action",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: action.status }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Recommended Next Action" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: action.text })]
+	});
+}
+function ContextStatusPanel({ context }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
+		className: "v46-context-panel",
+		odId: "context-status",
+		title: "Context Status",
+		meta: `${context.utilizationPercent}%`,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "v46-meter",
+			"aria-label": `Context utilization ${context.utilizationPercent}%`,
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: `${context.utilizationPercent}%` } })
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+			className: "v46-chip-list",
+			children: context.chips.map((chip) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: chip }, chip))
+		})]
+	});
+}
+function PendingResultPanel({ pendingResult }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Panel, {
+		className: "v46-pending-panel",
+		odId: "pending-result",
+		title: "Pending Result",
+		meta: pendingResult.label,
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["label", pendingResult.label],
+			["pendingResult.output", pendingResult.output === null ? "NULL" : pendingResult.output],
+			["contract", pendingResult.contract],
+			["reason", pendingResult.reason]
+		] })
+	});
+}
+function CommandBoundaryPanel({ boundary }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
+		className: "v46-command-panel",
+		odId: "command-boundary",
+		title: "Command Boundary",
+		meta: "copyOnly",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "v46-boundary-line",
+				"aria-hidden": "true"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+				["boundary state", commandBoundarySummary(boundary)],
+				["executionAvailable", String(boundary.executionAvailable)],
+				["copyOnly", String(boundary.copyOnly)]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				className: "v46-family-list",
+				children: boundary.blockedMutationFamilies.map((family) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: family }, family))
+			})
+		]
+	});
+}
+function GoalTimelinePanel({ timeline }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Panel, {
+		className: "v46-timeline-panel",
+		odId: "goal-timeline",
+		title: "Goal Timeline",
+		meta: "expanded",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
+			className: "v46-timeline",
+			children: timeline.map((event) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: event.index }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: event.title }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: event.copy })] })] }, event.index))
+		})
+	});
+}
+function OwnershipPanel({ ownership }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Panel, {
+		className: "v46-ownership-panel",
+		odId: "ownership",
+		title: "Ownership",
+		meta: "responsibility split",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			className: "v46-owner-grid",
+			children: ownership.map((owner) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: owner.name }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: owner.responsibility })] }, owner.name))
+		})
+	});
+}
+function Panel({ className, odId, title, meta, children }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: `v46-panel ${className}`,
+		"data-od-id": odId,
+		"aria-label": title,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: title }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: meta })] }), children]
+	});
+}
+function KeyValues({ rows }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dl", {
+		className: "v46-key-values",
+		children: rows.map(([key, value]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: key }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: value })] }, key))
+	});
+}
+//#endregion
+//#region frontend/workbench/src/App.jsx
 var initialState = {
 	phase: "loading",
 	model: null
@@ -21006,6 +21758,9 @@ var WORKBENCH_NAV_ITEMS = Object.freeze([
 	})
 ]);
 function App() {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LiveWorkbenchApp, {});
+}
+function LiveWorkbenchApp() {
 	const [viewState, setViewState] = (0, import_react.useState)(initialState);
 	async function refreshWorkbenchContracts() {
 		setViewState((current) => ({
@@ -21087,9 +21842,9 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: workbenchShellClassName(workbenchRoute),
-		"aria-labelledby": "workbench-title",
+		"aria-labelledby": workbenchRoute === "supervisor" ? void 0 : "workbench-title",
 		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+			workbenchRoute === "supervisor" ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
 				className: "workbench-header",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "header-copy",
@@ -21104,7 +21859,7 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: workbenchRoute === "supervisor" ? "Read-only supervisor state: goal snapshot, active lease, context, pending result, command boundary, timeline, gate, and ownership. Fixture scenarios remain available when live data is unavailable." : workbenchRoute === "desktop" ? "只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。" : "围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。"
+							children: workbenchRoute === "desktop" ? "只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。" : "围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -21138,11 +21893,7 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 				title: "读取失败",
 				copy: "错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。"
 			}) : null,
-			workbenchRoute === "supervisor" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorDashboard, {
-				dashboard: selectedSupervisorDashboard(model),
-				routeState: selectedSupervisorDashboardRouteState(model),
-				refreshHandler: onRefreshWorkbenchContracts
-			}) : model === null ? null : workbenchRoute === "desktop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopShellRoute, {
+			workbenchRoute === "supervisor" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorShell, { view: projectSupervisorDashboardToWorkbenchView(selectedSupervisorDashboard(model), selectedSupervisorDashboardRouteState(model)) }) : model === null ? null : workbenchRoute === "desktop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopShellRoute, {
 				desktopShell: model.desktopShell,
 				routeContext
 			}) : workbenchRoute === "prompts" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspaceRoute, {
@@ -22218,353 +22969,6 @@ function WorkbenchRouteEvidenceList({ evidenceRefs }) {
 			["label", item.label],
 			["source", item.source]
 		] }) }, `${item.ref.text}-${index}`))
-	});
-}
-function SupervisorDashboard({ dashboard, routeState, refreshHandler = () => void 0 }) {
-	const scenarioLinks = SUPERVISOR_DASHBOARD_SCENARIOS.map((scenarioId) => ({
-		id: scenarioId,
-		href: `/workbench/supervisor/?scenario=${encodeURIComponent(scenarioId)}`,
-		label: SUPERVISOR_DASHBOARD_FIXTURES[scenarioId]?.label ?? scenarioId
-	}));
-	const fixtureMode = dashboard.sourceMode !== "live";
-	const copyPreviewsEnabled = dashboard.readOnly === true && dashboard.willMutate === false && dashboard.commandBoundary.executionAvailable === false && dashboard.commandBoundary.copyOnly === true;
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-		className: "supervisor-dashboard-route",
-		"aria-label": "Supervisor Command Center",
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-				className: "supervisor-topbar",
-				"aria-label": "Supervisor read-only metadata",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-					["contract", textValue(dashboard.contractName)],
-					["version", textValue(dashboard.contractVersion)],
-					["goal id", textValue(dashboard.goalSnapshot.goalId)],
-					["active task", textValue(dashboard.goalSnapshot.activeTask)],
-					["active role", textValue(dashboard.goalSnapshot.activeRole)],
-					["generated at", textValue(dashboard.generatedAt)],
-					["readOnly", textValue(dashboard.readOnly)],
-					["willMutate", textValue(dashboard.willMutate)]
-				] })
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipSummary, { ownership: dashboard.ownership }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundarySummary, { commandBoundary: dashboard.commandBoundary }),
-			fixtureMode ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", {
-				className: "supervisor-scenario-nav",
-				"aria-label": "Supervisor fixture scenarios",
-				children: scenarioLinks.map((scenario) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", {
-					className: scenario.id === dashboard.id ? "supervisor-scenario active" : "supervisor-scenario",
-					href: scenario.href,
-					"aria-current": scenario.id === dashboard.id ? "page" : void 0,
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: scenario.label }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: scenario.id })]
-				}, scenario.id))
-			}) : null,
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "supervisor-fixture-note",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: dashboard.summary }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["source: ", routeState.source] }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["refresh handler: ", typeof refreshHandler === "function" ? "existing Workbench read refresh only" : "none"] })
-				]
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "supervisor-dashboard-grid",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalSnapshotSummary, { goalSnapshot: dashboard.goalSnapshot }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecommendedNextActionCard, {
-						recommendedNextAction: dashboard.recommendedNextAction,
-						commandBoundary: dashboard.commandBoundary,
-						copyPreviewsEnabled
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveLeasePanel, {
-						activeLease: dashboard.activeLease,
-						contextStatus: dashboard.contextStatus
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContextStatusPanel, { contextStatus: dashboard.contextStatus }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PendingResultPanel, { pendingResult: dashboard.pendingResult }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundaryPanel, {
-						commandBoundary: dashboard.commandBoundary,
-						copyPreviewsEnabled
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalTimeline, { goalTimeline: dashboard.goalTimeline }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CurrentGateCard, { currentGate: dashboard.currentGate }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipPanel, { ownership: dashboard.ownership })
-				]
-			})
-		]
-	});
-}
-function OwnershipSummary({ ownership }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "supervisor-ownership-summary",
-		"aria-label": "Ownership projected summary",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Ownership" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["orchestration owner", textValue(ownership.orchestrationOwner)],
-			["daemon state", textValue(ownership.daemonState)],
-			["delivery boundary", textValue(ownership.deliveryBoundary)],
-			["active PR", textValue(ownership.activePr)],
-			["branch", textValue(ownership.branch)],
-			["controller intervention", textValue(ownership.controllerInterventionReason)]
-		] })]
-	});
-}
-function CommandBoundarySummary({ commandBoundary }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "supervisor-boundary-summary",
-		"aria-label": "Command Boundary projected summary",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Command Boundary" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["state", textValue(commandBoundary.state)],
-			["executionAvailable", textValue(commandBoundary.executionAvailable)],
-			["copyOnly", textValue(commandBoundary.copyOnly)],
-			["blocked families", textValue(commandBoundary.blockedFamilies.length)]
-		] })]
-	});
-}
-function GoalSnapshotSummary({ goalSnapshot }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
-		className: "supervisor-card-goal",
-		kicker: "goal snapshot",
-		title: "Goal Snapshot",
-		state: goalSnapshot.releaseReadiness,
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["goal id", textValue(goalSnapshot.goalId)],
-			["title", textValue(goalSnapshot.title)],
-			["active task", textValue(goalSnapshot.activeTask)],
-			["active role", textValue(goalSnapshot.activeRole)],
-			["completed / total", supervisorTaskCountValue(goalSnapshot)],
-			["blockers", textValue(goalSnapshot.blockerCount)],
-			["release readiness", textValue(goalSnapshot.releaseReadiness)],
-			["generated", textValue(goalSnapshot.generatedAt)]
-		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-			title: "source contracts",
-			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: goalSnapshot.sourceContracts })
-		})]
-	});
-}
-function RecommendedNextActionCard({ recommendedNextAction, commandBoundary, copyPreviewsEnabled = false }) {
-	const previewVisible = copyPreviewsEnabled && commandBoundary.copyOnly === true && commandBoundary.executionAvailable === false && isNonEmptyText(recommendedNextAction.safePreview);
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
-		className: "supervisor-card-action",
-		kicker: "recommended next action",
-		title: "Recommended Next Action",
-		state: recommendedNextAction.state,
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-				["action id", textValue(recommendedNextAction.actionId)],
-				["label", textValue(recommendedNextAction.label)],
-				["reason", textValue(recommendedNextAction.reason)],
-				["target role", textValue(recommendedNextAction.targetRole)],
-				["target task", textValue(recommendedNextAction.targetTask)],
-				["action state", textValue(recommendedNextAction.state)],
-				["checkpoint", textValue(recommendedNextAction.checkpointRef)],
-				["wait policy", textValue(recommendedNextAction.waitPolicy)],
-				["stale threshold", textValue(recommendedNextAction.staleThreshold)]
-			] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "blocked fields",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: recommendedNextAction.blockedFields })
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "required confirmation",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: recommendedNextAction.requiredConfirmationFields })
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "mismatch / intervention",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: supervisorActionMismatchItems(recommendedNextAction) })
-			}),
-			previewVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CopyPreviewText, { text: recommendedNextAction.safePreview }) : null
-		]
-	});
-}
-function ActiveLeasePanel({ activeLease, contextStatus }) {
-	const driftVisible = contextStatus.driftMarkers.some((marker) => marker !== "none");
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
-		className: "supervisor-card-lease",
-		kicker: "active lease",
-		title: "Active Lease",
-		state: activeLease.status,
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["lease id", textValue(activeLease.leaseId)],
-			["thread id", textValue(activeLease.threadId)],
-			["task id", textValue(activeLease.taskId)],
-			["role", textValue(activeLease.role)],
-			["phase", textValue(activeLease.phase)],
-			["status", textValue(activeLease.status)],
-			["started", textValue(activeLease.startedAt)],
-			["updated", textValue(activeLease.updatedAt)],
-			["age", textValue(activeLease.age)],
-			["duplicate dispatch guard", textValue(activeLease.duplicateDispatchGuard)]
-		] }), driftVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-			className: "supervisor-warning",
-			children: ["drift warning: ", contextStatus.driftMarkers.join(" / ")]
-		}) : null]
-	});
-}
-function ContextStatusPanel({ contextStatus }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
-		className: "supervisor-card-context",
-		kicker: "context status",
-		title: "Context Status",
-		state: contextStatus.state,
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-				["transcript", textValue(contextStatus.transcriptAvailability)],
-				["exchange count", textValue(contextStatus.exchangeCount)],
-				["latest turn", textValue(contextStatus.latestTurn)],
-				["latest tool call", textValue(contextStatus.latestToolCall)],
-				["token usage", textValue(contextStatus.tokenUsage)],
-				["context utilization", textValue(contextStatus.utilization)],
-				["transcript state", textValue(contextStatus.transcriptState)],
-				["result-block evidence", textValue(contextStatus.resultBlockEvidence)],
-				["checkpoint ref", textValue(contextStatus.checkpointRef)]
-			] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "provider summaries",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: contextStatus.providers.length === 0 ? ["missing contract field: contextStatus.providerSummaries"] : contextStatus.providers })
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "drift markers",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: contextStatus.driftMarkers })
-			})
-		]
-	});
-}
-function PendingResultPanel({ pendingResult }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
-		className: "supervisor-card-pending",
-		kicker: "pending result",
-		title: "Pending Result",
-		state: pendingResult.status,
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["status", textValue(pendingResult.status)],
-			["source", textValue(pendingResult.source)],
-			["event to register", textValue(pendingResult.eventToRegister)],
-			["evidence ref", textValue(pendingResult.evidenceRef)],
-			["parser reason", textValue(pendingResult.parserReason)],
-			["stale marker", textValue(pendingResult.staleMarker)],
-			["missing marker", textValue(pendingResult.missingMarker)]
-		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-			className: "panel-note",
-			children: "No event append control is rendered in this fixture prototype."
-		})]
-	});
-}
-function CommandBoundaryPanel({ commandBoundary, copyPreviewsEnabled = false }) {
-	const previewVisible = copyPreviewsEnabled && commandBoundary.copyOnly === true && isNonEmptyText(commandBoundary.safePreview);
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(SupervisorCard, {
-		className: "supervisor-card-boundary",
-		kicker: "command boundary",
-		title: "Command Boundary",
-		state: commandBoundary.state,
-		children: [
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-				["state", textValue(commandBoundary.state)],
-				["executionAvailable", textValue(commandBoundary.executionAvailable)],
-				["copyOnly", textValue(commandBoundary.copyOnly)]
-			] }),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "allowed families",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandFamilyList, { items: commandBoundary.allowedFamilies })
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "blocked families",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandFamilyList, {
-					items: commandBoundary.blockedFamilies,
-					blocked: true
-				})
-			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
-				title: "confirmation fields",
-				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompactList, { items: commandBoundary.confirmationFields })
-			}),
-			previewVisible ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CopyPreviewText, { text: commandBoundary.safePreview }) : null
-		]
-	});
-}
-function GoalTimeline({ goalTimeline }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorCard, {
-		className: "supervisor-card-timeline",
-		kicker: "goal timeline",
-		title: "Goal Timeline",
-		state: `${goalTimeline.length} events`,
-		children: goalTimeline.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "goal timeline 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", {
-			className: "supervisor-timeline-list",
-			children: goalTimeline.map((event) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-				["event id", textValue(event.eventId)],
-				["task", textValue(event.taskId)],
-				["role", textValue(event.role)],
-				["status", textValue(event.status)],
-				["evidence ref", textValue(event.evidenceRef)],
-				["timestamp", textValue(event.timestamp)],
-				["hash state", textValue(event.hashState)]
-			] }) }, event.eventId))
-		})
-	});
-}
-function CurrentGateCard({ currentGate }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorCard, {
-		className: "supervisor-card-gate",
-		kicker: "current gate",
-		title: "Current Gate",
-		state: currentGate.status,
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["gate id", textValue(currentGate.gateId)],
-			["status", textValue(currentGate.status)],
-			["required family", textValue(currentGate.requiredCommandFamily)],
-			["blocking reason", textValue(currentGate.blockingReason)],
-			["evidence requirement", textValue(currentGate.evidenceRequirement)],
-			["closeout authorization", textValue(currentGate.closeoutAuthorization)]
-		] })
-	});
-}
-function OwnershipPanel({ ownership }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorCard, {
-		className: "supervisor-card-ownership",
-		kicker: "ownership",
-		title: "Ownership",
-		state: ownership.daemonState,
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["orchestration owner", textValue(ownership.orchestrationOwner)],
-			["delivery boundary", textValue(ownership.deliveryBoundary)],
-			["active PR", textValue(ownership.activePr)],
-			["branch", textValue(ownership.branch)],
-			["rollback boundary", textValue(ownership.rollbackBoundary)],
-			["daemon state", textValue(ownership.daemonState)],
-			["controller intervention", textValue(ownership.controllerInterventionReason)]
-		] })
-	});
-}
-function SupervisorCard({ className, kicker, title, state, children }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
-		className: `supervisor-card ${className}`,
-		"aria-labelledby": `${className}-title`,
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
-			className: "supervisor-card-header",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "section-kicker",
-				children: kicker
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-				id: `${className}-title`,
-				children: title
-			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-				className: "panel-state",
-				children: state
-			})]
-		}), children]
-	});
-}
-function supervisorTaskCountValue(goalSnapshot) {
-	const completed = goalSnapshot.completedTasks;
-	const total = goalSnapshot.totalTasks;
-	if (completed === null || completed === void 0 || total === null || total === void 0) return textValue(null);
-	return textValue(`${completed} / ${total}`);
-}
-function supervisorActionMismatchItems(recommendedNextAction) {
-	return [...Array.isArray(recommendedNextAction.mismatchList) ? recommendedNextAction.mismatchList : [], recommendedNextAction.manualInterventionReason].filter(isNonEmptyText);
-}
-function CopyPreviewText({ text }) {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
-		className: "copy-preview-text",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Copy preview" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: text })]
 	});
 }
 function PromptWorkspaceRoute({ model, routeContext, onWorkbenchContextChanged = () => void 0 }) {
@@ -28565,14 +28969,6 @@ function CompactList({ items }) {
 		children: normalizedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item }) }, item))
 	});
 }
-function CommandFamilyList({ items, blocked = false }) {
-	const normalizedItems = Array.isArray(items) ? items.filter((item) => typeof item === "string" && item.trim() !== "") : [];
-	if (normalizedItems.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "未暴露。" });
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
-		className: blocked ? "command-family-list blocked-command-family-list" : "command-family-list",
-		children: normalizedItems.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item }) }, item))
-	});
-}
 function CheckList({ checks }) {
 	if (checks.state === "missing") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "checks 未暴露。" });
 	if (checks.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "checks 为空。" });
@@ -29846,8 +30242,10 @@ function findRoute(routes, id) {
 }
 function selectedSupervisorDashboard(model) {
 	if (model?.supervisorDashboard?.state === "available") return model.supervisorDashboard;
+	const scenarioId = currentWorkbenchSearchParams().get("scenario");
+	if (scenarioId === null) return null;
 	return {
-		...SUPERVISOR_DASHBOARD_FIXTURES[currentWorkbenchSearchParams().get("scenario") ?? "release-ready"] ?? SUPERVISOR_DASHBOARD_FIXTURES["release-ready"],
+		...SUPERVISOR_DASHBOARD_FIXTURES[scenarioId] ?? SUPERVISOR_DASHBOARD_FIXTURES["release-ready"],
 		sourceMode: "fixture"
 	};
 }
@@ -29855,6 +30253,10 @@ function selectedSupervisorDashboardRouteState(model) {
 	if (model?.supervisorDashboard?.state === "available") return {
 		state: model.supervisorDashboard.route?.state ?? "ready",
 		source: model.supervisorDashboard.source ?? model.supervisorDashboard.route?.path ?? "goal supervisor route"
+	};
+	if (!currentWorkbenchSearchParams().has("scenario")) return {
+		state: "local-sample-fallback",
+		source: "frontend/workbench/src/v46SupervisorWorkbench.jsx"
 	};
 	return {
 		state: model?.supervisorDashboard?.route?.state ?? "fixture",
