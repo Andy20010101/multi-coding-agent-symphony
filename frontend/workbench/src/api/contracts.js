@@ -49,6 +49,7 @@ const APP_CORE_BACKUP_EXPORT_CONTRACT_NAME = 'app-core-backup-export.v1';
 const APP_CORE_RELEASE_MANAGER_CONTRACT_NAME = 'app-core-release-manager.v1';
 const PROJECT_REGISTRY_CONTRACT_NAME = 'project-registry.v1';
 const RECENT_PROJECTS_CONTRACT_NAME = 'recent-projects.v1';
+const CURRENT_PROJECT_BINDING_CONTRACT_NAME = 'current-project-binding.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
@@ -419,6 +420,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/projects/recent',
     method: 'GET',
     contractName: RECENT_PROJECTS_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'currentProjectBinding',
+    label: 'Current Project Binding',
+    path: '/api/projects/current-binding',
+    method: 'GET',
+    contractName: CURRENT_PROJECT_BINDING_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'runtimeSnapshot',
@@ -942,6 +950,7 @@ export function projectWorkbenchContracts(results) {
   const summaryData = dataFrom(results.summary);
   const projectRegistryData = dataFrom(results.projectRegistry);
   const recentProjectsData = dataFrom(results.recentProjects);
+  const currentProjectBindingData = dataFrom(results.currentProjectBinding);
   const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
   const appDataInventoryData = dataFrom(results.appDataInventory);
   const inboxCaptureData = dataFrom(results.inboxCapture);
@@ -1137,6 +1146,10 @@ export function projectWorkbenchContracts(results) {
     result: results.recentProjects,
     recentProjects: recentProjectsData
   });
+  const projectedCurrentProjectBinding = projectCurrentProjectBinding({
+    result: results.currentProjectBinding,
+    binding: currentProjectBindingData
+  });
   const projectedArtifactRefs = projectArtifactRefs(
     latestRun?.artifactRefs,
     latestRun?.artifactStatus,
@@ -1223,6 +1236,7 @@ export function projectWorkbenchContracts(results) {
     desktopShell: projectDesktopShell({
       projectRegistry: projectedProjectRegistry,
       recentProjects: projectedRecentProjects,
+      currentProjectBinding: projectedCurrentProjectBinding,
       runtimeSnapshot: projectedRuntimeSnapshot,
       activeGoal: activeGoalControl,
       jobConsole: projectedJobConsole,
@@ -1240,6 +1254,7 @@ export function projectWorkbenchContracts(results) {
     }),
     projectRegistry: projectedProjectRegistry,
     recentProjects: projectedRecentProjects,
+    currentProjectBinding: projectedCurrentProjectBinding,
     runtimeSnapshot: projectedRuntimeSnapshot,
     appDataInventory: projectAppDataInventory({
       result: results.appDataInventory,
@@ -1517,6 +1532,51 @@ function projectRecentProjects({ result, recentProjects }) {
   };
 }
 
+function projectCurrentProjectBinding({ result, binding }) {
+  return {
+    state: result?.ok === true ? binding?.state ?? 'missing' : 'missing',
+    contractName: valueState(binding?.contractName),
+    contractVersion: valueState(binding?.contractVersion),
+    generatedAt: valueState(binding?.generatedAt),
+    selectedProjectId: valueState(binding?.selectedProjectId),
+    selectedProjectName: valueState(binding?.selectedProjectName),
+    repoPath: valueState(binding?.repoPath),
+    defaultBranch: valueState(binding?.defaultBranch),
+    lastGoalId: valueState(binding?.lastGoalId),
+    lastRunId: valueState(binding?.lastRunId),
+    healthStatus: valueState(binding?.healthStatus),
+    bindingSource: valueState(binding?.bindingSource),
+    persisted: valueState(binding?.persisted),
+    selectionUpdatedAt: valueState(binding?.selectionUpdatedAt),
+    fallbackReason: valueState(binding?.fallbackReason),
+    route: valueState(result?.routeDescriptor?.path ?? '/api/projects/current-binding'),
+    routeState: valueState(result?.ok === true ? binding?.routeState ?? 'ready' : routeStateFromResult(result)),
+    readOnly: valueState(binding?.readOnly),
+    sourcePolicy: valueState(binding?.sourcePolicy ?? 'backend-known project id only; no frontend path input'),
+    selectionControl: {
+      state: valueState(binding?.selectionControl?.state),
+      endpointId: valueState(binding?.selectionControl?.endpointId),
+      disabledReason: valueState(binding?.selectionControl?.disabledReason)
+    },
+    boundaries: {
+      selectionOnly: valueState(binding?.boundaries?.selectionOnly),
+      acceptsProjectIdOnly: valueState(binding?.boundaries?.acceptsProjectIdOnly),
+      arbitraryPathSubmissionAvailable: valueState(binding?.boundaries?.arbitraryPathSubmissionAvailable),
+      frontendFilesystemScanAvailable: valueState(binding?.boundaries?.frontendFilesystemScanAvailable),
+      frontendArbitraryPathReadAvailable: valueState(binding?.boundaries?.frontendArbitraryPathReadAvailable),
+      commandExecutionAvailable: valueState(binding?.boundaries?.commandExecutionAvailable),
+      providerLaunchAvailable: valueState(binding?.boundaries?.providerLaunchAvailable),
+      goalMutationAvailable: valueState(binding?.boundaries?.goalMutationAvailable),
+      childDispatchAvailable: valueState(binding?.boundaries?.childDispatchAvailable),
+      jobExecutionAvailable: valueState(binding?.boundaries?.jobExecutionAvailable),
+      gitWriteAvailable: valueState(binding?.boundaries?.gitWriteAvailable),
+      releaseWriteAvailable: valueState(binding?.boundaries?.releaseWriteAvailable),
+      rawTranscriptReadAvailable: valueState(binding?.boundaries?.rawTranscriptReadAvailable)
+    },
+    note: 'Current project binding comes from current-project-binding.v1. Selection accepts only a backend-known project id through the backend contract; Workbench does not accept paths, scan disk, mutate goals, launch providers, run jobs, or write git/release state.'
+  };
+}
+
 function projectRecentProjectItem(item) {
   return {
     projectId: valueState(item?.projectId),
@@ -1753,6 +1813,7 @@ function snapshotRuntimeState(snapshot) {
 function projectDesktopShell({
   projectRegistry,
   recentProjects,
+  currentProjectBinding,
   runtimeSnapshot,
   activeGoal,
   jobConsole,
@@ -1769,6 +1830,7 @@ function projectDesktopShell({
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
   const recentProjectsRoute = findProjectedRoute(routeStates, 'recentProjects');
+  const currentProjectBindingRoute = findProjectedRoute(routeStates, 'currentProjectBinding');
   const runtimeRoute = findProjectedRoute(routeStates, 'runtimeSnapshot');
   const goalRoute = findProjectedRoute(routeStates, 'goalRunbook');
   const nextRoute = findProjectedRoute(routeStates, 'goalNextAction');
@@ -1785,6 +1847,8 @@ function projectDesktopShell({
   const diagnosticsBundleRoute = findProjectedRoute(routeStates, 'diagnosticsBundle');
   const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
   const currentProject = currentProjectFromRegistry(projectRegistry);
+  const boundProject = currentProjectFromBinding(currentProjectBinding);
+  const hasBoundProject = currentProjectBinding?.state === 'bound';
   const backendHealth = projectDesktopBackendHealth({
     runtimeSnapshot,
     runtimeRoute
@@ -1839,20 +1903,22 @@ function projectDesktopShell({
     }
   ];
   const workspace = {
-    state: valueState(firstValue(runtimeSnapshot?.project?.name, currentProject?.name) === undefined ? 'missing' : 'available'),
-    project: valueState(firstValue(runtimeSnapshot?.project?.name, currentProject?.name)),
-    projectId: valueState(firstValue(runtimeSnapshot?.project?.id, currentProject?.projectId)),
-    repoPath: valueState(firstValue(runtimeSnapshot?.project?.repoPath, currentProject?.repoPath)),
-    repoPathSource: valueState(firstValue(runtimeSnapshot?.project?.repoPath) !== undefined
-      ? 'app-state-snapshot.v1 current_project'
-      : firstValue(currentProject?.repoPath) !== undefined ? 'project-registry.v1 current project' : undefined),
-    defaultBranch: valueState(firstValue(runtimeSnapshot?.project?.defaultBranch, currentProject?.defaultBranch)),
-    lastGoalId: valueState(firstValue(runtimeSnapshot?.project?.lastGoalId, currentProject?.lastGoalId)),
-    lastRunId: valueState(firstValue(runtimeSnapshot?.project?.lastRunId, currentProject?.lastRunId)),
+    state: valueState(firstValue(boundProject?.name, runtimeSnapshot?.project?.name, currentProject?.name) === undefined ? 'missing' : 'available'),
+    project: valueState(firstValue(boundProject?.name, runtimeSnapshot?.project?.name, currentProject?.name)),
+    projectId: valueState(firstValue(boundProject?.projectId, runtimeSnapshot?.project?.id, currentProject?.projectId)),
+    repoPath: valueState(firstValue(boundProject?.repoPath, runtimeSnapshot?.project?.repoPath, currentProject?.repoPath)),
+    repoPathSource: valueState(hasBoundProject && firstValue(boundProject?.repoPath) !== undefined
+      ? 'current-project-binding.v1 selected project'
+      : firstValue(runtimeSnapshot?.project?.repoPath) !== undefined
+        ? 'app-state-snapshot.v1 current_project'
+        : firstValue(currentProject?.repoPath) !== undefined ? 'project-registry.v1 current project' : undefined),
+    defaultBranch: valueState(firstValue(boundProject?.defaultBranch, runtimeSnapshot?.project?.defaultBranch, currentProject?.defaultBranch)),
+    lastGoalId: valueState(firstValue(boundProject?.lastGoalId, runtimeSnapshot?.project?.lastGoalId, currentProject?.lastGoalId)),
+    lastRunId: valueState(firstValue(boundProject?.lastRunId, runtimeSnapshot?.project?.lastRunId, currentProject?.lastRunId)),
     resolutionStatus: valueState(firstValue(runtimeSnapshot?.project?.status, projectRegistry?.resolution?.status)),
-    route: valueState(projectRoute?.path),
-    routeState: valueState(routeStateFromRoute(projectRoute)),
-    sourcePolicy: valueState('app-state-snapshot.v1 current_project + project-registry.v1')
+    route: valueState(currentProjectBindingRoute?.path ?? projectRoute?.path),
+    routeState: valueState(routeStateFromRoute(currentProjectBindingRoute ?? projectRoute)),
+    sourcePolicy: valueState('current-project-binding.v1 + app-state-snapshot.v1 current_project + project-registry.v1')
   };
   const activeGoalStatus = {
     state: valueState(firstValue(activeGoal?.viewModel?.state, runtimeSnapshot?.state)),
@@ -1888,6 +1954,21 @@ function projectDesktopShell({
     sourcePolicy: valueState('goal-next-action.v1')
   };
   const boundaries = projectDesktopBoundaryFlags();
+  const projectHealth = projectDesktopProjectHealth({
+    workspace,
+    backendHealth,
+    activeGoalStatus,
+    supervisorSummary,
+    jobConsole,
+    artifactIndex,
+    routeProvenance,
+    currentProjectBinding
+  });
+  const selectedProject = projectDesktopSelectedProject({
+    workspace,
+    currentProjectBinding,
+    projectHealth
+  });
   const appStates = projectDesktopAppStateFlags({
     backendHealth,
     sidecarState,
@@ -1895,7 +1976,8 @@ function projectDesktopShell({
     activeGoalStatus,
     supervisorSummary,
     runtimeSnapshot,
-    routeProvenance
+    routeProvenance,
+    currentProjectBinding
   });
 
   return {
@@ -1958,6 +2040,9 @@ function projectDesktopShell({
         items: []
       }
     },
+    currentProjectBinding,
+    selectedProject,
+    projectHealth,
     recentProjects: {
       state: recentProjects?.state ?? 'missing',
       contractName: recentProjects?.contractName,
@@ -2109,6 +2194,7 @@ function projectDesktopRouteProvenance({
     ['runtimeSnapshot', 'backend health', 'app-state-snapshot.v1'],
     ['projectRegistry', 'current project', 'project-registry.v1'],
     ['recentProjects', 'recent projects', RECENT_PROJECTS_CONTRACT_NAME],
+    ['currentProjectBinding', 'selected project binding', CURRENT_PROJECT_BINDING_CONTRACT_NAME],
     ['goalRunbook', 'active goal', GOAL_RUNBOOK_CONTRACT_NAME],
     ['goalNextAction', 'next action', GOAL_NEXT_ACTION_CONTRACT_NAME],
     ['goalSupervisor', 'supervisor summary', GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME],
@@ -2146,6 +2232,137 @@ function projectDesktopRouteProvenance({
   };
 }
 
+function projectDesktopSelectedProject({
+  workspace,
+  currentProjectBinding,
+  projectHealth
+}) {
+  const bindingState = currentProjectBinding?.state ?? 'missing';
+  const projectId = workspace?.projectId;
+  const hasProject = projectId?.state === 'available';
+  const appStates = [];
+
+  if (bindingState === 'missing') {
+    appStates.push('binding missing');
+  }
+
+  if (!hasProject) {
+    appStates.push('project missing');
+  }
+
+  if (projectHealth?.activeGoal?.state?.value === 'missing') {
+    appStates.push('active goal missing');
+  }
+
+  if (projectHealth?.supervisor?.state?.value !== 'available') {
+    appStates.push('supervisor unavailable');
+  }
+
+  if (projectHealth?.backend?.state?.value === 'stale') {
+    appStates.push('stale snapshot');
+  }
+
+  if (projectHealth?.routeProvenance?.state?.value === 'failed') {
+    appStates.push('route failed');
+  }
+
+  const selectedState = bindingState === 'bound'
+    ? 'selected'
+    : bindingState === 'unbound' ? 'needs-selection' : bindingState;
+
+  return {
+    state: valueState(selectedState),
+    projectId,
+    displayName: workspace?.project,
+    repoPath: workspace?.repoPath,
+    healthState: projectHealth?.state,
+    appStates: {
+      state: valueState(appStates.length === 0 ? 'available' : 'degraded'),
+      items: appStates.map((state) => valueState(state))
+    },
+    sourcePolicy: valueState('backend contracts only'),
+    selectionControl: currentProjectBinding?.selectionControl ?? {
+      state: valueState('unavailable'),
+      disabledReason: valueState('current-project-binding.v1 missing'),
+      endpointId: valueState('/api/projects/current-binding/select')
+    }
+  };
+}
+
+function projectDesktopProjectHealth({
+  workspace,
+  backendHealth,
+  activeGoalStatus,
+  supervisorSummary,
+  jobConsole,
+  artifactIndex,
+  routeProvenance,
+  currentProjectBinding
+}) {
+  const backendState = backendHealth?.state?.value;
+  const activeGoalId = firstValue(activeGoalStatus?.goalId);
+  const routeItems = routeProvenance?.items ?? [];
+  const failedRoutes = routeItems.filter((item) => item.routeState.value === 'failed');
+  const state = workspace?.projectId?.state !== 'available'
+    ? 'missing'
+    : failedRoutes.length > 0
+      ? 'failed'
+      : activeGoalId === undefined || supervisorSummary?.state?.value !== 'available'
+        ? 'degraded'
+        : backendState === 'stale' ? 'stale' : 'healthy';
+
+  return {
+    contractName: valueState('project-health-snapshot.v1'),
+    projectId: workspace?.projectId,
+    state: valueState(state),
+    repo: {
+      path: workspace?.repoPath,
+      branch: workspace?.defaultBranch,
+      remote: valueState(undefined),
+      dirtyState: valueState(undefined)
+    },
+    backend: {
+      state: backendHealth?.state,
+      routeAvailability: backendHealth?.routeState,
+      freshness: backendHealth?.freshness,
+      sidecarCompatibility: backendHealth?.mode,
+      contractFreshness: backendHealth?.generatedAt
+    },
+    activeGoal: {
+      state: valueState(activeGoalId === undefined ? 'missing' : activeGoalStatus?.state?.value ?? 'available'),
+      goalId: activeGoalStatus?.goalId,
+      title: activeGoalStatus?.title,
+      taskCount: activeGoalStatus?.totalTasks,
+      nextTask: activeGoalStatus?.currentTaskId,
+      missingReason: valueState(activeGoalId === undefined ? 'active goal missing for selected project' : null)
+    },
+    supervisor: {
+      state: supervisorSummary?.state,
+      pendingResult: supervisorSummary?.pendingResult,
+      commandBoundaryState: supervisorSummary?.commandBoundaryState
+    },
+    runs: {
+      latestRunId: workspace?.lastRunId,
+      runHealth: valueState(jobConsole?.state),
+      lastOpenedAt: currentProjectBinding?.selectionUpdatedAt
+    },
+    artifacts: {
+      state: valueState(artifactIndex?.state),
+      count: artifactIndex?.summary?.entryCount ?? valueState(undefined)
+    },
+    routeProvenance: {
+      state: routeProvenance?.state,
+      items: routeItems.map((item) => ({
+        route: item.route,
+        routeState: item.routeState,
+        sourceContract: item.contractName,
+        error: item.error
+      }))
+    },
+    boundaries: valueState('no frontend file read, no command execution, no provider launch, no git write, no release write')
+  };
+}
+
 function projectDesktopBoundaryFlags() {
   return {
     readOnly: valueState(true),
@@ -2176,7 +2393,8 @@ function projectDesktopAppStateFlags({
   activeGoalStatus,
   supervisorSummary,
   runtimeSnapshot,
-  routeProvenance
+  routeProvenance,
+  currentProjectBinding
 }) {
   const backendRouteState = backendHealth?.routeState?.value ?? 'missing';
   const projectRouteState = workspace?.routeState?.value ?? 'missing';
@@ -2192,8 +2410,16 @@ function projectDesktopAppStateFlags({
   const supervisorModelUnavailable = supervisorSummary?.state?.value !== 'available';
   const staleSnapshot = runtimeSnapshot?.state === 'stale' || backendHealth?.freshness?.value === 'stale';
   const routeFailed = failedRouteLabels.length > 0;
+  const bindingMissing = currentProjectBinding?.state !== 'bound';
 
   return {
+    bindingMissing: desktopAppStateFlag({
+      value: bindingMissing,
+      state: currentProjectBinding?.state === 'failed' ? 'failed' : 'missing',
+      reason: bindingMissing ? `current project binding ${currentProjectBinding?.state ?? 'missing'}` : 'selected project binding exposed',
+      source: CURRENT_PROJECT_BINDING_CONTRACT_NAME,
+      routeState: currentProjectBinding?.routeState?.value ?? 'missing'
+    }),
     backendUnavailable: desktopAppStateFlag({
       value: backendUnavailable,
       state: desktopUnavailableStateFromRoute(backendRouteState),
@@ -2243,7 +2469,7 @@ function projectDesktopAppStateFlags({
       source: 'route state projection',
       routeState: routeProvenance?.state?.value ?? 'missing'
     }),
-    sourcePolicy: valueState('visible App Home state flags derived from route states and read-only projections')
+    sourcePolicy: valueState('visible App Home state flags derived from selected project binding, route states, and read-only projections')
   };
 }
 
@@ -2503,6 +2729,21 @@ function currentProjectFromRegistry(projectRegistry) {
   const currentProjectId = firstValue(projectRegistry?.currentProjectId);
 
   return projects.find((project) => firstValue(project.projectId) === currentProjectId) ?? projects[0] ?? null;
+}
+
+function currentProjectFromBinding(currentProjectBinding) {
+  if (currentProjectBinding?.state === 'bound') {
+    return {
+      projectId: currentProjectBinding.selectedProjectId,
+      name: currentProjectBinding.selectedProjectName,
+      repoPath: currentProjectBinding.repoPath,
+      defaultBranch: currentProjectBinding.defaultBranch,
+      lastGoalId: currentProjectBinding.lastGoalId,
+      lastRunId: currentProjectBinding.lastRunId
+    };
+  }
+
+  return null;
 }
 
 function routeStateFromRoute(route) {

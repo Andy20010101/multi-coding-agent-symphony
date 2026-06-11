@@ -114,9 +114,12 @@ import {
   buildInboxCaptureContract
 } from './inbox-capture-contract.js';
 import {
+  ProjectSelectionError,
+  buildCurrentProjectBinding,
   buildRecentProjects,
   buildProjectRegistry,
-  resolveCurrentProject
+  resolveCurrentProject,
+  selectCurrentProjectBinding
 } from './project-registry.js';
 import {
   readGoalEventJournal
@@ -220,6 +223,7 @@ const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
 const DEFAULT_READINESS_TIMEOUT_MS = 3000;
 const GOAL_EVENT_CONFIRM_MAX_BODY_BYTES = 32 * 1024;
+const PROJECT_SELECTION_MAX_BODY_BYTES = 4 * 1024;
 const CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME = 'controlled-implementation-plan-preview.v1';
 const CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_VERSION = 1;
 const CONTROLLED_IMPLEMENTATION_RUN_CONFIRMATION_CONTRACT_NAME = 'controlled-implementation-run-confirmation.v1';
@@ -764,6 +768,43 @@ export function createSymphonyConsoleServer({
       }
 
       if (method === 'POST') {
+        if (url.pathname === '/api/projects/current-binding/select') {
+          if (hasSearchParams(url.searchParams)) {
+            writeApiErrorResponse(response, {
+              status: 400,
+              code: 'invalid-project-selection-request',
+              message: 'Project selection does not accept query parameters.',
+              route: url.pathname,
+              method
+            });
+            return;
+          }
+
+          try {
+            const body = await readProjectSelectionRequestBody(request);
+
+            writeJsonResponse(response, 200, await selectCurrentProjectBinding({
+              cwd,
+              stateDir,
+              body
+            }));
+          } catch (error) {
+            if (error instanceof ProjectSelectionError) {
+              writeApiErrorResponse(response, {
+                status: 400,
+                code: error.code,
+                message: error.message,
+                route: url.pathname,
+                method
+              });
+              return;
+            }
+
+            throw error;
+          }
+          return;
+        }
+
         const controlledProviderRunnerConfirmRequest = parseControlledProviderRunnerConfirmRequestPath(url.pathname, url.searchParams);
 
         if (controlledProviderRunnerConfirmRequest !== null) {
@@ -1013,6 +1054,25 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, await buildRecentProjects({
+          cwd,
+          stateDir
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/projects/current-binding') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-current-project-binding-request',
+            message: 'Current project binding does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildCurrentProjectBinding({
           cwd,
           stateDir
         }));
@@ -6899,6 +6959,53 @@ async function readGoalEventConfirmRequestBody(request) {
       'invalid-goal-confirm-request',
       'Goal event plan confirm requires a valid JSON object.',
       { reason: 'invalid-json-body' }
+    );
+  }
+
+  return body;
+}
+
+async function readProjectSelectionRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new ProjectSelectionError(
+      'invalid-project-selection-request',
+      'Project selection requires application/json.'
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > PROJECT_SELECTION_MAX_BODY_BYTES) {
+      throw new ProjectSelectionError(
+        'invalid-project-selection-request',
+        'Project selection request body is too large.'
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  let body;
+
+  try {
+    body = JSON.parse(content);
+  } catch {
+    throw new ProjectSelectionError(
+      'invalid-project-selection-request',
+      'Project selection requires a valid JSON object.'
+    );
+  }
+
+  if (!isPlainObject(body)) {
+    throw new ProjectSelectionError(
+      'invalid-project-selection-request',
+      'Project selection requires a valid JSON object.'
     );
   }
 

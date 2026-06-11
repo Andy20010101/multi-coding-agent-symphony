@@ -3,6 +3,7 @@ import {
   GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
   GOAL_RUNBOOK_ROUTE_TEMPLATE,
   GOAL_OPERATIONS_ROUTE_TEMPLATE,
+  GOAL_SUPERVISOR_ROUTE_TEMPLATE,
   READONLY_API_ROUTES,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   GOAL_EVENTS_ROUTE_TEMPLATE,
@@ -126,7 +127,20 @@ export async function fetchWorkbenchContracts(options = {}) {
   );
 
   const results = Object.fromEntries(entries);
+  const selectedRepoPath = selectedRepoPathFromResults(results);
+  const selectedRuntimeRoute = createSelectedRuntimeSnapshotRoute(selectedRepoPath);
+
+  if (selectedRuntimeRoute !== null) {
+    results.runtimeSnapshot = await fetchReadonlyRoute(selectedRuntimeRoute, options);
+  }
+
   const guidedGoalHandoffRoute = createGuidedGoalHandoffRoute(results.handoffRefs?.data);
+  const selectedGoalRoutes = createSelectedGoalRoutes(selectedGoalIdFromBinding(results));
+
+  await Promise.all(selectedGoalRoutes.map(async ([key, route]) => {
+    results[key] = await fetchReadonlyRoute(route, options);
+  }));
+
   const activeGoalId = activeGoalIdFromResults(results);
   const activeGoalProgressRoute = createGoalProgressRoute(activeGoalId);
   const activeGoalEventsRoute = createGoalEventsRoute(activeGoalId);
@@ -965,15 +979,22 @@ function readonlySkipped({ route, message }) {
 }
 
 function latestRunIdFromResults(results) {
-  const runId = results.latestRun?.ok === true
-    ? results.latestRun.data?.run?.runId
-    : null;
+  const candidates = [
+    results.currentProjectBinding?.ok === true && results.currentProjectBinding.data?.state === 'bound'
+      ? results.currentProjectBinding.data?.lastRunId
+      : null,
+    results.latestRun?.ok === true ? results.latestRun.data?.run?.runId : null
+  ];
+  const runId = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
 
   return typeof runId === 'string' && runId.trim().length > 0 ? runId : null;
 }
 
 function activeGoalIdFromResults(results) {
   const candidates = [
+    results.currentProjectBinding?.ok === true && results.currentProjectBinding.data?.state === 'bound'
+      ? results.currentProjectBinding.data?.lastGoalId
+      : null,
     results.goalRunbook?.ok === true ? results.goalRunbook.data?.goalId : null,
     results.goalNextAction?.ok === true && results.goalNextAction.data?.status !== 'missing-runbook'
       ? results.goalNextAction.data?.goalId
@@ -982,6 +1003,65 @@ function activeGoalIdFromResults(results) {
   const goalId = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim().length > 0);
 
   return goalId === 'latest' ? null : goalId ?? null;
+}
+
+function selectedRepoPathFromResults(results) {
+  const binding = results.currentProjectBinding?.ok === true
+    ? results.currentProjectBinding.data
+    : null;
+  const repoPath = binding?.state === 'bound' ? binding.repoPath : null;
+
+  return typeof repoPath === 'string' && repoPath.trim().length > 0 ? repoPath : null;
+}
+
+function selectedGoalIdFromBinding(results) {
+  const binding = results.currentProjectBinding?.ok === true
+    ? results.currentProjectBinding.data
+    : null;
+  const goalId = binding?.state === 'bound' ? binding.lastGoalId : null;
+
+  return typeof goalId === 'string' && goalId.trim().length > 0 ? goalId : null;
+}
+
+function createSelectedRuntimeSnapshotRoute(repoPath) {
+  if (typeof repoPath !== 'string' || repoPath.trim() === '') {
+    return null;
+  }
+
+  const route = READONLY_API_ROUTES.find((candidate) => candidate.id === 'runtimeSnapshot');
+
+  if (!route) {
+    return null;
+  }
+
+  return {
+    ...route,
+    path: `${route.path}?repoPath=${encodeURIComponent(repoPath)}`
+  };
+}
+
+function createSelectedGoalRoutes(goalId) {
+  if (!isSafeWorkspaceQueryToken(goalId)) {
+    return [];
+  }
+
+  return [
+    ['goalRunbook', createGoalWorkspaceRoute({
+      template: GOAL_RUNBOOK_ROUTE_TEMPLATE,
+      goalId,
+      suffix: 'runbook'
+    })],
+    ['goalNextAction', createGoalWorkspaceRoute({
+      template: GOAL_NEXT_ACTION_ROUTE_TEMPLATE,
+      goalId,
+      suffix: 'next'
+    })],
+    ['goalSupervisor', createGoalWorkspaceRoute({
+      template: GOAL_SUPERVISOR_ROUTE_TEMPLATE,
+      goalId,
+      suffix: 'supervisor'
+    })]
+  ].filter(([, route]) => route !== null);
 }
 
 function createGoalWorkspaceRoute({ template, goalId, suffix }) {

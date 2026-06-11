@@ -63,6 +63,7 @@ import {
   buildWorkflowRouterCategoriesContract
 } from '../src/symphony/workflow-router-categories.js';
 import {
+  validateCurrentProjectBindingContract,
   projectRecentProjectsFromRegistry,
   validateRecentProjectsContract
 } from '../src/symphony/project-registry.js';
@@ -90,6 +91,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/summary', 'symphony.console-snapshot'],
         ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/projects/recent', 'recent-projects.v1'],
+        ['GET', '/api/projects/current-binding', 'current-project-binding.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
         ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
@@ -138,6 +140,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/summary', 'symphony.console-snapshot'],
         ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/projects/recent', 'recent-projects.v1'],
+        ['GET', '/api/projects/current-binding', 'current-project-binding.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
         ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
@@ -351,6 +354,136 @@ describe('v15 Workbench read-only API client', () => {
       assert.equal((await rejected.json()).contractName, 'error-envelope.v1');
       assert.equal(queryRejected.status, 400);
       assert.equal((await queryRejected.json()).error.code, 'invalid-recent-projects-request');
+    } finally {
+      await cleanupManagedActiveGoalWorkbenchServer({ root, server });
+    }
+  });
+
+  it('serves current project binding and validates selection-only POST payloads', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-current-project-binding-'));
+
+    await mkdir(join(root, '.git'));
+    await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
+    await writeFile(join(root, '.git', 'config'), [
+      '[remote "origin"]',
+      '\turl = git@example.com:fixture/current-project-binding.git',
+      ''
+    ].join('\n'), 'utf8');
+    await writeFile(join(root, 'package.json'), `${JSON.stringify({ name: 'current-project-binding-fixture' }, null, 2)}\n`, 'utf8');
+
+    const server = createSymphonyConsoleServer({
+      stateDir: join(root, '.symphony'),
+      cwd: root,
+      env: { HOME: root }
+    });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const initial = await fetch(`${baseUrl}/api/projects/current-binding`);
+      const initialModel = await initial.json();
+
+      assert.equal(initial.status, 200);
+      assert.deepEqual(validateCurrentProjectBindingContract(initialModel), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(initialModel.contractName, 'current-project-binding.v1');
+      assert.equal(initialModel.state, 'bound');
+      assert.equal(initialModel.bindingSource, 'cwd fallback');
+      assert.equal(initialModel.persisted, false);
+      assert.equal(initialModel.selectionControl.endpointId, '/api/projects/current-binding/select');
+      assert.equal(initialModel.boundaries.selectionOnly, true);
+      assert.equal(initialModel.boundaries.arbitraryPathSubmissionAvailable, false);
+      assert.equal(initialModel.boundaries.commandExecutionAvailable, false);
+      assert.equal(initialModel.boundaries.providerLaunchAvailable, false);
+      assert.equal(initialModel.boundaries.goalMutationAvailable, false);
+      assert.equal(initialModel.boundaries.jobExecutionAvailable, false);
+      assert.equal(initialModel.boundaries.gitWriteAvailable, false);
+      assert.equal(initialModel.boundaries.releaseWriteAvailable, false);
+
+      const selected = await fetch(`${baseUrl}/api/projects/current-binding/select`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          projectId: initialModel.selectedProjectId,
+          expectedRegistryVersion: 1
+        })
+      });
+      const selectedModel = await selected.json();
+
+      assert.equal(selected.status, 200);
+      assert.deepEqual(validateCurrentProjectBindingContract(selectedModel), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(selectedModel.state, 'bound');
+      assert.equal(selectedModel.bindingSource, 'persisted app state');
+      assert.equal(selectedModel.persisted, true);
+      assert.equal(selectedModel.selectedProjectId, initialModel.selectedProjectId);
+      assert.equal(selectedModel.repoPath, root);
+      assert.equal(selectedModel.boundaries.acceptsProjectIdOnly, true);
+
+      const persisted = await fetch(`${baseUrl}/api/projects/current-binding`);
+      const persistedModel = await persisted.json();
+
+      assert.equal(persisted.status, 200);
+      assert.equal(persistedModel.persisted, true);
+      assert.equal(persistedModel.selectedProjectId, initialModel.selectedProjectId);
+
+      const rejectedQuery = await fetch(`${baseUrl}/api/projects/current-binding/select?repoPath=${encodeURIComponent(root)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: initialModel.selectedProjectId })
+      });
+      const rejectedPathBody = await fetch(`${baseUrl}/api/projects/current-binding/select`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: initialModel.selectedProjectId,
+          repoPath: root
+        })
+      });
+      const rejectedCommandBody = await fetch(`${baseUrl}/api/projects/current-binding/select`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: initialModel.selectedProjectId,
+          command: 'pnpm test'
+        })
+      });
+      const rejectedUnsafeId = await fetch(`${baseUrl}/api/projects/current-binding/select`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: '../outside' })
+      });
+      const rejectedUnknownId = await fetch(`${baseUrl}/api/projects/current-binding/select`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: 'backend-known-project-missing' })
+      });
+      const rejectedContentType = await fetch(`${baseUrl}/api/projects/current-binding/select`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ projectId: initialModel.selectedProjectId })
+      });
+
+      for (const response of [
+        rejectedQuery,
+        rejectedPathBody,
+        rejectedCommandBody,
+        rejectedUnsafeId,
+        rejectedUnknownId,
+        rejectedContentType
+      ]) {
+        const error = await response.json();
+
+        assert.equal(response.status, 400);
+        assert.equal(error.contractName, 'error-envelope.v1');
+        assert.equal(error.error.code, 'invalid-project-selection-request');
+      }
     } finally {
       await cleanupManagedActiveGoalWorkbenchServer({ root, server });
     }
@@ -885,11 +1018,13 @@ describe('v15 Workbench read-only API client', () => {
       registry: projectRegistryContract,
       generatedAt: '2026-06-11T00:00:00.000Z'
     });
+    const currentProjectBindingContract = createV48CurrentProjectBindingPayload(projectRegistryContract.projects[0]);
     const latestRunContract = createV37LatestRunPayload();
     const [safePreviewRoute] = createSafeArtifactPreviewRoutes(latestRunContract.run.artifactRefs);
     const model = projectWorkbenchContracts({
       projectRegistry: createWorkbenchResult('projectRegistry', projectRegistryContract),
       recentProjects: createWorkbenchResult('recentProjects', recentProjectsContract),
+      currentProjectBinding: createWorkbenchResult('currentProjectBinding', currentProjectBindingContract),
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', runtimeSnapshotContract),
       goalRunbook: createWorkbenchResult('goalRunbook', {
         contractName: 'goal-runbook.v1',
@@ -958,8 +1093,11 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.backendHealth.routeSource.text, 'live contract');
     assert.equal(model.desktopShell.workspace.project.text, 'Multi Coding Agent Symphony');
     assert.equal(model.desktopShell.workspace.repoPath.text, '/repo');
-    assert.equal(model.desktopShell.workspace.repoPathSource.text, 'app-state-snapshot.v1 current_project');
-    assert.equal(model.desktopShell.workspace.sourcePolicy.text, 'app-state-snapshot.v1 current_project + project-registry.v1');
+    assert.equal(model.desktopShell.workspace.repoPathSource.text, 'current-project-binding.v1 selected project');
+    assert.equal(model.desktopShell.workspace.sourcePolicy.text, 'current-project-binding.v1 + app-state-snapshot.v1 current_project + project-registry.v1');
+    assert.equal(model.desktopShell.currentProjectBinding.contractName.text, 'current-project-binding.v1');
+    assert.equal(model.desktopShell.selectedProject.state.text, 'selected');
+    assert.equal(model.desktopShell.projectHealth.contractName.text, 'project-health-snapshot.v1');
     assert.equal(model.projectRegistry.contractName.text, 'project-registry.v1');
     assert.equal(model.projectRegistry.projects.count.value, 2);
     assert.equal(model.desktopShell.projectList.contractName.text, 'project-registry.v1');
@@ -1101,6 +1239,10 @@ describe('v15 Workbench read-only API client', () => {
     const baseResults = {
       projectRegistry: createWorkbenchResult('projectRegistry', startupProjectRegistry),
       recentProjects: createWorkbenchResult('recentProjects', startupRecentProjects),
+      currentProjectBinding: createWorkbenchResult(
+        'currentProjectBinding',
+        createV48CurrentProjectBindingPayload(startupProjectRegistry.projects[0])
+      ),
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', healthySnapshot),
       goalRunbook: createWorkbenchResult('goalRunbook', goalRunbook),
       goalNextAction: createWorkbenchResult('goalNextAction', goalNextAction),
@@ -1164,6 +1306,10 @@ describe('v15 Workbench read-only API client', () => {
 
     const projectMissingModel = projectModel({
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', missingProjectSnapshot),
+      currentProjectBinding: createFailedWorkbenchResult('currentProjectBinding', {
+        httpStatus: 404,
+        message: 'current project binding route missing'
+      }),
       projectRegistry: createFailedWorkbenchResult('projectRegistry', {
         httpStatus: 404,
         message: 'project registry route missing'
@@ -7273,6 +7419,49 @@ function createV37JobRunControlPayload() {
       jobExecutionAvailable: false,
       actionExecutionAvailable: false,
       hiddenRetryAvailable: false
+    }
+  };
+}
+
+function createV48CurrentProjectBindingPayload(project) {
+  return {
+    contractName: 'current-project-binding.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-11T00:01:00.000Z',
+    state: 'bound',
+    selectedProjectId: project.project_id,
+    selectedProjectName: project.project_name,
+    repoPath: project.repo_path,
+    defaultBranch: project.default_branch,
+    lastGoalId: project.last_goal_id,
+    lastRunId: project.last_run_id,
+    healthStatus: project.health_status,
+    bindingSource: 'persisted app state',
+    persisted: true,
+    selectionUpdatedAt: '2026-06-11T00:01:00.000Z',
+    fallbackReason: null,
+    routeState: 'ready',
+    readOnly: true,
+    selectionControl: {
+      state: 'available',
+      endpointId: '/api/projects/current-binding/select',
+      disabledReason: null
+    },
+    sourcePolicy: 'backend-known project id only; no frontend path input',
+    boundaries: {
+      selectionOnly: true,
+      acceptsProjectIdOnly: true,
+      arbitraryPathSubmissionAvailable: false,
+      frontendFilesystemScanAvailable: false,
+      frontendArbitraryPathReadAvailable: false,
+      commandExecutionAvailable: false,
+      providerLaunchAvailable: false,
+      goalMutationAvailable: false,
+      childDispatchAvailable: false,
+      jobExecutionAvailable: false,
+      gitWriteAvailable: false,
+      releaseWriteAvailable: false,
+      rawTranscriptReadAvailable: false
     }
   };
 }
