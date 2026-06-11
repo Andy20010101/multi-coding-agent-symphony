@@ -1234,6 +1234,7 @@ h4 {
 
 .desktop-project-launcher-header,
 .desktop-project-launcher-grid,
+.desktop-project-health,
 .desktop-project-launcher-footer {
   min-width: 0;
 }
@@ -1272,12 +1273,18 @@ h4 {
 }
 
 .desktop-current-binding,
-.desktop-recent-projects {
+.desktop-recent-projects,
+.desktop-project-health {
   min-width: 0;
   border: 1px solid var(--dsk-line-faint);
   border-radius: 4px;
   padding: 10px;
   background: color-mix(in oklab, var(--dsk-surface), var(--dsk-surface-warm) 42%);
+}
+
+.desktop-project-health {
+  display: grid;
+  gap: 8px;
 }
 
 .desktop-mini-header {

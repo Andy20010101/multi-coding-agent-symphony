@@ -2,15 +2,27 @@ import { lstat, readFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 
 import { readManagedActiveGoalPointer } from './goal-runbook-registry.js';
-import { readLatestRun } from './state.js';
+import { atomicWriteJson, readLatestRun } from './state.js';
 
 export const PROJECT_REGISTRY_CONTRACT_NAME = 'project-registry.v1';
 export const CURRENT_PROJECT_RESOLVER_CONTRACT_NAME = 'current-project-resolver.v1';
 export const RECENT_PROJECTS_CONTRACT_NAME = 'recent-projects.v1';
+export const CURRENT_PROJECT_BINDING_CONTRACT_NAME = 'current-project-binding.v1';
 export const PROJECT_REGISTRY_CONTRACT_VERSION = 1;
 
 const PROJECT_HEALTH_VALUES = Object.freeze(['ok', 'attention', 'blocked', 'unknown']);
 const RECENT_PROJECT_STATES = Object.freeze(['available', 'empty', 'missing', 'stale', 'degraded', 'failed']);
+const CURRENT_PROJECT_BINDING_STATES = Object.freeze(['bound', 'unbound', 'missing', 'stale', 'failed']);
+const CURRENT_PROJECT_BINDING_SOURCES = Object.freeze(['user selection', 'cwd fallback', 'persisted app state', 'backend default']);
+const CURRENT_PROJECT_BINDING_PATH = join('app', 'current-project-binding.json');
+
+export class ProjectSelectionError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'ProjectSelectionError';
+    this.code = code;
+  }
+}
 
 export async function buildProjectRegistry({
   cwd = process.cwd(),
@@ -61,6 +73,148 @@ export async function buildRecentProjects({
   return projectRecentProjectsFromRegistry({
     registry: sourceRegistry,
     generatedAt
+  });
+}
+
+export async function buildCurrentProjectBinding({
+  cwd = process.cwd(),
+  repoPath,
+  stateDir,
+  generatedAt = new Date().toISOString(),
+  registry
+} = {}) {
+  const sourceRegistry = registry ?? await buildProjectRegistry({
+    cwd,
+    repoPath,
+    stateDir,
+    generatedAt
+  });
+  const persistedBinding = await readPersistedCurrentProjectBinding(sourceRegistry?.resolution?.stateDir ?? stateDir);
+
+  return projectCurrentProjectBindingFromRegistry({
+    registry: sourceRegistry,
+    persistedBinding,
+    generatedAt
+  });
+}
+
+export async function selectCurrentProjectBinding({
+  cwd = process.cwd(),
+  stateDir,
+  body,
+  generatedAt = new Date().toISOString()
+} = {}) {
+  validateSelectCurrentProjectBody(body);
+
+  const registry = await buildProjectRegistry({
+    cwd,
+    stateDir,
+    generatedAt
+  });
+
+  if (body.expectedRegistryVersion !== undefined && body.expectedRegistryVersion !== registry.contractVersion) {
+    throw new ProjectSelectionError(
+      'invalid-project-selection-request',
+      `Expected project registry version ${body.expectedRegistryVersion}, got ${registry.contractVersion}. Refresh the registry and select again.`
+    );
+  }
+
+  const selectedProject = findRegistryProject(registry, body.projectId);
+
+  if (selectedProject === null) {
+    throw new ProjectSelectionError(
+      'invalid-project-selection-request',
+      'Selected project id is not present in the backend project registry; refresh recent projects or recover the missing registry entry.'
+    );
+  }
+
+  const selectionUpdatedAt = generatedAt;
+  const persistedBinding = {
+    contractName: CURRENT_PROJECT_BINDING_CONTRACT_NAME,
+    contractVersion: PROJECT_REGISTRY_CONTRACT_VERSION,
+    selectedProjectId: selectedProject.project_id,
+    selectionUpdatedAt,
+    bindingSource: 'user selection'
+  };
+
+  await atomicWriteJson(currentProjectBindingPath(registry.resolution.stateDir), persistedBinding);
+
+  return projectCurrentProjectBindingFromRegistry({
+    registry,
+    persistedBinding,
+    generatedAt
+  });
+}
+
+export function projectCurrentProjectBindingFromRegistry({
+  registry,
+  persistedBinding,
+  selectedProjectId,
+  state,
+  bindingSource,
+  fallbackReason,
+  generatedAt = new Date().toISOString()
+} = {}) {
+  if (!isPlainObject(registry)) {
+    return assertCurrentProjectBindingContract({
+      contractName: CURRENT_PROJECT_BINDING_CONTRACT_NAME,
+      contractVersion: PROJECT_REGISTRY_CONTRACT_VERSION,
+      generatedAt,
+      state: 'failed',
+      selectedProjectId: selectedProjectId ?? null,
+      selectedProjectName: null,
+      repoPath: null,
+      defaultBranch: null,
+      lastGoalId: null,
+      lastRunId: null,
+      healthStatus: null,
+      bindingSource: bindingSource ?? 'backend default',
+      persisted: false,
+      selectionUpdatedAt: null,
+      fallbackReason: fallbackReason ?? 'project registry contract is unavailable',
+      routeState: 'failed',
+      readOnly: true,
+      selectionControl: selectionControlModel('unavailable', '/api/projects/current-binding/select', 'project registry unavailable'),
+      sourcePolicy: 'backend-known project id only; no frontend path input',
+      boundaries: currentProjectBindingBoundaries()
+    });
+  }
+
+  const persistedProjectId = nonEmptyString(persistedBinding?.selectedProjectId);
+  const fallbackProjectId = nonEmptyString(registry.currentProjectId);
+  const effectiveProjectId = nonEmptyString(selectedProjectId) ?? persistedProjectId ?? fallbackProjectId;
+  const project = effectiveProjectId === null ? null : findRegistryProject(registry, effectiveProjectId);
+  const resolvedState = state ?? bindingStateFromRegistry({ registry, effectiveProjectId, project });
+  const resolvedSource = bindingSource
+    ?? (persistedProjectId !== null ? 'persisted app state' : fallbackProjectId !== null ? 'cwd fallback' : 'backend default');
+  const resolvedFallbackReason = fallbackReason
+    ?? fallbackReasonFromBinding({ registry, effectiveProjectId, project, persistedProjectId });
+
+  return assertCurrentProjectBindingContract({
+    contractName: CURRENT_PROJECT_BINDING_CONTRACT_NAME,
+    contractVersion: PROJECT_REGISTRY_CONTRACT_VERSION,
+    generatedAt,
+    state: resolvedState,
+    selectedProjectId: effectiveProjectId,
+    selectedProjectName: project?.project_name ?? null,
+    repoPath: project?.repo_path ?? null,
+    defaultBranch: project?.default_branch ?? null,
+    lastGoalId: project?.last_goal_id ?? null,
+    lastRunId: project?.last_run_id ?? null,
+    healthStatus: project?.health_status ?? null,
+    bindingSource: resolvedSource,
+    persisted: persistedProjectId !== null && project !== null,
+    selectionUpdatedAt: nonEmptyString(persistedBinding?.selectionUpdatedAt),
+    fallbackReason: resolvedFallbackReason,
+    routeState: registry.resolution?.status === 'resolved' ? 'ready' : 'missing',
+    readOnly: true,
+    selectionControl: selectionControlModel(
+      registry.resolution?.status === 'resolved' && Array.isArray(registry.projects) && registry.projects.length > 0 ? 'available' : 'disabled',
+      '/api/projects/current-binding/select',
+      registry.resolution?.status === 'resolved' ? null : 'registry missing or project no longer available'
+    ),
+    sourcePolicy: 'backend-known project id only; no frontend path input',
+    boundaries: currentProjectBindingBoundaries()
   });
 }
 
@@ -235,6 +389,49 @@ export function validateRecentProjectsContract(recentProjects) {
   return { ok: errors.length === 0, errors };
 }
 
+export function validateCurrentProjectBindingContract(binding) {
+  const errors = [];
+
+  if (!isPlainObject(binding)) {
+    return { ok: false, errors: ['binding must be a plain object'] };
+  }
+
+  requireExact(errors, binding.contractName, 'contractName', CURRENT_PROJECT_BINDING_CONTRACT_NAME);
+  requireExact(errors, binding.contractVersion, 'contractVersion', PROJECT_REGISTRY_CONTRACT_VERSION);
+  requireIsoTimestamp(errors, binding.generatedAt, 'generatedAt');
+  requireEnum(errors, binding.state, 'state', CURRENT_PROJECT_BINDING_STATES);
+
+  for (const field of [
+    'selectedProjectId',
+    'selectedProjectName',
+    'repoPath',
+    'defaultBranch',
+    'lastGoalId',
+    'lastRunId',
+    'healthStatus',
+    'selectionUpdatedAt',
+    'fallbackReason'
+  ]) {
+    if (binding[field] !== null) {
+      requireNonEmptyString(errors, binding[field], field);
+    }
+  }
+
+  if (binding.healthStatus !== null) {
+    requireEnum(errors, binding.healthStatus, 'healthStatus', PROJECT_HEALTH_VALUES);
+  }
+
+  requireEnum(errors, binding.bindingSource, 'bindingSource', CURRENT_PROJECT_BINDING_SOURCES);
+  requireExact(errors, typeof binding.persisted, 'persisted type', 'boolean');
+  requireEnum(errors, binding.routeState, 'routeState', ['ready', 'missing', 'stale', 'failed']);
+  requireExact(errors, binding.readOnly, 'readOnly', true);
+  validateSelectionControl(errors, binding.selectionControl);
+  requireNonEmptyString(errors, binding.sourcePolicy, 'sourcePolicy');
+  validateCurrentProjectBindingBoundaries(errors, binding.boundaries);
+
+  return { ok: errors.length === 0, errors };
+}
+
 export function assertProjectRegistryContract(registry) {
   const result = validateProjectRegistryContract(registry);
 
@@ -263,6 +460,43 @@ export function assertRecentProjectsContract(recentProjects) {
   }
 
   return recentProjects;
+}
+
+export function assertCurrentProjectBindingContract(binding) {
+  const result = validateCurrentProjectBindingContract(binding);
+
+  if (!result.ok) {
+    throw new Error(`Invalid current project binding contract: ${result.errors.join('; ')}`);
+  }
+
+  return binding;
+}
+
+export function validateSelectCurrentProjectBody(body) {
+  const errors = [];
+
+  if (!isPlainObject(body)) {
+    errors.push('selection body must be a JSON object');
+  } else {
+    const allowed = new Set(['projectId', 'expectedRegistryVersion']);
+    const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
+
+    if (unsupported.length > 0) {
+      errors.push(`selection body field ${unsupported[0]} is not allowed`);
+    }
+
+    requireSafeProjectId(errors, body.projectId, 'projectId');
+
+    if (body.expectedRegistryVersion !== undefined) {
+      requireExact(errors, Number.isInteger(body.expectedRegistryVersion), 'expectedRegistryVersion integer', true);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new ProjectSelectionError('invalid-project-selection-request', errors.join('; '));
+  }
+
+  return true;
 }
 
 async function buildRegisteredProject({ repoPath, stateDir }) {
@@ -294,6 +528,100 @@ async function buildRegisteredProject({ repoPath, stateDir }) {
     health_status: 'ok',
     last_opened_at: lastOpenedAt,
     pinned: false
+  };
+}
+
+async function readPersistedCurrentProjectBinding(stateDir) {
+  if (!nonEmptyString(stateDir)) {
+    return null;
+  }
+
+  try {
+    const persisted = JSON.parse(await readFile(currentProjectBindingPath(stateDir), 'utf8'));
+
+    return isPlainObject(persisted) ? persisted : null;
+  } catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function currentProjectBindingPath(stateDir) {
+  return join(stateDir, CURRENT_PROJECT_BINDING_PATH);
+}
+
+function findRegistryProject(registry, projectId) {
+  const projects = Array.isArray(registry?.projects) ? registry.projects : [];
+
+  return projects.find((project) => project?.project_id === projectId) ?? null;
+}
+
+function bindingStateFromRegistry({ registry, effectiveProjectId, project }) {
+  if (registry?.resolution?.status !== 'resolved') {
+    return 'missing';
+  }
+
+  if (effectiveProjectId === null) {
+    return 'unbound';
+  }
+
+  if (project === null) {
+    return 'missing';
+  }
+
+  if (registry?.freshness?.status === 'stale') {
+    return 'stale';
+  }
+
+  return 'bound';
+}
+
+function fallbackReasonFromBinding({ registry, effectiveProjectId, project, persistedProjectId }) {
+  if (registry?.resolution?.status !== 'resolved') {
+    return 'registry missing or project no longer available';
+  }
+
+  if (effectiveProjectId === null) {
+    return 'no backend-known project id is selected';
+  }
+
+  if (project === null) {
+    return 'selected project id is not present in the backend project registry';
+  }
+
+  if (persistedProjectId === null) {
+    return 'using backend current project fallback';
+  }
+
+  return null;
+}
+
+function selectionControlModel(state, endpointId, disabledReason) {
+  return {
+    state,
+    endpointId,
+    disabledReason
+  };
+}
+
+function currentProjectBindingBoundaries() {
+  return {
+    selectionOnly: true,
+    acceptsProjectIdOnly: true,
+    arbitraryPathSubmissionAvailable: false,
+    frontendFilesystemScanAvailable: false,
+    frontendArbitraryPathReadAvailable: false,
+    commandExecutionAvailable: false,
+    providerLaunchAvailable: false,
+    goalMutationAvailable: false,
+    childDispatchAvailable: false,
+    jobExecutionAvailable: false,
+    gitWriteAvailable: false,
+    releaseWriteAvailable: false,
+    rawTranscriptReadAvailable: false
   };
 }
 
@@ -702,6 +1030,46 @@ function validateRecentProjectBoundaries(errors, boundaries) {
   }
 }
 
+function validateSelectionControl(errors, selectionControl) {
+  if (!isPlainObject(selectionControl)) {
+    errors.push('selectionControl must be a plain object');
+    return;
+  }
+
+  requireEnum(errors, selectionControl.state, 'selectionControl.state', ['available', 'disabled', 'unavailable']);
+  requireExact(errors, selectionControl.endpointId, 'selectionControl.endpointId', '/api/projects/current-binding/select');
+
+  if (selectionControl.disabledReason !== null) {
+    requireNonEmptyString(errors, selectionControl.disabledReason, 'selectionControl.disabledReason');
+  }
+}
+
+function validateCurrentProjectBindingBoundaries(errors, boundaries) {
+  if (!isPlainObject(boundaries)) {
+    errors.push('boundaries must be a plain object');
+    return;
+  }
+
+  requireExact(errors, boundaries.selectionOnly, 'boundaries.selectionOnly', true);
+  requireExact(errors, boundaries.acceptsProjectIdOnly, 'boundaries.acceptsProjectIdOnly', true);
+
+  for (const field of [
+    'arbitraryPathSubmissionAvailable',
+    'frontendFilesystemScanAvailable',
+    'frontendArbitraryPathReadAvailable',
+    'commandExecutionAvailable',
+    'providerLaunchAvailable',
+    'goalMutationAvailable',
+    'childDispatchAvailable',
+    'jobExecutionAvailable',
+    'gitWriteAvailable',
+    'releaseWriteAvailable',
+    'rawTranscriptReadAvailable'
+  ]) {
+    requireExact(errors, boundaries[field], `boundaries.${field}`, false);
+  }
+}
+
 function requireExact(errors, value, path, expected) {
   if (value !== expected) {
     errors.push(`${path} must be ${String(expected)}`);
@@ -725,6 +1093,14 @@ function requireIsoTimestamp(errors, value, path) {
 
   if (typeof value === 'string' && Number.isNaN(Date.parse(value))) {
     errors.push(`${path} must be an ISO timestamp`);
+  }
+}
+
+function requireSafeProjectId(errors, value, path) {
+  requireNonEmptyString(errors, value, path);
+
+  if (typeof value === 'string' && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value)) {
+    errors.push(`${path} must be a backend-known project id token`);
   }
 }
 

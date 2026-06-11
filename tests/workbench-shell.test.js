@@ -486,6 +486,7 @@ describe('v15 Workbench React/Vite shell', () => {
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
     const recentRoute = READONLY_API_ROUTES.find((route) => route.id === 'recentProjects');
     const projectRoute = READONLY_API_ROUTES.find((route) => route.id === 'projectRegistry');
+    const bindingRoute = READONLY_API_ROUTES.find((route) => route.id === 'currentProjectBinding');
     const availableFixture = JSON.parse(await readFile('fixtures/contracts/recent-projects.available.v1.json', 'utf8'));
     const stateFixtures = await Promise.all(
       ['empty', 'missing', 'stale', 'degraded', 'failed'].map(async (state) => [
@@ -508,7 +509,8 @@ describe('v15 Workbench React/Vite shell', () => {
 
       viewState.model = projectWorkbenchContracts({
         projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
-        recentProjects: readonlyRouteResult(recentRoute, availableFixture)
+        recentProjects: readonlyRouteResult(recentRoute, availableFixture),
+        currentProjectBinding: readonlyRouteResult(bindingRoute, createProjectLauncherBindingPayload())
       });
       viewState.model.routeContext = createWorkbenchRenderRouteContext();
 
@@ -526,8 +528,9 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, /Project Launcher/u);
       assert.match(desktopHtml, /Recent Projects/u);
       assert.match(desktopHtml, /current binding/u);
-      assert.match(desktopHtml, /Selection stays pending for PR-3/u);
-      assert.match(desktopHtml, /pending PR-3; no app-state mutation is available in this UI/u);
+      assert.match(desktopHtml, /current-project-binding\.v1/u);
+      assert.match(desktopHtml, /selected project health/u);
+      assert.match(desktopHtml, /\/api\/projects\/current-binding\/select/u);
       assert.match(desktopHtml, /recent-projects\.v1/u);
       assert.match(desktopHtml, /\/api\/projects\/recent/u);
       assert.match(desktopHtml, /project-registry\.v1/u);
@@ -538,10 +541,15 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, /v48-project-launcher-recent-projects/u);
       assert.match(desktopHtml, /run-v48-pr1/u);
       assert.match(desktopHtml, /current project/u);
+      assert.match(desktopHtml, />selection only<\/dt><dd[^>]*>true/u);
+      assert.match(desktopHtml, />accepts project id only<\/dt><dd[^>]*>true/u);
       assert.match(desktopHtml, />disk scan<\/dt><dd[^>]*>false/u);
       assert.match(desktopHtml, />arbitrary path read<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />path submission<\/dt><dd[^>]*>false/u);
       assert.match(desktopHtml, />command execution<\/dt><dd[^>]*>false/u);
-      assert.match(desktopHtml, />model invocation<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />provider launch<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />goal mutation<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />job execution<\/dt><dd[^>]*>false/u);
       assert.match(desktopHtml, />git write<\/dt><dd[^>]*>false/u);
       assert.match(desktopHtml, />release write<\/dt><dd[^>]*>false/u);
       assert.doesNotMatch(launcherHtml, /<button\b|<form\b|<input\b|<textarea\b|onClick=|fetch\(|window\.open|navigator\.clipboard/u);
@@ -551,7 +559,8 @@ describe('v15 Workbench React/Vite shell', () => {
         const stateViewState = createWorkbenchRenderViewState();
         stateViewState.model = projectWorkbenchContracts({
           projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
-          recentProjects: readonlyRouteResult(recentRoute, fixture)
+          recentProjects: readonlyRouteResult(recentRoute, fixture),
+          currentProjectBinding: readonlyRouteResult(bindingRoute, createProjectLauncherBindingPayload())
         });
         stateViewState.model.routeContext = createWorkbenchRenderRouteContext();
 
@@ -566,7 +575,8 @@ describe('v15 Workbench React/Vite shell', () => {
         phase: 'ready',
         model: projectWorkbenchContracts({
           projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
-          recentProjects: readonlyRouteResult(recentRoute, stateFixtures.find(([state]) => state === 'degraded')[1])
+          recentProjects: readonlyRouteResult(recentRoute, stateFixtures.find(([state]) => state === 'degraded')[1]),
+          currentProjectBinding: readonlyRouteResult(bindingRoute, createProjectLauncherBindingPayload())
         })
       });
       assert.match(degradedHtml, /project health is attention/u);
@@ -575,7 +585,8 @@ describe('v15 Workbench React/Vite shell', () => {
         phase: 'ready',
         model: projectWorkbenchContracts({
           projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
-          recentProjects: readonlyRouteResult(recentRoute, stateFixtures.find(([state]) => state === 'failed')[1])
+          recentProjects: readonlyRouteResult(recentRoute, stateFixtures.find(([state]) => state === 'failed')[1]),
+          currentProjectBinding: readonlyRouteResult(bindingRoute, createProjectLauncherBindingPayload())
         })
       });
       assert.match(failedHtml, /project registry contract is unavailable/u);
@@ -1473,6 +1484,9 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/jobs/create',
       '/api/jobs/timeline',
       '/api/projects',
+      '/api/projects/current-binding',
+      '/api/projects/current-binding',
+      '/api/projects/current-binding/select',
       '/api/projects/recent',
       '/api/providers/capabilities',
       '/api/providers/health',
@@ -1932,6 +1946,49 @@ function createProjectLauncherRegistryPayload() {
       gitWriteAvailable: false,
       releaseWriteAvailable: false,
       arbitraryCommandExecutionAvailable: false
+    }
+  };
+}
+
+function createProjectLauncherBindingPayload() {
+  return {
+    contractName: 'current-project-binding.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-11T00:01:00.000Z',
+    state: 'bound',
+    selectedProjectId: 'multi-coding-agent-symphony',
+    selectedProjectName: 'Multi Coding Agent Symphony',
+    repoPath: '/workspace/multi-coding-agent-symphony',
+    defaultBranch: 'main',
+    lastGoalId: 'v48-project-launcher-recent-projects',
+    lastRunId: 'run-v48-pr1',
+    healthStatus: 'ok',
+    bindingSource: 'persisted app state',
+    persisted: true,
+    selectionUpdatedAt: '2026-06-11T00:01:00.000Z',
+    fallbackReason: null,
+    routeState: 'ready',
+    readOnly: true,
+    selectionControl: {
+      state: 'available',
+      endpointId: '/api/projects/current-binding/select',
+      disabledReason: null
+    },
+    sourcePolicy: 'backend-known project id only; no frontend path input',
+    boundaries: {
+      selectionOnly: true,
+      acceptsProjectIdOnly: true,
+      arbitraryPathSubmissionAvailable: false,
+      frontendFilesystemScanAvailable: false,
+      frontendArbitraryPathReadAvailable: false,
+      commandExecutionAvailable: false,
+      providerLaunchAvailable: false,
+      goalMutationAvailable: false,
+      childDispatchAvailable: false,
+      jobExecutionAvailable: false,
+      gitWriteAvailable: false,
+      releaseWriteAvailable: false,
+      rawTranscriptReadAvailable: false
     }
   };
 }
