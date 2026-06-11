@@ -1,12 +1,14 @@
 # v37 Desktop Shell Workspace
 
-This directory is the v37 Desktop Shell workspace. The renderer entry remains:
+This directory is the v37 Desktop Shell workspace. After v46, it is also the intended starting point for v47 Mac App Shell Activation. The renderer entry remains:
 
 ```text
 /workbench/desktop/
 ```
 
-The route is built from the existing Workbench Vite/React asset pipeline and served by the local console sidecar. v37 task-2 adds a minimal Tauri host boundary under `desktop/shell/src-tauri/` without adding Electron or changing the workflow kernel.
+The route is built from the existing Workbench Vite/React asset pipeline and served by the local console sidecar. v37 task-2 added a minimal Tauri host boundary under `desktop/shell/src-tauri/` without adding Electron or changing the workflow kernel.
+
+As of v46, the daily path is still the browser Workbench started by `symphony console`. v47 should activate this existing Tauri shell so local supervision starts from an app home surface instead of a browser URL.
 
 ## Decision
 
@@ -31,6 +33,17 @@ Renderer and contract files:
 - `docs/plans/v37-desktop-shell-ux-brief-2026-06-02.md`: layout, state, and follow-up handoff.
 
 The desktop route may show only data from explicit backend contracts. It must not infer goal state from branch names, filenames, prompts, task titles, or frontend-only state.
+
+## v47 Activation Target
+
+v47 should reuse this workspace rather than start a second desktop shell. The activation target is:
+
+- native window entry for the app home or enhanced `/workbench/desktop/` surface
+- current project, sidecar state, backend health, active goal, next action, supervisor summary, route source, and read-only boundary visible on the first screen
+- backend unavailable, sidecar missing, project missing, active goal missing, supervisor model unavailable, stale snapshot, and route failure shown as app states
+- no browser terminal, generic shell runner, provider CLI invocation, daemon control, child dispatch, goal event registration, git push/tag/publish, GitHub Release, signed distribution, notarization, or auto-update
+
+Implementation guidance lives in `docs/plans/v47-mac-app-shell-activation-runbook-2026-06-11.md`.
 
 Native host files:
 
