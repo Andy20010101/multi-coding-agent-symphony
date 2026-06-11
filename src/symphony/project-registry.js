@@ -6,9 +6,11 @@ import { readLatestRun } from './state.js';
 
 export const PROJECT_REGISTRY_CONTRACT_NAME = 'project-registry.v1';
 export const CURRENT_PROJECT_RESOLVER_CONTRACT_NAME = 'current-project-resolver.v1';
+export const RECENT_PROJECTS_CONTRACT_NAME = 'recent-projects.v1';
 export const PROJECT_REGISTRY_CONTRACT_VERSION = 1;
 
 const PROJECT_HEALTH_VALUES = Object.freeze(['ok', 'attention', 'blocked', 'unknown']);
+const RECENT_PROJECT_STATES = Object.freeze(['available', 'empty', 'missing', 'stale', 'degraded', 'failed']);
 
 export async function buildProjectRegistry({
   cwd = process.cwd(),
@@ -39,6 +41,73 @@ export async function buildProjectRegistry({
     currentProjectId: currentProject.currentProject?.project_id ?? null,
     resolution: currentProject.resolution,
     boundaries: readOnlyProjectBoundaries()
+  });
+}
+
+export async function buildRecentProjects({
+  cwd = process.cwd(),
+  repoPath,
+  stateDir,
+  generatedAt = new Date().toISOString(),
+  registry
+} = {}) {
+  const sourceRegistry = registry ?? await buildProjectRegistry({
+    cwd,
+    repoPath,
+    stateDir,
+    generatedAt
+  });
+
+  return projectRecentProjectsFromRegistry({
+    registry: sourceRegistry,
+    generatedAt
+  });
+}
+
+export function projectRecentProjectsFromRegistry({
+  registry,
+  generatedAt = new Date().toISOString()
+} = {}) {
+  if (!isPlainObject(registry)) {
+    return assertRecentProjectsContract({
+      contractName: RECENT_PROJECTS_CONTRACT_NAME,
+      contractVersion: PROJECT_REGISTRY_CONTRACT_VERSION,
+      generatedAt,
+      state: 'failed',
+      source: recentProjectsSource({
+        kind: 'unavailable',
+        sourceContract: null,
+        degradedReason: 'project registry contract is unavailable'
+      }),
+      readOnly: true,
+      items: [],
+      boundaries: readOnlyRecentProjectBoundaries()
+    });
+  }
+
+  const projects = Array.isArray(registry.projects) ? registry.projects : [];
+  const items = projects.map(recentProjectItemFromRegistryProject);
+  const degradedReason = firstDegradedReason(items);
+  const state = recentProjectsStateFromRegistry({
+    registry,
+    itemCount: items.length,
+    degradedReason
+  });
+
+  return assertRecentProjectsContract({
+    contractName: RECENT_PROJECTS_CONTRACT_NAME,
+    contractVersion: PROJECT_REGISTRY_CONTRACT_VERSION,
+    generatedAt,
+    state,
+    source: recentProjectsSource({
+      kind: 'registry',
+      sourceContract: registry.contractName,
+      generatedAt: registry.generatedAt,
+      degradedReason
+    }),
+    readOnly: true,
+    items,
+    boundaries: readOnlyRecentProjectBoundaries()
   });
 }
 
@@ -141,6 +210,31 @@ export function validateCurrentProjectResolverContract(resolver) {
   return { ok: errors.length === 0, errors };
 }
 
+export function validateRecentProjectsContract(recentProjects) {
+  const errors = [];
+
+  if (!isPlainObject(recentProjects)) {
+    return { ok: false, errors: ['recentProjects must be a plain object'] };
+  }
+
+  requireExact(errors, recentProjects.contractName, 'contractName', RECENT_PROJECTS_CONTRACT_NAME);
+  requireExact(errors, recentProjects.contractVersion, 'contractVersion', PROJECT_REGISTRY_CONTRACT_VERSION);
+  requireIsoTimestamp(errors, recentProjects.generatedAt, 'generatedAt');
+  requireEnum(errors, recentProjects.state, 'state', RECENT_PROJECT_STATES);
+  validateRecentProjectsSource(errors, recentProjects.source);
+  requireExact(errors, recentProjects.readOnly, 'readOnly', true);
+
+  if (!Array.isArray(recentProjects.items)) {
+    errors.push('items must be an array');
+  } else {
+    recentProjects.items.forEach((item, index) => validateRecentProjectItem(errors, item, `items[${index}]`));
+  }
+
+  validateRecentProjectBoundaries(errors, recentProjects.boundaries);
+
+  return { ok: errors.length === 0, errors };
+}
+
 export function assertProjectRegistryContract(registry) {
   const result = validateProjectRegistryContract(registry);
 
@@ -159,6 +253,16 @@ export function assertCurrentProjectResolverContract(resolver) {
   }
 
   return resolver;
+}
+
+export function assertRecentProjectsContract(recentProjects) {
+  const result = validateRecentProjectsContract(recentProjects);
+
+  if (!result.ok) {
+    throw new Error(`Invalid recent projects contract: ${result.errors.join('; ')}`);
+  }
+
+  return recentProjects;
 }
 
 async function buildRegisteredProject({ repoPath, stateDir }) {
@@ -248,6 +352,94 @@ function readOnlyProjectBoundaries() {
     releaseWriteAvailable: false,
     arbitraryCommandExecutionAvailable: false
   };
+}
+
+function readOnlyRecentProjectBoundaries() {
+  return {
+    readOnly: true,
+    diskScanAvailable: false,
+    scanScope: 'known-projects-only',
+    arbitraryPathReadAvailable: false,
+    commandExecutionAvailable: false,
+    modelInvocationAvailable: false,
+    gitWriteAvailable: false,
+    releaseWriteAvailable: false
+  };
+}
+
+function recentProjectsSource({
+  kind,
+  sourceContract,
+  generatedAt,
+  degradedReason
+}) {
+  return {
+    kind,
+    scanScope: 'known-projects-only',
+    sourceContract,
+    generatedAt: generatedAt ?? null,
+    degradedReason: degradedReason ?? null
+  };
+}
+
+function recentProjectItemFromRegistryProject(project) {
+  const healthStatus = nonEmptyString(project?.health_status) ?? 'unknown';
+  const degradedReason = healthStatus === 'attention' || healthStatus === 'blocked'
+    ? `project health is ${healthStatus}`
+    : null;
+
+  return {
+    projectId: nonEmptyString(project?.project_id) ?? 'unknown-project',
+    displayName: nonEmptyString(project?.project_name) ?? 'Unknown project',
+    repoPath: {
+      displayValue: nonEmptyString(project?.repo_path) ?? '未暴露'
+    },
+    defaultBranch: nonEmptyString(project?.default_branch) ?? null,
+    remote: {
+      displayValue: nonEmptyString(project?.remote_url) ?? null
+    },
+    pinned: project?.pinned === true,
+    lastOpenedAt: nonEmptyString(project?.last_opened_at) ?? null,
+    lastGoalId: nonEmptyString(project?.last_goal_id) ?? null,
+    lastRunId: nonEmptyString(project?.last_run_id) ?? null,
+    healthSummary: {
+      state: healthStatus,
+      text: healthStatus === 'ok' ? 'ok' : `health ${healthStatus}`
+    },
+    degradedReason
+  };
+}
+
+function recentProjectsStateFromRegistry({
+  registry,
+  itemCount,
+  degradedReason
+}) {
+  if (registry?.state === 'failed') {
+    return 'failed';
+  }
+
+  if (registry?.freshness?.status === 'stale') {
+    return 'stale';
+  }
+
+  if (itemCount === 0 && registry?.resolution?.status !== 'resolved') {
+    return 'missing';
+  }
+
+  if (itemCount === 0) {
+    return 'empty';
+  }
+
+  if (degradedReason !== null) {
+    return 'degraded';
+  }
+
+  return 'available';
+}
+
+function firstDegradedReason(items) {
+  return items.find((item) => item.degradedReason !== null)?.degradedReason ?? null;
 }
 
 function parseDefaultBranch(gitHead) {
@@ -420,6 +612,91 @@ function validateBoundaries(errors, boundaries) {
     'gitWriteAvailable',
     'releaseWriteAvailable',
     'arbitraryCommandExecutionAvailable'
+  ]) {
+    requireExact(errors, boundaries[field], `boundaries.${field}`, false);
+  }
+}
+
+function validateRecentProjectsSource(errors, source) {
+  if (!isPlainObject(source)) {
+    errors.push('source must be a plain object');
+    return;
+  }
+
+  requireEnum(errors, source.kind, 'source.kind', ['registry', 'explicit cwd', 'managed recent list', 'fixture', 'unavailable']);
+  requireExact(errors, source.scanScope, 'source.scanScope', 'known-projects-only');
+
+  if (source.sourceContract !== null) {
+    requireNonEmptyString(errors, source.sourceContract, 'source.sourceContract');
+  }
+
+  if (source.generatedAt !== null) {
+    requireIsoTimestamp(errors, source.generatedAt, 'source.generatedAt');
+  }
+
+  if (source.degradedReason !== null) {
+    requireNonEmptyString(errors, source.degradedReason, 'source.degradedReason');
+  }
+}
+
+function validateRecentProjectItem(errors, item, path) {
+  if (!isPlainObject(item)) {
+    errors.push(`${path} must be a plain object`);
+    return;
+  }
+
+  for (const field of ['projectId', 'displayName']) {
+    requireNonEmptyString(errors, item[field], `${path}.${field}`);
+  }
+
+  if (!isPlainObject(item.repoPath)) {
+    errors.push(`${path}.repoPath must be a plain object`);
+  } else {
+    requireNonEmptyString(errors, item.repoPath.displayValue, `${path}.repoPath.displayValue`);
+  }
+
+  if (item.defaultBranch !== null) {
+    requireNonEmptyString(errors, item.defaultBranch, `${path}.defaultBranch`);
+  }
+
+  if (!isPlainObject(item.remote)) {
+    errors.push(`${path}.remote must be a plain object`);
+  } else if (item.remote.displayValue !== null) {
+    requireNonEmptyString(errors, item.remote.displayValue, `${path}.remote.displayValue`);
+  }
+
+  requireExact(errors, typeof item.pinned, `${path}.pinned type`, 'boolean');
+
+  for (const field of ['lastOpenedAt', 'lastGoalId', 'lastRunId', 'degradedReason']) {
+    if (item[field] !== null) {
+      requireNonEmptyString(errors, item[field], `${path}.${field}`);
+    }
+  }
+
+  if (!isPlainObject(item.healthSummary)) {
+    errors.push(`${path}.healthSummary must be a plain object`);
+  } else {
+    requireEnum(errors, item.healthSummary.state, `${path}.healthSummary.state`, PROJECT_HEALTH_VALUES);
+    requireNonEmptyString(errors, item.healthSummary.text, `${path}.healthSummary.text`);
+  }
+}
+
+function validateRecentProjectBoundaries(errors, boundaries) {
+  if (!isPlainObject(boundaries)) {
+    errors.push('boundaries must be a plain object');
+    return;
+  }
+
+  requireExact(errors, boundaries.readOnly, 'boundaries.readOnly', true);
+  requireExact(errors, boundaries.diskScanAvailable, 'boundaries.diskScanAvailable', false);
+  requireExact(errors, boundaries.scanScope, 'boundaries.scanScope', 'known-projects-only');
+
+  for (const field of [
+    'arbitraryPathReadAvailable',
+    'commandExecutionAvailable',
+    'modelInvocationAvailable',
+    'gitWriteAvailable',
+    'releaseWriteAvailable'
   ]) {
     requireExact(errors, boundaries[field], `boundaries.${field}`, false);
   }

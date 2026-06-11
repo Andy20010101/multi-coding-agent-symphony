@@ -1,0 +1,25 @@
+{
+  "contractName": "recent-projects.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-11T00:00:00.000Z",
+  "state": "empty",
+  "source": {
+    "kind": "fixture",
+    "scanScope": "known-projects-only",
+    "sourceContract": "project-registry.v1",
+    "generatedAt": "2026-06-11T00:00:00.000Z",
+    "degradedReason": null
+  },
+  "readOnly": true,
+  "items": [],
+  "boundaries": {
+    "readOnly": true,
+    "diskScanAvailable": false,
+    "scanScope": "known-projects-only",
+    "arbitraryPathReadAvailable": false,
+    "commandExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false
+  }
+}

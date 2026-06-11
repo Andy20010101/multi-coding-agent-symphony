@@ -1,0 +1,25 @@
+{
+  "contractName": "recent-projects.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-11T00:00:00.000Z",
+  "state": "failed",
+  "source": {
+    "kind": "unavailable",
+    "scanScope": "known-projects-only",
+    "sourceContract": null,
+    "generatedAt": null,
+    "degradedReason": "project registry contract is unavailable"
+  },
+  "readOnly": true,
+  "items": [],
+  "boundaries": {
+    "readOnly": true,
+    "diskScanAvailable": false,
+    "scanScope": "known-projects-only",
+    "arbitraryPathReadAvailable": false,
+    "commandExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false
+  }
+}

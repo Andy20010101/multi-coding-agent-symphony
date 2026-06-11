@@ -62,6 +62,10 @@ import {
 import {
   buildWorkflowRouterCategoriesContract
 } from '../src/symphony/workflow-router-categories.js';
+import {
+  projectRecentProjectsFromRegistry,
+  validateRecentProjectsContract
+} from '../src/symphony/project-registry.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
 const V19_GOAL_ID = 'v19-goal-runbook-next-action';
@@ -85,6 +89,7 @@ describe('v15 Workbench read-only API client', () => {
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
         ['GET', '/api/projects', 'project-registry.v1'],
+        ['GET', '/api/projects/recent', 'recent-projects.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
         ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
@@ -132,6 +137,7 @@ describe('v15 Workbench read-only API client', () => {
       [
         ['GET', '/api/summary', 'symphony.console-snapshot'],
         ['GET', '/api/projects', 'project-registry.v1'],
+        ['GET', '/api/projects/recent', 'recent-projects.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
         ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
@@ -223,6 +229,128 @@ describe('v15 Workbench read-only API client', () => {
       assert.equal(rejected.status, 405);
       assert.equal(error.contractName, 'error-envelope.v1');
       assert.equal(error.error.code, 'method-not-allowed');
+    } finally {
+      await cleanupManagedActiveGoalWorkbenchServer({ root, server });
+    }
+  });
+
+  it('validates recent projects fixtures and projects boundary flags into Workbench', async () => {
+    const fixtureNames = [
+      'available',
+      'empty',
+      'missing',
+      'stale',
+      'degraded',
+      'failed'
+    ];
+    const fixtures = await Promise.all(fixtureNames.map(async (name) => JSON.parse(
+      await readFile(`fixtures/contracts/recent-projects.${name}.v1.json`, 'utf8')
+    )));
+
+    fixtures.forEach((fixture, index) => {
+      assert.deepEqual(validateRecentProjectsContract(fixture), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(fixture.state, fixtureNames[index]);
+      assert.equal(fixture.readOnly, true);
+      assert.equal(fixture.source.scanScope, 'known-projects-only');
+      assert.equal(fixture.boundaries.diskScanAvailable, false);
+      assert.equal(fixture.boundaries.arbitraryPathReadAvailable, false);
+      assert.equal(fixture.boundaries.commandExecutionAvailable, false);
+      assert.equal(fixture.boundaries.modelInvocationAvailable, false);
+      assert.equal(fixture.boundaries.gitWriteAvailable, false);
+      assert.equal(fixture.boundaries.releaseWriteAvailable, false);
+    });
+
+    const registry = createV37ProjectRegistryPayload();
+    const recentFromRegistry = projectRecentProjectsFromRegistry({
+      registry,
+      generatedAt: '2026-06-11T00:00:00.000Z'
+    });
+    const model = projectWorkbenchContracts({
+      projectRegistry: createWorkbenchResult('projectRegistry', registry),
+      recentProjects: createWorkbenchResult('recentProjects', recentFromRegistry)
+    });
+
+    assert.equal(recentFromRegistry.contractName, 'recent-projects.v1');
+    assert.equal(recentFromRegistry.source.kind, 'registry');
+    assert.equal(recentFromRegistry.source.sourceContract, 'project-registry.v1');
+    assert.equal(recentFromRegistry.source.scanScope, 'known-projects-only');
+    assert.equal(recentFromRegistry.items[0].projectId, registry.projects[0].project_id);
+    assert.equal(model.recentProjects.contractName.text, 'recent-projects.v1');
+    assert.equal(model.recentProjects.state, 'available');
+    assert.equal(model.recentProjects.items.count.value, 2);
+    assert.equal(model.recentProjects.items.items[0].displayName.text, 'Multi Coding Agent Symphony');
+    assert.equal(model.recentProjects.items.items[0].repoPath.text, '/repo');
+    assert.equal(model.recentProjects.source.sourceContract.text, 'project-registry.v1');
+    assert.equal(model.recentProjects.boundaries.diskScanAvailable.value, false);
+    assert.equal(model.recentProjects.boundaries.arbitraryPathReadAvailable.value, false);
+    assert.equal(model.recentProjects.boundaries.commandExecutionAvailable.value, false);
+    assert.equal(model.recentProjects.boundaries.modelInvocationAvailable.value, false);
+    assert.equal(model.recentProjects.boundaries.gitWriteAvailable.value, false);
+    assert.equal(model.recentProjects.boundaries.releaseWriteAvailable.value, false);
+    assert.equal(model.desktopShell.projectList.contractName.text, 'project-registry.v1');
+    assert.equal(model.desktopShell.recentProjects.contractName.text, 'recent-projects.v1');
+    assert.equal(model.desktopShell.recentProjects.route.text, '/api/projects/recent');
+    assert.equal(model.desktopShell.recentProjects.sourcePolicy.text, 'recent-projects.v1 wraps project-registry.v1; known-projects-only');
+  });
+
+  it('serves recent projects as a read-only GET route backed by the project registry', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-recent-projects-route-'));
+
+    await mkdir(join(root, '.git'));
+    await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
+    await writeFile(join(root, '.git', 'config'), [
+      '[remote "origin"]',
+      '\turl = git@example.com:fixture/recent-projects.git',
+      ''
+    ].join('\n'), 'utf8');
+    await writeFile(join(root, 'package.json'), `${JSON.stringify({ name: 'recent-projects-fixture' }, null, 2)}\n`, 'utf8');
+    await mkdir(join(root, '.symphony', 'goals'), { recursive: true });
+    await writeFile(join(root, '.symphony', 'goals', 'latest-active-goal.json'), `${JSON.stringify({
+      contractName: 'managed-active-goal-pointer.v1',
+      contractVersion: 1,
+      goalId: 'v48-project-launcher-recent-projects',
+      storage: 'managed-active-goal-pointer',
+      runbookStateRef: '.symphony/goals/runbooks/v48-project-launcher-recent-projects.json'
+    }, null, 2)}\n`, 'utf8');
+
+    const server = createSymphonyConsoleServer({
+      stateDir: join(root, '.symphony'),
+      cwd: root,
+      env: { HOME: root }
+    });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const response = await fetch(`${baseUrl}/api/projects/recent`);
+      const model = await response.json();
+      const rejected = await fetch(`${baseUrl}/api/projects/recent`, { method: 'POST' });
+      const queryRejected = await fetch(`${baseUrl}/api/projects/recent?path=package.json`);
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(validateRecentProjectsContract(model), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(model.contractName, 'recent-projects.v1');
+      assert.equal(model.state, 'available');
+      assert.equal(model.source.kind, 'registry');
+      assert.equal(model.source.sourceContract, 'project-registry.v1');
+      assert.equal(model.source.scanScope, 'known-projects-only');
+      assert.equal(model.items[0].displayName, 'recent-projects-fixture');
+      assert.equal(model.items[0].lastGoalId, 'v48-project-launcher-recent-projects');
+      assert.equal(model.boundaries.diskScanAvailable, false);
+      assert.equal(model.boundaries.arbitraryPathReadAvailable, false);
+      assert.equal(model.boundaries.commandExecutionAvailable, false);
+      assert.equal(model.boundaries.modelInvocationAvailable, false);
+      assert.equal(model.boundaries.gitWriteAvailable, false);
+      assert.equal(model.boundaries.releaseWriteAvailable, false);
+      assert.equal(rejected.status, 405);
+      assert.equal((await rejected.json()).contractName, 'error-envelope.v1');
+      assert.equal(queryRejected.status, 400);
+      assert.equal((await queryRejected.json()).error.code, 'invalid-recent-projects-request');
     } finally {
       await cleanupManagedActiveGoalWorkbenchServer({ root, server });
     }
@@ -753,10 +881,15 @@ describe('v15 Workbench read-only API client', () => {
         }
       }`);
     const projectRegistryContract = createV37ProjectRegistryPayload();
+    const recentProjectsContract = projectRecentProjectsFromRegistry({
+      registry: projectRegistryContract,
+      generatedAt: '2026-06-11T00:00:00.000Z'
+    });
     const latestRunContract = createV37LatestRunPayload();
     const [safePreviewRoute] = createSafeArtifactPreviewRoutes(latestRunContract.run.artifactRefs);
     const model = projectWorkbenchContracts({
       projectRegistry: createWorkbenchResult('projectRegistry', projectRegistryContract),
+      recentProjects: createWorkbenchResult('recentProjects', recentProjectsContract),
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', runtimeSnapshotContract),
       goalRunbook: createWorkbenchResult('goalRunbook', {
         contractName: 'goal-runbook.v1',
@@ -892,6 +1025,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.artifactReadiness.boundaries.localFileOpenAvailable.value, false);
     assert.equal(model.desktopShell.routeProvenance.state.text, 'available');
     assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'runtimeSnapshot').source.text, 'live contract');
+    assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'recentProjects').routeState.text, 'ready');
     assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'goalSupervisor').routeState.text, 'ready');
     assert.equal(model.desktopShell.appStates.backendUnavailable.value, false);
     assert.equal(model.desktopShell.appStates.sidecarMissing.value, false);
@@ -959,8 +1093,14 @@ describe('v15 Workbench read-only API client', () => {
         blocked: false
       }
     };
+    const startupProjectRegistry = createV37ProjectRegistryPayload();
+    const startupRecentProjects = projectRecentProjectsFromRegistry({
+      registry: startupProjectRegistry,
+      generatedAt: '2026-06-11T00:00:00.000Z'
+    });
     const baseResults = {
-      projectRegistry: createWorkbenchResult('projectRegistry', createV37ProjectRegistryPayload()),
+      projectRegistry: createWorkbenchResult('projectRegistry', startupProjectRegistry),
+      recentProjects: createWorkbenchResult('recentProjects', startupRecentProjects),
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', healthySnapshot),
       goalRunbook: createWorkbenchResult('goalRunbook', goalRunbook),
       goalNextAction: createWorkbenchResult('goalNextAction', goalNextAction),
