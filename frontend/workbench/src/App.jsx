@@ -176,7 +176,7 @@ export function WorkbenchShell({
             <h1 id="workbench-title">{workbenchRouteTitle(workbenchRoute)}</h1>
             <p className="header-summary">
               {workbenchRoute === 'desktop'
-                ? '只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。'
+                ? 'Native App Home：current project、sidecar、backend health、active goal、next action、supervisor summary、route provenance。'
                 : '围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。'}
             </p>
           </div>
@@ -574,17 +574,18 @@ function JobConsolePanel({
 
 function DesktopShellRoute({ desktopShell, routeContext }) {
   return (
-    <section className="desktop-shell-workspace" aria-label="v37 Desktop Shell MVP">
+    <section className="desktop-shell-workspace" aria-label="v47 Mac App Home">
       <aside className="desktop-sidebar" aria-label="Desktop shell navigation">
         <div className="desktop-brand-lockup">
           <p className="section-kicker">local app</p>
-          <h2>Command Center</h2>
+          <h2>App Home</h2>
         </div>
         <nav aria-label="Desktop shell sections">
-          <a href="#desktop-overview" aria-current="page">Overview</a>
+          <a href="#desktop-overview" aria-current="page">Home</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
+          <a href="#desktop-provenance">Provenance</a>
           <a href="#desktop-boundaries">Boundaries</a>
         </nav>
         <div className="desktop-sidebar-status">
@@ -600,31 +601,38 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
             <strong>{desktopShell?.workspace?.project?.text ?? '未暴露'}</strong>
           </div>
           <div>
+            <span>backend</span>
+            <strong>{desktopShell?.backendHealth?.state?.text ?? 'missing'}</strong>
+          </div>
+          <div>
             <span>goal</span>
             <strong>{desktopShell?.activeGoalStatus?.goalId?.text ?? desktopShell?.workspace?.lastGoalId?.text ?? '未暴露'}</strong>
           </div>
           <div>
-            <span>state</span>
-            <strong>{desktopShell?.state ?? 'missing'}</strong>
-          </div>
-          <div>
-            <span>decision</span>
-            <strong>{desktopShell?.shellDecision?.selected?.text ?? '未暴露'}</strong>
+            <span>boundary</span>
+            <strong>readOnly {desktopShell?.boundaries?.readOnly?.text ?? '未暴露'} / willMutate {desktopShell?.boundaries?.willMutate?.text ?? '未暴露'}</strong>
           </div>
         </section>
 
+        <DesktopAppHomePanel desktopShell={desktopShell} routeContext={routeContext} />
+        <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
           nextActionDetail={desktopShell?.nextActionDetail}
         />
 
         <section id="desktop-overview" className="desktop-card-grid desktop-first-row" aria-label="Desktop shell first row">
-          <DesktopProjectListCard projectList={desktopShell?.projectList} />
+          <DesktopCurrentProjectCard workspace={desktopShell?.workspace} projectList={desktopShell?.projectList} />
+          <DesktopBackendHealthCard backendHealth={desktopShell?.backendHealth} />
           <DesktopSidecarCard sidecarHealth={desktopShell?.sidecarHealth} />
-          <DesktopMetricCards cards={desktopShell?.firstRowCards} />
+          <DesktopActiveGoalCard activeGoalStatus={desktopShell?.activeGoalStatus} />
+          <DesktopNextActionCard nextActionDetail={desktopShell?.nextActionDetail} />
+          <DesktopSupervisorSummaryCard supervisorSummary={desktopShell?.supervisorSummary} />
         </section>
 
         <section className="desktop-card-grid desktop-lower-grid" aria-label="Desktop shell lower workspace">
+          <DesktopMetricCards cards={desktopShell?.firstRowCards} />
+          <DesktopProjectListCard projectList={desktopShell?.projectList} />
           <DesktopLifecycleCard lifecycle={desktopShell?.lifecycle} />
           <DesktopDevelopmentStatusCard
             activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -633,11 +641,110 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
           <DesktopRunStateCard jobRun={desktopShell?.jobRun} />
           <DesktopArtifactReadinessCard artifactReadiness={desktopShell?.artifactReadiness} />
           <DesktopProviderHubCard providerHub={desktopShell?.providerHub} />
+          <DesktopRouteProvenanceCard routeProvenance={desktopShell?.routeProvenance} />
           <DesktopDecisionCard shellDecision={desktopShell?.shellDecision} />
           <DesktopBoundaryCard boundaries={desktopShell?.boundaries} note={desktopShell?.note} />
         </section>
       </div>
     </section>
+  );
+}
+
+function DesktopAppHomePanel({ desktopShell, routeContext }) {
+  const evidenceRefs = routeContext?.evidenceRefs?.items ?? [];
+
+  return (
+    <section className="desktop-app-home-panel" aria-label="Desktop App Home summary">
+      <div>
+        <p className="section-kicker">app home</p>
+        <h2>{desktopShell?.appHome?.title?.text ?? 'Symphony App Home'}</h2>
+        <p>{desktopShell?.note ?? 'App Home unavailable.'}</p>
+      </div>
+      <FieldList rows={[
+        ['current project', desktopShell?.workspace?.project],
+        ['repo path', desktopShell?.workspace?.repoPath],
+        ['repo path source', desktopShell?.workspace?.repoPathSource],
+        ['backend route', desktopShell?.backendHealth?.route],
+        ['route source', desktopShell?.appHome?.routeSource],
+        ['evidence refs', textValue(evidenceRefs.length > 0
+          ? `${evidenceRefs.map((item) => item.ref.text).join('、')} (inert text only)`
+          : 'inert text only')],
+        ['command preview', desktopShell?.sidecarHealth?.commandPreviewInert]
+      ]} />
+    </section>
+  );
+}
+
+function DesktopAppStateStrip({ appStates }) {
+  const rows = [
+    ['backend unavailable', appStates?.backendUnavailable],
+    ['sidecar missing', appStates?.sidecarMissing],
+    ['project missing', appStates?.projectMissing],
+    ['active goal missing', appStates?.activeGoalMissing],
+    ['supervisor unavailable', appStates?.supervisorModelUnavailable],
+    ['stale snapshot', appStates?.staleSnapshot],
+    ['route failed', appStates?.routeFailed]
+  ];
+
+  return (
+    <section className="desktop-app-state-strip" aria-label="Desktop missing state visibility">
+      <dl className="desktop-app-state-list">
+        {rows.map(([label, state]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{formatState(state)}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function DesktopCurrentProjectCard({ workspace, projectList }) {
+  return (
+    <article className="desktop-card" aria-labelledby="desktop-current-project-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">current project</p>
+          <h2 id="desktop-current-project-title">Project</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(workspace?.state?.text)}`}>{workspace?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['name', workspace?.project],
+        ['repo path', workspace?.repoPath],
+        ['repo path source', workspace?.repoPathSource],
+        ['resolution', workspace?.resolutionStatus],
+        ['routeState', workspace?.routeState],
+        ['registry projects', projectList?.projects?.count],
+        ['source', workspace?.sourcePolicy]
+      ]} />
+    </article>
+  );
+}
+
+function DesktopBackendHealthCard({ backendHealth }) {
+  return (
+    <article className="desktop-card" aria-labelledby="desktop-backend-health-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">backend health</p>
+          <h2 id="desktop-backend-health-title">Backend</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(backendHealth?.state?.text)}`}>{backendHealth?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['status', backendHealth?.status],
+        ['mode', backendHealth?.mode],
+        ['version', backendHealth?.version],
+        ['kernel', backendHealth?.kernel],
+        ['freshness', backendHealth?.freshness],
+        ['route', backendHealth?.route],
+        ['routeState', backendHealth?.routeState],
+        ['route source', backendHealth?.routeSource],
+        ['source', backendHealth?.sourcePolicy]
+      ]} />
+    </article>
   );
 }
 
@@ -733,7 +840,96 @@ function DesktopSidecarCard({ sidecarHealth }) {
         ['status', sidecarHealth?.status],
         ['attach', sidecarHealth?.attachState],
         ['launcher', sidecarHealth?.launcherState],
+        ['launcher command id', sidecarHealth?.launcherCommandId],
+        ['fixed launcher contract', sidecarHealth?.fixedLauncherContract],
+        ['renderer launch', sidecarHealth?.rendererLaunchAvailable],
         ['bridge', sidecarHealth?.launcherHandoff]
+      ]} />
+    </article>
+  );
+}
+
+function DesktopActiveGoalCard({ activeGoalStatus }) {
+  return (
+    <article className="desktop-card" aria-labelledby="desktop-active-goal-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">active goal</p>
+          <h2 id="desktop-active-goal-title">Active Goal</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(activeGoalStatus?.state?.text)}`}>{activeGoalStatus?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['goal id', activeGoalStatus?.goalId],
+        ['title', activeGoalStatus?.title],
+        ['current task', activeGoalStatus?.currentTaskId],
+        ['task status', activeGoalStatus?.currentTaskStatus],
+        ['blocked', activeGoalStatus?.currentTaskBlocked],
+        ['completed', activeGoalStatus?.completedTasks],
+        ['total', activeGoalStatus?.totalTasks],
+        ['route', activeGoalStatus?.route],
+        ['routeState', activeGoalStatus?.routeState],
+        ['source', activeGoalStatus?.sourcePolicy]
+      ]} />
+    </article>
+  );
+}
+
+function DesktopNextActionCard({ nextActionDetail }) {
+  return (
+    <article className="desktop-card" aria-labelledby="desktop-next-action-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">next action</p>
+          <h2 id="desktop-next-action-title">Next Action</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(nextActionDetail?.state?.text)}`}>{nextActionDetail?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['task', nextActionDetail?.taskId],
+        ['role', nextActionDetail?.role],
+        ['phase', nextActionDetail?.phase],
+        ['reason', nextActionDetail?.reason],
+        ['blocked', nextActionDetail?.blocked],
+        ['register with', nextActionDetail?.registerWith],
+        ['route', nextActionDetail?.route],
+        ['routeState', nextActionDetail?.routeState],
+        ['source', nextActionDetail?.sourcePolicy]
+      ]} />
+    </article>
+  );
+}
+
+function DesktopSupervisorSummaryCard({ supervisorSummary }) {
+  return (
+    <article className="desktop-card desktop-span-2" aria-labelledby="desktop-supervisor-summary-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">supervisor summary</p>
+          <h2 id="desktop-supervisor-summary-title">Supervisor</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(supervisorSummary?.state?.text)}`}>{supervisorSummary?.state?.text ?? 'missing'}</span>
+      </header>
+      <FieldList rows={[
+        ['summary', supervisorSummary?.summary],
+        ['goal', supervisorSummary?.goalId],
+        ['active task', supervisorSummary?.activeTask],
+        ['active role', supervisorSummary?.activeRole],
+        ['recommended action', supervisorSummary?.recommendedAction],
+        ['reason', supervisorSummary?.actionReason],
+        ['context', supervisorSummary?.contextState],
+        ['pending result', supervisorSummary?.pendingResult],
+        ['current gate', supervisorSummary?.currentGate],
+        ['gate status', supervisorSummary?.gateStatus],
+        ['readOnly', supervisorSummary?.readOnly],
+        ['willMutate', supervisorSummary?.willMutate],
+        ['command boundary', supervisorSummary?.commandBoundaryState],
+        ['command execution', supervisorSummary?.commandExecutionAvailable],
+        ['safe preview', supervisorSummary?.safePreview],
+        ['route', supervisorSummary?.route],
+        ['routeState', supervisorSummary?.routeState],
+        ['route source', supervisorSummary?.routeSource],
+        ['source', supervisorSummary?.sourcePolicy]
       ]} />
     </article>
   );
@@ -762,6 +958,44 @@ function DesktopMetricCards({ cards }) {
         </article>
       ))}
     </>
+  );
+}
+
+function DesktopRouteProvenanceCard({ routeProvenance }) {
+  const items = routeProvenance?.items ?? [];
+
+  return (
+    <article id="desktop-provenance" className="desktop-card desktop-span-2" aria-labelledby="desktop-route-provenance-title">
+      <header className="desktop-card-header">
+        <div>
+          <p className="section-kicker">route / source provenance</p>
+          <h2 id="desktop-route-provenance-title">Route Sources</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(routeProvenance?.state?.text)}`}>{routeProvenance?.state?.text ?? 'missing'}</span>
+      </header>
+      {items.length === 0 ? (
+        <EmptyBlock copy="Route/source provenance 未暴露。" />
+      ) : (
+        <ul className="desktop-readonly-list desktop-route-provenance-list">
+          {items.map((item, index) => (
+            <li key={`${item.id?.text ?? 'route'}-${index}`}>
+              <div>
+                <strong>{item.label?.text ?? item.id?.text ?? 'route'}</strong>
+                <span>{item.source?.text ?? 'missing'}</span>
+              </div>
+              <FieldList rows={[
+                ['route', item.route],
+                ['routeState', item.routeState],
+                ['contract', item.contractName],
+                ['version', item.contractVersion],
+                ['error', item.error]
+              ]} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="panel-note">{routeProvenance?.sourcePolicy?.text ?? 'Route provenance unavailable.'}</p>
+    </article>
   );
 }
 
@@ -1071,10 +1305,24 @@ function DesktopBoundaryCard({ boundaries, note }) {
       </header>
       <FieldList rows={[
         ['readOnly', boundaries?.readOnly],
+        ['willMutate', boundaries?.willMutate],
+        ['browser terminal', boundaries?.browserTerminalAvailable],
+        ['generic shell runner', boundaries?.genericShellRunnerAvailable],
         ['shell exec', boundaries?.shellCommandExecutionAvailable],
+        ['provider CLI from renderer', boundaries?.providerCliFromRendererAvailable],
+        ['daemon control', boundaries?.daemonControlAvailable],
+        ['child dispatch', boundaries?.childDispatchAvailable],
+        ['goal event registration', boundaries?.goalEventRegistrationAvailable],
+        ['local file open', boundaries?.arbitraryLocalFileOpenAvailable],
         ['git write', boundaries?.gitWriteAvailable],
-        ['release declared', boundaries?.releaseReadyDeclared]
+        ['git/release action', boundaries?.gitReleaseActionAvailable],
+        ['release declared', boundaries?.releaseReadyDeclared],
+        ['signing/notarization/update', boundaries?.signingNotarizationAutoUpdateAvailable],
+        ['evidence refs', boundaries?.evidenceRefsAreInertText],
+        ['command preview', boundaries?.commandPreviewsAreInertText],
+        ['source', boundaries?.statusSource]
       ]} />
+      <p className="panel-note">{note ?? 'Desktop App Home boundary unavailable.'}</p>
     </article>
   );
 }
@@ -1088,7 +1336,7 @@ function desktopStatusClass(status) {
     return 'olive';
   }
 
-  if (['blocked', 'stale', 'partial', 'needs-attention', 'unavailable', 'needs-attach', 'launch-requested'].includes(status)) {
+  if (['blocked', 'stale', 'partial', 'needs-attention', 'unavailable', 'needs-attach', 'launch-requested', 'missing', 'empty', 'failed', 'route-failed'].includes(status)) {
     return 'amber';
   }
 
@@ -9652,7 +9900,7 @@ function workbenchShellClassName(route) {
 
 function workbenchRouteEyebrow(route) {
   if (route === 'desktop') {
-    return 'v37 Desktop Shell MVP';
+    return 'v47 Mac App Home';
   }
 
   if (route === 'supervisor') {
@@ -9664,7 +9912,7 @@ function workbenchRouteEyebrow(route) {
 
 function workbenchRouteTitle(route) {
   if (route === 'desktop') {
-    return 'Symphony Desktop Shell';
+    return 'Symphony App Home';
   }
 
   if (route === 'supervisor') {
@@ -9676,7 +9924,7 @@ function workbenchRouteTitle(route) {
 
 function workbenchRouteStatusText(route) {
   if (route === 'desktop') {
-    return 'contract-backed';
+    return 'app home read-only / no renderer mutation';
   }
 
   if (route === 'supervisor') {

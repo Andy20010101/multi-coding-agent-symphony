@@ -327,7 +327,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(navSource, /\bscan\b|\bdo\b|\bstatus\b|\bcontinue\b|\bartifacts\b/u);
   });
 
-  it('renders the v37 Desktop Shell route as a UI-first read-only command center', async () => {
+  it('renders the v47 Desktop App Home route as a native-first read-only surface', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
     const server = await createViteServer({
@@ -345,26 +345,53 @@ describe('v15 Workbench React/Vite shell', () => {
 
       viewState.model.routeContext = createWorkbenchRenderRouteContext();
 
-      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/?goal=v37-desktop-shell-mvp&task=task-1', viewState);
+      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/?goal=v47-mac-app-shell-activation&task=task-1', viewState);
       const statusStripIndex = desktopHtml.indexOf('class="desktop-development-strip"');
       const firstRowIndex = desktopHtml.indexOf('id="desktop-overview"');
       const lowerGridIndex = desktopHtml.indexOf('class="desktop-card-grid desktop-lower-grid"');
+      const appHomeIndex = desktopHtml.indexOf('class="desktop-app-home-panel"');
+      const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
       const statusStripHtml = desktopHtml.slice(statusStripIndex, firstRowIndex);
 
-      assert.match(desktopHtml, /Symphony Desktop Shell/u);
-      assert.match(desktopHtml, /v37 Desktop Shell MVP/u);
+      assert.match(desktopHtml, /Symphony App Home/u);
+      assert.match(desktopHtml, /v47 Mac App Home/u);
       assert.match(desktopHtml, /class="workbench-shell desktop-shell-route"/u);
-      assert.match(desktopHtml, /Command Center/u);
-      assert.match(desktopHtml, /href="#desktop-overview" aria-current="page">Overview/u);
+      assert.match(desktopHtml, /App Home/u);
+      assert.match(desktopHtml, /href="#desktop-overview" aria-current="page">Home/u);
+      assert.match(desktopHtml, /Native App Home/u);
+      assert.match(desktopHtml, />backend</u);
+      assert.match(desktopHtml, />boundary</u);
+      assert.match(desktopHtml, />willMutate/u);
+      assert.match(desktopHtml, />repo path source</u);
+      assert.match(desktopHtml, />route source</u);
+      assert.match(desktopHtml, />command preview</u);
+      assert.match(desktopHtml, /inert text only/u);
+      assert.match(desktopHtml, /backend unavailable/u);
+      assert.match(desktopHtml, /sidecar missing/u);
+      assert.match(desktopHtml, /project missing/u);
+      assert.match(desktopHtml, /active goal missing/u);
+      assert.match(desktopHtml, /supervisor unavailable/u);
+      assert.match(desktopHtml, /stale snapshot/u);
+      assert.match(desktopHtml, /route failed/u);
+      assert.match(desktopHtml, /Backend/u);
       assert.match(desktopHtml, /project registry/u);
       assert.match(desktopHtml, /Projects/u);
       assert.match(desktopHtml, /sidecar health/u);
-      assert.match(desktopHtml, /Active goal/u);
-      assert.match(desktopHtml, /Next action/u);
+      assert.match(desktopHtml, /Active Goal/u);
+      assert.match(desktopHtml, /Next Action/u);
       assert.match(desktopHtml, /Run health/u);
+      assert.match(desktopHtml, /Supervisor/u);
+      assert.match(desktopHtml, />command execution</u);
+      assert.match(desktopHtml, /Route Sources/u);
+      assert.match(desktopHtml, /route \/ source provenance/u);
+      assert.match(desktopHtml, /live contract|failed route|missing route/u);
+      assert.notEqual(appHomeIndex, -1);
+      assert.notEqual(appStateIndex, -1);
       assert.notEqual(statusStripIndex, -1);
       assert.notEqual(firstRowIndex, -1);
       assert.notEqual(lowerGridIndex, -1);
+      assert.equal(appHomeIndex < appStateIndex, true);
+      assert.equal(appStateIndex < statusStripIndex, true);
       assert.equal(statusStripIndex < firstRowIndex, true);
       assert.equal(firstRowIndex < lowerGridIndex, true);
       assert.match(statusStripHtml, />blocked</u);
@@ -392,27 +419,42 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, />provider CLI execution</u);
       assert.match(desktopHtml, /Tauri First/u);
       assert.match(desktopHtml, /No Runner Surface/u);
+      assert.match(desktopHtml, /browser terminal/u);
+      assert.match(desktopHtml, /generic shell runner/u);
       assert.match(desktopHtml, /shell exec/u);
+      assert.match(desktopHtml, /provider CLI from renderer/u);
+      assert.match(desktopHtml, /goal event registration/u);
+      assert.match(desktopHtml, /git\/release action/u);
       assert.match(desktopHtml, /git write/u);
       assert.match(desktopHtml, /release declared/u);
       assert.doesNotMatch(desktopHtml, /class="workbench-nav"/u);
-      assert.doesNotMatch(desktopHtml, /scan \/ do|browser terminal|release ready/u);
+      assert.doesNotMatch(desktopHtml, /scan \/ do|release ready/u);
     } finally {
       await server.close();
       restoreSsrLocation();
     }
 
     assert.match(app, /DesktopShellRoute/u);
+    assert.match(app, /DesktopAppHomePanel/u);
+    assert.match(app, /DesktopAppStateStrip/u);
+    assert.match(app, /DesktopCurrentProjectCard/u);
+    assert.match(app, /DesktopBackendHealthCard/u);
     assert.match(app, /DesktopProjectListCard/u);
     assert.match(app, /DesktopSidecarCard/u);
+    assert.match(app, /DesktopActiveGoalCard/u);
+    assert.match(app, /DesktopNextActionCard/u);
+    assert.match(app, /DesktopSupervisorSummaryCard/u);
     assert.match(app, /DesktopDevelopmentStatusCard/u);
     assert.match(app, /DesktopDevelopmentStatusStrip/u);
     assert.match(app, /DesktopArtifactReadinessCard/u);
     assert.match(app, /DesktopProviderHubCard/u);
+    assert.match(app, /DesktopRouteProvenanceCard/u);
     assert.match(app, /DesktopJobTransitionList/u);
     assert.match(app, /DesktopArtifactPreviewList/u);
     assert.match(css, /\.desktop-shell-route/u);
     assert.match(css, /\.desktop-sidebar/u);
+    assert.match(css, /\.desktop-app-home-panel/u);
+    assert.match(css, /\.desktop-app-state-strip/u);
     assert.match(css, /\.desktop-development-strip/u);
     assert.match(css, /\.desktop-status\.plum/u);
     assert.match(css, /\.desktop-status\.olive/u);
@@ -860,7 +902,8 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(operationPanelBody, /polling\.route/u);
     assert.match(operationPanelBody, /polling\.reason/u);
     assert.match(contracts, /GET goal-operation-runs\.v1/u);
-    assert.doesNotMatch(app, /child_process|exec\(|spawn\(|terminal emulator|generic shell runner|WebSocket|EventSource/u);
+    assert.doesNotMatch(app, /child_process|exec\(|spawn\(|terminal emulator|WebSocket|EventSource/u);
+    assert.doesNotMatch(operationPanelBody, /generic shell runner/u);
   });
 
   it('wires the v31 main verification readiness panel as explicit-state copy-only display', async () => {

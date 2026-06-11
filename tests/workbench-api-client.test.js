@@ -656,7 +656,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.doesNotMatch(JSON.stringify(hub), /sk-test-secret-value/u);
   });
 
-  it('projects the v37 Desktop Shell view model from existing read-only contracts', () => {
+  it('projects the v47 Desktop App Home view model from existing read-only contracts', () => {
     const runtimeSnapshotContract = JSON.parse(`{
         "contractName": "app-state-snapshot.v1",
         "contractVersion": 1,
@@ -758,6 +758,35 @@ describe('v15 Workbench read-only API client', () => {
     const model = projectWorkbenchContracts({
       projectRegistry: createWorkbenchResult('projectRegistry', projectRegistryContract),
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', runtimeSnapshotContract),
+      goalRunbook: createWorkbenchResult('goalRunbook', {
+        contractName: 'goal-runbook.v1',
+        contractVersion: 1,
+        goalId: 'v37-desktop-shell-mvp',
+        title: 'v37 Desktop Shell MVP',
+        tasks: [{
+          taskId: 'task-1',
+          title: 'Desktop shell decision and minimal workspace',
+          status: 'planned',
+          role: 'worker',
+          phase: 'implement'
+        }]
+      }),
+      goalNextAction: createWorkbenchResult('goalNextAction', {
+        contractName: 'goal-next-action.v1',
+        contractVersion: 1,
+        goalId: 'v37-desktop-shell-mvp',
+        status: 'action-required',
+        reason: 'No worker evidence is recorded.',
+        next: {
+          taskId: 'task-1',
+          role: 'worker',
+          phase: 'implement',
+          blocked: false
+        },
+        afterCompletion: {
+          registerWith: 'symphony goal update'
+        }
+      }),
       latestRun: createWorkbenchResult('latestRun', latestRunContract),
       jobModel: createWorkbenchResult('jobModel', createV37JobModelPayload()),
       jobCreation: createWorkbenchResult('jobCreation', createV37JobCreationPayload()),
@@ -766,12 +795,16 @@ describe('v15 Workbench read-only API client', () => {
       artifactIndex: createWorkbenchResult('artifactIndex', createV37ArtifactIndexPayload()),
       evidenceTimeline: createWorkbenchResult('evidenceTimeline', createV37EvidenceTimelinePayload()),
       releaseBundle: createWorkbenchResult('releaseBundle', createV37ReleaseBundlePayload()),
+      goalSupervisor: createWorkbenchResult('goalSupervisor', createGoalSupervisorAppReadModelPayload()),
       safeArtifactPreviews: [
         createWorkbenchRouteResult(safePreviewRoute, createV37SafeArtifactPreviewPayload())
       ]
     });
 
-    assert.equal(model.desktopShell.modelName.text, 'DesktopShellMvpViewModel');
+    assert.equal(model.desktopShell.modelName.text, 'DesktopAppHomeViewModel');
+    assert.equal(model.desktopShell.appHome.title.text, 'Symphony App Home');
+    assert.equal(model.desktopShell.appHome.routePath.text, '/workbench/desktop/');
+    assert.equal(model.desktopShell.appHome.sourcePolicy.text, 'existing read-only Workbench contracts only');
     assert.equal(model.desktopShell.shellDecision.selected.text, 'Tauri-first desktop shell');
     assert.equal(model.desktopShell.shellDecision.deferredAlternative.text, 'Electron deferred');
     assert.equal(model.desktopShell.shellDecision.workspace.text, 'desktop/shell/src-tauri + /workbench/desktop/');
@@ -783,8 +816,17 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.sidecarHealth.launcherState.text, 'defined');
     assert.equal(model.desktopShell.sidecarHealth.launcherAvailable.value, true);
     assert.equal(model.desktopShell.sidecarHealth.rendererLaunchAvailable.value, false);
+    assert.equal(model.desktopShell.sidecarHealth.fixedLauncherContract.text, 'attach_sidecar + launch_sidecar + symphony.console.sidecar.launch');
+    assert.equal(model.desktopShell.sidecarHealth.commandPreviewInert.text, 'pnpm symphony console --host <loopback> --port <allowed-port>');
     assert.equal(model.desktopShell.sidecarHealth.launcherHandoff.text, 'symphony.console.sidecar.launch');
+    assert.equal(model.desktopShell.backendHealth.state.text, 'healthy');
+    assert.equal(model.desktopShell.backendHealth.status.text, 'ok');
+    assert.equal(model.desktopShell.backendHealth.routeState.text, 'ready');
+    assert.equal(model.desktopShell.backendHealth.routeSource.text, 'live contract');
     assert.equal(model.desktopShell.workspace.project.text, 'Multi Coding Agent Symphony');
+    assert.equal(model.desktopShell.workspace.repoPath.text, '/repo');
+    assert.equal(model.desktopShell.workspace.repoPathSource.text, 'app-state-snapshot.v1 current_project');
+    assert.equal(model.desktopShell.workspace.sourcePolicy.text, 'app-state-snapshot.v1 current_project + project-registry.v1');
     assert.equal(model.projectRegistry.contractName.text, 'project-registry.v1');
     assert.equal(model.projectRegistry.projects.count.value, 2);
     assert.equal(model.desktopShell.projectList.contractName.text, 'project-registry.v1');
@@ -802,7 +844,16 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.nextActionDetail.taskId.text, 'task-1');
     assert.equal(model.desktopShell.nextActionDetail.role.text, 'worker');
     assert.equal(model.desktopShell.nextActionDetail.phase.text, 'implement');
+    assert.equal(model.desktopShell.nextActionDetail.reason.text, 'No worker evidence is recorded.');
     assert.equal(model.desktopShell.nextActionDetail.sourcePolicy.text, 'goal-next-action.v1');
+    assert.equal(model.desktopShell.supervisorSummary.state.text, 'available');
+    assert.equal(model.desktopShell.supervisorSummary.goalId.text, 'v44-4-live-supervisor');
+    assert.equal(model.desktopShell.supervisorSummary.activeTask.text, 'task-3');
+    assert.equal(model.desktopShell.supervisorSummary.recommendedAction.text, 'Checkpoint pending result');
+    assert.equal(model.desktopShell.supervisorSummary.readOnly.value, true);
+    assert.equal(model.desktopShell.supervisorSummary.willMutate.value, false);
+    assert.equal(model.desktopShell.supervisorSummary.commandExecutionAvailable.value, false);
+    assert.equal(model.desktopShell.supervisorSummary.routeState.text, 'ready');
     assert.equal(model.desktopShell.firstRowCards.items.map((card) => card.label.text).join(', '), 'Active goal, Next action, Run health');
     assert.equal(model.desktopShell.jobRun.sourcePolicy.text, 'job-model.v1 + job-creation.v1 + job-timeline-log-stream.v1 + job-run-control.v1');
     assert.equal(model.desktopShell.jobRun.jobId.text, 'job-v37-task-4');
@@ -839,11 +890,30 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.artifactReadiness.releaseReady.value, false);
     assert.equal(model.desktopShell.artifactReadiness.releaseDecisionAvailable.value, false);
     assert.equal(model.desktopShell.artifactReadiness.boundaries.localFileOpenAvailable.value, false);
+    assert.equal(model.desktopShell.routeProvenance.state.text, 'available');
+    assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'runtimeSnapshot').source.text, 'live contract');
+    assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'goalSupervisor').routeState.text, 'ready');
+    assert.equal(model.desktopShell.appStates.backendUnavailable.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarMissing.value, false);
+    assert.equal(model.desktopShell.appStates.projectMissing.value, false);
+    assert.equal(model.desktopShell.appStates.activeGoalMissing.value, false);
+    assert.equal(model.desktopShell.appStates.supervisorModelUnavailable.value, false);
+    assert.equal(model.desktopShell.appStates.staleSnapshot.value, false);
+    assert.equal(model.desktopShell.appStates.routeFailed.value, false);
+    assert.equal(model.desktopShell.boundaries.readOnly.value, true);
+    assert.equal(model.desktopShell.boundaries.willMutate.value, false);
+    assert.equal(model.desktopShell.boundaries.browserTerminalAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.genericShellRunnerAvailable.value, false);
     assert.equal(model.desktopShell.boundaries.shellCommandExecutionAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.providerCliFromRendererAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.goalEventRegistrationAvailable.value, false);
     assert.equal(model.desktopShell.boundaries.modelInvocationAvailable.value, false);
     assert.equal(model.desktopShell.boundaries.arbitraryLocalFileOpenAvailable.value, false);
     assert.equal(model.desktopShell.boundaries.gitWriteAvailable.value, false);
+    assert.equal(model.desktopShell.boundaries.gitReleaseActionAvailable.value, false);
     assert.equal(model.desktopShell.boundaries.releaseReadyDeclared.value, false);
+    assert.equal(model.desktopShell.boundaries.evidenceRefsAreInertText.value, true);
+    assert.equal(model.desktopShell.boundaries.commandPreviewsAreInertText.value, true);
     assert.equal(model.desktopShell.boundaries.statusSource.text, 'explicit backend contracts only');
 
     const missingSidecarHostContract = structuredClone(runtimeSnapshotContract);
