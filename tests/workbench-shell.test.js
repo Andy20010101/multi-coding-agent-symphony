@@ -420,14 +420,11 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function DesktopShellRoute'), app.indexOf('function GoldenPathPanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
   });
 
-  it('renders the v44.4 fixture Supervisor Command Center without execution controls', async () => {
+  it('renders the v46 fixture Supervisor Workbench without execution controls', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
     const fixtureSource = await readFile('frontend/workbench/src/fixtures/supervisorDashboardFixtures.js', 'utf8');
-    const supervisorSource = app.slice(
-      app.indexOf('function SupervisorDashboard'),
-      app.indexOf('function PromptWorkspaceRoute')
-    );
+    const supervisorSource = await readFile('frontend/workbench/src/v46SupervisorWorkbench.jsx', 'utf8');
     const server = await createViteServer({
       configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
       server: {
@@ -441,93 +438,114 @@ describe('v15 Workbench React/Vite shell', () => {
       const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
       const viewState = createWorkbenchRenderViewState();
       const defaultHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
+      const releaseHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=release-ready', viewState);
       const pendingHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=pending-result', viewState);
       const leaseHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=healthy-active-lease', viewState);
       const staleHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=stale-transcript', viewState);
       const blockedHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=blocked-gate', viewState);
       const missingHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/?scenario=missing-empty-context', viewState);
 
-      assert.match(defaultHtml, /Supervisor Command Center/u);
+      assert.doesNotMatch(defaultHtml, /Supervisor Command Center/u);
       assert.match(defaultHtml, /class="workbench-shell supervisor-shell-route"/u);
-      assert.match(defaultHtml, /supervisor read-only \/ fixture fallback/u);
-      assert.match(defaultHtml, /Command Boundary projected summary/u);
-      assert.match(defaultHtml, /Ownership projected summary/u);
-      assert.match(defaultHtml, /goal-supervisor-app-read-model\.v1/u);
-      assert.match(defaultHtml, />goal id<\/dt><dd[^>]*>v44-4-workbench-supervisor-dashboard-prototype/u);
-      assert.match(defaultHtml, />generated at<\/dt><dd[^>]*>2026-06-10T10:24:00\+08:00/u);
+      assert.match(defaultHtml, /class="v46-supervisor-shell"/u);
+      assert.match(defaultHtml, /Workbench Supervisor Dashboard/u);
+      assert.doesNotMatch(defaultHtml, /supervisor read-only \/ fixture fallback/u);
+      assert.match(defaultHtml, />contract<\/dt><dd[^>]*>supervisor-dashboard-state\.v46 \/ 1/u);
+      assert.match(defaultHtml, /local-sample-fallback/u);
+      assert.match(defaultHtml, />goal id<\/dt><dd[^>]*>v45-backend-entrypoint-decomposition/u);
+      assert.match(defaultHtml, />generated<\/dt><dd[^>]*>2026-06-10T13:24:00\+08:00/u);
       assert.match(defaultHtml, />readOnly<\/dt><dd[^>]*>true/u);
       assert.match(defaultHtml, />willMutate<\/dt><dd[^>]*>false/u);
-      assert.match(defaultHtml, /Release-ready/u);
-      assert.match(defaultHtml, /Healthy active lease/u);
-      assert.match(defaultHtml, /Pending result/u);
-      assert.match(defaultHtml, /Stale transcript/u);
-      assert.match(defaultHtml, /Blocked gate/u);
-      assert.match(defaultHtml, /Missing context/u);
+      assert.match(defaultHtml, /Draft v46 Workbench frontend runbook after OpenDesign exploration/u);
+      assert.match(defaultHtml, /Recommended Next Action/u);
+      assert.match(defaultHtml, /Command Boundary/u);
+      assert.match(defaultHtml, /copyOnly true/u);
+      assert.match(defaultHtml, /daemon-control/u);
+      assert.match(defaultHtml, /provider-cli/u);
+      assert.match(defaultHtml, /real-cli/u);
+      assert.match(defaultHtml, /release-closeout/u);
+      assert.match(defaultHtml, /git-tag/u);
 
-      const goalIndex = defaultHtml.indexOf('Goal Snapshot');
-      const actionIndex = defaultHtml.indexOf('Recommended Next Action');
-      const leaseIndex = defaultHtml.indexOf('Active Lease');
-      const contextIndex = defaultHtml.indexOf('Context Status');
-      const pendingIndex = defaultHtml.indexOf('Pending Result');
-      const boundaryIndex = defaultHtml.indexOf('Command Boundary', pendingIndex);
-      const timelineIndex = defaultHtml.indexOf('Goal Timeline');
-      const gateIndex = defaultHtml.indexOf('Current Gate');
-      const ownershipIndex = defaultHtml.indexOf('supervisor-card-ownership-title');
+      const sidebarLabels = [...defaultHtml.matchAll(/class="v46-sidebar-label">([^<]+)<\/span>/gu)]
+        .map((match) => match[1]);
+      assert.deepEqual(sidebarLabels, [
+        'Overview',
+        'Active Lease',
+        'Current Gate',
+        'Command Boundary',
+        'Context Status',
+        'Timeline',
+        'Ownership'
+      ]);
+
+      const goalIndex = defaultHtml.indexOf('data-od-id="goal-snapshot"');
+      const leaseIndex = defaultHtml.indexOf('data-od-id="active-lease"');
+      const gateIndex = defaultHtml.indexOf('data-od-id="current-gate"');
+      const actionIndex = defaultHtml.indexOf('data-od-id="recommended-next-action"');
+      const contextIndex = defaultHtml.indexOf('data-od-id="context-status"');
+      const boundaryIndex = defaultHtml.indexOf('data-od-id="command-boundary"');
+      const pendingIndex = defaultHtml.indexOf('data-od-id="pending-result"');
+      const timelineIndex = defaultHtml.indexOf('data-od-id="goal-timeline"');
+      const ownershipIndex = defaultHtml.indexOf('data-od-id="ownership"');
 
       for (const index of [goalIndex, actionIndex, leaseIndex, contextIndex, pendingIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
         assert.notEqual(index, -1);
       }
 
-      assert.equal(goalIndex < actionIndex, true);
-      assert.equal(actionIndex < leaseIndex, true);
-      assert.equal(leaseIndex < contextIndex, true);
-      assert.equal(contextIndex < pendingIndex, true);
-      assert.equal(pendingIndex < boundaryIndex, true);
-      assert.equal(boundaryIndex < timelineIndex, true);
-      assert.equal(timelineIndex < gateIndex, true);
-      assert.equal(gateIndex < ownershipIndex, true);
+      assert.equal(goalIndex < leaseIndex, true);
+      assert.equal(leaseIndex < gateIndex, true);
+      assert.equal(gateIndex < actionIndex, true);
+      assert.equal(actionIndex < contextIndex, true);
+      assert.equal(contextIndex < boundaryIndex, true);
+      assert.equal(boundaryIndex < pendingIndex, true);
+      assert.equal(pendingIndex < timelineIndex, true);
+      assert.equal(timelineIndex < ownershipIndex, true);
 
-      assert.match(defaultHtml, /ready-declared/u);
-      assert.match(defaultHtml, /tag/u);
-      assert.match(defaultHtml, /publish/u);
-      assert.match(defaultHtml, /release closeout/u);
+      assert.doesNotMatch(defaultHtml, /Release readiness is present/u);
+      assert.match(releaseHtml, /Release readiness is present/u);
+      assert.match(releaseHtml, /tag/u);
+      assert.match(releaseHtml, /publish/u);
+      assert.match(releaseHtml, /close out/u);
       assert.doesNotMatch(defaultHtml, /href="(?:artifact:|docs\/plans\/|file:)/u);
       assert.match(leaseHtml, /lease-task-2-worker-001/u);
       assert.match(leaseHtml, /readable summary/u);
-      assert.match(leaseHtml, /blocked while lease is healthy/u);
+      assert.match(leaseHtml, /duplicate dispatch remains blocked/u);
       assert.match(pendingHtml, /worker\.evidence-recorded/u);
-      assert.match(pendingHtml, /artifact:v44-4:pending-worker-evidence/u);
+      assert.match(pendingHtml, /artifact:v44-4:task-1-worker-evidence/u);
       assert.match(pendingHtml, /parser accepted event fields/u);
       assert.doesNotMatch(pendingHtml, />Register<|>Apply<|>Execute</u);
       assert.match(staleHtml, /stale transcript summary/u);
-      assert.match(staleHtml, /recover-stale-context/u);
-      assert.match(staleHtml, /lease active but transcript stale/u);
+      assert.match(staleHtml, /recover-drift/u);
+      assert.match(staleHtml, /Lease update is older than the stale threshold/u);
       assert.match(blockedHtml, /missing main verification evidence ref/u);
-      assert.match(blockedHtml, /closeout authorization<\/dt><dd[^>]*>blocked/u);
-      assert.match(missingHtml, /missing contract field: contextStatus\.providerSummaries/u);
-      assert.match(missingHtml, /pendingResult absent from fixture read model/u);
-      assert.match(missingHtml, /goal timeline 未暴露/u);
+      assert.match(blockedHtml, /main verification evidence/u);
+      assert.match(missingHtml, /contextStatus\.providerSummaries is empty/u);
+      assert.match(missingHtml, />pendingResult\.output<\/dt><dd[^>]*>NULL/u);
+      assert.match(missingHtml, />contract<\/dt><dd[^>]*>missing/u);
     } finally {
       await server.close();
       restoreSsrLocation();
     }
 
     for (const componentName of [
-      'SupervisorDashboard',
-      'GoalSnapshotSummary',
-      'CurrentGateCard',
-      'RecommendedNextActionCard',
+      'SupervisorShell',
+      'SupervisorSidebar',
+      'StatusHeader',
+      'GoalSnapshotPanel',
+      'CurrentGatePanel',
+      'RecommendedNextActionBand',
       'ActiveLeasePanel',
       'PendingResultPanel',
-      'GoalTimeline',
+      'GoalTimelinePanel',
       'ContextStatusPanel',
       'OwnershipPanel',
       'CommandBoundaryPanel'
     ]) {
-      assert.match(app, new RegExp(`function ${componentName}\\b`, 'u'));
+      assert.match(supervisorSource, new RegExp(`function ${componentName}\\b`, 'u'));
     }
 
     assert.match(app, /selectedSupervisorDashboard/u);
+    assert.match(app, /projectSupervisorDashboardToWorkbenchView/u);
     assert.match(app, /\/workbench\/supervisor\//u);
     assert.match(fixtureSource, /release-ready/u);
     assert.match(fixtureSource, /healthy-active-lease/u);
@@ -535,16 +553,20 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(fixtureSource, /stale-transcript/u);
     assert.match(fixtureSource, /blocked-gate/u);
     assert.match(fixtureSource, /missing-empty-context/u);
-    assert.match(css, /\.supervisor-dashboard-grid[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/u);
-    assert.match(css, /\.supervisor-ownership-summary/u);
-    assert.match(css, /\.command-family-list[\s\S]*flex-wrap:\s*wrap/u);
-    assert.match(css, /\.blocked-command-family-list li/u);
-    assert.match(css, /@media \(max-width: 920px\)[\s\S]*\.supervisor-dashboard-grid,[\s\S]*\.supervisor-timeline-list[\s\S]*grid-template-columns:\s*1fr/u);
+    assert.match(css, /\.v46-supervisor-shell/u);
+    assert.match(css, /\.v46-supervisor-shell[\s\S]*grid-template-columns:\s*232px minmax\(0, 1fr\)/u);
+    assert.match(css, /\.v46-dashboard-grid[\s\S]*grid-template-columns:\s*minmax\(0, 1\.05fr\) minmax\(360px, 0\.95fr\)/u);
+    assert.match(css, /grid-template-areas:[\s\S]*"goal lease"[\s\S]*"decision boundary"[\s\S]*"ownership timeline"/u);
+    assert.match(css, /@media \(max-width: 980px\)[\s\S]*\.v46-dashboard-grid[\s\S]*display:\s*flex/u);
+    assert.match(css, /\.v46-family-list[\s\S]*flex-wrap:\s*wrap/u);
+    assert.match(css, /\.v46-pending-panel[\s\S]*order:\s*5/u);
+    assert.match(css, /\.v46-command-panel[\s\S]*order:\s*6/u);
+    assert.match(css, /\.v46-context-panel[\s\S]*order:\s*7/u);
     assert.doesNotMatch(supervisorSource, /fetch\(|confirmGoalEventPlan|GoalEventPlanPreview|<button\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|claude\/projects/u);
     assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
   });
 
-  it('renders the v44.4 Supervisor Command Center from the projected read-only API model when available', async () => {
+  it('renders the v46 Supervisor Workbench from the projected read-only API model when available', async () => {
     const server = await createViteServer({
       configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
       server: {
@@ -562,29 +584,29 @@ describe('v15 Workbench React/Vite shell', () => {
       };
       const html = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
 
-      assert.match(html, /Supervisor Command Center/u);
-      assert.match(html, />contract<\/dt><dd[^>]*>goal-supervisor-app-read-model\.v1/u);
-      assert.match(html, />version<\/dt><dd[^>]*>1/u);
+      assert.match(html, /Workbench Supervisor Dashboard/u);
+      assert.match(html, /class="v46-supervisor-shell"/u);
+      assert.match(html, />contract<\/dt><dd[^>]*>supervisor-dashboard-state\.v46 \/ 1/u);
+      assert.match(html, /goal-supervisor-app-read-model\.v1/u);
       assert.match(html, />goal id<\/dt><dd[^>]*>v44-4-live-supervisor/u);
       assert.match(html, />active task<\/dt><dd[^>]*>task-3/u);
-      assert.match(html, />active role<\/dt><dd[^>]*>worker/u);
-      assert.match(html, />generated at<\/dt><dd[^>]*>2026-06-10T12:04:00\.000Z/u);
-      assert.match(html, /Live read-only supervisor state from the goal supervisor route\./u);
-      assert.match(html, /source: \/api\/goals\/latest\/supervisor/u);
-      assert.match(html, /Command Boundary projected summary/u);
+      assert.match(html, />role<\/dt><dd[^>]*>worker/u);
+      assert.match(html, />generated<\/dt><dd[^>]*>2026-06-10T12:04:00\.000Z/u);
+      assert.match(html, /Command Boundary/u);
+      assert.match(html, /copyOnly true/u);
       assert.match(html, /Checkpoint pending result/u);
       assert.match(html, /result-awaits-registration/u);
-      assert.match(html, /Copy preview: summarize pending result only\./u);
-      assert.match(html, /blocked: active lease still healthy/u);
       assert.match(html, /local-goal-supervisor-daemon/u);
       assert.match(html, /external-orchestration-owner/u);
       assert.match(html, /42000 \/ 200000/u);
       assert.match(html, /21%/u);
-      assert.match(html, /child-dispatch/u);
-      assert.match(html, /event-log-write/u);
-      assert.match(html, /class="command-family-list blocked-command-family-list"/u);
+      assert.match(html, /daemon-control/u);
+      assert.match(html, /provider-cli/u);
+      assert.match(html, /real-cli/u);
+      assert.match(html, /release-closeout/u);
+      assert.match(html, /git-tag/u);
+      assert.match(html, /class="v46-family-list"/u);
       assert.match(html, /evt-live-task-3/u);
-      assert.match(html, /blocked-without-operator-authorization/u);
       assert.doesNotMatch(html, /href="(?:artifact:|docs\/plans\/|file:)/u);
       assert.doesNotMatch(html, /Release-ready|Healthy active lease|Pending result|Stale transcript|Blocked gate|Missing context/u);
       assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u);
@@ -594,7 +616,56 @@ describe('v15 Workbench React/Vite shell', () => {
     }
   });
 
-  it('binds the v44.4 supervisor core panels from projected live model states', async () => {
+  it('quarantines unsafe v46 supervisor live payloads before rendering', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const unsafePayload = {
+        ...createGoalSupervisorRenderPayload(),
+        readOnly: false,
+        willMutate: true,
+        commandBoundary: {
+          state: 'confirm-required',
+          executionAvailable: true,
+          copyOnly: false,
+          blockedCommandFamilies: []
+        }
+      };
+      const viewState = {
+        phase: 'ready',
+        model: createWorkbenchRenderModelWithSupervisor(unsafePayload)
+      };
+      const html = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
+
+      assert.match(html, /invalid live safety contract/u);
+      assert.match(html, /safety contract failed/u);
+      assert.match(html, />readOnly<\/dt><dd[^>]*>true/u);
+      assert.match(html, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.match(html, />executionAvailable<\/dt><dd[^>]*>false/u);
+      assert.match(html, />copyOnly<\/dt><dd[^>]*>true/u);
+      assert.match(html, /readOnly\/willMutate rejected/u);
+      assert.match(html, /daemon-control/u);
+      assert.match(html, /provider-cli/u);
+      assert.match(html, /real-cli/u);
+      assert.match(html, /release-closeout/u);
+      assert.match(html, /git-tag/u);
+      assert.doesNotMatch(html, />willMutate<\/dt><dd[^>]*>true/u);
+      assert.doesNotMatch(html, />executionAvailable<\/dt><dd[^>]*>true/u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+  });
+
+  it('binds the v46 supervisor core panels from projected live model states', async () => {
     const server = await createViteServer({
       configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
       server: {
@@ -611,10 +682,10 @@ describe('v15 Workbench React/Vite shell', () => {
           id: 'release-ready',
           payload: createGoalSupervisorRenderPayloadVariant('release-ready'),
           expected: [
-            /ready-declared/u,
             /copy-release-handoff/u,
-            /authorized-by-read-model/u,
-            /Copy preview: release-ready status remains copy-only\./u
+            /release-ready-declared/u,
+            /release evidence refs present/u,
+            /Prepare release handoff/u
           ]
         },
         {
@@ -622,8 +693,8 @@ describe('v15 Workbench React/Vite shell', () => {
           payload: createGoalSupervisorRenderPayloadVariant('active-lease'),
           expected: [
             /lease-live-task-2/u,
-            /blocked: active lease still healthy/u,
-            />status<\/dt><dd[^>]*>healthy/u
+            /active-tool-call-in-progress/u,
+            />lease health<\/dt><dd[^>]*>healthy/u
           ]
         },
         {
@@ -640,7 +711,7 @@ describe('v15 Workbench React/Vite shell', () => {
           payload: createGoalSupervisorRenderPayloadVariant('stale-transcript'),
           expected: [
             /lease-active-transcript-stale/u,
-            /lease active but transcript stale/u,
+            /stale-summary/u,
             /recover-stale-context/u
           ]
         },
@@ -650,18 +721,16 @@ describe('v15 Workbench React/Vite shell', () => {
           expected: [
             /Blocked by current gate/u,
             /missing main verification evidence ref/u,
-            /main-verification-evidence/u,
-            /operator-needed-for-gate-evidence/u
+            /main verification evidence/u
           ]
         },
         {
           id: 'empty-context',
           payload: createGoalSupervisorRenderPayloadVariant('empty-context'),
           expected: [
-            /missing contract field: contextStatus\.providerSummaries/u,
-            />status<\/dt><dd[^>]*>missing/u,
-            />transcript<\/dt><dd class="missing-value">/u,
-            /goal timeline 未暴露/u
+            />label<\/dt><dd[^>]*>missing/u,
+            />pendingResult\.output<\/dt><dd[^>]*>NULL/u,
+            /\[ EMPTY \]/u
           ]
         }
       ];
@@ -681,7 +750,7 @@ describe('v15 Workbench React/Vite shell', () => {
         assert.match(html, /Context Status/u, scenario.id);
         assert.match(html, /Ownership/u, scenario.id);
         assert.match(html, /Command Boundary/u, scenario.id);
-        assert.match(html, /source: \/api\/goals\/latest\/supervisor/u, scenario.id);
+        assert.match(html, />contract<\/dt><dd[^>]*>supervisor-dashboard-state\.v46 \/ 1/u, scenario.id);
         assert.doesNotMatch(html, /href="(?:artifact:|docs\/plans\/|file:)/u, scenario.id);
         assert.doesNotMatch(html, /supervisor-scenario/u, scenario.id);
         assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u, scenario.id);

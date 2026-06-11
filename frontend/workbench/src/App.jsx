@@ -18,6 +18,10 @@ import {
   SUPERVISOR_DASHBOARD_FIXTURES,
   SUPERVISOR_DASHBOARD_SCENARIOS
 } from './fixtures/supervisorDashboardFixtures.js';
+import {
+  SupervisorShell,
+  projectSupervisorDashboardToWorkbenchView
+} from './v46SupervisorWorkbench.jsx';
 
 const initialState = {
   phase: 'loading',
@@ -42,6 +46,10 @@ const WORKBENCH_NAV_ITEMS = Object.freeze([
 ]);
 
 export default function App() {
+  return <LiveWorkbenchApp />;
+}
+
+function LiveWorkbenchApp() {
   const [viewState, setViewState] = useState(initialState);
 
   async function refreshWorkbenchContracts() {
@@ -157,25 +165,28 @@ export function WorkbenchShell({
   });
 
   return (
-    <main className={workbenchShellClassName(workbenchRoute)} aria-labelledby="workbench-title">
-      <header className="workbench-header">
-        <div className="header-copy">
-          <p className="eyebrow">{workbenchRouteEyebrow(workbenchRoute)}</p>
-          <h1 id="workbench-title">{workbenchRouteTitle(workbenchRoute)}</h1>
-          <p className="header-summary">
-            {workbenchRoute === 'supervisor'
-              ? 'Read-only supervisor state: goal snapshot, active lease, context, pending result, command boundary, timeline, gate, and ownership. Fixture scenarios remain available when live data is unavailable.'
-              : workbenchRoute === 'desktop'
-              ? '只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。'
-              : '围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。'}
-          </p>
-        </div>
-        <div className="status-strip" aria-label="当前只读状态">
-          <span>{phaseText(viewState.phase)}</span>
-          <span>{routeCounts.ready}/{routeCounts.total} routes 已读取</span>
-          <span>{workbenchRouteStatusText(workbenchRoute)}</span>
-        </div>
-      </header>
+    <main
+      className={workbenchShellClassName(workbenchRoute)}
+      aria-labelledby={workbenchRoute === 'supervisor' ? undefined : 'workbench-title'}
+    >
+      {workbenchRoute === 'supervisor' ? null : (
+        <header className="workbench-header">
+          <div className="header-copy">
+            <p className="eyebrow">{workbenchRouteEyebrow(workbenchRoute)}</p>
+            <h1 id="workbench-title">{workbenchRouteTitle(workbenchRoute)}</h1>
+            <p className="header-summary">
+              {workbenchRoute === 'desktop'
+                ? '只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。'
+                : '围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。'}
+            </p>
+          </div>
+          <div className="status-strip" aria-label="当前只读状态">
+            <span>{phaseText(viewState.phase)}</span>
+            <span>{routeCounts.ready}/{routeCounts.total} routes 已读取</span>
+            <span>{workbenchRouteStatusText(workbenchRoute)}</span>
+          </div>
+        </header>
+      )}
 
       {workbenchRoute === 'desktop' || workbenchRoute === 'supervisor' ? null : (
         <>
@@ -189,10 +200,11 @@ export function WorkbenchShell({
       {workbenchRoute !== 'supervisor' && viewState.phase === 'failed' ? <ShellState title="读取失败" copy="错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。" /> : null}
 
       {workbenchRoute === 'supervisor' ? (
-        <SupervisorDashboard
-          dashboard={selectedSupervisorDashboard(model)}
-          routeState={selectedSupervisorDashboardRouteState(model)}
-          refreshHandler={onRefreshWorkbenchContracts}
+        <SupervisorShell
+          view={projectSupervisorDashboardToWorkbenchView(
+            selectedSupervisorDashboard(model),
+            selectedSupervisorDashboardRouteState(model)
+          )}
         />
       ) : model === null ? null : (
         workbenchRoute === 'desktop' ? (
@@ -9573,7 +9585,10 @@ function selectedSupervisorDashboard(model) {
     return model.supervisorDashboard;
   }
 
-  const scenarioId = currentWorkbenchSearchParams().get('scenario') ?? 'release-ready';
+  const scenarioId = currentWorkbenchSearchParams().get('scenario');
+  if (scenarioId === null) {
+    return null;
+  }
 
   return {
     ...(SUPERVISOR_DASHBOARD_FIXTURES[scenarioId] ?? SUPERVISOR_DASHBOARD_FIXTURES['release-ready']),
@@ -9586,6 +9601,13 @@ function selectedSupervisorDashboardRouteState(model) {
     return {
       state: model.supervisorDashboard.route?.state ?? 'ready',
       source: model.supervisorDashboard.source ?? model.supervisorDashboard.route?.path ?? 'goal supervisor route'
+    };
+  }
+
+  if (!currentWorkbenchSearchParams().has('scenario')) {
+    return {
+      state: 'local-sample-fallback',
+      source: 'frontend/workbench/src/v46SupervisorWorkbench.jsx'
     };
   }
 

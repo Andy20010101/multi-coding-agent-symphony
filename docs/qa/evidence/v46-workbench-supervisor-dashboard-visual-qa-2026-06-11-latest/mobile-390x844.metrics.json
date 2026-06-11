@@ -1,0 +1,755 @@
+{
+  "actualOrder": [
+    "status-header",
+    "goal-snapshot",
+    "active-lease",
+    "current-gate",
+    "recommended-next-action",
+    "pending-result",
+    "command-boundary",
+    "context-status",
+    "goal-timeline",
+    "ownership"
+  ],
+  "chips": [
+    {
+      "label": "generated",
+      "rect": {
+        "bottom": 286.01,
+        "height": 49,
+        "right": 212.73,
+        "width": 188.73,
+        "x": 24,
+        "y": 237.01
+      },
+      "value": "2026-06-10T13:24:00+08:00"
+    },
+    {
+      "label": "readOnly",
+      "rect": {
+        "bottom": 286.01,
+        "height": 49,
+        "right": 288.05,
+        "width": 68.32,
+        "x": 219.73,
+        "y": 237.01
+      },
+      "value": "true"
+    },
+    {
+      "label": "willMutate",
+      "rect": {
+        "bottom": 342.01,
+        "height": 49,
+        "right": 99.71,
+        "width": 75.71,
+        "x": 24,
+        "y": 293.01
+      },
+      "value": "false"
+    },
+    {
+      "label": "role",
+      "rect": {
+        "bottom": 342.01,
+        "height": 49,
+        "right": 233.84,
+        "width": 127.13,
+        "x": 106.71,
+        "y": 293.01
+      },
+      "value": "supervisor-monitor"
+    },
+    {
+      "label": "contract",
+      "rect": {
+        "bottom": 398.01,
+        "height": 49,
+        "right": 244.17,
+        "width": 220.17,
+        "x": 24,
+        "y": 349.01
+      },
+      "value": "supervisor-dashboard-state.v46 / 1"
+    },
+    {
+      "label": "health",
+      "rect": {
+        "bottom": 454.01,
+        "height": 49,
+        "right": 176.8,
+        "width": 152.8,
+        "x": 24,
+        "y": 405.01
+      },
+      "value": "observed-only / healthy"
+    }
+  ],
+  "commandBoundaryRows": [
+    "boundary state",
+    "executionAvailable",
+    "copyOnly"
+  ],
+  "commandBoundaryVisible": false,
+  "controls": {
+    "anchors": 0,
+    "buttons": 0,
+    "details": 0,
+    "forms": 0,
+    "hrefs": 1,
+    "roleButtons": 0
+  },
+  "expectedOrder": [
+    "status-header",
+    "goal-snapshot",
+    "active-lease",
+    "current-gate",
+    "recommended-next-action",
+    "pending-result",
+    "command-boundary",
+    "context-status",
+    "goal-timeline",
+    "ownership"
+  ],
+  "firstViewportSections": [
+    {
+      "bottom": 466.01,
+      "id": "status-header",
+      "y": 143.9
+    },
+    {
+      "bottom": 682.98,
+      "id": "goal-snapshot",
+      "y": 480.01
+    },
+    {
+      "bottom": 939.46,
+      "id": "active-lease",
+      "y": 692.98
+    }
+  ],
+  "goalId": {
+    "label": "Goal ID:",
+    "labelRect": {
+      "bottom": 171.49,
+      "height": 15.59,
+      "right": 73.98,
+      "width": 49.98,
+      "x": 24,
+      "y": 155.9
+    },
+    "labelTitleBottomDeltaPx": -57.52,
+    "lineCenterDeltaFromHeaderPx": 0,
+    "lineRect": {
+      "bottom": 229.01,
+      "height": 73.11,
+      "right": 366,
+      "width": 342,
+      "x": 24,
+      "y": 155.9
+    },
+    "style": {
+      "cursor": "auto",
+      "display": "block",
+      "fontSize": "21.6px",
+      "lineHeight": "23.76px",
+      "overflowX": "visible",
+      "transform": "none",
+      "whiteSpace": "normal",
+      "writingMode": "horizontal-tb"
+    },
+    "text": "v45-backend-entrypoint-decomposition",
+    "titleLineEstimate": 2,
+    "titleOverflowPx": 0,
+    "titleRect": {
+      "bottom": 229.01,
+      "height": 47.52,
+      "right": 366,
+      "width": 342,
+      "x": 24,
+      "y": 181.49
+    }
+  },
+  "goalSnapshotRows": [
+    "active task",
+    "goal id",
+    "mutation"
+  ],
+  "hasBoundaryStateRow": true,
+  "hasContractChip": true,
+  "horizontalOverflowPx": 0,
+  "loadedAssets": {
+    "scripts": [
+      "/workbench/assets/index-BsCE7mzH.js"
+    ],
+    "stylesheets": [
+      "/workbench/assets/index-DK3WOan4.css"
+    ]
+  },
+  "maxRightOverViewportPx": 666.35,
+  "maxRightSelector": "div.v46-sidebar-item.neutral",
+  "oldHeader": {
+    "workbenchHeader": 0,
+    "workbenchTitle": 0
+  },
+  "orderElements": [
+    {
+      "id": "status-header",
+      "rect": {
+        "bottom": 466.01,
+        "height": 322.11,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 143.9
+      },
+      "textStart": "Goal ID:v45-backend-entrypoint-decompositiongenerated2026-06-10T13:24:00+08:00readOnlytruewillMutatefalserolesupervisor-monitorcontractsupervisor-dashboard-state.v46 / 1healthobser"
+    },
+    {
+      "id": "goal-snapshot",
+      "rect": {
+        "bottom": 682.98,
+        "height": 202.98,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 480.01
+      },
+      "textStart": "Goal Snapshotlocal-sample-fallbackactive taskv46 frontend baseline planninggoal idv45-backend-entrypoint-decompositionmutationdisabled by supervisor boundary"
+    },
+    {
+      "id": "active-lease",
+      "rect": {
+        "bottom": 939.46,
+        "height": 246.48,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 692.98
+      },
+      "textStart": "Active Leasehealthylease-v46-ui-prototype-004thread id019eb1-ui-prototype-claude-warm-v4lease healthhealthytelemetrystrong active lease observed"
+    },
+    {
+      "id": "current-gate",
+      "rect": {
+        "bottom": 1187.53,
+        "height": 238.07,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 949.46
+      },
+      "textStart": "Current Gatefrontend baselinegatefrontend baselineconditionOpenDesign focused-v2 handoff accepted as visual baselinenext artifactv46 Workbench frontend runbook implementation slice"
+    },
+    {
+      "id": "recommended-next-action",
+      "rect": {
+        "bottom": 1327.33,
+        "height": 129.8,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 1197.53
+      },
+      "textStart": "confirm-requiredRecommended Next ActionDraft v46 Workbench frontend runbook after OpenDesign exploration."
+    },
+    {
+      "id": "pending-result",
+      "rect": {
+        "bottom": 1589.05,
+        "height": 251.72,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 1337.33
+      },
+      "textStart": "Pending Resultnone / NULLlabelnone / NULLpendingResult.outputNULLcontract[ EMPTY ]reasonNULL"
+    },
+    {
+      "id": "command-boundary",
+      "rect": {
+        "bottom": 1876.82,
+        "height": 277.77,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 1599.05
+      },
+      "textStart": "Command BoundarycopyOnlyboundary stateexecution unavailable; copyOnly trueexecutionAvailablefalsecopyOnlytruedaemon-controlprovider-clireal-clirelease-closeoutgit-tag"
+    },
+    {
+      "id": "context-status",
+      "rect": {
+        "bottom": 2032.37,
+        "height": 145.55,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 1886.82
+      },
+      "textStart": "Context Status62%focused-v2 handoff loadedstatic modelno network readscopyOnly boundary"
+    },
+    {
+      "id": "goal-timeline",
+      "rect": {
+        "bottom": 2481.68,
+        "height": 439.31,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 2042.37
+      },
+      "textStart": "Goal Timelineexpanded01OpenDesign artifact receivedFocused v2 package defines the static supervisor workbench baseline and read-only constraints.02Preflight completedRepository com"
+    },
+    {
+      "id": "ownership",
+      "rect": {
+        "bottom": 2821.43,
+        "height": 329.75,
+        "right": 378,
+        "width": 366,
+        "x": 12,
+        "y": 2491.68
+      },
+      "textStart": "Ownershipresponsibility splitdaemonOwns background observation and lease projection outside the browser.controllerOwns implementation sequencing, verification, and recovery decisio"
+    }
+  ],
+  "orderMatchesExpected": true,
+  "pendingOutput": {
+    "ddRect": {
+      "bottom": 1475.56,
+      "height": 17.55,
+      "right": 364,
+      "width": 338,
+      "x": 26,
+      "y": 1458.02
+    },
+    "ddText": "NULL",
+    "dtRect": {
+      "bottom": 1456.02,
+      "height": 16.2,
+      "right": 364,
+      "width": 338,
+      "x": 26,
+      "y": 1439.82
+    },
+    "dtText": "pendingResult.output",
+    "dtWhiteSpace": "normal",
+    "gridTemplateColumns": "338px",
+    "rowOverflowPx": 0,
+    "rowRect": {
+      "bottom": 1480.56,
+      "height": 44.74,
+      "right": 364,
+      "width": 338,
+      "x": 26,
+      "y": 1435.82
+    }
+  },
+  "sidebar": {
+    "items": [
+      {
+        "iconRect": {
+          "bottom": 106.9,
+          "height": 22,
+          "right": 48,
+          "width": 22,
+          "x": 26,
+          "y": 84.9
+        },
+        "itemRect": {
+          "bottom": 115.9,
+          "height": 40,
+          "right": 133.04,
+          "width": 121.04,
+          "x": 12,
+          "y": 75.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Overview",
+        "labelRect": {
+          "bottom": 105.9,
+          "height": 20,
+          "right": 120.04,
+          "width": 58.04,
+          "x": 62,
+          "y": 85.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 106.9,
+          "height": 22,
+          "right": 177.04,
+          "width": 22,
+          "x": 155.04,
+          "y": 84.9
+        },
+        "itemRect": {
+          "bottom": 115.9,
+          "height": 40,
+          "right": 282.59,
+          "width": 141.55,
+          "x": 141.04,
+          "y": 75.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Active Lease",
+        "labelRect": {
+          "bottom": 105.9,
+          "height": 20,
+          "right": 269.59,
+          "width": 78.55,
+          "x": 191.04,
+          "y": 85.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 106.9,
+          "height": 22,
+          "right": 326.59,
+          "width": 22,
+          "x": 304.59,
+          "y": 84.9
+        },
+        "itemRect": {
+          "bottom": 115.9,
+          "height": 40,
+          "right": 433.83,
+          "width": 143.23,
+          "x": 290.59,
+          "y": 75.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Current Gate",
+        "labelRect": {
+          "bottom": 105.9,
+          "height": 20,
+          "right": 420.83,
+          "width": 80.23,
+          "x": 340.59,
+          "y": 85.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 106.9,
+          "height": 22,
+          "right": 477.83,
+          "width": 22,
+          "x": 455.83,
+          "y": 84.9
+        },
+        "itemRect": {
+          "bottom": 115.9,
+          "height": 40,
+          "right": 631.45,
+          "width": 189.62,
+          "x": 441.83,
+          "y": 75.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Command Boundary",
+        "labelRect": {
+          "bottom": 105.9,
+          "height": 20,
+          "right": 618.45,
+          "width": 126.62,
+          "x": 491.83,
+          "y": 85.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 106.9,
+          "height": 22,
+          "right": 675.45,
+          "width": 22,
+          "x": 653.45,
+          "y": 84.9
+        },
+        "itemRect": {
+          "bottom": 115.9,
+          "height": 40,
+          "right": 794.95,
+          "width": 155.5,
+          "x": 639.45,
+          "y": 75.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Context Status",
+        "labelRect": {
+          "bottom": 105.9,
+          "height": 20,
+          "right": 781.95,
+          "width": 92.5,
+          "x": 689.45,
+          "y": 85.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 106.9,
+          "height": 22,
+          "right": 838.95,
+          "width": 22,
+          "x": 816.95,
+          "y": 84.9
+        },
+        "itemRect": {
+          "bottom": 115.9,
+          "height": 40,
+          "right": 918.55,
+          "width": 115.6,
+          "x": 802.95,
+          "y": 75.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Timeline",
+        "labelRect": {
+          "bottom": 105.9,
+          "height": 20,
+          "right": 905.55,
+          "width": 52.6,
+          "x": 852.95,
+          "y": 85.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 106.9,
+          "height": 22,
+          "right": 962.55,
+          "width": 22,
+          "x": 940.55,
+          "y": 84.9
+        },
+        "itemRect": {
+          "bottom": 115.9,
+          "height": 40,
+          "right": 1056.35,
+          "width": 129.8,
+          "x": 926.55,
+          "y": 75.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Ownership",
+        "labelRect": {
+          "bottom": 105.9,
+          "height": 20,
+          "right": 1043.35,
+          "width": 66.8,
+          "x": 976.55,
+          "y": 85.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      }
+    ],
+    "labels": [
+      "Overview",
+      "Active Lease",
+      "Current Gate",
+      "Command Boundary",
+      "Context Status",
+      "Timeline",
+      "Ownership"
+    ],
+    "listRect": {
+      "bottom": 116.9,
+      "height": 51,
+      "right": 378,
+      "width": 366,
+      "x": 12,
+      "y": 65.9
+    },
+    "rect": {
+      "bottom": 129.9,
+      "height": 129.9,
+      "right": 390,
+      "width": 390,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "timelineStaticExpanded": true,
+  "title": "v20 Workbench",
+  "url": "http://127.0.0.1:56977/workbench/supervisor/",
+  "viewport": {
+    "clientHeight": 844,
+    "clientWidth": 390,
+    "innerHeight": 844,
+    "innerWidth": 390
+  },
+  "viewportName": "mobile-390x844",
+  "visibleHeadings": [
+    {
+      "rect": {
+        "bottom": 229.01,
+        "height": 47.52,
+        "right": 366,
+        "width": 342,
+        "x": 24,
+        "y": 181.49
+      },
+      "tag": "h1",
+      "text": "v45-backend-entrypoint-decomposition"
+    },
+    {
+      "rect": {
+        "bottom": 511.55,
+        "height": 19.55,
+        "right": 135.16,
+        "width": 109.16,
+        "x": 26,
+        "y": 492.01
+      },
+      "tag": "h2",
+      "text": "Goal Snapshot"
+    },
+    {
+      "rect": {
+        "bottom": 724.53,
+        "height": 19.55,
+        "right": 119.34,
+        "width": 93.34,
+        "x": 26,
+        "y": 704.98
+      },
+      "tag": "h2",
+      "text": "Active Lease"
+    }
+  ]
+}

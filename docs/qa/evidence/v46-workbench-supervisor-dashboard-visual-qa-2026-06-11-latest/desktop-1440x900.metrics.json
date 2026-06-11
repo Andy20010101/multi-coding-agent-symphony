@@ -1,0 +1,910 @@
+{
+  "actualOrder": [
+    "status-header",
+    "goal-snapshot",
+    "active-lease",
+    "current-gate",
+    "context-status",
+    "recommended-next-action",
+    "command-boundary",
+    "pending-result",
+    "goal-timeline",
+    "ownership"
+  ],
+  "chips": [
+    {
+      "label": "generated",
+      "rect": {
+        "bottom": 87.76,
+        "height": 26,
+        "right": 531.33,
+        "width": 252.81,
+        "x": 278.52,
+        "y": 61.76
+      },
+      "value": "2026-06-10T13:24:00+08:00"
+    },
+    {
+      "label": "readOnly",
+      "rect": {
+        "bottom": 87.76,
+        "height": 26,
+        "right": 635.15,
+        "width": 96.82,
+        "x": 538.33,
+        "y": 61.76
+      },
+      "value": "true"
+    },
+    {
+      "label": "willMutate",
+      "rect": {
+        "bottom": 87.76,
+        "height": 26,
+        "right": 750.61,
+        "width": 108.46,
+        "x": 642.15,
+        "y": 61.76
+      },
+      "value": "false"
+    },
+    {
+      "label": "role",
+      "rect": {
+        "bottom": 87.76,
+        "height": 26,
+        "right": 911.74,
+        "width": 154.13,
+        "x": 757.61,
+        "y": 61.76
+      },
+      "value": "supervisor-monitor"
+    },
+    {
+      "label": "contract",
+      "rect": {
+        "bottom": 87.76,
+        "height": 26,
+        "right": 1192.69,
+        "width": 273.95,
+        "x": 918.74,
+        "y": 61.76
+      },
+      "value": "supervisor-dashboard-state.v46 / 1"
+    },
+    {
+      "label": "health",
+      "rect": {
+        "bottom": 87.76,
+        "height": 26,
+        "right": 1393.48,
+        "width": 193.79,
+        "x": 1199.69,
+        "y": 61.76
+      },
+      "value": "observed-only / healthy"
+    }
+  ],
+  "commandBoundaryRows": [
+    "boundary state",
+    "executionAvailable",
+    "copyOnly"
+  ],
+  "commandBoundaryVisible": true,
+  "controls": {
+    "anchors": 0,
+    "buttons": 0,
+    "details": 0,
+    "forms": 0,
+    "hrefs": 1,
+    "roleButtons": 0
+  },
+  "expectedOrder": [
+    "status-header",
+    "goal-snapshot",
+    "active-lease",
+    "current-gate",
+    "recommended-next-action",
+    "pending-result",
+    "command-boundary",
+    "context-status",
+    "goal-timeline",
+    "ownership"
+  ],
+  "firstViewportSections": [
+    {
+      "bottom": 101.76,
+      "id": "status-header",
+      "y": 16
+    },
+    {
+      "bottom": 307.65,
+      "id": "goal-snapshot",
+      "y": 115.76
+    },
+    {
+      "bottom": 307.65,
+      "id": "active-lease",
+      "y": 115.76
+    },
+    {
+      "bottom": 468.04,
+      "id": "current-gate",
+      "y": 319.65
+    },
+    {
+      "bottom": 672.83,
+      "id": "recommended-next-action",
+      "y": 480.04
+    },
+    {
+      "bottom": 866.77,
+      "id": "pending-result",
+      "y": 684.83
+    },
+    {
+      "bottom": 672.83,
+      "id": "command-boundary",
+      "y": 480.04
+    },
+    {
+      "bottom": 468.04,
+      "id": "context-status",
+      "y": 319.65
+    },
+    {
+      "bottom": 1053.95,
+      "id": "goal-timeline",
+      "y": 684.83
+    },
+    {
+      "bottom": 1053.95,
+      "id": "ownership",
+      "y": 878.77
+    }
+  ],
+  "goalId": {
+    "label": "Goal ID:",
+    "labelRect": {
+      "bottom": 53.09,
+      "height": 15.59,
+      "right": 652.34,
+      "width": 49.98,
+      "x": 602.36,
+      "y": 37.5
+    },
+    "labelTitleBottomDeltaPx": -0.66,
+    "lineCenterDeltaFromHeaderPx": 0,
+    "lineRect": {
+      "bottom": 53.76,
+      "height": 23.76,
+      "right": 1069.63,
+      "width": 467.27,
+      "x": 602.36,
+      "y": 30
+    },
+    "style": {
+      "cursor": "auto",
+      "display": "block",
+      "fontSize": "21.6px",
+      "lineHeight": "23.76px",
+      "overflowX": "visible",
+      "transform": "none",
+      "whiteSpace": "normal",
+      "writingMode": "horizontal-tb"
+    },
+    "text": "v45-backend-entrypoint-decomposition",
+    "titleLineEstimate": 1,
+    "titleOverflowPx": 0,
+    "titleRect": {
+      "bottom": 53.76,
+      "height": 23.76,
+      "right": 1069.63,
+      "width": 407.3,
+      "x": 662.34,
+      "y": 30
+    }
+  },
+  "goalSnapshotRows": [
+    "active task",
+    "goal id",
+    "mutation"
+  ],
+  "hasBoundaryStateRow": true,
+  "hasContractChip": true,
+  "horizontalOverflowPx": 0,
+  "loadedAssets": {
+    "scripts": [
+      "/workbench/assets/index-BsCE7mzH.js"
+    ],
+    "stylesheets": [
+      "/workbench/assets/index-DK3WOan4.css"
+    ]
+  },
+  "maxRightOverViewportPx": 0,
+  "maxRightSelector": "div",
+  "oldHeader": {
+    "workbenchHeader": 0,
+    "workbenchTitle": 0
+  },
+  "orderElements": [
+    {
+      "id": "status-header",
+      "rect": {
+        "bottom": 101.76,
+        "height": 85.76,
+        "right": 1420,
+        "width": 1168,
+        "x": 252,
+        "y": 16
+      },
+      "textStart": "Goal ID:v45-backend-entrypoint-decompositiongenerated2026-06-10T13:24:00+08:00readOnlytruewillMutatefalserolesupervisor-monitorcontractsupervisor-dashboard-state.v46 / 1healthobser"
+    },
+    {
+      "id": "goal-snapshot",
+      "rect": {
+        "bottom": 307.65,
+        "height": 191.89,
+        "right": 858.9,
+        "width": 606.9,
+        "x": 252,
+        "y": 115.76
+      },
+      "textStart": "Goal Snapshotlocal-sample-fallbackactive taskv46 frontend baseline planninggoal idv45-backend-entrypoint-decompositionmutationdisabled by supervisor boundary"
+    },
+    {
+      "id": "active-lease",
+      "rect": {
+        "bottom": 307.65,
+        "height": 191.89,
+        "right": 1419.99,
+        "width": 549.09,
+        "x": 870.9,
+        "y": 115.76
+      },
+      "textStart": "Active Leasehealthylease-v46-ui-prototype-004thread id019eb1-ui-prototype-claude-warm-v4lease healthhealthytelemetrystrong active lease observed"
+    },
+    {
+      "id": "current-gate",
+      "rect": {
+        "bottom": 468.04,
+        "height": 148.39,
+        "right": 858.9,
+        "width": 606.9,
+        "x": 252,
+        "y": 319.65
+      },
+      "textStart": "Current Gatefrontend baselinegatefrontend baselineconditionOpenDesign focused-v2 handoff accepted as visual baselinenext artifactv46 Workbench frontend runbook implementation slice"
+    },
+    {
+      "id": "recommended-next-action",
+      "rect": {
+        "bottom": 672.83,
+        "height": 192.79,
+        "right": 858.9,
+        "width": 606.9,
+        "x": 252,
+        "y": 480.04
+      },
+      "textStart": "confirm-requiredRecommended Next ActionDraft v46 Workbench frontend runbook after OpenDesign exploration."
+    },
+    {
+      "id": "pending-result",
+      "rect": {
+        "bottom": 866.77,
+        "height": 181.94,
+        "right": 858.9,
+        "width": 606.9,
+        "x": 252,
+        "y": 684.83
+      },
+      "textStart": "Pending Resultnone / NULLlabelnone / NULLpendingResult.outputNULLcontract[ EMPTY ]reasonNULL"
+    },
+    {
+      "id": "command-boundary",
+      "rect": {
+        "bottom": 672.83,
+        "height": 192.79,
+        "right": 1419.99,
+        "width": 549.09,
+        "x": 870.9,
+        "y": 480.04
+      },
+      "textStart": "Command BoundarycopyOnlyboundary stateexecution unavailable; copyOnly trueexecutionAvailablefalsecopyOnlytruedaemon-controlprovider-clireal-clirelease-closeoutgit-tag"
+    },
+    {
+      "id": "context-status",
+      "rect": {
+        "bottom": 468.04,
+        "height": 148.39,
+        "right": 1419.99,
+        "width": 549.09,
+        "x": 870.9,
+        "y": 319.65
+      },
+      "textStart": "Context Status62%focused-v2 handoff loadedstatic modelno network readscopyOnly boundary"
+    },
+    {
+      "id": "goal-timeline",
+      "rect": {
+        "bottom": 1053.95,
+        "height": 369.13,
+        "right": 1419.99,
+        "width": 549.09,
+        "x": 870.9,
+        "y": 684.83
+      },
+      "textStart": "Goal Timelineexpanded01OpenDesign artifact receivedFocused v2 package defines the static supervisor workbench baseline and read-only constraints.02Preflight completedRepository com"
+    },
+    {
+      "id": "ownership",
+      "rect": {
+        "bottom": 1053.95,
+        "height": 175.19,
+        "right": 858.9,
+        "width": 606.9,
+        "x": 252,
+        "y": 878.77
+      },
+      "textStart": "Ownershipresponsibility splitdaemonOwns background observation and lease projection outside the browser.controllerOwns implementation sequencing, verification, and recovery decisio"
+    }
+  ],
+  "orderMatchesExpected": false,
+  "pendingOutput": {
+    "ddRect": {
+      "bottom": 786.67,
+      "height": 17.55,
+      "right": 844.9,
+      "width": 424.9,
+      "x": 420,
+      "y": 769.13
+    },
+    "ddText": "NULL",
+    "dtRect": {
+      "bottom": 785.32,
+      "height": 16.2,
+      "right": 406,
+      "width": 140,
+      "x": 266,
+      "y": 769.13
+    },
+    "dtText": "pendingResult.output",
+    "dtWhiteSpace": "nowrap",
+    "gridTemplateColumns": "140px 424.898px",
+    "rowOverflowPx": 0,
+    "rowRect": {
+      "bottom": 791.67,
+      "height": 26.55,
+      "right": 844.9,
+      "width": 578.9,
+      "x": 266,
+      "y": 765.13
+    }
+  },
+  "sidebar": {
+    "items": [
+      {
+        "iconRect": {
+          "bottom": 126.9,
+          "height": 22,
+          "right": 50,
+          "width": 22,
+          "x": 28,
+          "y": 104.9
+        },
+        "itemRect": {
+          "bottom": 135.9,
+          "height": 40,
+          "right": 217,
+          "width": 203,
+          "x": 14,
+          "y": 95.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Overview",
+        "labelRect": {
+          "bottom": 125.9,
+          "height": 20,
+          "right": 204,
+          "width": 140,
+          "x": 64,
+          "y": 105.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 172.9,
+          "height": 22,
+          "right": 50,
+          "width": 22,
+          "x": 28,
+          "y": 150.9
+        },
+        "itemRect": {
+          "bottom": 181.9,
+          "height": 40,
+          "right": 217,
+          "width": 203,
+          "x": 14,
+          "y": 141.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Active Lease",
+        "labelRect": {
+          "bottom": 171.9,
+          "height": 20,
+          "right": 204,
+          "width": 140,
+          "x": 64,
+          "y": 151.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 218.9,
+          "height": 22,
+          "right": 50,
+          "width": 22,
+          "x": 28,
+          "y": 196.9
+        },
+        "itemRect": {
+          "bottom": 227.9,
+          "height": 40,
+          "right": 217,
+          "width": 203,
+          "x": 14,
+          "y": 187.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Current Gate",
+        "labelRect": {
+          "bottom": 217.9,
+          "height": 20,
+          "right": 204,
+          "width": 140,
+          "x": 64,
+          "y": 197.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 264.9,
+          "height": 22,
+          "right": 50,
+          "width": 22,
+          "x": 28,
+          "y": 242.9
+        },
+        "itemRect": {
+          "bottom": 273.9,
+          "height": 40,
+          "right": 217,
+          "width": 203,
+          "x": 14,
+          "y": 233.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Command Boundary",
+        "labelRect": {
+          "bottom": 263.9,
+          "height": 20,
+          "right": 204,
+          "width": 140,
+          "x": 64,
+          "y": 243.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 310.9,
+          "height": 22,
+          "right": 50,
+          "width": 22,
+          "x": 28,
+          "y": 288.9
+        },
+        "itemRect": {
+          "bottom": 319.9,
+          "height": 40,
+          "right": 217,
+          "width": 203,
+          "x": 14,
+          "y": 279.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Context Status",
+        "labelRect": {
+          "bottom": 309.9,
+          "height": 20,
+          "right": 204,
+          "width": 140,
+          "x": 64,
+          "y": 289.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 356.9,
+          "height": 22,
+          "right": 50,
+          "width": 22,
+          "x": 28,
+          "y": 334.9
+        },
+        "itemRect": {
+          "bottom": 365.9,
+          "height": 40,
+          "right": 217,
+          "width": 203,
+          "x": 14,
+          "y": 325.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Timeline",
+        "labelRect": {
+          "bottom": 355.9,
+          "height": 20,
+          "right": 204,
+          "width": 140,
+          "x": 64,
+          "y": 335.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      },
+      {
+        "iconRect": {
+          "bottom": 402.9,
+          "height": 22,
+          "right": 50,
+          "width": 22,
+          "x": 28,
+          "y": 380.9
+        },
+        "itemRect": {
+          "bottom": 411.9,
+          "height": 40,
+          "right": 217,
+          "width": 203,
+          "x": 14,
+          "y": 371.9
+        },
+        "itemStyle": {
+          "cursor": "auto",
+          "display": "grid",
+          "fontSize": "13px",
+          "lineHeight": "13px",
+          "overflowX": "visible",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        },
+        "label": "Ownership",
+        "labelRect": {
+          "bottom": 401.9,
+          "height": 20,
+          "right": 204,
+          "width": 140,
+          "x": 64,
+          "y": 381.9
+        },
+        "labelStyle": {
+          "cursor": "auto",
+          "display": "block",
+          "fontSize": "13px",
+          "lineHeight": "20px",
+          "overflowX": "hidden",
+          "transform": "none",
+          "whiteSpace": "nowrap",
+          "writingMode": "horizontal-tb"
+        }
+      }
+    ],
+    "labels": [
+      "Overview",
+      "Active Lease",
+      "Current Gate",
+      "Command Boundary",
+      "Context Status",
+      "Timeline",
+      "Ownership"
+    ],
+    "listRect": {
+      "bottom": 411.9,
+      "height": 330,
+      "right": 217,
+      "width": 203,
+      "x": 14,
+      "y": 81.9
+    },
+    "rect": {
+      "bottom": 1077.95,
+      "height": 1077.95,
+      "right": 232,
+      "width": 232,
+      "x": 0,
+      "y": 0
+    }
+  },
+  "timelineStaticExpanded": true,
+  "title": "v20 Workbench",
+  "url": "http://127.0.0.1:56977/workbench/supervisor/",
+  "viewport": {
+    "clientHeight": 900,
+    "clientWidth": 1440,
+    "innerHeight": 900,
+    "innerWidth": 1440
+  },
+  "viewportName": "desktop-1440x900",
+  "visibleHeadings": [
+    {
+      "rect": {
+        "bottom": 53.76,
+        "height": 23.76,
+        "right": 1069.63,
+        "width": 407.3,
+        "x": 662.34,
+        "y": 30
+      },
+      "tag": "h1",
+      "text": "v45-backend-entrypoint-decomposition"
+    },
+    {
+      "rect": {
+        "bottom": 147.3,
+        "height": 19.55,
+        "right": 375.16,
+        "width": 109.16,
+        "x": 266,
+        "y": 127.76
+      },
+      "tag": "h2",
+      "text": "Goal Snapshot"
+    },
+    {
+      "rect": {
+        "bottom": 147.3,
+        "height": 19.55,
+        "right": 978.24,
+        "width": 93.34,
+        "x": 884.9,
+        "y": 127.76
+      },
+      "tag": "h2",
+      "text": "Active Lease"
+    },
+    {
+      "rect": {
+        "bottom": 351.2,
+        "height": 19.55,
+        "right": 363.84,
+        "width": 97.84,
+        "x": 266,
+        "y": 331.65
+      },
+      "tag": "h2",
+      "text": "Current Gate"
+    },
+    {
+      "rect": {
+        "bottom": 511.59,
+        "height": 19.55,
+        "right": 473.08,
+        "width": 206.08,
+        "x": 267,
+        "y": 492.04
+      },
+      "tag": "h2",
+      "text": "Recommended Next Action"
+    },
+    {
+      "rect": {
+        "bottom": 351.2,
+        "height": 19.55,
+        "right": 994.63,
+        "width": 109.73,
+        "x": 884.9,
+        "y": 331.65
+      },
+      "tag": "h2",
+      "text": "Context Status"
+    },
+    {
+      "rect": {
+        "bottom": 511.59,
+        "height": 19.55,
+        "right": 1041.16,
+        "width": 156.27,
+        "x": 884.9,
+        "y": 492.04
+      },
+      "tag": "h2",
+      "text": "Command Boundary"
+    },
+    {
+      "rect": {
+        "bottom": 716.38,
+        "height": 19.55,
+        "right": 380.18,
+        "width": 114.18,
+        "x": 266,
+        "y": 696.83
+      },
+      "tag": "h2",
+      "text": "Pending Result"
+    },
+    {
+      "rect": {
+        "bottom": 716.38,
+        "height": 19.55,
+        "right": 990.72,
+        "width": 105.82,
+        "x": 884.9,
+        "y": 696.83
+      },
+      "tag": "h2",
+      "text": "Goal Timeline"
+    },
+    {
+      "rect": {
+        "bottom": 750.83,
+        "height": 16.25,
+        "right": 1405.99,
+        "width": 449.09,
+        "x": 956.9,
+        "y": 734.58
+      },
+      "tag": "h3",
+      "text": "OpenDesign artifact received"
+    },
+    {
+      "rect": {
+        "bottom": 832.17,
+        "height": 16.25,
+        "right": 1405.99,
+        "width": 449.09,
+        "x": 956.9,
+        "y": 815.92
+      },
+      "tag": "h3",
+      "text": "Preflight completed"
+    },
+    {
+      "rect": {
+        "bottom": 913.52,
+        "height": 16.25,
+        "right": 1405.99,
+        "width": 449.09,
+        "x": 956.9,
+        "y": 897.27
+      },
+      "tag": "h3",
+      "text": "Static model attached"
+    },
+    {
+      "rect": {
+        "bottom": 910.31,
+        "height": 19.55,
+        "right": 348.34,
+        "width": 82.34,
+        "x": 266,
+        "y": 890.77
+      },
+      "tag": "h2",
+      "text": "Ownership"
+    }
+  ]
+}
