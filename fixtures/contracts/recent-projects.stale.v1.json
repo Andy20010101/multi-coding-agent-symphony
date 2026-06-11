@@ -1,0 +1,46 @@
+{
+  "contractName": "recent-projects.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-10T00:00:00.000Z",
+  "state": "stale",
+  "source": {
+    "kind": "fixture",
+    "scanScope": "known-projects-only",
+    "sourceContract": "project-registry.v1",
+    "generatedAt": "2026-06-10T00:00:00.000Z",
+    "degradedReason": "registry snapshot is stale"
+  },
+  "readOnly": true,
+  "items": [
+    {
+      "projectId": "multi-coding-agent-symphony",
+      "displayName": "Multi Coding Agent Symphony",
+      "repoPath": {
+        "displayValue": "/workspace/multi-coding-agent-symphony"
+      },
+      "defaultBranch": "main",
+      "remote": {
+        "displayValue": "git@github.com:Andy20010101/multi-coding-agent-symphony.git"
+      },
+      "pinned": false,
+      "lastOpenedAt": "2026-06-10T00:00:00.000Z",
+      "lastGoalId": "v47-mac-app-shell-activation",
+      "lastRunId": "run-v47",
+      "healthSummary": {
+        "state": "ok",
+        "text": "ok"
+      },
+      "degradedReason": null
+    }
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "diskScanAvailable": false,
+    "scanScope": "known-projects-only",
+    "arbitraryPathReadAvailable": false,
+    "commandExecutionAvailable": false,
+    "modelInvocationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false
+  }
+}

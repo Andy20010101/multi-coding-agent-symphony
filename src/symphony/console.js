@@ -114,6 +114,7 @@ import {
   buildInboxCaptureContract
 } from './inbox-capture-contract.js';
 import {
+  buildRecentProjects,
   buildProjectRegistry,
   resolveCurrentProject
 } from './project-registry.js';
@@ -993,6 +994,25 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, await buildProjectRegistry({
+          cwd,
+          stateDir
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/projects/recent') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-recent-projects-request',
+            message: 'Recent projects does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildRecentProjects({
           cwd,
           stateDir
         }));

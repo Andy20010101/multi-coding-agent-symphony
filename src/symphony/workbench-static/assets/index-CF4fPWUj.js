@@ -9932,6 +9932,7 @@ var EVIDENCE_BUNDLE_CONTRACT_NAME = "evidence-bundle.v1";
 var APP_CORE_BACKUP_EXPORT_CONTRACT_NAME = "app-core-backup-export.v1";
 var APP_CORE_RELEASE_MANAGER_CONTRACT_NAME = "app-core-release-manager.v1";
 var PROJECT_REGISTRY_CONTRACT_NAME = "project-registry.v1";
+var RECENT_PROJECTS_CONTRACT_NAME = "recent-projects.v1";
 var ERROR_ENVELOPE_CONTRACT_NAME = "error-envelope.v1";
 var MATRIX_MISSING_TEXT = "missing";
 var MATRIX_UNKNOWN_TEXT = "unknown";
@@ -10407,6 +10408,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/projects",
 		method: "GET",
 		contractName: PROJECT_REGISTRY_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "recentProjects",
+		label: "Recent Projects",
+		path: "/api/projects/recent",
+		method: "GET",
+		contractName: RECENT_PROJECTS_CONTRACT_NAME
 	}),
 	Object.freeze({
 		id: "runtimeSnapshot",
@@ -10906,6 +10914,7 @@ var ARTIFACT_PREVIEW_FIELD_GROUPS = Object.freeze([
 function projectWorkbenchContracts(results) {
 	const summaryData = dataFrom(results.summary);
 	const projectRegistryData = dataFrom(results.projectRegistry);
+	const recentProjectsData = dataFrom(results.recentProjects);
 	const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
 	const appDataInventoryData = dataFrom(results.appDataInventory);
 	const inboxCaptureData = dataFrom(results.inboxCapture);
@@ -11057,6 +11066,10 @@ function projectWorkbenchContracts(results) {
 		result: results.projectRegistry,
 		registry: projectRegistryData
 	});
+	const projectedRecentProjects = projectRecentProjects({
+		result: results.recentProjects,
+		recentProjects: recentProjectsData
+	});
 	const projectedArtifactRefs = projectArtifactRefs(latestRun?.artifactRefs, latestRun?.artifactStatus, safeArtifactPreviewResults);
 	const projectedArtifactIndex = projectArtifactIndex({
 		result: results.artifactIndex,
@@ -11136,6 +11149,7 @@ function projectWorkbenchContracts(results) {
 		}),
 		desktopShell: projectDesktopShell({
 			projectRegistry: projectedProjectRegistry,
+			recentProjects: projectedRecentProjects,
 			runtimeSnapshot: projectedRuntimeSnapshot,
 			activeGoal: activeGoalControl,
 			jobConsole: projectedJobConsole,
@@ -11152,6 +11166,7 @@ function projectWorkbenchContracts(results) {
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
+		recentProjects: projectedRecentProjects,
 		runtimeSnapshot: projectedRuntimeSnapshot,
 		appDataInventory: projectAppDataInventory({
 			result: results.appDataInventory,
@@ -11377,6 +11392,57 @@ function projectProjectRegistry({ result, registry }) {
 		note: "Project list comes from project-registry.v1. The route reads only cwd or an explicit repo path and does not scan the disk, run commands, write git state, or infer active goal status from frontend state."
 	};
 }
+function projectRecentProjects({ result, recentProjects }) {
+	const items = Array.isArray(recentProjects?.items) ? recentProjects.items : [];
+	const routeMissingState = result?.ok === true ? "empty" : "missing";
+	return {
+		state: result?.ok === true ? recentProjects?.state ?? (items.length === 0 ? "empty" : "available") : routeMissingState,
+		contractName: valueState(recentProjects?.contractName),
+		contractVersion: valueState(recentProjects?.contractVersion),
+		generatedAt: valueState(recentProjects?.generatedAt),
+		readOnly: valueState(recentProjects?.readOnly),
+		source: {
+			kind: valueState(recentProjects?.source?.kind),
+			scanScope: valueState(recentProjects?.source?.scanScope),
+			sourceContract: valueState(recentProjects?.source?.sourceContract),
+			degradedReason: valueState(recentProjects?.source?.degradedReason)
+		},
+		items: {
+			state: items.length === 0 ? "empty" : "available",
+			count: valueState(items.length),
+			items: items.map(projectRecentProjectItem)
+		},
+		boundaries: {
+			readOnly: valueState(recentProjects?.boundaries?.readOnly),
+			diskScanAvailable: valueState(recentProjects?.boundaries?.diskScanAvailable),
+			scanScope: valueState(recentProjects?.boundaries?.scanScope),
+			arbitraryPathReadAvailable: valueState(recentProjects?.boundaries?.arbitraryPathReadAvailable),
+			commandExecutionAvailable: valueState(recentProjects?.boundaries?.commandExecutionAvailable),
+			modelInvocationAvailable: valueState(recentProjects?.boundaries?.modelInvocationAvailable),
+			gitWriteAvailable: valueState(recentProjects?.boundaries?.gitWriteAvailable),
+			releaseWriteAvailable: valueState(recentProjects?.boundaries?.releaseWriteAvailable)
+		},
+		note: "Recent projects come from recent-projects.v1, which wraps backend-known project-registry.v1 state. Source policy is known-projects-only; Workbench does not scan disk, accept arbitrary paths, run commands, invoke models, write git state, or write release state."
+	};
+}
+function projectRecentProjectItem(item) {
+	return {
+		projectId: valueState(item?.projectId),
+		displayName: valueState(item?.displayName),
+		repoPath: valueState(item?.repoPath?.displayValue),
+		defaultBranch: valueState(item?.defaultBranch),
+		remote: valueState(item?.remote?.displayValue),
+		pinned: valueState(item?.pinned),
+		lastOpenedAt: valueState(item?.lastOpenedAt),
+		lastGoalId: valueState(item?.lastGoalId),
+		lastRunId: valueState(item?.lastRunId),
+		healthSummary: {
+			state: valueState(item?.healthSummary?.state),
+			text: valueState(item?.healthSummary?.text)
+		},
+		degradedReason: valueState(item?.degradedReason)
+	};
+}
 function projectRegistryProject(project, currentProjectId) {
 	const isCurrentProject = project?.project_id === currentProjectId;
 	return {
@@ -11563,8 +11629,9 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
+	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const runtimeRoute = findProjectedRoute(routeStates, "runtimeSnapshot");
 	const goalRoute = findProjectedRoute(routeStates, "goalRunbook");
 	const nextRoute = findProjectedRoute(routeStates, "goalNextAction");
@@ -11744,6 +11811,34 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 				items: []
 			}
 		},
+		recentProjects: {
+			state: recentProjects?.state ?? "missing",
+			contractName: recentProjects?.contractName,
+			route: valueState(recentProjectsRoute?.path),
+			routeState: valueState(routeStateFromRoute(recentProjectsRoute)),
+			sourcePolicy: valueState("recent-projects.v1 wraps project-registry.v1; known-projects-only"),
+			source: recentProjects?.source ?? {
+				kind: valueState(void 0),
+				scanScope: valueState(void 0),
+				sourceContract: valueState(void 0),
+				degradedReason: valueState(void 0)
+			},
+			items: recentProjects?.items ?? {
+				state: "missing",
+				count: valueState(void 0),
+				items: []
+			},
+			boundaries: recentProjects?.boundaries ?? {
+				readOnly: valueState(void 0),
+				diskScanAvailable: valueState(void 0),
+				scanScope: valueState(void 0),
+				arbitraryPathReadAvailable: valueState(void 0),
+				commandExecutionAvailable: valueState(void 0),
+				modelInvocationAvailable: valueState(void 0),
+				gitWriteAvailable: valueState(void 0),
+				releaseWriteAvailable: valueState(void 0)
+			}
+		},
 		activeGoalStatus,
 		nextActionDetail,
 		supervisorSummary,
@@ -11858,6 +11953,11 @@ function projectDesktopRouteProvenance({ routeStates, runtimeSnapshot }) {
 			"projectRegistry",
 			"current project",
 			"project-registry.v1"
+		],
+		[
+			"recentProjects",
+			"recent projects",
+			RECENT_PROJECTS_CONTRACT_NAME
 		],
 		[
 			"goalRunbook",

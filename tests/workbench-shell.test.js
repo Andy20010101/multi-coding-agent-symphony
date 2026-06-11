@@ -1361,6 +1361,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/jobs/create',
       '/api/jobs/timeline',
       '/api/projects',
+      '/api/projects/recent',
       '/api/providers/capabilities',
       '/api/providers/health',
       '/api/providers/lane-preview',
