@@ -370,9 +370,16 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, /sidecar missing/u);
       assert.match(desktopHtml, /project missing/u);
       assert.match(desktopHtml, /active goal missing/u);
-      assert.match(desktopHtml, /supervisor unavailable/u);
+      assert.match(desktopHtml, /supervisor model unavailable/u);
       assert.match(desktopHtml, /stale snapshot/u);
       assert.match(desktopHtml, /route failed/u);
+      assert.match(desktopHtml, /backend unavailable[\s\S]*true \/ failed/u);
+      assert.match(desktopHtml, /sidecar missing[\s\S]*true \/ missing/u);
+      assert.match(desktopHtml, /project missing[\s\S]*true \/ missing/u);
+      assert.match(desktopHtml, /active goal missing[\s\S]*true \/ missing/u);
+      assert.match(desktopHtml, /supervisor model unavailable[\s\S]*true \/ failed/u);
+      assert.match(desktopHtml, /route failed[\s\S]*true \/ failed/u);
+      assert.match(desktopHtml, /runtime snapshot route failed/u);
       assert.match(desktopHtml, /Backend/u);
       assert.match(desktopHtml, /project registry/u);
       assert.match(desktopHtml, /Projects/u);
@@ -429,6 +436,18 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, /release declared/u);
       assert.doesNotMatch(desktopHtml, /class="workbench-nav"/u);
       assert.doesNotMatch(desktopHtml, /scan \/ do|release ready/u);
+
+      const staleSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.stale.v1.json', 'utf8'));
+      const runtimeRoute = READONLY_API_ROUTES.find((route) => route.id === 'runtimeSnapshot');
+      const staleViewState = createWorkbenchRenderViewState();
+      staleViewState.model = projectWorkbenchContracts({
+        runtimeSnapshot: readonlyRouteResult(runtimeRoute, staleSnapshot)
+      });
+      staleViewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+      const staleHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', staleViewState);
+      assert.match(staleHtml, /stale snapshot[\s\S]*true \/ stale/u);
+      assert.match(staleHtml, /runtime freshness stale/u);
     } finally {
       await server.close();
       restoreSsrLocation();

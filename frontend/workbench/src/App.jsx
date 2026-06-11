@@ -681,7 +681,7 @@ function DesktopAppStateStrip({ appStates }) {
     ['sidecar missing', appStates?.sidecarMissing],
     ['project missing', appStates?.projectMissing],
     ['active goal missing', appStates?.activeGoalMissing],
-    ['supervisor unavailable', appStates?.supervisorModelUnavailable],
+    ['supervisor model unavailable', appStates?.supervisorModelUnavailable],
     ['stale snapshot', appStates?.staleSnapshot],
     ['route failed', appStates?.routeFailed]
   ];
@@ -692,7 +692,10 @@ function DesktopAppStateStrip({ appStates }) {
         {rows.map(([label, state]) => (
           <div key={label}>
             <dt>{label}</dt>
-            <dd>{formatState(state)}</dd>
+            <dd>
+              <span>{formatState(state)}</span>
+              {state?.reason?.state === 'available' ? <small>{formatState(state.reason)}</small> : null}
+            </dd>
           </div>
         ))}
       </dl>

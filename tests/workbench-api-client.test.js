@@ -928,6 +928,173 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(missingSidecarHostModel.desktopShell.sidecarHealth.lifecycleContract.state, 'missing');
   });
 
+  it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {
+    const healthySnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.healthy.v1.json', 'utf8'));
+    const missingProjectSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.missing-project.v1.json', 'utf8'));
+    const missingGoalSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.missing-goal.v1.json', 'utf8'));
+    const staleSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.stale.v1.json', 'utf8'));
+    const goalRunbook = {
+      contractName: 'goal-runbook.v1',
+      contractVersion: 1,
+      goalId: 'v47-mac-app-shell-activation',
+      title: 'v47 Mac App Shell Activation',
+      tasks: [{
+        taskId: 'task-2',
+        title: 'Startup and unavailable-state projection',
+        status: 'planned',
+        role: 'worker',
+        phase: 'implement'
+      }]
+    };
+    const goalNextAction = {
+      contractName: 'goal-next-action.v1',
+      contractVersion: 1,
+      goalId: 'v47-mac-app-shell-activation',
+      status: 'action-required',
+      reason: 'Project startup state needs projection.',
+      next: {
+        taskId: 'task-2',
+        role: 'worker',
+        phase: 'implement',
+        blocked: false
+      }
+    };
+    const baseResults = {
+      projectRegistry: createWorkbenchResult('projectRegistry', createV37ProjectRegistryPayload()),
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', healthySnapshot),
+      goalRunbook: createWorkbenchResult('goalRunbook', goalRunbook),
+      goalNextAction: createWorkbenchResult('goalNextAction', goalNextAction),
+      goalSupervisor: createWorkbenchResult('goalSupervisor', createGoalSupervisorAppReadModelPayload()),
+      jobModel: createWorkbenchResult('jobModel', createV37JobModelPayload()),
+      artifactIndex: createWorkbenchResult('artifactIndex', createV37ArtifactIndexPayload()),
+      evidenceTimeline: createWorkbenchResult('evidenceTimeline', createV37EvidenceTimelinePayload())
+    };
+    const projectModel = (overrides = {}) => projectWorkbenchContracts({
+      ...baseResults,
+      ...overrides
+    });
+    const assertStartupFlag = (flag, expected) => {
+      assert.equal(flag.value, expected.value, expected.label);
+      assert.equal(flag.status.value, expected.status, expected.label);
+      assert.equal(flag.routeState.value, expected.routeState, expected.label);
+      assert.equal(flag.text, `${String(expected.value)} / ${expected.status}`, expected.label);
+      assert.equal(flag.reason.state, 'available', expected.label);
+      assert.equal(flag.source.state, 'available', expected.label);
+    };
+
+    const readyModel = projectModel();
+    assertStartupFlag(readyModel.desktopShell.appStates.backendUnavailable, {
+      label: 'backend available',
+      value: false,
+      status: 'ready',
+      routeState: 'ready'
+    });
+    assertStartupFlag(readyModel.desktopShell.appStates.routeFailed, {
+      label: 'routes ready',
+      value: false,
+      status: 'ready',
+      routeState: 'available'
+    });
+
+    const backendUnavailableModel = projectModel({
+      runtimeSnapshot: createFailedWorkbenchResult('runtimeSnapshot', {
+        httpStatus: 503,
+        message: 'runtime snapshot backend unavailable'
+      })
+    });
+    assertStartupFlag(backendUnavailableModel.desktopShell.appStates.backendUnavailable, {
+      label: 'backend unavailable',
+      value: true,
+      status: 'failed',
+      routeState: 'failed'
+    });
+    assert.equal(backendUnavailableModel.desktopShell.backendHealth.routeSource.text, 'failed route');
+
+    const missingSidecarSnapshot = structuredClone(healthySnapshot);
+    delete missingSidecarSnapshot.runtime_health.sidecarHost;
+    const sidecarMissingModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', missingSidecarSnapshot)
+    });
+    assertStartupFlag(sidecarMissingModel.desktopShell.appStates.sidecarMissing, {
+      label: 'sidecar missing',
+      value: true,
+      status: 'missing',
+      routeState: 'ready'
+    });
+
+    const projectMissingModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', missingProjectSnapshot),
+      projectRegistry: createFailedWorkbenchResult('projectRegistry', {
+        httpStatus: 404,
+        message: 'project registry route missing'
+      })
+    });
+    assertStartupFlag(projectMissingModel.desktopShell.appStates.projectMissing, {
+      label: 'project missing',
+      value: true,
+      status: 'missing',
+      routeState: 'failed'
+    });
+
+    const activeGoalMissingModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', missingGoalSnapshot),
+      goalRunbook: createFailedWorkbenchResult('goalRunbook', {
+        httpStatus: 404,
+        message: 'active goal runbook missing'
+      }),
+      goalNextAction: createFailedWorkbenchResult('goalNextAction', {
+        httpStatus: 404,
+        message: 'active goal next action missing'
+      })
+    });
+    assertStartupFlag(activeGoalMissingModel.desktopShell.appStates.activeGoalMissing, {
+      label: 'active goal missing',
+      value: true,
+      status: 'missing',
+      routeState: 'failed'
+    });
+
+    const supervisorUnavailableModel = projectModel({
+      goalSupervisor: createWorkbenchResult('goalSupervisor', {
+        contractName: 'unexpected-supervisor-model.v1',
+        contractVersion: 1
+      })
+    });
+    assertStartupFlag(supervisorUnavailableModel.desktopShell.appStates.supervisorModelUnavailable, {
+      label: 'supervisor model unavailable',
+      value: true,
+      status: 'unavailable',
+      routeState: 'ready'
+    });
+    assert.equal(supervisorUnavailableModel.desktopShell.appStates.routeFailed.value, false);
+
+    const staleSnapshotModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', staleSnapshot)
+    });
+    assertStartupFlag(staleSnapshotModel.desktopShell.appStates.staleSnapshot, {
+      label: 'stale snapshot',
+      value: true,
+      status: 'stale',
+      routeState: 'ready'
+    });
+    assert.equal(staleSnapshotModel.desktopShell.backendHealth.routeSource.text, 'stale snapshot');
+
+    const routeFailedModel = projectModel({
+      goalNextAction: createFailedWorkbenchResult('goalNextAction', {
+        httpStatus: 500,
+        message: 'goal next route failed'
+      })
+    });
+    assertStartupFlag(routeFailedModel.desktopShell.appStates.routeFailed, {
+      label: 'route failed',
+      value: true,
+      status: 'failed',
+      routeState: 'failed'
+    });
+    assert.match(routeFailedModel.desktopShell.appStates.routeFailed.reason.text, /next action/u);
+    assert.equal(routeFailedModel.desktopShell.routeProvenance.state.text, 'failed');
+  });
+
   it('uses GET for every client request', async () => {
     const calls = [];
     const fetchImpl = async (path, init) => {
@@ -5017,6 +5184,24 @@ function createWorkbenchResult(routeId, data) {
     routeDescriptor: route,
     httpStatus: 200,
     data
+  };
+}
+
+function createFailedWorkbenchResult(routeId, {
+  httpStatus = 503,
+  message = 'stub route failed'
+} = {}) {
+  const route = READONLY_API_ROUTES.find((candidate) => candidate.id === routeId);
+
+  assert.notEqual(route, undefined);
+
+  return {
+    ok: false,
+    route: route.path,
+    method: route.method,
+    routeDescriptor: route,
+    httpStatus,
+    message
   };
 }
 
