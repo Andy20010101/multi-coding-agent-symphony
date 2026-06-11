@@ -30,7 +30,7 @@ The native host boundary remains small:
 | PR-1 App Home surface | #43 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/43` | `codex/v47-app-home-surface` | `d6bc8d77a533c78806909d2ac63d8b4cd4ab5e0e` | 2026-06-11T04:14:54Z | Workbench App Home source, projection contracts, CSS, generated Workbench assets, focused tests |
 | PR-2 startup and unavailable-state projection | #44 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/44` | `codex/v47-startup-unavailable-state-projection` | `e516038e1ef95a3cda9a292c301acf519b5586e6` | 2026-06-11T06:34:32Z | Workbench projection/rendering, generated Workbench asset refresh, focused tests |
 | PR-3 desktop host boundary and smoke hardening | #45 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/45` | `codex/v47-desktop-host-boundary-hardening` | `a0194cc86bfab30820b83115870c31fde40b6361` | 2026-06-11T07:51:30Z | `scripts/desktop-shell-smoke.js`, `desktop/shell/README.md` |
-| PR-4 acceptance and closeout snapshot | #46 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/46` | `codex/v47-acceptance-closeout-snapshot` | Pending | Pending | `docs/qa/v47-mac-app-shell-activation-acceptance.md`, this snapshot |
+| PR-4 acceptance and closeout snapshot | #46 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/46` | `codex/v47-acceptance-closeout-snapshot` | `1ffdaff93e30d05321995bcc4b55a7b826ce60b2` | 2026-06-11T08:14:49Z | `docs/qa/v47-mac-app-shell-activation-acceptance.md`, this snapshot |
 
 Reconcile before PR-4 edits:
 
