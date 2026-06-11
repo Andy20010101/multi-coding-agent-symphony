@@ -82,11 +82,17 @@ pnpm desktop:shell:smoke
 
 This validates the host manifest, Tauri file layout, controlled command names, fixed `pnpm symphony console` launch shape, loopback host guard, port range guard, and no Electron dependency. It is not a native app build.
 
-v37 task-5 extends the same smoke check to assert:
+v47 PR-3 extends the same smoke check to assert:
 
 - the Rust command surface is limited to `attach_sidecar` and `launch_sidecar`
 - the invoke handler exposes only those two commands
 - the launcher command id remains `symphony.console.sidecar.launch`
+- the native launch shape remains `pnpm symphony console --host <loopback> --port <allowed-port>`
+- the host allowlist remains `127.0.0.1` and `localhost`
+- the port allowlist remains `1024` through `65535`
+- the Tauri capability set remains a single `default.json` capability for the `main` window with only `core:default`
+- the Tauri config does not add plugins, updater settings, publish URLs, signing/notarization fields, or extra windows
+- Cargo runtime dependencies remain limited to `serde` and `tauri`, with `tauri-build` as the only build dependency
 - renderer shell execution, arbitrary command access, and arbitrary path access remain unavailable
 - `bundle.active` remains `false`
 - `Cargo.toml` keeps `publish = false`
@@ -100,4 +106,4 @@ pnpm desktop:shell:smoke
 cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/tauri-target
 ```
 
-Distribution packaging remains off. This workspace does not enable auto-update, publish, signing, notarization, tag, push, release gates, release readiness, a generic shell runner, or arbitrary local file access. Release/distribution work belongs to a later release-manager or native distribution task after independent review and main verification.
+Distribution packaging remains off. The smoke check and `cargo check` validate source-level host boundaries and compileability only; they do not produce or validate a signed app, notarized app, auto-update channel, publish endpoint, or release automation. This workspace does not enable auto-update, publish, signing, notarization, tag, push, release gates, release readiness, a generic shell runner, or arbitrary local file access. Release/distribution work belongs to a later release-manager or native distribution task after independent review and main verification.
