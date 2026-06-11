@@ -22931,7 +22931,7 @@ function DesktopNextActionCard({ nextActionDetail }) {
 }
 function DesktopSupervisorSummaryCard({ supervisorSummary }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
-		className: "desktop-card desktop-span-2",
+		className: "desktop-card",
 		"aria-labelledby": "desktop-supervisor-summary-title",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
 			className: "desktop-card-header",

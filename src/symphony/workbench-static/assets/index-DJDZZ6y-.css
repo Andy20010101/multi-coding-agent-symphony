@@ -977,59 +977,161 @@ h4 {
 }
 
 .desktop-shell-route {
-  background:
-    radial-gradient(circle at 22px 18px, rgba(111, 90, 63, 0.035) 0 1px, transparent 1px 100%),
-    linear-gradient(180deg, #f4ecdc 0%, #efe3cc 42%, #f7f2e9 100%);
-  background-size: 32px 32px, auto;
-  padding-bottom: 18px;
+  --dsk-bg: #f8f3eb;
+  --dsk-surface: #fffaf2;
+  --dsk-surface-warm: #efe4d7;
+  --dsk-fg: #141413;
+  --dsk-fg-2: #403934;
+  --dsk-muted: #6d6259;
+  --dsk-meta: #8f7d6e;
+  --dsk-border: #eadfce;
+  --dsk-border-soft: #ded0be;
+  --dsk-accent: #c76645;
+  --dsk-success: #2f7d65;
+  --dsk-warn: #d99b32;
+  --dsk-line: color-mix(in oklab, var(--dsk-border-soft), var(--dsk-fg) 18%);
+  --dsk-line-soft: color-mix(in oklab, var(--dsk-border-soft), var(--dsk-fg) 14%);
+  --dsk-line-faint: color-mix(in oklab, var(--dsk-border-soft), transparent 36%);
+  --dsk-panel: color-mix(in oklab, var(--dsk-surface), var(--dsk-surface-warm) 58%);
+  --dsk-chip: color-mix(in oklab, var(--dsk-surface), var(--dsk-surface-warm) 62%);
+  --dsk-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --dsk-display: Georgia, "Times New Roman", serif;
+  --dsk-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  padding-bottom: 22px;
+  background: var(--dsk-bg);
+  color: var(--dsk-fg);
+  font-family: var(--dsk-ui);
+  -webkit-font-smoothing: antialiased;
 }
 
 .desktop-shell-route .workbench-header {
+  display: grid;
   width: min(1280px, calc(100% - 40px));
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 390px);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, auto);
+  gap: 8px 18px;
   align-items: center;
-  padding-top: 12px;
-  padding-bottom: 6px;
+  margin: 14px auto 0;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
+  padding: 12px 14px;
+  background: color-mix(in oklab, var(--dsk-surface), var(--dsk-surface-warm) 42%);
 }
 
 .desktop-shell-route .eyebrow {
-  margin-bottom: 3px;
-  font-size: 0.68rem;
+  margin: 0 0 4px;
+  color: color-mix(in oklab, var(--dsk-muted), var(--dsk-accent) 26%);
+  font-family: var(--dsk-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .desktop-shell-route h1 {
-  font-size: 1.35rem;
-  line-height: 1.05;
+  margin: 0;
+  color: var(--dsk-fg);
+  font-size: 20px;
+  font-weight: 660;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 .desktop-shell-route .header-summary {
   display: -webkit-box;
-  max-width: 720px;
+  max-width: 760px;
   margin: 5px 0 0;
   overflow: hidden;
-  font-size: 0.82rem;
-  line-height: 1.25;
+  color: var(--dsk-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
 }
 
 .desktop-shell-route .status-strip {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
+  justify-content: flex-end;
 }
 
 .desktop-shell-route .status-strip span {
-  min-height: 26px;
-  padding: 4px 8px;
-  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
+  padding: 2px 7px;
+  background: var(--dsk-chip);
+  color: var(--dsk-muted);
+  font-family: var(--dsk-mono);
+  font-size: 11px;
+  font-weight: 520;
+  overflow-wrap: anywhere;
+}
+
+.desktop-shell-route .shell-state {
+  margin-top: 12px;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
+  padding: 14px 16px;
+  background: var(--dsk-panel);
+}
+
+.desktop-shell-route .shell-state h2 {
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.desktop-shell-route .shell-state p {
+  color: var(--dsk-muted);
+  font-size: 13px;
+}
+
+.desktop-shell-route .section-kicker {
+  margin: 0 0 4px;
+  color: color-mix(in oklab, var(--dsk-meta), var(--dsk-accent) 22%);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.desktop-shell-route .empty-copy {
+  border: 1px dashed color-mix(in oklab, var(--dsk-border-soft), var(--dsk-fg) 16%);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: color-mix(in oklab, var(--dsk-surface-warm), var(--dsk-bg) 52%);
+  color: var(--dsk-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.desktop-shell-route .panel-note {
+  margin-top: 10px;
+  border: 1px solid var(--dsk-line-faint);
+  border-radius: 4px;
+  padding: 7px 9px;
+  background: color-mix(in oklab, var(--dsk-surface-warm), var(--dsk-bg) 48%);
+  color: var(--dsk-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.desktop-shell-route .missing-value {
+  color: color-mix(in oklab, var(--dsk-warn), var(--dsk-fg) 42%);
 }
 
 .desktop-shell-workspace {
   display: grid;
   width: min(1280px, calc(100% - 40px));
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  grid-template-columns: minmax(190px, 232px) minmax(0, 1fr);
   gap: 12px;
-  margin: 8px auto 0;
+  margin: 12px auto 0;
 }
 
 .desktop-sidebar,
@@ -1038,10 +1140,11 @@ h4 {
 .desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
-  border: 1px solid #c9b996;
-  border-radius: 8px;
-  background: rgba(255, 252, 244, 0.94);
-  box-shadow: 0 12px 28px rgba(69, 51, 33, 0.08);
+  min-width: 0;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
+  background: var(--dsk-panel);
+  box-shadow: none;
 }
 
 .desktop-sidebar {
@@ -1049,108 +1152,147 @@ h4 {
   align-content: start;
   gap: 12px;
   min-height: 0;
-  padding: 12px;
+  padding: 14px 12px;
+  background: color-mix(in oklab, var(--dsk-surface-warm), var(--dsk-bg) 34%);
+}
+
+.desktop-brand-lockup {
+  padding: 2px 4px 12px;
+  border-bottom: 1px solid var(--dsk-line-soft);
+}
+
+.desktop-brand-lockup .section-kicker {
+  margin-bottom: 5px;
 }
 
 .desktop-brand-lockup h2 {
-  font-size: 1rem;
+  margin: 0;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .desktop-sidebar nav {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 
 .desktop-sidebar a {
-  min-height: 34px;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
   border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 7px 9px;
-  color: #3a3132;
-  font-size: 0.84rem;
-  font-weight: 800;
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--dsk-fg-2);
+  font-size: 13px;
+  font-weight: 520;
+  line-height: 1;
   text-decoration: none;
 }
 
 .desktop-sidebar a[aria-current="page"],
 .desktop-sidebar a:hover,
 .desktop-sidebar a:focus-visible {
-  border-color: #7f5977;
-  background: #f3edf2;
-  color: #50324f;
+  border-color: color-mix(in oklab, var(--dsk-accent), var(--dsk-border-soft) 54%);
+  background: color-mix(in oklab, var(--dsk-accent), var(--dsk-surface-warm) 87%);
+  color: var(--dsk-fg);
 }
 
 .desktop-sidebar-status {
   display: grid;
-  gap: 4px;
-  border-top: 1px solid #d7c9ab;
-  padding-top: 10px;
-  color: #5f533f;
-  font-size: 0.8rem;
+  gap: 3px;
+  border-top: 1px solid var(--dsk-line-soft);
+  padding: 10px 4px 0;
+}
+
+.desktop-sidebar-status span {
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .desktop-sidebar-status strong {
-  color: #51683d;
-  font-size: 0.95rem;
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-mono);
+  font-size: 12.5px;
+  font-weight: 640;
+  overflow-wrap: anywhere;
 }
 
 .desktop-main-stage {
+  display: grid;
+  gap: 10px;
+  align-content: start;
   min-width: 0;
 }
 
 .desktop-topbar {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  min-height: 48px;
-  align-items: center;
-  padding: 8px 10px;
+  gap: 10px;
+  align-items: start;
+  padding: 9px 12px;
 }
 
 .desktop-topbar div {
+  display: grid;
+  gap: 3px;
   min-width: 0;
 }
 
 .desktop-topbar span {
   display: block;
-  color: #7c6e55;
-  font-size: 0.72rem;
-  font-weight: 800;
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .desktop-topbar strong {
   display: block;
-  color: #251f22;
-  font-size: 0.9rem;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-mono);
+  font-size: 12.5px;
+  font-weight: 640;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
 .desktop-app-home-panel {
   display: grid;
-  grid-template-columns: minmax(260px, 0.58fr) minmax(0, 0.42fr);
-  gap: 12px;
+  grid-template-columns: minmax(240px, 0.46fr) minmax(0, 0.54fr);
+  gap: 8px 16px;
   align-items: start;
-  margin-top: 8px;
-  padding: 10px;
+  padding: 12px 14px;
 }
 
 .desktop-app-home-panel h2 {
   margin: 0;
-  color: #241e23;
-  font-size: 1.15rem;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .desktop-app-home-panel p {
-  margin: 5px 0 0;
-  color: #56493a;
-  font-size: 0.82rem;
-  line-height: 1.35;
+  margin: 6px 0 0;
+  color: var(--dsk-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .desktop-app-state-strip {
-  margin-top: 8px;
-  padding: 8px 10px;
+  padding: 9px 12px;
 }
 
 .desktop-app-state-list {
@@ -1162,38 +1304,47 @@ h4 {
 
 .desktop-app-state-list div {
   min-width: 0;
-  border: 1px solid rgba(128, 96, 54, 0.22);
-  border-radius: 8px;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
   padding: 5px 7px;
-  background: rgba(250, 245, 236, 0.78);
+  background: var(--dsk-chip);
 }
 
 .desktop-app-state-list dt {
-  color: #7c6e55;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 0.6rem;
-  font-weight: 800;
   overflow: hidden;
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .desktop-app-state-list dd {
-  margin: 2px 0 0;
-  color: #241e23;
-  font-size: 0.74rem;
-  font-weight: 800;
+  margin: 3px 0 0;
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-mono);
+  font-size: 11px;
+  font-weight: 560;
   overflow-wrap: anywhere;
+}
+
+.desktop-app-state-list dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--dsk-muted);
+  font-size: 9.5px;
+  font-weight: 500;
 }
 
 .desktop-development-strip {
   display: grid;
-  grid-template-columns: minmax(130px, 0.16fr) minmax(0, 0.84fr);
-  gap: 9px;
+  grid-template-columns: minmax(118px, 0.16fr) minmax(0, 0.84fr);
+  gap: 12px;
   align-items: center;
-  margin-top: 8px;
-  padding: 8px 10px;
+  padding: 9px 12px;
 }
 
 .desktop-development-strip-heading {
@@ -1202,11 +1353,15 @@ h4 {
 
 .desktop-development-strip .section-kicker {
   margin-bottom: 3px;
-  font-size: 0.68rem;
 }
 
 .desktop-development-strip h2 {
-  font-size: 0.95rem;
+  margin: 0;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .desktop-development-status-list {
@@ -1218,18 +1373,19 @@ h4 {
 
 .desktop-development-status-list div {
   min-width: 0;
-  border: 1px solid rgba(128, 96, 54, 0.22);
-  border-radius: 8px;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
   padding: 5px 7px;
-  background: rgba(247, 239, 224, 0.62);
+  background: var(--dsk-chip);
 }
 
 .desktop-development-status-list dt {
-  color: #7c6e55;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 0.62rem;
-  font-weight: 800;
   overflow: hidden;
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1237,11 +1393,12 @@ h4 {
 
 .desktop-development-status-list dd {
   min-width: 0;
-  margin: 2px 0 0;
-  color: #241e23;
-  font-size: 0.76rem;
-  font-weight: 800;
+  margin: 3px 0 0;
   overflow: hidden;
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-mono);
+  font-size: 11px;
+  font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1252,18 +1409,17 @@ h4 {
 }
 
 .desktop-first-row {
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  margin-top: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .desktop-lower-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 10px;
+  grid-auto-flow: dense;
 }
 
 .desktop-card {
   min-width: 0;
-  padding: 10px;
+  padding: 11px 13px;
 }
 
 .desktop-span-2 {
@@ -1272,10 +1428,13 @@ h4 {
 
 .desktop-card-header {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 7px;
+  margin-bottom: 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--dsk-line-soft);
 }
 
 .desktop-card-header > div {
@@ -1283,7 +1442,12 @@ h4 {
 }
 
 .desktop-card h2 {
-  font-size: 0.98rem;
+  margin: 0;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-size: 15.5px;
+  font-weight: 500;
+  line-height: 1.15;
 }
 
 .desktop-card h2,
@@ -1298,23 +1462,40 @@ h4 {
   white-space: nowrap;
 }
 
-.desktop-card .field-row {
-  grid-template-columns: minmax(86px, 0.42fr) minmax(0, 0.58fr);
-  gap: 8px;
-  padding: 5px 0;
+.desktop-shell-route .field-row {
+  grid-template-columns: minmax(96px, 0.4fr) minmax(0, 0.6fr);
+  gap: 10px;
+  border-top: 1px solid var(--dsk-line-faint);
+  padding: 4px 0;
 }
 
-.desktop-card .field-row dt,
-.desktop-card .field-row dd {
-  font-size: 0.74rem;
-  line-height: 1.2;
+.desktop-shell-route .field-row:first-child {
+  border-top: 0;
+}
+
+.desktop-shell-route .field-row dt {
+  color: var(--dsk-meta);
+  font-family: var(--dsk-ui);
+  font-size: 11.5px;
+  font-weight: 640;
+  line-height: 1.35;
+}
+
+.desktop-shell-route .field-row dd {
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-mono);
+  font-size: 11.5px;
+  font-weight: 520;
+  line-height: 1.4;
 }
 
 .desktop-metric-card > strong {
   display: -webkit-box;
-  color: #241e23;
-  font-size: 1.05rem;
-  line-height: 1.2;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-mono);
+  font-size: 16px;
+  font-weight: 640;
+  line-height: 1.25;
   overflow: hidden;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -1325,48 +1506,52 @@ h4 {
   display: -webkit-box;
   margin: 5px 0 0;
   overflow: hidden;
-  color: #5a4d3e;
-  font-size: 0.78rem;
-  line-height: 1.25;
+  color: var(--dsk-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .desktop-status {
   display: inline-flex;
-  min-height: 24px;
   align-items: center;
-  border: 1px solid #c7b699;
-  border-radius: 999px;
-  padding: 3px 8px;
-  background: #f7efe0;
-  color: #4f3f2d;
-  font-size: 0.72rem;
-  font-weight: 800;
+  max-width: 100%;
+  min-height: 20px;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
+  padding: 2px 7px;
+  background: var(--dsk-chip);
+  color: var(--dsk-muted);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  font-weight: 560;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
 .desktop-status.plum {
-  border-color: #a988a0;
-  background: #f3edf2;
-  color: #5c315b;
+  border-color: color-mix(in oklab, var(--dsk-accent), var(--dsk-border-soft) 56%);
+  background: color-mix(in oklab, var(--dsk-accent), var(--dsk-surface) 91%);
+  color: color-mix(in oklab, var(--dsk-accent), var(--dsk-fg) 30%);
 }
 
 .desktop-status.olive {
-  border-color: #a6b47c;
-  background: #eff4df;
-  color: #4d6337;
+  border-color: color-mix(in oklab, var(--dsk-success), var(--dsk-border-soft) 52%);
+  background: color-mix(in oklab, var(--dsk-success), var(--dsk-surface) 90%);
+  color: color-mix(in oklab, var(--dsk-success), var(--dsk-fg) 22%);
 }
 
 .desktop-status.amber {
-  border-color: #d7ad65;
-  background: #fff3d6;
-  color: #85591c;
+  border-color: color-mix(in oklab, var(--dsk-warn), var(--dsk-border-soft) 46%);
+  background: color-mix(in oklab, var(--dsk-warn), var(--dsk-surface) 88%);
+  color: color-mix(in oklab, var(--dsk-warn), var(--dsk-fg) 45%);
 }
 
 .desktop-timeline {
   display: grid;
-  gap: 5px;
+  gap: 0;
   margin: 8px 0 0;
   padding: 0;
   list-style: none;
@@ -1374,17 +1559,31 @@ h4 {
 
 .desktop-timeline li {
   display: grid;
-  grid-template-columns: minmax(80px, 0.28fr) minmax(70px, 0.22fr) minmax(0, 0.5fr);
-  gap: 6px;
-  align-items: center;
-  border-top: 1px solid rgba(90, 73, 48, 0.16);
-  padding-top: 5px;
+  grid-template-columns: minmax(72px, 0.24fr) minmax(86px, 0.3fr) minmax(0, 0.46fr);
+  gap: 8px;
+  align-items: baseline;
+  border-top: 1px solid var(--dsk-line-faint);
+  padding: 5px 0;
+}
+
+.desktop-timeline li:first-child {
+  border-top: 0;
 }
 
 .desktop-timeline span {
-  color: #86601f;
-  font-size: 0.72rem;
-  font-weight: 800;
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.desktop-timeline strong {
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-mono);
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .desktop-timeline strong,
@@ -1394,13 +1593,13 @@ h4 {
 }
 
 .desktop-timeline small {
-  color: #5e5141;
-  font-size: 0.76rem;
+  color: var(--dsk-muted);
+  font-size: 11.5px;
 }
 
 .desktop-project-list {
   display: grid;
-  gap: 7px;
+  gap: 0;
   margin: 8px 0 0;
   padding: 0;
   list-style: none;
@@ -1408,14 +1607,14 @@ h4 {
 
 .desktop-project-list li {
   min-width: 0;
-  border-top: 1px solid rgba(90, 73, 48, 0.16);
-  padding-top: 7px;
+  border-top: 1px solid var(--dsk-line-faint);
+  padding: 7px 0;
 }
 
 .desktop-project-list div:first-child {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
 }
 
@@ -1427,21 +1626,23 @@ h4 {
 
 .desktop-readonly-list-wrap {
   display: grid;
-  gap: 7px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 9px;
 }
 
 .desktop-readonly-list-wrap h3 {
   margin: 0;
-  color: #6a4b24;
-  font-size: 0.76rem;
-  font-weight: 900;
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .desktop-readonly-list {
   display: grid;
-  gap: 7px;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1449,14 +1650,14 @@ h4 {
 
 .desktop-readonly-list li {
   min-width: 0;
-  border-top: 1px solid rgba(90, 73, 48, 0.16);
-  padding-top: 7px;
+  border-top: 1px solid var(--dsk-line-faint);
+  padding: 7px 0;
 }
 
 .desktop-readonly-list li > div:first-child {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   min-width: 0;
 }
@@ -1468,47 +1669,67 @@ h4 {
 }
 
 .desktop-readonly-list strong {
-  color: #241e23;
-  font-size: 0.78rem;
+  color: var(--dsk-fg);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .desktop-readonly-list span {
   flex: 0 0 auto;
-  border: 1px solid #d7ad65;
-  border-radius: 999px;
-  padding: 2px 6px;
-  background: #fff3d6;
-  color: #85591c;
-  font-size: 0.66rem;
-  font-weight: 900;
+  border: 1px solid var(--dsk-line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: var(--dsk-chip);
+  color: var(--dsk-muted);
+  font-family: var(--dsk-mono);
+  font-size: 10px;
+  font-weight: 560;
 }
 
 .desktop-readonly-list small {
   display: block;
-  margin-top: 3px;
-  color: #5e5141;
-  font-size: 0.72rem;
-  line-height: 1.25;
+  margin-top: 2px;
+  color: var(--dsk-muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .desktop-readonly-list .field-list {
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
 .desktop-route-provenance-list span {
-  max-width: 45%;
+  max-width: 48%;
+  overflow-wrap: anywhere;
+  text-align: right;
   white-space: normal;
 }
 
 .desktop-project-list strong {
-  color: #251f22;
-  font-size: 0.85rem;
+  color: var(--dsk-fg);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .desktop-project-list span {
-  color: #51683d;
-  font-size: 0.72rem;
-  font-weight: 800;
+  flex: 0 0 auto;
+  color: color-mix(in oklab, var(--dsk-success), var(--dsk-fg) 25%);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.desktop-project-list small {
+  display: block;
+  margin-top: 2px;
+  color: var(--dsk-muted);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+#desktop-boundaries {
+  border-style: dashed;
 }
 
 .supervisor-shell-route {
@@ -3050,107 +3271,74 @@ h4 {
 @media (max-width: 920px) {
   .desktop-shell-route .workbench-header {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(190px, 0.72fr);
-    gap: 8px;
     width: min(100% - 24px, 1280px);
-    padding-top: 8px;
-    padding-bottom: 5px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px 12px;
   }
 
   .desktop-shell-route .header-summary {
-    display: -webkit-box;
     max-width: none;
-    margin-top: 3px;
-    overflow: hidden;
-    color: #425058;
-    font-size: 0.76rem;
-    line-height: 1.2;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
+    -webkit-line-clamp: 2;
   }
 
   .desktop-shell-route .status-strip {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 5px;
-  }
-
-  .desktop-shell-route .status-strip span {
-    min-height: 22px;
-    padding: 3px 6px;
-    font-size: 0.68rem;
-    overflow-wrap: anywhere;
+    justify-content: flex-start;
   }
 
   .desktop-shell-workspace {
     width: min(100% - 24px, 1280px);
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    margin-top: 5px;
+    gap: 10px;
+    margin-top: 10px;
   }
 
   .desktop-sidebar {
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     min-height: auto;
-    gap: 8px;
-    padding: 8px;
+    gap: 10px;
+    padding: 9px 10px;
   }
 
-  .desktop-brand-lockup h2 {
-    font-size: 0.84rem;
+  .desktop-brand-lockup {
+    border-right: 1px solid var(--dsk-line-soft);
+    border-bottom: 0;
+    padding: 0 12px 0 2px;
   }
 
   .desktop-sidebar nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 4px;
   }
 
   .desktop-sidebar a {
     min-height: 26px;
-    padding: 4px 5px;
-    font-size: 0.68rem;
-    text-align: center;
+    padding: 4px 8px;
+    font-size: 12px;
   }
 
   .desktop-sidebar-status {
     border-top: 0;
-    border-left: 1px solid #d7c9ab;
-    padding-top: 0;
-    padding-left: 8px;
-    font-size: 0.68rem;
+    border-left: 1px solid var(--dsk-line-soft);
+    padding: 0 0 0 10px;
   }
 
   .desktop-topbar {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    min-height: 38px;
-    padding: 6px 8px;
-  }
-
-  .desktop-topbar span {
-    font-size: 0.62rem;
-  }
-
-  .desktop-topbar strong {
-    font-size: 0.74rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .desktop-development-strip {
     grid-template-columns: 1fr;
-    gap: 6px;
-    margin-top: 7px;
-    padding: 6px 8px;
+    gap: 8px;
   }
 
   .desktop-app-home-panel {
     grid-template-columns: 1fr;
-    gap: 8px;
-    margin-top: 7px;
-    padding: 8px;
+    gap: 10px;
   }
 
   .desktop-app-state-list {
@@ -3161,120 +3349,57 @@ h4 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .desktop-first-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 7px;
-    margin-top: 7px;
-  }
-
-  .desktop-lower-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
-    margin-top: 7px;
-  }
-
-  .desktop-card {
-    padding: 8px;
-  }
-
-  .desktop-card-header {
-    gap: 8px;
-    margin-bottom: 7px;
-  }
-
-  .desktop-card h2 {
-    font-size: 0.88rem;
-  }
-
-  .desktop-card .section-kicker {
-    margin-bottom: 4px;
-    font-size: 0.68rem;
-  }
-
-  .desktop-status {
-    min-height: 22px;
-    padding: 2px 7px;
-    font-size: 0.68rem;
-  }
-
-  .desktop-metric-card > strong {
-    font-size: 0.92rem;
-  }
-
-  .desktop-metric-card > p {
-    margin-top: 5px;
-    font-size: 0.76rem;
-  }
-
-  .desktop-card .field-row {
-    grid-template-columns: minmax(58px, 0.42fr) minmax(0, 0.58fr);
-    gap: 5px;
-    padding: 4px 0;
-  }
-
-  .desktop-card .field-row dt,
-  .desktop-card .field-row dd {
-    font-size: 0.68rem;
-    line-height: 1.15;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .desktop-timeline {
-    gap: 5px;
-    margin-top: 8px;
-  }
-
-  .desktop-timeline li {
-    grid-template-columns: minmax(58px, 0.24fr) minmax(54px, 0.22fr) minmax(0, 0.54fr);
-    gap: 6px;
-    padding-top: 5px;
-  }
-}
-
-@media (max-width: 480px) {
-  .desktop-shell-workspace,
   .desktop-first-row,
-  .desktop-lower-grid,
-  .desktop-topbar,
-  .desktop-app-home-panel,
-  .desktop-shell-route .status-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .desktop-sidebar {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
-
-  .desktop-sidebar nav {
+  .desktop-lower-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .desktop-sidebar-status {
-    border-top: 1px solid #d7c9ab;
-    border-left: 0;
-    padding-top: 8px;
-    padding-left: 0;
   }
 }
 
 @media (max-width: 640px) {
-  .desktop-shell-workspace,
-  .desktop-first-row,
-  .desktop-lower-grid,
+  .desktop-shell-route .workbench-header,
+  .desktop-shell-workspace {
+    width: min(100% - 20px, 1280px);
+  }
+
+  .desktop-sidebar {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-items: start;
+    padding: 10px;
+  }
+
+  .desktop-brand-lockup {
+    border-right: 0;
+    border-bottom: 1px solid var(--dsk-line-soft);
+    padding: 0 2px 8px;
+  }
+
+  .desktop-sidebar-status {
+    border-top: 1px solid var(--dsk-line-soft);
+    border-left: 0;
+    padding: 8px 2px 0;
+  }
+
   .desktop-topbar,
   .desktop-app-home-panel,
   .desktop-app-state-list,
   .desktop-development-status-list,
-  .desktop-sidebar,
-  .desktop-shell-route .status-strip {
+  .desktop-first-row,
+  .desktop-lower-grid {
     grid-template-columns: 1fr;
   }
 
+  .desktop-span-2 {
+    grid-column: auto;
+  }
+
+  .desktop-card,
+  .desktop-topbar {
+    padding: 10px;
+  }
+
   .desktop-development-strip {
-    padding: 8px;
+    padding: 10px;
   }
 
   .desktop-development-status-list dd {
@@ -3282,18 +3407,8 @@ h4 {
     white-space: normal;
   }
 
-  .desktop-sidebar {
-    align-items: start;
-  }
-
-  .desktop-sidebar nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .desktop-sidebar-status {
-    border-top: 1px solid #d7c9ab;
-    border-left: 0;
-    padding-top: 8px;
-    padding-left: 0;
+  .desktop-shell-route .field-row {
+    grid-template-columns: minmax(86px, 0.38fr) minmax(0, 0.62fr);
+    gap: 8px;
   }
 }
