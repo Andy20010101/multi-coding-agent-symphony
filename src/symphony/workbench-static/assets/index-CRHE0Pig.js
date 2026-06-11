@@ -22676,6 +22676,10 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 					"aria-label": "Desktop shell sections",
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#desktop-project-launcher",
+							children: "Projects"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-overview",
 							"aria-current": "page",
 							children: "Home"
@@ -22725,6 +22729,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 						] })] })
 					]
 				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopProjectLauncherPanel, { desktopShell }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppHomePanel, {
 					desktopShell,
 					routeContext
@@ -22775,6 +22780,146 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 			]
 		})]
 	});
+}
+function DesktopProjectLauncherPanel({ desktopShell }) {
+	const recentProjects = desktopShell?.recentProjects;
+	const items = recentProjects?.items?.items ?? [];
+	const currentProjectId = textValueFromState(desktopShell?.projectList?.currentProjectId);
+	const currentProjectName = textValueFromState(desktopShell?.workspace?.project);
+	const launcherState = projectLauncherState(recentProjects);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "desktop-project-launcher",
+		className: "desktop-project-launcher",
+		"aria-label": "Project Launcher read-only preview",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "desktop-project-launcher-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "section-kicker",
+						children: "project launcher"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Project Launcher" }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "Recent Projects is a read-only preview from backend-known project contracts. Selection stays pending for PR-3." })
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(launcherState)}`,
+					children: launcherState
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "desktop-project-launcher-grid",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+					className: "desktop-current-binding",
+					"aria-labelledby": "desktop-current-binding-title",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+						className: "desktop-mini-header",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "section-kicker",
+							children: "current binding"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+							id: "desktop-current-binding-title",
+							children: currentProjectName || "Current Project"
+						})]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["project id", desktopShell?.workspace?.projectId ?? desktopShell?.projectList?.currentProjectId],
+						["repo path", desktopShell?.workspace?.repoPath],
+						["branch", desktopShell?.workspace?.defaultBranch],
+						["last goal", desktopShell?.workspace?.lastGoalId],
+						["last run", desktopShell?.workspace?.lastRunId],
+						["binding source", desktopShell?.workspace?.repoPathSource],
+						["routeState", desktopShell?.workspace?.routeState]
+					] })]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+					className: "desktop-recent-projects",
+					"aria-labelledby": "desktop-recent-projects-title",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+						className: "desktop-mini-header desktop-recent-projects-title-row",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "section-kicker",
+							children: "recent projects"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+							id: "desktop-recent-projects-title",
+							children: "Recent Projects"
+						})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: `desktop-status ${desktopStatusClass(recentProjects?.state)}`,
+							children: recentProjects?.state ?? "missing"
+						})]
+					}), items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: projectLauncherEmptyCopy(recentProjects) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+						className: "desktop-recent-project-list",
+						children: items.slice(0, 4).map((project, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopRecentProjectRow, {
+							project,
+							currentProjectId
+						}, `${project.projectId?.text ?? "project"}-${index}`))
+					})]
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "desktop-project-launcher-footer",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", recentProjects?.contractName],
+					["route", recentProjects?.route],
+					["routeState", recentProjects?.routeState],
+					["source", recentProjects?.source?.sourceContract],
+					["source kind", recentProjects?.source?.kind],
+					["scan scope", recentProjects?.source?.scanScope],
+					["generated", recentProjects?.generatedAt],
+					["degraded reason", recentProjects?.source?.degradedReason],
+					["selection", textValue("pending PR-3; no app-state mutation is available in this UI")]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readOnly", recentProjects?.boundaries?.readOnly],
+					["disk scan", recentProjects?.boundaries?.diskScanAvailable],
+					["arbitrary path read", recentProjects?.boundaries?.arbitraryPathReadAvailable],
+					["command execution", recentProjects?.boundaries?.commandExecutionAvailable],
+					["model invocation", recentProjects?.boundaries?.modelInvocationAvailable],
+					["git write", recentProjects?.boundaries?.gitWriteAvailable],
+					["release write", recentProjects?.boundaries?.releaseWriteAvailable],
+					["source policy", recentProjects?.sourcePolicy]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: recentProjects?.note ?? "Recent Projects route unavailable; no frontend scan, path input, command execution, provider invocation, git write, or release write is attempted."
+			})
+		]
+	});
+}
+function DesktopRecentProjectRow({ project, currentProjectId }) {
+	const projectId = textValueFromState(project?.projectId);
+	const healthState = textValueFromState(project?.healthSummary?.state);
+	const isCurrent = currentProjectId !== "" && projectId === currentProjectId;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+		className: isCurrent ? "current" : void 0,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "desktop-recent-project-head",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: project?.displayName?.text ?? "project" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: project?.repoPath?.text ?? "repo path 未暴露" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: `desktop-status ${desktopStatusClass(healthState)}`,
+				children: healthState || "unknown"
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["project id", project?.projectId],
+			["branch", project?.defaultBranch],
+			["remote", project?.remote],
+			["last opened", project?.lastOpenedAt],
+			["last goal", project?.lastGoalId],
+			["last run", project?.lastRunId],
+			["health", project?.healthSummary?.text],
+			["degraded reason", project?.degradedReason],
+			["current binding", textValue(isCurrent ? "current project" : "not selected in current binding")]
+		] })]
+	});
+}
+function projectLauncherState(recentProjects) {
+	if (recentProjects?.state === "available" && (recentProjects?.items?.items ?? []).length > 0) return "available";
+	return recentProjects?.state ?? "missing";
+}
+function projectLauncherEmptyCopy(recentProjects) {
+	const state = recentProjects?.state ?? "missing";
+	const reason = textValueFromState(recentProjects?.source?.degradedReason);
+	if (state === "empty") return "Recent Projects is empty. Backend returned no known recent project rows.";
+	if (state === "stale") return reason || "Recent Projects snapshot is stale.";
+	if (state === "degraded") return reason || "Recent Projects is degraded.";
+	if (state === "failed") return reason || "Recent Projects route failed.";
+	return reason || "Recent Projects route or contract is missing.";
 }
 function DesktopAppHomePanel({ desktopShell, routeContext }) {
 	const evidenceRefs = routeContext?.evidenceRefs?.items ?? [];

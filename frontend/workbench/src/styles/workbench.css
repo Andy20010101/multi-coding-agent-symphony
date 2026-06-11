@@ -1136,6 +1136,7 @@ h4 {
 
 .desktop-sidebar,
 .desktop-topbar,
+.desktop-project-launcher,
 .desktop-app-home-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
@@ -1223,6 +1224,145 @@ h4 {
   font-size: 12.5px;
   font-weight: 640;
   overflow-wrap: anywhere;
+}
+
+.desktop-project-launcher {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.desktop-project-launcher-header,
+.desktop-project-launcher-grid,
+.desktop-project-launcher-footer {
+  min-width: 0;
+}
+
+.desktop-project-launcher-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--dsk-line-soft);
+}
+
+.desktop-project-launcher-header h2 {
+  margin: 0;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.desktop-project-launcher-header p {
+  margin: 5px 0 0;
+  color: var(--dsk-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.desktop-project-launcher-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.34fr) minmax(0, 0.66fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.desktop-current-binding,
+.desktop-recent-projects {
+  min-width: 0;
+  border: 1px solid var(--dsk-line-faint);
+  border-radius: 4px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--dsk-surface), var(--dsk-surface-warm) 42%);
+}
+
+.desktop-mini-header {
+  margin-bottom: 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--dsk-line-faint);
+}
+
+.desktop-mini-header h3 {
+  margin: 0;
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-display);
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.desktop-recent-projects-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.desktop-recent-project-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desktop-recent-project-list li {
+  min-width: 0;
+  border: 1px solid var(--dsk-line-faint);
+  border-radius: 4px;
+  padding: 9px;
+  background: color-mix(in oklab, var(--dsk-surface-warm), var(--dsk-bg) 50%);
+}
+
+.desktop-recent-project-list li.current {
+  border-color: color-mix(in oklab, var(--dsk-success), var(--dsk-border-soft) 48%);
+  background: color-mix(in oklab, var(--dsk-success), var(--dsk-surface) 92%);
+}
+
+.desktop-recent-project-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+  margin-bottom: 5px;
+}
+
+.desktop-recent-project-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desktop-recent-project-head strong,
+.desktop-recent-project-head small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.desktop-recent-project-head strong {
+  color: var(--dsk-fg);
+  font-size: 13px;
+  font-weight: 640;
+  line-height: 1.25;
+}
+
+.desktop-recent-project-head small {
+  color: var(--dsk-muted);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.desktop-project-launcher-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .desktop-main-stage {
@@ -3336,6 +3476,11 @@ h4 {
     gap: 8px;
   }
 
+  .desktop-project-launcher-grid,
+  .desktop-project-launcher-footer {
+    grid-template-columns: 1fr;
+  }
+
   .desktop-app-home-panel {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -3381,6 +3526,7 @@ h4 {
   }
 
   .desktop-topbar,
+  .desktop-project-launcher-header,
   .desktop-app-home-panel,
   .desktop-app-state-list,
   .desktop-development-status-list,
@@ -3394,8 +3540,18 @@ h4 {
   }
 
   .desktop-card,
+  .desktop-project-launcher,
   .desktop-topbar {
     padding: 10px;
+  }
+
+  .desktop-recent-project-head {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .desktop-recent-project-head .desktop-status {
+    justify-self: start;
   }
 
   .desktop-development-strip {
