@@ -581,6 +581,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
           <h2>App Home</h2>
         </div>
         <nav aria-label="Desktop shell sections">
+          <a href="#desktop-project-launcher">Projects</a>
           <a href="#desktop-overview" aria-current="page">Home</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
@@ -614,6 +615,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
           </div>
         </section>
 
+        <DesktopProjectLauncherPanel desktopShell={desktopShell} />
         <DesktopAppHomePanel desktopShell={desktopShell} routeContext={routeContext} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
@@ -648,6 +650,157 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
       </div>
     </section>
   );
+}
+
+function DesktopProjectLauncherPanel({ desktopShell }) {
+  const recentProjects = desktopShell?.recentProjects;
+  const items = recentProjects?.items?.items ?? [];
+  const currentProjectId = textValueFromState(desktopShell?.projectList?.currentProjectId);
+  const currentProjectName = textValueFromState(desktopShell?.workspace?.project);
+  const launcherState = projectLauncherState(recentProjects);
+
+  return (
+    <section
+      id="desktop-project-launcher"
+      className="desktop-project-launcher"
+      aria-label="Project Launcher read-only preview"
+    >
+      <header className="desktop-project-launcher-header">
+        <div>
+          <p className="section-kicker">project launcher</p>
+          <h2>Project Launcher</h2>
+          <p>Recent Projects is a read-only preview from backend-known project contracts. Selection stays pending for PR-3.</p>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(launcherState)}`}>{launcherState}</span>
+      </header>
+
+      <div className="desktop-project-launcher-grid">
+        <article className="desktop-current-binding" aria-labelledby="desktop-current-binding-title">
+          <header className="desktop-mini-header">
+            <p className="section-kicker">current binding</p>
+            <h3 id="desktop-current-binding-title">{currentProjectName || 'Current Project'}</h3>
+          </header>
+          <FieldList rows={[
+            ['project id', desktopShell?.workspace?.projectId ?? desktopShell?.projectList?.currentProjectId],
+            ['repo path', desktopShell?.workspace?.repoPath],
+            ['branch', desktopShell?.workspace?.defaultBranch],
+            ['last goal', desktopShell?.workspace?.lastGoalId],
+            ['last run', desktopShell?.workspace?.lastRunId],
+            ['binding source', desktopShell?.workspace?.repoPathSource],
+            ['routeState', desktopShell?.workspace?.routeState]
+          ]} />
+        </article>
+
+        <article className="desktop-recent-projects" aria-labelledby="desktop-recent-projects-title">
+          <header className="desktop-mini-header desktop-recent-projects-title-row">
+            <div>
+              <p className="section-kicker">recent projects</p>
+              <h3 id="desktop-recent-projects-title">Recent Projects</h3>
+            </div>
+            <span className={`desktop-status ${desktopStatusClass(recentProjects?.state)}`}>{recentProjects?.state ?? 'missing'}</span>
+          </header>
+          {items.length === 0 ? (
+            <EmptyBlock copy={projectLauncherEmptyCopy(recentProjects)} />
+          ) : (
+            <ul className="desktop-recent-project-list">
+              {items.slice(0, 4).map((project, index) => (
+                <DesktopRecentProjectRow
+                  key={`${project.projectId?.text ?? 'project'}-${index}`}
+                  project={project}
+                  currentProjectId={currentProjectId}
+                />
+              ))}
+            </ul>
+          )}
+        </article>
+      </div>
+
+      <div className="desktop-project-launcher-footer">
+        <FieldList rows={[
+          ['contract', recentProjects?.contractName],
+          ['route', recentProjects?.route],
+          ['routeState', recentProjects?.routeState],
+          ['source', recentProjects?.source?.sourceContract],
+          ['source kind', recentProjects?.source?.kind],
+          ['scan scope', recentProjects?.source?.scanScope],
+          ['generated', recentProjects?.generatedAt],
+          ['degraded reason', recentProjects?.source?.degradedReason],
+          ['selection', textValue('pending PR-3; no app-state mutation is available in this UI')]
+        ]} />
+        <FieldList rows={[
+          ['readOnly', recentProjects?.boundaries?.readOnly],
+          ['disk scan', recentProjects?.boundaries?.diskScanAvailable],
+          ['arbitrary path read', recentProjects?.boundaries?.arbitraryPathReadAvailable],
+          ['command execution', recentProjects?.boundaries?.commandExecutionAvailable],
+          ['model invocation', recentProjects?.boundaries?.modelInvocationAvailable],
+          ['git write', recentProjects?.boundaries?.gitWriteAvailable],
+          ['release write', recentProjects?.boundaries?.releaseWriteAvailable],
+          ['source policy', recentProjects?.sourcePolicy]
+        ]} />
+      </div>
+      <p className="panel-note">{recentProjects?.note ?? 'Recent Projects route unavailable; no frontend scan, path input, command execution, provider invocation, git write, or release write is attempted.'}</p>
+    </section>
+  );
+}
+
+function DesktopRecentProjectRow({ project, currentProjectId }) {
+  const projectId = textValueFromState(project?.projectId);
+  const healthState = textValueFromState(project?.healthSummary?.state);
+  const isCurrent = currentProjectId !== '' && projectId === currentProjectId;
+
+  return (
+    <li className={isCurrent ? 'current' : undefined}>
+      <div className="desktop-recent-project-head">
+        <div>
+          <strong>{project?.displayName?.text ?? 'project'}</strong>
+          <small>{project?.repoPath?.text ?? 'repo path 未暴露'}</small>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(healthState)}`}>{healthState || 'unknown'}</span>
+      </div>
+      <FieldList rows={[
+        ['project id', project?.projectId],
+        ['branch', project?.defaultBranch],
+        ['remote', project?.remote],
+        ['last opened', project?.lastOpenedAt],
+        ['last goal', project?.lastGoalId],
+        ['last run', project?.lastRunId],
+        ['health', project?.healthSummary?.text],
+        ['degraded reason', project?.degradedReason],
+        ['current binding', textValue(isCurrent ? 'current project' : 'not selected in current binding')]
+      ]} />
+    </li>
+  );
+}
+
+function projectLauncherState(recentProjects) {
+  if (recentProjects?.state === 'available' && (recentProjects?.items?.items ?? []).length > 0) {
+    return 'available';
+  }
+
+  return recentProjects?.state ?? 'missing';
+}
+
+function projectLauncherEmptyCopy(recentProjects) {
+  const state = recentProjects?.state ?? 'missing';
+  const reason = textValueFromState(recentProjects?.source?.degradedReason);
+
+  if (state === 'empty') {
+    return 'Recent Projects is empty. Backend returned no known recent project rows.';
+  }
+
+  if (state === 'stale') {
+    return reason || 'Recent Projects snapshot is stale.';
+  }
+
+  if (state === 'degraded') {
+    return reason || 'Recent Projects is degraded.';
+  }
+
+  if (state === 'failed') {
+    return reason || 'Recent Projects route failed.';
+  }
+
+  return reason || 'Recent Projects route or contract is missing.';
 }
 
 function DesktopAppHomePanel({ desktopShell, routeContext }) {

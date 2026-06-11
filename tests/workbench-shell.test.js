@@ -481,6 +481,118 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function DesktopShellRoute'), app.indexOf('function GoldenPathPanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
   });
 
+  it('renders the v48 Project Launcher as a read-only recent-projects preview', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
+    const recentRoute = READONLY_API_ROUTES.find((route) => route.id === 'recentProjects');
+    const projectRoute = READONLY_API_ROUTES.find((route) => route.id === 'projectRegistry');
+    const availableFixture = JSON.parse(await readFile('fixtures/contracts/recent-projects.available.v1.json', 'utf8'));
+    const stateFixtures = await Promise.all(
+      ['empty', 'missing', 'stale', 'degraded', 'failed'].map(async (state) => [
+        state,
+        JSON.parse(await readFile(`fixtures/contracts/recent-projects.${state}.v1.json`, 'utf8'))
+      ])
+    );
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const viewState = createWorkbenchRenderViewState();
+
+      viewState.model = projectWorkbenchContracts({
+        projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
+        recentProjects: readonlyRouteResult(recentRoute, availableFixture)
+      });
+      viewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', viewState);
+      const launcherIndex = desktopHtml.indexOf('id="desktop-project-launcher"');
+      const appHomeIndex = desktopHtml.indexOf('class="desktop-app-home-panel"');
+      const launcherHtml = desktopHtml.slice(
+        launcherIndex,
+        desktopHtml.indexOf('class="desktop-app-home-panel"')
+      );
+
+      assert.notEqual(launcherIndex, -1);
+      assert.equal(launcherIndex < appHomeIndex, true);
+      assert.match(desktopHtml, /href="#desktop-project-launcher">Projects/u);
+      assert.match(desktopHtml, /Project Launcher/u);
+      assert.match(desktopHtml, /Recent Projects/u);
+      assert.match(desktopHtml, /current binding/u);
+      assert.match(desktopHtml, /Selection stays pending for PR-3/u);
+      assert.match(desktopHtml, /pending PR-3; no app-state mutation is available in this UI/u);
+      assert.match(desktopHtml, /recent-projects\.v1/u);
+      assert.match(desktopHtml, /\/api\/projects\/recent/u);
+      assert.match(desktopHtml, /project-registry\.v1/u);
+      assert.match(desktopHtml, /known-projects-only/u);
+      assert.match(desktopHtml, /Multi Coding Agent Symphony/u);
+      assert.match(desktopHtml, /\/workspace\/multi-coding-agent-symphony/u);
+      assert.match(desktopHtml, /git@github\.com:Andy20010101\/multi-coding-agent-symphony\.git/u);
+      assert.match(desktopHtml, /v48-project-launcher-recent-projects/u);
+      assert.match(desktopHtml, /run-v48-pr1/u);
+      assert.match(desktopHtml, /current project/u);
+      assert.match(desktopHtml, />disk scan<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />arbitrary path read<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />command execution<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />model invocation<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />git write<\/dt><dd[^>]*>false/u);
+      assert.match(desktopHtml, />release write<\/dt><dd[^>]*>false/u);
+      assert.doesNotMatch(launcherHtml, /<button\b|<form\b|<input\b|<textarea\b|onClick=|fetch\(|window\.open|navigator\.clipboard/u);
+      assert.doesNotMatch(launcherHtml, />Select<|>Open<|>Run<|>Launch<|>Execute<|>Approve<|>Dispatch<|>Push<|>Tag<|>Release</u);
+
+      for (const [state, fixture] of stateFixtures) {
+        const stateViewState = createWorkbenchRenderViewState();
+        stateViewState.model = projectWorkbenchContracts({
+          projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
+          recentProjects: readonlyRouteResult(recentRoute, fixture)
+        });
+        stateViewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+        const stateHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', stateViewState);
+
+        assert.match(stateHtml, new RegExp(`>${state}<`, 'u'));
+        assert.match(stateHtml, /Recent Projects/u);
+        assert.match(stateHtml, /known-projects-only/u);
+      }
+
+      const degradedHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', {
+        phase: 'ready',
+        model: projectWorkbenchContracts({
+          projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
+          recentProjects: readonlyRouteResult(recentRoute, stateFixtures.find(([state]) => state === 'degraded')[1])
+        })
+      });
+      assert.match(degradedHtml, /project health is attention/u);
+
+      const failedHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', {
+        phase: 'ready',
+        model: projectWorkbenchContracts({
+          projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
+          recentProjects: readonlyRouteResult(recentRoute, stateFixtures.find(([state]) => state === 'failed')[1])
+        })
+      });
+      assert.match(failedHtml, /project registry contract is unavailable/u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+
+    assert.match(app, /DesktopProjectLauncherPanel/u);
+    assert.match(app, /DesktopRecentProjectRow/u);
+    assert.match(app, /projectLauncherEmptyCopy/u);
+    assert.match(css, /\.desktop-project-launcher/u);
+    assert.match(css, /\.desktop-recent-project-list/u);
+    assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.desktop-project-launcher-header/u);
+    assert.doesNotMatch(app.slice(app.indexOf('function DesktopProjectLauncherPanel'), app.indexOf('function DesktopAppHomePanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
+  });
+
   it('renders the v46 fixture Supervisor Workbench without execution controls', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
@@ -1771,6 +1883,56 @@ function readonlyRouteResult(route, data) {
     routeDescriptor: route,
     httpStatus: 200,
     data
+  };
+}
+
+function createProjectLauncherRegistryPayload() {
+  return {
+    contractName: 'project-registry.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-11T00:00:00.000Z',
+    readOnly: true,
+    source: {
+      kind: 'repo-local-metadata',
+      scanScope: 'cwd-or-explicit-repo-path',
+      stateDir: '.symphony',
+      writes: false
+    },
+    projects: [
+      {
+        project_id: 'multi-coding-agent-symphony',
+        project_name: 'Multi Coding Agent Symphony',
+        repo_path: '/workspace/multi-coding-agent-symphony',
+        default_branch: 'main',
+        remote_url: 'git@github.com:Andy20010101/multi-coding-agent-symphony.git',
+        last_goal_id: 'v48-project-launcher-recent-projects',
+        last_run_id: 'run-v48-pr1',
+        health_status: 'ok',
+        last_opened_at: '2026-06-11T00:00:00.000Z',
+        pinned: false
+      }
+    ],
+    currentProjectId: 'multi-coding-agent-symphony',
+    resolution: {
+      status: 'resolved',
+      strategy: 'cwd',
+      inputPath: '/workspace/multi-coding-agent-symphony',
+      repoPath: '/workspace/multi-coding-agent-symphony',
+      stateDir: '.symphony',
+      readOnly: true,
+      blockers: []
+    },
+    boundaries: {
+      readOnly: true,
+      diskScanScope: 'cwd-or-explicit-repo-path-only',
+      registryDatabaseWritesAvailable: false,
+      actionExecutionAvailable: false,
+      jobQueueAvailable: false,
+      modelInvocationAvailable: false,
+      gitWriteAvailable: false,
+      releaseWriteAvailable: false,
+      arbitraryCommandExecutionAvailable: false
+    }
   };
 }
 
