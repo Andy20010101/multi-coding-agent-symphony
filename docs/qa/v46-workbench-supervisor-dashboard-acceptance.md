@@ -116,7 +116,7 @@ http://127.0.0.1:5173/workbench/supervisor/
 
 - `node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js`：88 pass。
 - `pnpm workbench:v46:qa`：`status: ok`，包含 route-level legacy header 缺席检查。
-- `pnpm workbench:build`：PASS，当前静态页面引用 `index-DPTWSAac.js` 和 `index-BE6qZ2PL.css`。
+- `pnpm workbench:build`：PASS，当前静态页面引用 `index-BsCE7mzH.js` 和 `index-DK3WOan4.css`。
 - `pnpm check`：PASS。
 - `git diff --check`：PASS。
 
