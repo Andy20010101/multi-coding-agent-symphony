@@ -1034,6 +1034,8 @@ h4 {
 
 .desktop-sidebar,
 .desktop-topbar,
+.desktop-app-home-panel,
+.desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
   border: 1px solid #c9b996;
@@ -1121,6 +1123,67 @@ h4 {
   display: block;
   color: #251f22;
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.desktop-app-home-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.58fr) minmax(0, 0.42fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 8px;
+  padding: 10px;
+}
+
+.desktop-app-home-panel h2 {
+  margin: 0;
+  color: #241e23;
+  font-size: 1.15rem;
+}
+
+.desktop-app-home-panel p {
+  margin: 5px 0 0;
+  color: #56493a;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.desktop-app-state-strip {
+  margin-top: 8px;
+  padding: 8px 10px;
+}
+
+.desktop-app-state-list {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.desktop-app-state-list div {
+  min-width: 0;
+  border: 1px solid rgba(128, 96, 54, 0.22);
+  border-radius: 8px;
+  padding: 5px 7px;
+  background: rgba(250, 245, 236, 0.78);
+}
+
+.desktop-app-state-list dt {
+  color: #7c6e55;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.desktop-app-state-list dd {
+  margin: 2px 0 0;
+  color: #241e23;
+  font-size: 0.74rem;
+  font-weight: 800;
   overflow-wrap: anywhere;
 }
 
@@ -1430,6 +1493,11 @@ h4 {
 
 .desktop-readonly-list .field-list {
   margin-top: 5px;
+}
+
+.desktop-route-provenance-list span {
+  max-width: 45%;
+  white-space: normal;
 }
 
 .desktop-project-list strong {
@@ -3034,7 +3102,7 @@ h4 {
   }
 
   .desktop-sidebar nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
   }
 
@@ -3076,6 +3144,17 @@ h4 {
     gap: 6px;
     margin-top: 7px;
     padding: 6px 8px;
+  }
+
+  .desktop-app-home-panel {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 7px;
+    padding: 8px;
+  }
+
+  .desktop-app-state-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .desktop-development-status-list {
@@ -3159,6 +3238,7 @@ h4 {
   .desktop-first-row,
   .desktop-lower-grid,
   .desktop-topbar,
+  .desktop-app-home-panel,
   .desktop-shell-route .status-strip {
     grid-template-columns: 1fr;
   }
@@ -3185,6 +3265,8 @@ h4 {
   .desktop-first-row,
   .desktop-lower-grid,
   .desktop-topbar,
+  .desktop-app-home-panel,
+  .desktop-app-state-list,
   .desktop-development-status-list,
   .desktop-sidebar,
   .desktop-shell-route .status-strip {

@@ -11109,6 +11109,10 @@ function projectWorkbenchContracts(results) {
 		lanePreview: providerLanePreviewData,
 		activeGoal: activeGoalControl
 	});
+	const projectedSupervisorDashboard = projectSupervisorDashboard({
+		result: results.goalSupervisor,
+		supervisor: goalSupervisorData
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11144,6 +11148,7 @@ function projectWorkbenchContracts(results) {
 			restoreValidation: projectedRestoreValidation,
 			diagnosticsBundle: projectedDiagnosticsBundle,
 			providerHub: projectedProviderHub,
+			supervisorDashboard: projectedSupervisorDashboard,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11199,10 +11204,7 @@ function projectWorkbenchContracts(results) {
 			operations: goalOperationsData,
 			nextAction: goalNextActionData
 		}),
-		supervisorDashboard: projectSupervisorDashboard({
-			result: results.goalSupervisor,
-			supervisor: goalSupervisorData
-		}),
+		supervisorDashboard: projectedSupervisorDashboard,
 		activeGoal: activeGoalControl,
 		goalDraftHandoff: activeGoalControl.goalDraftHandoff,
 		capabilities: projectCapabilities(capabilitiesData),
@@ -11561,11 +11563,12 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, routeStates }) {
+function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const runtimeRoute = findProjectedRoute(routeStates, "runtimeSnapshot");
 	const goalRoute = findProjectedRoute(routeStates, "goalRunbook");
 	const nextRoute = findProjectedRoute(routeStates, "goalNextAction");
+	const supervisorRoute = findProjectedRoute(routeStates, "goalSupervisor");
 	const jobRoute = findProjectedRoute(routeStates, "jobModel");
 	const jobCreationRoute = findProjectedRoute(routeStates, "jobCreation");
 	const jobTimelineRoute = findProjectedRoute(routeStates, "jobTimeline");
@@ -11578,6 +11581,18 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 	const diagnosticsBundleRoute = findProjectedRoute(routeStates, "diagnosticsBundle");
 	const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
 	const currentProject = currentProjectFromRegistry(projectRegistry);
+	const backendHealth = projectDesktopBackendHealth({
+		runtimeSnapshot,
+		runtimeRoute
+	});
+	const supervisorSummary = projectDesktopSupervisorSummary({
+		supervisorDashboard,
+		supervisorRoute
+	});
+	const routeProvenance = projectDesktopRouteProvenance({
+		routeStates,
+		runtimeSnapshot
+	});
 	const sidecarAttachState = firstValue(sidecarHost?.attachState);
 	const sidecarState = sidecarAttachState === "attached" ? "attached" : sidecarAttachState === void 0 ? "missing" : runtimeSnapshot?.state === "stale" ? "stale" : "needs-attention";
 	const currentTaskText = [
@@ -11612,13 +11627,77 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 			source: valueState("job-model.v1 + job-timeline-log-stream.v1")
 		}
 	];
+	const workspace = {
+		state: valueState(firstValue(runtimeSnapshot?.project?.name, currentProject?.name) === void 0 ? "missing" : "available"),
+		project: valueState(firstValue(runtimeSnapshot?.project?.name, currentProject?.name)),
+		projectId: valueState(firstValue(runtimeSnapshot?.project?.id, currentProject?.projectId)),
+		repoPath: valueState(firstValue(runtimeSnapshot?.project?.repoPath, currentProject?.repoPath)),
+		repoPathSource: valueState(firstValue(runtimeSnapshot?.project?.repoPath) !== void 0 ? "app-state-snapshot.v1 current_project" : firstValue(currentProject?.repoPath) !== void 0 ? "project-registry.v1 current project" : void 0),
+		defaultBranch: valueState(firstValue(runtimeSnapshot?.project?.defaultBranch, currentProject?.defaultBranch)),
+		lastGoalId: valueState(firstValue(runtimeSnapshot?.project?.lastGoalId, currentProject?.lastGoalId)),
+		lastRunId: valueState(firstValue(runtimeSnapshot?.project?.lastRunId, currentProject?.lastRunId)),
+		resolutionStatus: valueState(firstValue(runtimeSnapshot?.project?.status, projectRegistry?.resolution?.status)),
+		route: valueState(projectRoute?.path),
+		routeState: valueState(routeStateFromRoute(projectRoute)),
+		sourcePolicy: valueState("app-state-snapshot.v1 current_project + project-registry.v1")
+	};
+	const activeGoalStatus = {
+		state: valueState(firstValue(activeGoal?.viewModel?.state, runtimeSnapshot?.state)),
+		goalId: valueState(firstValue(activeGoal?.viewModel?.goalId, runtimeSnapshot?.activeGoal?.goalId)),
+		title: valueState(firstValue(activeGoal?.viewModel?.title, runtimeSnapshot?.activeGoal?.title)),
+		completedTasks: runtimeSnapshot?.activeGoal?.completedTasks,
+		totalTasks: runtimeSnapshot?.activeGoal?.totalTasks,
+		currentTaskId: valueState(firstValue(activeGoal?.taskQueue?.nextTaskId, runtimeSnapshot?.currentTask?.taskId)),
+		currentTaskStatus: runtimeSnapshot?.currentTask?.status,
+		currentTaskBlocked: runtimeSnapshot?.currentTask?.blocked,
+		reviewVerdict: runtimeSnapshot?.review?.verdict,
+		reviewEvidenceRef: runtimeSnapshot?.review?.evidenceRef,
+		mainVerificationStatus: runtimeSnapshot?.mainVerification?.status,
+		mainVerificationEvidenceRef: runtimeSnapshot?.mainVerification?.evidenceRef,
+		releaseReady: runtimeSnapshot?.release?.ready,
+		releaseReadySource: runtimeSnapshot?.release?.readySource,
+		missingReleaseGates: valueState((runtimeSnapshot?.release?.missingGates ?? []).length),
+		blockerCount: valueState((runtimeSnapshot?.blockers ?? []).length),
+		route: valueState(goalRoute?.path),
+		routeState: valueState(routeStateFromRoute(goalRoute)),
+		sourcePolicy: valueState("app-state-snapshot.v1 + goal-progress-ledger.v1 + goal-event-log.v1")
+	};
+	const nextActionDetail = {
+		state: valueState(firstValue(activeGoal?.nextAction?.status, runtimeSnapshot?.nextAction?.status)),
+		taskId: valueState(firstValue(activeGoal?.nextAction?.next?.taskId, runtimeSnapshot?.currentTask?.taskId)),
+		role: valueState(firstValue(activeGoal?.nextAction?.next?.role, runtimeSnapshot?.currentTask?.role)),
+		phase: valueState(firstValue(activeGoal?.nextAction?.next?.phase, runtimeSnapshot?.currentTask?.phase)),
+		reason: valueState(firstValue(activeGoal?.nextAction?.reason, runtimeSnapshot?.nextAction?.reason)),
+		blocked: activeGoal?.nextAction?.next?.blocked ?? runtimeSnapshot?.currentTask?.blocked,
+		registerWith: valueState(firstValue(activeGoal?.nextAction?.afterCompletion?.registerWith, runtimeSnapshot?.nextAction?.registerWith)),
+		route: valueState(nextRoute?.path),
+		routeState: valueState(routeStateFromRoute(nextRoute)),
+		sourcePolicy: valueState("goal-next-action.v1")
+	};
+	const boundaries = projectDesktopBoundaryFlags();
+	const appStates = projectDesktopAppStateFlags({
+		backendHealth,
+		sidecarState,
+		workspace,
+		activeGoalStatus,
+		supervisorSummary,
+		runtimeSnapshot,
+		routeProvenance
+	});
 	return {
 		state: runtimeSnapshot?.state === "healthy" ? "ready" : runtimeSnapshot?.state ?? "missing",
-		modelName: valueState("DesktopShellMvpViewModel"),
+		modelName: valueState("DesktopAppHomeViewModel"),
 		route: {
 			path: valueState("/workbench/desktop/"),
 			routeState: valueState("client-rendered"),
 			source: valueState("Workbench Vite route hosted by the local console sidecar")
+		},
+		appHome: {
+			title: valueState("Symphony App Home"),
+			state: valueState(appStates.routeFailed.value === true ? "route-failed" : runtimeSnapshot?.state ?? "missing"),
+			routePath: valueState("/workbench/desktop/"),
+			routeSource: valueState("Tauri window route / Workbench Vite renderer"),
+			sourcePolicy: valueState("existing read-only Workbench contracts only")
 		},
 		shellDecision: {
 			selected: valueState("Tauri-first desktop shell"),
@@ -11645,16 +11724,12 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 			launcherCommandId: sidecarHost?.launcherCommandId,
 			launcherAvailable: valueState(firstValue(sidecarHost?.launcherState) === "defined"),
 			rendererLaunchAvailable: sidecarHost?.rendererLaunchAvailable,
+			fixedLauncherContract: valueState("attach_sidecar + launch_sidecar + symphony.console.sidecar.launch"),
+			commandPreviewInert: valueState("pnpm symphony console --host <loopback> --port <allowed-port>"),
 			launcherHandoff: valueState(firstValue(sidecarHost?.launcherCommandId) || "native host bridge unavailable")
 		},
-		workspace: {
-			project: valueState(firstValue(runtimeSnapshot?.project?.name, currentProject?.name)),
-			projectId: valueState(firstValue(runtimeSnapshot?.project?.id, currentProject?.projectId)),
-			repoPath: valueState(firstValue(runtimeSnapshot?.project?.repoPath, currentProject?.repoPath)),
-			defaultBranch: valueState(firstValue(runtimeSnapshot?.project?.defaultBranch, currentProject?.defaultBranch)),
-			lastGoalId: valueState(firstValue(runtimeSnapshot?.project?.lastGoalId, currentProject?.lastGoalId)),
-			lastRunId: valueState(firstValue(runtimeSnapshot?.project?.lastRunId, currentProject?.lastRunId))
-		},
+		backendHealth,
+		workspace,
 		projectList: {
 			state: projectRegistry?.state ?? "missing",
 			contractName: projectRegistry?.contractName,
@@ -11669,37 +11744,9 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 				items: []
 			}
 		},
-		activeGoalStatus: {
-			state: valueState(firstValue(activeGoal?.viewModel?.state, runtimeSnapshot?.state)),
-			goalId: valueState(firstValue(activeGoal?.viewModel?.goalId, runtimeSnapshot?.activeGoal?.goalId)),
-			title: valueState(firstValue(activeGoal?.viewModel?.title, runtimeSnapshot?.activeGoal?.title)),
-			completedTasks: runtimeSnapshot?.activeGoal?.completedTasks,
-			totalTasks: runtimeSnapshot?.activeGoal?.totalTasks,
-			currentTaskId: valueState(firstValue(activeGoal?.taskQueue?.nextTaskId, runtimeSnapshot?.currentTask?.taskId)),
-			currentTaskStatus: runtimeSnapshot?.currentTask?.status,
-			currentTaskBlocked: runtimeSnapshot?.currentTask?.blocked,
-			reviewVerdict: runtimeSnapshot?.review?.verdict,
-			reviewEvidenceRef: runtimeSnapshot?.review?.evidenceRef,
-			mainVerificationStatus: runtimeSnapshot?.mainVerification?.status,
-			mainVerificationEvidenceRef: runtimeSnapshot?.mainVerification?.evidenceRef,
-			releaseReady: runtimeSnapshot?.release?.ready,
-			releaseReadySource: runtimeSnapshot?.release?.readySource,
-			missingReleaseGates: valueState((runtimeSnapshot?.release?.missingGates ?? []).length),
-			blockerCount: valueState((runtimeSnapshot?.blockers ?? []).length),
-			sourcePolicy: valueState("app-state-snapshot.v1 + goal-progress-ledger.v1 + goal-event-log.v1")
-		},
-		nextActionDetail: {
-			state: valueState(firstValue(activeGoal?.nextAction?.status, runtimeSnapshot?.nextAction?.status)),
-			taskId: valueState(firstValue(activeGoal?.nextAction?.next?.taskId, runtimeSnapshot?.currentTask?.taskId)),
-			role: valueState(firstValue(activeGoal?.nextAction?.next?.role, runtimeSnapshot?.currentTask?.role)),
-			phase: valueState(firstValue(activeGoal?.nextAction?.next?.phase, runtimeSnapshot?.currentTask?.phase)),
-			reason: valueState(firstValue(activeGoal?.nextAction?.reason, runtimeSnapshot?.nextAction?.reason)),
-			blocked: activeGoal?.nextAction?.next?.blocked ?? runtimeSnapshot?.currentTask?.blocked,
-			registerWith: valueState(firstValue(activeGoal?.nextAction?.afterCompletion?.registerWith, runtimeSnapshot?.nextAction?.registerWith)),
-			route: valueState(nextRoute?.path),
-			routeState: valueState(routeStateFromRoute(nextRoute)),
-			sourcePolicy: valueState("goal-next-action.v1")
-		},
+		activeGoalStatus,
+		nextActionDetail,
+		supervisorSummary,
 		firstRowCards: {
 			state: firstRowCards.length === 0 ? "empty" : "available",
 			items: firstRowCards
@@ -11740,17 +11787,169 @@ function projectDesktopShell({ projectRegistry, runtimeSnapshot, activeGoal, job
 			diagnosticsBundleRoute
 		}),
 		providerHub,
-		boundaries: {
-			readOnly: valueState(true),
-			shellCommandExecutionAvailable: valueState(false),
-			modelInvocationAvailable: valueState(false),
-			arbitraryLocalFileOpenAvailable: valueState(false),
-			gitWriteAvailable: valueState(false),
-			releaseReadyDeclared: valueState(false),
-			statusSource: valueState("explicit backend contracts only")
-		},
-		note: "Desktop Shell MVP is a first-screen desktop information architecture over the existing local API contracts. It does not execute shell commands, start jobs, open files, call models, self-approve, or declare release readiness."
+		routeProvenance,
+		appStates,
+		boundaries,
+		note: "App Home is a first-screen desktop surface over existing read-only local API contracts. It does not execute shell commands, start jobs, open files, call models, self-approve, mutate goals, push git state, or declare release completion."
 	};
+}
+function projectDesktopBackendHealth({ runtimeSnapshot, runtimeRoute }) {
+	const routeState = routeStateFromRoute(runtimeRoute);
+	return {
+		state: valueState(runtimeSnapshot?.state ?? (routeState === "ready" ? "available" : routeState)),
+		status: runtimeSnapshot?.runtime?.status,
+		mode: runtimeSnapshot?.runtime?.mode,
+		version: runtimeSnapshot?.runtime?.version,
+		kernel: runtimeSnapshot?.runtime?.kernel,
+		generatedAt: runtimeSnapshot?.generatedAt,
+		freshness: runtimeSnapshot?.freshness?.status,
+		ageMs: runtimeSnapshot?.freshness?.ageMs,
+		staleAfterMs: runtimeSnapshot?.freshness?.staleAfterMs,
+		cwd: runtimeSnapshot?.runtime?.cwd,
+		repoPath: runtimeSnapshot?.runtime?.repoPath,
+		route: valueState(runtimeRoute?.path),
+		routeState: valueState(routeState),
+		routeSource: valueState(desktopRouteSourceText(runtimeRoute, runtimeSnapshot?.state)),
+		sourcePolicy: valueState("app-state-snapshot.v1 via /api/runtime/snapshot")
+	};
+}
+function projectDesktopSupervisorSummary({ supervisorDashboard, supervisorRoute }) {
+	const route = supervisorDashboard?.route ?? supervisorRoute;
+	const available = supervisorDashboard?.state === "available";
+	const recommendedNextAction = supervisorDashboard?.recommendedNextAction ?? {};
+	const goalSnapshot = supervisorDashboard?.goalSnapshot ?? {};
+	const commandBoundary = supervisorDashboard?.commandBoundary ?? {};
+	return {
+		state: valueState(available ? "available" : "unavailable"),
+		summary: valueState(supervisorDashboard?.summary),
+		goalId: valueState(goalSnapshot.goalId),
+		title: valueState(goalSnapshot.title),
+		activeTask: valueState(goalSnapshot.activeTask),
+		activeRole: valueState(goalSnapshot.activeRole),
+		recommendedAction: valueState(recommendedNextAction.label ?? recommendedNextAction.actionId),
+		actionReason: valueState(recommendedNextAction.reason),
+		targetTask: valueState(recommendedNextAction.targetTask),
+		targetRole: valueState(recommendedNextAction.targetRole),
+		contextState: valueState(supervisorDashboard?.contextStatus?.state),
+		pendingResult: valueState(supervisorDashboard?.pendingResult?.status),
+		currentGate: valueState(supervisorDashboard?.currentGate?.gateId),
+		gateStatus: valueState(supervisorDashboard?.currentGate?.status),
+		ownership: valueState(supervisorDashboard?.ownership?.orchestrationOwner),
+		commandBoundaryState: valueState(commandBoundary.state),
+		commandExecutionAvailable: valueState(commandBoundary.executionAvailable === true),
+		safePreview: valueState(recommendedNextAction.safePreview ?? commandBoundary.safePreview),
+		readOnly: valueState(supervisorDashboard?.readOnly),
+		willMutate: valueState(supervisorDashboard?.willMutate),
+		route: valueState(route?.path),
+		routeState: valueState(routeStateFromRoute(route)),
+		routeSource: valueState(desktopRouteSourceText(route, available ? "available" : "missing")),
+		sourceMode: valueState(supervisorDashboard?.sourceMode),
+		sourcePolicy: valueState("goal-supervisor-app-read-model.v1")
+	};
+}
+function projectDesktopRouteProvenance({ routeStates, runtimeSnapshot }) {
+	const items = [
+		[
+			"runtimeSnapshot",
+			"backend health",
+			"app-state-snapshot.v1"
+		],
+		[
+			"projectRegistry",
+			"current project",
+			"project-registry.v1"
+		],
+		[
+			"goalRunbook",
+			"active goal",
+			GOAL_RUNBOOK_CONTRACT_NAME
+		],
+		[
+			"goalNextAction",
+			"next action",
+			GOAL_NEXT_ACTION_CONTRACT_NAME
+		],
+		[
+			"goalSupervisor",
+			"supervisor summary",
+			GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME
+		],
+		[
+			"jobModel",
+			"run health",
+			JOB_MODEL_CONTRACT_NAME
+		],
+		[
+			"artifactIndex",
+			"artifact readiness",
+			ARTIFACT_INDEX_CONTRACT_NAME
+		],
+		[
+			"evidenceTimeline",
+			"evidence refs",
+			EVIDENCE_TIMELINE_CONTRACT_NAME
+		]
+	].map(([id, label, sourceContract]) => {
+		const route = findProjectedRoute(routeStates, id);
+		const source = id === "runtimeSnapshot" ? desktopRouteSourceText(route, runtimeSnapshot?.state) : desktopRouteSourceText(route);
+		return {
+			id: valueState(id),
+			label: valueState(label),
+			route: valueState(route?.path),
+			routeState: valueState(routeStateFromRoute(route)),
+			source: valueState(source),
+			contractName: route?.contractName ?? valueState(sourceContract),
+			contractVersion: route?.contractVersion ?? valueState(void 0),
+			error: valueState(route?.error)
+		};
+	});
+	return {
+		state: valueState(items.some((item) => item.routeState.value === "failed") ? "failed" : items.some((item) => item.routeState.value === "unavailable") ? "partial" : "available"),
+		items,
+		sourcePolicy: valueState("route state projection from existing Workbench read-only API results")
+	};
+}
+function projectDesktopBoundaryFlags() {
+	return {
+		readOnly: valueState(true),
+		willMutate: valueState(false),
+		browserTerminalAvailable: valueState(false),
+		genericShellRunnerAvailable: valueState(false),
+		shellCommandExecutionAvailable: valueState(false),
+		providerCliFromRendererAvailable: valueState(false),
+		modelInvocationAvailable: valueState(false),
+		daemonControlAvailable: valueState(false),
+		childDispatchAvailable: valueState(false),
+		goalEventRegistrationAvailable: valueState(false),
+		arbitraryLocalFileOpenAvailable: valueState(false),
+		gitWriteAvailable: valueState(false),
+		gitReleaseActionAvailable: valueState(false),
+		releaseReadyDeclared: valueState(false),
+		signingNotarizationAutoUpdateAvailable: valueState(false),
+		evidenceRefsAreInertText: valueState(true),
+		commandPreviewsAreInertText: valueState(true),
+		statusSource: valueState("explicit backend contracts only")
+	};
+}
+function projectDesktopAppStateFlags({ backendHealth, sidecarState, workspace, activeGoalStatus, supervisorSummary, runtimeSnapshot, routeProvenance }) {
+	return {
+		backendUnavailable: valueState(backendHealth?.routeState?.value !== "ready"),
+		sidecarMissing: valueState(sidecarState === "missing"),
+		projectMissing: valueState(workspace?.project?.state === "missing"),
+		activeGoalMissing: valueState(activeGoalStatus?.goalId?.state === "missing"),
+		supervisorModelUnavailable: valueState(supervisorSummary?.state?.value !== "available"),
+		staleSnapshot: valueState(runtimeSnapshot?.state === "stale"),
+		routeFailed: valueState(routeProvenance?.items?.some((item) => item.routeState.value === "failed") === true),
+		sourcePolicy: valueState("visible App Home state flags derived from route states and read-only projections")
+	};
+}
+function desktopRouteSourceText(route, projectedState) {
+	if (route?.state === "ready" && projectedState === "stale") return "stale snapshot";
+	if (route?.state === "ready") return "live contract";
+	if (route?.state === "skipped") return "skipped route";
+	if (route?.state === "failed") return "failed route";
+	if (projectedState === "missing") return "missing model";
+	return "missing route";
 }
 function projectDesktopJobRun({ jobConsole, jobRoute, jobCreationRoute, jobTimelineRoute, jobRunControlRoute }) {
 	const jobModel = jobConsole?.jobModel ?? {};
@@ -21859,7 +22058,7 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "header-summary",
-							children: workbenchRoute === "desktop" ? "只读桌面 shell：sidecar、goal、next action、run state、artifact readiness。" : "围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。"
+							children: workbenchRoute === "desktop" ? "Native App Home：current project、sidecar、backend health、active goal、next action、supervisor summary、route provenance。" : "围绕 active goal、next action、prompt handoff、event registration、review、verification 和 closeout 展开。顶层路径使用 goal-status、goal next、goal prompt、goal update/review/gate、goal closeout 和 scoped operations contracts。"
 						})
 					]
 				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -22288,7 +22487,7 @@ function JobConsolePanel({ jobConsole, jobModelRoute, jobCreationRoute, jobTimel
 function DesktopShellRoute({ desktopShell, routeContext }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "desktop-shell-workspace",
-		"aria-label": "v37 Desktop Shell MVP",
+		"aria-label": "v47 Mac App Home",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {
 			className: "desktop-sidebar",
 			"aria-label": "Desktop shell navigation",
@@ -22298,7 +22497,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "section-kicker",
 						children: "local app"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Command Center" })]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "App Home" })]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", {
 					"aria-label": "Desktop shell sections",
@@ -22306,7 +22505,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-overview",
 							"aria-current": "page",
-							children: "Overview"
+							children: "Home"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
@@ -22319,6 +22518,10 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-artifacts",
 							children: "Artifacts"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#desktop-provenance",
+							children: "Provenance"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-boundaries",
@@ -22339,11 +22542,21 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 					"aria-label": "Desktop shell top status bar",
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "project" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: desktopShell?.workspace?.project?.text ?? "未暴露" })] }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "backend" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: desktopShell?.backendHealth?.state?.text ?? "missing" })] }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "goal" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: desktopShell?.activeGoalStatus?.goalId?.text ?? desktopShell?.workspace?.lastGoalId?.text ?? "未暴露" })] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "state" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: desktopShell?.state ?? "missing" })] }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "decision" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: desktopShell?.shellDecision?.selected?.text ?? "未暴露" })] })
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "boundary" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("strong", { children: [
+							"readOnly ",
+							desktopShell?.boundaries?.readOnly?.text ?? "未暴露",
+							" / willMutate ",
+							desktopShell?.boundaries?.willMutate?.text ?? "未暴露"
+						] })] })
 					]
 				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppHomePanel, {
+					desktopShell,
+					routeContext
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
 					nextActionDetail: desktopShell?.nextActionDetail
@@ -22353,15 +22566,23 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 					className: "desktop-card-grid desktop-first-row",
 					"aria-label": "Desktop shell first row",
 					children: [
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopProjectListCard, { projectList: desktopShell?.projectList }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopCurrentProjectCard, {
+							workspace: desktopShell?.workspace,
+							projectList: desktopShell?.projectList
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopBackendHealthCard, { backendHealth: desktopShell?.backendHealth }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopSidecarCard, { sidecarHealth: desktopShell?.sidecarHealth }),
-						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopMetricCards, { cards: desktopShell?.firstRowCards })
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopActiveGoalCard, { activeGoalStatus: desktopShell?.activeGoalStatus }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopNextActionCard, { nextActionDetail: desktopShell?.nextActionDetail }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopSupervisorSummaryCard, { supervisorSummary: desktopShell?.supervisorSummary })
 					]
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "desktop-card-grid desktop-lower-grid",
 					"aria-label": "Desktop shell lower workspace",
 					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopMetricCards, { cards: desktopShell?.firstRowCards }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopProjectListCard, { projectList: desktopShell?.projectList }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopLifecycleCard, { lifecycle: desktopShell?.lifecycle }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusCard, {
 							activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -22370,6 +22591,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopRunStateCard, { jobRun: desktopShell?.jobRun }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopArtifactReadinessCard, { artifactReadiness: desktopShell?.artifactReadiness }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopProviderHubCard, { providerHub: desktopShell?.providerHub }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopRouteProvenanceCard, { routeProvenance: desktopShell?.routeProvenance }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDecisionCard, { shellDecision: desktopShell?.shellDecision }),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopBoundaryCard, {
 							boundaries: desktopShell?.boundaries,
@@ -22379,6 +22601,103 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 				})
 			]
 		})]
+	});
+}
+function DesktopAppHomePanel({ desktopShell, routeContext }) {
+	const evidenceRefs = routeContext?.evidenceRefs?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "desktop-app-home-panel",
+		"aria-label": "Desktop App Home summary",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "section-kicker",
+				children: "app home"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: desktopShell?.appHome?.title?.text ?? "Symphony App Home" }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: desktopShell?.note ?? "App Home unavailable." })
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["current project", desktopShell?.workspace?.project],
+			["repo path", desktopShell?.workspace?.repoPath],
+			["repo path source", desktopShell?.workspace?.repoPathSource],
+			["backend route", desktopShell?.backendHealth?.route],
+			["route source", desktopShell?.appHome?.routeSource],
+			["evidence refs", textValue(evidenceRefs.length > 0 ? `${evidenceRefs.map((item) => item.ref.text).join("、")} (inert text only)` : "inert text only")],
+			["command preview", desktopShell?.sidecarHealth?.commandPreviewInert]
+		] })]
+	});
+}
+function DesktopAppStateStrip({ appStates }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+		className: "desktop-app-state-strip",
+		"aria-label": "Desktop missing state visibility",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dl", {
+			className: "desktop-app-state-list",
+			children: [
+				["backend unavailable", appStates?.backendUnavailable],
+				["sidecar missing", appStates?.sidecarMissing],
+				["project missing", appStates?.projectMissing],
+				["active goal missing", appStates?.activeGoalMissing],
+				["supervisor unavailable", appStates?.supervisorModelUnavailable],
+				["stale snapshot", appStates?.staleSnapshot],
+				["route failed", appStates?.routeFailed]
+			].map(([label, state]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: label }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: formatState(state) })] }, label))
+		})
+	});
+}
+function DesktopCurrentProjectCard({ workspace, projectList }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "desktop-card",
+		"aria-labelledby": "desktop-current-project-title",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+			className: "desktop-card-header",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "section-kicker",
+				children: "current project"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				id: "desktop-current-project-title",
+				children: "Project"
+			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: `desktop-status ${desktopStatusClass(workspace?.state?.text)}`,
+				children: workspace?.state?.text ?? "missing"
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["name", workspace?.project],
+			["repo path", workspace?.repoPath],
+			["repo path source", workspace?.repoPathSource],
+			["resolution", workspace?.resolutionStatus],
+			["routeState", workspace?.routeState],
+			["registry projects", projectList?.projects?.count],
+			["source", workspace?.sourcePolicy]
+		] })]
+	});
+}
+function DesktopBackendHealthCard({ backendHealth }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "desktop-card",
+		"aria-labelledby": "desktop-backend-health-title",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+			className: "desktop-card-header",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "section-kicker",
+				children: "backend health"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				id: "desktop-backend-health-title",
+				children: "Backend"
+			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: `desktop-status ${desktopStatusClass(backendHealth?.state?.text)}`,
+				children: backendHealth?.state?.text ?? "missing"
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["status", backendHealth?.status],
+			["mode", backendHealth?.mode],
+			["version", backendHealth?.version],
+			["kernel", backendHealth?.kernel],
+			["freshness", backendHealth?.freshness],
+			["route", backendHealth?.route],
+			["routeState", backendHealth?.routeState],
+			["route source", backendHealth?.routeSource],
+			["source", backendHealth?.sourcePolicy]
+		] })]
 	});
 }
 function DesktopDevelopmentStatusStrip({ activeGoalStatus, nextActionDetail }) {
@@ -22471,7 +22790,108 @@ function DesktopSidecarCard({ sidecarHealth }) {
 			["status", sidecarHealth?.status],
 			["attach", sidecarHealth?.attachState],
 			["launcher", sidecarHealth?.launcherState],
+			["launcher command id", sidecarHealth?.launcherCommandId],
+			["fixed launcher contract", sidecarHealth?.fixedLauncherContract],
+			["renderer launch", sidecarHealth?.rendererLaunchAvailable],
 			["bridge", sidecarHealth?.launcherHandoff]
+		] })]
+	});
+}
+function DesktopActiveGoalCard({ activeGoalStatus }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "desktop-card",
+		"aria-labelledby": "desktop-active-goal-title",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+			className: "desktop-card-header",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "section-kicker",
+				children: "active goal"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				id: "desktop-active-goal-title",
+				children: "Active Goal"
+			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: `desktop-status ${desktopStatusClass(activeGoalStatus?.state?.text)}`,
+				children: activeGoalStatus?.state?.text ?? "missing"
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["goal id", activeGoalStatus?.goalId],
+			["title", activeGoalStatus?.title],
+			["current task", activeGoalStatus?.currentTaskId],
+			["task status", activeGoalStatus?.currentTaskStatus],
+			["blocked", activeGoalStatus?.currentTaskBlocked],
+			["completed", activeGoalStatus?.completedTasks],
+			["total", activeGoalStatus?.totalTasks],
+			["route", activeGoalStatus?.route],
+			["routeState", activeGoalStatus?.routeState],
+			["source", activeGoalStatus?.sourcePolicy]
+		] })]
+	});
+}
+function DesktopNextActionCard({ nextActionDetail }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "desktop-card",
+		"aria-labelledby": "desktop-next-action-title",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+			className: "desktop-card-header",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "section-kicker",
+				children: "next action"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				id: "desktop-next-action-title",
+				children: "Next Action"
+			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: `desktop-status ${desktopStatusClass(nextActionDetail?.state?.text)}`,
+				children: nextActionDetail?.state?.text ?? "missing"
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["task", nextActionDetail?.taskId],
+			["role", nextActionDetail?.role],
+			["phase", nextActionDetail?.phase],
+			["reason", nextActionDetail?.reason],
+			["blocked", nextActionDetail?.blocked],
+			["register with", nextActionDetail?.registerWith],
+			["route", nextActionDetail?.route],
+			["routeState", nextActionDetail?.routeState],
+			["source", nextActionDetail?.sourcePolicy]
+		] })]
+	});
+}
+function DesktopSupervisorSummaryCard({ supervisorSummary }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "desktop-card desktop-span-2",
+		"aria-labelledby": "desktop-supervisor-summary-title",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+			className: "desktop-card-header",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "section-kicker",
+				children: "supervisor summary"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				id: "desktop-supervisor-summary-title",
+				children: "Supervisor"
+			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: `desktop-status ${desktopStatusClass(supervisorSummary?.state?.text)}`,
+				children: supervisorSummary?.state?.text ?? "missing"
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["summary", supervisorSummary?.summary],
+			["goal", supervisorSummary?.goalId],
+			["active task", supervisorSummary?.activeTask],
+			["active role", supervisorSummary?.activeRole],
+			["recommended action", supervisorSummary?.recommendedAction],
+			["reason", supervisorSummary?.actionReason],
+			["context", supervisorSummary?.contextState],
+			["pending result", supervisorSummary?.pendingResult],
+			["current gate", supervisorSummary?.currentGate],
+			["gate status", supervisorSummary?.gateStatus],
+			["readOnly", supervisorSummary?.readOnly],
+			["willMutate", supervisorSummary?.willMutate],
+			["command boundary", supervisorSummary?.commandBoundaryState],
+			["command execution", supervisorSummary?.commandExecutionAvailable],
+			["safe preview", supervisorSummary?.safePreview],
+			["route", supervisorSummary?.route],
+			["routeState", supervisorSummary?.routeState],
+			["route source", supervisorSummary?.routeSource],
+			["source", supervisorSummary?.sourcePolicy]
 		] })]
 	});
 }
@@ -22498,6 +22918,43 @@ function DesktopMetricCards({ cards }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: card.detail.text })
 		]
 	}, card.id.text)) });
+}
+function DesktopRouteProvenanceCard({ routeProvenance }) {
+	const items = routeProvenance?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		id: "desktop-provenance",
+		className: "desktop-card desktop-span-2",
+		"aria-labelledby": "desktop-route-provenance-title",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "desktop-card-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "route / source provenance"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+					id: "desktop-route-provenance-title",
+					children: "Route Sources"
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(routeProvenance?.state?.text)}`,
+					children: routeProvenance?.state?.text ?? "missing"
+				})]
+			}),
+			items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Route/source provenance 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				className: "desktop-readonly-list desktop-route-provenance-list",
+				children: items.map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: item.label?.text ?? item.id?.text ?? "route" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.source?.text ?? "missing" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["route", item.route],
+					["routeState", item.routeState],
+					["contract", item.contractName],
+					["version", item.contractVersion],
+					["error", item.error]
+				] })] }, `${item.id?.text ?? "route"}-${index}`))
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: routeProvenance?.sourcePolicy?.text ?? "Route provenance unavailable."
+			})
+		]
+	});
 }
 function DesktopLifecycleCard({ lifecycle }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
@@ -22797,24 +23254,44 @@ function DesktopBoundaryCard({ boundaries, note }) {
 		id: "desktop-boundaries",
 		className: "desktop-card",
 		"aria-labelledby": "desktop-boundaries-title",
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
-			className: "desktop-card-header",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "section-kicker",
-				children: "desktop-only boundary"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-				id: "desktop-boundaries-title",
-				children: "No Runner Surface"
-			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-				className: "desktop-status olive",
-				children: "locked"
-			})]
-		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-			["readOnly", boundaries?.readOnly],
-			["shell exec", boundaries?.shellCommandExecutionAvailable],
-			["git write", boundaries?.gitWriteAvailable],
-			["release declared", boundaries?.releaseReadyDeclared]
-		] })]
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "desktop-card-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "desktop-only boundary"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+					id: "desktop-boundaries-title",
+					children: "No Runner Surface"
+				})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: "desktop-status olive",
+					children: "locked"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["readOnly", boundaries?.readOnly],
+				["willMutate", boundaries?.willMutate],
+				["browser terminal", boundaries?.browserTerminalAvailable],
+				["generic shell runner", boundaries?.genericShellRunnerAvailable],
+				["shell exec", boundaries?.shellCommandExecutionAvailable],
+				["provider CLI from renderer", boundaries?.providerCliFromRendererAvailable],
+				["daemon control", boundaries?.daemonControlAvailable],
+				["child dispatch", boundaries?.childDispatchAvailable],
+				["goal event registration", boundaries?.goalEventRegistrationAvailable],
+				["local file open", boundaries?.arbitraryLocalFileOpenAvailable],
+				["git write", boundaries?.gitWriteAvailable],
+				["git/release action", boundaries?.gitReleaseActionAvailable],
+				["release declared", boundaries?.releaseReadyDeclared],
+				["signing/notarization/update", boundaries?.signingNotarizationAutoUpdateAvailable],
+				["evidence refs", boundaries?.evidenceRefsAreInertText],
+				["command preview", boundaries?.commandPreviewsAreInertText],
+				["source", boundaries?.statusSource]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: note ?? "Desktop App Home boundary unavailable."
+			})
+		]
 	});
 }
 function desktopStatusClass(status) {
@@ -22833,7 +23310,11 @@ function desktopStatusClass(status) {
 		"needs-attention",
 		"unavailable",
 		"needs-attach",
-		"launch-requested"
+		"launch-requested",
+		"missing",
+		"empty",
+		"failed",
+		"route-failed"
 	].includes(status)) return "amber";
 	return "plum";
 }
@@ -30277,17 +30758,17 @@ function workbenchShellClassName(route) {
 	return "workbench-shell";
 }
 function workbenchRouteEyebrow(route) {
-	if (route === "desktop") return "v37 Desktop Shell MVP";
+	if (route === "desktop") return "v47 Mac App Home";
 	if (route === "supervisor") return "v44.4 fixture prototype";
 	return "v28 Workbench v1";
 }
 function workbenchRouteTitle(route) {
-	if (route === "desktop") return "Symphony Desktop Shell";
+	if (route === "desktop") return "Symphony App Home";
 	if (route === "supervisor") return "Supervisor Command Center";
 	return "Symphony Workbench";
 }
 function workbenchRouteStatusText(route) {
-	if (route === "desktop") return "contract-backed";
+	if (route === "desktop") return "app home read-only / no renderer mutation";
 	if (route === "supervisor") return "supervisor read-only / fixture fallback";
 	return "confirm 后会刷新 goal-status / events / next action";
 }
