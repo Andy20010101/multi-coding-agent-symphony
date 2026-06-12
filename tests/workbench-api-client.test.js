@@ -234,7 +234,8 @@ describe('v15 Workbench read-only API client', () => {
       assert.equal(model.threadContinuationDecision.contractName, 'threadContinuationDecision.v1');
       assert.equal(model.threadContinuationDecision.commandBoundary.executionAvailable, false);
       assert.equal(model.threadContinuationDecision.commandBoundary.copyOnly, true);
-      assert.equal(JSON.stringify(model).includes('rawTranscript'), false);
+      assert.doesNotMatch(JSON.stringify(model), /"rawTranscript"\s*:/u);
+      assert.doesNotMatch(JSON.stringify(model), /"rawModelOutput"\s*:/u);
 
       const rejected = await fetch(`${baseUrl}/api/goals/v19-fixture/supervisor`, { method: 'POST' });
       const error = await rejected.json();
