@@ -11151,6 +11151,14 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.codexProviderExecutionPreview,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedCodexProviderRunRecovery = projectCodexProviderRunRecovery({
+		contract: goalSupervisorData?.codexProviderRunRecovery,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
+	const projectedReviewerHandoffPreview = projectReviewerHandoffPreview({
+		contract: goalSupervisorData?.reviewerHandoffPreview,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11171,6 +11179,8 @@ function projectWorkbenchContracts(results) {
 		systemGoldenPath: projectedSystemGoldenPath,
 		childDispatchPreview: projectedChildDispatchPreview,
 		codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
+		codexProviderRunRecovery: projectedCodexProviderRunRecovery,
+		reviewerHandoffPreview: projectedReviewerHandoffPreview,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11195,6 +11205,8 @@ function projectWorkbenchContracts(results) {
 			systemGoldenPath: projectedSystemGoldenPath,
 			childDispatchPreview: projectedChildDispatchPreview,
 			codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
+			codexProviderRunRecovery: projectedCodexProviderRunRecovery,
+			reviewerHandoffPreview: projectedReviewerHandoffPreview,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11706,7 +11718,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -11984,6 +11996,8 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		systemGoldenPath,
 		childDispatchPreview,
 		codexProviderExecutionPreview,
+		codexProviderRunRecovery,
+		reviewerHandoffPreview,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12264,6 +12278,155 @@ function projectCodexProviderExecutionResultReturn(resultReturn) {
 		releaseGateMutationAvailable: valueState(resultReturn?.releaseGateMutationAvailable),
 		rawTranscriptAvailable: valueState(resultReturn?.rawTranscriptAvailable),
 		rawModelOutputAvailable: valueState(resultReturn?.rawModelOutputAvailable)
+	};
+}
+function projectCodexProviderRunRecovery({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	return {
+		state: hasContract ? contract.recoveryState ?? "available" : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		task: {
+			taskId: valueState(contract?.task?.taskId),
+			title: valueState(contract?.task?.title),
+			state: valueState(contract?.task?.state),
+			sourceContract: valueState(contract?.task?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+		},
+		runId: valueState(contract?.runId),
+		providerId: valueState(contract?.providerId),
+		role: valueState(contract?.role),
+		previewHash: valueState(contract?.previewHash),
+		taskPackHash: valueState(contract?.taskPackHash),
+		runStatus: valueState(contract?.runStatus),
+		recoveryState: valueState(contract?.recoveryState),
+		resultIntake: projectCodexProviderRunRecoveryResultIntake(contract?.resultIntake),
+		nextSafeAction: {
+			actionId: valueState(contract?.nextSafeAction?.actionId),
+			label: valueState(contract?.nextSafeAction?.label),
+			copyOnly: valueState(contract?.nextSafeAction?.copyOnly),
+			willMutate: valueState(contract?.nextSafeAction?.willMutate)
+		},
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		sourceContracts: {
+			state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : void 0),
+			items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectChildDispatchSourceContract)
+		},
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 codexProviderRunRecovery projection")
+		},
+		note: hasContract ? "Codex run recovery is projected from backend-owned run records and pending result state. Workbench displays operator-safe recovery state only." : "Codex run recovery is unavailable until goal-supervisor-app-read-model.v1 exposes codexProviderRunRecovery.v1."
+	};
+}
+function projectCodexProviderRunRecoveryResultIntake(resultIntake) {
+	const pendingResult = resultIntake?.pendingResult;
+	return {
+		state: resultIntake !== null && resultIntake !== void 0 && typeof resultIntake === "object" && !Array.isArray(resultIntake) ? "available" : "missing",
+		contractName: valueState(resultIntake?.contractName),
+		requestId: valueState(resultIntake?.requestId),
+		requestState: valueState(resultIntake?.requestState),
+		previewHash: valueState(resultIntake?.previewHash),
+		planHash: valueState(resultIntake?.planHash),
+		pendingResultState: valueState(pendingResult?.state),
+		pendingResultEscrowRef: valueState(pendingResult?.escrowRef),
+		blockedReasons: projectSystemGoldenPathTextItems(resultIntake?.blockedReasons),
+		sourceRef: projectSystemGoldenPathSourceRef(resultIntake?.sourceRef)
+	};
+}
+function projectReviewerHandoffPreview({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	const ready = hasContract && blockedReasons.length === 0;
+	return {
+		state: hasContract ? ready ? "ready" : "blocked" : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		workerTask: {
+			taskId: valueState(contract?.workerTask?.taskId),
+			title: valueState(contract?.workerTask?.title),
+			state: valueState(contract?.workerTask?.state),
+			sourceContract: valueState(contract?.workerTask?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.workerTask?.sourceRef)
+		},
+		reviewerTask: {
+			taskId: valueState(contract?.reviewerTask?.taskId),
+			title: valueState(contract?.reviewerTask?.title),
+			state: valueState(contract?.reviewerTask?.state),
+			sourceContract: valueState(contract?.reviewerTask?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.reviewerTask?.sourceRef)
+		},
+		pendingResultRef: {
+			contractName: valueState(contract?.pendingResultRef?.contractName),
+			state: valueState(contract?.pendingResultRef?.state),
+			escrowRef: valueState(contract?.pendingResultRef?.escrowRef),
+			blockedReasons: projectSystemGoldenPathTextItems(contract?.pendingResultRef?.blockedReasons),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.pendingResultRef?.sourceRef)
+		},
+		acceptedResultSummary: projectReviewerHandoffResultSummary(contract?.acceptedResultSummary),
+		handoffPack: projectReviewerHandoffPack(contract?.handoffPack),
+		copyOnly: valueState(contract?.copyOnly),
+		willMutate: valueState(contract?.willMutate),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		sourceContracts: {
+			state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : void 0),
+			items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectChildDispatchSourceContract)
+		},
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 reviewerHandoffPreview projection")
+		},
+		note: hasContract ? "Reviewer handoff preview is copy-only. Workbench displays accepted pending result context without creating a reviewer verdict." : "Reviewer handoff preview is unavailable until goal-supervisor-app-read-model.v1 exposes reviewerHandoffPreview.v1."
+	};
+}
+function projectReviewerHandoffResultSummary(summary) {
+	return {
+		state: summary !== null && summary !== void 0 && typeof summary === "object" && !Array.isArray(summary) ? "available" : "missing",
+		status: valueState(summary?.status),
+		summary: valueState(summary?.summary),
+		changedFiles: projectSystemGoldenPathTextItems(summary?.changedFiles),
+		validationCommands: projectSystemGoldenPathTextItems(summary?.validationCommands),
+		risks: projectSystemGoldenPathTextItems(summary?.risks),
+		blockers: projectSystemGoldenPathTextItems(summary?.blockers),
+		evidenceRefs: projectChildDispatchEvidenceRefs(summary?.evidenceRefs),
+		blockerReason: valueState(summary?.blockerReason)
+	};
+}
+function projectReviewerHandoffPack(handoffPack) {
+	const hasPack = handoffPack !== null && handoffPack !== void 0 && typeof handoffPack === "object" && !Array.isArray(handoffPack);
+	return {
+		state: hasPack ? "available" : "missing",
+		title: valueState(handoffPack?.title),
+		handoffBody: valueState(handoffPack?.body),
+		workerEvidenceRefs: projectChildDispatchEvidenceRefs(handoffPack?.workerEvidenceRefs),
+		changedFiles: projectSystemGoldenPathTextItems(handoffPack?.changedFiles),
+		validationCommands: projectSystemGoldenPathTextItems(handoffPack?.validationCommands),
+		risks: projectSystemGoldenPathTextItems(handoffPack?.risks),
+		blockers: projectSystemGoldenPathTextItems(handoffPack?.blockers),
+		json: valueState(hasPack ? stableJsonText(handoffPack) : void 0)
 	};
 }
 function projectChildDispatchTaskPack(taskPack) {
@@ -25745,6 +25908,14 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Codex Run"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#codex-run-recovery-panel",
+							children: "Recovery"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#reviewer-handoff-preview-panel",
+							children: "Reviewer Handoff"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -25800,6 +25971,8 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChildDispatchPreviewPanel, { childDispatchPreview: desktopShell?.childDispatchPreview }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodexProviderExecutionPreviewPanel, { codexProviderExecutionPreview: desktopShell?.codexProviderExecutionPreview }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodexRunRecoveryPanel, { codexProviderRunRecovery: desktopShell?.codexProviderRunRecovery }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewerHandoffPreviewPanel, { reviewerHandoffPreview: desktopShell?.reviewerHandoffPreview }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -26509,6 +26682,215 @@ function CodexProviderExecutionPreviewPanel({ codexProviderExecutionPreview }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: preview?.note ?? "Codex provider execution preview unavailable."
+			})
+		]
+	});
+}
+function CodexRunRecoveryPanel({ codexProviderRunRecovery }) {
+	const recovery = codexProviderRunRecovery;
+	const sourceContracts = recovery?.sourceContracts?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "codex-run-recovery-panel",
+		className: "codex-run-recovery-panel",
+		"aria-label": "Codex Run Recovery",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "codex-run-recovery-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v55 run recovery"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Codex Run Recovery" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(recovery?.state)}`,
+					children: recovery?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "codex-run-recovery-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", recovery?.contractName],
+					["goal", recovery?.goal?.goalId],
+					["task", recovery?.task?.taskId],
+					["run id", recovery?.runId],
+					["provider", recovery?.providerId],
+					["role", recovery?.role],
+					["run status", recovery?.runStatus],
+					["recovery state", recovery?.recoveryState],
+					["blocked reasons", textValueFromItems(recovery?.blockedReasons, "无")]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["preview hash", recovery?.previewHash],
+					["task pack hash", recovery?.taskPackHash],
+					["read model source", recovery?.route?.source],
+					["route", recovery?.route?.path],
+					["route state", recovery?.route?.routeState],
+					["generated at", recovery?.generatedAt]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Result Intake",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["request contract", recovery?.resultIntake?.contractName],
+					["request id", recovery?.resultIntake?.requestId],
+					["request state", recovery?.resultIntake?.requestState],
+					["pending result state", recovery?.resultIntake?.pendingResultState],
+					["pending escrow", recovery?.resultIntake?.pendingResultEscrowRef],
+					["preview hash", recovery?.resultIntake?.previewHash],
+					["plan hash", recovery?.resultIntake?.planHash],
+					["blocked reasons", textValueFromItems(recovery?.resultIntake?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Next Safe Action",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["action", recovery?.nextSafeAction?.actionId],
+					["label", recovery?.nextSafeAction?.label],
+					["copy only", recovery?.nextSafeAction?.copyOnly],
+					["willMutate", recovery?.nextSafeAction?.willMutate]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "source contracts",
+				children: sourceContracts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "codexProviderRunRecovery source contracts 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: sourceContracts.map((source, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: source.contractName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["readOnly", source.readOnly],
+						["required for", textValueFromItems(source.requiredFor, "无")],
+						["source ref", source.sourceRef?.ref]
+					] })] }, `${source.contractName.text}-${index}`))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["provider execution", recovery?.boundaries?.providerExecutionAvailable],
+					["claude-code execution", recovery?.boundaries?.claudeCodeExecutionAvailable],
+					["provider parity", recovery?.boundaries?.providerParityAvailable],
+					["automatic reviewer verdict", recovery?.boundaries?.automaticReviewerVerdictAvailable],
+					["generic shell", recovery?.boundaries?.genericShellAvailable],
+					["arbitrary command", recovery?.boundaries?.arbitraryCommandExecutionAvailable],
+					["frontend JSONL read", recovery?.boundaries?.frontendLocalJsonlReadAvailable],
+					["local session file read", recovery?.boundaries?.localSessionFileReadAvailable],
+					["transcript exposure", recovery?.boundaries?.rawTranscriptAvailable],
+					["model-output exposure", recovery?.boundaries?.rawModelOutputAvailable],
+					["goal event write", recovery?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", recovery?.boundaries?.directTaskCompleteAvailable],
+					["reviewer mutation", recovery?.boundaries?.reviewerMutationAvailable],
+					["main gate mutation", recovery?.boundaries?.mainVerificationMutationAvailable],
+					["gate mutation", recovery?.boundaries?.releaseGateMutationAvailable],
+					["git mutation", recovery?.boundaries?.gitMutationAvailable],
+					["tag automation", recovery?.boundaries?.tagAutomationAvailable],
+					["publish automation", recovery?.boundaries?.publishAutomationAvailable],
+					["github publish automation", recovery?.boundaries?.githubReleaseAutomationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: recovery?.note ?? "Codex run recovery unavailable."
+			})
+		]
+	});
+}
+function ReviewerHandoffPreviewPanel({ reviewerHandoffPreview }) {
+	const preview = reviewerHandoffPreview;
+	const sourceContracts = preview?.sourceContracts?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "reviewer-handoff-preview-panel",
+		className: "reviewer-handoff-preview-panel",
+		"aria-label": "Reviewer Handoff Preview",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "reviewer-handoff-preview-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v55 reviewer handoff"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Reviewer Handoff Preview" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(preview?.state)}`,
+					children: preview?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "reviewer-handoff-preview-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", preview?.contractName],
+					["goal", preview?.goal?.goalId],
+					["worker task", preview?.workerTask?.taskId],
+					["worker task state", preview?.workerTask?.state],
+					["reviewer task", preview?.reviewerTask?.taskId],
+					["reviewer task state", preview?.reviewerTask?.state],
+					["copy only", preview?.copyOnly],
+					["willMutate", preview?.willMutate],
+					["blocked reasons", textValueFromItems(preview?.blockedReasons, "无")]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["pending result contract", preview?.pendingResultRef?.contractName],
+					["pending result state", preview?.pendingResultRef?.state],
+					["pending escrow", preview?.pendingResultRef?.escrowRef],
+					["result status", preview?.acceptedResultSummary?.status],
+					["summary", preview?.acceptedResultSummary?.summary],
+					["evidence refs", evidenceRefsTextFromCollection(preview?.acceptedResultSummary?.evidenceRefs)]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Accepted Result Summary",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["changed files", textValueFromItems(preview?.acceptedResultSummary?.changedFiles, "无")],
+					["validation commands", textValueFromItems(preview?.acceptedResultSummary?.validationCommands, "无")],
+					["risks", textValueFromItems(preview?.acceptedResultSummary?.risks, "无")],
+					["blockers", textValueFromItems(preview?.acceptedResultSummary?.blockers, "无")],
+					["blocker reason", preview?.acceptedResultSummary?.blockerReason]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "Handoff Pack",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["pack state", preview?.handoffPack?.state],
+					["title", preview?.handoffPack?.title],
+					["body", preview?.handoffPack?.handoffBody],
+					["worker evidence refs", evidenceRefsTextFromCollection(preview?.handoffPack?.workerEvidenceRefs)],
+					["changed files", textValueFromItems(preview?.handoffPack?.changedFiles, "无")],
+					["validation commands", textValueFromItems(preview?.handoffPack?.validationCommands, "无")],
+					["risks", textValueFromItems(preview?.handoffPack?.risks, "无")],
+					["blockers", textValueFromItems(preview?.handoffPack?.blockers, "无")]
+				] }), preview?.handoffPack?.json?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+					className: "copy-block child-dispatch-copy-block",
+					children: preview.handoffPack.json.text
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "handoffPack 未暴露。" })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "source contracts",
+				children: sourceContracts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "reviewerHandoffPreview source contracts 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: sourceContracts.map((source, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: source.contractName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["readOnly", source.readOnly],
+						["required for", textValueFromItems(source.requiredFor, "无")],
+						["source ref", source.sourceRef?.ref]
+					] })] }, `${source.contractName.text}-${index}`))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["provider execution", preview?.boundaries?.providerExecutionAvailable],
+					["claude-code execution", preview?.boundaries?.claudeCodeExecutionAvailable],
+					["automatic reviewer verdict", preview?.boundaries?.automaticReviewerVerdictAvailable],
+					["generic shell", preview?.boundaries?.genericShellAvailable],
+					["arbitrary command", preview?.boundaries?.arbitraryCommandExecutionAvailable],
+					["frontend JSONL read", preview?.boundaries?.frontendLocalJsonlReadAvailable],
+					["local session file read", preview?.boundaries?.localSessionFileReadAvailable],
+					["transcript exposure", preview?.boundaries?.rawTranscriptAvailable],
+					["model-output exposure", preview?.boundaries?.rawModelOutputAvailable],
+					["goal event write", preview?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", preview?.boundaries?.directTaskCompleteAvailable],
+					["reviewer mutation", preview?.boundaries?.reviewerMutationAvailable],
+					["main gate mutation", preview?.boundaries?.mainVerificationMutationAvailable],
+					["gate mutation", preview?.boundaries?.releaseGateMutationAvailable],
+					["git mutation", preview?.boundaries?.gitMutationAvailable],
+					["tag automation", preview?.boundaries?.tagAutomationAvailable],
+					["publish automation", preview?.boundaries?.publishAutomationAvailable],
+					["github publish automation", preview?.boundaries?.githubReleaseAutomationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: preview?.note ?? "Reviewer handoff preview unavailable."
 			})
 		]
 	});
@@ -34766,6 +35148,10 @@ function firstText(...values) {
 function textValueFromItems(collection, emptyText = "无") {
 	const values = (collection?.items ?? []).map((item) => textValueFromState(item)).filter((item) => item !== "");
 	return textValue(values.length === 0 ? emptyText : values.join("、"));
+}
+function evidenceRefsTextFromCollection(collection) {
+	const values = (collection?.items ?? []).map((item) => firstText(item.ref, item.label, item.kind)).filter((item) => item !== "");
+	return textValue(values.length === 0 ? "无" : values.join("、"));
 }
 function manualCliRequiredState(systemGoldenPath) {
 	const commands = (systemGoldenPath?.manualRequired?.items ?? []).map((item) => textValueFromState(item.commandName)).filter((item) => item !== "");

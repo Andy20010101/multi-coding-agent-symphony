@@ -616,6 +616,8 @@ function DesktopShellRoute({
           <a href="#system-golden-path-panel">System Path</a>
           <a href="#child-dispatch-preview-panel">Child Task</a>
           <a href="#codex-provider-execution-preview-panel">Codex Run</a>
+          <a href="#codex-run-recovery-panel">Recovery</a>
+          <a href="#reviewer-handoff-preview-panel">Reviewer Handoff</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -658,6 +660,8 @@ function DesktopShellRoute({
         <CodexProviderExecutionPreviewPanel
           codexProviderExecutionPreview={desktopShell?.codexProviderExecutionPreview}
         />
+        <CodexRunRecoveryPanel codexProviderRunRecovery={desktopShell?.codexProviderRunRecovery} />
+        <ReviewerHandoffPreviewPanel reviewerHandoffPreview={desktopShell?.reviewerHandoffPreview} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -1467,6 +1471,237 @@ function CodexProviderExecutionPreviewPanel({ codexProviderExecutionPreview }) {
       </Subsection>
 
       <p className="panel-note">{preview?.note ?? 'Codex provider execution preview unavailable.'}</p>
+    </section>
+  );
+}
+
+function CodexRunRecoveryPanel({ codexProviderRunRecovery }) {
+  const recovery = codexProviderRunRecovery;
+  const sourceContracts = recovery?.sourceContracts?.items ?? [];
+
+  return (
+    <section
+      id="codex-run-recovery-panel"
+      className="codex-run-recovery-panel"
+      aria-label="Codex Run Recovery"
+    >
+      <header className="codex-run-recovery-header">
+        <div>
+          <p className="section-kicker">v55 run recovery</p>
+          <h2>Codex Run Recovery</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(recovery?.state)}`}>
+          {recovery?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="codex-run-recovery-summary">
+        <FieldList rows={[
+          ['contract', recovery?.contractName],
+          ['goal', recovery?.goal?.goalId],
+          ['task', recovery?.task?.taskId],
+          ['run id', recovery?.runId],
+          ['provider', recovery?.providerId],
+          ['role', recovery?.role],
+          ['run status', recovery?.runStatus],
+          ['recovery state', recovery?.recoveryState],
+          ['blocked reasons', textValueFromItems(recovery?.blockedReasons, '无')]
+        ]} />
+
+        <FieldList rows={[
+          ['preview hash', recovery?.previewHash],
+          ['task pack hash', recovery?.taskPackHash],
+          ['read model source', recovery?.route?.source],
+          ['route', recovery?.route?.path],
+          ['route state', recovery?.route?.routeState],
+          ['generated at', recovery?.generatedAt]
+        ]} />
+      </div>
+
+      <Subsection title="Result Intake">
+        <FieldList rows={[
+          ['request contract', recovery?.resultIntake?.contractName],
+          ['request id', recovery?.resultIntake?.requestId],
+          ['request state', recovery?.resultIntake?.requestState],
+          ['pending result state', recovery?.resultIntake?.pendingResultState],
+          ['pending escrow', recovery?.resultIntake?.pendingResultEscrowRef],
+          ['preview hash', recovery?.resultIntake?.previewHash],
+          ['plan hash', recovery?.resultIntake?.planHash],
+          ['blocked reasons', textValueFromItems(recovery?.resultIntake?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Next Safe Action">
+        <FieldList rows={[
+          ['action', recovery?.nextSafeAction?.actionId],
+          ['label', recovery?.nextSafeAction?.label],
+          ['copy only', recovery?.nextSafeAction?.copyOnly],
+          ['willMutate', recovery?.nextSafeAction?.willMutate]
+        ]} />
+      </Subsection>
+
+      <Subsection title="source contracts">
+        {sourceContracts.length === 0 ? (
+          <EmptyBlock copy="codexProviderRunRecovery source contracts 未暴露。" />
+        ) : (
+          <ul className="codex-provider-source-list">
+            {sourceContracts.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="safety boundaries">
+        <FieldList rows={[
+          ['provider execution', recovery?.boundaries?.providerExecutionAvailable],
+          ['claude-code execution', recovery?.boundaries?.claudeCodeExecutionAvailable],
+          ['provider parity', recovery?.boundaries?.providerParityAvailable],
+          ['automatic reviewer verdict', recovery?.boundaries?.automaticReviewerVerdictAvailable],
+          ['generic shell', recovery?.boundaries?.genericShellAvailable],
+          ['arbitrary command', recovery?.boundaries?.arbitraryCommandExecutionAvailable],
+          ['frontend JSONL read', recovery?.boundaries?.frontendLocalJsonlReadAvailable],
+          ['local session file read', recovery?.boundaries?.localSessionFileReadAvailable],
+          ['transcript exposure', recovery?.boundaries?.rawTranscriptAvailable],
+          ['model-output exposure', recovery?.boundaries?.rawModelOutputAvailable],
+          ['goal event write', recovery?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', recovery?.boundaries?.directTaskCompleteAvailable],
+          ['reviewer mutation', recovery?.boundaries?.reviewerMutationAvailable],
+          ['main gate mutation', recovery?.boundaries?.mainVerificationMutationAvailable],
+          ['gate mutation', recovery?.boundaries?.releaseGateMutationAvailable],
+          ['git mutation', recovery?.boundaries?.gitMutationAvailable],
+          ['tag automation', recovery?.boundaries?.tagAutomationAvailable],
+          ['publish automation', recovery?.boundaries?.publishAutomationAvailable],
+          ['github publish automation', recovery?.boundaries?.githubReleaseAutomationAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{recovery?.note ?? 'Codex run recovery unavailable.'}</p>
+    </section>
+  );
+}
+
+function ReviewerHandoffPreviewPanel({ reviewerHandoffPreview }) {
+  const preview = reviewerHandoffPreview;
+  const sourceContracts = preview?.sourceContracts?.items ?? [];
+
+  return (
+    <section
+      id="reviewer-handoff-preview-panel"
+      className="reviewer-handoff-preview-panel"
+      aria-label="Reviewer Handoff Preview"
+    >
+      <header className="reviewer-handoff-preview-header">
+        <div>
+          <p className="section-kicker">v55 reviewer handoff</p>
+          <h2>Reviewer Handoff Preview</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(preview?.state)}`}>
+          {preview?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="reviewer-handoff-preview-summary">
+        <FieldList rows={[
+          ['contract', preview?.contractName],
+          ['goal', preview?.goal?.goalId],
+          ['worker task', preview?.workerTask?.taskId],
+          ['worker task state', preview?.workerTask?.state],
+          ['reviewer task', preview?.reviewerTask?.taskId],
+          ['reviewer task state', preview?.reviewerTask?.state],
+          ['copy only', preview?.copyOnly],
+          ['willMutate', preview?.willMutate],
+          ['blocked reasons', textValueFromItems(preview?.blockedReasons, '无')]
+        ]} />
+
+        <FieldList rows={[
+          ['pending result contract', preview?.pendingResultRef?.contractName],
+          ['pending result state', preview?.pendingResultRef?.state],
+          ['pending escrow', preview?.pendingResultRef?.escrowRef],
+          ['result status', preview?.acceptedResultSummary?.status],
+          ['summary', preview?.acceptedResultSummary?.summary],
+          ['evidence refs', evidenceRefsTextFromCollection(preview?.acceptedResultSummary?.evidenceRefs)]
+        ]} />
+      </div>
+
+      <Subsection title="Accepted Result Summary">
+        <FieldList rows={[
+          ['changed files', textValueFromItems(preview?.acceptedResultSummary?.changedFiles, '无')],
+          ['validation commands', textValueFromItems(preview?.acceptedResultSummary?.validationCommands, '无')],
+          ['risks', textValueFromItems(preview?.acceptedResultSummary?.risks, '无')],
+          ['blockers', textValueFromItems(preview?.acceptedResultSummary?.blockers, '无')],
+          ['blocker reason', preview?.acceptedResultSummary?.blockerReason]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Handoff Pack">
+        <FieldList rows={[
+          ['pack state', preview?.handoffPack?.state],
+          ['title', preview?.handoffPack?.title],
+          ['body', preview?.handoffPack?.handoffBody],
+          ['worker evidence refs', evidenceRefsTextFromCollection(preview?.handoffPack?.workerEvidenceRefs)],
+          ['changed files', textValueFromItems(preview?.handoffPack?.changedFiles, '无')],
+          ['validation commands', textValueFromItems(preview?.handoffPack?.validationCommands, '无')],
+          ['risks', textValueFromItems(preview?.handoffPack?.risks, '无')],
+          ['blockers', textValueFromItems(preview?.handoffPack?.blockers, '无')]
+        ]} />
+        {preview?.handoffPack?.json?.state === 'available' ? (
+          <pre className="copy-block child-dispatch-copy-block">{preview.handoffPack.json.text}</pre>
+        ) : (
+          <EmptyBlock copy="handoffPack 未暴露。" />
+        )}
+      </Subsection>
+
+      <Subsection title="source contracts">
+        {sourceContracts.length === 0 ? (
+          <EmptyBlock copy="reviewerHandoffPreview source contracts 未暴露。" />
+        ) : (
+          <ul className="codex-provider-source-list">
+            {sourceContracts.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="safety boundaries">
+        <FieldList rows={[
+          ['provider execution', preview?.boundaries?.providerExecutionAvailable],
+          ['claude-code execution', preview?.boundaries?.claudeCodeExecutionAvailable],
+          ['automatic reviewer verdict', preview?.boundaries?.automaticReviewerVerdictAvailable],
+          ['generic shell', preview?.boundaries?.genericShellAvailable],
+          ['arbitrary command', preview?.boundaries?.arbitraryCommandExecutionAvailable],
+          ['frontend JSONL read', preview?.boundaries?.frontendLocalJsonlReadAvailable],
+          ['local session file read', preview?.boundaries?.localSessionFileReadAvailable],
+          ['transcript exposure', preview?.boundaries?.rawTranscriptAvailable],
+          ['model-output exposure', preview?.boundaries?.rawModelOutputAvailable],
+          ['goal event write', preview?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', preview?.boundaries?.directTaskCompleteAvailable],
+          ['reviewer mutation', preview?.boundaries?.reviewerMutationAvailable],
+          ['main gate mutation', preview?.boundaries?.mainVerificationMutationAvailable],
+          ['gate mutation', preview?.boundaries?.releaseGateMutationAvailable],
+          ['git mutation', preview?.boundaries?.gitMutationAvailable],
+          ['tag automation', preview?.boundaries?.tagAutomationAvailable],
+          ['publish automation', preview?.boundaries?.publishAutomationAvailable],
+          ['github publish automation', preview?.boundaries?.githubReleaseAutomationAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note ?? 'Reviewer handoff preview unavailable.'}</p>
     </section>
   );
 }
@@ -10892,6 +11127,14 @@ function textValueFromItems(collection, emptyText = '无') {
     .filter((item) => item !== '');
 
   return textValue(values.length === 0 ? emptyText : values.join('、'));
+}
+
+function evidenceRefsTextFromCollection(collection) {
+  const values = (collection?.items ?? [])
+    .map((item) => firstText(item.ref, item.label, item.kind))
+    .filter((item) => item !== '');
+
+  return textValue(values.length === 0 ? '无' : values.join('、'));
 }
 
 function manualCliRequiredState(systemGoldenPath) {

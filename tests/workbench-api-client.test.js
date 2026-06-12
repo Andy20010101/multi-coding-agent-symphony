@@ -1433,6 +1433,53 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.codexProviderExecutionPreview.contractName.text, 'codexProviderExecutionPreview.v1');
   });
 
+  it('projects v55 Codex run recovery and reviewer handoff preview into the Workbench desktop shell', async () => {
+    const codexProviderRunRecovery = JSON.parse(
+      await readFile('fixtures/contracts/codex-provider-run-recovery/recovery.completed-accepted.v1.json', 'utf8')
+    );
+    const reviewerHandoffPreview = JSON.parse(
+      await readFile('fixtures/contracts/codex-provider-run-recovery/reviewer-handoff.ready.v1.json', 'utf8')
+    );
+    const supervisor = {
+      ...createGoalSupervisorAppReadModelPayload(),
+      codexProviderRunRecovery,
+      reviewerHandoffPreview
+    };
+    const model = projectWorkbenchContracts({
+      goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
+    });
+    const recovery = model.codexProviderRunRecovery;
+    const handoff = model.reviewerHandoffPreview;
+
+    assert.equal(recovery.contractName.text, 'codexProviderRunRecovery.v1');
+    assert.equal(recovery.state, 'ready-for-reviewer-handoff');
+    assert.equal(recovery.runStatus.text, 'completed');
+    assert.equal(recovery.resultIntake.requestState.text, 'accepted');
+    assert.equal(recovery.resultIntake.pendingResultState.text, 'available');
+    assert.equal(recovery.nextSafeAction.copyOnly.value, true);
+    assert.equal(recovery.nextSafeAction.willMutate.value, false);
+    assert.equal(recovery.boundaries.providerExecutionAvailable.value, false);
+    assert.equal(recovery.boundaries.directGoalEventAppendAvailable.value, false);
+    assert.equal(recovery.boundaries.githubReleaseAutomationAvailable.value, false);
+    assert.equal(recovery.sourceContracts.items.some((contract) => contract.contractName.text === 'pendingResult.v1'), true);
+
+    assert.equal(handoff.contractName.text, 'reviewerHandoffPreview.v1');
+    assert.equal(handoff.state, 'ready');
+    assert.equal(handoff.copyOnly.value, true);
+    assert.equal(handoff.willMutate.value, false);
+    assert.equal(handoff.workerTask.state.text, 'accepted');
+    assert.equal(handoff.pendingResultRef.state.text, 'available');
+    assert.equal(handoff.acceptedResultSummary.status.text, 'completed');
+    assert.equal(handoff.acceptedResultSummary.changedFiles.count.value, 2);
+    assert.equal(handoff.handoffPack.state, 'available');
+    assert.match(handoff.handoffPack.json.text, /"workerEvidenceRefs"/u);
+    assert.equal(handoff.boundaries.automaticReviewerVerdictAvailable.value, false);
+    assert.equal(handoff.boundaries.reviewerMutationAvailable.value, false);
+    assert.equal(handoff.boundaries.gitMutationAvailable.value, false);
+    assert.equal(model.desktopShell.codexProviderRunRecovery.contractName.text, 'codexProviderRunRecovery.v1');
+    assert.equal(model.desktopShell.reviewerHandoffPreview.contractName.text, 'reviewerHandoffPreview.v1');
+  });
+
   it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {
     const healthySnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.healthy.v1.json', 'utf8'));
     const missingProjectSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.missing-project.v1.json', 'utf8'));
