@@ -646,6 +646,14 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(defaultHtml, /Context Advisory/u);
       assert.match(defaultHtml, /Thread Continuation Decision/u);
       assert.match(defaultHtml, /Command Boundary/u);
+      assert.match(defaultHtml, /Result Intake/u);
+      assert.match(defaultHtml, /Paste worker result block/u);
+      assert.match(defaultHtml, /Preview Result Intake/u);
+      assert.match(defaultHtml, /This does not run a provider\./u);
+      assert.match(defaultHtml, /This does not dispatch a child\./u);
+      assert.match(defaultHtml, /This does not append a goal event\./u);
+      assert.match(defaultHtml, /This only creates pending result escrow after confirm\./u);
+      assert.match(defaultHtml, /<button[^>]*disabled[^>]*>Preview Result Intake<\/button>/u);
       assert.match(defaultHtml, /Event Plan Preview/u);
       assert.match(defaultHtml, /Preview Event Plan/u);
       assert.match(defaultHtml, /Refresh Supervisor State/u);
@@ -676,6 +684,7 @@ describe('v15 Workbench React/Vite shell', () => {
         'Context Advisory',
         'Continuation',
         'Command Boundary',
+        'Result Intake',
         'Context Status',
         'Timeline',
         'Ownership'
@@ -691,11 +700,12 @@ describe('v15 Workbench React/Vite shell', () => {
       const continuationIndex = defaultHtml.indexOf('data-od-id="thread-continuation-decision"');
       const boundaryIndex = defaultHtml.indexOf('data-od-id="command-boundary"');
       const pendingIndex = defaultHtml.indexOf('data-od-id="pending-result"');
+      const resultIntakeIndex = defaultHtml.indexOf('data-od-id="result-intake"');
       const eventPreviewIndex = defaultHtml.indexOf('data-od-id="supervisor-event-preview"');
       const timelineIndex = defaultHtml.indexOf('data-od-id="goal-timeline"');
       const ownershipIndex = defaultHtml.indexOf('data-od-id="ownership"');
 
-      for (const index of [goalIndex, actionIndex, leaseIndex, inventoryIndex, contextIndex, advisoryIndex, continuationIndex, pendingIndex, eventPreviewIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
+      for (const index of [goalIndex, actionIndex, leaseIndex, inventoryIndex, contextIndex, advisoryIndex, continuationIndex, pendingIndex, resultIntakeIndex, eventPreviewIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
         assert.notEqual(index, -1);
       }
 
@@ -706,7 +716,8 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.equal(actionIndex < continuationIndex, true);
       assert.equal(continuationIndex < boundaryIndex, true);
       assert.equal(boundaryIndex < pendingIndex, true);
-      assert.equal(pendingIndex < eventPreviewIndex, true);
+      assert.equal(pendingIndex < resultIntakeIndex, true);
+      assert.equal(resultIntakeIndex < eventPreviewIndex, true);
       assert.equal(eventPreviewIndex < timelineIndex, true);
       assert.equal(timelineIndex < ownershipIndex, true);
 
@@ -750,6 +761,10 @@ describe('v15 Workbench React/Vite shell', () => {
       'RecommendedNextActionBand',
       'ActiveLeasePanel',
       'PendingResultPanel',
+      'ResultIntakeLane',
+      'ResultIntakePreviewResult',
+      'ResultEscrowConfirmAction',
+      'ResultEscrowConfirmResult',
       'SupervisorEventPreviewLane',
       'SupervisorEventEligibilityNotice',
       'SupervisorEventPreviewResult',
@@ -782,13 +797,17 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(css, /\.v46-supervisor-shell/u);
     assert.match(css, /\.v46-supervisor-shell[\s\S]*grid-template-columns:\s*232px minmax\(0, 1fr\)/u);
     assert.match(css, /\.v46-dashboard-grid[\s\S]*grid-template-columns:\s*minmax\(0, 1\.05fr\) minmax\(360px, 0\.95fr\)/u);
-    assert.match(css, /grid-template-areas:[\s\S]*"goal lease"[\s\S]*"inventory context"[\s\S]*"decision continuation"[\s\S]*"event-preview event-preview"[\s\S]*"ownership timeline"/u);
+    assert.match(css, /grid-template-areas:[\s\S]*"goal lease"[\s\S]*"inventory context"[\s\S]*"decision continuation"[\s\S]*"result-intake result-intake"[\s\S]*"event-preview event-preview"[\s\S]*"ownership timeline"/u);
     assert.match(css, /@media \(max-width: 980px\)[\s\S]*\.v46-dashboard-grid[\s\S]*display:\s*flex/u);
     assert.match(css, /\.v46-family-list[\s\S]*flex-wrap:\s*wrap/u);
     assert.match(css, /\.v46-pending-panel[\s\S]*order:\s*5/u);
-    assert.match(css, /\.v50-event-preview-panel[\s\S]*order:\s*11/u);
+    assert.match(css, /\.v51-result-intake-panel[\s\S]*order:\s*11/u);
+    assert.match(css, /\.v50-event-preview-panel[\s\S]*order:\s*12/u);
     assert.match(css, /\.v50-event-controls/u);
+    assert.match(css, /\.v51-result-controls/u);
     assert.match(css, /\.v50-preview-button/u);
+    assert.match(css, /\.v51-preview-button/u);
+    assert.match(css, /\.v51-confirm-button/u);
     assert.match(css, /\.v50-refresh-button/u);
     assert.match(css, /\.v50-eligibility-notice/u);
     assert.match(css, /\.v46-inventory-panel[\s\S]*order:\s*6/u);
@@ -797,10 +816,14 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(supervisorSource, /confirmGoalEventPlan/u);
     assert.match(supervisorSource, /Preview Event Plan/u);
     assert.match(supervisorSource, /Confirm Event Append/u);
+    assert.match(supervisorSource, /Preview Result Intake/u);
+    assert.match(supervisorSource, /Confirm Result Escrow/u);
     assert.match(supervisorSource, /Refresh Supervisor State/u);
     assert.match(supervisorSource, /refreshSupervisorState/u);
+    assert.match(supervisorSource, /previewResultIntake/u);
+    assert.match(supervisorSource, /confirmResultEscrow/u);
     assert.doesNotMatch(supervisorSource, /\bfetch\s*\(/u);
-    assert.doesNotMatch(supervisorSource, /<GoalEventPlanPreview\b|function GoalEventPlanPreview\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|provider folders|raw transcripts|claude\/projects/u);
+    assert.doesNotMatch(supervisorSource, /<GoalEventPlanPreview\b|function GoalEventPlanPreview\b|<form\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|provider folders|raw transcripts|claude\/projects/u);
     assert.doesNotMatch(supervisorSource, />\s*(Run|Execute|Continue|Compact|New Thread|Dispatch|Launch)\s*</u);
     assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
   });
@@ -835,6 +858,14 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /copyOnly true/u);
       assert.match(html, /Checkpoint pending result/u);
       assert.match(html, /result-awaits-registration/u);
+      assert.match(html, /result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3/u);
+      assert.match(html, />state<\/dt><dd[^>]*>available/u);
+      assert.match(html, /Result Intake/u);
+      assert.match(html, /Paste worker result block/u);
+      assert.match(html, />source kind<\/dt><dd[^>]*>manual-paste/u);
+      assert.match(html, />preview route<\/dt><dd[^>]*>\/api\/goals\/v44-4-live-supervisor\/result-intake-preview/u);
+      assert.match(html, />confirm route<\/dt><dd[^>]*>\/api\/goals\/v44-4-live-supervisor\/result-intake-confirm/u);
+      assert.match(html, /Preview Result Intake/u);
       assert.match(html, /Session Source Inventory/u);
       assert.match(html, /Context Advisory/u);
       assert.match(html, /Thread Continuation Decision/u);
@@ -885,7 +916,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.doesNotMatch(html, /href="(?:artifact:|docs\/plans\/|file:)/u);
       assert.doesNotMatch(html, /Release-ready|Healthy active lease|Pending result|Stale transcript|Blocked gate|Missing context/u);
       assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u);
-      assert.doesNotMatch(html, /confirmGoalEventPlan|<form|<textarea|\.symphony|jsonl|sessions\/|provider folders|raw transcripts/u);
+      assert.doesNotMatch(html, /confirmGoalEventPlan|<form|\.symphony|jsonl|sessions\/|provider folders|raw transcripts/u);
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -1087,6 +1118,137 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(failedHtml, />refresh phase<\/dt><dd[^>]*>failed/u);
       assert.match(failedHtml, />refresh message<\/dt><dd[^>]*>fetchWorkbenchContracts failed/u);
       assert.doesNotMatch(`${loadingHtml}\n${succeededHtml}\n${failedHtml}`, /Preview Event Plan|Confirm Event Append|<form|<textarea|href="(?:artifact:|docs\/plans\/|file:)/u);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('previews and confirms result intake through escrow without appending goal events', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const {
+        ResultIntakeLane,
+        buildResultIntakeRequestBody,
+        canConfirmResultEscrow,
+        confirmResultEscrowFromPreview,
+        projectSupervisorDashboardToWorkbenchView,
+        resultEscrowConfirmStateFromPreview,
+        resultIntakePreviewResultView,
+        resultIntakePreviewStateFromDescriptor
+      } = await server.ssrLoadModule('/src/v46SupervisorWorkbench.jsx');
+      const model = createWorkbenchRenderModelWithSupervisor();
+      const view = projectSupervisorDashboardToWorkbenchView(
+        model.supervisorDashboard,
+        model.supervisorDashboard.route
+      );
+      const resultBlockText = JSON.stringify({
+        status: 'completed',
+        summary: 'Added controlled Workbench result intake.',
+        changedFiles: ['frontend/workbench/src/v46SupervisorWorkbench.jsx'],
+        validationCommands: ['pnpm workbench:build'],
+        evidenceRefs: ['docs/plans/v51-workbench-result-intake-evidence-2026-06-12.md']
+      });
+      const request = buildResultIntakeRequestBody({
+        resultIntake: view.resultIntake,
+        resultBlockText,
+        submittedAt: '2026-06-12T09:00:00.000Z'
+      });
+      const previewPayload = createResultIntakePreviewRenderPayload(request.requestBody);
+      const previewState = {
+        ...resultIntakePreviewStateFromDescriptor(view.resultIntake),
+        phase: 'ready',
+        request: request.requestBody,
+        preview: previewPayload,
+        result: resultIntakePreviewResultView(previewPayload),
+        message: null
+      };
+      const calls = [];
+      const confirmState = await confirmResultEscrowFromPreview({
+        resultIntake: view.resultIntake,
+        previewState,
+        confirmResultEscrowImpl: async (path, body) => {
+          calls.push([path, body]);
+
+          return {
+            ok: true,
+            data: createResultIntakeConfirmationRenderPayload(previewPayload)
+          };
+        }
+      });
+      const html = renderToStaticMarkup(React.createElement(ResultIntakeLane, {
+        resultIntake: view.resultIntake,
+        resultBlockText,
+        previewState,
+        previewLoading: false,
+        confirmState,
+        confirmLoading: false,
+        refreshState: {
+          phase: 'succeeded',
+          source: 'fetchWorkbenchContracts',
+          result: 'supervisorDashboard available; route ready',
+          message: 'contract refresh completed'
+        },
+        refreshLoading: false,
+        onResultBlockInput: () => undefined,
+        onPreviewResultIntake: () => undefined,
+        onConfirmResultEscrow: () => undefined,
+        onRefreshSupervisorState: () => undefined
+      }));
+      const idleConfirmState = resultEscrowConfirmStateFromPreview(view.resultIntake, null);
+
+      assert.equal(request.ok, true);
+      assert.equal(request.requestBody.contractName, 'resultIntakeRequest.v1');
+      assert.equal(request.requestBody.goalId, 'v44-4-live-supervisor');
+      assert.equal(request.requestBody.taskId, 'task-3');
+      assert.equal(request.requestBody.source, 'manual-paste');
+      assert.equal(request.requestBody.boundaries.directGoalEventAppendAvailable, false);
+      assert.deepEqual(Object.keys(request.requestBody), [
+        'contractName',
+        'contractVersion',
+        'goalId',
+        'taskId',
+        'workerRole',
+        'source',
+        'submittedAt',
+        'resultBlock',
+        'evidenceRefs',
+        'requestedEvent',
+        'boundaries'
+      ]);
+      assert.equal(canConfirmResultEscrow({
+        resultIntake: view.resultIntake,
+        previewState
+      }), true);
+      assert.deepEqual(calls, [[
+        '/api/goals/v44-4-live-supervisor/result-intake-confirm',
+        {
+          resultIntakeRequest: request.requestBody,
+          resultIntakePreview: previewPayload,
+          planHash: previewPayload.planHash
+        }
+      ]]);
+      assert.equal(confirmState.phase, 'ready');
+      assert.equal(idleConfirmState.phase, 'idle');
+      assert.match(html, /Preview Result Intake/u);
+      assert.match(html, /Confirm Result Escrow/u);
+      assert.match(html, /Refresh Supervisor State/u);
+      assert.match(html, /resultIntakePreview\.v1 \/ 1/u);
+      assert.match(html, />writesOnPreview<\/dt><dd[^>]*>false/u);
+      assert.match(html, />writesGoalEventLog<\/dt><dd[^>]*>false/u);
+      assert.match(html, />willAppendGoalEvent<\/dt><dd[^>]*>false/u);
+      assert.match(html, />escrowRef<\/dt><dd[^>]*>result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3/u);
+      assert.match(html, />pendingResultRef<\/dt><dd[^>]*>pending-result:v44-4-live-supervisor:task-3/u);
+      assert.match(html, />refresh result<\/dt><dd[^>]*>supervisorDashboard available; route ready/u);
+      assert.doesNotMatch(html, /goal-event-confirmation|Confirm Event Append|event-plan-confirm|raw model output|provider session secret/u);
+      assert.doesNotMatch(JSON.stringify(calls), /"actor"|goal-event-log|event-plan-confirm/u);
     } finally {
       await server.close();
     }
@@ -2624,13 +2786,75 @@ function createGoalSupervisorRenderPayload() {
       driftMarkers: []
     },
     pendingResult: {
+      contractName: 'pendingResult.v1',
+      contractVersion: 1,
+      goalId: 'v44-4-live-supervisor',
+      taskId: 'task-3',
+      workerRole: 'worker',
       source: 'result-intake',
       status: 'pending',
+      state: 'available',
+      escrowRef: 'result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3',
+      sanitizedSummary: {
+        status: 'completed',
+        summary: 'Worker evidence recorded for task-3.',
+        changedFiles: ['frontend/workbench/src/v46SupervisorWorkbench.jsx'],
+        validationCommands: ['node --test tests/workbench-shell.test.js'],
+        evidenceRefs: [{
+          kind: 'artifact-ref',
+          ref: 'artifact:v44-4:pending-result',
+          label: 'pending result registration'
+        }],
+        risks: [],
+        blockers: []
+      },
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:v44-4:pending-result',
+        label: 'pending result registration'
+      }],
+      eventCandidate: {
+        eventType: 'worker.evidence-recorded',
+        taskId: 'task-3',
+        workerRole: 'worker',
+        command: 'update',
+        commandName: 'symphony goal update',
+        requiresEvidence: true,
+        evidenceRefs: [{
+          kind: 'artifact-ref',
+          ref: 'artifact:v44-4:pending-result',
+          label: 'pending result registration'
+        }],
+        blocker: null,
+        willAppendGoalEvent: false,
+        state: 'eligible',
+        reason: 'eligible-result-event'
+      },
       eventToRegister: 'worker.evidence-recorded',
       evidenceRef: 'artifact:v44-4:pending-result',
       parserReason: 'valid-result-awaits-registration',
       stale: false,
-      missing: false
+      missing: false,
+      blockedReasons: [],
+      sourceContracts: [{
+        contractName: 'resultEvidenceEscrow.v1',
+        contractVersion: 1,
+        escrowRef: 'result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3',
+        previewPlanHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      }],
+      boundaries: {
+        providerExecutionAvailable: false,
+        childDispatchAvailable: false,
+        directGoalEventAppendAvailable: false,
+        untrustedTranscriptProjectionAvailable: false,
+        frontendLocalFileReadAvailable: false,
+        reviewerMutationAvailable: false,
+        mainVerificationMutationAvailable: false,
+        releaseGateMutationAvailable: false,
+        gitMutationAvailable: false,
+        githubReleaseAutomationAvailable: false,
+        projectionAppendsGoalEvent: false
+      }
     },
     currentGate: {
       gateId: 'release.ready',
@@ -2866,6 +3090,109 @@ function createSupervisorGoalUpdatePlanPreviewPayload() {
       available: true,
       requiredFlags: ['--confirm', '--plan-hash'],
       copyOnlyCommand: 'symphony goal update --goal v44-4-live-supervisor --task task-3 --event worker.evidence-recorded --actor local-goal-supervisor-worker --evidence-ref artifact:v44-4:pending-result --confirm --plan-hash sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --json'
+    }
+  };
+}
+
+function createResultIntakePreviewRenderPayload(request) {
+  return {
+    contractName: 'resultIntakePreview.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-12T09:01:00.000Z',
+    readOnly: true,
+    willMutate: false,
+    goalId: request.goalId,
+    taskId: request.taskId,
+    workerRole: request.workerRole,
+    source: request.source,
+    sanitizedSummary: {
+      status: 'completed',
+      summary: 'Added controlled Workbench result intake.',
+      changedFiles: ['frontend/workbench/src/v46SupervisorWorkbench.jsx'],
+      validationCommands: ['pnpm workbench:build'],
+      risks: [],
+      blockers: []
+    },
+    evidenceRefs: request.evidenceRefs,
+    blockedFields: [],
+    eventCandidate: {
+      eventType: 'worker.evidence-recorded',
+      taskId: request.taskId,
+      workerRole: request.workerRole,
+      command: 'update',
+      commandName: 'symphony goal update',
+      requiresEvidence: true,
+      evidenceRefs: request.evidenceRefs,
+      blocker: null,
+      willAppendGoalEvent: false,
+      state: 'eligible',
+      reason: 'eligible-result-event'
+    },
+    previewWriteTarget: {
+      kind: 'result-evidence-escrow',
+      storage: 'pending-result-escrow',
+      writesOnPreview: false,
+      writesOnConfirm: true,
+      writesGoalEventLog: false
+    },
+    planHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    expiresAt: '2026-06-12T09:16:00.000Z',
+    confirmRequestShape: {
+      method: 'POST',
+      route: `/api/goals/${request.goalId}/result-intake-confirm`,
+      contentType: 'application/json',
+      requiredBodyFields: ['goalId', 'taskId', 'planHash'],
+      optionalBodyFields: ['previewId', 'escrowId'],
+      confirmUsesPlanHash: true
+    },
+    boundaries: {
+      providerExecutionAvailable: false,
+      childDispatchAvailable: false,
+      directGoalEventAppendAvailable: false,
+      untrustedTranscriptProjectionAvailable: false,
+      frontendLocalFileReadAvailable: false,
+      reviewerMutationAvailable: false,
+      mainVerificationMutationAvailable: false,
+      releaseGateMutationAvailable: false,
+      gitMutationAvailable: false,
+      githubReleaseAutomationAvailable: false,
+      readOnly: true,
+      willMutate: false,
+      previewWrites: false,
+      confirmWritesResultEscrow: true
+    }
+  };
+}
+
+function createResultIntakeConfirmationRenderPayload(preview) {
+  return {
+    contractName: 'result-intake-confirmation.v1',
+    contractVersion: 1,
+    goalId: preview.goalId,
+    taskId: preview.taskId,
+    mode: 'confirm',
+    status: 'confirmed',
+    written: true,
+    planHash: preview.planHash,
+    refs: {
+      escrowRef: 'result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3',
+      pendingResultRef: 'pending-result:v44-4-live-supervisor:task-3'
+    },
+    refreshed: {
+      supervisor: {
+        method: 'GET',
+        route: '/api/goals/v44-4-live-supervisor/supervisor',
+        pendingResultProjectionAvailable: true
+      }
+    },
+    safety: {
+      writesResultEvidenceEscrow: true,
+      writesPendingResult: true,
+      writesGoalEventLog: false,
+      writesOperationRegistry: false,
+      providerExecutionAvailable: false,
+      childDispatchAvailable: false,
+      directGoalEventAppendAvailable: false
     }
   };
 }

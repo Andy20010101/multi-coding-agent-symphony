@@ -233,6 +233,7 @@ body {
     "gate advisory"
     "decision continuation"
     "boundary pending"
+    "result-intake result-intake"
     "event-preview event-preview"
     "ownership timeline";
   gap: 12px;
@@ -339,6 +340,10 @@ body {
 
 .v46-pending-panel {
   grid-area: pending;
+}
+
+.v51-result-intake-panel {
+  grid-area: result-intake;
 }
 
 .v50-event-preview-panel {
@@ -610,8 +615,58 @@ body {
   margin-top: 10px;
 }
 
+.v51-boundary-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.v51-boundary-list li {
+  border: 1px solid color-mix(in oklab, var(--v46-border-soft), var(--v46-warn) 25%);
+  border-radius: 4px;
+  padding: 4px 7px;
+  background: color-mix(in oklab, var(--v46-warn), var(--v46-surface) 91%);
+  color: var(--v46-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.v51-result-input-label {
+  display: block;
+  margin-top: 10px;
+  color: var(--v46-fg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.v51-result-input {
+  display: block;
+  width: 100%;
+  min-height: 132px;
+  margin-top: 6px;
+  border: 1px solid color-mix(in oklab, var(--v46-border-soft), var(--v46-fg) 20%);
+  border-radius: 4px;
+  padding: 9px 10px;
+  resize: vertical;
+  background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-surface) 58%);
+  color: var(--v46-fg);
+  font: 12px/1.45 var(--v46-mono);
+}
+
+.v51-result-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-start;
+  margin-top: 10px;
+}
+
 .v50-preview-button,
-.v50-refresh-button {
+.v50-refresh-button,
+.v51-preview-button {
   max-width: 220px;
   border: 1px solid color-mix(in oklab, var(--v46-success), var(--v46-border-soft) 35%);
   border-radius: 4px;
@@ -627,7 +682,8 @@ body {
 }
 
 .v50-preview-button:disabled,
-.v50-refresh-button:disabled {
+.v50-refresh-button:disabled,
+.v51-preview-button:disabled {
   border-color: var(--v46-border-soft);
   background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-surface) 52%);
   color: var(--v46-muted);
@@ -635,10 +691,13 @@ body {
 
 .v50-preview-status,
 .v50-preview-result,
+.v51-preview-result,
 .v50-eligibility-notice,
 .v50-refresh-control,
 .v50-confirm-lane,
-.v50-confirm-result {
+.v50-confirm-result,
+.v51-confirm-lane,
+.v51-confirm-result {
   margin-top: 10px;
 }
 
@@ -669,7 +728,8 @@ body {
   padding-top: 10px;
 }
 
-.v50-confirm-button {
+.v50-confirm-button,
+.v51-confirm-button {
   max-width: 230px;
   border: 1px solid color-mix(in oklab, var(--v46-accent), var(--v46-success) 35%);
   border-radius: 4px;
@@ -679,7 +739,8 @@ body {
   font: 700 12px/1.1 var(--v46-ui-font);
 }
 
-.v50-confirm-button:disabled {
+.v50-confirm-button:disabled,
+.v51-confirm-button:disabled {
   border-color: var(--v46-border-soft);
   background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-surface) 52%);
   color: var(--v46-muted);
@@ -769,16 +830,20 @@ body {
     order: 10;
   }
 
-  .v50-event-preview-panel {
+  .v51-result-intake-panel {
     order: 11;
   }
 
-  .v46-timeline-panel {
+  .v50-event-preview-panel {
     order: 12;
   }
 
-  .v46-ownership-panel {
+  .v46-timeline-panel {
     order: 13;
+  }
+
+  .v46-ownership-panel {
+    order: 14;
   }
 
   .v46-owner-grid {

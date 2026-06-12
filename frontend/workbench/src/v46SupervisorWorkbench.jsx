@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 
 import {
   confirmGoalEventPlan,
-  fetchGoalEventPlanPreview
+  confirmResultEscrow,
+  fetchGoalEventPlanPreview,
+  previewResultIntake
 } from './api/client.js';
 
 const CANONICAL_BLOCKED_MUTATION_FAMILIES = Object.freeze([
@@ -21,6 +23,45 @@ const DEFAULT_HEALTH = Object.freeze({
   gateState: 'frontend baseline',
   duplicateDispatchAllowed: false,
   reason: 'local read-only sample'
+});
+
+const RESULT_INTAKE_SOURCE_KIND = 'manual-paste';
+const RESULT_INTAKE_MAX_BLOCK_LENGTH = 12000;
+
+const RESULT_INTAKE_BOUNDARY_NOTICES = Object.freeze([
+  'This does not run a provider.',
+  'This does not dispatch a child.',
+  'This does not append a goal event.',
+  'This only creates pending result escrow after confirm.'
+]);
+
+const RESULT_INTAKE_BOUNDARIES = Object.freeze({
+  providerExecutionAvailable: false,
+  childDispatchAvailable: false,
+  directGoalEventAppendAvailable: false,
+  untrustedTranscriptProjectionAvailable: false,
+  frontendLocalFileReadAvailable: false,
+  reviewerMutationAvailable: false,
+  mainVerificationMutationAvailable: false,
+  releaseGateMutationAvailable: false,
+  gitMutationAvailable: false,
+  githubReleaseAutomationAvailable: false
+});
+
+const RESULT_INTAKE_PREVIEW_IDLE_STATE = Object.freeze({
+  identity: 'NULL',
+  phase: 'idle',
+  request: null,
+  preview: null,
+  result: null,
+  message: null
+});
+
+const RESULT_ESCROW_CONFIRM_IDLE_STATE = Object.freeze({
+  identity: 'NULL',
+  phase: 'idle',
+  result: null,
+  message: null
 });
 
 export const SUPERVISOR_REFRESH_IDLE_STATE = Object.freeze({
@@ -125,7 +166,22 @@ export const SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
     label: 'none / NULL',
     output: null,
     contract: '[ EMPTY ]',
-    reason: 'NULL'
+    reason: 'NULL',
+    state: 'NULL',
+    escrowRef: 'NULL',
+    evidenceRefs: 'NULL',
+    blockedReasons: Object.freeze(['none'])
+  }),
+  resultIntake: Object.freeze({
+    state: 'disabled',
+    sourceKind: RESULT_INTAKE_SOURCE_KIND,
+    goalId: 'v45-backend-entrypoint-decomposition',
+    taskId: 'NULL',
+    workerRole: 'worker',
+    previewRoute: 'NULL',
+    confirmRoute: 'NULL',
+    disabledReason: 'task id unavailable',
+    boundaryNotices: RESULT_INTAKE_BOUNDARY_NOTICES
   }),
   eventPreview: Object.freeze({
     contract: 'supervisorEventRegistrationEligibility.v1',
@@ -268,8 +324,17 @@ export function projectSupervisorDashboardToWorkbenchView(dashboard, routeState 
     pendingResult: Object.freeze({
       label: textValue(pendingResult.status ?? 'none / NULL'),
       output: null,
-      contract: textValue(pendingResult.eventToRegister ?? pendingResult.evidenceRef ?? '[ EMPTY ]'),
-      reason: textValue(pendingResult.parserReason ?? pendingResult.source ?? 'NULL')
+      contract: textValue(pendingResult.contractName ?? pendingResult.eventToRegister ?? pendingResult.evidenceRef ?? '[ EMPTY ]'),
+      reason: textValue(pendingResult.parserReason ?? pendingResult.source ?? 'NULL'),
+      state: textValue(pendingResult.state ?? 'NULL'),
+      escrowRef: safeResultIntakeDisplayText(pendingResult.escrowRef) ?? 'NULL',
+      evidenceRefs: evidenceRefsText(pendingResult.evidenceRefs),
+      blockedReasons: Object.freeze(listResultIntakeDisplayValues(pendingResult.blockedReasons, ['none']))
+    }),
+    resultIntake: resultIntakeDescriptorFromDashboard({
+      dashboard,
+      goalSnapshot,
+      pendingResult
     }),
     eventPreview: supervisorEventPreviewView(eventRegistrationEligibility),
     commandBoundary: commandBoundaryView(commandBoundary),
@@ -346,7 +411,16 @@ function rejectedLiveSupervisorView(dashboard, routeState) {
       label: 'invalid live safety contract',
       output: null,
       contract: '[ EMPTY ]',
-      reason: 'readOnly/willMutate rejected'
+      reason: 'readOnly/willMutate rejected',
+      state: 'blocked',
+      escrowRef: 'NULL',
+      evidenceRefs: 'NULL',
+      blockedReasons: Object.freeze(['readOnly/willMutate rejected'])
+    }),
+    resultIntake: Object.freeze({
+      ...SUPERVISOR_WORKBENCH_VIEW.resultIntake,
+      state: 'disabled',
+      disabledReason: 'live supervisor safety contract failed'
     }),
     commandBoundary: defaultCommandBoundary()
   });
@@ -366,6 +440,77 @@ function textValue(value) {
   }
 
   return String(value);
+}
+
+function resultIntakeDescriptorFromDashboard({
+  dashboard,
+  goalSnapshot,
+  pendingResult
+}) {
+  const goalId = textValue(goalSnapshot.goalId ?? dashboard.goalId ?? SUPERVISOR_WORKBENCH_VIEW.goalId);
+  const taskId = textValue(goalSnapshot.activeTask ?? pendingResult.taskId ?? 'NULL');
+  const workerRole = supportedResultIntakeWorkerRole(goalSnapshot.activeRole ?? pendingResult.workerRole);
+  const previewRoute = resultIntakeRoute(goalId, 'result-intake-preview');
+  const confirmRoute = resultIntakeRoute(goalId, 'result-intake-confirm');
+  const disabledReason = resultIntakeDisabledReason({
+    goalId,
+    taskId,
+    previewRoute,
+    confirmRoute
+  });
+
+  return Object.freeze({
+    state: disabledReason === null ? 'available' : 'disabled',
+    sourceKind: RESULT_INTAKE_SOURCE_KIND,
+    goalId,
+    taskId,
+    workerRole,
+    previewRoute: textValue(previewRoute),
+    confirmRoute: textValue(confirmRoute),
+    disabledReason: textValue(disabledReason),
+    boundaryNotices: RESULT_INTAKE_BOUNDARY_NOTICES
+  });
+}
+
+function resultIntakeDisabledReason({
+  goalId,
+  taskId,
+  previewRoute,
+  confirmRoute
+}) {
+  if (!isSafeResultIntakeRouteSegment(goalId)) {
+    return 'goal id unavailable';
+  }
+
+  if (!isSafeResultIntakeRouteSegment(taskId)) {
+    return 'task id unavailable';
+  }
+
+  if (previewRoute === null || confirmRoute === null) {
+    return 'result intake route unavailable';
+  }
+
+  return null;
+}
+
+function supportedResultIntakeWorkerRole(value) {
+  const role = String(value ?? '').trim();
+
+  return ['worker', 'reviewer', 'main-verifier', 'release-manager'].includes(role) ? role : 'worker';
+}
+
+function resultIntakeRoute(goalId, suffix) {
+  if (!isSafeResultIntakeRouteSegment(goalId)) {
+    return null;
+  }
+
+  return `/api/goals/${encodeURIComponent(goalId)}/${suffix}`;
+}
+
+function isSafeResultIntakeRouteSegment(value) {
+  return typeof value === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value) &&
+    !value.includes('..');
 }
 
 function supervisorHealth(dashboard, activeLease, contextStatus, currentGate, ownership) {
@@ -954,6 +1099,358 @@ function goalEventConfirmationResultView(result) {
   });
 }
 
+export function buildResultIntakeRequestBody({
+  resultIntake,
+  resultBlockText,
+  submittedAt = new Date().toISOString()
+}) {
+  const descriptor = objectValue(resultIntake);
+  const goalId = descriptor.goalId;
+  const taskId = descriptor.taskId;
+
+  if (!isSafeResultIntakeRouteSegment(goalId) || !isSafeResultIntakeRouteSegment(taskId)) {
+    return {
+      ok: false,
+      message: 'goal or task unavailable'
+    };
+  }
+
+  const trimmed = String(resultBlockText ?? '').trim();
+
+  if (trimmed === '') {
+    return {
+      ok: false,
+      message: 'result block unavailable'
+    };
+  }
+
+  let parsed;
+
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return {
+      ok: false,
+      message: 'result block must be a JSON object'
+    };
+  }
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {
+      ok: false,
+      message: 'result block must be a JSON object'
+    };
+  }
+
+  const hasEnvelopeShape = parsed.resultBlock !== null &&
+    typeof parsed.resultBlock === 'object' &&
+    !Array.isArray(parsed.resultBlock);
+  const resultBlock = hasEnvelopeShape
+    ? parsed.resultBlock
+    : resultBlockFromParsedPaste(parsed);
+  const requestedEvent = requestedResultIntakeEvent({
+    parsed,
+    resultBlock,
+    taskId
+  });
+  const evidenceRefs = normalizedResultIntakeEvidenceRefs(
+    hasEnvelopeShape ? parsed.evidenceRefs : parsed.evidenceRefs ?? resultBlock.evidenceRefs
+  );
+
+  return {
+    ok: true,
+    requestBody: {
+      contractName: 'resultIntakeRequest.v1',
+      contractVersion: 1,
+      goalId,
+      taskId,
+      workerRole: supportedResultIntakeWorkerRole(parsed.workerRole ?? descriptor.workerRole),
+      source: supportedResultIntakeSource(parsed.source ?? descriptor.sourceKind),
+      submittedAt,
+      resultBlock,
+      evidenceRefs,
+      requestedEvent,
+      boundaries: { ...RESULT_INTAKE_BOUNDARIES }
+    }
+  };
+}
+
+function resultBlockFromParsedPaste(parsed) {
+  const {
+    contractName,
+    contractVersion,
+    goalId,
+    taskId,
+    workerRole,
+    source,
+    submittedAt,
+    requestedEvent,
+    boundaries,
+    ...resultBlock
+  } = parsed;
+
+  return resultBlock;
+}
+
+function requestedResultIntakeEvent({
+  parsed,
+  resultBlock,
+  taskId
+}) {
+  const source = objectValue(parsed.requestedEvent ?? resultBlock.requestedEvent);
+  const eventType = safeResultIntakeEventType(source.eventType)
+    ?? inferredResultIntakeEventType(resultBlock);
+  const blocker = objectValue(source.blocker ?? resultBlock.blocker);
+  const blockerReason = safeResultIntakeDisplayText(blocker.reason ?? resultBlock.blockerReason);
+  const requestedEvent = {
+    eventType,
+    taskId: safeResultIntakeToken(source.taskId) ?? taskId
+  };
+
+  if (eventType === 'blocker.opened' || blockerReason !== null) {
+    requestedEvent.blocker = {
+      blockerId: safeResultIntakeToken(blocker.blockerId) ?? `blocker-${taskId}`,
+      reason: blockerReason ?? 'worker reported a blocker',
+      severity: safeResultIntakeDisplayText(blocker.severity) ?? 'medium'
+    };
+  }
+
+  return requestedEvent;
+}
+
+function inferredResultIntakeEventType(resultBlock) {
+  const status = String(resultBlock.status ?? '').trim().toLowerCase();
+
+  if (status === 'blocked' || safeResultIntakeDisplayText(resultBlock.blockerReason) !== null) {
+    return 'blocker.opened';
+  }
+
+  if (status === 'failed') {
+    return 'worker.self-check-failed';
+  }
+
+  if (status === 'passed') {
+    return 'worker.self-check-passed';
+  }
+
+  return 'worker.evidence-recorded';
+}
+
+function normalizedResultIntakeEvidenceRefs(value) {
+  return (Array.isArray(value) ? value : [])
+    .map(normalizedResultIntakeEvidenceRef)
+    .filter((evidenceRef) => evidenceRef !== null);
+}
+
+function normalizedResultIntakeEvidenceRef(value) {
+  if (typeof value === 'string') {
+    const ref = safeResultIntakeDisplayText(value);
+
+    if (ref === null) {
+      return null;
+    }
+
+    if (ref.startsWith('docs/plans/')) {
+      return {
+        kind: 'repo-doc',
+        ref,
+        label: ref
+      };
+    }
+
+    if (ref.startsWith('artifact-ref:')) {
+      const artifactRef = ref.slice('artifact-ref:'.length);
+
+      return {
+        kind: 'artifact-ref',
+        ref: artifactRef,
+        label: artifactRef
+      };
+    }
+
+    if (ref.startsWith('artifact:')) {
+      return {
+        kind: 'artifact-ref',
+        ref,
+        label: ref
+      };
+    }
+
+    if (/^[a-f0-9]{7,64}$/u.test(ref)) {
+      return {
+        kind: 'commit',
+        ref,
+        label: ref
+      };
+    }
+
+    return {
+      kind: 'external-note',
+      ref,
+      label: ref
+    };
+  }
+
+  const evidenceRef = objectValue(value);
+  const kind = safeResultIntakeToken(evidenceRef.kind);
+  const ref = safeResultIntakeDisplayText(evidenceRef.ref);
+  const label = safeResultIntakeDisplayText(evidenceRef.label ?? evidenceRef.ref);
+
+  if (kind === null || ref === null || label === null) {
+    return null;
+  }
+
+  return {
+    kind,
+    ref,
+    label
+  };
+}
+
+function supportedResultIntakeSource(value) {
+  const source = String(value ?? '').trim();
+
+  return ['manual-paste', 'external-worker', 'codex', 'claude', 'kiro'].includes(source)
+    ? source
+    : RESULT_INTAKE_SOURCE_KIND;
+}
+
+function safeResultIntakeEventType(value) {
+  const eventType = safeResultIntakeDisplayText(value);
+
+  return [
+    'worker.evidence-recorded',
+    'worker.self-check-passed',
+    'worker.self-check-failed',
+    'blocker.opened',
+    'blocker.resolved',
+    'reviewer.approved',
+    'reviewer.needs-revision',
+    'reviewer.blocked',
+    'main.verification-passed',
+    'main.verification-failed',
+    'release.gate-passed',
+    'release.gate-failed',
+    'release.evidence-recorded',
+    'release.ready-declared'
+  ].includes(eventType) ? eventType : null;
+}
+
+export function resultIntakePreviewResultView(preview) {
+  const summary = objectValue(preview.sanitizedSummary);
+  const eventCandidate = objectValue(preview.eventCandidate);
+  const previewWriteTarget = objectValue(preview.previewWriteTarget);
+  const confirmShape = objectValue(preview.confirmRequestShape);
+
+  return Object.freeze({
+    contract: contractRefLabel(preview, 'resultIntakePreview.v1'),
+    goalId: safeResultIntakeDisplayText(preview.goalId) ?? 'NULL',
+    taskId: safeResultIntakeDisplayText(preview.taskId) ?? 'NULL',
+    workerRole: safeResultIntakeDisplayText(preview.workerRole) ?? 'NULL',
+    source: safeResultIntakeDisplayText(preview.source) ?? 'NULL',
+    summaryStatus: safeResultIntakeDisplayText(summary.status) ?? 'NULL',
+    summary: safeResultIntakeDisplayText(summary.summary) ?? 'NULL',
+    changedFiles: textValue(listResultIntakeDisplayValues(summary.changedFiles, ['none'])),
+    validationCommands: textValue(listResultIntakeDisplayValues(summary.validationCommands, ['none'])),
+    risks: textValue(listResultIntakeDisplayValues(summary.risks, ['none'])),
+    blockers: textValue(listResultIntakeDisplayValues(summary.blockers, ['none'])),
+    blockerReason: safeResultIntakeDisplayText(summary.blockerReason) ?? 'NULL',
+    evidenceRefs: evidenceRefsText(preview.evidenceRefs),
+    blockedFields: Object.freeze(listResultIntakeDisplayValues(preview.blockedFields, ['none'])),
+    blockedReasons: Object.freeze(resultIntakeBlockedReasons(preview)),
+    eventState: safeResultIntakeDisplayText(eventCandidate.state) ?? 'NULL',
+    eventReason: safeResultIntakeDisplayText(eventCandidate.reason) ?? 'NULL',
+    eventType: safeResultIntakeDisplayText(eventCandidate.eventType) ?? 'NULL',
+    commandName: safeResultIntakeDisplayText(eventCandidate.commandName) ?? 'NULL',
+    willAppendGoalEvent: textValue(eventCandidate.willAppendGoalEvent === true),
+    writesOnPreview: textValue(previewWriteTarget.writesOnPreview === true),
+    writesOnConfirm: textValue(previewWriteTarget.writesOnConfirm === true),
+    writesGoalEventLog: textValue(previewWriteTarget.writesGoalEventLog === true),
+    planHash: safeResultIntakeDisplayText(preview.planHash) ?? 'NULL',
+    expiresAt: safeResultIntakeDisplayText(preview.expiresAt) ?? 'NULL',
+    confirmRoute: safeResultIntakeDisplayText(confirmShape.route) ?? 'NULL',
+    confirmUsesPlanHash: textValue(confirmShape.confirmUsesPlanHash === true)
+  });
+}
+
+function resultIntakeBlockedReasons(preview) {
+  const eventCandidate = objectValue(preview.eventCandidate);
+  const reasons = [
+    eventCandidate.state === 'blocked' ? eventCandidate.reason : null,
+    ...listResultIntakeDisplayValues(preview.blockedFields, [])
+  ].map(safeResultIntakeDisplayText).filter((value) => value !== null);
+
+  return reasons.length > 0 ? reasons : ['none'];
+}
+
+function resultEscrowConfirmationResultView(result) {
+  const refs = objectValue(result.refs);
+  const refreshed = objectValue(result.refreshed);
+  const supervisor = objectValue(refreshed.supervisor);
+
+  return Object.freeze({
+    contract: contractRefLabel(result, 'result-intake-confirmation.v1'),
+    status: safeResultIntakeDisplayText(result.status) ?? 'NULL',
+    written: textValue(result.written === true),
+    planHash: safeResultIntakeDisplayText(result.planHash) ?? 'NULL',
+    escrowRef: safeResultIntakeDisplayText(refs.escrowRef) ?? 'NULL',
+    pendingResultRef: safeResultIntakeDisplayText(refs.pendingResultRef) ?? 'NULL',
+    refreshRoute: safeResultIntakeDisplayText(supervisor.route) ?? 'NULL',
+    pendingResultProjectionAvailable: textValue(supervisor.pendingResultProjectionAvailable === true)
+  });
+}
+
+function listResultIntakeDisplayValues(values, fallback) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return fallback;
+  }
+
+  const safeValues = values
+    .map((value) => safeResultIntakeDisplayText(value))
+    .filter((value) => value !== null);
+
+  return safeValues.length > 0 ? safeValues : fallback;
+}
+
+function safeResultIntakeToken(value) {
+  const text = safeResultIntakeDisplayText(value);
+
+  return text !== null && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(text) ? text : null;
+}
+
+function safeResultIntakeDisplayText(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const text = String(value).trim();
+  const lower = text.toLowerCase();
+  const safeApiRoute = text.startsWith('/api/goals/') &&
+    !text.includes('\\') &&
+    !text.includes('..') &&
+    !text.includes('?') &&
+    !text.includes('#');
+
+  if (
+    text === '' ||
+    (text.startsWith('/') && !safeApiRoute) ||
+    text.startsWith('~/') ||
+    text.startsWith('file://') ||
+    text.includes('\\') ||
+    text.includes('../') ||
+    text.includes('..\\') ||
+    /(?:^|\/)\.(?:codex|claude|git|symphony)(?:\/|$)/iu.test(text) ||
+    /raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|model[\s_-]*output/iu.test(text) ||
+    lower.includes('%2e') ||
+    lower.includes('%2f') ||
+    lower.includes('%5c')
+  ) {
+    return null;
+  }
+
+  return text;
+}
+
 function evidenceRefsText(evidenceRefs) {
   if (!Array.isArray(evidenceRefs) || evidenceRefs.length === 0) {
     return 'NULL';
@@ -1096,6 +1593,7 @@ const SIDEBAR_ITEMS = Object.freeze([
   Object.freeze({ label: 'Context Advisory', tone: 'neutral' }),
   Object.freeze({ label: 'Continuation', tone: 'warn' }),
   Object.freeze({ label: 'Command Boundary', tone: 'warn' }),
+  Object.freeze({ label: 'Result Intake', tone: 'observed' }),
   Object.freeze({ label: 'Context Status', tone: 'neutral' }),
   Object.freeze({ label: 'Timeline', tone: 'neutral' }),
   Object.freeze({ label: 'Ownership', tone: 'neutral' })
@@ -1107,9 +1605,14 @@ export function SupervisorShell({
   onRefreshSupervisorState
 }) {
   const eventPreview = view.eventPreview ?? SUPERVISOR_WORKBENCH_VIEW.eventPreview;
+  const resultIntake = view.resultIntake ?? SUPERVISOR_WORKBENCH_VIEW.resultIntake;
   const previewIdentity = supervisorEventPreviewIdentity(eventPreview);
+  const intakeIdentity = resultIntakeIdentity(resultIntake);
   const [previewState, setPreviewState] = useState(() => supervisorPreviewStateFromEventPreview(eventPreview));
   const [confirmState, setConfirmState] = useState(() => supervisorConfirmStateFromEventPreview(eventPreview, previewState.result));
+  const [resultBlockText, setResultBlockText] = useState('');
+  const [resultIntakePreviewState, setResultIntakePreviewState] = useState(() => resultIntakePreviewStateFromDescriptor(resultIntake));
+  const [resultEscrowConfirmState, setResultEscrowConfirmState] = useState(() => resultEscrowConfirmStateFromPreview(resultIntake, resultIntakePreviewState));
   const [refreshState, setRefreshState] = useState(SUPERVISOR_REFRESH_IDLE_STATE);
   const visiblePreviewState = visibleSupervisorPreviewState({
     eventPreview,
@@ -1120,14 +1623,38 @@ export function SupervisorShell({
     previewState: visiblePreviewState,
     confirmState
   });
+  const visibleIntakePreviewState = visibleResultIntakePreviewState({
+    resultIntake,
+    previewState: resultIntakePreviewState
+  });
+  const visibleEscrowConfirmState = visibleResultEscrowConfirmState({
+    resultIntake,
+    previewState: visibleIntakePreviewState,
+    confirmState: resultEscrowConfirmState
+  });
   const previewLoading = visiblePreviewState.phase === 'loading';
   const confirmLoading = visibleConfirmState.phase === 'loading';
+  const intakePreviewLoading = visibleIntakePreviewState.phase === 'loading';
+  const escrowConfirmLoading = visibleEscrowConfirmState.phase === 'loading';
   const refreshLoading = refreshState.phase === 'loading';
 
   useEffect(() => {
     setPreviewState(supervisorPreviewStateFromEventPreview(eventPreview));
     setConfirmState(supervisorConfirmStateFromEventPreview(eventPreview, eventPreview.previewResult));
   }, [previewIdentity]);
+
+  useEffect(() => {
+    setResultIntakePreviewState(resultIntakePreviewStateFromDescriptor(resultIntake));
+    setResultEscrowConfirmState(resultEscrowConfirmStateFromPreview(resultIntake, null));
+  }, [intakeIdentity]);
+
+  function handleResultBlockInput(event) {
+    const nextValue = String(event.target.value ?? '').slice(0, RESULT_INTAKE_MAX_BLOCK_LENGTH);
+
+    setResultBlockText(nextValue);
+    setResultIntakePreviewState(resultIntakePreviewStateFromDescriptor(resultIntake));
+    setResultEscrowConfirmState(resultEscrowConfirmStateFromPreview(resultIntake, null));
+  }
 
   async function handlePreviewEventPlan() {
     if (!eventPreview.canPreview || previewLoading) {
@@ -1209,6 +1736,95 @@ export function SupervisorShell({
     }));
   }
 
+  async function handlePreviewResultIntake() {
+    if (resultIntake.state !== 'available' || intakePreviewLoading) {
+      return;
+    }
+
+    const request = buildResultIntakeRequestBody({
+      resultIntake,
+      resultBlockText
+    });
+
+    if (!request.ok) {
+      setResultIntakePreviewState({
+        identity: resultIntakeIdentity(resultIntake),
+        phase: 'failed',
+        request: null,
+        preview: null,
+        result: null,
+        message: request.message
+      });
+      setResultEscrowConfirmState(resultEscrowConfirmStateFromPreview(resultIntake, null));
+      return;
+    }
+
+    setResultIntakePreviewState({
+      identity: resultIntakeIdentity(resultIntake),
+      phase: 'loading',
+      request: request.requestBody,
+      preview: null,
+      result: null,
+      message: null
+    });
+    setResultEscrowConfirmState(resultEscrowConfirmStateFromPreview(resultIntake, null));
+
+    const result = await previewResultIntake(resultIntake.previewRoute, request.requestBody);
+
+    if (result.ok) {
+      const resultView = resultIntakePreviewResultView(result.data);
+      const nextPreviewState = {
+        identity: resultIntakeIdentity(resultIntake),
+        phase: 'ready',
+        request: request.requestBody,
+        preview: result.data,
+        result: resultView,
+        message: null
+      };
+
+      setResultIntakePreviewState(nextPreviewState);
+      setResultEscrowConfirmState(resultEscrowConfirmStateFromPreview(resultIntake, nextPreviewState));
+      return;
+    }
+
+    setResultIntakePreviewState({
+      identity: resultIntakeIdentity(resultIntake),
+      phase: 'failed',
+      request: null,
+      preview: null,
+      result: null,
+      message: textValue(result.message ?? 'result intake preview failed')
+    });
+    setResultEscrowConfirmState(resultEscrowConfirmStateFromPreview(resultIntake, null));
+  }
+
+  async function handleConfirmResultEscrow() {
+    if (escrowConfirmLoading) {
+      return;
+    }
+
+    setResultEscrowConfirmState({
+      identity: resultEscrowConfirmIdentity({
+        resultIntake,
+        previewState: visibleIntakePreviewState
+      }),
+      phase: 'loading',
+      result: null,
+      message: null
+    });
+
+    const nextConfirmState = await confirmResultEscrowFromPreview({
+      resultIntake,
+      previewState: visibleIntakePreviewState
+    });
+
+    setResultEscrowConfirmState(nextConfirmState);
+
+    if (nextConfirmState.phase === 'ready') {
+      await handleRefreshSupervisorState();
+    }
+  }
+
   return (
     <main className="v46-supervisor-shell" aria-labelledby="v46-supervisor-title">
       <SupervisorSidebar items={SIDEBAR_ITEMS} />
@@ -1225,6 +1841,20 @@ export function SupervisorShell({
           <ThreadContinuationDecisionPanel decision={view.threadContinuationDecision} />
           <CommandBoundaryPanel boundary={view.commandBoundary} />
           <PendingResultPanel pendingResult={view.pendingResult} />
+          <ResultIntakeLane
+            resultIntake={resultIntake}
+            resultBlockText={resultBlockText}
+            previewState={visibleIntakePreviewState}
+            previewLoading={intakePreviewLoading}
+            confirmState={visibleEscrowConfirmState}
+            confirmLoading={escrowConfirmLoading}
+            refreshState={refreshState}
+            refreshLoading={refreshLoading}
+            onResultBlockInput={handleResultBlockInput}
+            onPreviewResultIntake={handlePreviewResultIntake}
+            onConfirmResultEscrow={handleConfirmResultEscrow}
+            onRefreshSupervisorState={handleRefreshSupervisorState}
+          />
           <SupervisorEventPreviewLane
             eventPreview={eventPreview}
             previewState={visiblePreviewState}
@@ -1251,6 +1881,23 @@ export function supervisorPreviewStateFromEventPreview(eventPreview) {
     phase: eventPreview.previewResult === null ? 'idle' : 'ready',
     result: eventPreview.previewResult,
     message: null
+  });
+}
+
+export function resultIntakePreviewStateFromDescriptor(resultIntake) {
+  return Object.freeze({
+    ...RESULT_INTAKE_PREVIEW_IDLE_STATE,
+    identity: resultIntakeIdentity(resultIntake)
+  });
+}
+
+export function resultEscrowConfirmStateFromPreview(resultIntake, previewState) {
+  return Object.freeze({
+    ...RESULT_ESCROW_CONFIRM_IDLE_STATE,
+    identity: resultEscrowConfirmIdentity({
+      resultIntake,
+      previewState
+    })
   });
 }
 
@@ -1355,6 +2002,129 @@ export function visibleSupervisorConfirmState({
   return confirmState?.identity === identity
     ? confirmState
     : supervisorConfirmStateFromEventPreview(eventPreview, previewState?.result ?? null);
+}
+
+export function visibleResultIntakePreviewState({
+  resultIntake,
+  previewState
+}) {
+  const identity = resultIntakeIdentity(resultIntake);
+
+  return previewState?.identity === identity
+    ? previewState
+    : resultIntakePreviewStateFromDescriptor(resultIntake);
+}
+
+export function visibleResultEscrowConfirmState({
+  resultIntake,
+  previewState,
+  confirmState
+}) {
+  const identity = resultEscrowConfirmIdentity({
+    resultIntake,
+    previewState: previewState?.phase === 'ready' ? previewState : null
+  });
+
+  return confirmState?.identity === identity
+    ? confirmState
+    : resultEscrowConfirmStateFromPreview(resultIntake, previewState);
+}
+
+function resultIntakeIdentity(resultIntake) {
+  return [
+    resultIntake?.state,
+    resultIntake?.goalId,
+    resultIntake?.taskId,
+    resultIntake?.workerRole,
+    resultIntake?.sourceKind,
+    resultIntake?.previewRoute,
+    resultIntake?.confirmRoute
+  ].map(textValue).join('\u001c');
+}
+
+function resultEscrowConfirmIdentity({
+  resultIntake,
+  previewState
+}) {
+  return [
+    resultIntakeIdentity(resultIntake),
+    previewState?.preview?.planHash,
+    previewState?.result?.eventState,
+    previewState?.result?.eventType
+  ].map(textValue).join('\u001b');
+}
+
+export function canConfirmResultEscrow({
+  resultIntake,
+  previewState
+}) {
+  const confirmRoute = resultIntake?.confirmRoute === 'NULL' ? null : resultIntake?.confirmRoute;
+  const preview = objectValue(previewState?.preview);
+  const planHash = usableSupervisorPlanHash(preview.planHash);
+
+  return resultIntake?.state === 'available' &&
+    confirmRoute !== null &&
+    previewState?.phase === 'ready' &&
+    preview.contractName === 'resultIntakePreview.v1' &&
+    objectValue(preview.confirmRequestShape).route === confirmRoute &&
+    preview.eventCandidate?.state === 'eligible' &&
+    planHash !== null;
+}
+
+export async function confirmResultEscrowFromPreview({
+  resultIntake,
+  previewState,
+  confirmResultEscrowImpl = confirmResultEscrow
+}) {
+  const visiblePreviewState = visibleResultIntakePreviewState({
+    resultIntake,
+    previewState
+  });
+  const confirmIdentity = resultEscrowConfirmIdentity({
+    resultIntake,
+    previewState: visiblePreviewState
+  });
+  const confirmRoute = resultIntake?.confirmRoute === 'NULL' ? null : resultIntake?.confirmRoute;
+  const preview = objectValue(visiblePreviewState.preview);
+  const request = objectValue(visiblePreviewState.request);
+  const planHash = usableSupervisorPlanHash(preview.planHash);
+
+  if (
+    typeof confirmResultEscrowImpl !== 'function' ||
+    confirmRoute === null ||
+    visiblePreviewState.phase !== 'ready' ||
+    planHash === null ||
+    !canConfirmResultEscrow({ resultIntake, previewState: visiblePreviewState })
+  ) {
+    return {
+      identity: confirmIdentity,
+      phase: 'failed',
+      result: null,
+      message: 'result escrow confirm unavailable'
+    };
+  }
+
+  const result = await confirmResultEscrowImpl(confirmRoute, {
+    resultIntakeRequest: request,
+    resultIntakePreview: preview,
+    planHash
+  });
+
+  if (result.ok) {
+    return {
+      identity: confirmIdentity,
+      phase: 'ready',
+      result: resultEscrowConfirmationResultView(result.data),
+      message: null
+    };
+  }
+
+  return {
+    identity: confirmIdentity,
+    phase: 'failed',
+    result: null,
+    message: textValue(result.message ?? 'result escrow confirm failed')
+  };
 }
 
 function supervisorEventConfirmIdentity({
@@ -1675,9 +2445,201 @@ export function PendingResultPanel({ pendingResult }) {
         ['label', pendingResult.label],
         ['pendingResult.output', pendingResult.output === null ? 'NULL' : pendingResult.output],
         ['contract', pendingResult.contract],
+        ['state', pendingResult.state],
+        ['escrowRef', pendingResult.escrowRef],
+        ['evidence refs', pendingResult.evidenceRefs],
         ['reason', pendingResult.reason]
       ]} />
+      <TextList className="v46-family-list" items={pendingResult.blockedReasons} />
     </Panel>
+  );
+}
+
+export function ResultIntakeLane({
+  resultIntake,
+  resultBlockText,
+  previewState,
+  previewLoading,
+  confirmState,
+  confirmLoading,
+  refreshState = SUPERVISOR_REFRESH_IDLE_STATE,
+  refreshLoading = false,
+  onResultBlockInput,
+  onPreviewResultIntake,
+  onConfirmResultEscrow,
+  onRefreshSupervisorState = () => undefined
+}) {
+  const canPreview = resultIntake.state === 'available' &&
+    resultBlockText.trim() !== '' &&
+    !previewLoading;
+
+  return (
+    <Panel className="v51-result-intake-panel" odId="result-intake" title="Result Intake" meta={resultIntake.state}>
+      <KeyValues rows={[
+        ['goal id', resultIntake.goalId],
+        ['task id', resultIntake.taskId],
+        ['worker role', resultIntake.workerRole],
+        ['source kind', resultIntake.sourceKind],
+        ['preview route', resultIntake.previewRoute],
+        ['confirm route', resultIntake.confirmRoute],
+        ['disabled reason', resultIntake.disabledReason]
+      ]} />
+      <TextList className="v51-boundary-list" items={resultIntake.boundaryNotices} />
+      <label className="v51-result-input-label" htmlFor="v51-result-intake-block">
+        Paste worker result block
+      </label>
+      <textarea
+        id="v51-result-intake-block"
+        className="v51-result-input"
+        value={resultBlockText}
+        maxLength={RESULT_INTAKE_MAX_BLOCK_LENGTH}
+        spellCheck="false"
+        onChange={onResultBlockInput}
+      />
+      <div className="v51-result-controls">
+        <button
+          type="button"
+          className="v51-preview-button"
+          disabled={!canPreview}
+          onClick={onPreviewResultIntake}
+        >
+          Preview Result Intake
+        </button>
+        <SupervisorRefreshStateControl
+          refreshState={refreshState}
+          refreshLoading={refreshLoading}
+          onRefreshSupervisorState={onRefreshSupervisorState}
+        />
+      </div>
+      <ResultIntakePreviewResult previewState={previewState} />
+      <ResultEscrowConfirmAction
+        resultIntake={resultIntake}
+        previewState={previewState}
+        confirmState={confirmState}
+        confirmLoading={confirmLoading}
+        onConfirmResultEscrow={onConfirmResultEscrow}
+      />
+    </Panel>
+  );
+}
+
+function ResultIntakePreviewResult({ previewState }) {
+  if (previewState.phase === 'loading') {
+    return <p className="v50-preview-status">result intake preview pending</p>;
+  }
+
+  if (previewState.phase === 'failed') {
+    return <p className="v50-preview-status">{previewState.message}</p>;
+  }
+
+  if (previewState.result === null) {
+    return <p className="v50-preview-status">result intake preview not loaded</p>;
+  }
+
+  const result = previewState.result;
+
+  return (
+    <div className="v51-preview-result">
+      <KeyValues rows={[
+        ['preview contract', result.contract],
+        ['goal id', result.goalId],
+        ['task id', result.taskId],
+        ['worker role', result.workerRole],
+        ['source', result.source],
+        ['summary status', result.summaryStatus],
+        ['summary', result.summary],
+        ['changed files', result.changedFiles],
+        ['validation commands', result.validationCommands],
+        ['risks', result.risks],
+        ['blockers', result.blockers],
+        ['blocker reason', result.blockerReason],
+        ['evidence refs', result.evidenceRefs],
+        ['event state', result.eventState],
+        ['event reason', result.eventReason],
+        ['event type', result.eventType],
+        ['command name', result.commandName],
+        ['willAppendGoalEvent', result.willAppendGoalEvent],
+        ['writesOnPreview', result.writesOnPreview],
+        ['writesOnConfirm', result.writesOnConfirm],
+        ['writesGoalEventLog', result.writesGoalEventLog],
+        ['planHash', result.planHash],
+        ['expiresAt', result.expiresAt],
+        ['confirm route', result.confirmRoute],
+        ['confirmUsesPlanHash', result.confirmUsesPlanHash]
+      ]} />
+      <TextList className="v46-family-list" items={result.blockedFields} />
+      <TextList className="v46-chip-list" items={result.blockedReasons} />
+    </div>
+  );
+}
+
+function ResultEscrowConfirmAction({
+  resultIntake,
+  previewState,
+  confirmState,
+  confirmLoading,
+  onConfirmResultEscrow
+}) {
+  const canConfirm = canConfirmResultEscrow({
+    resultIntake,
+    previewState
+  });
+
+  if (previewState.phase !== 'ready' || previewState.result === null) {
+    return null;
+  }
+
+  return (
+    <div className="v51-confirm-lane">
+      {canConfirm ? (
+        <button
+          type="button"
+          className="v51-confirm-button"
+          disabled={confirmLoading}
+          onClick={onConfirmResultEscrow}
+        >
+          Confirm Result Escrow
+        </button>
+      ) : (
+        <p className="v50-preview-status">result escrow confirm unavailable</p>
+      )}
+      <ResultEscrowConfirmResult confirmState={confirmState} />
+    </div>
+  );
+}
+
+function ResultEscrowConfirmResult({ confirmState }) {
+  if (confirmState.phase === 'idle') {
+    return null;
+  }
+
+  if (confirmState.phase === 'loading') {
+    return <p className="v50-preview-status">result escrow confirm pending</p>;
+  }
+
+  if (confirmState.phase === 'failed') {
+    return <p className="v50-preview-status">{confirmState.message}</p>;
+  }
+
+  if (confirmState.result === null) {
+    return <p className="v50-preview-status">result escrow confirmation not loaded</p>;
+  }
+
+  const result = confirmState.result;
+
+  return (
+    <div className="v51-confirm-result">
+      <KeyValues rows={[
+        ['confirmation contract', result.contract],
+        ['status', result.status],
+        ['written', result.written],
+        ['planHash', result.planHash],
+        ['escrowRef', result.escrowRef],
+        ['pendingResultRef', result.pendingResultRef],
+        ['refresh route', result.refreshRoute],
+        ['pending result projection', result.pendingResultProjectionAvailable]
+      ]} />
+    </div>
   );
 }
 

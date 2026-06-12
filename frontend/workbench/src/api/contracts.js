@@ -11987,16 +11987,188 @@ function projectSupervisorDecisionCommandBoundary(commandBoundary, fallbackComma
 function projectSupervisorPendingResult(pendingResult) {
   const result = pendingResult ?? {};
   const missing = pendingResult === null || pendingResult === undefined || result.missing === true;
+  const evidenceRefs = projectSupervisorResultEvidenceRefs(result.evidenceRefs);
+  const eventCandidate = projectSupervisorResultEventCandidate(result.eventCandidate, evidenceRefs);
+  const escrowRef = safeSupervisorResultText(result.escrowRef);
+  const evidenceRef = safeSupervisorResultText(result.evidenceRef) ?? stringifySupervisorResultEvidenceRef(evidenceRefs[0]);
 
   return {
+    contractName: result.contractName === 'pendingResult.v1' ? 'pendingResult.v1' : null,
+    contractVersion: Number.isInteger(result.contractVersion) ? result.contractVersion : null,
+    goalId: safeSupervisorResultToken(result.goalId),
+    taskId: safeSupervisorResultToken(result.taskId),
+    workerRole: safeSupervisorResultToken(result.workerRole),
     status: result.status ?? 'missing',
-    source: result.source ?? null,
-    eventToRegister: result.eventToRegister ?? null,
-    evidenceRef: result.evidenceRef ?? null,
-    parserReason: result.parserReason ?? null,
+    state: safeSupervisorResultToken(result.state),
+    source: safeSupervisorResultToken(result.source),
+    escrowRef,
+    sanitizedSummary: projectSupervisorResultSummary(result.sanitizedSummary),
+    evidenceRefs,
+    eventCandidate,
+    eventToRegister: eventCandidate.eventType ?? safeSupervisorResultText(result.eventToRegister),
+    evidenceRef,
+    parserReason: safeSupervisorResultText(result.parserReason ?? eventCandidate.reason),
+    blockedReasons: projectSupervisorResultTextList(result.blockedReasons),
+    sourceContracts: projectSupervisorResultSourceContracts(result.sourceContracts),
+    boundaries: projectSupervisorResultBoundaries(result.boundaries),
     staleMarker: result.staleMarker ?? (missing ? 'unknown' : result.stale === true ? 'stale' : 'fresh'),
     missingMarker: result.missingMarker ?? (missing ? 'pendingResult' : 'none')
   };
+}
+
+function projectSupervisorResultSummary(summary) {
+  const source = summary ?? {};
+
+  return {
+    status: safeSupervisorResultText(source.status) ?? 'unknown',
+    summary: safeSupervisorResultText(source.summary),
+    changedFiles: projectSupervisorResultTextList(source.changedFiles),
+    validationCommands: projectSupervisorResultTextList(source.validationCommands),
+    evidenceRefs: projectSupervisorResultEvidenceRefs(source.evidenceRefs),
+    blockerReason: safeSupervisorResultText(source.blockerReason),
+    risks: projectSupervisorResultTextList(source.risks),
+    blockers: projectSupervisorResultTextList(source.blockers)
+  };
+}
+
+function projectSupervisorResultEventCandidate(candidate, fallbackEvidenceRefs = []) {
+  const source = candidate ?? {};
+  const evidenceRefs = projectSupervisorResultEvidenceRefs(source.evidenceRefs);
+
+  return {
+    eventType: safeSupervisorResultText(source.eventType),
+    taskId: safeSupervisorResultToken(source.taskId),
+    workerRole: safeSupervisorResultToken(source.workerRole),
+    command: safeSupervisorResultToken(source.command),
+    commandName: safeSupervisorResultText(source.commandName),
+    requiresEvidence: source.requiresEvidence === true,
+    evidenceRefs: evidenceRefs.length > 0 ? evidenceRefs : fallbackEvidenceRefs,
+    blocker: projectSupervisorResultBlocker(source.blocker),
+    willAppendGoalEvent: false,
+    state: safeSupervisorResultToken(source.state),
+    reason: safeSupervisorResultText(source.reason)
+  };
+}
+
+function projectSupervisorResultBlocker(blocker) {
+  const source = blocker ?? {};
+  const normalized = {
+    blockerId: safeSupervisorResultToken(source.blockerId),
+    reason: safeSupervisorResultText(source.reason),
+    severity: safeSupervisorResultText(source.severity)
+  };
+
+  return Object.values(normalized).some((value) => value !== null) ? normalized : null;
+}
+
+function projectSupervisorResultEvidenceRefs(evidenceRefs) {
+  return (Array.isArray(evidenceRefs) ? evidenceRefs : [])
+    .map((evidenceRef) => {
+      const kind = safeSupervisorResultToken(evidenceRef?.kind);
+      const ref = safeSupervisorResultText(evidenceRef?.ref);
+      const label = safeSupervisorResultText(evidenceRef?.label);
+
+      if (!['repo-doc', 'artifact-ref', 'commit', 'command-evidence', 'external-note'].includes(kind) ||
+          ref === null ||
+          label === null) {
+        return null;
+      }
+
+      if (kind === 'repo-doc' && !ref.startsWith('docs/plans/')) {
+        return null;
+      }
+
+      return { kind, ref, label };
+    })
+    .filter((evidenceRef) => evidenceRef !== null);
+}
+
+function stringifySupervisorResultEvidenceRef(evidenceRef) {
+  if (evidenceRef === null || evidenceRef === undefined) {
+    return null;
+  }
+
+  return evidenceRef.kind === 'artifact-ref' ? `artifact-ref:${evidenceRef.ref}` : evidenceRef.ref;
+}
+
+function projectSupervisorResultSourceContracts(sourceContracts) {
+  return (Array.isArray(sourceContracts) ? sourceContracts : [])
+    .map((contract) => {
+      const contractName = safeSupervisorContractName(contract?.contractName);
+
+      if (contractName === null) {
+        return null;
+      }
+
+      return {
+        contractName,
+        contractVersion: Number.isInteger(contract.contractVersion) ? contract.contractVersion : null,
+        escrowRef: safeSupervisorResultText(contract.escrowRef),
+        previewPlanHash: safeSupervisorHash(contract.previewPlanHash),
+        generatedAt: safeSupervisorResultText(contract.generatedAt),
+        readOnly: true
+      };
+    })
+    .filter((contract) => contract !== null);
+}
+
+function projectSupervisorResultBoundaries(boundaries) {
+  return {
+    providerExecutionAvailable: false,
+    childDispatchAvailable: false,
+    directGoalEventAppendAvailable: false,
+    untrustedTranscriptProjectionAvailable: false,
+    frontendLocalFileReadAvailable: false,
+    reviewerMutationAvailable: false,
+    mainVerificationMutationAvailable: false,
+    releaseGateMutationAvailable: false,
+    gitMutationAvailable: false,
+    githubReleaseAutomationAvailable: false,
+    projectionAppendsGoalEvent: false
+  };
+}
+
+function projectSupervisorResultTextList(values) {
+  return (Array.isArray(values) ? values : [])
+    .map((value) => safeSupervisorResultText(value))
+    .filter(isNonEmptyString);
+}
+
+function safeSupervisorResultText(value) {
+  if (!isNonEmptyString(value)) {
+    return null;
+  }
+
+  const text = String(value).trim();
+
+  if (
+    isUnsafeControlledEvidenceRefInput(text) ||
+    /(?:^|\/)\.(?:codex|claude|git|symphony)(?:\/|$)/iu.test(text) ||
+    /\.jsonl(?:$|[?#])/iu.test(text) ||
+    /raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|model[\s_-]*output/iu.test(text)
+  ) {
+    return null;
+  }
+
+  return text;
+}
+
+function safeSupervisorResultToken(value) {
+  const text = safeSupervisorResultText(value);
+
+  return isNonEmptyString(text) && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(text) ? text : null;
+}
+
+function safeSupervisorContractName(value) {
+  const text = safeSupervisorResultText(value);
+
+  return text === 'resultEvidenceEscrow.v1' ? text : null;
+}
+
+function safeSupervisorHash(value) {
+  const text = safeSupervisorResultText(value);
+
+  return isNonEmptyString(text) && /^sha256:[a-f0-9]{64}$/u.test(text) ? text : null;
 }
 
 function projectSupervisorCommandBoundary(commandBoundary) {

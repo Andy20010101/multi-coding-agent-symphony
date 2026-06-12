@@ -17,13 +17,15 @@ import {
   confirmControlledAdoptionPlanFreeze,
   confirmControlledImplementationRunPlan,
   confirmGoalEventPlan,
+  confirmResultEscrow,
   fetchAdoptionInspection,
   fetchGoalEventPlanPreview,
   fetchPromptWorkspaceHandoffBoard,
   fetchPromptWorkspacePromptPack,
   fetchPromptWorkspaceRunbook,
   fetchReadonlyRoute,
-  fetchWorkbenchContracts
+  fetchWorkbenchContracts,
+  previewResultIntake
 } from '../frontend/workbench/src/api/client.js';
 import {
   CONTRACT_TEXT,
@@ -520,6 +522,18 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(dashboard.recommendedNextAction.manualInterventionReason, 'operator-review-required');
     assert.equal(dashboard.activeLease.duplicateDispatchGuard, 'blocked: active lease still healthy');
     assert.deepEqual(dashboard.commandBoundary.blockedFamilies, ['child-dispatch', 'event-log-write']);
+    assert.equal(dashboard.pendingResult.contractName, 'pendingResult.v1');
+    assert.equal(dashboard.pendingResult.state, 'available');
+    assert.equal(dashboard.pendingResult.escrowRef, 'result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3');
+    assert.equal(dashboard.pendingResult.eventCandidate.eventType, 'worker.evidence-recorded');
+    assert.equal(dashboard.pendingResult.eventCandidate.willAppendGoalEvent, false);
+    assert.deepEqual(dashboard.pendingResult.evidenceRefs, [{
+      kind: 'artifact-ref',
+      ref: 'artifact:v44-4:pending-result',
+      label: 'pending result registration'
+    }]);
+    assert.equal(dashboard.pendingResult.boundaries.directGoalEventAppendAvailable, false);
+    assert.equal(dashboard.pendingResult.boundaries.frontendLocalFileReadAvailable, false);
     assert.equal(dashboard.sessionSourceInventory.contractName, 'sessionSourceInventory.v1');
     assert.equal(dashboard.sessionSourceInventory.state, 'degraded');
     assert.equal(dashboard.sessionSourceInventory.providers[1].state, 'unreadable');
@@ -555,6 +569,67 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(dashboard.currentGate.closeoutAuthorization, 'blocked-without-operator-authorization');
     assert.equal(dashboard.ownership.branch, 'codex/v44-4-pr2-supervisor-route-api-client');
     assert.equal(model.routeStates.find((route) => route.id === 'goalSupervisor').state, 'ready');
+  });
+
+  it('sanitizes v51 pending result projection before Workbench renders it', () => {
+    const supervisor = createGoalSupervisorAppReadModelPayload();
+    const model = projectWorkbenchContracts({
+      goalSupervisor: createWorkbenchResult('goalSupervisor', {
+        ...supervisor,
+        pendingResult: {
+          ...supervisor.pendingResult,
+          escrowRef: '.codex/sessions/local-secret.jsonl',
+          sanitizedSummary: {
+            ...supervisor.pendingResult.sanitizedSummary,
+            summary: 'raw model output should not render',
+            changedFiles: ['/Users/andy/private/file.js'],
+            validationCommands: ['node --test tests/workbench-shell.test.js']
+          },
+          evidenceRefs: [
+            ...supervisor.pendingResult.evidenceRefs,
+            {
+              kind: 'repo-doc',
+              ref: '.claude/projects/local-secret.jsonl',
+              label: 'unsafe local session ref'
+            }
+          ],
+          sourceContracts: [
+            {
+              contractName: 'resultEvidenceEscrow.v1',
+              contractVersion: 1,
+              escrowRef: 'result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3',
+              previewPlanHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            },
+            {
+              contractName: 'rawSession.v1',
+              escrowRef: '.symphony/events/local-secret.jsonl'
+            }
+          ],
+          boundaries: {
+            providerExecutionAvailable: true,
+            childDispatchAvailable: true,
+            directGoalEventAppendAvailable: true,
+            frontendLocalFileReadAvailable: true,
+            projectionAppendsGoalEvent: true
+          }
+        }
+      })
+    });
+    const pendingResult = model.supervisorDashboard.pendingResult;
+    const serialized = JSON.stringify(pendingResult);
+
+    assert.equal(pendingResult.escrowRef, null);
+    assert.equal(pendingResult.sanitizedSummary.summary, null);
+    assert.deepEqual(pendingResult.sanitizedSummary.changedFiles, []);
+    assert.deepEqual(pendingResult.evidenceRefs, [{
+      kind: 'artifact-ref',
+      ref: 'artifact:v44-4:pending-result',
+      label: 'pending result registration'
+    }]);
+    assert.equal(pendingResult.sourceContracts.some((contract) => contract.contractName === 'rawSession.v1'), false);
+    assert.equal(pendingResult.boundaries.providerExecutionAvailable, false);
+    assert.equal(pendingResult.boundaries.directGoalEventAppendAvailable, false);
+    assert.doesNotMatch(serialized, /\.jsonl|\.codex|\.claude|\.symphony|raw model output|\/Users\/andy/u);
   });
 
   it('projects v44.4 supervisor remaining panels without inferring from local files', () => {
@@ -1638,6 +1713,102 @@ describe('v15 Workbench read-only API client', () => {
       'application/json',
       'sha256:1111111111111111111111111111111111111111111111111111111111111111'
     ]]);
+  });
+
+  it('posts controlled result intake preview and result escrow confirm requests without event append bodies', async () => {
+    const calls = [];
+    const request = createResultIntakeRequestPayload();
+    const preview = createResultIntakePreviewPayload(request);
+    const previewResult = await previewResultIntake('/api/goals/v51-result-intake-evidence-escrow/result-intake-preview', request, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return preview;
+          }
+        };
+      }
+    });
+    const confirmResult = await confirmResultEscrow('/api/goals/v51-result-intake-evidence-escrow/result-intake-confirm', {
+      resultIntakeRequest: request,
+      resultIntakePreview: preview,
+      planHash: preview.planHash
+    }, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return createResultIntakeConfirmationPayload(preview);
+          }
+        };
+      }
+    });
+    const rejectedPreview = await previewResultIntake('/api/goals/v51-result-intake-evidence-escrow/result-intake-preview', request, {
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            contractName: 'goal-update-plan.v1'
+          };
+        }
+      })
+    });
+
+    assert.equal(previewResult.ok, true);
+    assert.equal(confirmResult.ok, true);
+    assert.equal(rejectedPreview.ok, false);
+    assert.equal(previewResult.data.willMutate, false);
+    assert.equal(previewResult.data.previewWriteTarget.writesOnPreview, false);
+    assert.equal(previewResult.data.previewWriteTarget.writesGoalEventLog, false);
+    assert.equal(confirmResult.data.safety.writesGoalEventLog, false);
+    assert.equal(confirmResult.data.refs.escrowRef, 'result-evidence-escrow:v51-result-intake-evidence-escrow:task-1:escrow_aaaaaaaaaaaaaaaa');
+    assert.equal(confirmResult.data.refs.pendingResultRef, 'pending-result:v51-result-intake-evidence-escrow:task-1');
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      init.headers['Content-Type'],
+      Object.keys(JSON.parse(init.body))
+    ]), [[
+      '/api/goals/v51-result-intake-evidence-escrow/result-intake-preview',
+      'POST',
+      'no-store',
+      'application/json',
+      'application/json',
+      [
+        'contractName',
+        'contractVersion',
+        'goalId',
+        'taskId',
+        'workerRole',
+        'source',
+        'submittedAt',
+        'resultBlock',
+        'evidenceRefs',
+        'requestedEvent',
+        'boundaries'
+      ]
+    ], [
+      '/api/goals/v51-result-intake-evidence-escrow/result-intake-confirm',
+      'POST',
+      'no-store',
+      'application/json',
+      'application/json',
+      [
+        'resultIntakeRequest',
+        'resultIntakePreview',
+        'planHash'
+      ]
+    ]]);
+    assert.doesNotMatch(JSON.stringify(calls.map(([, init]) => JSON.parse(init.body))), /"actor"|goal-event-confirmation|event-plan-confirm/u);
   });
 
   it('builds supervisor event confirm body only from eligibility shape and visible preview planHash', async () => {
@@ -5619,6 +5790,141 @@ async function previewAndConfirmGoalEvent({
   return confirm.data;
 }
 
+function createResultIntakeRequestPayload() {
+  return {
+    contractName: 'resultIntakeRequest.v1',
+    contractVersion: 1,
+    goalId: 'v51-result-intake-evidence-escrow',
+    taskId: 'task-1',
+    workerRole: 'worker',
+    source: 'manual-paste',
+    submittedAt: '2026-06-12T09:00:00.000Z',
+    resultBlock: {
+      status: 'completed',
+      summary: 'Added the Workbench result intake lane.',
+      changedFiles: ['frontend/workbench/src/v46SupervisorWorkbench.jsx'],
+      validationCommands: ['pnpm workbench:build'],
+      risks: [],
+      blockers: []
+    },
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/plans/v51-workbench-result-intake-evidence-2026-06-12.md',
+      label: 'v51 Workbench evidence'
+    }],
+    requestedEvent: {
+      eventType: 'worker.evidence-recorded',
+      taskId: 'task-1'
+    },
+    boundaries: {
+      providerExecutionAvailable: false,
+      childDispatchAvailable: false,
+      directGoalEventAppendAvailable: false,
+      untrustedTranscriptProjectionAvailable: false,
+      frontendLocalFileReadAvailable: false,
+      reviewerMutationAvailable: false,
+      mainVerificationMutationAvailable: false,
+      releaseGateMutationAvailable: false,
+      gitMutationAvailable: false,
+      githubReleaseAutomationAvailable: false
+    }
+  };
+}
+
+function createResultIntakePreviewPayload(request = createResultIntakeRequestPayload()) {
+  return {
+    contractName: 'resultIntakePreview.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-12T09:01:00.000Z',
+    readOnly: true,
+    willMutate: false,
+    goalId: request.goalId,
+    taskId: request.taskId,
+    workerRole: request.workerRole,
+    source: request.source,
+    sanitizedSummary: {
+      status: 'completed',
+      summary: 'Added the Workbench result intake lane.',
+      changedFiles: ['frontend/workbench/src/v46SupervisorWorkbench.jsx'],
+      validationCommands: ['pnpm workbench:build'],
+      risks: [],
+      blockers: []
+    },
+    evidenceRefs: request.evidenceRefs,
+    blockedFields: [],
+    eventCandidate: {
+      eventType: 'worker.evidence-recorded',
+      taskId: request.taskId,
+      workerRole: request.workerRole,
+      command: 'update',
+      commandName: 'symphony goal update',
+      requiresEvidence: true,
+      evidenceRefs: request.evidenceRefs,
+      blocker: null,
+      willAppendGoalEvent: false,
+      state: 'eligible',
+      reason: 'eligible-result-event'
+    },
+    previewWriteTarget: {
+      kind: 'result-evidence-escrow',
+      storage: 'pending-result-escrow',
+      writesOnPreview: false,
+      writesOnConfirm: true,
+      writesGoalEventLog: false
+    },
+    planHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    expiresAt: '2026-06-12T09:16:00.000Z',
+    confirmRequestShape: {
+      method: 'POST',
+      route: `/api/goals/${request.goalId}/result-intake-confirm`,
+      contentType: 'application/json',
+      requiredBodyFields: ['goalId', 'taskId', 'planHash'],
+      optionalBodyFields: ['previewId', 'escrowId'],
+      confirmUsesPlanHash: true
+    },
+    boundaries: {
+      ...request.boundaries,
+      readOnly: true,
+      willMutate: false,
+      previewWrites: false,
+      confirmWritesResultEscrow: true
+    }
+  };
+}
+
+function createResultIntakeConfirmationPayload(preview = createResultIntakePreviewPayload()) {
+  return {
+    contractName: 'result-intake-confirmation.v1',
+    contractVersion: 1,
+    goalId: preview.goalId,
+    taskId: preview.taskId,
+    mode: 'confirm',
+    status: 'confirmed',
+    written: true,
+    planHash: preview.planHash,
+    refs: {
+      escrowRef: 'result-evidence-escrow:v51-result-intake-evidence-escrow:task-1:escrow_aaaaaaaaaaaaaaaa',
+      pendingResultRef: 'pending-result:v51-result-intake-evidence-escrow:task-1'
+    },
+    refreshed: {
+      supervisor: {
+        method: 'GET',
+        route: '/api/goals/v51-result-intake-evidence-escrow/supervisor',
+        pendingResultProjectionAvailable: true
+      }
+    },
+    safety: {
+      writesResultEvidenceEscrow: true,
+      writesPendingResult: true,
+      writesGoalEventLog: false,
+      writesOperationRegistry: false,
+      providerExecutionAvailable: false,
+      childDispatchAvailable: false,
+      directGoalEventAppendAvailable: false
+    }
+  };
+}
+
 function createWorkbenchResult(routeId, data) {
   const route = READONLY_API_ROUTES.find((candidate) => candidate.id === routeId);
 
@@ -5743,14 +6049,76 @@ function createGoalSupervisorAppReadModelPayload() {
       driftMarkers: []
     },
     pendingResult: {
+      contractName: 'pendingResult.v1',
+      contractVersion: 1,
+      goalId: 'v44-4-live-supervisor',
+      taskId: 'task-3',
+      workerRole: 'worker',
       source: 'result-intake',
       status: 'pending',
+      state: 'available',
+      escrowRef: 'result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3',
+      sanitizedSummary: {
+        status: 'completed',
+        summary: 'Worker evidence recorded for task-3.',
+        changedFiles: ['frontend/workbench/src/v46SupervisorWorkbench.jsx'],
+        validationCommands: ['node --test tests/workbench-shell.test.js'],
+        evidenceRefs: [{
+          kind: 'artifact-ref',
+          ref: 'artifact:v44-4:pending-result',
+          label: 'pending result registration'
+        }],
+        risks: [],
+        blockers: []
+      },
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:v44-4:pending-result',
+        label: 'pending result registration'
+      }],
+      eventCandidate: {
+        eventType: 'worker.evidence-recorded',
+        taskId: 'task-3',
+        workerRole: 'worker',
+        command: 'update',
+        commandName: 'symphony goal update',
+        requiresEvidence: true,
+        evidenceRefs: [{
+          kind: 'artifact-ref',
+          ref: 'artifact:v44-4:pending-result',
+          label: 'pending result registration'
+        }],
+        blocker: null,
+        willAppendGoalEvent: false,
+        state: 'eligible',
+        reason: 'eligible-result-event'
+      },
       eventToRegister: 'worker.evidence-recorded',
       evidenceRef: 'artifact:v44-4:pending-result',
       parserReason: 'valid-result-awaits-registration',
       stale: false,
       missing: false,
-      resultId: 'result-live-task-3'
+      resultId: 'result-live-task-3',
+      blockedReasons: [],
+      sourceContracts: [{
+        contractName: 'resultEvidenceEscrow.v1',
+        contractVersion: 1,
+        escrowRef: 'result-evidence-escrow:v44-4-live-supervisor:task-3:escrow_live_task_3',
+        previewPlanHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      }],
+      boundaries: {
+        providerExecutionAvailable: false,
+        childDispatchAvailable: false,
+        directGoalEventAppendAvailable: false,
+        untrustedTranscriptProjectionAvailable: false,
+        frontendLocalFileReadAvailable: false,
+        reviewerMutationAvailable: false,
+        mainVerificationMutationAvailable: false,
+        releaseGateMutationAvailable: false,
+        gitMutationAvailable: false,
+        githubReleaseAutomationAvailable: false,
+        projectionAppendsGoalEvent: false
+      }
     },
     currentGate: {
       gateId: 'release.ready',
