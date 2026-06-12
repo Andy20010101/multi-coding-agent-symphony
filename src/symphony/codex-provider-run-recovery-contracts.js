@@ -1,3 +1,8 @@
+import {
+  CODEX_PROVIDER_RUN_RECORD_CONTRACT_NAME,
+  validateCodexProviderRunRecordContract
+} from './codex-provider-execution-contracts.js';
+
 export const CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME = 'codexProviderRunRecovery.v1';
 export const REVIEWER_HANDOFF_PREVIEW_CONTRACT_NAME = 'reviewerHandoffPreview.v1';
 export const CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_VERSION = 1;
@@ -34,6 +39,84 @@ export class CodexProviderRunRecoveryContractError extends Error {
     this.code = code;
     this.details = details;
   }
+}
+
+export function buildCodexProviderRunRecovery({
+  generatedAt = new Date().toISOString(),
+  runRecord,
+  pendingResult = null,
+  currentPreviewHash = null,
+  goal = null,
+  task = null
+} = {}) {
+  if (!isPlainObject(runRecord)) {
+    throw new CodexProviderRunRecoveryContractError(
+      'missing-codex-provider-run-record',
+      'Codex provider run recovery requires a backend-owned run record.'
+    );
+  }
+
+  const validation = validateCodexProviderRunRecordContract(runRecord);
+  const unsafeRunRecord = validation.ok === false && validation.errors.some(isUnsafeValidationError);
+  const hasResultIntakeRequest = isPlainObject(runRecord.resultIntakeRequest);
+  const pendingResultRef = pendingResultRefFromContract(pendingResult);
+  const effectiveCurrentPreviewHash = safeHash(currentPreviewHash) ?? safeHash(runRecord.previewHash);
+  const stalePreviewHash = effectiveCurrentPreviewHash !== null &&
+    safeHash(runRecord.previewHash) !== null &&
+    effectiveCurrentPreviewHash !== runRecord.previewHash;
+  const recoveryState = recoveryStateFrom({
+    runRecord,
+    pendingResultRef,
+    hasResultIntakeRequest,
+    unsafeRunRecord,
+    stalePreviewHash
+  });
+  const blockedReasons = recoveryBlockedReasons({
+    recoveryState,
+    runRecord,
+    pendingResultRef
+  });
+  const recovery = {
+    contractName: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME,
+    contractVersion: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_VERSION,
+    generatedAt: new Date(millisOrNow(generatedAt)).toISOString(),
+    goal: goalForRecovery({ goal, runRecord }),
+    task: taskForRecovery({ task, runRecord }),
+    runId: safeToken(runRecord.runId) ?? 'missing-run-id',
+    providerId: 'codex',
+    role: 'worker',
+    previewHash: safeHash(runRecord.previewHash) ?? null,
+    taskPackHash: safeHash(runRecord.taskPackHash) ?? null,
+    runStatus: runRecord.status === 'blocked' ? 'blocked' : 'completed',
+    resultIntake: resultIntakeForRecovery({
+      runRecord,
+      pendingResultRef,
+      hasResultIntakeRequest,
+      recoveryState,
+      stalePreviewHash,
+      effectiveCurrentPreviewHash
+    }),
+    recoveryState,
+    nextSafeAction: nextSafeActionForRecovery(recoveryState),
+    blockedReasons,
+    sourceContracts: sourceContractsForRecovery({
+      runRecord,
+      hasResultIntakeRequest,
+      pendingResultRef
+    }),
+    boundaries: buildRunRecoveryBoundaries()
+  };
+  const recoveryValidation = validateCodexProviderRunRecoveryContract(recovery);
+
+  if (!recoveryValidation.ok) {
+    throw new CodexProviderRunRecoveryContractError(
+      'invalid-built-codex-provider-run-recovery',
+      'Built Codex provider run recovery contract is invalid.',
+      { reason: recoveryValidation.errors[0] }
+    );
+  }
+
+  return recovery;
 }
 
 const RECOVERY_ALLOWED_FIELDS = new Set([
@@ -287,6 +370,324 @@ export function assertReviewerHandoffPreviewContract(preview) {
   }
 
   return preview;
+}
+
+function recoveryStateFrom({
+  runRecord,
+  pendingResultRef,
+  hasResultIntakeRequest,
+  unsafeRunRecord,
+  stalePreviewHash
+}) {
+  if (unsafeRunRecord) {
+    return 'unsafe-provider-output';
+  }
+
+  if (!hasResultIntakeRequest) {
+    return 'missing-result-intake';
+  }
+
+  if (stalePreviewHash) {
+    return 'stale-preview-hash';
+  }
+
+  if (runRecord.status === 'blocked' && pendingResultRef?.state === 'blocked') {
+    return 'blocked-provider-result';
+  }
+
+  if (runRecord.status === 'completed' && pendingResultRef?.state === 'available') {
+    return 'ready-for-reviewer-handoff';
+  }
+
+  return 'pending-result-intake';
+}
+
+function recoveryBlockedReasons({
+  recoveryState,
+  runRecord,
+  pendingResultRef
+}) {
+  if (recoveryState === 'ready-for-reviewer-handoff') {
+    return [];
+  }
+
+  if (recoveryState === 'blocked-provider-result') {
+    return [
+      'provider-run-blocked',
+      'pending-result-blocked'
+    ];
+  }
+
+  if (recoveryState === 'missing-result-intake') {
+    return ['missing-result-intake-request'];
+  }
+
+  if (recoveryState === 'stale-preview-hash') {
+    return ['stale-preview-hash'];
+  }
+
+  if (recoveryState === 'unsafe-provider-output') {
+    return ['unsafe-provider-output'];
+  }
+
+  return uniqueStrings([
+    'pending-result-intake',
+    ...(runRecord.status === 'blocked' ? ['provider-run-blocked'] : []),
+    ...(pendingResultRef?.state === 'blocked' ? ['pending-result-blocked'] : [])
+  ]);
+}
+
+function resultIntakeForRecovery({
+  runRecord,
+  pendingResultRef,
+  hasResultIntakeRequest,
+  recoveryState,
+  stalePreviewHash,
+  effectiveCurrentPreviewHash
+}) {
+  const requestState = resultIntakeStateForRecovery({ recoveryState, pendingResultRef });
+
+  return {
+    contractName: 'resultIntakeRequest.v1',
+    requestId: `result-intake:${safeToken(runRecord.goalId) ?? 'missing-goal'}:${safeToken(runRecord.taskId) ?? 'missing-task'}:${safeToken(runRecord.runId) ?? 'missing-run'}`,
+    requestState,
+    previewHash: hasResultIntakeRequest
+      ? (stalePreviewHash ? effectiveCurrentPreviewHash : safeHash(runRecord.previewHash))
+      : null,
+    planHash: safeHash(pendingResultRef?.previewPlanHash),
+    pendingResult: pendingResultForRecoveryContract(pendingResultRef),
+    blockedReasons: resultIntakeBlockedReasonsForRecovery({ recoveryState, pendingResultRef }),
+    sourceRef: {
+      kind: 'contract',
+      ref: 'resultIntakeRequest.v1'
+    }
+  };
+}
+
+function resultIntakeStateForRecovery({
+  recoveryState,
+  pendingResultRef
+}) {
+  if (recoveryState === 'ready-for-reviewer-handoff') {
+    return 'accepted';
+  }
+
+  if (recoveryState === 'blocked-provider-result') {
+    return 'blocked';
+  }
+
+  if (recoveryState === 'missing-result-intake') {
+    return 'missing';
+  }
+
+  if (recoveryState === 'stale-preview-hash') {
+    return 'stale';
+  }
+
+  if (recoveryState === 'unsafe-provider-output') {
+    return 'unsafe';
+  }
+
+  if (pendingResultRef?.state === 'blocked') {
+    return 'blocked';
+  }
+
+  return 'pending';
+}
+
+function resultIntakeBlockedReasonsForRecovery({
+  recoveryState,
+  pendingResultRef
+}) {
+  if (recoveryState === 'ready-for-reviewer-handoff') {
+    return [];
+  }
+
+  if (recoveryState === 'blocked-provider-result') {
+    return ['pending-result-blocked'];
+  }
+
+  if (recoveryState === 'missing-result-intake') {
+    return ['missing-result-intake-request'];
+  }
+
+  if (recoveryState === 'stale-preview-hash') {
+    return ['stale-preview-hash'];
+  }
+
+  if (recoveryState === 'unsafe-provider-output') {
+    return ['unsafe-provider-output'];
+  }
+
+  return uniqueStrings([
+    'pending-result-intake',
+    ...safeStringArray(pendingResultRef?.blockedReasons)
+  ]);
+}
+
+function pendingResultRefFromContract(pendingResult) {
+  if (!isPlainObject(pendingResult) || pendingResult.contractName !== 'pendingResult.v1') {
+    return null;
+  }
+
+  const state = PENDING_RESULT_STATE_SET.has(pendingResult.state)
+    ? pendingResult.state
+    : 'blocked';
+  const sourceContract = Array.isArray(pendingResult.sourceContracts)
+    ? pendingResult.sourceContracts.find((contract) => isPlainObject(contract) && safeHash(contract.previewPlanHash) !== null)
+    : null;
+
+  return {
+    contractName: 'pendingResult.v1',
+    state,
+    escrowRef: safeDisplayText(pendingResult.escrowRef) ?? `pending-result:${safeToken(pendingResult.goalId) ?? 'missing-goal'}:${safeToken(pendingResult.taskId) ?? 'missing-task'}`,
+    previewPlanHash: safeHash(sourceContract?.previewPlanHash),
+    blockedReasons: safeStringArray(pendingResult.blockedReasons),
+    sourceRef: {
+      kind: 'contract',
+      ref: 'pendingResult.v1'
+    }
+  };
+}
+
+function pendingResultForRecoveryContract(pendingResultRef) {
+  if (pendingResultRef === null) {
+    return null;
+  }
+
+  return {
+    contractName: 'pendingResult.v1',
+    state: pendingResultRef.state,
+    escrowRef: pendingResultRef.escrowRef,
+    blockedReasons: pendingResultRef.blockedReasons,
+    sourceRef: {
+      kind: 'contract',
+      ref: 'pendingResult.v1'
+    }
+  };
+}
+
+function nextSafeActionForRecovery(recoveryState) {
+  const actions = {
+    'ready-for-reviewer-handoff': {
+      actionId: 'copy-reviewer-handoff',
+      label: 'Copy reviewer handoff after accepted pending result',
+      copyOnly: true,
+      willMutate: false
+    },
+    'blocked-provider-result': {
+      actionId: 'review-provider-blocker',
+      label: 'Review provider blocker before reviewer handoff',
+      copyOnly: true,
+      willMutate: false
+    },
+    'missing-result-intake': {
+      actionId: 'open-result-intake-preview',
+      label: 'Open result intake preview for sanitized run result',
+      copyOnly: true,
+      willMutate: false
+    },
+    'stale-preview-hash': {
+      actionId: 'refresh-codex-preview',
+      label: 'Refresh Codex provider preview before recovery',
+      copyOnly: true,
+      willMutate: false
+    },
+    'unsafe-provider-output': {
+      actionId: 'reject-unsafe-run-record',
+      label: 'Reject unsafe run record and request sanitized evidence',
+      copyOnly: true,
+      willMutate: false
+    },
+    'pending-result-intake': {
+      actionId: 'wait-result-intake',
+      label: 'Wait for result intake acceptance before reviewer handoff',
+      copyOnly: true,
+      willMutate: false
+    }
+  };
+
+  return actions[recoveryState] ?? actions['pending-result-intake'];
+}
+
+function goalForRecovery({ goal, runRecord }) {
+  const source = isPlainObject(goal) ? goal : {};
+  const goalId = safeToken(source.goalId) ?? safeToken(runRecord.goalId) ?? 'missing-goal';
+
+  return {
+    goalId,
+    title: safeDisplayText(source.title) ?? safeDisplayText(runRecord.goalTitle) ?? goalId,
+    state: GOAL_STATE_SET.has(source.state) ? source.state : 'active',
+    sourceContract: safeContractName(source.sourceContract) ?? CODEX_PROVIDER_RUN_RECORD_CONTRACT_NAME,
+    sourceRef: safeSourceRef(source.sourceRef) ?? {
+      kind: 'run-record',
+      ref: safeToken(runRecord.runId) ?? 'missing-run'
+    }
+  };
+}
+
+function taskForRecovery({ task, runRecord }) {
+  const source = isPlainObject(task) ? task : {};
+  const taskId = safeToken(source.taskId) ?? safeToken(runRecord.taskId) ?? 'missing-task';
+
+  return {
+    taskId,
+    title: safeDisplayText(source.title) ?? safeDisplayText(runRecord.taskTitle) ?? taskId,
+    state: GOAL_STATE_SET.has(source.state) ? source.state : 'active',
+    sourceContract: safeContractName(source.sourceContract) ?? CODEX_PROVIDER_RUN_RECORD_CONTRACT_NAME,
+    sourceRef: safeSourceRef(source.sourceRef) ?? {
+      kind: 'run-record',
+      ref: safeToken(runRecord.runId) ?? 'missing-run'
+    }
+  };
+}
+
+function sourceContractsForRecovery({
+  runRecord,
+  hasResultIntakeRequest,
+  pendingResultRef
+}) {
+  return [
+    {
+      contractName: CODEX_PROVIDER_RUN_RECORD_CONTRACT_NAME,
+      contractVersion: 1,
+      readOnly: true,
+      requiredFor: ['run-id', 'preview-hash', 'task-pack-hash'],
+      previewHash: safeHash(runRecord.previewHash) ?? undefined,
+      sourceRef: {
+        kind: 'run-record',
+        ref: safeToken(runRecord.runId) ?? 'missing-run'
+      }
+    },
+    hasResultIntakeRequest
+      ? {
+          contractName: 'resultIntakeRequest.v1',
+          contractVersion: 1,
+          readOnly: true,
+          requiredFor: ['result-intake-state'],
+          sourceRef: {
+            kind: 'contract',
+            ref: 'resultIntakeRequest.v1'
+          }
+        }
+      : null,
+    pendingResultRef === null
+      ? null
+      : {
+          contractName: 'pendingResult.v1',
+          contractVersion: 1,
+          readOnly: true,
+          requiredFor: ['pending-result-state'],
+          sourceRef: {
+            kind: 'contract',
+            ref: 'pendingResult.v1'
+          }
+        }
+  ].filter((contract) => contract !== null);
+}
+
+function buildRunRecoveryBoundaries() {
+  return { ...CODEX_PROVIDER_RUN_RECOVERY_BOUNDARIES };
 }
 
 function validateRecoveryStateBinding(errors, recovery) {
@@ -818,6 +1219,96 @@ function isControlledEvidenceRef(ref) {
   }
 
   return isSafeRepoRelativePath(ref.ref) && (ref.kind !== 'repo-doc' || ref.ref.startsWith('docs/plans/'));
+}
+
+function safeToken(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const token = value.trim();
+
+  return SAFE_TOKEN_PATTERN.test(token) && !isUnsafeText(token) ? token : null;
+}
+
+function safeHash(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const hash = value.trim();
+
+  return HASH_PATTERN.test(hash) ? hash : null;
+}
+
+function safeContractName(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const contractName = value.trim();
+
+  return SOURCE_CONTRACT_NAME_PATTERN.test(contractName) && !isUnsafeText(contractName)
+    ? contractName
+    : null;
+}
+
+function safeSourceRef(sourceRef) {
+  if (!isPlainObject(sourceRef) || !REF_KIND_SET.has(sourceRef.kind)) {
+    return null;
+  }
+
+  const ref = safeDisplayText(sourceRef.ref);
+
+  if (ref === null) {
+    return null;
+  }
+
+  return {
+    kind: sourceRef.kind,
+    ref,
+    ...(safeDisplayText(sourceRef.label) === null ? {} : { label: safeDisplayText(sourceRef.label) }),
+    ...(safeTimestamp(sourceRef.generatedAt) === null ? {} : { generatedAt: safeTimestamp(sourceRef.generatedAt) })
+  };
+}
+
+function safeDisplayText(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const text = value.trim();
+
+  return text === '' || isUnsafeText(text) ? null : text;
+}
+
+function safeStringArray(value) {
+  return Array.isArray(value)
+    ? value.map((entry) => safeDisplayText(entry)).filter((entry) => entry !== null)
+    : [];
+}
+
+function safeTimestamp(value) {
+  if (typeof value !== 'string' || value.trim() === '' || Number.isNaN(Date.parse(value))) {
+    return null;
+  }
+
+  return new Date(Date.parse(value)).toISOString();
+}
+
+function millisOrNow(value) {
+  const ms = Date.parse(value);
+
+  return Number.isNaN(ms) ? Date.now() : ms;
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((entry) => typeof entry === 'string' && entry.trim() !== ''))];
+}
+
+function isUnsafeValidationError(error) {
+  return typeof error === 'string' &&
+    /raw provider output|raw transcript|rawTranscript|rawModelOutput|local session|direct mutation routes/iu.test(error);
 }
 
 function isSafeRepoRelativePath(value) {

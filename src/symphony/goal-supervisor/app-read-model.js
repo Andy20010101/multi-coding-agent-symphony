@@ -37,6 +37,11 @@ import {
   buildCodexProviderExecutionPreviewFromChildDispatch
 } from '../codex-provider-execution-backend.js';
 import {
+  CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME,
+  buildCodexProviderRunRecovery,
+  validateCodexProviderRunRecoveryContract
+} from '../codex-provider-run-recovery-contracts.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -109,6 +114,7 @@ export function buildGoalSupervisorAppReadModel({
   currentProjectBinding = null,
   appStateSnapshot = null,
   childDispatchProviderPolicy = null,
+  codexProviderRunRecord = null,
   goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
@@ -235,6 +241,15 @@ export function buildGoalSupervisorAppReadModel({
     childDispatchPreview,
     generatedAt
   });
+  const codexProviderRunRecovery = buildGoalSupervisorCodexProviderRunRecovery({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    tasks,
+    codexProviderRunRecord,
+    pendingResultState,
+    currentPreviewHash: codexProviderExecutionPreview.previewHash
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -272,8 +287,58 @@ export function buildGoalSupervisorAppReadModel({
     supervisorEventRegistrationEligibility: normalizedEventRegistrationEligibility,
     systemGoldenPath,
     childDispatchPreview,
-    codexProviderExecutionPreview
+    codexProviderExecutionPreview,
+    codexProviderRunRecovery
   };
+}
+
+function buildGoalSupervisorCodexProviderRunRecovery({
+  generatedAt,
+  goalId,
+  title,
+  tasks,
+  codexProviderRunRecord,
+  pendingResultState,
+  currentPreviewHash
+}) {
+  if (!isPlainObject(codexProviderRunRecord)) {
+    return null;
+  }
+
+  const taskId = codexProviderRunRecord.taskId;
+  const task = Array.isArray(tasks)
+    ? tasks.find((entry) => isPlainObject(entry) && entry.taskId === taskId)
+    : null;
+  const recovery = buildCodexProviderRunRecovery({
+    generatedAt,
+    runRecord: codexProviderRunRecord,
+    pendingResult: pendingResultState,
+    currentPreviewHash,
+    goal: {
+      goalId,
+      title: title ?? goalId,
+      state: 'active',
+      sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+      sourceRef: supervisorRouteSourceRef()
+    },
+    task: {
+      taskId,
+      title: task?.title ?? taskId,
+      state: task?.status === 'blocked' ? 'blocked' : 'active',
+      sourceContract: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME,
+      sourceRef: {
+        kind: 'run-record',
+        ref: codexProviderRunRecord.runId
+      }
+    }
+  });
+  const validation = validateCodexProviderRunRecoveryContract(recovery);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid Codex provider run recovery projection: ${validation.errors.join('; ')}`);
+  }
+
+  return recovery;
 }
 
 function buildGoalSupervisorChildDispatchPreview({
