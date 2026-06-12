@@ -11735,6 +11735,12 @@ function projectSupervisorDashboard({
   }
 
   const commandBoundary = projectSupervisorCommandBoundary(supervisor.commandBoundary);
+  const sessionSourceInventory = projectSupervisorSessionSourceInventory(supervisor.sessionSourceInventory);
+  const contextAdvisory = projectSupervisorContextAdvisory(supervisor.contextAdvisory);
+  const threadContinuationDecision = projectSupervisorThreadContinuationDecision(
+    supervisor.threadContinuationDecision,
+    commandBoundary
+  );
 
   return {
     state: 'available',
@@ -11760,6 +11766,9 @@ function projectSupervisorDashboard({
     currentGate: projectSupervisorCurrentGate(supervisor.currentGate),
     ownership: projectSupervisorOwnership(supervisor.ownership),
     commandBoundary,
+    sessionSourceInventory,
+    contextAdvisory,
+    threadContinuationDecision,
     goalTimeline: projectSupervisorTimeline(supervisor.goalTimeline)
   };
 }
@@ -11843,6 +11852,134 @@ function projectSupervisorContextStatus(contextStatus) {
     driftMarkers: Array.isArray(context.driftMarkers) && context.driftMarkers.length > 0
       ? context.driftMarkers
       : ['none']
+  };
+}
+
+function projectSupervisorSessionSourceInventory(sessionSourceInventory) {
+  const inventory = sessionSourceInventory ?? {};
+  const summary = inventory.summary ?? {};
+  const providers = Array.isArray(inventory.providers) ? inventory.providers : [];
+
+  return {
+    state: inventory.state ?? summary.state ?? (providers.length === 0 ? 'missing' : 'unknown'),
+    contractName: inventory.contractName ?? 'sessionSourceInventory.v1',
+    contractVersion: inventory.contractVersion ?? null,
+    generatedAt: inventory.generatedAt ?? null,
+    readOnly: inventory.readOnly === true,
+    willMutate: inventory.willMutate === true ? true : false,
+    scanScope: inventory.scanScope ?? 'bounded-provider-session-roots',
+    summary: {
+      providerCount: summary.providerCount ?? providers.length,
+      availableProviderCount: summary.availableProviderCount ?? 0,
+      missingProviderCount: summary.missingProviderCount ?? 0,
+      degradedProviderCount: summary.degradedProviderCount ?? 0,
+      failedProviderCount: summary.failedProviderCount ?? 0,
+      state: summary.state ?? inventory.state ?? (providers.length === 0 ? 'missing' : 'unknown')
+    },
+    providers: providers.map(projectSupervisorInventoryProvider),
+    degradedReasons: Array.isArray(inventory.degradedReasons) ? inventory.degradedReasons : []
+  };
+}
+
+function projectSupervisorInventoryProvider(provider) {
+  const sourceSummary = provider?.sourceSummary ?? {};
+
+  return {
+    provider: provider?.provider ?? 'unknown',
+    state: provider?.state ?? sourceSummary.availability ?? 'unknown',
+    availability: sourceSummary.availability ?? provider?.state ?? 'unknown',
+    readState: sourceSummary.readState ?? 'unknown',
+    candidateFileCount: sourceSummary.candidateFileCount ?? provider?.candidateFileCount ?? 'missing',
+    scannedFileCount: sourceSummary.scannedFileCount ?? provider?.scannedFileCount ?? 'missing',
+    readableFileCount: sourceSummary.readableFileCount ?? provider?.readableFileCount ?? 'missing',
+    unreadableFileCount: sourceSummary.unreadableFileCount ?? provider?.unreadableFileCount ?? 'missing',
+    latestModifiedAt: sourceSummary.latestModifiedAt ?? provider?.latestModifiedAt ?? null,
+    stale: sourceSummary.stale === true,
+    latestSessionRef: sourceSummary.latestSessionRef ?? provider?.latestSessionRef ?? null,
+    failureReason: sourceSummary.failureReason ?? provider?.failureReason ?? null,
+    degradedReasons: Array.isArray(provider?.degradedReasons) ? provider.degradedReasons : []
+  };
+}
+
+function projectSupervisorContextAdvisory(contextAdvisory) {
+  const advisory = contextAdvisory ?? {};
+
+  return {
+    state: supervisorContextAdvisoryState(advisory),
+    contractName: advisory.contractName ?? 'contextAdvisory.v1',
+    contractVersion: advisory.contractVersion ?? null,
+    generatedAt: advisory.generatedAt ?? null,
+    readOnly: advisory.readOnly === true,
+    willMutate: advisory.willMutate === true ? true : false,
+    sessionContextRef: supervisorContractRefText(advisory.sessionContextRef),
+    inventoryRef: supervisorContractRefText(advisory.inventoryRef),
+    transcriptAvailability: advisory.transcriptAvailability ?? 'missing',
+    exchangeCount: advisory.exchangeCount ?? 'missing',
+    latestToolCall: supervisorObjectSummaryText(advisory.latestToolCall),
+    latestTurnState: supervisorObjectSummaryText(advisory.latestTurnState),
+    tokenUsage: supervisorTokenUsageText(advisory.tokenUsage),
+    contextUtilization: supervisorContextUtilizationText(advisory.contextUtilization),
+    contextBand: advisory.contextBand ?? 'unknown',
+    resultBlockEvidence: supervisorResultBlockEvidenceText(advisory.resultBlockEvidence),
+    staleTranscriptState: supervisorTranscriptFlagText(advisory.staleTranscriptState, 'stale'),
+    missingTranscriptState: supervisorTranscriptFlagText(advisory.missingTranscriptState, 'missing'),
+    degradedReasons: Array.isArray(advisory.degradedReasons) ? advisory.degradedReasons : [],
+    blockedFields: Array.isArray(advisory.blockedFields) ? advisory.blockedFields : [],
+    policyInputs: {
+      threadId: advisory.policyInputs?.threadId ?? null,
+      transcriptAvailability: advisory.policyInputs?.transcriptAvailability ?? 'missing',
+      sessionSourceSummaries: supervisorProviderSummaryTexts(advisory.policyInputs?.sessionSourceSummaries),
+      inventorySourceSummaries: supervisorInventoryPolicySourceTexts(advisory.policyInputs?.inventorySourceSummaries)
+    }
+  };
+}
+
+function projectSupervisorThreadContinuationDecision(threadContinuationDecision, fallbackCommandBoundary) {
+  const continuation = threadContinuationDecision ?? {};
+  const commandBoundary = projectSupervisorDecisionCommandBoundary(
+    continuation.commandBoundary,
+    fallbackCommandBoundary
+  );
+
+  return {
+    state: continuation.decision ?? 'unknown',
+    contractName: continuation.contractName ?? 'threadContinuationDecision.v1',
+    contractVersion: continuation.contractVersion ?? null,
+    generatedAt: continuation.generatedAt ?? null,
+    readOnly: continuation.readOnly === true,
+    willMutate: continuation.willMutate === true ? true : false,
+    decision: continuation.decision ?? 'unknown',
+    reason: continuation.reason ?? null,
+    confidence: continuation.confidence ?? 'unknown',
+    targetRole: continuation.targetRole ?? null,
+    taskId: continuation.taskId ?? null,
+    threadId: continuation.threadId ?? null,
+    checkpointRef: continuation.checkpointRef ?? null,
+    waitPolicy: supervisorWaitPolicyText(continuation.waitPolicy),
+    blockedFields: Array.isArray(continuation.blockedFields) ? continuation.blockedFields : [],
+    mismatchList: Array.isArray(continuation.mismatchList) ? continuation.mismatchList : [],
+    requiredEvidence: Array.isArray(continuation.requiredEvidence) ? continuation.requiredEvidence : [],
+    sourceContracts: supervisorContractRefTexts(continuation.sourceContracts),
+    commandBoundary
+  };
+}
+
+function projectSupervisorDecisionCommandBoundary(commandBoundary, fallbackCommandBoundary) {
+  const boundary = commandBoundary ?? {};
+
+  return {
+    state: boundary.state ?? fallbackCommandBoundary?.state ?? 'disabled',
+    executionAvailable: false,
+    copyOnly: true,
+    readOnly: true,
+    confirmationReady: boundary.confirmationReady === true,
+    allowedFamilies: Array.isArray(boundary.allowedCommandFamilies) ? boundary.allowedCommandFamilies : [],
+    blockedFamilies: Array.isArray(boundary.blockedCommandFamilies)
+      ? boundary.blockedCommandFamilies
+      : fallbackCommandBoundary?.blockedFamilies ?? [],
+    confirmationFields: Array.isArray(boundary.confirmationFields)
+      ? boundary.confirmationFields
+      : fallbackCommandBoundary?.confirmationFields ?? []
   };
 }
 
@@ -12100,6 +12237,85 @@ function supervisorResultBlockEvidenceText(resultBlockEvidence) {
     resultBlockEvidence.sourceRef,
     resultBlockEvidence.status
   );
+}
+
+function supervisorContextAdvisoryState(advisory) {
+  if (advisory?.missingTranscriptState?.missing === true) {
+    return 'missing';
+  }
+
+  if (advisory?.staleTranscriptState?.stale === true) {
+    return 'stale';
+  }
+
+  if (Array.isArray(advisory?.blockedFields) && advisory.blockedFields.length > 0) {
+    return 'blocked';
+  }
+
+  if (Array.isArray(advisory?.degradedReasons) && advisory.degradedReasons.length > 0) {
+    return 'degraded';
+  }
+
+  if (advisory?.contextBand === 'unknown' || advisory?.transcriptAvailability === undefined) {
+    return 'unknown';
+  }
+
+  return 'available';
+}
+
+function supervisorTranscriptFlagText(state, flag) {
+  if (state === null || state === undefined || typeof state !== 'object' || Array.isArray(state)) {
+    return flag === 'stale' ? 'stale: false' : 'missing: false';
+  }
+
+  const active = flag === 'stale' ? state.stale === true : state.missing === true;
+  const reason = state.reason ?? null;
+
+  return reason === null ? `${flag}: ${String(active)}` : `${flag}: ${String(active)} / ${reason}`;
+}
+
+function supervisorContractRefTexts(sourceContracts) {
+  return (Array.isArray(sourceContracts) ? sourceContracts : [])
+    .map(supervisorContractRefText)
+    .filter(isNonEmptyString);
+}
+
+function supervisorContractRefText(contract) {
+  if (typeof contract === 'string') {
+    return contract;
+  }
+
+  if (contract === null || contract === undefined || typeof contract !== 'object' || Array.isArray(contract)) {
+    return null;
+  }
+
+  const name = contract.contractName ?? null;
+
+  if (!isNonEmptyString(name)) {
+    return null;
+  }
+
+  return [
+    name,
+    contract.contractVersion === null || contract.contractVersion === undefined ? null : `v${contract.contractVersion}`,
+    contract.generatedAt ?? null
+  ].filter(isNonEmptyString).join(' / ');
+}
+
+function supervisorInventoryPolicySourceTexts(sources) {
+  return (Array.isArray(sources) ? sources : [])
+    .map((source) => {
+      if (typeof source === 'string') {
+        return source;
+      }
+
+      return [
+        source?.provider,
+        source?.state,
+        source?.sourceSummary?.readState
+      ].filter(isNonEmptyString).join(': ');
+    })
+    .filter(isNonEmptyString);
 }
 
 function projectRouteState(route, result) {

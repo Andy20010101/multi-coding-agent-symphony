@@ -642,6 +642,9 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(defaultHtml, />willMutate<\/dt><dd[^>]*>false/u);
       assert.match(defaultHtml, /Draft v46 Workbench frontend runbook after OpenDesign exploration/u);
       assert.match(defaultHtml, /Recommended Next Action/u);
+      assert.match(defaultHtml, /Session Source Inventory/u);
+      assert.match(defaultHtml, /Context Advisory/u);
+      assert.match(defaultHtml, /Thread Continuation Decision/u);
       assert.match(defaultHtml, /Command Boundary/u);
       assert.match(defaultHtml, /copyOnly true/u);
       assert.match(defaultHtml, /daemon-control/u);
@@ -655,7 +658,10 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.deepEqual(sidebarLabels, [
         'Overview',
         'Active Lease',
+        'Source Inventory',
         'Current Gate',
+        'Context Advisory',
+        'Continuation',
         'Command Boundary',
         'Context Status',
         'Timeline',
@@ -664,23 +670,27 @@ describe('v15 Workbench React/Vite shell', () => {
 
       const goalIndex = defaultHtml.indexOf('data-od-id="goal-snapshot"');
       const leaseIndex = defaultHtml.indexOf('data-od-id="active-lease"');
+      const inventoryIndex = defaultHtml.indexOf('data-od-id="session-source-inventory"');
       const gateIndex = defaultHtml.indexOf('data-od-id="current-gate"');
       const actionIndex = defaultHtml.indexOf('data-od-id="recommended-next-action"');
       const contextIndex = defaultHtml.indexOf('data-od-id="context-status"');
+      const advisoryIndex = defaultHtml.indexOf('data-od-id="context-advisory"');
+      const continuationIndex = defaultHtml.indexOf('data-od-id="thread-continuation-decision"');
       const boundaryIndex = defaultHtml.indexOf('data-od-id="command-boundary"');
       const pendingIndex = defaultHtml.indexOf('data-od-id="pending-result"');
       const timelineIndex = defaultHtml.indexOf('data-od-id="goal-timeline"');
       const ownershipIndex = defaultHtml.indexOf('data-od-id="ownership"');
 
-      for (const index of [goalIndex, actionIndex, leaseIndex, contextIndex, pendingIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
+      for (const index of [goalIndex, actionIndex, leaseIndex, inventoryIndex, contextIndex, advisoryIndex, continuationIndex, pendingIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
         assert.notEqual(index, -1);
       }
 
       assert.equal(goalIndex < leaseIndex, true);
-      assert.equal(leaseIndex < gateIndex, true);
+      assert.equal(leaseIndex < contextIndex, true);
+      assert.equal(inventoryIndex < gateIndex, true);
       assert.equal(gateIndex < actionIndex, true);
-      assert.equal(actionIndex < contextIndex, true);
-      assert.equal(contextIndex < boundaryIndex, true);
+      assert.equal(actionIndex < continuationIndex, true);
+      assert.equal(continuationIndex < boundaryIndex, true);
       assert.equal(boundaryIndex < pendingIndex, true);
       assert.equal(pendingIndex < timelineIndex, true);
       assert.equal(timelineIndex < ownershipIndex, true);
@@ -701,9 +711,14 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(staleHtml, /stale transcript summary/u);
       assert.match(staleHtml, /recover-drift/u);
       assert.match(staleHtml, /Lease update is older than the stale threshold/u);
+      assert.match(staleHtml, /unreadable/u);
+      assert.match(staleHtml, /new-thread/u);
       assert.match(blockedHtml, /missing main verification evidence ref/u);
       assert.match(blockedHtml, /main verification evidence/u);
+      assert.match(blockedHtml, /confirm-required/u);
       assert.match(missingHtml, /contextStatus\.providerSummaries is empty/u);
+      assert.match(missingHtml, /sessionSourceInventory\.v1/u);
+      assert.match(missingHtml, /no-readable-session-transcript/u);
       assert.match(missingHtml, />pendingResult\.output<\/dt><dd[^>]*>NULL/u);
       assert.match(missingHtml, />contract<\/dt><dd[^>]*>missing/u);
     } finally {
@@ -720,6 +735,9 @@ describe('v15 Workbench React/Vite shell', () => {
       'RecommendedNextActionBand',
       'ActiveLeasePanel',
       'PendingResultPanel',
+      'SessionSourceInventoryPanel',
+      'ContextAdvisoryPanel',
+      'ThreadContinuationDecisionPanel',
       'GoalTimelinePanel',
       'ContextStatusPanel',
       'OwnershipPanel',
@@ -737,14 +755,17 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(fixtureSource, /stale-transcript/u);
     assert.match(fixtureSource, /blocked-gate/u);
     assert.match(fixtureSource, /missing-empty-context/u);
+    assert.match(fixtureSource, /sessionSourceInventory\.v1/u);
+    assert.match(fixtureSource, /contextAdvisory\.v1/u);
+    assert.match(fixtureSource, /threadContinuationDecision\.v1/u);
     assert.match(css, /\.v46-supervisor-shell/u);
     assert.match(css, /\.v46-supervisor-shell[\s\S]*grid-template-columns:\s*232px minmax\(0, 1fr\)/u);
     assert.match(css, /\.v46-dashboard-grid[\s\S]*grid-template-columns:\s*minmax\(0, 1\.05fr\) minmax\(360px, 0\.95fr\)/u);
-    assert.match(css, /grid-template-areas:[\s\S]*"goal lease"[\s\S]*"decision boundary"[\s\S]*"ownership timeline"/u);
+    assert.match(css, /grid-template-areas:[\s\S]*"goal lease"[\s\S]*"inventory context"[\s\S]*"decision continuation"[\s\S]*"ownership timeline"/u);
     assert.match(css, /@media \(max-width: 980px\)[\s\S]*\.v46-dashboard-grid[\s\S]*display:\s*flex/u);
     assert.match(css, /\.v46-family-list[\s\S]*flex-wrap:\s*wrap/u);
     assert.match(css, /\.v46-pending-panel[\s\S]*order:\s*5/u);
-    assert.match(css, /\.v46-command-panel[\s\S]*order:\s*6/u);
+    assert.match(css, /\.v46-inventory-panel[\s\S]*order:\s*6/u);
     assert.match(css, /\.v46-context-panel[\s\S]*order:\s*7/u);
     assert.doesNotMatch(supervisorSource, /fetch\(|confirmGoalEventPlan|GoalEventPlanPreview|<button\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|claude\/projects/u);
     assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
@@ -780,6 +801,14 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /copyOnly true/u);
       assert.match(html, /Checkpoint pending result/u);
       assert.match(html, /result-awaits-registration/u);
+      assert.match(html, /Session Source Inventory/u);
+      assert.match(html, /Context Advisory/u);
+      assert.match(html, /Thread Continuation Decision/u);
+      assert.match(html, /sessionSourceInventory\.v1/u);
+      assert.match(html, /contextAdvisory\.v1/u);
+      assert.match(html, /threadContinuationDecision\.v1/u);
+      assert.match(html, /claude:all-candidate-files-unreadable/u);
+      assert.match(html, /pending-result-registration/u);
       assert.match(html, /local-goal-supervisor-daemon/u);
       assert.match(html, /external-orchestration-owner/u);
       assert.match(html, /42000 \/ 200000/u);
@@ -930,6 +959,9 @@ describe('v15 Workbench React/Vite shell', () => {
         assert.match(html, /Recommended Next Action/u, scenario.id);
         assert.match(html, /Active Lease/u, scenario.id);
         assert.match(html, /Pending Result/u, scenario.id);
+        assert.match(html, /Session Source Inventory/u, scenario.id);
+        assert.match(html, /Context Advisory/u, scenario.id);
+        assert.match(html, /Thread Continuation Decision/u, scenario.id);
         assert.match(html, /Current Gate/u, scenario.id);
         assert.match(html, /Context Status/u, scenario.id);
         assert.match(html, /Ownership/u, scenario.id);
@@ -2113,6 +2145,91 @@ function createGoalSupervisorRenderPayload() {
       blockedCommandFamilies: ['child-dispatch', 'event-log-write'],
       safeCommandPreview: null,
       confirmationFields: []
+    },
+    sessionSourceInventory: {
+      contractName: 'sessionSourceInventory.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-10T12:04:00.000Z',
+      readOnly: true,
+      willMutate: false,
+      state: 'degraded',
+      summary: {
+        providerCount: 2,
+        availableProviderCount: 1,
+        missingProviderCount: 0,
+        degradedProviderCount: 1,
+        failedProviderCount: 0,
+        state: 'degraded'
+      },
+      providers: [{
+        provider: 'codex',
+        state: 'available',
+        readState: 'readable',
+        readableFileCount: 2,
+        unreadableFileCount: 0,
+        latestSessionRef: 'codex:live-task-3',
+        degradedReasons: []
+      }, {
+        provider: 'claude',
+        state: 'unreadable',
+        readState: 'unreadable',
+        readableFileCount: 0,
+        unreadableFileCount: 1,
+        latestSessionRef: 'claude:live-task-3',
+        degradedReasons: ['all-candidate-files-unreadable']
+      }],
+      degradedReasons: ['claude:all-candidate-files-unreadable']
+    },
+    contextAdvisory: {
+      contractName: 'contextAdvisory.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-10T12:04:00.000Z',
+      readOnly: true,
+      willMutate: false,
+      transcriptAvailability: 'readable',
+      exchangeCount: 18,
+      latestToolCall: 'name: node --test, status: completed',
+      latestTurnState: 'status: completed, role: assistant',
+      tokenUsage: 'status: available, totalTokens: 42000',
+      contextUtilization: '21%',
+      contextBand: 'low',
+      resultBlockEvidence: 'present',
+      staleTranscriptState: 'stale: false',
+      missingTranscriptState: 'missing: false',
+      degradedReasons: ['claude:all-candidate-files-unreadable'],
+      blockedFields: [],
+      policyInputs: {
+        threadId: '019ea62d-live-task-3',
+        transcriptAvailability: 'readable',
+        sessionSourceSummaries: ['codex: readable: 019ea62d-live-task-3'],
+        inventorySourceSummaries: ['codex: available: readable', 'claude: unreadable: unreadable']
+      }
+    },
+    threadContinuationDecision: {
+      contractName: 'threadContinuationDecision.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-10T12:04:00.000Z',
+      readOnly: true,
+      willMutate: false,
+      state: 'checkpoint',
+      decision: 'checkpoint',
+      reason: 'result-awaits-registration',
+      confidence: 'known',
+      targetRole: 'worker',
+      taskId: 'task-3',
+      threadId: '019ea62d-live-task-3',
+      checkpointRef: 'artifact:v44-4:pending-result',
+      waitPolicy: null,
+      blockedFields: [],
+      mismatchList: [],
+      requiredEvidence: ['pending-result-registration'],
+      sourceContracts: ['contextAdvisory.v1', 'sessionSourceInventory.v1', 'goal-supervisor-app-read-model.v1'],
+      commandBoundary: {
+        state: 'disabled',
+        executionAvailable: false,
+        copyOnly: true,
+        blockedFamilies: ['child-dispatch', 'event-log-write']
+      }
     },
     goalTimeline: [{
       eventId: 'evt-live-task-3',

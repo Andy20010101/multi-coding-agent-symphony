@@ -26,9 +26,16 @@ import {
   buildGoalSupervisorAppReadModel
 } from './app-read-model.js';
 import {
+  CONTEXT_ADVISORY_CONTRACT_NAME,
   SESSION_CONTEXT_CONTRACT_NAME,
-  buildSessionContext
+  SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+  buildContextAdvisory,
+  buildSessionContext,
+  buildSessionSourceInventory
 } from './session-context.js';
+import {
+  THREAD_CONTINUATION_DECISION_CONTRACT_NAME
+} from './thread-continuation-decision.js';
 
 export async function buildGoalSupervisorAppReadModelFromContracts({
   stateDir = '.symphony',
@@ -36,6 +43,10 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
   generatedAt = new Date().toISOString(),
   supervisorObservability = null,
   sessionContext = null,
+  sessionSourceInventory = null,
+  contextAdvisory = null,
+  threadContinuationDecision = null,
+  sessionInventoryOptions = {},
   sessionHookOptions = {}
 } = {}) {
   const nowMs = Date.parse(generatedAt);
@@ -74,6 +85,15 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     generatedAt,
     ...sessionHookOptions
   });
+  const normalizedSessionSourceInventory = sessionSourceInventory ?? await buildSessionSourceInventory({
+    generatedAt,
+    ...sessionInventoryOptions
+  });
+  const normalizedContextAdvisory = contextAdvisory ?? buildContextAdvisory({
+    sessionContext: normalizedSessionContext,
+    sessionSourceInventory: normalizedSessionSourceInventory,
+    generatedAt
+  });
   const state = {
     goalId: goalNext.goalId ?? context?.goalId ?? goalId,
     active,
@@ -92,7 +112,18 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     goalId: context?.runbook?.goalId ?? goalNext.goalId ?? goalId,
     title: context?.runbook?.goalTitle ?? null,
     tasks: tasksFromContracts({ runbook: context?.runbook ?? null, ledger }),
-    sourceContracts: sourceContractsFor({ context, eventLog, ledger, goalNext, observability, coreProjection, sessionContext: normalizedSessionContext }),
+    sourceContracts: sourceContractsFor({
+      context,
+      eventLog,
+      ledger,
+      goalNext,
+      observability,
+      coreProjection,
+      sessionContext: normalizedSessionContext,
+      sessionSourceInventory: normalizedSessionSourceInventory,
+      contextAdvisory: normalizedContextAdvisory,
+      threadContinuationDecision
+    }),
     timelineEvents: timelineEventsFromEventLog(eventLog),
     state,
     goalNext,
@@ -101,6 +132,9 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     nowMs: effectiveNowMs,
     coreProjection,
     sessionContext: normalizedSessionContext,
+    sessionSourceInventory: normalizedSessionSourceInventory,
+    contextAdvisory: normalizedContextAdvisory,
+    threadContinuationDecision,
     ownership: {
       daemonState: observability.daemon?.state ?? 'external-orchestration-owner'
     },
@@ -143,7 +177,18 @@ function timelineEventsFromEventLog(eventLog) {
     }));
 }
 
-function sourceContractsFor({ context, eventLog, ledger, goalNext, observability, coreProjection, sessionContext }) {
+function sourceContractsFor({
+  context,
+  eventLog,
+  ledger,
+  goalNext,
+  observability,
+  coreProjection,
+  sessionContext,
+  sessionSourceInventory,
+  contextAdvisory,
+  threadContinuationDecision
+}) {
   const contracts = [
     context === null ? null : GOAL_RUNBOOK_CONTRACT_NAME,
     eventLog === null ? null : GOAL_EVENT_LOG_CONTRACT_NAME,
@@ -151,7 +196,10 @@ function sourceContractsFor({ context, eventLog, ledger, goalNext, observability
     goalNext?.contractName ?? GOAL_NEXT_ACTION_CONTRACT_NAME,
     coreProjection?.contractName ?? GOAL_SUPERVISOR_CORE_PROJECTION_CONTRACT_NAME,
     observability?.contractName ?? SUPERVISOR_OBSERVABILITY_CONTRACT_NAME,
-    sessionContext?.contractName ?? SESSION_CONTEXT_CONTRACT_NAME
+    sessionContext?.contractName ?? SESSION_CONTEXT_CONTRACT_NAME,
+    sessionSourceInventory?.contractName ?? SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+    contextAdvisory?.contractName ?? CONTEXT_ADVISORY_CONTRACT_NAME,
+    threadContinuationDecision?.contractName ?? THREAD_CONTINUATION_DECISION_CONTRACT_NAME
   ];
 
   return [...new Set(contracts.filter(nonEmptyString))];

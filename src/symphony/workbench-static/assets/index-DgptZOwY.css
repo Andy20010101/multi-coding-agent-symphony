@@ -229,9 +229,10 @@ body {
   grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
   grid-template-areas:
     "goal lease"
-    "gate context"
-    "decision boundary"
-    "pending timeline"
+    "inventory context"
+    "gate advisory"
+    "decision continuation"
+    "boundary pending"
     "ownership timeline";
   gap: 12px;
   align-items: stretch;
@@ -295,6 +296,9 @@ body {
 .v46-lease-panel,
 .v46-gate-panel,
 .v46-context-panel,
+.v46-inventory-panel,
+.v46-advisory-panel,
+.v46-continuation-panel,
 .v46-command-panel,
 .v46-pending-panel {
   grid-column: auto;
@@ -314,6 +318,18 @@ body {
 
 .v46-context-panel {
   grid-area: context;
+}
+
+.v46-inventory-panel {
+  grid-area: inventory;
+}
+
+.v46-advisory-panel {
+  grid-area: advisory;
+}
+
+.v46-continuation-panel {
+  grid-area: continuation;
 }
 
 .v46-command-panel {
@@ -645,7 +661,7 @@ body {
     order: 5;
   }
 
-  .v46-command-panel {
+  .v46-inventory-panel {
     order: 6;
   }
 
@@ -653,12 +669,24 @@ body {
     order: 7;
   }
 
-  .v46-timeline-panel {
+  .v46-advisory-panel {
     order: 8;
   }
 
-  .v46-ownership-panel {
+  .v46-continuation-panel {
     order: 9;
+  }
+
+  .v46-command-panel {
+    order: 10;
+  }
+
+  .v46-timeline-panel {
+    order: 11;
+  }
+
+  .v46-ownership-panel {
+    order: 12;
   }
 
   .v46-owner-grid {

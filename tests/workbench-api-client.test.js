@@ -224,6 +224,13 @@ describe('v15 Workbench read-only API client', () => {
       assert.equal(model.commandBoundary.state, 'disabled');
       assert.equal(model.commandBoundary.executionAvailable, false);
       assert.equal(model.commandBoundary.blockedCommandFamilies.includes('child-dispatch'), true);
+      assert.equal(model.sessionSourceInventory.contractName, 'sessionSourceInventory.v1');
+      assert.equal(model.sessionSourceInventory.summary.state, 'missing');
+      assert.equal(model.contextAdvisory.contractName, 'contextAdvisory.v1');
+      assert.equal(model.contextAdvisory.contextBand, 'unknown');
+      assert.equal(model.threadContinuationDecision.contractName, 'threadContinuationDecision.v1');
+      assert.equal(model.threadContinuationDecision.commandBoundary.executionAvailable, false);
+      assert.equal(model.threadContinuationDecision.commandBoundary.copyOnly, true);
       assert.equal(JSON.stringify(model).includes('rawTranscript'), false);
 
       const rejected = await fetch(`${baseUrl}/api/goals/v19-fixture/supervisor`, { method: 'POST' });
@@ -512,6 +519,20 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(dashboard.recommendedNextAction.manualInterventionReason, 'operator-review-required');
     assert.equal(dashboard.activeLease.duplicateDispatchGuard, 'blocked: active lease still healthy');
     assert.deepEqual(dashboard.commandBoundary.blockedFamilies, ['child-dispatch', 'event-log-write']);
+    assert.equal(dashboard.sessionSourceInventory.contractName, 'sessionSourceInventory.v1');
+    assert.equal(dashboard.sessionSourceInventory.state, 'degraded');
+    assert.equal(dashboard.sessionSourceInventory.providers[1].state, 'unreadable');
+    assert.equal(dashboard.contextAdvisory.contractName, 'contextAdvisory.v1');
+    assert.equal(dashboard.contextAdvisory.contextBand, 'moderate');
+    assert.equal(dashboard.contextAdvisory.tokenUsage, 'status: available, inputTokens: 39000, outputTokens: 3000, totalTokens: 42000');
+    assert.deepEqual(dashboard.contextAdvisory.blockedFields, []);
+    assert.equal(dashboard.threadContinuationDecision.contractName, 'threadContinuationDecision.v1');
+    assert.equal(dashboard.threadContinuationDecision.decision, 'checkpoint');
+    assert.equal(dashboard.threadContinuationDecision.reason, 'result-awaits-registration');
+    assert.equal(dashboard.threadContinuationDecision.confidence, 'known');
+    assert.deepEqual(dashboard.threadContinuationDecision.requiredEvidence, ['pending-result-registration']);
+    assert.equal(dashboard.threadContinuationDecision.commandBoundary.executionAvailable, false);
+    assert.equal(dashboard.threadContinuationDecision.commandBoundary.copyOnly, true);
     assert.equal(dashboard.goalTimeline[0].hashState, 'linked');
     assert.equal(dashboard.currentGate.closeoutAuthorization, 'blocked-without-operator-authorization');
     assert.equal(dashboard.ownership.branch, 'codex/v44-4-pr2-supervisor-route-api-client');
@@ -557,6 +578,9 @@ describe('v15 Workbench read-only API client', () => {
         checkpointRef: 'checkpoint:v44-4-token-watch',
         driftMarkers: ['lease active but transcript stale']
       },
+      sessionSourceInventory: null,
+      contextAdvisory: null,
+      threadContinuationDecision: null,
       pendingResult: null,
       commandBoundary: {
         state: 'confirm-required',
@@ -616,6 +640,9 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(dashboard.ownership.daemonState, 'observed-only');
     assert.equal(dashboard.ownership.activePr, '#128');
     assert.deepEqual(dashboard.goalTimeline, []);
+    assert.equal(dashboard.sessionSourceInventory.state, 'missing');
+    assert.equal(dashboard.contextAdvisory.state, 'unknown');
+    assert.equal(dashboard.threadContinuationDecision.decision, 'unknown');
   });
 
   it('projects the Workbench Action Registry panel from backend action contracts only', () => {
@@ -5616,6 +5643,179 @@ function createGoalSupervisorAppReadModelPayload() {
       blockedCommandFamilies: ['child-dispatch', 'event-log-write'],
       safeCommandPreview: null,
       confirmationFields: []
+    },
+    sessionSourceInventory: {
+      contractName: 'sessionSourceInventory.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-10T12:04:00.000Z',
+      readOnly: true,
+      willMutate: false,
+      state: 'degraded',
+      scanScope: 'bounded-provider-session-roots',
+      summary: {
+        providerCount: 2,
+        availableProviderCount: 1,
+        missingProviderCount: 0,
+        degradedProviderCount: 1,
+        failedProviderCount: 0,
+        state: 'degraded'
+      },
+      providers: [{
+        provider: 'codex',
+        state: 'available',
+        readOnly: true,
+        willMutate: false,
+        readableFileCount: 2,
+        candidateFileCount: 2,
+        sourceSummary: {
+          availability: 'available',
+          readState: 'readable',
+          candidateFileCount: 2,
+          scannedFileCount: 2,
+          readableFileCount: 2,
+          unreadableFileCount: 0,
+          latestSessionRef: 'codex:live-task-3',
+          stale: false
+        },
+        degradedReasons: []
+      }, {
+        provider: 'claude',
+        state: 'unreadable',
+        readOnly: true,
+        willMutate: false,
+        readableFileCount: 0,
+        candidateFileCount: 1,
+        sourceSummary: {
+          availability: 'unreadable',
+          readState: 'unreadable',
+          candidateFileCount: 1,
+          scannedFileCount: 1,
+          readableFileCount: 0,
+          unreadableFileCount: 1,
+          latestSessionRef: 'claude:live-task-3',
+          stale: false,
+          failureReason: 'permission-denied'
+        },
+        degradedReasons: ['all-candidate-files-unreadable']
+      }],
+      degradedReasons: ['claude:all-candidate-files-unreadable']
+    },
+    contextAdvisory: {
+      contractName: 'contextAdvisory.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-10T12:04:00.000Z',
+      readOnly: true,
+      willMutate: false,
+      sessionContextRef: {
+        contractName: 'sessionContext.v1',
+        contractVersion: 1,
+        generatedAt: '2026-06-10T12:04:00.000Z',
+        readOnly: true,
+        threadId: '019ea62d-live-task-3'
+      },
+      inventoryRef: {
+        contractName: 'sessionSourceInventory.v1',
+        contractVersion: 1,
+        generatedAt: '2026-06-10T12:04:00.000Z',
+        readOnly: true,
+        threadId: null
+      },
+      transcriptAvailability: 'readable',
+      exchangeCount: 18,
+      latestToolCall: {
+        name: 'node --test',
+        status: 'completed',
+        updatedAt: '2026-06-10T12:01:00.000Z'
+      },
+      latestTurnState: {
+        status: 'completed',
+        role: 'assistant',
+        updatedAt: '2026-06-10T12:02:00.000Z'
+      },
+      tokenUsage: {
+        status: 'available',
+        inputTokens: 39000,
+        outputTokens: 3000,
+        totalTokens: 42000
+      },
+      contextUtilization: {
+        status: 'available',
+        usedTokens: 42000,
+        maxTokens: 200000,
+        ratio: 0.21
+      },
+      contextBand: 'moderate',
+      resultBlockEvidence: {
+        status: 'present',
+        present: true
+      },
+      staleTranscriptState: {
+        stale: false,
+        reason: null
+      },
+      missingTranscriptState: {
+        missing: false,
+        reason: null
+      },
+      degradedReasons: ['claude:all-candidate-files-unreadable'],
+      blockedFields: [],
+      policyInputs: {
+        threadId: '019ea62d-live-task-3',
+        transcriptAvailability: 'readable',
+        sessionSourceSummaries: [{
+          provider: 'codex',
+          status: 'readable',
+          threadId: '019ea62d-live-task-3'
+        }],
+        inventorySourceSummaries: [{
+          provider: 'codex',
+          state: 'available',
+          sourceSummary: {
+            readState: 'readable'
+          }
+        }]
+      }
+    },
+    threadContinuationDecision: {
+      contractName: 'threadContinuationDecision.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-10T12:04:00.000Z',
+      readOnly: true,
+      willMutate: false,
+      decision: 'checkpoint',
+      reason: 'result-awaits-registration',
+      confidence: 'known',
+      targetRole: 'worker',
+      taskId: 'task-3',
+      threadId: '019ea62d-live-task-3',
+      checkpointRef: 'artifact:v44-4:pending-result',
+      waitPolicy: null,
+      blockedFields: [],
+      mismatchList: [],
+      requiredEvidence: ['pending-result-registration'],
+      sourceContracts: [{
+        contractName: 'contextAdvisory.v1',
+        contractVersion: 1,
+        generatedAt: '2026-06-10T12:04:00.000Z',
+        readOnly: true,
+        threadId: null
+      }, {
+        contractName: 'sessionSourceInventory.v1',
+        contractVersion: 1,
+        generatedAt: '2026-06-10T12:04:00.000Z',
+        readOnly: true,
+        threadId: null
+      }],
+      commandBoundary: {
+        state: 'disabled',
+        executionAvailable: false,
+        copyOnly: true,
+        readOnly: true,
+        allowedCommandFamilies: [],
+        blockedCommandFamilies: ['child-dispatch', 'event-log-write'],
+        confirmationFields: [],
+        confirmationReady: false
+      }
     },
     goalTimeline: [{
       eventId: 'evt-live-task-3',

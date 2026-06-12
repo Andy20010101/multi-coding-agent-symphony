@@ -16,7 +16,7 @@ export function createGoalRoutes({
     match({ url }) {
       return parseGoalSupervisorRequestPath(url.pathname, url.searchParams) !== null;
     },
-    async handle({ response, url, method, stateDir }) {
+    async handle({ response, url, method, stateDir, env }) {
       const request = parseGoalSupervisorRequestPath(url.pathname, url.searchParams);
 
       if (request.kind === 'invalid') {
@@ -30,7 +30,8 @@ export function createGoalRoutes({
 
       writeJsonResponse(response, 200, await goalSupervisorService.buildSupervisorReadModel({
         stateDir,
-        goalId: request.goalId
+        goalId: request.goalId,
+        env
       }));
     }
   }];

@@ -51,6 +51,62 @@ export const SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
       'copyOnly boundary'
     ])
   }),
+  sessionSourceInventory: Object.freeze({
+    state: 'missing',
+    contract: 'sessionSourceInventory.v1',
+    generatedAt: 'NULL',
+    readOnly: true,
+    summary: 'providers 0; available 0; missing 0; degraded 0; failed 0',
+    providers: Object.freeze([
+      Object.freeze('missing: backend inventory contract not available')
+    ]),
+    degradedReasons: Object.freeze(['missing'])
+  }),
+  contextAdvisory: Object.freeze({
+    state: 'unknown',
+    contract: 'contextAdvisory.v1',
+    generatedAt: 'NULL',
+    readOnly: true,
+    transcriptAvailability: 'missing',
+    exchangeCount: 'missing',
+    latestToolCall: 'missing',
+    latestTurnState: 'missing',
+    tokenUsage: 'missing',
+    contextUtilization: 'missing',
+    contextBand: 'unknown',
+    resultBlockEvidence: 'missing',
+    staleTranscriptState: 'stale: false',
+    missingTranscriptState: 'missing: true',
+    blockedFields: Object.freeze(['contextAdvisory']),
+    degradedReasons: Object.freeze(['missing']),
+    policyInputs: Object.freeze([
+      'transcript: missing'
+    ])
+  }),
+  threadContinuationDecision: Object.freeze({
+    state: 'unknown',
+    contract: 'threadContinuationDecision.v1',
+    generatedAt: 'NULL',
+    readOnly: true,
+    decision: 'unknown',
+    reason: 'missing thread continuation decision',
+    confidence: 'unknown',
+    targetRole: 'NULL',
+    taskId: 'NULL',
+    threadId: 'NULL',
+    checkpointRef: 'NULL',
+    waitPolicy: 'NULL',
+    blockedFields: Object.freeze(['threadContinuationDecision']),
+    mismatchList: Object.freeze(['none']),
+    requiredEvidence: Object.freeze(['missing']),
+    sourceContracts: Object.freeze(['missing']),
+    commandBoundary: Object.freeze({
+      state: 'disabled',
+      executionAvailable: false,
+      copyOnly: true,
+      blockedFamilies: Object.freeze([])
+    })
+  }),
   pendingResult: Object.freeze({
     label: 'none / NULL',
     output: null,
@@ -125,6 +181,9 @@ export function projectSupervisorDashboardToWorkbenchView(dashboard, routeState 
   const nextAction = objectValue(dashboard.recommendedNextAction);
   const activeLease = objectValue(dashboard.activeLease);
   const contextStatus = objectValue(dashboard.contextStatus);
+  const sessionSourceInventory = objectValue(dashboard.sessionSourceInventory);
+  const contextAdvisory = objectValue(dashboard.contextAdvisory);
+  const threadContinuationDecision = objectValue(dashboard.threadContinuationDecision);
   const pendingResult = objectValue(dashboard.pendingResult);
   const commandBoundary = objectValue(dashboard.commandBoundary);
   const ownership = objectValue(dashboard.ownership);
@@ -160,6 +219,9 @@ export function projectSupervisorDashboardToWorkbenchView(dashboard, routeState 
       utilizationPercent: utilizationPercent(contextStatus.utilization),
       chips: Object.freeze(contextChips(contextStatus))
     }),
+    sessionSourceInventory: sessionSourceInventoryView(sessionSourceInventory),
+    contextAdvisory: contextAdvisoryView(contextAdvisory),
+    threadContinuationDecision: threadContinuationDecisionView(threadContinuationDecision, commandBoundary),
     pendingResult: Object.freeze({
       label: textValue(pendingResult.status ?? 'none / NULL'),
       output: null,
@@ -381,6 +443,179 @@ function contextChips(contextStatus) {
   return chips.length > 0 ? chips.map(textValue) : ['missing contract field: contextStatus.providerSummaries'];
 }
 
+function sessionSourceInventoryView(inventory) {
+  const summary = objectValue(inventory.summary);
+  const providers = Array.isArray(inventory.providers) ? inventory.providers : [];
+  const providerRows = providers.map((provider) => {
+    if (typeof provider === 'string') {
+      return provider;
+    }
+
+    return [
+      provider?.provider,
+      provider?.state,
+      provider?.readState ?? provider?.availability,
+      provider?.readableFileCount === undefined ? null : `readable ${provider.readableFileCount}`,
+      provider?.unreadableFileCount === undefined ? null : `unreadable ${provider.unreadableFileCount}`,
+      provider?.latestSessionRef
+    ].filter((value) => value !== null && value !== undefined && value !== '').map(textValue).join(' / ');
+  }).filter((value) => value !== '');
+
+  return Object.freeze({
+    state: textValue(inventory.state ?? summary.state ?? (providers.length === 0 ? 'missing' : 'unknown')),
+    contract: contractRefLabel(inventory, 'sessionSourceInventory.v1'),
+    generatedAt: textValue(inventory.generatedAt ?? 'NULL'),
+    readOnly: inventory.readOnly === true,
+    summary: textValue([
+      `providers ${summary.providerCount ?? providers.length ?? 'missing'}`,
+      `available ${summary.availableProviderCount ?? 'missing'}`,
+      `missing ${summary.missingProviderCount ?? 'missing'}`,
+      `degraded ${summary.degradedProviderCount ?? 'missing'}`,
+      `failed ${summary.failedProviderCount ?? 'missing'}`
+    ].join('; ')),
+    providers: Object.freeze(providerRows.length > 0 ? providerRows : ['missing: no provider inventory rows']),
+    degradedReasons: Object.freeze(listTextValues(inventory.degradedReasons, ['none']))
+  });
+}
+
+function contextAdvisoryView(advisory) {
+  return Object.freeze({
+    state: textValue(advisory.state ?? advisory.contextBand ?? 'unknown'),
+    contract: contractRefLabel(advisory, 'contextAdvisory.v1'),
+    generatedAt: textValue(advisory.generatedAt ?? 'NULL'),
+    readOnly: advisory.readOnly === true,
+    transcriptAvailability: textValue(advisory.transcriptAvailability ?? 'missing'),
+    exchangeCount: textValue(advisory.exchangeCount ?? 'missing'),
+    latestToolCall: textValue(summaryText(advisory.latestToolCall, 'missing')),
+    latestTurnState: textValue(summaryText(advisory.latestTurnState, 'missing')),
+    tokenUsage: textValue(summaryText(advisory.tokenUsage, 'missing')),
+    contextUtilization: textValue(summaryText(advisory.contextUtilization, 'missing')),
+    contextBand: textValue(advisory.contextBand ?? 'unknown'),
+    resultBlockEvidence: textValue(summaryText(advisory.resultBlockEvidence, 'missing')),
+    staleTranscriptState: transcriptStateText(advisory.staleTranscriptState, 'stale'),
+    missingTranscriptState: transcriptStateText(advisory.missingTranscriptState, 'missing'),
+    blockedFields: Object.freeze(listTextValues(advisory.blockedFields, ['none'])),
+    degradedReasons: Object.freeze(listTextValues(advisory.degradedReasons, ['none'])),
+    policyInputs: Object.freeze(policyInputRows(advisory.policyInputs))
+  });
+}
+
+function threadContinuationDecisionView(decision, fallbackCommandBoundary) {
+  const boundary = objectValue(decision.commandBoundary);
+  const fallbackBoundary = objectValue(fallbackCommandBoundary);
+
+  return Object.freeze({
+    state: textValue(decision.state ?? decision.decision ?? 'unknown'),
+    contract: contractRefLabel(decision, 'threadContinuationDecision.v1'),
+    generatedAt: textValue(decision.generatedAt ?? 'NULL'),
+    readOnly: decision.readOnly === true,
+    decision: textValue(decision.decision ?? 'unknown'),
+    reason: textValue(decision.reason ?? 'NULL'),
+    confidence: textValue(decision.confidence ?? 'unknown'),
+    targetRole: textValue(decision.targetRole ?? 'NULL'),
+    taskId: textValue(decision.taskId ?? 'NULL'),
+    threadId: textValue(decision.threadId ?? 'NULL'),
+    checkpointRef: textValue(decision.checkpointRef ?? 'NULL'),
+    waitPolicy: textValue(summaryText(decision.waitPolicy, 'NULL')),
+    blockedFields: Object.freeze(listTextValues(decision.blockedFields, ['none'])),
+    mismatchList: Object.freeze(listTextValues(decision.mismatchList, ['none'])),
+    requiredEvidence: Object.freeze(listTextValues(decision.requiredEvidence, ['none'])),
+    sourceContracts: Object.freeze(listTextValues(decision.sourceContracts, ['missing'])),
+    commandBoundary: Object.freeze({
+      state: textValue(boundary.state ?? fallbackBoundary.state ?? 'disabled'),
+      executionAvailable: false,
+      copyOnly: true,
+      blockedFamilies: Object.freeze(listTextValues(
+        boundary.blockedFamilies ?? boundary.blockedCommandFamilies ?? fallbackBoundary.blockedFamilies,
+        []
+      ))
+    })
+  });
+}
+
+function contractRefLabel(value, fallbackName) {
+  const version = value.contractVersion === null || value.contractVersion === undefined
+    ? 'unknown'
+    : value.contractVersion;
+
+  return version === 'unknown'
+    ? textValue(value.contractName ?? fallbackName)
+    : `${textValue(value.contractName ?? fallbackName)} / ${version}`;
+}
+
+function policyInputRows(policyInputs) {
+  const inputs = objectValue(policyInputs);
+  const rows = [
+    inputs.threadId ? `thread ${inputs.threadId}` : null,
+    inputs.transcriptAvailability ? `transcript ${inputs.transcriptAvailability}` : null,
+    ...listTextValues(inputs.sessionSourceSummaries, []),
+    ...listTextValues(inputs.inventorySourceSummaries, [])
+  ].filter((value) => value !== null && value !== '');
+
+  return rows.length > 0 ? rows : ['missing'];
+}
+
+function transcriptFlag(state, flag) {
+  const value = objectValue(state);
+  const active = flag === 'stale' ? value.stale === true : value.missing === true;
+
+  return value.reason ? `${flag}: ${String(active)} / ${value.reason}` : `${flag}: ${String(active)}`;
+}
+
+function transcriptStateText(state, flag) {
+  if (state === null || state === undefined) {
+    return flag === 'stale' ? 'stale: false' : 'missing: false';
+  }
+
+  if (typeof state !== 'object' || Array.isArray(state)) {
+    return textValue(state);
+  }
+
+  return transcriptFlag(state, flag);
+}
+
+function summaryText(value, fallbackValue) {
+  if (value === null || value === undefined || value === '') {
+    return fallbackValue;
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return objectSummary(value) ?? fallbackValue;
+  }
+
+  return value;
+}
+
+function objectSummary(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const entries = Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== null && entryValue !== undefined && entryValue !== '')
+    .map(([key, entryValue]) => `${key}: ${textValue(entryValue)}`);
+
+  return entries.length > 0 ? entries.join(', ') : null;
+}
+
+function listTextValues(values, fallback) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return fallback;
+  }
+
+  return values.map((value) => {
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    return objectSummary(value);
+  }).filter((value) => value !== null && value !== '').map(textValue);
+}
+
 function commandBoundaryView(commandBoundary) {
   const rawFamilies = rawBoundaryFamilies(commandBoundary);
 
@@ -505,7 +740,10 @@ function commandBoundarySummary(boundary) {
 const SIDEBAR_ITEMS = Object.freeze([
   Object.freeze({ label: 'Overview', tone: 'selected' }),
   Object.freeze({ label: 'Active Lease', tone: 'observed' }),
+  Object.freeze({ label: 'Source Inventory', tone: 'neutral' }),
   Object.freeze({ label: 'Current Gate', tone: 'neutral' }),
+  Object.freeze({ label: 'Context Advisory', tone: 'neutral' }),
+  Object.freeze({ label: 'Continuation', tone: 'warn' }),
   Object.freeze({ label: 'Command Boundary', tone: 'warn' }),
   Object.freeze({ label: 'Context Status', tone: 'neutral' }),
   Object.freeze({ label: 'Timeline', tone: 'neutral' }),
@@ -521,9 +759,12 @@ export function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
         <div className="v46-dashboard-grid">
           <GoalSnapshotPanel view={view} />
           <ActiveLeasePanel lease={view.activeLease} />
-          <CurrentGatePanel gate={view.currentGate} />
-          <RecommendedNextActionBand action={view.recommendedNextAction} />
+          <SessionSourceInventoryPanel inventory={view.sessionSourceInventory} />
           <ContextStatusPanel context={view.context} />
+          <CurrentGatePanel gate={view.currentGate} />
+          <ContextAdvisoryPanel advisory={view.contextAdvisory} />
+          <RecommendedNextActionBand action={view.recommendedNextAction} />
+          <ThreadContinuationDecisionPanel decision={view.threadContinuationDecision} />
           <CommandBoundaryPanel boundary={view.commandBoundary} />
           <PendingResultPanel pendingResult={view.pendingResult} />
           <GoalTimelinePanel timeline={view.timeline} />
@@ -717,6 +958,71 @@ export function ContextStatusPanel({ context }) {
   );
 }
 
+export function SessionSourceInventoryPanel({ inventory }) {
+  return (
+    <Panel className="v46-inventory-panel" odId="session-source-inventory" title="Session Source Inventory" meta={inventory.state}>
+      <KeyValues rows={[
+        ['contract', inventory.contract],
+        ['generated', inventory.generatedAt],
+        ['readOnly', String(inventory.readOnly)],
+        ['summary', inventory.summary]
+      ]} />
+      <TextList className="v46-chip-list" items={inventory.providers} />
+      <TextList className="v46-family-list" items={inventory.degradedReasons} />
+    </Panel>
+  );
+}
+
+export function ContextAdvisoryPanel({ advisory }) {
+  return (
+    <Panel className="v46-advisory-panel" odId="context-advisory" title="Context Advisory" meta={advisory.state}>
+      <KeyValues rows={[
+        ['contract', advisory.contract],
+        ['generated', advisory.generatedAt],
+        ['transcript', advisory.transcriptAvailability],
+        ['exchange count', advisory.exchangeCount],
+        ['latest tool call', advisory.latestToolCall],
+        ['latest turn', advisory.latestTurnState],
+        ['token usage', advisory.tokenUsage],
+        ['context utilization', advisory.contextUtilization],
+        ['context band', advisory.contextBand],
+        ['result-block evidence', advisory.resultBlockEvidence],
+        ['stale state', advisory.staleTranscriptState],
+        ['missing state', advisory.missingTranscriptState]
+      ]} />
+      <TextList className="v46-family-list" items={advisory.blockedFields} />
+      <TextList className="v46-chip-list" items={advisory.degradedReasons} />
+      <TextList className="v46-chip-list" items={advisory.policyInputs} />
+    </Panel>
+  );
+}
+
+export function ThreadContinuationDecisionPanel({ decision }) {
+  return (
+    <Panel className="v46-continuation-panel" odId="thread-continuation-decision" title="Thread Continuation Decision" meta={decision.decision}>
+      <KeyValues rows={[
+        ['contract', decision.contract],
+        ['generated', decision.generatedAt],
+        ['decision', decision.decision],
+        ['reason', decision.reason],
+        ['confidence', decision.confidence],
+        ['target role', decision.targetRole],
+        ['task id', decision.taskId],
+        ['thread id', decision.threadId],
+        ['checkpoint ref', decision.checkpointRef],
+        ['wait policy', decision.waitPolicy],
+        ['boundary state', decision.commandBoundary.state],
+        ['executionAvailable', String(decision.commandBoundary.executionAvailable)],
+        ['copyOnly', String(decision.commandBoundary.copyOnly)]
+      ]} />
+      <TextList className="v46-family-list" items={decision.blockedFields} />
+      <TextList className="v46-chip-list" items={decision.mismatchList} />
+      <TextList className="v46-chip-list" items={decision.requiredEvidence} />
+      <TextList className="v46-chip-list" items={decision.sourceContracts} />
+    </Panel>
+  );
+}
+
 export function PendingResultPanel({ pendingResult }) {
   return (
     <Panel className="v46-pending-panel" odId="pending-result" title="Pending Result" meta={pendingResult.label}>
@@ -803,5 +1109,15 @@ function KeyValues({ rows }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function TextList({ className, items }) {
+  return (
+    <ul className={className}>
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
   );
 }
