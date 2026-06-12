@@ -110,6 +110,56 @@ describe('v50 supervisor event registration eligibility projection', () => {
     assertNoUnsafePayload(eligibility);
   });
 
+  it('rejects artifact refs that point at local provider session files', () => {
+    const eligibility = buildSupervisorEventRegistrationEligibility({
+      goalId: GOAL_ID,
+      pendingResult: pendingResult(workerResult({
+        eventToRegister: 'worker.evidence-recorded',
+        evidenceRef: 'artifact-ref:.codex/sessions/2026/06/12/foo.jsonl'
+      })),
+      threadContinuationDecision: checkpointDecision(),
+      generatedAt: GENERATED_AT
+    });
+
+    assert.equal(eligibility.state, 'blocked');
+    assert.equal(eligibility.reason, 'required-inputs-missing');
+    assert.ok(eligibility.missingInputs.includes('evidenceRef'));
+    assert.deepEqual(eligibility.recommendedEvent.evidenceRefs, []);
+    assert.equal(eligibility.previewRequest, null);
+    assert.equal(eligibility.confirmRequestShape, null);
+    assertNoUnsafePayload(eligibility);
+  });
+
+  it('drops raw transcript statement and reason variants from serialized eligibility', () => {
+    const eligibility = buildSupervisorEventRegistrationEligibility({
+      goalId: GOAL_ID,
+      pendingResult: {
+        status: 'pending',
+        reason: 'raw transcript contained command output',
+        record: workerResult({
+          eventToRegister: 'worker.evidence-recorded',
+          statement: 'Register RAW_transcript evidence from the thread.'
+        })
+      },
+      threadContinuationDecision: {
+        ...checkpointDecision(),
+        reason: 'raw-transcript checkpoint reason'
+      },
+      taskState: {
+        taskId: TASK_ID,
+        role: 'worker',
+        status: 'raw transcript status'
+      },
+      generatedAt: GENERATED_AT
+    });
+
+    assert.equal(eligibility.state, 'eligible');
+    assert.equal(eligibility.recommendedEvent.statement, undefined);
+    assert.equal(eligibility.recommendedEvent.sourceReason, 'allowed-goal-update-event');
+    assert.equal(Object.hasOwn(eligibility.previewRequest.query, 'statement'), false);
+    assertNoUnsafePayload(eligibility);
+  });
+
   it('routes reviewer verdicts to symphony goal review instead of goal update', () => {
     const eligibility = buildSupervisorEventRegistrationEligibility({
       goalId: GOAL_ID,
@@ -320,7 +370,13 @@ function assertNoUnsafePayload(value) {
   const serialized = JSON.stringify(value).toLowerCase();
 
   assert.equal(serialized.includes('/users/andy'), false);
+  assert.equal(serialized.includes('.codex'), false);
+  assert.equal(serialized.includes('.claude'), false);
+  assert.equal(serialized.includes('.symphony'), false);
+  assert.equal(serialized.includes('.git/'), false);
+  assert.equal(serialized.includes('sessions/'), false);
   assert.equal(serialized.includes('.jsonl'), false);
+  assert.equal(/raw[\s_-]*transcript/u.test(serialized), false);
   assert.equal(serialized.includes('rawtranscript'), false);
   assert.equal(serialized.includes('stdout'), false);
   assert.equal(serialized.includes('prompt'), false);

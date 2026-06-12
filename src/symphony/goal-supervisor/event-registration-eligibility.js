@@ -141,6 +141,13 @@ const OPTIONAL_CONFIRM_FIELDS = Object.freeze([
   'blockerReason',
   'blockerSeverity'
 ]);
+const LOCAL_HIDDEN_PATH_SEGMENTS = new Set([
+  '.codex',
+  '.claude',
+  '.git',
+  '.symphony'
+]);
+const RAW_TRANSCRIPT_PATTERN = /\braw[\s_-]*transcript\b/iu;
 
 export function buildSupervisorEventRegistrationEligibility({
   goalId = null,
@@ -693,6 +700,7 @@ function safeEvidenceRef(value) {
 
   if (hasUnsafeText(trimmed) ||
       hasUnsafePathShape(ref) ||
+      hasUnsafeLocalEvidencePath(ref) ||
       lower.includes('%2e') ||
       lower.includes('%2f') ||
       lower.includes('%5c')) {
@@ -831,12 +839,41 @@ function hasUnsafeText(value) {
   const lower = value.toLowerCase();
 
   return /[\x00-\x1F\x7F]/u.test(value) ||
-    lower.includes('rawtranscript') ||
+    RAW_TRANSCRIPT_PATTERN.test(value) ||
     lower.includes('jsonl') ||
     lower.includes('prompt') ||
     lower.includes('stdout') ||
     lower.includes('secret') ||
     lower.startsWith('file:');
+}
+
+function hasUnsafeLocalEvidencePath(value) {
+  if (!nonEmptyString(value)) {
+    return false;
+  }
+
+  const normalized = value.replaceAll('\\', '/').toLowerCase();
+  const segments = normalized.split('/').filter((segment) => segment !== '');
+  const pathLike = normalized.includes('/');
+
+  if (segments.some((segment) => LOCAL_HIDDEN_PATH_SEGMENTS.has(segment))) {
+    return true;
+  }
+
+  if (segments.some((segment) => segment.startsWith('.'))) {
+    return true;
+  }
+
+  if (pathLike && segments.includes('sessions')) {
+    return true;
+  }
+
+  if (pathLike && normalized.includes('transcript')) {
+    return true;
+  }
+
+  return normalized.endsWith('.jsonl') ||
+    normalized.includes('.jsonl/');
 }
 
 function hasUnsafePathShape(value) {
