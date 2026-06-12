@@ -1,0 +1,44 @@
+{
+  "contractName": "resultIntakeRequest.v1",
+  "contractVersion": 1,
+  "goalId": "v51-result-intake-evidence-escrow",
+  "taskId": "task-1",
+  "workerRole": "main-verifier",
+  "source": "manual-paste",
+  "submittedAt": "2026-06-12T09:25:00.000Z",
+  "resultBlock": {
+    "status": "completed",
+    "summary": "Main verification events must stay on the gate command family.",
+    "changedFiles": [
+      "tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "risks": [],
+    "blockers": []
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v51-task-1-main-verification-evidence-2026-06-12.md",
+      "label": "v51 task 1 main verification evidence"
+    }
+  ],
+  "requestedEvent": {
+    "eventType": "main.verification-passed",
+    "taskId": "task-1"
+  },
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "childDispatchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "untrustedTranscriptProjectionAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}

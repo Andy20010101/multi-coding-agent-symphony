@@ -154,6 +154,78 @@ describe('v51 result intake evidence escrow contracts', () => {
     assert.ok(mismatchValidation.errors.includes('planHash must match result intake preview'));
   });
 
+  it('rejects preview content tampering when the submitted plan hash is reused', () => {
+    const request = fixture('safe-worker-result.v1.json');
+    const preview = buildResultIntakePreview(request, {
+      generatedAt: GENERATED_AT,
+      expiresAt: EXPIRES_AT
+    });
+    const tamperedPreview = {
+      ...preview,
+      sanitizedSummary: {
+        ...preview.sanitizedSummary,
+        summary: 'Tampered summary should not confirm with the original hash.'
+      }
+    };
+    const validation = validateResultEscrowConfirmInput({
+      preview: tamperedPreview,
+      planHash: preview.planHash,
+      now: '2026-06-12T09:40:00.000Z'
+    });
+
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.includes('planHash must match result intake preview content'));
+    assert.ok(validation.errors.includes('submitted planHash must match result intake preview content'));
+  });
+
+  it('rejects expiry extension when the original plan hash is reused', () => {
+    const request = fixture('safe-worker-result.v1.json');
+    const preview = buildResultIntakePreview(request, {
+      generatedAt: GENERATED_AT,
+      expiresAt: EXPIRES_AT
+    });
+    const extendedPreview = {
+      ...preview,
+      expiresAt: '2026-06-12T10:30:00.000Z'
+    };
+    const validation = validateResultEscrowConfirmInput({
+      preview: extendedPreview,
+      planHash: preview.planHash,
+      now: '2026-06-12T10:00:00.000Z'
+    });
+
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.includes('expiresAt must be within result intake preview ttl'));
+    assert.ok(validation.errors.includes('planHash must match result intake preview content'));
+    assert.ok(validation.errors.includes('submitted planHash must match result intake preview content'));
+  });
+
+  it('blocks main verification and release gate event families before result escrow confirm', () => {
+    for (const name of [
+      'unsupported-main-verification-event.v1.json',
+      'unsupported-release-gate-event.v1.json'
+    ]) {
+      const request = fixture(name);
+      const preview = buildResultIntakePreview(request, {
+        generatedAt: GENERATED_AT,
+        expiresAt: EXPIRES_AT
+      });
+      const confirmValidation = validateResultEscrowConfirmInput({
+        preview,
+        planHash: preview.planHash,
+        now: '2026-06-12T09:35:00.000Z'
+      });
+
+      assert.equal(validateResultIntakeRequestContract(request).ok, true);
+      assert.equal(validateResultIntakePreviewContract(preview).ok, true);
+      assert.equal(preview.eventCandidate.state, 'blocked');
+      assert.equal(preview.eventCandidate.reason, 'event-routed-to-goal-gate');
+      assert.equal(preview.eventCandidate.commandName, 'symphony goal gate');
+      assert.equal(confirmValidation.ok, false);
+      assert.ok(confirmValidation.errors.includes('preview event candidate is not eligible'));
+    }
+  });
+
   it('strips raw transcript fields from serializable preview-like objects', () => {
     const request = fixture('safe-worker-result.v1.json');
     const preview = buildResultIntakePreview(request, {

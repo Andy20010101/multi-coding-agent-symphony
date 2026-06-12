@@ -73,6 +73,7 @@ const GATE_EVENTS = new Set([
 
 const HASH_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const COMMIT_PATTERN = /^[a-f0-9]{7,64}$/u;
+const PREVIEW_TTL_MS = 15 * 60 * 1000;
 const RAW_FIELD_NAME_PATTERN = /^(?:rawTranscript|transcript|rawModelOutput|rawOutput|providerOutput|sessionLog|messages|conversation)$/iu;
 const RAW_TEXT_PATTERN = /\b(?:raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file|model[\s_-]*output|\.jsonl|\.codex\/sessions|\.claude\/)/iu;
 const LOCAL_HIDDEN_PATH_SEGMENTS = new Set([
@@ -179,7 +180,7 @@ export function buildResultIntakePreview(request, {
 
   const effectiveGeneratedAt = new Date(millisOrNow(generatedAt)).toISOString();
   const effectiveExpiresAt = expiresAt === null
-    ? new Date(Date.parse(effectiveGeneratedAt) + 15 * 60 * 1000).toISOString()
+    ? new Date(Date.parse(effectiveGeneratedAt) + PREVIEW_TTL_MS).toISOString()
     : new Date(millisOrNow(expiresAt)).toISOString();
   const summaryResult = sanitizeResultBlock(request.resultBlock);
   const evidenceRefs = normalizeEvidenceRefs(request.evidenceRefs);
@@ -216,20 +217,7 @@ export function buildResultIntakePreview(request, {
     previewWrites: false,
     confirmWritesResultEscrow: true
   });
-  const planHash = resultIntakePlanHash({
-    goalId: request.goalId,
-    taskId: request.taskId,
-    workerRole: request.workerRole,
-    source: request.source,
-    sanitizedSummary: summaryResult.sanitizedSummary,
-    evidenceRefs,
-    eventCandidate,
-    previewWriteTarget,
-    confirmRequestShape,
-    boundaries
-  });
-
-  return {
+  const preview = {
     contractName: RESULT_INTAKE_PREVIEW_CONTRACT_NAME,
     contractVersion: RESULT_INTAKE_CONTRACT_VERSION,
     generatedAt: effectiveGeneratedAt,
@@ -244,10 +232,14 @@ export function buildResultIntakePreview(request, {
     blockedFields: summaryResult.blockedFields,
     eventCandidate,
     previewWriteTarget,
-    planHash,
     expiresAt: effectiveExpiresAt,
     confirmRequestShape,
     boundaries
+  };
+
+  return {
+    ...preview,
+    planHash: computeResultIntakePreviewPlanHash(preview)
   };
 }
 
@@ -308,6 +300,14 @@ export function validateResultIntakePreviewContract(preview) {
     errors.push('expiresAt must be after generatedAt');
   }
 
+  if (Date.parse(preview.expiresAt) - Date.parse(preview.generatedAt) > PREVIEW_TTL_MS) {
+    errors.push('expiresAt must be within result intake preview ttl');
+  }
+
+  if (HASH_PATTERN.test(preview.planHash) && preview.planHash !== computeResultIntakePreviewPlanHash(preview)) {
+    errors.push('planHash must match result intake preview content');
+  }
+
   for (const field of findUnsafeRawFields(preview.sanitizedSummary, 'sanitizedSummary')) {
     errors.push(`${field} must not contain raw transcript data`);
   }
@@ -348,6 +348,10 @@ export function validateResultEscrowConfirmInput({
 
   if (isPlainObject(preview) && preview.planHash !== planHash) {
     errors.push('planHash must match result intake preview');
+  }
+
+  if (isPlainObject(preview) && HASH_PATTERN.test(planHash) && planHash !== computeResultIntakePreviewPlanHash(preview)) {
+    errors.push('submitted planHash must match result intake preview content');
   }
 
   if (isPlainObject(preview) && preview.eventCandidate?.state !== 'eligible') {
@@ -610,6 +614,32 @@ export function toSerializableResultIntakeContract(value) {
 
 export function resultIntakePlanHash(value) {
   return `sha256:${createHash('sha256').update(canonicalJson(value)).digest('hex')}`;
+}
+
+export function buildResultIntakePreviewHashPayload(preview) {
+  return {
+    contractName: preview.contractName,
+    contractVersion: preview.contractVersion,
+    generatedAt: preview.generatedAt,
+    readOnly: preview.readOnly,
+    willMutate: preview.willMutate,
+    goalId: preview.goalId,
+    taskId: preview.taskId,
+    workerRole: preview.workerRole,
+    source: preview.source,
+    sanitizedSummary: preview.sanitizedSummary,
+    evidenceRefs: preview.evidenceRefs,
+    blockedFields: preview.blockedFields,
+    eventCandidate: preview.eventCandidate,
+    previewWriteTarget: preview.previewWriteTarget,
+    expiresAt: preview.expiresAt,
+    confirmRequestShape: preview.confirmRequestShape,
+    boundaries: preview.boundaries
+  };
+}
+
+export function computeResultIntakePreviewPlanHash(preview) {
+  return resultIntakePlanHash(buildResultIntakePreviewHashPayload(preview));
 }
 
 function buildEventCandidate({

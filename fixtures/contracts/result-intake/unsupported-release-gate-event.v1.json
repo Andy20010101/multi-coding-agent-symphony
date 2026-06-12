@@ -1,0 +1,44 @@
+{
+  "contractName": "resultIntakeRequest.v1",
+  "contractVersion": 1,
+  "goalId": "v51-result-intake-evidence-escrow",
+  "taskId": "release",
+  "workerRole": "release-manager",
+  "source": "manual-paste",
+  "submittedAt": "2026-06-12T09:30:00.000Z",
+  "resultBlock": {
+    "status": "completed",
+    "summary": "Release gate events must stay on the gate command family.",
+    "changedFiles": [
+      "tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "risks": [],
+    "blockers": []
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v51-release-gate-evidence-2026-06-12.md",
+      "label": "v51 release gate evidence"
+    }
+  ],
+  "requestedEvent": {
+    "eventType": "release.gate-passed",
+    "taskId": "release"
+  },
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "childDispatchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "untrustedTranscriptProjectionAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
