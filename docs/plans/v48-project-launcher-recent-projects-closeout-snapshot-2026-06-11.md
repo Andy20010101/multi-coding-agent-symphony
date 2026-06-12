@@ -27,7 +27,11 @@ v48 does not deliver signed distribution, notarization, `.dmg` packaging, auto-u
 | PR-1 Recent Projects read model | #51 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/51` | `codex/v48-recent-projects-read-model` | `fad47973a5580509d22101d304d3df3f104816ff` | 2026-06-11T13:10:29Z | Added `GET /api/projects/recent`, fixtures, Workbench projection, route allowlist, and boundary tests; validation: `node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js`, `pnpm check`, `pnpm workbench:build`, `git diff --check`, `git diff --cached --check`. |
 | PR-2 Project Launcher UI | #52 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/52` | `codex/v48-project-launcher-ui` | `7b17e47331a3a8c5250f2d0b117a32cd4a2aaeea` | 2026-06-11T14:23:17Z | Added the read-only launcher UI before App Home, rendered available/empty/missing/stale/degraded/failed states, and browser-checked desktop plus 390px viewport; validation: `pnpm workbench:build`, `node --test tests/workbench-shell.test.js tests/workbench-api-client.test.js`, `pnpm check`, `git diff --check`. |
 | PR-3 selected project binding | #53 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/53` | `codex/v48-selected-project-binding` | `8462324fcce942f63ca0c2e8eee4a156e4f6131b` | 2026-06-11T15:08:21Z | Added `current-project-binding.v1`, selection-only POST validation, selected project App Home binding, Project Health, and route provenance projection; validation: `pnpm workbench:build`, `node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js`, `pnpm check`, `git diff --check`. |
-| PR-4 acceptance and closeout snapshot | Draft PR from this branch | `codex/v48-acceptance-closeout-snapshot` | Pending | Pending | Adds `docs/qa/v48-project-launcher-recent-projects-acceptance.md` and this snapshot. Required validation is recorded below. |
+| PR-4 acceptance and closeout snapshot | #54 `https://github.com/Andy20010101/multi-coding-agent-symphony/pull/54` | `codex/v48-acceptance-closeout-snapshot` | `898a1eb9c7ca65db1b6dc9434495b4df9ecdc610` | 2026-06-12T00:58:39Z | Added `docs/qa/v48-project-launcher-recent-projects-acceptance.md` and this snapshot; validation is recorded below. |
+
+## PR-5 metadata cleanup
+
+PR-5 updates this closeout snapshot after PR #54 merged into `main`. It records the PR #54 URL, branch, merge commit, merged time, and post-merge tag-prep wording. It does not add v48 runtime scope or change acceptance evidence.
 
 ## Reconcile before PR-4 edits
 
@@ -118,9 +122,9 @@ v48: Project Launcher and Recent Projects
 Pre-tag checklist:
 
 - PR #50 through PR #53 are merged into `main`.
-- PR-4 is reviewed, validation has passed, and the branch is merged into `main`.
-- `main` is fetched after PR #4 merge.
-- `pnpm workbench:build`, `node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js`, `pnpm check`, and `git diff --check` pass on post-merge `main`.
+- PR #54 is merged into `main` at `898a1eb9c7ca65db1b6dc9434495b4df9ecdc610` with `mergedAt` `2026-06-12T00:58:39Z`.
+- `main` is fetched after the PR #54 merge.
+- Post-merge validation for `main` should include `pnpm workbench:build`, `node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js`, `pnpm check`, and `git diff --check`.
 - Because PR #51 through PR #53 touched shared contract helpers, route allowlists, backend projection, and generated Workbench assets, run `pnpm test` before tagging or record why it was not selected.
 - No tag is created by this PR.
 - No GitHub Release is created by this PR.
