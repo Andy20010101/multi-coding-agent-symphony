@@ -1378,6 +1378,61 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.childDispatchPreview.contractName.text, 'childDispatchPreview.v1');
   });
 
+  it('projects v54 Codex provider execution preview into the Workbench desktop shell as read-only state', async () => {
+    const codexProviderExecutionPreview = JSON.parse(
+      await readFile('fixtures/contracts/codex-provider-execution/preview.ready.v1.json', 'utf8')
+    );
+    const supervisor = {
+      ...createGoalSupervisorAppReadModelPayload(),
+      codexProviderExecutionPreview
+    };
+    const model = projectWorkbenchContracts({
+      goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
+    });
+    const preview = model.codexProviderExecutionPreview;
+
+    assert.equal(preview.contractName.text, 'codexProviderExecutionPreview.v1');
+    assert.equal(preview.state, 'ready');
+    assert.equal(preview.goal.goalId.text, 'v54-codex-provider-execution-pilot');
+    assert.equal(preview.task.taskId.text, 'pr-1-contracts-fixtures-tests');
+    assert.equal(preview.providerId.text, 'codex');
+    assert.equal(preview.role.text, 'worker');
+    assert.match(preview.previewHash.text, /^sha256:[a-f0-9]{64}$/u);
+    assert.match(preview.taskPackHash.text, /^sha256:[a-f0-9]{64}$/u);
+    assert.equal(preview.inputSummary.taskPackAvailable.value, true);
+    assert.equal(preview.executionPolicy.allowedProviders.items.map((item) => item.text).join(', '), 'codex');
+    assert.equal(preview.executionPolicy.requiresOperatorConfirmation.value, true);
+    assert.equal(preview.executionPolicy.startsOnPreview.value, false);
+    assert.equal(preview.confirmation.state.text, 'ready');
+    assert.equal(preview.confirmation.label.text, 'Confirm Codex Run');
+    assert.equal(preview.confirmation.providerExecutionStartsOnPreview.value, false);
+    assert.equal(preview.confirmation.providerExecutionStartsWithoutConfirmation.value, false);
+    assert.equal(preview.runStatus.label.text, 'Codex Run Status');
+    assert.equal(preview.runStatus.state.text, 'not-started');
+    assert.equal(preview.runStatus.runnerContract.text, 'codexProviderExecutionRunnerResult.v1');
+    assert.equal(preview.resultReturn.returnPath.text, 'v51-result-intake');
+    assert.equal(preview.resultReturn.resultIntakeContract.text, 'resultIntakeRequest.v1');
+    assert.equal(preview.resultReturn.directGoalEventAppendAvailable.value, false);
+    assert.equal(preview.resultReturn.directTaskCompleteAvailable.value, false);
+    assert.equal(preview.resultReturn.reviewerMutationAvailable.value, false);
+    assert.equal(preview.resultReturn.mainVerificationMutationAvailable.value, false);
+    assert.equal(preview.boundaries.codexOnly.value, true);
+    assert.equal(preview.boundaries.workerRoleOnly.value, true);
+    assert.equal(preview.boundaries.claudeCodeExecutionAvailable.value, false);
+    assert.equal(preview.boundaries.providerParityAvailable.value, false);
+    assert.equal(preview.boundaries.genericShellAvailable.value, false);
+    assert.equal(preview.boundaries.arbitraryCommandExecutionAvailable.value, false);
+    assert.equal(preview.boundaries.frontendLocalJsonlReadAvailable.value, false);
+    assert.equal(preview.boundaries.localSessionFileReadAvailable.value, false);
+    assert.equal(preview.boundaries.rawTranscriptAvailable.value, false);
+    assert.equal(preview.boundaries.rawModelOutputAvailable.value, false);
+    assert.equal(preview.boundaries.gitMutationAvailable.value, false);
+    assert.equal(preview.boundaries.tagAutomationAvailable.value, false);
+    assert.equal(preview.boundaries.publishAutomationAvailable.value, false);
+    assert.equal(preview.boundaries.githubReleaseAutomationAvailable.value, false);
+    assert.equal(model.desktopShell.codexProviderExecutionPreview.contractName.text, 'codexProviderExecutionPreview.v1');
+  });
+
   it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {
     const healthySnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.healthy.v1.json', 'utf8'));
     const missingProjectSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.missing-project.v1.json', 'utf8'));

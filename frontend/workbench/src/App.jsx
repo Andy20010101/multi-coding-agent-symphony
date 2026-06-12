@@ -615,6 +615,7 @@ function DesktopShellRoute({
           <a href="#desktop-overview" aria-current="page">Home</a>
           <a href="#system-golden-path-panel">System Path</a>
           <a href="#child-dispatch-preview-panel">Child Task</a>
+          <a href="#codex-provider-execution-preview-panel">Codex Run</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -654,6 +655,9 @@ function DesktopShellRoute({
           onRefreshWorkbenchContracts={onRefreshWorkbenchContracts}
         />
         <ChildDispatchPreviewPanel childDispatchPreview={desktopShell?.childDispatchPreview} />
+        <CodexProviderExecutionPreviewPanel
+          codexProviderExecutionPreview={desktopShell?.codexProviderExecutionPreview}
+        />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -1317,6 +1321,153 @@ function ChildDispatchCopyBlock({
         <pre className="copy-block child-dispatch-copy-block">{copyText}</pre>
       )}
     </article>
+  );
+}
+
+function CodexProviderExecutionPreviewPanel({ codexProviderExecutionPreview }) {
+  const preview = codexProviderExecutionPreview;
+  const sourceContracts = preview?.sourceContracts?.items ?? [];
+
+  return (
+    <section
+      id="codex-provider-execution-preview-panel"
+      className="codex-provider-execution-panel"
+      aria-label="Codex Execution Preview"
+    >
+      <header className="codex-provider-execution-header">
+        <div>
+          <p className="section-kicker">v54 codex provider pilot</p>
+          <h2>Codex Execution Preview</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(preview?.state)}`}>
+          {preview?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="codex-provider-execution-summary">
+        <FieldList rows={[
+          ['contract', preview?.contractName],
+          ['goal', preview?.goal?.goalId],
+          ['task', preview?.task?.taskId],
+          ['provider', preview?.providerId],
+          ['role', preview?.role],
+          ['preview hash', preview?.previewHash],
+          ['task pack hash', preview?.taskPackHash],
+          ['blocked reasons', textValueFromItems(preview?.blockedReasons, '无')]
+        ]} />
+
+        <FieldList rows={[
+          ['task pack available', preview?.inputSummary?.taskPackAvailable],
+          ['task pack source', preview?.inputSummary?.taskPackSourceContract],
+          ['provider policy', preview?.inputSummary?.providerPolicyReason],
+          ['allowed providers', textValueFromItems(preview?.executionPolicy?.allowedProviders, '未暴露')],
+          ['allowed roles', textValueFromItems(preview?.executionPolicy?.allowedRoles, '未暴露')],
+          ['route', preview?.route?.path],
+          ['route state', preview?.route?.routeState]
+        ]} />
+      </div>
+
+      <Subsection title="Confirm Codex Run">
+        <FieldList rows={[
+          ['confirmation state', preview?.confirmation?.state],
+          ['required fields', textValueFromItems(preview?.confirmation?.requiredFields, '未暴露')],
+          ['preview hash', preview?.confirmation?.previewHash],
+          ['provider', preview?.confirmation?.providerId],
+          ['goal', preview?.confirmation?.goalId],
+          ['task', preview?.confirmation?.taskId],
+          ['role', preview?.confirmation?.role],
+          ['explicit operator confirmation', preview?.confirmation?.explicitOperatorConfirmationRequired],
+          ['starts on preview', preview?.confirmation?.providerExecutionStartsOnPreview],
+          ['starts without confirmation', preview?.confirmation?.providerExecutionStartsWithoutConfirmation],
+          ['willMutate', preview?.confirmation?.willMutate]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Codex Run Status">
+        <FieldList rows={[
+          ['run state', preview?.runStatus?.state],
+          ['runner contract', preview?.runStatus?.runnerContract],
+          ['provider', preview?.runStatus?.providerId],
+          ['role', preview?.runStatus?.role],
+          ['return path', preview?.runStatus?.returnPath],
+          ['result intake contract', preview?.runStatus?.resultIntakeContract],
+          ['transcript exposure', preview?.runStatus?.rawTranscriptAvailable],
+          ['model-output exposure', preview?.runStatus?.rawModelOutputAvailable],
+          ['source', preview?.runStatus?.source]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Return Through Result Intake">
+        <FieldList rows={[
+          ['return path', preview?.resultReturn?.returnPath],
+          ['result intake contract', preview?.resultReturn?.resultIntakeContract],
+          ['request required', preview?.resultReturn?.resultIntakeRequestRequired],
+          ['sanitized result required', preview?.resultReturn?.sanitizedResultRequired],
+          ['goal event write', preview?.resultReturn?.directGoalEventAppendAvailable],
+          ['task completion write', preview?.resultReturn?.directTaskCompleteAvailable],
+          ['reviewer mutation', preview?.resultReturn?.reviewerMutationAvailable],
+          ['main gate mutation', preview?.resultReturn?.mainVerificationMutationAvailable],
+          ['gate mutation', preview?.resultReturn?.releaseGateMutationAvailable],
+          ['transcript exposure', preview?.resultReturn?.rawTranscriptAvailable],
+          ['model-output exposure', preview?.resultReturn?.rawModelOutputAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Refresh State">
+        <FieldList rows={[
+          ['read model source', preview?.route?.source],
+          ['generated at', preview?.generatedAt],
+          ['contract version', preview?.contractVersion]
+        ]} />
+      </Subsection>
+
+      <Subsection title="source contracts">
+        {sourceContracts.length === 0 ? (
+          <EmptyBlock copy="codexProviderExecutionPreview source contracts 未暴露。" />
+        ) : (
+          <ul className="codex-provider-source-list">
+            {sourceContracts.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="safety boundaries">
+        <FieldList rows={[
+          ['codex only', preview?.boundaries?.codexOnly],
+          ['worker role only', preview?.boundaries?.workerRoleOnly],
+          ['explicit confirmation', preview?.boundaries?.explicitOperatorConfirmationRequired],
+          ['preview hash required', preview?.boundaries?.previewHashRequired],
+          ['provider parity', preview?.boundaries?.providerParityAvailable],
+          ['claude-code execution', preview?.boundaries?.claudeCodeExecutionAvailable],
+          ['generic shell', preview?.boundaries?.genericShellAvailable],
+          ['arbitrary command', preview?.boundaries?.arbitraryCommandExecutionAvailable],
+          ['frontend JSONL read', preview?.boundaries?.frontendLocalJsonlReadAvailable],
+          ['local session file read', preview?.boundaries?.localSessionFileReadAvailable],
+          ['transcript exposure', preview?.boundaries?.rawTranscriptAvailable],
+          ['model-output exposure', preview?.boundaries?.rawModelOutputAvailable],
+          ['goal event write', preview?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', preview?.boundaries?.directTaskCompleteAvailable],
+          ['reviewer mutation', preview?.boundaries?.reviewerMutationAvailable],
+          ['main gate mutation', preview?.boundaries?.mainVerificationMutationAvailable],
+          ['gate mutation', preview?.boundaries?.releaseGateMutationAvailable],
+          ['git mutation', preview?.boundaries?.gitMutationAvailable],
+          ['tag automation', preview?.boundaries?.tagAutomationAvailable],
+          ['publish automation', preview?.boundaries?.publishAutomationAvailable],
+          ['github publish automation', preview?.boundaries?.githubReleaseAutomationAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note ?? 'Codex provider execution preview unavailable.'}</p>
+    </section>
   );
 }
 
