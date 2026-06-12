@@ -1,12 +1,29 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, join, relative, sep } from 'node:path';
 
 export const SESSION_CONTEXT_CONTRACT_NAME = 'sessionContext.v1';
 export const SESSION_CONTEXT_CONTRACT_VERSION = 1;
+export const SESSION_SOURCE_INVENTORY_CONTRACT_NAME = 'sessionSourceInventory.v1';
+export const SESSION_SOURCE_INVENTORY_CONTRACT_VERSION = 1;
 
 const DEFAULT_STALE_AFTER_MS = 30 * 60 * 1000;
 const DEFAULT_MAX_FILES_PER_PROVIDER = 200;
+const SESSION_SOURCE_SCAN_SCOPE = 'bounded-provider-session-roots';
+const SESSION_SOURCE_BOUNDARIES = Object.freeze({
+  readOnly: true,
+  willMutate: false,
+  frontendMayScanFolders: false,
+  exposesRawTranscript: false,
+  exposesRawJsonl: false,
+  launchesProvider: false,
+  writesGoalState: false,
+  writesLedgers: false,
+  writesEventLogs: false,
+  writesSymphonyState: false,
+  dispatchesChildren: false,
+  compactsTranscripts: false
+});
 
 export async function buildSessionContext({
   threadId = null,
@@ -94,6 +111,382 @@ export async function normalizeSessionContextFromJsonl({
     sourceRef,
     generatedAt
   });
+}
+
+export async function buildSessionSourceInventory({
+  generatedAt = new Date().toISOString(),
+  staleAfterMs = DEFAULT_STALE_AFTER_MS,
+  maxFilesPerProvider = DEFAULT_MAX_FILES_PER_PROVIDER,
+  codexRoot = join(homedir(), '.codex', 'sessions'),
+  claudeRoot = join(homedir(), '.claude', 'projects'),
+  codexRootDisplayPath = '~/.codex/sessions',
+  claudeRootDisplayPath = '~/.claude/projects'
+} = {}) {
+  const nowMs = millisOrNow(generatedAt);
+  const effectiveGeneratedAt = new Date(nowMs).toISOString();
+  const effectiveMaxFiles = positiveIntegerOrDefault(maxFilesPerProvider, DEFAULT_MAX_FILES_PER_PROVIDER);
+  const providers = await Promise.all([
+    buildProviderSourceInventory({
+      provider: 'codex',
+      root: codexRoot,
+      rootDisplayPath: codexRootDisplayPath,
+      pattern: '~/.codex/sessions/YYYY/MM/DD/*.jsonl',
+      generatedAt: effectiveGeneratedAt,
+      staleAfterMs,
+      maxFiles: effectiveMaxFiles,
+      matchesPattern: codexSessionSourcePath
+    }),
+    buildProviderSourceInventory({
+      provider: 'claude',
+      root: claudeRoot,
+      rootDisplayPath: claudeRootDisplayPath,
+      pattern: '~/.claude/projects/**/*.jsonl',
+      generatedAt: effectiveGeneratedAt,
+      staleAfterMs,
+      maxFiles: effectiveMaxFiles,
+      matchesPattern: () => true
+    })
+  ]);
+
+  return {
+    contractName: SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+    contractVersion: SESSION_SOURCE_INVENTORY_CONTRACT_VERSION,
+    generatedAt: effectiveGeneratedAt,
+    readOnly: true,
+    willMutate: false,
+    scanScope: SESSION_SOURCE_SCAN_SCOPE,
+    maxFilesPerProvider: effectiveMaxFiles,
+    providers,
+    summary: inventorySummary(providers),
+    boundaries: { ...SESSION_SOURCE_BOUNDARIES }
+  };
+}
+
+async function buildProviderSourceInventory({
+  provider,
+  root,
+  rootDisplayPath,
+  pattern,
+  generatedAt,
+  staleAfterMs,
+  maxFiles,
+  matchesPattern
+}) {
+  const base = {
+    provider,
+    rootDisplayPath,
+    pattern,
+    scanScope: SESSION_SOURCE_SCAN_SCOPE,
+    maxFiles,
+    readOnly: true,
+    willMutate: false
+  };
+  const rootInfo = await safeStatWithReason(root);
+
+  if (rootInfo.status === 'failed') {
+    return providerInventoryResult({
+      ...base,
+      state: 'failed',
+      degradedReasons: ['root-stat-failed'],
+      failureReason: rootInfo.reason
+    });
+  }
+
+  if (rootInfo.info === null) {
+    return providerInventoryResult({
+      ...base,
+      state: 'missing',
+      degradedReasons: ['source-root-missing']
+    });
+  }
+
+  if (!rootInfo.info.isDirectory() && !rootInfo.info.isFile()) {
+    return providerInventoryResult({
+      ...base,
+      state: 'failed',
+      degradedReasons: ['source-root-not-readable-directory']
+    });
+  }
+
+  const discovered = await discoverProviderJsonlFiles({
+    root,
+    maxFiles,
+    matchesPattern
+  });
+
+  if (discovered.status === 'failed') {
+    return providerInventoryResult({
+      ...base,
+      state: 'failed',
+      degradedReasons: ['source-scan-failed'],
+      failureReason: discovered.reason
+    });
+  }
+
+  if (discovered.files.length === 0) {
+    return providerInventoryResult({
+      ...base,
+      state: 'missing',
+      candidateFileCount: 0,
+      degradedReasons: ['no-candidate-session-files']
+    });
+  }
+
+  const candidates = await inspectCandidateSessionFiles({
+    files: discovered.files
+  });
+  const latest = candidates
+    .filter((candidate) => candidate.stat !== null)
+    .sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs)
+    .at(0) ?? null;
+  const latestModifiedAt = latest === null ? null : new Date(latest.stat.mtimeMs).toISOString();
+  const staleAgeMs = latest === null ? null : Math.max(0, Date.parse(generatedAt) - latest.stat.mtimeMs);
+  const stale = Number.isFinite(staleAgeMs) && staleAgeMs > staleAfterMs;
+  const readableFileCount = candidates.filter((candidate) => candidate.readable).length;
+  const unreadableCount = candidates.filter((candidate) => candidate.readable === false).length;
+  const invalidJsonlCount = candidates.filter((candidate) => candidate.invalidJsonl).length;
+  const degradedReasons = [
+    discovered.truncated ? 'max-files-per-provider-reached' : null,
+    unreadableCount > 0 && readableFileCount > 0 ? 'some-candidate-files-unreadable' : null,
+    invalidJsonlCount > 0 ? 'some-candidate-files-have-invalid-jsonl' : null,
+    stale ? 'latest-session-file-exceeded-stale-threshold' : null
+  ].filter(nonEmptyString);
+  const state = providerInventoryState({
+    readableFileCount,
+    unreadableCount,
+    stale,
+    degradedReasons
+  });
+
+  return providerInventoryResult({
+    ...base,
+    state,
+    readableFileCount,
+    candidateFileCount: discovered.candidateFileCount,
+    latestModifiedAt,
+    latestSessionRef: latest === null ? null : sessionSourceRef({ provider, root, file: latest.file }),
+    degradedReasons,
+    sourceSummary: {
+      availability: state === 'available' ? 'available' : state,
+      readState: readableFileCount > 0 ? 'readable' : 'unreadable',
+      scanScope: SESSION_SOURCE_SCAN_SCOPE,
+      maxFiles,
+      candidateFileCount: discovered.candidateFileCount,
+      scannedFileCount: discovered.files.length,
+      readableFileCount,
+      unreadableFileCount: unreadableCount,
+      latestModifiedAt,
+      stale,
+      staleAfterMs,
+      latestSessionRef: latest === null ? null : sessionSourceRef({ provider, root, file: latest.file })
+    }
+  });
+}
+
+function providerInventoryResult({
+  provider,
+  rootDisplayPath,
+  pattern,
+  state,
+  scanScope,
+  maxFiles,
+  readOnly,
+  willMutate,
+  readableFileCount = 0,
+  candidateFileCount = 0,
+  latestModifiedAt = null,
+  latestSessionRef = null,
+  degradedReasons = [],
+  failureReason = null,
+  sourceSummary = null
+}) {
+  return {
+    provider,
+    rootDisplayPath,
+    pattern,
+    state,
+    readOnly,
+    willMutate,
+    readableFileCount,
+    candidateFileCount,
+    latestModifiedAt,
+    latestSessionRef,
+    degradedReasons,
+    sourceSummary: sourceSummary ?? {
+      availability: state,
+      readState: state === 'missing' ? 'missing' : state,
+      scanScope,
+      maxFiles,
+      candidateFileCount,
+      scannedFileCount: candidateFileCount,
+      readableFileCount,
+      latestModifiedAt,
+      latestSessionRef,
+      failureReason
+    },
+    scanScope,
+    maxFiles
+  };
+}
+
+function providerInventoryState({
+  readableFileCount,
+  unreadableCount,
+  stale,
+  degradedReasons
+}) {
+  if (readableFileCount === 0 && unreadableCount > 0) {
+    return 'unreadable';
+  }
+
+  if (stale) {
+    return 'stale';
+  }
+
+  if (degradedReasons.length > 0) {
+    return 'degraded';
+  }
+
+  return 'available';
+}
+
+function inventorySummary(providers) {
+  const failedCount = providers.filter((provider) => provider.state === 'failed').length;
+  const degradedCount = providers.filter((provider) => ['degraded', 'stale', 'unreadable'].includes(provider.state)).length;
+  const availableCount = providers.filter((provider) => provider.state === 'available').length;
+  const missingCount = providers.filter((provider) => provider.state === 'missing').length;
+
+  return {
+    providerCount: providers.length,
+    availableProviderCount: availableCount,
+    missingProviderCount: missingCount,
+    degradedProviderCount: degradedCount,
+    failedProviderCount: failedCount,
+    state: failedCount > 0
+      ? 'failed'
+      : degradedCount > 0
+        ? 'degraded'
+        : availableCount > 0
+          ? 'available'
+          : 'missing'
+  };
+}
+
+async function discoverProviderJsonlFiles({
+  root,
+  maxFiles,
+  matchesPattern
+}) {
+  const files = [];
+  const stack = [root];
+
+  while (stack.length > 0 && files.length <= maxFiles) {
+    const current = stack.pop();
+    const currentInfo = await safeStatWithReason(current);
+
+    if (currentInfo.status === 'failed') {
+      return { status: 'failed', reason: currentInfo.reason, files: [], candidateFileCount: 0, truncated: false };
+    }
+
+    if (currentInfo.info === null) {
+      continue;
+    }
+
+    if (currentInfo.info.isFile()) {
+      if (current.endsWith('.jsonl') && matchesPattern(root, current)) {
+        files.push(current);
+      }
+      continue;
+    }
+
+    if (!currentInfo.info.isDirectory()) {
+      continue;
+    }
+
+    let entries;
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch (error) {
+      return { status: 'failed', reason: error?.code ?? 'readdir-failed', files: [], candidateFileCount: 0, truncated: false };
+    }
+
+    for (const entry of entries.sort((left, right) => right.name.localeCompare(left.name))) {
+      const fullPath = join(current, entry.name);
+
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+      } else if (entry.isFile() && entry.name.endsWith('.jsonl') && matchesPattern(root, fullPath)) {
+        files.push(fullPath);
+      }
+
+      if (files.length > maxFiles) {
+        break;
+      }
+    }
+  }
+
+  const withStats = [];
+
+  for (const file of files.slice(0, maxFiles + 1)) {
+    const info = await safeStat(file);
+
+    if (info !== null) {
+      withStats.push({ file, mtimeMs: info.mtimeMs });
+    }
+  }
+
+  const sorted = withStats
+    .sort((left, right) => right.mtimeMs - left.mtimeMs)
+    .map((entry) => entry.file);
+
+  return {
+    status: 'ok',
+    files: sorted.slice(0, maxFiles),
+    candidateFileCount: Math.min(files.length, maxFiles),
+    truncated: files.length > maxFiles
+  };
+}
+
+async function inspectCandidateSessionFiles({ files }) {
+  const inspected = [];
+
+  for (const file of files) {
+    const info = await safeStat(file);
+    const text = await safeReadFile(file);
+
+    inspected.push({
+      file,
+      stat: info,
+      readable: text !== null,
+      invalidJsonl: text !== null && hasInvalidJsonlLine(text)
+    });
+  }
+
+  return inspected.sort((left, right) => {
+    const leftMs = left.stat?.mtimeMs ?? -1;
+    const rightMs = right.stat?.mtimeMs ?? -1;
+
+    return rightMs - leftMs;
+  });
+}
+
+function codexSessionSourcePath(root, file) {
+  const parts = relative(root, file).split(sep);
+
+  return parts.length === 4 &&
+    /^\d{4}$/u.test(parts[0]) &&
+    /^\d{2}$/u.test(parts[1]) &&
+    /^\d{2}$/u.test(parts[2]) &&
+    parts[3].endsWith('.jsonl');
+}
+
+function sessionSourceRef({ provider, root, file }) {
+  const rel = relative(root, file)
+    .split(sep)
+    .filter(nonEmptyString)
+    .join('/');
+
+  return `${provider}:${rel === '' ? basename(file) : rel}`;
 }
 
 async function readProviderContext({
@@ -588,6 +981,30 @@ async function safeStat(path) {
   }
 }
 
+async function safeStatWithReason(path) {
+  try {
+    return {
+      status: 'ok',
+      info: await stat(path),
+      reason: null
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      return {
+        status: 'ok',
+        info: null,
+        reason: error.code
+      };
+    }
+
+    return {
+      status: 'failed',
+      info: null,
+      reason: error?.code ?? 'stat-failed'
+    };
+  }
+}
+
 function latestProviderContext(contexts) {
   return latestByTimestamp(contexts, (context) => context.latestTurnAt);
 }
@@ -665,6 +1082,25 @@ function millisOrNow(value) {
   const parsed = Date.parse(value);
 
   return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function positiveIntegerOrDefault(value, fallback) {
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function hasInvalidJsonlLine(jsonl) {
+  return String(jsonl)
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .some((line) => {
+      try {
+        JSON.parse(line);
+        return false;
+      } catch {
+        return true;
+      }
+    });
 }
 
 function arrayFrom(value) {
