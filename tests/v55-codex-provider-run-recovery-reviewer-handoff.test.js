@@ -14,6 +14,7 @@ import {
   assertCodexProviderRunRecoveryContract,
   assertReviewerHandoffPreviewContract,
   buildCodexProviderRunRecovery,
+  buildReviewerHandoffPreview,
   validateCodexProviderRunRecoveryContract,
   validateReviewerHandoffPreviewContract
 } from '../src/symphony/codex-provider-run-recovery-contracts.js';
@@ -176,12 +177,32 @@ describe('v55 Codex provider run recovery and reviewer handoff contracts', () =>
 
   it('rejects local source refs before they can expose provider sessions', () => {
     const recovery = fixture('recovery.completed-accepted.v1.json');
+    const handoff = fixture('reviewer-handoff.ready.v1.json');
 
     recovery.sourceContracts[0].sourceRef.ref = '/Users/andy/Codex/sessions/session-123.txt';
+    handoff.acceptedResultSummary.changedFiles[0] = '/Users/andy/project/src/foo.js';
+    handoff.handoffPack.changedFiles[0] = '../src/foo.js';
+    handoff.handoffPack.body = 'POST /api/goals/g1/event-plan-confirm';
 
     assertValidationIncludes(
       validateCodexProviderRunRecoveryContract(recovery),
       'sourceContracts[0].sourceRef.ref must not contain raw provider output, local session refs, or direct mutation routes'
+    );
+    const handoffValidation = validateReviewerHandoffPreviewContract(handoff);
+
+    assertValidationIncludes(
+      handoffValidation,
+      'acceptedResultSummary.changedFiles[0] must be a safe repo-relative path'
+    );
+    assertValidationIncludes(
+      handoffValidation,
+      'handoffPack.changedFiles[0] must be a safe repo-relative path'
+    );
+    assert.ok(
+      handoffValidation.errors.includes(
+        'preview.handoffPack.body must not contain raw provider output, local session refs, or direct mutation routes'
+      ),
+      handoffValidation.errors.join('; ')
     );
   });
 
@@ -242,6 +263,103 @@ describe('v55 Codex provider run recovery and reviewer handoff contracts', () =>
     assertNoUnsafePayload(unsafeRecovery);
   });
 
+  it('builds reviewer handoff preview only after accepted pending result linkage', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const pendingResult = pendingResultForRunRecord(completedRun);
+    const recovery = buildCodexProviderRunRecovery({
+      runRecord: completedRun,
+      pendingResult,
+      generatedAt: '2026-06-13T01:27:00.000Z'
+    });
+    const preview = buildReviewerHandoffPreview({
+      recovery,
+      pendingResult,
+      reviewerTask: {
+        taskId: 'pr-2-readonly-review',
+        title: 'Read-only backend recovery review'
+      },
+      generatedAt: '2026-06-13T01:28:00.000Z'
+    });
+
+    assert.equal(validateReviewerHandoffPreviewContract(preview).ok, true);
+    assert.equal(preview.contractName, REVIEWER_HANDOFF_PREVIEW_CONTRACT_NAME);
+    assert.equal(preview.copyOnly, true);
+    assert.equal(preview.willMutate, false);
+    assert.deepEqual(preview.blockedReasons, []);
+    assert.equal(preview.pendingResultRef.state, 'available');
+    assert.equal(preview.workerTask.state, 'accepted');
+    assert.equal(preview.reviewerTask.taskId, 'pr-2-readonly-review');
+    assert.deepEqual(preview.acceptedResultSummary.changedFiles, pendingResult.sanitizedSummary.changedFiles);
+    assert.deepEqual(preview.handoffPack.validationCommands, pendingResult.sanitizedSummary.validationCommands);
+    assert.deepEqual(preview.handoffPack.workerEvidenceRefs, pendingResult.evidenceRefs);
+    assertNoUnsafePayload(preview);
+  });
+
+  it('blocks reviewer handoff preview when pending result is missing or recovery is stale', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const pendingResult = pendingResultForRunRecord(completedRun);
+    const readyRecovery = buildCodexProviderRunRecovery({
+      runRecord: completedRun,
+      pendingResult,
+      generatedAt: '2026-06-13T01:29:00.000Z'
+    });
+    const missingPendingPreview = buildReviewerHandoffPreview({
+      recovery: readyRecovery,
+      generatedAt: '2026-06-13T01:30:00.000Z'
+    });
+    const staleRecovery = buildCodexProviderRunRecovery({
+      runRecord: completedRun,
+      pendingResult,
+      currentPreviewHash: 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+      generatedAt: '2026-06-13T01:31:00.000Z'
+    });
+    const stalePreview = buildReviewerHandoffPreview({
+      recovery: staleRecovery,
+      pendingResult,
+      generatedAt: '2026-06-13T01:32:00.000Z'
+    });
+
+    assert.equal(validateReviewerHandoffPreviewContract(missingPendingPreview).ok, true);
+    assert.deepEqual(missingPendingPreview.blockedReasons, ['pending-result-not-accepted']);
+    assert.equal(missingPendingPreview.pendingResultRef, null);
+    assert.equal(missingPendingPreview.acceptedResultSummary, null);
+    assert.equal(missingPendingPreview.handoffPack, null);
+
+    assert.equal(validateReviewerHandoffPreviewContract(stalePreview).ok, true);
+    assert.deepEqual(stalePreview.blockedReasons, ['stale-preview-hash']);
+    assert.equal(stalePreview.pendingResultRef.state, 'available');
+    assert.equal(stalePreview.acceptedResultSummary, null);
+    assert.equal(stalePreview.handoffPack, null);
+    assertNoUnsafePayload(stalePreview);
+  });
+
+  it('blocks reviewer handoff preview when available pending result does not match accepted recovery', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const pendingResult = pendingResultForRunRecord(completedRun);
+    const recovery = buildCodexProviderRunRecovery({
+      runRecord: completedRun,
+      pendingResult,
+      generatedAt: '2026-06-13T01:33:00.000Z'
+    });
+    const mismatchedPendingResult = structuredClone(pendingResult);
+
+    mismatchedPendingResult.escrowRef = `${pendingResult.escrowRef}:other`;
+    mismatchedPendingResult.sanitizedSummary.summary = 'Different accepted result should not be handed off.';
+    mismatchedPendingResult.sanitizedSummary.changedFiles = ['src/other.js'];
+
+    const preview = buildReviewerHandoffPreview({
+      recovery,
+      pendingResult: mismatchedPendingResult,
+      generatedAt: '2026-06-13T01:34:00.000Z'
+    });
+
+    assert.equal(validateReviewerHandoffPreviewContract(preview).ok, true);
+    assert.deepEqual(preview.blockedReasons, ['pending-result-mismatch']);
+    assert.equal(preview.pendingResultRef.state, 'available');
+    assert.equal(preview.acceptedResultSummary, null);
+    assert.equal(preview.handoffPack, null);
+  });
+
   it('adds Codex run recovery to the supervisor read model without a write path', () => {
     const completedRun = v54Fixture('run-record.completed.v1.json');
     const previewOnlyModel = buildGoalSupervisorAppReadModel(readModelInputForRun({
@@ -262,6 +380,11 @@ describe('v55 Codex provider run recovery and reviewer handoff contracts', () =>
     assert.equal(model.codexProviderRunRecovery.boundaries.providerExecutionAvailable, false);
     assert.equal(model.codexProviderRunRecovery.boundaries.directGoalEventAppendAvailable, false);
     assert.equal(model.codexProviderRunRecovery.boundaries.githubReleaseAutomationAvailable, false);
+    assert.equal(model.reviewerHandoffPreview.contractName, REVIEWER_HANDOFF_PREVIEW_CONTRACT_NAME);
+    assert.equal(validateReviewerHandoffPreviewContract(model.reviewerHandoffPreview).ok, true);
+    assert.deepEqual(model.reviewerHandoffPreview.blockedReasons, []);
+    assert.equal(model.reviewerHandoffPreview.copyOnly, true);
+    assert.equal(model.reviewerHandoffPreview.willMutate, false);
   });
 
   it('classifies stale preview hash through the supervisor read model path', () => {
@@ -281,6 +404,11 @@ describe('v55 Codex provider run recovery and reviewer handoff contracts', () =>
       model.codexProviderRunRecovery.previewHash
     );
     assert.deepEqual(model.codexProviderRunRecovery.blockedReasons, ['stale-preview-hash']);
+    assert.equal(model.reviewerHandoffPreview.contractName, REVIEWER_HANDOFF_PREVIEW_CONTRACT_NAME);
+    assert.equal(validateReviewerHandoffPreviewContract(model.reviewerHandoffPreview).ok, true);
+    assert.deepEqual(model.reviewerHandoffPreview.blockedReasons, ['stale-preview-hash']);
+    assert.equal(model.reviewerHandoffPreview.acceptedResultSummary, null);
+    assert.equal(model.reviewerHandoffPreview.handoffPack, null);
   });
 
   it('reads backend-owned Codex run records from managed state only', async () => {
@@ -415,7 +543,7 @@ function assertNoUnsafePayload(value) {
   const serialized = JSON.stringify(value);
 
   assert.doesNotMatch(serialized, /raw transcript|raw model output|provider session|\.jsonl/iu);
-  assert.doesNotMatch(serialized, /Confirm Reviewer Verdict|Launch Claude Code|Run Shell|gh release|git push/iu);
+  assert.doesNotMatch(serialized, /Confirm Reviewer Verdict|Launch Claude Code|Run Shell|event-plan-confirm|gh release|git push/iu);
 }
 
 function assertValidationIncludes(validation, expected) {

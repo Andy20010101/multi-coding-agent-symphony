@@ -39,6 +39,8 @@ import {
 import {
   CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME,
   buildCodexProviderRunRecovery,
+  buildReviewerHandoffPreview,
+  validateReviewerHandoffPreviewContract,
   validateCodexProviderRunRecoveryContract
 } from '../codex-provider-run-recovery-contracts.js';
 import {
@@ -250,6 +252,11 @@ export function buildGoalSupervisorAppReadModel({
     pendingResultState,
     currentPreviewHash: codexProviderExecutionPreview.previewHash
   });
+  const reviewerHandoffPreview = buildGoalSupervisorReviewerHandoffPreview({
+    generatedAt,
+    codexProviderRunRecovery,
+    pendingResultState
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -288,7 +295,8 @@ export function buildGoalSupervisorAppReadModel({
     systemGoldenPath,
     childDispatchPreview,
     codexProviderExecutionPreview,
-    codexProviderRunRecovery
+    codexProviderRunRecovery,
+    reviewerHandoffPreview
   };
 }
 
@@ -339,6 +347,29 @@ function buildGoalSupervisorCodexProviderRunRecovery({
   }
 
   return recovery;
+}
+
+function buildGoalSupervisorReviewerHandoffPreview({
+  generatedAt,
+  codexProviderRunRecovery,
+  pendingResultState
+}) {
+  if (!isPlainObject(codexProviderRunRecovery)) {
+    return null;
+  }
+
+  const preview = buildReviewerHandoffPreview({
+    generatedAt,
+    recovery: codexProviderRunRecovery,
+    pendingResult: pendingResultState
+  });
+  const validation = validateReviewerHandoffPreviewContract(preview);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid reviewer handoff preview projection: ${validation.errors.join('; ')}`);
+  }
+
+  return preview;
 }
 
 function buildGoalSupervisorChildDispatchPreview({
