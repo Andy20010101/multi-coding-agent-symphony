@@ -18,6 +18,9 @@ import {
   readPendingResult
 } from '../result-intake-state.js';
 import {
+  readCodexProviderRunRecord
+} from '../codex-provider-run-recovery-state.js';
+import {
   SUPERVISOR_OBSERVABILITY_CONTRACT_NAME,
   buildSupervisorObservability
 } from '../supervisor-runner.js';
@@ -88,6 +91,11 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     goalId: resolvedGoalId,
     taskId: goalNext.next?.taskId
   });
+  const codexProviderRunRecord = await readCurrentCodexProviderRunRecord({
+    stateDir,
+    goalId: resolvedGoalId,
+    taskId: goalNext.next?.taskId
+  });
   const active = activeLeaseFromObservability(observability);
   const normalizedSessionContext = sessionContext ?? await buildSessionContext({
     threadId: active?.threadId ?? null,
@@ -132,7 +140,8 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
       sessionSourceInventory: normalizedSessionSourceInventory,
       contextAdvisory: normalizedContextAdvisory,
       threadContinuationDecision,
-      pendingResultState
+      pendingResultState,
+      codexProviderRunRecord
     }),
     timelineEvents: timelineEventsFromEventLog(eventLog),
     state,
@@ -146,10 +155,27 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     contextAdvisory: normalizedContextAdvisory,
     threadContinuationDecision,
     pendingResultState,
+    codexProviderRunRecord,
     ownership: {
       daemonState: observability.daemon?.state ?? 'external-orchestration-owner'
     },
     branch: branchFromRunbook(context?.runbook ?? null)
+  });
+}
+
+async function readCurrentCodexProviderRunRecord({
+  stateDir,
+  goalId,
+  taskId
+}) {
+  if (!nonEmptyString(goalId) || !nonEmptyString(taskId)) {
+    return null;
+  }
+
+  return await readCodexProviderRunRecord({
+    stateDir,
+    goalId,
+    taskId
   });
 }
 
@@ -215,7 +241,8 @@ function sourceContractsFor({
   sessionSourceInventory,
   contextAdvisory,
   threadContinuationDecision,
-  pendingResultState
+  pendingResultState,
+  codexProviderRunRecord
 }) {
   const contracts = [
     context === null ? null : GOAL_RUNBOOK_CONTRACT_NAME,
@@ -228,7 +255,8 @@ function sourceContractsFor({
     sessionSourceInventory?.contractName ?? SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
     contextAdvisory?.contractName ?? CONTEXT_ADVISORY_CONTRACT_NAME,
     threadContinuationDecision?.contractName ?? THREAD_CONTINUATION_DECISION_CONTRACT_NAME,
-    pendingResultState?.contractName
+    pendingResultState?.contractName,
+    codexProviderRunRecord?.contractName
   ];
 
   return [...new Set(contracts.filter(nonEmptyString))];

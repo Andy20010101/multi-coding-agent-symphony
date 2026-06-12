@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -11,12 +13,25 @@ import {
   REVIEWER_HANDOFF_PREVIEW_CONTRACT_NAME,
   assertCodexProviderRunRecoveryContract,
   assertReviewerHandoffPreviewContract,
+  buildCodexProviderRunRecovery,
   validateCodexProviderRunRecoveryContract,
   validateReviewerHandoffPreviewContract
 } from '../src/symphony/codex-provider-run-recovery-contracts.js';
 import {
   validateCodexProviderRunRecordContract
 } from '../src/symphony/codex-provider-execution-contracts.js';
+import {
+  buildPendingResultFromEscrow,
+  buildResultEvidenceEscrow,
+  buildResultIntakePreview
+} from '../src/symphony/result-intake-contracts.js';
+import {
+  getCodexProviderRunRecordPath,
+  readCodexProviderRunRecord
+} from '../src/symphony/codex-provider-run-recovery-state.js';
+import {
+  buildGoalSupervisorAppReadModel
+} from '../src/symphony/goal-supervisor/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -170,6 +185,132 @@ describe('v55 Codex provider run recovery and reviewer handoff contracts', () =>
     );
   });
 
+  it('projects recovery from backend-owned run records and v51 pending result state', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const blockedRun = v54Fixture('run-record.blocked.v1.json');
+    const completedPending = pendingResultForRunRecord(completedRun);
+    const blockedPending = pendingResultForRunRecord(blockedRun);
+    const completedRecovery = buildCodexProviderRunRecovery({
+      runRecord: completedRun,
+      pendingResult: completedPending,
+      generatedAt: '2026-06-13T01:20:00.000Z'
+    });
+    const blockedRecovery = buildCodexProviderRunRecovery({
+      runRecord: blockedRun,
+      pendingResult: blockedPending,
+      generatedAt: '2026-06-13T01:21:00.000Z'
+    });
+    const missingIntakeRun = structuredClone(completedRun);
+    const unsafeRun = v54Fixture('run-record.raw-transcript.invalid.v1.json');
+    const staleRecovery = buildCodexProviderRunRecovery({
+      runRecord: completedRun,
+      pendingResult: completedPending,
+      currentPreviewHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+      generatedAt: '2026-06-13T01:22:00.000Z'
+    });
+
+    delete missingIntakeRun.resultIntakeRequest;
+
+    const missingRecovery = buildCodexProviderRunRecovery({
+      runRecord: missingIntakeRun,
+      generatedAt: '2026-06-13T01:23:00.000Z'
+    });
+    const unsafeRecovery = buildCodexProviderRunRecovery({
+      runRecord: unsafeRun,
+      generatedAt: '2026-06-13T01:24:00.000Z'
+    });
+
+    assert.equal(validateCodexProviderRunRecoveryContract(completedRecovery).ok, true);
+    assert.equal(completedRecovery.recoveryState, 'ready-for-reviewer-handoff');
+    assert.equal(completedRecovery.resultIntake.pendingResult.contractName, 'pendingResult.v1');
+    assert.equal(completedRecovery.resultIntake.pendingResult.state, 'available');
+
+    assert.equal(validateCodexProviderRunRecoveryContract(blockedRecovery).ok, true);
+    assert.equal(blockedRecovery.recoveryState, 'blocked-provider-result');
+    assert.deepEqual(blockedRecovery.blockedReasons, ['provider-run-blocked', 'pending-result-blocked']);
+
+    assert.equal(validateCodexProviderRunRecoveryContract(staleRecovery).ok, true);
+    assert.equal(staleRecovery.recoveryState, 'stale-preview-hash');
+    assert.notEqual(staleRecovery.resultIntake.previewHash, staleRecovery.previewHash);
+
+    assert.equal(validateCodexProviderRunRecoveryContract(missingRecovery).ok, true);
+    assert.equal(missingRecovery.recoveryState, 'missing-result-intake');
+    assert.equal(missingRecovery.resultIntake.pendingResult, null);
+
+    assert.equal(validateCodexProviderRunRecoveryContract(unsafeRecovery).ok, true);
+    assert.equal(unsafeRecovery.recoveryState, 'unsafe-provider-output');
+    assertNoUnsafePayload(unsafeRecovery);
+  });
+
+  it('adds Codex run recovery to the supervisor read model without a write path', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const previewOnlyModel = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: completedRun,
+      nowMs: Date.parse('2026-06-13T01:25:00.000Z')
+    }));
+    const alignedRun = alignRunRecordWithPreview(completedRun, previewOnlyModel.codexProviderExecutionPreview);
+    const pendingResult = pendingResultForRunRecord(alignedRun);
+    const model = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: alignedRun,
+      pendingResult,
+      nowMs: Date.parse('2026-06-13T01:25:00.000Z')
+    }));
+
+    assert.equal(model.codexProviderRunRecovery.contractName, CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME);
+    assert.equal(validateCodexProviderRunRecoveryContract(model.codexProviderRunRecovery).ok, true);
+    assert.equal(model.codexProviderRunRecovery.recoveryState, 'ready-for-reviewer-handoff');
+    assert.equal(model.codexProviderRunRecovery.boundaries.providerExecutionAvailable, false);
+    assert.equal(model.codexProviderRunRecovery.boundaries.directGoalEventAppendAvailable, false);
+    assert.equal(model.codexProviderRunRecovery.boundaries.githubReleaseAutomationAvailable, false);
+  });
+
+  it('classifies stale preview hash through the supervisor read model path', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const pendingResult = pendingResultForRunRecord(completedRun);
+    const model = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: completedRun,
+      pendingResult,
+      nowMs: Date.parse('2026-06-13T01:26:00.000Z')
+    }));
+
+    assert.equal(model.codexProviderRunRecovery.contractName, CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME);
+    assert.equal(validateCodexProviderRunRecoveryContract(model.codexProviderRunRecovery).ok, true);
+    assert.equal(model.codexProviderRunRecovery.recoveryState, 'stale-preview-hash');
+    assert.notEqual(
+      model.codexProviderRunRecovery.resultIntake.previewHash,
+      model.codexProviderRunRecovery.previewHash
+    );
+    assert.deepEqual(model.codexProviderRunRecovery.blockedReasons, ['stale-preview-hash']);
+  });
+
+  it('reads backend-owned Codex run records from managed state only', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v55-run-recovery-'));
+    const stateDir = join(root, '.symphony');
+    const runRecord = v54Fixture('run-record.completed.v1.json');
+    const runRecordPath = getCodexProviderRunRecordPath({
+      stateDir,
+      goalId: runRecord.goalId,
+      taskId: runRecord.taskId
+    });
+
+    try {
+      await mkdir(dirname(runRecordPath), { recursive: true });
+      await writeFile(runRecordPath, `${JSON.stringify(runRecord, null, 2)}\n`, 'utf8');
+
+      const read = await readCodexProviderRunRecord({
+        stateDir,
+        goalId: runRecord.goalId,
+        taskId: runRecord.taskId
+      });
+
+      assert.equal(read.contractName, 'codexProviderRunRecord.v1');
+      assert.equal(read.runId, runRecord.runId);
+      assert.equal(validateCodexProviderRunRecordContract(read).ok, true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('throws typed assertion errors for recovery and handoff contract violations', () => {
     const recovery = fixture('recovery.completed-accepted.v1.json');
     const handoff = fixture('reviewer-handoff.ready.v1.json');
@@ -202,6 +343,66 @@ function fixture(name) {
 
 function v54Fixture(name) {
   return JSON.parse(readFileSync(join(V54_FIXTURE_DIR, name), 'utf8'));
+}
+
+function pendingResultForRunRecord(runRecord) {
+  const preview = buildResultIntakePreview(runRecord.resultIntakeRequest, {
+    generatedAt: '2026-06-13T01:10:00.000Z',
+    expiresAt: '2026-06-13T01:25:00.000Z'
+  });
+  const escrow = buildResultEvidenceEscrow(preview, {
+    createdAt: '2026-06-13T01:11:00.000Z',
+    now: '2026-06-13T01:11:00.000Z'
+  });
+
+  return buildPendingResultFromEscrow(escrow);
+}
+
+function readModelInputForRun({
+  runRecord,
+  pendingResult = null,
+  nowMs
+}) {
+  return {
+    goalId: runRecord.goalId,
+    title: 'v55 Codex Provider Run Recovery and Reviewer Handoff',
+    tasks: [{
+      taskId: runRecord.taskId,
+      title: 'Backend recovery projection',
+      status: 'active'
+    }],
+    goalNext: {
+      contractName: 'goal-next-action.v1',
+      contractVersion: 1,
+      goalId: runRecord.goalId,
+      status: 'action-required',
+      next: {
+        taskId: runRecord.taskId,
+        role: 'worker',
+        phase: 'implement'
+      },
+      reason: 'backend recovery projection is next'
+    },
+    pendingResultState: pendingResult,
+    codexProviderRunRecord: runRecord,
+    nowMs
+  };
+}
+
+function alignRunRecordWithPreview(runRecord, preview) {
+  const aligned = structuredClone(runRecord);
+
+  aligned.previewHash = preview.previewHash;
+  aligned.sourceContracts = aligned.sourceContracts.map((contract) => (
+    contract.previewHash === undefined
+      ? contract
+      : {
+          ...contract,
+          previewHash: preview.previewHash
+        }
+  ));
+
+  return aligned;
 }
 
 function assertNoMutationBoundaries(boundaries) {
