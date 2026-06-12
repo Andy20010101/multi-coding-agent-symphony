@@ -131,8 +131,8 @@ describe('v44.3 goal supervisor session hook runtime', () => {
     assert.ok(model.goalSnapshot.sourceContracts.includes(SESSION_CONTEXT_CONTRACT_NAME));
     assert.equal(model.contextStatus.transcriptAvailability, 'readable');
     assert.equal(model.contextStatus.latestToolCall.name, 'Bash');
-    assert.equal(model.contextStatus.tokenUsage.totalTokens, 2600);
-    assert.equal(model.contextStatus.contextUtilization.ratio, 0.055);
+    assert.equal(model.contextStatus.tokenUsage.totalTokens, 'missing');
+    assert.equal(model.contextStatus.contextUtilization.ratio, 'missing');
     assert.equal(model.contextStatus.resultBlockEvidence.present, true);
     assertNoRawTranscriptText(model);
   });
@@ -374,16 +374,41 @@ describe('v49 context advisory projection', () => {
     assert.equal(advisory.exchangeCount, 5);
     assert.equal(advisory.latestToolCall.name, 'Bash');
     assert.equal(advisory.latestToolCall.status, 'completed');
-    assert.equal(advisory.tokenUsage.totalTokens, 2600);
-    assert.equal(advisory.contextUtilization.ratio, 0.055);
-    assert.equal(advisory.contextBand, 'low');
+    assert.equal(advisory.tokenUsage.totalTokens, 'missing');
+    assert.equal(advisory.contextUtilization.ratio, 'missing');
+    assert.equal(advisory.contextBand, 'unknown');
     assert.equal(advisory.resultBlockEvidence.status, 'present');
     assert.equal(advisory.policyInputs.threadId, 'thread-session-1');
     assert.equal(advisory.policyInputs.transcriptAvailability, 'readable');
-    assert.deepEqual(advisory.blockedFields, []);
+    assert.deepEqual(advisory.blockedFields, ['tokenUsage.totalTokens', 'contextUtilization.ratio']);
   });
 
-  it('keeps missing token totals and context ratio missing without inference', () => {
+  it('keeps adapter-sourced missing token totals and context ratio missing without inference', async () => {
+    const context = await buildSessionContext({
+      threadId: 'thread-session-1',
+      generatedAt: '2026-06-10T03:26:00.000Z',
+      codexFiles: [],
+      claudeFiles: [CLAUDE_ACTIVE]
+    });
+    const advisory = buildContextAdvisory({
+      sessionContext: context,
+      generatedAt: '2026-06-12T02:00:00.000Z'
+    });
+
+    assert.equal(context.tokenUsage.inputTokens, 900);
+    assert.equal(context.tokenUsage.outputTokens, 200);
+    assert.equal(context.tokenUsage.totalTokens, 'missing');
+    assert.equal(context.contextUtilization.usedTokens, 1100);
+    assert.equal(context.contextUtilization.maxTokens, 20000);
+    assert.equal(context.contextUtilization.ratio, 'missing');
+    assert.equal(advisory.tokenUsage.totalTokens, 'missing');
+    assert.equal(advisory.contextUtilization.ratio, 'missing');
+    assert.equal(advisory.contextBand, 'unknown');
+    assert.ok(advisory.blockedFields.includes('tokenUsage.totalTokens'));
+    assert.ok(advisory.blockedFields.includes('contextUtilization.ratio'));
+  });
+
+  it('keeps manually supplied missing token totals and context ratio missing without inference', () => {
     const advisory = buildContextAdvisory({
       generatedAt: '2026-06-12T02:00:00.000Z',
       sessionContext: {
@@ -419,6 +444,7 @@ describe('v49 context advisory projection', () => {
     assert.equal(advisory.contextUtilization.maxTokens, 1000);
     assert.equal(advisory.contextUtilization.ratio, 'missing');
     assert.equal(advisory.contextBand, 'unknown');
+    assert.ok(advisory.blockedFields.includes('tokenUsage.totalTokens'));
     assert.ok(advisory.blockedFields.includes('contextUtilization.ratio'));
   });
 

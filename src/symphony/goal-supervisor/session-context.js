@@ -453,6 +453,7 @@ function advisoryBlockedFields({
   return [
     transcriptAvailability === 'missing' ? 'transcriptAvailability' : null,
     tokenUsage.status === 'missing' ? 'tokenUsage' : null,
+    tokenUsage.status === 'available' && tokenUsage.totalTokens === 'missing' ? 'tokenUsage.totalTokens' : null,
     contextUtilization.status === 'missing' || contextUtilization.ratio === 'missing'
       ? 'contextUtilization.ratio'
       : null
@@ -1010,13 +1011,13 @@ function providerTokenUsage(entries) {
 
   const inputTokens = sumNumeric(usages.map((usage) => usage.inputTokens));
   const outputTokens = sumNumeric(usages.map((usage) => usage.outputTokens));
-  const totalTokens = sumNumeric(usages.map((usage) => usage.totalTokens));
+  const totalTokens = sumAllNumericOrMissing(usages.map((usage) => usage.totalTokens));
 
   return {
     status: 'available',
     inputTokens,
     outputTokens,
-    totalTokens: totalTokens ?? sumNumeric([inputTokens, outputTokens])
+    totalTokens
   };
 }
 
@@ -1041,8 +1042,7 @@ function extractUsage(entry) {
   );
   const totalTokens = firstFiniteNumber(
     usage.total_tokens,
-    usage.totalTokens,
-    inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens
+    usage.totalTokens
   );
 
   if (inputTokens === null && outputTokens === null && totalTokens === null) {
@@ -1088,13 +1088,8 @@ function extractContextUtilization(entry) {
   const usedTokens = firstFiniteNumber(context.used_tokens, context.usedTokens, context.tokens_used, context.tokensUsed);
   const maxTokens = firstFiniteNumber(context.max_tokens, context.maxTokens, context.context_window, context.contextWindow);
   const ratio = firstFiniteNumber(context.ratio, context.utilization, context.context_utilization);
-  const normalizedRatio = ratio ?? (
-    usedTokens === null || maxTokens === null || maxTokens === 0
-      ? null
-      : usedTokens / maxTokens
-  );
 
-  if (usedTokens === null && maxTokens === null && normalizedRatio === null) {
+  if (usedTokens === null && maxTokens === null && ratio === null) {
     return missingContextUtilization();
   }
 
@@ -1102,7 +1097,7 @@ function extractContextUtilization(entry) {
     status: 'available',
     usedTokens,
     maxTokens,
-    ratio: normalizedRatio
+    ratio: ratio ?? 'missing'
   };
 }
 
@@ -1117,13 +1112,13 @@ function aggregateTokenUsage(contexts) {
 
   const inputTokens = sumNumeric(available.map((usage) => usage.inputTokens));
   const outputTokens = sumNumeric(available.map((usage) => usage.outputTokens));
-  const totalTokens = sumNumeric(available.map((usage) => usage.totalTokens));
+  const totalTokens = sumAllNumericOrMissing(available.map((usage) => usage.totalTokens));
 
   return {
     status: 'available',
     inputTokens,
     outputTokens,
-    totalTokens: totalTokens ?? sumNumeric([inputTokens, outputTokens])
+    totalTokens
   };
 }
 
@@ -1436,6 +1431,10 @@ function sumNumeric(values) {
   }
 
   return numeric.reduce((sum, value) => sum + value, 0);
+}
+
+function sumAllNumericOrMissing(values) {
+  return values.every(Number.isFinite) ? sumNumeric(values) : 'missing';
 }
 
 function firstNonEmptyString(...values) {
