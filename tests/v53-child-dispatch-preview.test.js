@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import {
   CHILD_DISPATCH_ALLOWED_PROVIDER_IDS,
   CHILD_DISPATCH_BOUNDARIES,
+  CHILD_DISPATCH_PREVIEW_CONTRACT_NAME,
   CHILD_DISPATCH_RETURN_PATH,
   ChildDispatchPreviewContractError,
   assertChildDispatchPreviewContract,
@@ -14,6 +15,9 @@ import {
   validateChildDispatchPreviewContract,
   validateChildTaskPackContract
 } from '../src/symphony/child-dispatch-preview-contracts.js';
+import {
+  buildGoalSupervisorAppReadModel
+} from '../src/symphony/goal-supervisor/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -298,6 +302,118 @@ describe('v53 childDispatchPreview.v1 contracts and fixtures', () => {
       )
     );
   });
+
+  it('projects a valid childDispatchPreview from the backend app read model', () => {
+    const model = buildProjectionReadModel();
+    const preview = model.childDispatchPreview;
+    const validation = validateChildDispatchPreviewContract(preview);
+
+    assert.equal(preview.contractName, CHILD_DISPATCH_PREVIEW_CONTRACT_NAME);
+    assert.equal(validation.ok, true, validation.errors.join('; '));
+    assert.equal(preview.goal.goalId, 'v53-controlled-child-dispatch-preview');
+    assert.equal(preview.task.taskId, 'pr-2-backend-projection');
+    assert.equal(preview.readiness.state, 'ready');
+    assert.equal(preview.taskPack.goalId, preview.goal.goalId);
+    assert.equal(preview.taskPack.taskId, preview.task.taskId);
+  });
+
+  it('projects the ready Codex worker task pack as copy-only with v51 result intake return', () => {
+    const preview = buildProjectionReadModel().childDispatchPreview;
+
+    assert.equal(preview.providerRecommendation.providerId, 'codex');
+    assert.equal(preview.requestedRole, 'worker');
+    assert.equal(preview.readiness.providerExecutionAvailable, false);
+    assert.equal(preview.readiness.actualChildDispatchAvailable, false);
+    assert.equal(preview.providerRecommendation.providerExecutionAvailable, false);
+    assert.equal(preview.providerRecommendation.actualChildDispatchAvailable, false);
+    assert.equal(preview.taskPack.copyOnly, true);
+    assert.equal(preview.taskPack.willMutate, false);
+    assert.equal(preview.taskPack.returnPath, CHILD_DISPATCH_RETURN_PATH);
+    assert.equal(preview.resultExpectation.returnPath, CHILD_DISPATCH_RETURN_PATH);
+    assert.equal(preview.resultExpectation.resultIntakeContract, 'resultIntakeRequest.v1');
+    assert.equal(preview.resultExpectation.directGoalEventAppendAvailable, false);
+    assert.equal(preview.resultExpectation.directTaskCompleteAvailable, false);
+    assert.equal(preview.resultExpectation.reviewerMutationAvailable, false);
+    assert.equal(preview.resultExpectation.mainVerificationMutationAvailable, false);
+    assert.equal(preview.resultExpectation.releaseGateMutationAvailable, false);
+    assert.equal(preview.taskPack.expectedResultBlock.boundaries.providerExecutionAvailable, false);
+    assert.equal(preview.taskPack.expectedResultBlock.boundaries.childDispatchAvailable, false);
+    assert.equal(preview.taskPack.expectedResultBlock.willAppendGoalEvent, false);
+  });
+
+  it('can recommend Claude Code for reviewer role while staying copy-only', () => {
+    const preview = buildProjectionReadModel({ role: 'reviewer' }).childDispatchPreview;
+
+    assert.equal(preview.readiness.state, 'ready');
+    assert.equal(preview.requestedRole, 'reviewer');
+    assert.equal(preview.providerRecommendation.providerId, 'claude-code');
+    assert.equal(preview.taskPack.preferredProvider, 'claude-code');
+    assert.equal(preview.taskPack.copyOnly, true);
+    assert.equal(preview.taskPack.willMutate, false);
+    assert.equal(preview.taskPack.expectedResultBlock.source, 'claude');
+    assert.equal(preview.taskPack.expectedResultBlock.workerRole, 'reviewer');
+    assert.equal(preview.resultExpectation.expectedResultBlock.requestedEvent.eventType, 'reviewer.needs-revision');
+  });
+
+  it('blocks backend preview when active goal and active task are missing', () => {
+    const preview = buildGoalSupervisorAppReadModel({
+      nowMs: Date.parse(GENERATED_AT)
+    }).childDispatchPreview;
+
+    assert.equal(preview.readiness.state, 'blocked');
+    assert.equal(preview.readiness.canPreview, false);
+    assert.equal(preview.readiness.copyAvailable, false);
+    assert.ok(preview.blockedReasons.includes('active-goal-missing'));
+    assert.ok(preview.blockedReasons.includes('active-task-missing'));
+    assert.equal(preview.taskPack, null);
+    assert.equal(preview.resultExpectation, null);
+    assert.equal(validateChildDispatchPreviewContract(preview).ok, true);
+  });
+
+  it('blocks backend preview for unsupported provider policy', () => {
+    const preview = buildProjectionReadModel({
+      childDispatchProviderPolicy: {
+        preferredProvider: 'gemini-cli'
+      }
+    }).childDispatchPreview;
+
+    assert.equal(preview.readiness.state, 'blocked');
+    assert.equal(preview.readiness.canPreview, false);
+    assert.ok(preview.blockedReasons.includes('unsupported-provider'));
+    assert.equal(preview.providerRecommendation.providerId, 'codex');
+    assert.equal(preview.taskPack, null);
+    assert.equal(preview.resultExpectation, null);
+    assert.equal(validateChildDispatchPreviewContract(preview).ok, true);
+  });
+
+  it('preserves safe backend source contracts and refs in the projected preview', () => {
+    const preview = buildProjectionReadModel().childDispatchPreview;
+    const sourceNames = preview.sourceContracts.map((source) => source.contractName);
+    const serialized = JSON.stringify(preview);
+
+    for (const name of [
+      'goal-supervisor-app-read-model.v1',
+      'goal-next-action.v1',
+      'goal-supervisor-core-projection.v1',
+      'systemGoldenPath.v1',
+      'resultIntakeRequest.v1'
+    ]) {
+      assert.ok(sourceNames.includes(name), name);
+    }
+
+    assert.ok(preview.sourceRefs.some((sourceRef) => (
+      sourceRef.kind === 'route' &&
+      sourceRef.ref === '/api/goals/<goal-id>/supervisor'
+    )));
+    assert.ok(preview.sourceRefs.some((sourceRef) => (
+      sourceRef.kind === 'contract' &&
+      sourceRef.ref === 'systemGoldenPath.v1'
+    )));
+    assert.doesNotMatch(serialized, /\.jsonl|\.symphony|\/api\/providers|\/api\/child-dispatch/iu);
+    assert.doesNotMatch(serialized, /"rawTranscript"\s*:/u);
+    assert.doesNotMatch(serialized, /"rawModelOutput"\s*:/u);
+    assert.equal(validateChildDispatchPreviewContract(preview).ok, true);
+  });
 });
 
 function fixture(name) {
@@ -327,6 +443,199 @@ function activeTask() {
       kind: 'fixture',
       ref: 'fixtures/contracts/system-golden-path.ready.v1.json'
     }
+  };
+}
+
+function buildProjectionReadModel({
+  role = 'worker',
+  childDispatchProviderPolicy = null
+} = {}) {
+  const goalId = 'v53-controlled-child-dispatch-preview';
+  const taskId = 'pr-2-backend-projection';
+
+  return buildGoalSupervisorAppReadModel({
+    goalId,
+    title: 'v53 Controlled Child Dispatch Preview',
+    tasks: [
+      {
+        taskId,
+        title: 'Backend preview projection',
+        status: 'active'
+      }
+    ],
+    sourceContracts: [
+      'goal-next-action.v1',
+      'goal-supervisor-core-projection.v1'
+    ],
+    goalNext: goalNext({ goalId, taskId, role }),
+    coreProjection: coreProjection({ goalId, taskId, role }),
+    currentProjectBinding: currentProjectBinding(),
+    appStateSnapshot: appStateSnapshot({ goalId, taskId }),
+    contextAdvisory: contextAdvisory(),
+    threadContinuationDecision: threadContinuationDecision({ taskId, role }),
+    childDispatchProviderPolicy,
+    nowMs: Date.parse(GENERATED_AT)
+  });
+}
+
+function goalNext({ goalId, taskId, role }) {
+  return {
+    contractName: 'goal-next-action.v1',
+    contractVersion: 1,
+    goalId,
+    status: 'action-required',
+    next: {
+      taskId,
+      role,
+      phase: role === 'reviewer' ? 'review' : 'implement'
+    },
+    reason: `${taskId} ${role} is next`
+  };
+}
+
+function coreProjection({ goalId, taskId, role }) {
+  const result = workerResult({ goalId, taskId, role });
+
+  return {
+    contractName: 'goal-supervisor-core-projection.v1',
+    contractVersion: 1,
+    goalId,
+    current: {
+      taskId,
+      role,
+      threadId: `thread-${taskId}-${role}`
+    },
+    route: {
+      state: 'dispatchable',
+      reason: 'next-action-ready',
+      current: {
+        taskId,
+        role,
+        threadId: `thread-${taskId}-${role}`
+      },
+      pendingResult: {
+        source: 'recorded-result-state',
+        result
+      }
+    },
+    progress: {},
+    routeInput: {
+      resultIntake: {
+        source: 'thread-result',
+        status: 'pending',
+        record: result,
+        reason: 'valid-result-awaits-registration'
+      }
+    }
+  };
+}
+
+function workerResult({ goalId, taskId, role }) {
+  return {
+    goalId,
+    taskId,
+    role,
+    threadId: `thread-${taskId}-${role}`,
+    eventToRegister: 'worker.evidence-recorded',
+    evidenceRef: `docs/plans/v53-${taskId}-${role}-evidence-2026-06-12.md`,
+    branch: 'codex/v53-child-dispatch-preview-backend-projection',
+    headCommit: 'abcdef1234567890'
+  };
+}
+
+function currentProjectBinding() {
+  return {
+    contractName: 'current-project-binding.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    state: 'bound',
+    selectedProjectId: 'multi-coding-agent-symphony',
+    selectedProjectName: 'Multi Coding Agent Symphony',
+    readOnly: true
+  };
+}
+
+function appStateSnapshot({ goalId, taskId }) {
+  return {
+    contractName: 'app-state-snapshot.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    readOnly: true,
+    freshness: {
+      status: 'current'
+    },
+    active_goal: {
+      goal_id: goalId,
+      goal_title: 'v53 Controlled Child Dispatch Preview'
+    },
+    current_task: {
+      task_id: taskId,
+      title: 'Backend preview projection',
+      blocked: false
+    },
+    next_action: {
+      status: 'action-required',
+      next: {
+        taskId,
+        blocked: false
+      }
+    },
+    known_blockers: []
+  };
+}
+
+function contextAdvisory() {
+  return {
+    contractName: 'contextAdvisory.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    readOnly: true,
+    willMutate: false,
+    transcriptAvailability: 'readable',
+    staleTranscriptState: {
+      stale: false,
+      reason: null
+    },
+    missingTranscriptState: {
+      missing: false,
+      reason: null
+    },
+    resultBlockEvidence: {
+      status: 'present',
+      present: true,
+      evidenceRef: 'docs/plans/v53-pr-2-backend-projection-worker-evidence-2026-06-12.md'
+    },
+    contextUtilization: {
+      status: 'available',
+      ratio: 0.2
+    },
+    degradedReasons: [],
+    blockedFields: []
+  };
+}
+
+function threadContinuationDecision({ taskId, role }) {
+  return {
+    contractName: 'threadContinuationDecision.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    readOnly: true,
+    willMutate: false,
+    decision: 'checkpoint',
+    reason: 'result-awaits-registration',
+    taskId,
+    threadId: `thread-${taskId}-${role}`,
+    checkpointRef: `docs/plans/v53-${taskId}-${role}-evidence-2026-06-12.md`,
+    blockedFields: [],
+    requiredEvidence: ['pending-result-registration'],
+    sourceContracts: [
+      {
+        contractName: 'contextAdvisory.v1',
+        contractVersion: 1,
+        generatedAt: GENERATED_AT,
+        readOnly: true
+      }
+    ]
   };
 }
 

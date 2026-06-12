@@ -10,13 +10,29 @@ import {
 } from '../project-registry.js';
 import {
   GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
-  GOAL_CLOSEOUT_REPORT_CONTRACT_VERSION
+  GOAL_CLOSEOUT_REPORT_CONTRACT_VERSION,
+  GOAL_NEXT_ACTION_CONTRACT_NAME,
+  GOAL_NEXT_ACTION_CONTRACT_VERSION
 } from '../goal-runbook-contracts.js';
 import {
+  SYSTEM_GOLDEN_PATH_CONTRACT_NAME,
+  SYSTEM_GOLDEN_PATH_CONTRACT_VERSION,
   buildSystemGoldenPathContract,
   buildSystemGoldenPathManualCliAction,
   buildSystemGoldenPathRefreshAction
 } from '../system-golden-path-contracts.js';
+import {
+  RESULT_INTAKE_CONTRACT_VERSION,
+  RESULT_INTAKE_REQUEST_CONTRACT_NAME
+} from '../result-intake-contracts.js';
+import {
+  CHILD_DISPATCH_ALLOWED_PROVIDER_IDS,
+  CHILD_DISPATCH_ALLOWED_ROLES,
+  CHILD_DISPATCH_RETURN_PATH,
+  buildChildDispatchPreviewContract,
+  buildChildTaskPack,
+  validateChildDispatchPreviewContract
+} from '../child-dispatch-preview-contracts.js';
 import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
@@ -89,6 +105,7 @@ export function buildGoalSupervisorAppReadModel({
   recentProjects = null,
   currentProjectBinding = null,
   appStateSnapshot = null,
+  childDispatchProviderPolicy = null,
   goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
@@ -199,6 +216,18 @@ export function buildGoalSupervisorAppReadModel({
     currentGate: normalizedGate,
     goalCloseout
   });
+  const childDispatchPreview = buildGoalSupervisorChildDispatchPreview({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    tasks,
+    sourceContracts,
+    goalNext,
+    projection,
+    recommendedNextAction: normalizedNextAction,
+    systemGoldenPath,
+    providerPolicy: childDispatchProviderPolicy
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -234,8 +263,560 @@ export function buildGoalSupervisorAppReadModel({
     contextAdvisory: normalizedContextAdvisory,
     threadContinuationDecision: normalizedThreadContinuationDecision,
     supervisorEventRegistrationEligibility: normalizedEventRegistrationEligibility,
-    systemGoldenPath
+    systemGoldenPath,
+    childDispatchPreview
   };
+}
+
+function buildGoalSupervisorChildDispatchPreview({
+  generatedAt,
+  goalId,
+  title,
+  tasks,
+  sourceContracts,
+  goalNext,
+  projection,
+  recommendedNextAction,
+  systemGoldenPath,
+  providerPolicy
+}) {
+  const role = childDispatchRoleFrom({
+    providerPolicy,
+    recommendedNextAction,
+    goalNext,
+    projection
+  });
+  const task = childDispatchTaskFrom({
+    tasks,
+    recommendedNextAction,
+    goalNext,
+    projection,
+    systemGoldenPath
+  });
+  const goal = childDispatchGoalFrom({
+    goalId,
+    title,
+    systemGoldenPath,
+    projection
+  });
+  const provider = childDispatchProviderFor({
+    role,
+    providerPolicy
+  });
+  const previewSourceContracts = childDispatchSourceContracts({
+    sourceContracts,
+    goalNext,
+    projection,
+    systemGoldenPath
+  });
+  const previewSourceRefs = childDispatchSourceRefs({ sourceContracts: previewSourceContracts });
+  const blockedReasons = childDispatchBlockedReasons({
+    role,
+    provider,
+    systemGoldenPath
+  });
+  const taskPack = blockedReasons.length === 0
+    ? buildChildDispatchTaskPack({
+        goal,
+        task,
+        role,
+        providerId: provider.preferredProvider,
+        sourceContracts: previewSourceContracts,
+        systemGoldenPath,
+        recommendedNextAction
+      })
+    : null;
+  const preview = buildChildDispatchPreviewContract({
+    generatedAt,
+    goal,
+    task,
+    requestedRole: role,
+    preferredProvider: provider.preferredProvider,
+    sourceContracts: previewSourceContracts,
+    sourceRefs: previewSourceRefs,
+    taskPack,
+    blockedReasons
+  });
+  const validation = validateChildDispatchPreviewContract(preview);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid child dispatch preview projection: ${validation.errors.join('; ')}`);
+  }
+
+  return preview;
+}
+
+function childDispatchGoalFrom({
+  goalId,
+  title,
+  systemGoldenPath,
+  projection
+}) {
+  const normalizedGoalId = firstNonEmptyString(
+    goalId,
+    systemGoldenPath?.goal?.goalId,
+    projection?.goalId
+  );
+  const safeGoalId = safeChildDispatchToken(normalizedGoalId);
+
+  return {
+    goalId: safeGoalId,
+    title: safeGoalId === null ? null : safeChildDispatchText(firstNonEmptyString(title, systemGoldenPath?.goal?.title)),
+    state: safeGoalId === null ? 'missing' : childDispatchGoalStateFrom({ systemGoldenPath, projection }),
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: supervisorRouteSourceRef()
+  };
+}
+
+function childDispatchGoalStateFrom({
+  systemGoldenPath,
+  projection
+}) {
+  if (['blocked', 'missing'].includes(systemGoldenPath?.goal?.state)) {
+    return systemGoldenPath.goal.state;
+  }
+
+  if (projection?.route?.state === 'complete') {
+    return 'ready';
+  }
+
+  if (projection?.route?.state === 'blocked') {
+    return 'blocked';
+  }
+
+  return 'active';
+}
+
+function childDispatchTaskFrom({
+  tasks,
+  recommendedNextAction,
+  goalNext,
+  projection,
+  systemGoldenPath
+}) {
+  const normalizedTasks = Array.isArray(tasks) ? tasks.filter(isPlainObject) : [];
+  const taskId = firstNonEmptyString(
+    recommendedNextAction?.taskId,
+    goalNext?.next?.taskId,
+    projection?.current?.taskId,
+    projection?.route?.current?.taskId,
+    systemGoldenPath?.goal?.taskId
+  );
+  const safeTaskId = safeChildDispatchToken(taskId);
+  const matchedTask = taskId === null
+    ? null
+    : normalizedTasks.find((task) => task.taskId === taskId);
+
+  return {
+    taskId: safeTaskId,
+    title: safeTaskId === null
+      ? null
+      : safeChildDispatchText(firstNonEmptyString(
+          matchedTask?.title,
+          systemGoldenPath?.goal?.taskLabel,
+          safeTaskId
+        )),
+    state: childDispatchTaskStateFrom({
+      taskId: safeTaskId,
+      matchedTask,
+      systemGoldenPath,
+      projection
+    }),
+    sourceContract: SYSTEM_GOLDEN_PATH_CONTRACT_NAME,
+    sourceRef: sourceRefForContractName(SYSTEM_GOLDEN_PATH_CONTRACT_NAME)
+  };
+}
+
+function childDispatchTaskStateFrom({
+  taskId,
+  matchedTask,
+  systemGoldenPath,
+  projection
+}) {
+  if (taskId === null) {
+    return 'missing';
+  }
+
+  if (matchedTask?.status === 'blocked' || projection?.route?.state === 'blocked') {
+    return 'blocked';
+  }
+
+  if (isCompletedTaskStatus(matchedTask ?? {})) {
+    return 'ready';
+  }
+
+  if (systemGoldenPath?.goal?.state === 'pending') {
+    return 'pending';
+  }
+
+  return 'active';
+}
+
+function childDispatchRoleFrom({
+  providerPolicy,
+  recommendedNextAction,
+  goalNext,
+  projection
+}) {
+  const requestedRole = firstNonEmptyString(
+    providerPolicy?.requestedRole,
+    providerPolicy?.role,
+    recommendedNextAction?.targetRole,
+    goalNext?.next?.role,
+    projection?.current?.role,
+    projection?.route?.current?.role
+  );
+
+  if (requestedRole === 'main-verifier') {
+    return 'verifier';
+  }
+
+  return requestedRole ?? 'worker';
+}
+
+function childDispatchProviderFor({
+  role,
+  providerPolicy
+}) {
+  const providerByRole = isPlainObject(providerPolicy?.providerByRole)
+    ? providerPolicy.providerByRole
+    : {};
+  const preferredProvider = firstNonEmptyString(
+    providerPolicy?.preferredProvider,
+    providerPolicy?.providerId,
+    providerPolicy?.requestedProvider,
+    providerByRole[role],
+    role === 'reviewer' ? 'claude-code' : 'codex'
+  );
+  const allowedProviders = Array.isArray(providerPolicy?.allowedProviders)
+    ? uniqueStrings(providerPolicy.allowedProviders)
+    : [...CHILD_DISPATCH_ALLOWED_PROVIDER_IDS];
+
+  return {
+    preferredProvider,
+    allowedProviders
+  };
+}
+
+function childDispatchBlockedReasons({
+  role,
+  provider,
+  systemGoldenPath
+}) {
+  return uniqueStrings([
+    ...(!CHILD_DISPATCH_ALLOWED_ROLES.includes(role) ? ['unsupported-child-role'] : []),
+    ...(!CHILD_DISPATCH_ALLOWED_PROVIDER_IDS.includes(provider.preferredProvider) ||
+        !provider.allowedProviders.includes(provider.preferredProvider)
+      ? ['unsupported-provider']
+      : []),
+    ...systemGoldenPathBlockedReasons(systemGoldenPath)
+  ]);
+}
+
+function systemGoldenPathBlockedReasons(systemGoldenPath) {
+  if (!isPlainObject(systemGoldenPath) ||
+      systemGoldenPath.contractName !== SYSTEM_GOLDEN_PATH_CONTRACT_NAME) {
+    return ['system-golden-path-missing'];
+  }
+
+  if (!['blocked', 'missing', 'stale', 'degraded'].includes(systemGoldenPath.overallState)) {
+    return [];
+  }
+
+  return uniqueStrings([
+    `system-golden-path-${systemGoldenPath.overallState}`,
+    ...(Array.isArray(systemGoldenPath.blockedReasons) ? systemGoldenPath.blockedReasons : [])
+  ]);
+}
+
+function buildChildDispatchTaskPack({
+  goal,
+  task,
+  role,
+  providerId,
+  sourceContracts,
+  systemGoldenPath,
+  recommendedNextAction
+}) {
+  if (!nonEmptyString(goal.goalId) || !nonEmptyString(task.taskId)) {
+    return null;
+  }
+
+  return buildChildTaskPack({
+    goalId: goal.goalId,
+    taskId: task.taskId,
+    role,
+    preferredProvider: providerId,
+    sourceContracts,
+    projectContextRefs: childDispatchProjectContextRefs({ systemGoldenPath }),
+    taskPrompt: childDispatchTaskPrompt({
+      goal,
+      task,
+      role,
+      providerId,
+      recommendedNextAction
+    }),
+    acceptanceCriteria: [
+      'Return a sanitized result block through v51-result-intake.',
+      'Include evidence refs for changed files and validation commands.',
+      'Report blockers without updating goal state.'
+    ],
+    forbiddenActions: [
+      'Provider execution stays unavailable.',
+      'Actual child dispatch stays unavailable.',
+      'Child result cannot update goal state directly.',
+      'Reviewer, main, and release gates stay manual.'
+    ]
+  });
+}
+
+function childDispatchTaskPrompt({
+  goal,
+  task,
+  role,
+  providerId,
+  recommendedNextAction
+}) {
+  return [
+    `Goal ${goal.goalId}: ${goal.title ?? 'untitled'}.`,
+    `Task ${task.taskId}: ${task.title ?? task.taskId}.`,
+    `Role ${role}; preferred provider ${providerId}.`,
+    `Supervisor next action ${recommendedNextAction?.actionId ?? 'unknown'}: ${safeChildDispatchText(recommendedNextAction?.reason) ?? 'no reason supplied'}.`,
+    `Return only a sanitized ${RESULT_INTAKE_REQUEST_CONTRACT_NAME} block through ${CHILD_DISPATCH_RETURN_PATH}.`
+  ].join(' ');
+}
+
+function childDispatchProjectContextRefs({ systemGoldenPath }) {
+  return uniqueStrings([
+    'docs/plans/v53-controlled-child-dispatch-preview-runbook-2026-06-12.md',
+    GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    GOAL_NEXT_ACTION_CONTRACT_NAME,
+    SYSTEM_GOLDEN_PATH_CONTRACT_NAME,
+    RESULT_INTAKE_REQUEST_CONTRACT_NAME,
+    safeChildDispatchSourceRefValue(systemGoldenPath?.routeProvenance?.refreshRouteTemplate)
+  ]);
+}
+
+function childDispatchSourceContracts({
+  sourceContracts,
+  goalNext,
+  projection,
+  systemGoldenPath
+}) {
+  const records = new Map();
+
+  addChildDispatchSourceContract(records, {
+    contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    requiredFor: ['active-goal', 'active-task', 'preview-readiness'],
+    sourceRef: supervisorRouteSourceRef()
+  });
+  addChildDispatchSourceContract(records, {
+    contractName: GOAL_NEXT_ACTION_CONTRACT_NAME,
+    contractVersion: GOAL_NEXT_ACTION_CONTRACT_VERSION,
+    requiredFor: ['next-action'],
+    sourceRef: sourceRefForContractName(GOAL_NEXT_ACTION_CONTRACT_NAME),
+    contractObject: goalNext
+  });
+  addChildDispatchSourceContract(records, {
+    contractName: projection?.contractName,
+    contractVersion: projection?.contractVersion,
+    requiredFor: ['supervisor-state'],
+    sourceRef: sourceRefForContractName(projection?.contractName),
+    contractObject: projection
+  });
+  addChildDispatchSourceContract(records, {
+    contractName: SYSTEM_GOLDEN_PATH_CONTRACT_NAME,
+    contractVersion: SYSTEM_GOLDEN_PATH_CONTRACT_VERSION,
+    requiredFor: ['preview-readiness', 'task-pack'],
+    sourceRef: sourceRefForContractName(SYSTEM_GOLDEN_PATH_CONTRACT_NAME),
+    contractObject: systemGoldenPath
+  });
+  addChildDispatchSourceContract(records, {
+    contractName: RESULT_INTAKE_REQUEST_CONTRACT_NAME,
+    contractVersion: RESULT_INTAKE_CONTRACT_VERSION,
+    requiredFor: ['result-expectation'],
+    sourceRef: sourceRefForContractName(RESULT_INTAKE_REQUEST_CONTRACT_NAME)
+  });
+
+  for (const contract of normalizeContractRefs(sourceContracts)) {
+    addChildDispatchSourceContract(records, {
+      contractName: contract.contractName,
+      contractVersion: contract.contractVersion,
+      requiredFor: ['source-context'],
+      sourceRef: sourceRefForContractName(contract.contractName),
+      contractObject: contract
+    });
+  }
+
+  return [...records.values()].map((record) => stripEmptyObject({
+    contractName: record.contractName,
+    contractVersion: record.contractVersion,
+    readOnly: true,
+    requiredFor: record.requiredFor,
+    sourceRef: record.sourceRef
+  }));
+}
+
+function addChildDispatchSourceContract(records, {
+  contractName,
+  contractVersion,
+  requiredFor,
+  sourceRef,
+  contractObject
+}) {
+  const safeName = safeContractName(contractName);
+
+  if (safeName === null) {
+    return;
+  }
+
+  const existing = records.get(safeName) ?? {
+    contractName: safeName,
+    contractVersion: knownContractVersion(safeName),
+    requiredFor: [],
+    sourceRef: null
+  };
+  const version = Number.isInteger(contractVersion)
+    ? contractVersion
+    : Number.isInteger(contractObject?.contractVersion)
+      ? contractObject.contractVersion
+      : knownContractVersion(safeName);
+
+  existing.contractVersion = Number.isInteger(existing.contractVersion)
+    ? existing.contractVersion
+    : version;
+  existing.requiredFor = uniqueStrings([
+    ...existing.requiredFor,
+    ...(Array.isArray(requiredFor) ? requiredFor : [])
+  ]);
+  existing.sourceRef = preferredSourceRef(
+    existing.sourceRef,
+    safeChildDispatchSourceRef(sourceRef) ?? sourceRefForContractName(safeName)
+  );
+
+  records.set(safeName, existing);
+}
+
+function childDispatchSourceRefs({ sourceContracts }) {
+  const refs = [];
+
+  for (const sourceContract of sourceContracts) {
+    const sourceRef = safeChildDispatchSourceRef(sourceContract.sourceRef);
+
+    if (sourceRef !== null) {
+      refs.push({
+        ...sourceRef,
+        label: sourceContract.contractName
+      });
+    }
+  }
+
+  return uniqueSourceRefs(refs);
+}
+
+function safeChildDispatchSourceRef(sourceRef) {
+  if (!isPlainObject(sourceRef) ||
+      !['contract', 'route', 'fixture', 'docs'].includes(sourceRef.kind)) {
+    return null;
+  }
+
+  const ref = safeChildDispatchSourceRefValue(sourceRef.ref);
+
+  if (ref === null) {
+    return null;
+  }
+
+  return {
+    kind: sourceRef.kind,
+    ref
+  };
+}
+
+function safeChildDispatchSourceRefValue(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const candidate = value.trim();
+  const ref = candidate === '/api/goals/<goal-id>/supervisor'
+    ? candidate
+    : safeDisplayRef(candidate);
+
+  if (ref === null ||
+      /\/(?:event-plan-confirm|event-append|append-event|mark-complete|complete-task|git|tag|publish|release)(?:$|[/\s])/iu.test(ref) ||
+      /\/api\/(?:providers?|child(?:-dispatch)?|dispatch)(?:$|[/\s])/iu.test(ref) ||
+      /\b(?:git\s+(?:push|tag|checkout|merge|commit)|gh\s+release)\b/iu.test(ref)) {
+    return null;
+  }
+
+  return ref;
+}
+
+function safeChildDispatchToken(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const token = value.trim();
+
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/u.test(token) ||
+      childDispatchForbiddenText(token) ||
+      safeChildDispatchSourceRefValue(token) === null) {
+    return null;
+  }
+
+  return token;
+}
+
+function safeChildDispatchText(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const text = value.trim();
+
+  if (childDispatchForbiddenText(text) ||
+      /\b(?:raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file|model[\s_-]*output)\b|(?:^|[/.])(?:\.codex|\.claude|\.git|\.symphony)(?:[/]|$)|\.jsonl(?:$|[/\s])|\/api\/(?:providers?|child(?:-dispatch)?|dispatch)(?:$|[/\s])/iu.test(text)) {
+    return null;
+  }
+
+  return text;
+}
+
+function childDispatchForbiddenText(value) {
+  return [
+    'dispatch child',
+    'run child',
+    'launch codex',
+    'launch claude code',
+    'execute',
+    'run provider',
+    'confirm child result',
+    'append event',
+    'mark complete',
+    'push',
+    'tag',
+    'publish',
+    'release'
+  ].includes(value.trim().toLowerCase());
+}
+
+function uniqueSourceRefs(refs) {
+  const seen = new Set();
+  const result = [];
+
+  for (const ref of refs) {
+    const key = `${ref.kind}:${ref.ref}:${ref.label ?? ''}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push(ref);
+  }
+
+  return result;
 }
 
 export function buildGoalSupervisorSystemGoldenPath({

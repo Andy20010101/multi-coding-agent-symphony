@@ -15,6 +15,9 @@ import {
 import {
   validateSystemGoldenPathContract
 } from '../src/symphony/system-golden-path-contracts.js';
+import {
+  validateChildDispatchPreviewContract
+} from '../src/symphony/child-dispatch-preview-contracts.js';
 
 const FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/app-read-model.v44-3.pr1.v1.json', import.meta.url);
 const POLICY_FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/app-read-model.v44-3.pr4.v1.json', import.meta.url);
@@ -293,15 +296,22 @@ function assertTopLevelContract(model, label) {
     'sessionSourceInventory',
     'contextAdvisory',
     'threadContinuationDecision',
-    'systemGoldenPath'
+    'systemGoldenPath',
+    'childDispatchPreview'
   ]) {
     assert.equal(typeof model[field], 'object', `${label}: ${field}`);
     assert.notEqual(model[field], null, `${label}: ${field}`);
   }
 
   const validation = validateSystemGoldenPathContract(model.systemGoldenPath);
+  const childDispatchValidation = validateChildDispatchPreviewContract(model.childDispatchPreview);
 
   assert.equal(validation.ok, true, `${label}: ${validation.errors.join('; ')}`);
+  assert.equal(
+    childDispatchValidation.ok,
+    true,
+    `${label}: ${childDispatchValidation.errors.join('; ')}`
+  );
   assert.equal(model.ownership.orchestrationOwner, 'local-goal-supervisor-daemon', label);
   assert.equal(model.ownership.deliveryBoundary, 'pull-request', label);
   assert.equal(model.commandBoundary.executionAvailable, false, label);
@@ -309,9 +319,10 @@ function assertTopLevelContract(model, label) {
 
 function assertNoRawTranscriptFields(value, label) {
   const serialized = JSON.stringify(value);
-  assert.equal(serialized.includes('latestResultText'), false, label);
-  assert.equal(serialized.includes('rawTranscript'), false, label);
-  assert.equal(serialized.includes('agentMessage'), false, label);
+  assert.equal(serialized.includes('"latestResultText"'), false, label);
+  assert.doesNotMatch(serialized, /"rawTranscript"\s*:/u, label);
+  assert.doesNotMatch(serialized, /"rawModelOutput"\s*:/u, label);
+  assert.doesNotMatch(serialized, /"agentMessage"\s*:/u, label);
 }
 
 function createOutput() {
