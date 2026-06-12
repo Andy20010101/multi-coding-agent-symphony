@@ -3,6 +3,18 @@ import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
+import {
+  CONTEXT_ADVISORY_CONTRACT_NAME,
+  CONTEXT_ADVISORY_CONTRACT_VERSION,
+  SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+  SESSION_SOURCE_INVENTORY_CONTRACT_VERSION,
+  buildContextAdvisory
+} from './session-context.js';
+import {
+  THREAD_CONTINUATION_DECISION_CONTRACT_NAME,
+  THREAD_CONTINUATION_DECISION_CONTRACT_VERSION,
+  buildThreadContinuationDecision
+} from './thread-continuation-decision.js';
 
 export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME = 'goal-supervisor-app-read-model.v1';
 export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_VERSION = 1;
@@ -31,6 +43,9 @@ export function buildGoalSupervisorAppReadModel({
   currentGate = null,
   commandBoundary = null,
   recommendedNextAction = null,
+  sessionSourceInventory = null,
+  contextAdvisory = null,
+  threadContinuationDecision = null,
   activePr = null,
   branch = null
 } = {}) {
@@ -65,6 +80,46 @@ export function buildGoalSupervisorAppReadModel({
     route: projection.route,
     goalNext
   });
+  const normalizedNextAction = recommendedNextAction ?? chooseGoalSupervisorPolicyDecision({
+    projection,
+    pendingResult: normalizedPendingResult,
+    activeLease: normalizedActiveLease,
+    currentGate: normalizedGate,
+    contextStatus: normalizedContext,
+    commandBoundary: normalizedCommandBoundary
+  });
+  const normalizedSessionSourceInventory = normalizeSessionSourceInventory(
+    sessionSourceInventory,
+    generatedAt
+  );
+  const normalizedContextAdvisory = normalizeContextAdvisoryDisplay(
+    contextAdvisory ?? buildContextAdvisory({
+      sessionContext,
+      sessionSourceInventory: normalizedSessionSourceInventory,
+      generatedAt
+    }),
+    generatedAt
+  );
+  const normalizedThreadContinuationDecision = normalizeThreadContinuationDecisionDisplay(
+    threadContinuationDecision ?? buildThreadContinuationDecision({
+      contextAdvisory: normalizedContextAdvisory,
+      activeLease: normalizedActiveLease,
+      pendingResult: normalizedPendingResult,
+      currentPhase: projection.current ?? projection.route?.current ?? null,
+      taskState: projection.current ?? projection.route?.current ?? null,
+      supervisorProjection: projection,
+      supervisorPolicy: normalizedNextAction,
+      currentGate: normalizedGate,
+      commandBoundary: normalizedCommandBoundary,
+      sourceContracts: [
+        ...safeSourceContracts(sourceContracts),
+        normalizedSessionSourceInventory,
+        normalizedContextAdvisory
+      ],
+      generatedAt
+    }),
+    generatedAt
+  );
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -88,21 +143,17 @@ export function buildGoalSupervisorAppReadModel({
     activeLease: normalizedActiveLease,
     pendingResult: normalizedPendingResult,
     currentGate: normalizedGate,
-    recommendedNextAction: recommendedNextAction ?? chooseGoalSupervisorPolicyDecision({
-      projection,
-      pendingResult: normalizedPendingResult,
-      activeLease: normalizedActiveLease,
-      currentGate: normalizedGate,
-      contextStatus: normalizedContext,
-      commandBoundary: normalizedCommandBoundary
-    }),
+    recommendedNextAction: normalizedNextAction,
     ownership: normalizeOwnership({
       ownership,
       activePr,
       branch
     }),
     contextStatus: normalizedContext,
-    commandBoundary: normalizedCommandBoundary
+    commandBoundary: normalizedCommandBoundary,
+    sessionSourceInventory: normalizedSessionSourceInventory,
+    contextAdvisory: normalizedContextAdvisory,
+    threadContinuationDecision: normalizedThreadContinuationDecision
   };
 }
 
@@ -340,6 +391,376 @@ function normalizeContextStatus(sessionContext, projection) {
       : { status: 'missing', present: false },
     driftMarkers: Array.isArray(context.driftMarkers) ? context.driftMarkers.filter(nonEmptyString) : []
   };
+}
+
+function normalizeSessionSourceInventory(inventory, generatedAt) {
+  const sourceInventory = isPlainObject(inventory) ? inventory : {};
+  const providers = Array.isArray(sourceInventory.providers)
+    ? sourceInventory.providers.filter(isPlainObject).map(normalizeInventoryProvider)
+    : [];
+  const summary = isPlainObject(sourceInventory.summary) ? sourceInventory.summary : {};
+  const failedCount = integerOrNull(summary.failedProviderCount);
+  const degradedCount = integerOrNull(summary.degradedProviderCount);
+  const availableCount = integerOrNull(summary.availableProviderCount);
+  const missingCount = integerOrNull(summary.missingProviderCount);
+
+  return {
+    contractName: nonEmptyString(sourceInventory.contractName)
+      ? sourceInventory.contractName
+      : SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+    contractVersion: Number.isInteger(sourceInventory.contractVersion)
+      ? sourceInventory.contractVersion
+      : SESSION_SOURCE_INVENTORY_CONTRACT_VERSION,
+    generatedAt: firstNonEmptyString(sourceInventory.generatedAt, generatedAt),
+    readOnly: sourceInventory.readOnly === true || sourceInventory.contractName === undefined,
+    willMutate: false,
+    state: firstNonEmptyString(
+      summary.state,
+      providers.length === 0 ? 'missing' : null
+    ),
+    scanScope: firstNonEmptyString(sourceInventory.scanScope, 'bounded-provider-session-roots'),
+    maxFilesPerProvider: integerOrNull(sourceInventory.maxFilesPerProvider),
+    summary: {
+      providerCount: integerOrNull(summary.providerCount) ?? providers.length,
+      availableProviderCount: availableCount ?? countProvidersByState(providers, ['available']),
+      missingProviderCount: missingCount ?? countProvidersByState(providers, ['missing']),
+      degradedProviderCount: degradedCount ?? countProvidersByState(providers, ['degraded', 'stale', 'unreadable']),
+      failedProviderCount: failedCount ?? countProvidersByState(providers, ['failed']),
+      state: firstNonEmptyString(summary.state, providers.length === 0 ? 'missing' : 'unknown')
+    },
+    providers,
+    degradedReasons: uniqueStrings(providers.flatMap((provider) => provider.degradedReasons)),
+    boundaries: normalizeReadOnlyBoundaries(sourceInventory.boundaries)
+  };
+}
+
+function normalizeInventoryProvider(provider) {
+  const sourceSummary = isPlainObject(provider.sourceSummary) ? provider.sourceSummary : {};
+
+  return {
+    provider: firstNonEmptyString(provider.provider, 'unknown'),
+    state: firstNonEmptyString(provider.state, sourceSummary.availability, 'unknown'),
+    readOnly: provider.readOnly === true,
+    willMutate: false,
+    readableFileCount: countOrMissing(provider.readableFileCount, sourceSummary.readableFileCount),
+    candidateFileCount: countOrMissing(provider.candidateFileCount, sourceSummary.candidateFileCount),
+    scannedFileCount: countOrMissing(sourceSummary.scannedFileCount, provider.candidateFileCount),
+    unreadableFileCount: countOrMissing(sourceSummary.unreadableFileCount),
+    latestModifiedAt: firstNonEmptyString(provider.latestModifiedAt, sourceSummary.latestModifiedAt),
+    latestSessionRef: safeDisplayRef(firstNonEmptyString(provider.latestSessionRef, sourceSummary.latestSessionRef)),
+    failureReason: firstNonEmptyString(provider.failureReason, sourceSummary.failureReason),
+    degradedReasons: uniqueStrings(Array.isArray(provider.degradedReasons) ? provider.degradedReasons : []),
+    sourceSummary: {
+      availability: firstNonEmptyString(sourceSummary.availability, provider.state, 'unknown'),
+      readState: firstNonEmptyString(sourceSummary.readState, 'unknown'),
+      candidateFileCount: countOrMissing(sourceSummary.candidateFileCount, provider.candidateFileCount),
+      scannedFileCount: countOrMissing(sourceSummary.scannedFileCount),
+      readableFileCount: countOrMissing(sourceSummary.readableFileCount, provider.readableFileCount),
+      unreadableFileCount: countOrMissing(sourceSummary.unreadableFileCount),
+      latestModifiedAt: firstNonEmptyString(sourceSummary.latestModifiedAt, provider.latestModifiedAt),
+      stale: sourceSummary.stale === true,
+      latestSessionRef: safeDisplayRef(firstNonEmptyString(sourceSummary.latestSessionRef, provider.latestSessionRef)),
+      failureReason: firstNonEmptyString(sourceSummary.failureReason, provider.failureReason)
+    }
+  };
+}
+
+function normalizeContextAdvisoryDisplay(contextAdvisory, generatedAt) {
+  const advisory = isPlainObject(contextAdvisory) ? contextAdvisory : {};
+
+  return {
+    contractName: nonEmptyString(advisory.contractName)
+      ? advisory.contractName
+      : CONTEXT_ADVISORY_CONTRACT_NAME,
+    contractVersion: Number.isInteger(advisory.contractVersion)
+      ? advisory.contractVersion
+      : CONTEXT_ADVISORY_CONTRACT_VERSION,
+    generatedAt: firstNonEmptyString(advisory.generatedAt, generatedAt),
+    readOnly: advisory.readOnly === true || advisory.contractName === undefined,
+    willMutate: false,
+    sessionContextRef: normalizeContractRef(advisory.sessionContextRef),
+    inventoryRef: normalizeContractRef(advisory.inventoryRef),
+    transcriptAvailability: firstNonEmptyString(advisory.transcriptAvailability, 'missing'),
+    exchangeCount: Number.isInteger(advisory.exchangeCount) ? advisory.exchangeCount : 'missing',
+    latestToolCall: normalizeLatestToolCall(advisory.latestToolCall),
+    latestTurnState: normalizeLatestTurnState(advisory.latestTurnState),
+    tokenUsage: normalizeTokenUsage(advisory.tokenUsage),
+    contextUtilization: normalizeContextUtilization(advisory.contextUtilization),
+    contextBand: firstNonEmptyString(advisory.contextBand, 'unknown'),
+    resultBlockEvidence: normalizeResultBlockEvidence(advisory.resultBlockEvidence),
+    staleTranscriptState: normalizeStaleTranscriptState(advisory.staleTranscriptState),
+    missingTranscriptState: normalizeMissingTranscriptState(advisory.missingTranscriptState),
+    degradedReasons: uniqueStrings(Array.isArray(advisory.degradedReasons) ? advisory.degradedReasons : []),
+    blockedFields: uniqueStrings(Array.isArray(advisory.blockedFields) ? advisory.blockedFields : []),
+    policyInputs: normalizePolicyInputs(advisory.policyInputs),
+    boundaries: normalizeReadOnlyBoundaries(advisory.boundaries)
+  };
+}
+
+function normalizeThreadContinuationDecisionDisplay(decision, generatedAt) {
+  const continuation = isPlainObject(decision) ? decision : {};
+
+  return {
+    contractName: nonEmptyString(continuation.contractName)
+      ? continuation.contractName
+      : THREAD_CONTINUATION_DECISION_CONTRACT_NAME,
+    contractVersion: Number.isInteger(continuation.contractVersion)
+      ? continuation.contractVersion
+      : THREAD_CONTINUATION_DECISION_CONTRACT_VERSION,
+    generatedAt: firstNonEmptyString(continuation.generatedAt, generatedAt),
+    readOnly: continuation.readOnly === true || continuation.contractName === undefined,
+    willMutate: false,
+    decision: firstNonEmptyString(continuation.decision, 'unknown'),
+    reason: firstNonEmptyString(continuation.reason),
+    confidence: firstNonEmptyString(continuation.confidence, 'unknown'),
+    targetRole: firstNonEmptyString(continuation.targetRole),
+    taskId: firstNonEmptyString(continuation.taskId),
+    threadId: firstNonEmptyString(continuation.threadId),
+    checkpointRef: safeDisplayRef(continuation.checkpointRef),
+    waitPolicy: isPlainObject(continuation.waitPolicy) ? { ...continuation.waitPolicy } : null,
+    blockedFields: uniqueStrings(Array.isArray(continuation.blockedFields) ? continuation.blockedFields : []),
+    mismatchList: uniqueStrings(Array.isArray(continuation.mismatchList) ? continuation.mismatchList : []),
+    requiredEvidence: uniqueStrings(Array.isArray(continuation.requiredEvidence) ? continuation.requiredEvidence : []),
+    sourceContracts: normalizeContractRefs(continuation.sourceContracts),
+    commandBoundary: normalizeDecisionCommandBoundary(continuation.commandBoundary)
+  };
+}
+
+function normalizePolicyInputs(policyInputs) {
+  const inputs = isPlainObject(policyInputs) ? policyInputs : {};
+
+  return {
+    threadId: firstNonEmptyString(inputs.threadId),
+    sessionSourceSummaries: Array.isArray(inputs.sessionSourceSummaries)
+      ? inputs.sessionSourceSummaries.filter(isPlainObject).map((source) => ({
+          provider: firstNonEmptyString(source.provider),
+          status: firstNonEmptyString(source.status, 'unknown'),
+          threadId: firstNonEmptyString(source.threadId),
+          latestTurnAt: firstNonEmptyString(source.latestTurnAt)
+        }))
+      : [],
+    inventorySourceSummaries: Array.isArray(inputs.inventorySourceSummaries)
+      ? inputs.inventorySourceSummaries.filter(isPlainObject).map((source) => ({
+          provider: firstNonEmptyString(source.provider),
+          state: firstNonEmptyString(source.state, 'unknown'),
+          sourceSummary: isPlainObject(source.sourceSummary)
+            ? {
+                availability: firstNonEmptyString(source.sourceSummary.availability, 'unknown'),
+                readState: firstNonEmptyString(source.sourceSummary.readState, 'unknown'),
+                candidateFileCount: countOrMissing(source.sourceSummary.candidateFileCount),
+                scannedFileCount: countOrMissing(source.sourceSummary.scannedFileCount),
+                readableFileCount: countOrMissing(source.sourceSummary.readableFileCount),
+                unreadableFileCount: countOrMissing(source.sourceSummary.unreadableFileCount),
+                latestModifiedAt: firstNonEmptyString(source.sourceSummary.latestModifiedAt),
+                stale: source.sourceSummary.stale === true,
+                latestSessionRef: safeDisplayRef(source.sourceSummary.latestSessionRef),
+                failureReason: firstNonEmptyString(source.sourceSummary.failureReason)
+              }
+            : null
+        }))
+      : [],
+    transcriptAvailability: firstNonEmptyString(inputs.transcriptAvailability, 'missing'),
+    latestToolCall: normalizeLatestToolCall(inputs.latestToolCall),
+    latestTurnState: normalizeLatestTurnState(inputs.latestTurnState),
+    tokenUsage: normalizeTokenUsage(inputs.tokenUsage),
+    contextUtilization: normalizeContextUtilization(inputs.contextUtilization),
+    resultBlockEvidence: normalizeResultBlockEvidence(inputs.resultBlockEvidence),
+    staleTranscriptState: normalizeStaleTranscriptState(inputs.staleTranscriptState),
+    missingTranscriptState: normalizeMissingTranscriptState(inputs.missingTranscriptState)
+  };
+}
+
+function normalizeDecisionCommandBoundary(commandBoundary) {
+  const boundary = isPlainObject(commandBoundary) ? commandBoundary : {};
+
+  return {
+    state: firstNonEmptyString(boundary.state, 'disabled'),
+    executionAvailable: false,
+    copyOnly: true,
+    readOnly: true,
+    allowedCommandFamilies: uniqueStrings(Array.isArray(boundary.allowedCommandFamilies) ? boundary.allowedCommandFamilies : []),
+    blockedCommandFamilies: uniqueStrings(Array.isArray(boundary.blockedCommandFamilies) ? boundary.blockedCommandFamilies : []),
+    confirmationFields: uniqueStrings(Array.isArray(boundary.confirmationFields) ? boundary.confirmationFields : []),
+    confirmationReady: boundary.confirmationReady === true
+  };
+}
+
+function normalizeReadOnlyBoundaries(boundaries) {
+  const source = isPlainObject(boundaries) ? boundaries : {};
+
+  return {
+    readOnly: source.readOnly === true || boundaries === undefined,
+    willMutate: false,
+    frontendMayScanFolders: false,
+    exposesRawTranscript: false,
+    exposesRawJsonl: false,
+    launchesProvider: false,
+    dispatchesChildren: false,
+    compactsTranscripts: false
+  };
+}
+
+function normalizeContractRefs(sourceContracts) {
+  return (Array.isArray(sourceContracts) ? sourceContracts : [])
+    .map(normalizeContractRef)
+    .filter((contract) => contract !== null);
+}
+
+function normalizeContractRef(contract) {
+  if (typeof contract === 'string') {
+    return {
+      contractName: contract,
+      contractVersion: null,
+      generatedAt: null,
+      readOnly: null,
+      threadId: null
+    };
+  }
+
+  if (!isPlainObject(contract) || !nonEmptyString(contract.contractName)) {
+    return null;
+  }
+
+  return {
+    contractName: contract.contractName,
+    contractVersion: Number.isInteger(contract.contractVersion) ? contract.contractVersion : null,
+    generatedAt: firstNonEmptyString(contract.generatedAt),
+    readOnly: contract.readOnly === true,
+    threadId: firstNonEmptyString(contract.threadId)
+  };
+}
+
+function normalizeLatestToolCall(toolCall) {
+  if (!isPlainObject(toolCall)) {
+    return { name: null, status: 'missing', updatedAt: null };
+  }
+
+  return {
+    name: firstNonEmptyString(toolCall.name),
+    status: firstNonEmptyString(toolCall.status, 'missing'),
+    updatedAt: firstNonEmptyString(toolCall.updatedAt)
+  };
+}
+
+function normalizeLatestTurnState(turnState) {
+  if (!isPlainObject(turnState)) {
+    return { status: 'missing', role: null, updatedAt: null };
+  }
+
+  return {
+    status: firstNonEmptyString(turnState.status, 'missing'),
+    role: firstNonEmptyString(turnState.role),
+    updatedAt: firstNonEmptyString(turnState.updatedAt)
+  };
+}
+
+function normalizeTokenUsage(tokenUsage) {
+  const usage = isPlainObject(tokenUsage) ? tokenUsage : {};
+
+  return {
+    status: firstNonEmptyString(usage.status, 'missing'),
+    inputTokens: numberOrMissing(usage.inputTokens),
+    outputTokens: numberOrMissing(usage.outputTokens),
+    totalTokens: numberOrMissing(usage.totalTokens)
+  };
+}
+
+function normalizeContextUtilization(contextUtilization) {
+  const utilization = isPlainObject(contextUtilization) ? contextUtilization : {};
+
+  return {
+    status: firstNonEmptyString(utilization.status, 'missing'),
+    usedTokens: numberOrMissing(utilization.usedTokens),
+    maxTokens: numberOrMissing(utilization.maxTokens),
+    ratio: Number.isFinite(utilization.ratio) ? utilization.ratio : 'missing'
+  };
+}
+
+function normalizeResultBlockEvidence(resultBlockEvidence) {
+  const evidence = isPlainObject(resultBlockEvidence) ? resultBlockEvidence : {};
+
+  return {
+    status: firstNonEmptyString(evidence.status, 'missing'),
+    present: evidence.present === true,
+    evidenceRef: safeDisplayRef(evidence.evidenceRef),
+    checkpointRef: safeDisplayRef(evidence.checkpointRef)
+  };
+}
+
+function normalizeStaleTranscriptState(staleTranscriptState) {
+  const state = isPlainObject(staleTranscriptState) ? staleTranscriptState : {};
+
+  return {
+    stale: state.stale === true,
+    reason: firstNonEmptyString(state.reason),
+    thresholdMs: Number.isFinite(state.thresholdMs) ? state.thresholdMs : null,
+    ageMs: Number.isFinite(state.ageMs) ? state.ageMs : null
+  };
+}
+
+function normalizeMissingTranscriptState(missingTranscriptState) {
+  const state = isPlainObject(missingTranscriptState) ? missingTranscriptState : {};
+
+  return {
+    missing: state.missing === true,
+    reason: firstNonEmptyString(state.reason)
+  };
+}
+
+function safeSourceContracts(sourceContracts) {
+  return Array.isArray(sourceContracts) ? sourceContracts.filter((contract) => (
+    nonEmptyString(contract) || isPlainObject(contract)
+  )) : [];
+}
+
+function countProvidersByState(providers, states) {
+  return providers.filter((provider) => states.includes(provider.state)).length;
+}
+
+function countOrMissing(...values) {
+  const value = values.find(Number.isInteger);
+
+  return Number.isInteger(value) ? value : 'missing';
+}
+
+function integerOrNull(value) {
+  return Number.isInteger(value) ? value : null;
+}
+
+function numberOrMissing(value) {
+  return Number.isFinite(value) ? value : 'missing';
+}
+
+function safeDisplayRef(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const ref = value.trim();
+  const lower = ref.toLowerCase();
+
+  if (/[\x00-\x1F\x7F]/u.test(ref) ||
+      ref.startsWith('/') ||
+      ref.startsWith('~') ||
+      /^[a-z]:[\\/]/iu.test(ref) ||
+      ref.includes('\\') ||
+      ref === '..' ||
+      ref.startsWith('../') ||
+      ref.includes('/../') ||
+      lower.startsWith('file:') ||
+      lower.startsWith('stdout:') ||
+      lower.includes('prompt') ||
+      lower.includes('secret') ||
+      lower.endsWith('.jsonl') ||
+      lower.includes('.jsonl/')) {
+    return null;
+  }
+
+  return ref;
+}
+
+function uniqueStrings(values) {
+  return [...new Set((Array.isArray(values) ? values : []).filter(nonEmptyString))];
 }
 
 function firstNonEmptyString(...values) {

@@ -19306,6 +19306,9 @@ function projectSupervisorDashboard({ result, supervisor }) {
 		route
 	};
 	const commandBoundary = projectSupervisorCommandBoundary(supervisor.commandBoundary);
+	const sessionSourceInventory = projectSupervisorSessionSourceInventory(supervisor.sessionSourceInventory);
+	const contextAdvisory = projectSupervisorContextAdvisory(supervisor.contextAdvisory);
+	const threadContinuationDecision = projectSupervisorThreadContinuationDecision(supervisor.threadContinuationDecision, commandBoundary);
 	return {
 		state: "available",
 		id: "live-supervisor",
@@ -19327,6 +19330,9 @@ function projectSupervisorDashboard({ result, supervisor }) {
 		currentGate: projectSupervisorCurrentGate(supervisor.currentGate),
 		ownership: projectSupervisorOwnership(supervisor.ownership),
 		commandBoundary,
+		sessionSourceInventory,
+		contextAdvisory,
+		threadContinuationDecision,
 		goalTimeline: projectSupervisorTimeline(supervisor.goalTimeline)
 	};
 }
@@ -19394,6 +19400,117 @@ function projectSupervisorContextStatus(contextStatus) {
 		resultBlockEvidence: supervisorResultBlockEvidenceText(context.resultBlockEvidence),
 		checkpointRef: context.checkpointRef ?? context.resultBlockEvidence?.checkpointRef ?? null,
 		driftMarkers: Array.isArray(context.driftMarkers) && context.driftMarkers.length > 0 ? context.driftMarkers : ["none"]
+	};
+}
+function projectSupervisorSessionSourceInventory(sessionSourceInventory) {
+	const inventory = sessionSourceInventory ?? {};
+	const summary = inventory.summary ?? {};
+	const providers = Array.isArray(inventory.providers) ? inventory.providers : [];
+	return {
+		state: inventory.state ?? summary.state ?? (providers.length === 0 ? "missing" : "unknown"),
+		contractName: inventory.contractName ?? "sessionSourceInventory.v1",
+		contractVersion: inventory.contractVersion ?? null,
+		generatedAt: inventory.generatedAt ?? null,
+		readOnly: inventory.readOnly === true,
+		willMutate: inventory.willMutate === true ? true : false,
+		scanScope: inventory.scanScope ?? "bounded-provider-session-roots",
+		summary: {
+			providerCount: summary.providerCount ?? providers.length,
+			availableProviderCount: summary.availableProviderCount ?? 0,
+			missingProviderCount: summary.missingProviderCount ?? 0,
+			degradedProviderCount: summary.degradedProviderCount ?? 0,
+			failedProviderCount: summary.failedProviderCount ?? 0,
+			state: summary.state ?? inventory.state ?? (providers.length === 0 ? "missing" : "unknown")
+		},
+		providers: providers.map(projectSupervisorInventoryProvider),
+		degradedReasons: Array.isArray(inventory.degradedReasons) ? inventory.degradedReasons : []
+	};
+}
+function projectSupervisorInventoryProvider(provider) {
+	const sourceSummary = provider?.sourceSummary ?? {};
+	return {
+		provider: provider?.provider ?? "unknown",
+		state: provider?.state ?? sourceSummary.availability ?? "unknown",
+		availability: sourceSummary.availability ?? provider?.state ?? "unknown",
+		readState: sourceSummary.readState ?? "unknown",
+		candidateFileCount: sourceSummary.candidateFileCount ?? provider?.candidateFileCount ?? "missing",
+		scannedFileCount: sourceSummary.scannedFileCount ?? provider?.scannedFileCount ?? "missing",
+		readableFileCount: sourceSummary.readableFileCount ?? provider?.readableFileCount ?? "missing",
+		unreadableFileCount: sourceSummary.unreadableFileCount ?? provider?.unreadableFileCount ?? "missing",
+		latestModifiedAt: sourceSummary.latestModifiedAt ?? provider?.latestModifiedAt ?? null,
+		stale: sourceSummary.stale === true,
+		latestSessionRef: sourceSummary.latestSessionRef ?? provider?.latestSessionRef ?? null,
+		failureReason: sourceSummary.failureReason ?? provider?.failureReason ?? null,
+		degradedReasons: Array.isArray(provider?.degradedReasons) ? provider.degradedReasons : []
+	};
+}
+function projectSupervisorContextAdvisory(contextAdvisory) {
+	const advisory = contextAdvisory ?? {};
+	return {
+		state: supervisorContextAdvisoryState(advisory),
+		contractName: advisory.contractName ?? "contextAdvisory.v1",
+		contractVersion: advisory.contractVersion ?? null,
+		generatedAt: advisory.generatedAt ?? null,
+		readOnly: advisory.readOnly === true,
+		willMutate: advisory.willMutate === true ? true : false,
+		sessionContextRef: supervisorContractRefText(advisory.sessionContextRef),
+		inventoryRef: supervisorContractRefText(advisory.inventoryRef),
+		transcriptAvailability: advisory.transcriptAvailability ?? "missing",
+		exchangeCount: advisory.exchangeCount ?? "missing",
+		latestToolCall: supervisorObjectSummaryText(advisory.latestToolCall),
+		latestTurnState: supervisorObjectSummaryText(advisory.latestTurnState),
+		tokenUsage: supervisorTokenUsageText(advisory.tokenUsage),
+		contextUtilization: supervisorContextUtilizationText(advisory.contextUtilization),
+		contextBand: advisory.contextBand ?? "unknown",
+		resultBlockEvidence: supervisorResultBlockEvidenceText(advisory.resultBlockEvidence),
+		staleTranscriptState: supervisorTranscriptFlagText(advisory.staleTranscriptState, "stale"),
+		missingTranscriptState: supervisorTranscriptFlagText(advisory.missingTranscriptState, "missing"),
+		degradedReasons: Array.isArray(advisory.degradedReasons) ? advisory.degradedReasons : [],
+		blockedFields: Array.isArray(advisory.blockedFields) ? advisory.blockedFields : [],
+		policyInputs: {
+			threadId: advisory.policyInputs?.threadId ?? null,
+			transcriptAvailability: advisory.policyInputs?.transcriptAvailability ?? "missing",
+			sessionSourceSummaries: supervisorProviderSummaryTexts(advisory.policyInputs?.sessionSourceSummaries),
+			inventorySourceSummaries: supervisorInventoryPolicySourceTexts(advisory.policyInputs?.inventorySourceSummaries)
+		}
+	};
+}
+function projectSupervisorThreadContinuationDecision(threadContinuationDecision, fallbackCommandBoundary) {
+	const continuation = threadContinuationDecision ?? {};
+	const commandBoundary = projectSupervisorDecisionCommandBoundary(continuation.commandBoundary, fallbackCommandBoundary);
+	return {
+		state: continuation.decision ?? "unknown",
+		contractName: continuation.contractName ?? "threadContinuationDecision.v1",
+		contractVersion: continuation.contractVersion ?? null,
+		generatedAt: continuation.generatedAt ?? null,
+		readOnly: continuation.readOnly === true,
+		willMutate: continuation.willMutate === true ? true : false,
+		decision: continuation.decision ?? "unknown",
+		reason: continuation.reason ?? null,
+		confidence: continuation.confidence ?? "unknown",
+		targetRole: continuation.targetRole ?? null,
+		taskId: continuation.taskId ?? null,
+		threadId: continuation.threadId ?? null,
+		checkpointRef: continuation.checkpointRef ?? null,
+		waitPolicy: supervisorWaitPolicyText(continuation.waitPolicy),
+		blockedFields: Array.isArray(continuation.blockedFields) ? continuation.blockedFields : [],
+		mismatchList: Array.isArray(continuation.mismatchList) ? continuation.mismatchList : [],
+		requiredEvidence: Array.isArray(continuation.requiredEvidence) ? continuation.requiredEvidence : [],
+		sourceContracts: supervisorContractRefTexts(continuation.sourceContracts),
+		commandBoundary
+	};
+}
+function projectSupervisorDecisionCommandBoundary(commandBoundary, fallbackCommandBoundary) {
+	const boundary = commandBoundary ?? {};
+	return {
+		state: boundary.state ?? fallbackCommandBoundary?.state ?? "disabled",
+		executionAvailable: false,
+		copyOnly: true,
+		readOnly: true,
+		confirmationReady: boundary.confirmationReady === true,
+		allowedFamilies: Array.isArray(boundary.allowedCommandFamilies) ? boundary.allowedCommandFamilies : [],
+		blockedFamilies: Array.isArray(boundary.blockedCommandFamilies) ? boundary.blockedCommandFamilies : fallbackCommandBoundary?.blockedFamilies ?? [],
+		confirmationFields: Array.isArray(boundary.confirmationFields) ? boundary.confirmationFields : fallbackCommandBoundary?.confirmationFields ?? []
 	};
 }
 function projectSupervisorPendingResult(pendingResult) {
@@ -19528,6 +19645,44 @@ function supervisorResultBlockEvidenceText(resultBlockEvidence) {
 	if (resultBlockEvidence === null || resultBlockEvidence === void 0) return null;
 	if (typeof resultBlockEvidence !== "object" || Array.isArray(resultBlockEvidence)) return String(resultBlockEvidence);
 	return firstNonEmptyString(resultBlockEvidence.evidenceRef, resultBlockEvidence.sourceRef, resultBlockEvidence.status);
+}
+function supervisorContextAdvisoryState(advisory) {
+	if (advisory?.missingTranscriptState?.missing === true) return "missing";
+	if (advisory?.staleTranscriptState?.stale === true) return "stale";
+	if (Array.isArray(advisory?.blockedFields) && advisory.blockedFields.length > 0) return "blocked";
+	if (Array.isArray(advisory?.degradedReasons) && advisory.degradedReasons.length > 0) return "degraded";
+	if (advisory?.contextBand === "unknown" || advisory?.transcriptAvailability === void 0) return "unknown";
+	return "available";
+}
+function supervisorTranscriptFlagText(state, flag) {
+	if (state === null || state === void 0 || typeof state !== "object" || Array.isArray(state)) return flag === "stale" ? "stale: false" : "missing: false";
+	const active = flag === "stale" ? state.stale === true : state.missing === true;
+	const reason = state.reason ?? null;
+	return reason === null ? `${flag}: ${String(active)}` : `${flag}: ${String(active)} / ${reason}`;
+}
+function supervisorContractRefTexts(sourceContracts) {
+	return (Array.isArray(sourceContracts) ? sourceContracts : []).map(supervisorContractRefText).filter(isNonEmptyString);
+}
+function supervisorContractRefText(contract) {
+	if (typeof contract === "string") return contract;
+	if (contract === null || contract === void 0 || typeof contract !== "object" || Array.isArray(contract)) return null;
+	const name = contract.contractName ?? null;
+	if (!isNonEmptyString(name)) return null;
+	return [
+		name,
+		contract.contractVersion === null || contract.contractVersion === void 0 ? null : `v${contract.contractVersion}`,
+		contract.generatedAt ?? null
+	].filter(isNonEmptyString).join(" / ");
+}
+function supervisorInventoryPolicySourceTexts(sources) {
+	return (Array.isArray(sources) ? sources : []).map((source) => {
+		if (typeof source === "string") return source;
+		return [
+			source?.provider,
+			source?.state,
+			source?.sourceSummary?.readState
+		].filter(isNonEmptyString).join(": ");
+	}).filter(isNonEmptyString);
 }
 function projectRouteState(route, result) {
 	if (result?.skipped === true) return {
@@ -21209,6 +21364,113 @@ var BASE_COMMAND_BOUNDARY = Object.freeze({
 	confirmationFields: ["none accepted in Workbench prototype"],
 	safePreview: "Copy preview: summarize the current fixture state for an operator handoff. No command is executed."
 });
+var BASE_SESSION_SOURCE_INVENTORY = Object.freeze({
+	contractName: "sessionSourceInventory.v1",
+	contractVersion: 1,
+	generatedAt: "2026-06-10T10:24:00+08:00",
+	readOnly: true,
+	willMutate: false,
+	state: "degraded",
+	scanScope: "bounded-provider-session-roots",
+	summary: {
+		providerCount: 2,
+		availableProviderCount: 1,
+		missingProviderCount: 0,
+		degradedProviderCount: 1,
+		failedProviderCount: 0,
+		state: "degraded"
+	},
+	providers: [{
+		provider: "codex",
+		state: "available",
+		availability: "available",
+		readState: "readable",
+		candidateFileCount: 5,
+		scannedFileCount: 5,
+		readableFileCount: 5,
+		unreadableFileCount: 0,
+		latestModifiedAt: "2026-06-10T10:22:00+08:00",
+		stale: false,
+		latestSessionRef: "codex:2026-06-10-live",
+		degradedReasons: []
+	}, {
+		provider: "claude",
+		state: "degraded",
+		availability: "degraded",
+		readState: "readable",
+		candidateFileCount: 3,
+		scannedFileCount: 3,
+		readableFileCount: 2,
+		unreadableFileCount: 1,
+		latestModifiedAt: "2026-06-10T10:18:00+08:00",
+		stale: false,
+		latestSessionRef: "claude:project-live",
+		degradedReasons: ["some-candidate-files-unreadable"]
+	}],
+	degradedReasons: ["claude:some-candidate-files-unreadable"]
+});
+var BASE_CONTEXT_ADVISORY = Object.freeze({
+	contractName: "contextAdvisory.v1",
+	contractVersion: 1,
+	generatedAt: "2026-06-10T10:24:00+08:00",
+	readOnly: true,
+	willMutate: false,
+	state: "degraded",
+	sessionContextRef: "sessionContext.v1 / v1",
+	inventoryRef: "sessionSourceInventory.v1 / v1",
+	transcriptAvailability: "readable",
+	exchangeCount: 42,
+	latestToolCall: "missing",
+	latestTurnState: "status: completed, role: assistant",
+	tokenUsage: "status: available, inputTokens: 41000, outputTokens: 1200, totalTokens: 42200",
+	contextUtilization: "42%",
+	contextBand: "low",
+	resultBlockEvidence: "present",
+	staleTranscriptState: "stale: false",
+	missingTranscriptState: "missing: false",
+	degradedReasons: ["inventory:claude-degraded"],
+	blockedFields: [],
+	policyInputs: {
+		threadId: "019ea62d-live-task-3",
+		transcriptAvailability: "readable",
+		sessionSourceSummaries: ["codex: readable: 019ea62d-live-task-3"],
+		inventorySourceSummaries: ["codex: available: readable", "claude: degraded: readable"]
+	}
+});
+var BASE_THREAD_CONTINUATION_DECISION = Object.freeze({
+	contractName: "threadContinuationDecision.v1",
+	contractVersion: 1,
+	generatedAt: "2026-06-10T10:24:00+08:00",
+	readOnly: true,
+	willMutate: false,
+	state: "checkpoint",
+	decision: "checkpoint",
+	reason: "result-awaits-registration",
+	confidence: "partial",
+	targetRole: "release-manager",
+	taskId: "release",
+	threadId: "019ea62d-live-task-3",
+	checkpointRef: "checkpoint:v44-4-release-ready",
+	waitPolicy: "NULL",
+	blockedFields: ["event-log-write"],
+	mismatchList: ["none"],
+	requiredEvidence: ["pending-result-registration"],
+	sourceContracts: [
+		"contextAdvisory.v1",
+		"sessionSourceInventory.v1",
+		"goal-supervisor-app-read-model.v1"
+	],
+	commandBoundary: {
+		state: "disabled",
+		executionAvailable: false,
+		copyOnly: true,
+		blockedFamilies: [
+			"child-dispatch",
+			"event-log-write",
+			"provider-cli"
+		]
+	}
+});
 function createBaseDashboard(overrides = {}) {
 	return {
 		id: "release-ready",
@@ -21231,7 +21493,10 @@ function createBaseDashboard(overrides = {}) {
 			sourceContracts: [
 				"goal-supervisor-app-read-model.v1",
 				"goal-progress-ledger.v1",
-				"goal-event-log.v1"
+				"goal-event-log.v1",
+				"sessionSourceInventory.v1",
+				"contextAdvisory.v1",
+				"threadContinuationDecision.v1"
 			],
 			generatedAt: "2026-06-10T10:24:00+08:00"
 		},
@@ -21273,6 +21538,9 @@ function createBaseDashboard(overrides = {}) {
 			resultBlockEvidence: "artifact:v44-4:release-ready-context",
 			driftMarkers: ["none"]
 		},
+		sessionSourceInventory: BASE_SESSION_SOURCE_INVENTORY,
+		contextAdvisory: BASE_CONTEXT_ADVISORY,
+		threadContinuationDecision: BASE_THREAD_CONTINUATION_DECISION,
 		pendingResult: {
 			status: "consumed",
 			source: "fixture result escrow",
@@ -21347,7 +21615,19 @@ var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
 			updatedAt: "2026-06-10T10:30:20+08:00",
 			age: "40s",
 			duplicateDispatchGuard: "blocked while lease is healthy"
-		}
+		},
+		threadContinuationDecision: Object.freeze({
+			...BASE_THREAD_CONTINUATION_DECISION,
+			state: "wait",
+			decision: "wait",
+			reason: "active-tool-call-in-progress",
+			confidence: "known",
+			targetRole: "worker",
+			taskId: "task-2",
+			waitPolicy: "activeLeaseAgeMs: 40000, staleThresholdMs: 600000",
+			blockedFields: ["none"],
+			requiredEvidence: ["none"]
+		})
 	})),
 	"pending-result": Object.freeze(createBaseDashboard({
 		id: "pending-result",
@@ -21374,7 +21654,17 @@ var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
 			parserReason: "parser accepted event fields; registration remains unavailable",
 			staleMarker: "fresh",
 			missingMarker: "none"
-		}
+		},
+		threadContinuationDecision: Object.freeze({
+			...BASE_THREAD_CONTINUATION_DECISION,
+			state: "checkpoint",
+			decision: "checkpoint",
+			reason: "result-awaits-registration",
+			targetRole: "controller",
+			taskId: "task-3",
+			checkpointRef: "checkpoint:pending-result-task-3",
+			requiredEvidence: ["pending-result-registration"]
+		})
 	})),
 	"stale-transcript": Object.freeze(createBaseDashboard({
 		id: "stale-transcript",
@@ -21417,7 +21707,69 @@ var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
 			transcriptState: "stale",
 			resultBlockEvidence: "artifact:v44-4:stale-context",
 			driftMarkers: ["lease active but transcript stale"]
-		}
+		},
+		sessionSourceInventory: Object.freeze({
+			...BASE_SESSION_SOURCE_INVENTORY,
+			state: "stale",
+			summary: {
+				...BASE_SESSION_SOURCE_INVENTORY.summary,
+				state: "stale",
+				availableProviderCount: 0,
+				degradedProviderCount: 2
+			},
+			providers: [{
+				provider: "codex",
+				state: "stale",
+				availability: "stale",
+				readState: "readable",
+				candidateFileCount: 4,
+				scannedFileCount: 4,
+				readableFileCount: 4,
+				unreadableFileCount: 0,
+				latestModifiedAt: "2026-06-10T09:58:00+08:00",
+				stale: true,
+				latestSessionRef: "codex:stale-task-4",
+				degradedReasons: ["latest-session-file-exceeded-stale-threshold"]
+			}, {
+				provider: "claude",
+				state: "unreadable",
+				availability: "unreadable",
+				readState: "unreadable",
+				candidateFileCount: 2,
+				scannedFileCount: 2,
+				readableFileCount: 0,
+				unreadableFileCount: 2,
+				latestModifiedAt: "2026-06-10T09:52:00+08:00",
+				stale: true,
+				latestSessionRef: "claude:stale-task-4",
+				degradedReasons: ["all-candidate-files-unreadable"]
+			}],
+			degradedReasons: ["codex:latest-session-file-exceeded-stale-threshold", "claude:all-candidate-files-unreadable"]
+		}),
+		contextAdvisory: Object.freeze({
+			...BASE_CONTEXT_ADVISORY,
+			state: "stale",
+			transcriptAvailability: "stale",
+			exchangeCount: 18,
+			tokenUsage: "status: available, totalTokens: 178000",
+			contextUtilization: "89%",
+			contextBand: "high",
+			staleTranscriptState: "stale: true / lease-active-transcript-stale",
+			degradedReasons: ["session:lease-active-transcript-stale"],
+			blockedFields: ["staleTranscriptState"]
+		}),
+		threadContinuationDecision: Object.freeze({
+			...BASE_THREAD_CONTINUATION_DECISION,
+			state: "new-thread",
+			decision: "new-thread",
+			reason: "lease-active-transcript-stale",
+			confidence: "partial",
+			targetRole: "worker",
+			taskId: "task-4",
+			blockedFields: ["staleTranscriptState"],
+			mismatchList: ["lease active but transcript stale"],
+			requiredEvidence: ["durable-checkpoint"]
+		})
 	})),
 	"blocked-gate": Object.freeze(createBaseDashboard({
 		id: "blocked-gate",
@@ -21464,6 +21816,35 @@ var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
 				"verifier id",
 				"gate status"
 			]
+		}),
+		contextAdvisory: Object.freeze({
+			...BASE_CONTEXT_ADVISORY,
+			state: "blocked",
+			blockedFields: ["mainVerificationEvidence", "contextUtilization.ratio"],
+			contextBand: "unknown"
+		}),
+		threadContinuationDecision: Object.freeze({
+			...BASE_THREAD_CONTINUATION_DECISION,
+			state: "blocked",
+			decision: "blocked",
+			reason: "missing main verification evidence ref",
+			confidence: "partial",
+			targetRole: "main-verifier",
+			taskId: "task-5",
+			blockedFields: ["mainVerificationEvidence", "evidenceRef"],
+			mismatchList: ["main-verification-evidence"],
+			requiredEvidence: ["main-verification-evidence"],
+			commandBoundary: {
+				state: "confirm-required",
+				executionAvailable: false,
+				copyOnly: true,
+				blockedFamilies: [
+					"child-dispatch",
+					"event-log-write",
+					"provider-cli",
+					"release-closeout"
+				]
+			}
 		})
 	})),
 	"missing-empty-context": Object.freeze(createBaseDashboard({
@@ -21496,6 +21877,84 @@ var SUPERVISOR_DASHBOARD_FIXTURES = Object.freeze({
 			resultBlockEvidence: "missing",
 			driftMarkers: ["missing contract field: contextStatus.providerSummaries"]
 		},
+		sessionSourceInventory: Object.freeze({
+			...BASE_SESSION_SOURCE_INVENTORY,
+			state: "missing",
+			summary: {
+				providerCount: 2,
+				availableProviderCount: 0,
+				missingProviderCount: 2,
+				degradedProviderCount: 0,
+				failedProviderCount: 0,
+				state: "missing"
+			},
+			providers: [{
+				provider: "codex",
+				state: "missing",
+				availability: "missing",
+				readState: "missing",
+				candidateFileCount: 0,
+				scannedFileCount: 0,
+				readableFileCount: 0,
+				unreadableFileCount: 0,
+				latestModifiedAt: null,
+				stale: false,
+				latestSessionRef: null,
+				degradedReasons: ["source-root-missing"]
+			}, {
+				provider: "claude",
+				state: "missing",
+				availability: "missing",
+				readState: "missing",
+				candidateFileCount: 0,
+				scannedFileCount: 0,
+				readableFileCount: 0,
+				unreadableFileCount: 0,
+				latestModifiedAt: null,
+				stale: false,
+				latestSessionRef: null,
+				degradedReasons: ["source-root-missing"]
+			}],
+			degradedReasons: ["codex:source-root-missing", "claude:source-root-missing"]
+		}),
+		contextAdvisory: Object.freeze({
+			...BASE_CONTEXT_ADVISORY,
+			state: "unknown",
+			transcriptAvailability: "missing",
+			exchangeCount: "missing",
+			latestToolCall: "missing",
+			latestTurnState: "missing",
+			tokenUsage: "missing",
+			contextUtilization: "missing",
+			contextBand: "unknown",
+			resultBlockEvidence: "missing",
+			missingTranscriptState: "missing: true / no-readable-session-transcript",
+			degradedReasons: ["session:no-readable-session-transcript"],
+			blockedFields: [
+				"transcriptAvailability",
+				"tokenUsage",
+				"contextUtilization.ratio"
+			],
+			policyInputs: {
+				transcriptAvailability: "missing",
+				sessionSourceSummaries: [],
+				inventorySourceSummaries: ["codex: missing: missing", "claude: missing: missing"]
+			}
+		}),
+		threadContinuationDecision: Object.freeze({
+			...BASE_THREAD_CONTINUATION_DECISION,
+			state: "blocked",
+			decision: "blocked",
+			reason: "no-readable-session-transcript",
+			confidence: "unknown",
+			targetRole: "controller",
+			taskId: "task-6",
+			threadId: "NULL",
+			checkpointRef: "NULL",
+			blockedFields: ["transcriptAvailability", "contextUtilization.ratio"],
+			mismatchList: ["none"],
+			requiredEvidence: ["readable-session-transcript"]
+		}),
 		pendingResult: {
 			status: "missing",
 			source: "fixture result escrow",
@@ -21599,6 +22058,58 @@ var SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
 			"copyOnly boundary"
 		])
 	}),
+	sessionSourceInventory: Object.freeze({
+		state: "missing",
+		contract: "sessionSourceInventory.v1",
+		generatedAt: "NULL",
+		readOnly: true,
+		summary: "providers 0; available 0; missing 0; degraded 0; failed 0",
+		providers: Object.freeze([Object.freeze("missing: backend inventory contract not available")]),
+		degradedReasons: Object.freeze(["missing"])
+	}),
+	contextAdvisory: Object.freeze({
+		state: "unknown",
+		contract: "contextAdvisory.v1",
+		generatedAt: "NULL",
+		readOnly: true,
+		transcriptAvailability: "missing",
+		exchangeCount: "missing",
+		latestToolCall: "missing",
+		latestTurnState: "missing",
+		tokenUsage: "missing",
+		contextUtilization: "missing",
+		contextBand: "unknown",
+		resultBlockEvidence: "missing",
+		staleTranscriptState: "stale: false",
+		missingTranscriptState: "missing: true",
+		blockedFields: Object.freeze(["contextAdvisory"]),
+		degradedReasons: Object.freeze(["missing"]),
+		policyInputs: Object.freeze(["transcript: missing"])
+	}),
+	threadContinuationDecision: Object.freeze({
+		state: "unknown",
+		contract: "threadContinuationDecision.v1",
+		generatedAt: "NULL",
+		readOnly: true,
+		decision: "unknown",
+		reason: "missing thread continuation decision",
+		confidence: "unknown",
+		targetRole: "NULL",
+		taskId: "NULL",
+		threadId: "NULL",
+		checkpointRef: "NULL",
+		waitPolicy: "NULL",
+		blockedFields: Object.freeze(["threadContinuationDecision"]),
+		mismatchList: Object.freeze(["none"]),
+		requiredEvidence: Object.freeze(["missing"]),
+		sourceContracts: Object.freeze(["missing"]),
+		commandBoundary: Object.freeze({
+			state: "disabled",
+			executionAvailable: false,
+			copyOnly: true,
+			blockedFamilies: Object.freeze([])
+		})
+	}),
 	pendingResult: Object.freeze({
 		label: "none / NULL",
 		output: null,
@@ -21664,6 +22175,9 @@ function projectSupervisorDashboardToWorkbenchView(dashboard, routeState = null)
 	const nextAction = objectValue(dashboard.recommendedNextAction);
 	const activeLease = objectValue(dashboard.activeLease);
 	const contextStatus = objectValue(dashboard.contextStatus);
+	const sessionSourceInventory = objectValue(dashboard.sessionSourceInventory);
+	const contextAdvisory = objectValue(dashboard.contextAdvisory);
+	const threadContinuationDecision = objectValue(dashboard.threadContinuationDecision);
 	const pendingResult = objectValue(dashboard.pendingResult);
 	const commandBoundary = objectValue(dashboard.commandBoundary);
 	const ownership = objectValue(dashboard.ownership);
@@ -21698,6 +22212,9 @@ function projectSupervisorDashboardToWorkbenchView(dashboard, routeState = null)
 			utilizationPercent: utilizationPercent(contextStatus.utilization),
 			chips: Object.freeze(contextChips(contextStatus))
 		}),
+		sessionSourceInventory: sessionSourceInventoryView(sessionSourceInventory),
+		contextAdvisory: contextAdvisoryView(contextAdvisory),
+		threadContinuationDecision: threadContinuationDecisionView(threadContinuationDecision, commandBoundary),
 		pendingResult: Object.freeze({
 			label: textValue$1(pendingResult.status ?? "none / NULL"),
 			output: null,
@@ -21856,6 +22373,127 @@ function contextChips(contextStatus) {
 	].filter((value) => value !== null && value !== void 0 && value !== "");
 	return chips.length > 0 ? chips.map(textValue$1) : ["missing contract field: contextStatus.providerSummaries"];
 }
+function sessionSourceInventoryView(inventory) {
+	const summary = objectValue(inventory.summary);
+	const providers = Array.isArray(inventory.providers) ? inventory.providers : [];
+	const providerRows = providers.map((provider) => {
+		if (typeof provider === "string") return provider;
+		return [
+			provider?.provider,
+			provider?.state,
+			provider?.readState ?? provider?.availability,
+			provider?.readableFileCount === void 0 ? null : `readable ${provider.readableFileCount}`,
+			provider?.unreadableFileCount === void 0 ? null : `unreadable ${provider.unreadableFileCount}`,
+			provider?.latestSessionRef
+		].filter((value) => value !== null && value !== void 0 && value !== "").map(textValue$1).join(" / ");
+	}).filter((value) => value !== "");
+	return Object.freeze({
+		state: textValue$1(inventory.state ?? summary.state ?? (providers.length === 0 ? "missing" : "unknown")),
+		contract: contractRefLabel(inventory, "sessionSourceInventory.v1"),
+		generatedAt: textValue$1(inventory.generatedAt ?? "NULL"),
+		readOnly: inventory.readOnly === true,
+		summary: textValue$1([
+			`providers ${summary.providerCount ?? providers.length ?? "missing"}`,
+			`available ${summary.availableProviderCount ?? "missing"}`,
+			`missing ${summary.missingProviderCount ?? "missing"}`,
+			`degraded ${summary.degradedProviderCount ?? "missing"}`,
+			`failed ${summary.failedProviderCount ?? "missing"}`
+		].join("; ")),
+		providers: Object.freeze(providerRows.length > 0 ? providerRows : ["missing: no provider inventory rows"]),
+		degradedReasons: Object.freeze(listTextValues(inventory.degradedReasons, ["none"]))
+	});
+}
+function contextAdvisoryView(advisory) {
+	return Object.freeze({
+		state: textValue$1(advisory.state ?? advisory.contextBand ?? "unknown"),
+		contract: contractRefLabel(advisory, "contextAdvisory.v1"),
+		generatedAt: textValue$1(advisory.generatedAt ?? "NULL"),
+		readOnly: advisory.readOnly === true,
+		transcriptAvailability: textValue$1(advisory.transcriptAvailability ?? "missing"),
+		exchangeCount: textValue$1(advisory.exchangeCount ?? "missing"),
+		latestToolCall: textValue$1(summaryText(advisory.latestToolCall, "missing")),
+		latestTurnState: textValue$1(summaryText(advisory.latestTurnState, "missing")),
+		tokenUsage: textValue$1(summaryText(advisory.tokenUsage, "missing")),
+		contextUtilization: textValue$1(summaryText(advisory.contextUtilization, "missing")),
+		contextBand: textValue$1(advisory.contextBand ?? "unknown"),
+		resultBlockEvidence: textValue$1(summaryText(advisory.resultBlockEvidence, "missing")),
+		staleTranscriptState: transcriptStateText(advisory.staleTranscriptState, "stale"),
+		missingTranscriptState: transcriptStateText(advisory.missingTranscriptState, "missing"),
+		blockedFields: Object.freeze(listTextValues(advisory.blockedFields, ["none"])),
+		degradedReasons: Object.freeze(listTextValues(advisory.degradedReasons, ["none"])),
+		policyInputs: Object.freeze(policyInputRows(advisory.policyInputs))
+	});
+}
+function threadContinuationDecisionView(decision, fallbackCommandBoundary) {
+	const boundary = objectValue(decision.commandBoundary);
+	const fallbackBoundary = objectValue(fallbackCommandBoundary);
+	return Object.freeze({
+		state: textValue$1(decision.state ?? decision.decision ?? "unknown"),
+		contract: contractRefLabel(decision, "threadContinuationDecision.v1"),
+		generatedAt: textValue$1(decision.generatedAt ?? "NULL"),
+		readOnly: decision.readOnly === true,
+		decision: textValue$1(decision.decision ?? "unknown"),
+		reason: textValue$1(decision.reason ?? "NULL"),
+		confidence: textValue$1(decision.confidence ?? "unknown"),
+		targetRole: textValue$1(decision.targetRole ?? "NULL"),
+		taskId: textValue$1(decision.taskId ?? "NULL"),
+		threadId: textValue$1(decision.threadId ?? "NULL"),
+		checkpointRef: textValue$1(decision.checkpointRef ?? "NULL"),
+		waitPolicy: textValue$1(summaryText(decision.waitPolicy, "NULL")),
+		blockedFields: Object.freeze(listTextValues(decision.blockedFields, ["none"])),
+		mismatchList: Object.freeze(listTextValues(decision.mismatchList, ["none"])),
+		requiredEvidence: Object.freeze(listTextValues(decision.requiredEvidence, ["none"])),
+		sourceContracts: Object.freeze(listTextValues(decision.sourceContracts, ["missing"])),
+		commandBoundary: Object.freeze({
+			state: textValue$1(boundary.state ?? fallbackBoundary.state ?? "disabled"),
+			executionAvailable: false,
+			copyOnly: true,
+			blockedFamilies: Object.freeze(listTextValues(boundary.blockedFamilies ?? boundary.blockedCommandFamilies ?? fallbackBoundary.blockedFamilies, []))
+		})
+	});
+}
+function contractRefLabel(value, fallbackName) {
+	const version = value.contractVersion === null || value.contractVersion === void 0 ? "unknown" : value.contractVersion;
+	return version === "unknown" ? textValue$1(value.contractName ?? fallbackName) : `${textValue$1(value.contractName ?? fallbackName)} / ${version}`;
+}
+function policyInputRows(policyInputs) {
+	const inputs = objectValue(policyInputs);
+	const rows = [
+		inputs.threadId ? `thread ${inputs.threadId}` : null,
+		inputs.transcriptAvailability ? `transcript ${inputs.transcriptAvailability}` : null,
+		...listTextValues(inputs.sessionSourceSummaries, []),
+		...listTextValues(inputs.inventorySourceSummaries, [])
+	].filter((value) => value !== null && value !== "");
+	return rows.length > 0 ? rows : ["missing"];
+}
+function transcriptFlag(state, flag) {
+	const value = objectValue(state);
+	const active = flag === "stale" ? value.stale === true : value.missing === true;
+	return value.reason ? `${flag}: ${String(active)} / ${value.reason}` : `${flag}: ${String(active)}`;
+}
+function transcriptStateText(state, flag) {
+	if (state === null || state === void 0) return flag === "stale" ? "stale: false" : "missing: false";
+	if (typeof state !== "object" || Array.isArray(state)) return textValue$1(state);
+	return transcriptFlag(state, flag);
+}
+function summaryText(value, fallbackValue) {
+	if (value === null || value === void 0 || value === "") return fallbackValue;
+	if (typeof value === "object" && !Array.isArray(value)) return objectSummary(value) ?? fallbackValue;
+	return value;
+}
+function objectSummary(value) {
+	if (value === null || value === void 0) return null;
+	if (typeof value !== "object" || Array.isArray(value)) return value;
+	const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== null && entryValue !== void 0 && entryValue !== "").map(([key, entryValue]) => `${key}: ${textValue$1(entryValue)}`);
+	return entries.length > 0 ? entries.join(", ") : null;
+}
+function listTextValues(values, fallback) {
+	if (!Array.isArray(values) || values.length === 0) return fallback;
+	return values.map((value) => {
+		if (typeof value === "string") return value;
+		return objectSummary(value);
+	}).filter((value) => value !== null && value !== "").map(textValue$1);
+}
 function commandBoundaryView(commandBoundary) {
 	const rawFamilies = rawBoundaryFamilies(commandBoundary);
 	return Object.freeze({
@@ -21936,8 +22574,20 @@ var SIDEBAR_ITEMS = Object.freeze([
 		tone: "observed"
 	}),
 	Object.freeze({
+		label: "Source Inventory",
+		tone: "neutral"
+	}),
+	Object.freeze({
 		label: "Current Gate",
 		tone: "neutral"
+	}),
+	Object.freeze({
+		label: "Context Advisory",
+		tone: "neutral"
+	}),
+	Object.freeze({
+		label: "Continuation",
+		tone: "warn"
 	}),
 	Object.freeze({
 		label: "Command Boundary",
@@ -21968,9 +22618,12 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 				children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalSnapshotPanel, { view }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActiveLeasePanel, { lease: view.activeLease }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CurrentGatePanel, { gate: view.currentGate }),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecommendedNextActionBand, { action: view.recommendedNextAction }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SessionSourceInventoryPanel, { inventory: view.sessionSourceInventory }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContextStatusPanel, { context: view.context }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CurrentGatePanel, { gate: view.currentGate }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ContextAdvisoryPanel, { advisory: view.contextAdvisory }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecommendedNextActionBand, { action: view.recommendedNextAction }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadContinuationDecisionPanel, { decision: view.threadContinuationDecision }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundaryPanel, { boundary: view.commandBoundary }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PendingResultPanel, { pendingResult: view.pendingResult }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalTimelinePanel, { timeline: view.timeline }),
@@ -22223,6 +22876,107 @@ function ContextStatusPanel({ context }) {
 		})]
 	});
 }
+function SessionSourceInventoryPanel({ inventory }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
+		className: "v46-inventory-panel",
+		odId: "session-source-inventory",
+		title: "Session Source Inventory",
+		meta: inventory.state,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+				["contract", inventory.contract],
+				["generated", inventory.generatedAt],
+				["readOnly", String(inventory.readOnly)],
+				["summary", inventory.summary]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-chip-list",
+				items: inventory.providers
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-family-list",
+				items: inventory.degradedReasons
+			})
+		]
+	});
+}
+function ContextAdvisoryPanel({ advisory }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
+		className: "v46-advisory-panel",
+		odId: "context-advisory",
+		title: "Context Advisory",
+		meta: advisory.state,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+				["contract", advisory.contract],
+				["generated", advisory.generatedAt],
+				["transcript", advisory.transcriptAvailability],
+				["exchange count", advisory.exchangeCount],
+				["latest tool call", advisory.latestToolCall],
+				["latest turn", advisory.latestTurnState],
+				["token usage", advisory.tokenUsage],
+				["context utilization", advisory.contextUtilization],
+				["context band", advisory.contextBand],
+				["result-block evidence", advisory.resultBlockEvidence],
+				["stale state", advisory.staleTranscriptState],
+				["missing state", advisory.missingTranscriptState]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-family-list",
+				items: advisory.blockedFields
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-chip-list",
+				items: advisory.degradedReasons
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-chip-list",
+				items: advisory.policyInputs
+			})
+		]
+	});
+}
+function ThreadContinuationDecisionPanel({ decision }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
+		className: "v46-continuation-panel",
+		odId: "thread-continuation-decision",
+		title: "Thread Continuation Decision",
+		meta: decision.decision,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+				["contract", decision.contract],
+				["generated", decision.generatedAt],
+				["decision", decision.decision],
+				["reason", decision.reason],
+				["confidence", decision.confidence],
+				["target role", decision.targetRole],
+				["task id", decision.taskId],
+				["thread id", decision.threadId],
+				["checkpoint ref", decision.checkpointRef],
+				["wait policy", decision.waitPolicy],
+				["boundary state", decision.commandBoundary.state],
+				["executionAvailable", String(decision.commandBoundary.executionAvailable)],
+				["copyOnly", String(decision.commandBoundary.copyOnly)]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-family-list",
+				items: decision.blockedFields
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-chip-list",
+				items: decision.mismatchList
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-chip-list",
+				items: decision.requiredEvidence
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-chip-list",
+				items: decision.sourceContracts
+			})
+		]
+	});
+}
 function PendingResultPanel({ pendingResult }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Panel, {
 		className: "v46-pending-panel",
@@ -22296,6 +23050,12 @@ function KeyValues({ rows }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dl", {
 		className: "v46-key-values",
 		children: rows.map(([key, value]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("dt", { children: key }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("dd", { children: value })] }, key))
+	});
+}
+function TextList({ className, items }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className,
+		children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: item }, item))
 	});
 }
 //#endregion

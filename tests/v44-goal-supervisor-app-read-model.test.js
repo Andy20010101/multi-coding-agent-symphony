@@ -37,6 +37,11 @@ describe('v44.3 goal supervisor app read model contract', () => {
       assert.equal(model.commandBoundary.state, scenario.expected.commandBoundaryState, scenario.name);
       assert.equal(model.pendingResult.status, scenario.expected.pendingResultStatus, scenario.name);
       assert.equal(model.contextStatus.transcriptAvailability, scenario.expected.transcriptAvailability, scenario.name);
+      assert.equal(model.sessionSourceInventory.contractName, 'sessionSourceInventory.v1', scenario.name);
+      assert.equal(model.contextAdvisory.contractName, 'contextAdvisory.v1', scenario.name);
+      assert.equal(model.threadContinuationDecision.contractName, 'threadContinuationDecision.v1', scenario.name);
+      assert.equal(model.threadContinuationDecision.commandBoundary.executionAvailable, false, scenario.name);
+      assert.equal(model.threadContinuationDecision.commandBoundary.copyOnly, true, scenario.name);
     }
   });
 
@@ -174,7 +179,15 @@ describe('v44.3 goal supervisor app read model contract', () => {
       const model = await buildGoalSupervisorAppReadModelFromContracts({
         stateDir: join(root, '.symphony'),
         goalId: 'v19-fixture',
-        generatedAt: '2026-06-10T00:00:00.000Z'
+        generatedAt: '2026-06-10T00:00:00.000Z',
+        sessionHookOptions: {
+          codexRoot: join(root, '.codex', 'sessions'),
+          claudeRoot: join(root, '.claude', 'projects')
+        },
+        sessionInventoryOptions: {
+          codexRoot: join(root, '.codex', 'sessions'),
+          claudeRoot: join(root, '.claude', 'projects')
+        }
       });
 
       assert.equal(model.contractName, GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME);
@@ -188,8 +201,26 @@ describe('v44.3 goal supervisor app read model contract', () => {
         'goal-next-action.v1',
         'goal-supervisor-core-projection.v1',
         'goal-supervisor-observability.v1',
-        'sessionContext.v1'
+        'sessionContext.v1',
+        'sessionSourceInventory.v1',
+        'contextAdvisory.v1',
+        'threadContinuationDecision.v1'
       ]);
+      assert.equal(model.sessionSourceInventory.contractName, 'sessionSourceInventory.v1');
+      assert.equal(model.sessionSourceInventory.readOnly, true);
+      assert.equal(model.sessionSourceInventory.willMutate, false);
+      assert.equal(model.sessionSourceInventory.summary.state, 'missing');
+      assert.equal(model.contextAdvisory.contractName, 'contextAdvisory.v1');
+      assert.equal(model.contextAdvisory.readOnly, true);
+      assert.equal(model.contextAdvisory.willMutate, false);
+      assert.equal(model.contextAdvisory.transcriptAvailability, 'missing');
+      assert.equal(model.contextAdvisory.contextBand, 'unknown');
+      assert.ok(model.contextAdvisory.blockedFields.includes('contextUtilization.ratio'));
+      assert.equal(model.threadContinuationDecision.contractName, 'threadContinuationDecision.v1');
+      assert.equal(model.threadContinuationDecision.readOnly, true);
+      assert.equal(model.threadContinuationDecision.willMutate, false);
+      assert.equal(model.threadContinuationDecision.commandBoundary.executionAvailable, false);
+      assert.equal(model.threadContinuationDecision.commandBoundary.copyOnly, true);
       assert.equal(model.recommendedNextAction.actionId, 'open-handoff-thread');
       assert.equal(model.commandBoundary.state, 'disabled');
       assert.equal(model.commandBoundary.executionAvailable, false);
@@ -227,6 +258,10 @@ describe('v44.3 goal supervisor app read model contract', () => {
       assert.equal(model.goalSnapshot.goalId, 'v19-fixture');
       assert.equal(model.commandBoundary.executionAvailable, false);
       assert.equal(model.commandBoundary.copyOnly, true);
+      assert.equal(model.sessionSourceInventory.contractName, 'sessionSourceInventory.v1');
+      assert.equal(model.contextAdvisory.contractName, 'contextAdvisory.v1');
+      assert.equal(model.threadContinuationDecision.contractName, 'threadContinuationDecision.v1');
+      assert.equal(model.threadContinuationDecision.commandBoundary.executionAvailable, false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -251,7 +286,10 @@ function assertTopLevelContract(model, label) {
     'recommendedNextAction',
     'ownership',
     'contextStatus',
-    'commandBoundary'
+    'commandBoundary',
+    'sessionSourceInventory',
+    'contextAdvisory',
+    'threadContinuationDecision'
   ]) {
     assert.equal(typeof model[field], 'object', `${label}: ${field}`);
     assert.notEqual(model[field], null, `${label}: ${field}`);
