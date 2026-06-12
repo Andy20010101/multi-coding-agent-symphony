@@ -743,6 +743,8 @@ describe('v15 Workbench React/Vite shell', () => {
       'PendingResultPanel',
       'SupervisorEventPreviewLane',
       'SupervisorEventPreviewResult',
+      'SupervisorEventConfirmAction',
+      'SupervisorEventConfirmResult',
       'SessionSourceInventoryPanel',
       'ContextAdvisoryPanel',
       'ThreadContinuationDecisionPanel',
@@ -778,9 +780,11 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(css, /\.v46-inventory-panel[\s\S]*order:\s*6/u);
     assert.match(css, /\.v46-context-panel[\s\S]*order:\s*7/u);
     assert.match(supervisorSource, /fetchGoalEventPlanPreview/u);
+    assert.match(supervisorSource, /confirmGoalEventPlan/u);
     assert.match(supervisorSource, /Preview Event Plan/u);
+    assert.match(supervisorSource, /Confirm Event Append/u);
     assert.doesNotMatch(supervisorSource, /\bfetch\s*\(/u);
-    assert.doesNotMatch(supervisorSource, /confirmGoalEventPlan|<GoalEventPlanPreview\b|function GoalEventPlanPreview\b|Confirm Event Append|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|provider folders|raw transcripts|claude\/projects/u);
+    assert.doesNotMatch(supervisorSource, /<GoalEventPlanPreview\b|function GoalEventPlanPreview\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|provider folders|raw transcripts|claude\/projects/u);
     assert.doesNotMatch(supervisorSource, />\s*(Run|Execute|Continue|Compact|New Thread|Dispatch|Launch)\s*</u);
     assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
   });
@@ -830,6 +834,9 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /supervisorEventRegistrationEligibility\.v1 \/ 1/u);
       assert.match(html, /eligible-goal-update-event/u);
       assert.match(html, /\/api\/goals\/v44-4-live-supervisor\/event-plan-preview\?command=update&amp;task=task-3&amp;event=worker\.evidence-recorded&amp;actor=local-goal-supervisor-worker&amp;evidenceRef=artifact%3Av44-4%3Apending-result&amp;statement=Worker\+evidence\+recorded\+for\+task-3\./u);
+      assert.match(html, />confirm method<\/dt><dd[^>]*>POST/u);
+      assert.match(html, />confirm route<\/dt><dd[^>]*>\/api\/goals\/v44-4-live-supervisor\/event-plan-confirm/u);
+      assert.match(html, />confirm content type<\/dt><dd[^>]*>application\/json/u);
       assert.match(html, /goal-update-plan\.v1 \/ 1/u);
       assert.match(html, />event type<\/dt><dd[^>]*>worker\.evidence-recorded/u);
       assert.match(html, />task id<\/dt><dd[^>]*>task-3/u);
@@ -846,6 +853,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, />operation status<\/dt><dd[^>]*>planned/u);
       assert.match(html, />planHash<\/dt><dd[^>]*>sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/u);
       assert.match(html, />copy-only confirm command<\/dt><dd[^>]*>symphony goal update/u);
+      assert.match(html, /Confirm Event Append/u);
       assert.doesNotMatch(html, /\[object Object\]/u);
       assert.match(html, /42000 \/ 200000/u);
       assert.match(html, /21%/u);
@@ -859,7 +867,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.doesNotMatch(html, /href="(?:artifact:|docs\/plans\/|file:)/u);
       assert.doesNotMatch(html, /Release-ready|Healthy active lease|Pending result|Stale transcript|Blocked gate|Missing context/u);
       assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u);
-      assert.doesNotMatch(html, /Confirm Event Append|confirmGoalEventPlan|<form|<textarea|\.symphony|jsonl|sessions\/|provider folders|raw transcripts/u);
+      assert.doesNotMatch(html, /confirmGoalEventPlan|<form|<textarea|\.symphony|jsonl|sessions\/|provider folders|raw transcripts/u);
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -931,6 +939,255 @@ describe('v15 Workbench React/Vite shell', () => {
     } finally {
       await server.close();
       restoreSsrLocation();
+    }
+  });
+
+  it('confirms supervisor event append with the visible preview planHash and refresh callback', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const {
+        SupervisorEventPreviewLane,
+        buildSupervisorEventConfirmBody,
+        confirmSupervisorEventAppend,
+        projectSupervisorDashboardToWorkbenchView,
+        supervisorCanConfirmEventAppend,
+        supervisorPreviewStateFromEventPreview
+      } = await server.ssrLoadModule('/src/v46SupervisorWorkbench.jsx');
+      const model = createWorkbenchRenderModelWithSupervisor();
+      const view = projectSupervisorDashboardToWorkbenchView(
+        model.supervisorDashboard,
+        model.supervisorDashboard.route
+      );
+      const previewState = supervisorPreviewStateFromEventPreview(view.eventPreview);
+      const constrainedBody = buildSupervisorEventConfirmBody({
+        eventPreview: view.eventPreview,
+        previewResult: previewState.result
+      });
+      const calls = [];
+      const refreshes = [];
+      const confirmState = await confirmSupervisorEventAppend({
+        eventPreview: view.eventPreview,
+        previewState,
+        confirmGoalEventPlanImpl: async (path, body) => {
+          calls.push([path, body]);
+
+          return {
+            ok: true,
+            data: createSupervisorGoalEventConfirmationPayload()
+          };
+        },
+        onEventConfirmed: async (data) => {
+          refreshes.push(data.contractName);
+        }
+      });
+      const html = renderToStaticMarkup(React.createElement(SupervisorEventPreviewLane, {
+        eventPreview: view.eventPreview,
+        previewState,
+        previewLoading: false,
+        confirmState,
+        confirmLoading: false,
+        onPreviewEventPlan: () => undefined,
+        onConfirmEventAppend: () => undefined
+      }));
+      const mismatchConfirmState = await confirmSupervisorEventAppend({
+        eventPreview: view.eventPreview,
+        previewState,
+        confirmGoalEventPlanImpl: async () => ({
+          ok: false,
+          message: 'hash mismatch'
+        })
+      });
+      const mismatchHtml = renderToStaticMarkup(React.createElement(SupervisorEventPreviewLane, {
+        eventPreview: view.eventPreview,
+        previewState,
+        previewLoading: false,
+        confirmState: mismatchConfirmState,
+        confirmLoading: false,
+        onPreviewEventPlan: () => undefined,
+        onConfirmEventAppend: () => undefined
+      }));
+
+      assert.equal(supervisorCanConfirmEventAppend({
+        eventPreview: view.eventPreview,
+        previewResult: previewState.result
+      }), true);
+      assert.deepEqual(Object.keys(constrainedBody), [
+        'command',
+        'task',
+        'event',
+        'actor',
+        'planHash',
+        'evidenceRef',
+        'statement',
+        'blockerId',
+        'blockerReason',
+        'blockerSeverity'
+      ]);
+      assert.deepEqual(constrainedBody, {
+        command: 'update',
+        task: 'task-3',
+        event: 'worker.evidence-recorded',
+        actor: 'local-goal-supervisor-worker',
+        planHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        evidenceRef: ['artifact:v44-4:pending-result'],
+        statement: 'Worker evidence recorded for task-3.',
+        blockerId: 'blocker-v50-preview',
+        blockerReason: 'preview-only blocker field',
+        blockerSeverity: 'medium'
+      });
+      assert.deepEqual(calls, [[
+        '/api/goals/v44-4-live-supervisor/event-plan-confirm',
+        constrainedBody
+      ]]);
+      assert.deepEqual(refreshes, ['goal-event-confirmation.v1']);
+      assert.equal(confirmState.phase, 'ready');
+      assert.match(html, /Confirm Event Append/u);
+      assert.match(html, />confirmation contract<\/dt><dd[^>]*>goal-event-confirmation\.v1 \/ 1/u);
+      assert.match(html, />status<\/dt><dd[^>]*>appended/u);
+      assert.match(html, />written<\/dt><dd[^>]*>true/u);
+      assert.match(html, />event id<\/dt><dd[^>]*>evt-v50-task-3-confirmed/u);
+      assert.match(html, />sequence<\/dt><dd[^>]*>7/u);
+      assert.match(html, />event hash<\/dt><dd[^>]*>sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/u);
+      assert.match(html, />operation id<\/dt><dd[^>]*>op_v50_task3_event_confirm/u);
+      assert.match(html, />operation status<\/dt><dd[^>]*>confirmed/u);
+      assert.match(html, />refreshed\.progress<\/dt><dd[^>]*>goal-progress-ledger\.v1/u);
+      assert.match(html, />refreshed\.events<\/dt><dd[^>]*>goal-event-log\.v1/u);
+      assert.match(html, />refreshed\.nextAction<\/dt><dd[^>]*>goal-next-action\.v1/u);
+      assert.match(html, />refreshed\.closeout<\/dt><dd[^>]*>goal-closeout-report\.v1/u);
+      assert.doesNotMatch(html, /\[object Object\]/u);
+      assert.doesNotMatch(JSON.stringify(constrainedBody), /copyOnlyCommand|extra|branch|commit|raw|commandText/u);
+      assert.equal(mismatchConfirmState.phase, 'failed');
+      assert.match(mismatchHtml, /hash mismatch/u);
+      assert.match(mismatchHtml, />planHash<\/dt><dd[^>]*>sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/u);
+      assert.doesNotMatch(mismatchHtml, /evt-v50-task-3-confirmed/u);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not confirm supervisor event append without a current eligible preview planHash', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const {
+        SupervisorEventPreviewLane,
+        buildSupervisorEventConfirmBody,
+        confirmSupervisorEventAppend,
+        projectSupervisorDashboardToWorkbenchView,
+        supervisorCanConfirmEventAppend,
+        supervisorPreviewStateFromEventPreview,
+        visibleSupervisorPreviewState
+      } = await server.ssrLoadModule('/src/v46SupervisorWorkbench.jsx');
+      const eligibleModel = createWorkbenchRenderModelWithSupervisor();
+      const eligibleView = projectSupervisorDashboardToWorkbenchView(
+        eligibleModel.supervisorDashboard,
+        eligibleModel.supervisorDashboard.route
+      );
+      const readyPreviewState = supervisorPreviewStateFromEventPreview(eligibleView.eventPreview);
+      const noHashPreviewState = {
+        ...readyPreviewState,
+        result: {
+          ...readyPreviewState.result,
+          planHash: 'NULL'
+        }
+      };
+      const failedPreviewState = {
+        ...readyPreviewState,
+        phase: 'failed',
+        result: null,
+        message: 'hash mismatch'
+      };
+      const blockedPayload = {
+        ...createGoalSupervisorRenderPayload(),
+        supervisorEventRegistrationEligibility: {
+          ...createSupervisorEventEligibilityRenderPayload(),
+          state: 'blocked',
+          reason: 'event-routed-to-goal-gate',
+          previewResult: null
+        }
+      };
+      const blockedModel = createWorkbenchRenderModelWithSupervisor(blockedPayload);
+      const blockedView = projectSupervisorDashboardToWorkbenchView(
+        blockedModel.supervisorDashboard,
+        blockedModel.supervisorDashboard.route
+      );
+      const staleVisiblePreview = visibleSupervisorPreviewState({
+        eventPreview: blockedView.eventPreview,
+        previewState: readyPreviewState
+      });
+      const calls = [];
+      const noHashConfirm = await confirmSupervisorEventAppend({
+        eventPreview: eligibleView.eventPreview,
+        previewState: noHashPreviewState,
+        confirmGoalEventPlanImpl: async (path, body) => {
+          calls.push([path, body]);
+          return { ok: true, data: createSupervisorGoalEventConfirmationPayload() };
+        }
+      });
+      const failedConfirm = await confirmSupervisorEventAppend({
+        eventPreview: eligibleView.eventPreview,
+        previewState: failedPreviewState,
+        confirmGoalEventPlanImpl: async (path, body) => {
+          calls.push([path, body]);
+          return { ok: true, data: createSupervisorGoalEventConfirmationPayload() };
+        }
+      });
+      const staleConfirm = await confirmSupervisorEventAppend({
+        eventPreview: blockedView.eventPreview,
+        previewState: readyPreviewState,
+        confirmGoalEventPlanImpl: async (path, body) => {
+          calls.push([path, body]);
+          return { ok: true, data: createSupervisorGoalEventConfirmationPayload() };
+        }
+      });
+      const html = renderToStaticMarkup(React.createElement(SupervisorEventPreviewLane, {
+        eventPreview: blockedView.eventPreview,
+        previewState: staleVisiblePreview,
+        previewLoading: false,
+        confirmState: {
+          identity: 'stale',
+          phase: 'idle',
+          result: null,
+          message: null
+        },
+        confirmLoading: false,
+        onPreviewEventPlan: () => undefined,
+        onConfirmEventAppend: () => undefined
+      }));
+
+      assert.equal(supervisorCanConfirmEventAppend({
+        eventPreview: eligibleView.eventPreview,
+        previewResult: noHashPreviewState.result
+      }), false);
+      assert.equal(buildSupervisorEventConfirmBody({
+        eventPreview: eligibleView.eventPreview,
+        previewResult: noHashPreviewState.result
+      }), null);
+      assert.equal(staleVisiblePreview.phase, 'idle');
+      assert.equal(staleVisiblePreview.result, null);
+      assert.equal(noHashConfirm.phase, 'failed');
+      assert.equal(failedConfirm.phase, 'failed');
+      assert.equal(staleConfirm.phase, 'failed');
+      assert.deepEqual(calls, []);
+      assert.doesNotMatch(html, /Confirm Event Append/u);
+      assert.match(html, /preview result not loaded/u);
+    } finally {
+      await server.close();
     }
   });
 
@@ -2385,6 +2642,14 @@ function createSupervisorEventEligibilityRenderPayload() {
         statement: 'Worker evidence recorded for task-3.'
       }
     },
+    confirmRequestShape: {
+      method: 'POST',
+      route: '/api/goals/v44-4-live-supervisor/event-plan-confirm',
+      contentType: 'application/json',
+      requiredBodyFields: ['command', 'planHash', 'task', 'event', 'actor'],
+      optionalBodyFields: ['evidenceRef', 'statement', 'blockerId', 'blockerReason', 'blockerSeverity'],
+      confirmUsesPlanHash: true
+    },
     previewResult: createSupervisorGoalUpdatePlanPreviewPayload()
   };
 }
@@ -2451,6 +2716,46 @@ function createSupervisorGoalUpdatePlanPreviewPayload() {
       available: true,
       requiredFlags: ['--confirm', '--plan-hash'],
       copyOnlyCommand: 'symphony goal update --goal v44-4-live-supervisor --task task-3 --event worker.evidence-recorded --actor local-goal-supervisor-worker --evidence-ref artifact:v44-4:pending-result --confirm --plan-hash sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --json'
+    }
+  };
+}
+
+function createSupervisorGoalEventConfirmationPayload() {
+  return {
+    contractName: 'goal-event-confirmation.v1',
+    contractVersion: 1,
+    mode: 'confirm',
+    status: 'appended',
+    written: true,
+    appendOnly: true,
+    planHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    command: 'update',
+    operationRun: {
+      operationId: 'op_v50_task3_event_confirm',
+      status: 'confirmed'
+    },
+    eventSummary: {
+      eventId: 'evt-v50-task-3-confirmed',
+      sequence: 7,
+      eventType: 'worker.evidence-recorded',
+      taskId: 'task-3',
+      actorRole: 'worker',
+      actorId: 'local-goal-supervisor-worker',
+      eventHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    },
+    refreshed: {
+      progress: { contractName: 'goal-progress-ledger.v1' },
+      events: { contractName: 'goal-event-log.v1' },
+      nextAction: { contractName: 'goal-next-action.v1' },
+      closeout: { contractName: 'goal-closeout-report.v1' }
+    },
+    confirmEndpoint: {
+      constrainedCommands: ['update', 'review', 'gate'],
+      confirmUsesPlanHash: true
+    },
+    safety: {
+      confirmWritesAppendOnly: true,
+      genericShellRunner: false
     }
   };
 }

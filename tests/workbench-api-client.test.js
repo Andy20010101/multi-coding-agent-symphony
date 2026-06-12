@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createServer as createViteServer } from 'vite';
 
 import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 import { appendGoalEvent } from '../src/symphony/goal-event-journal.js';
@@ -1614,6 +1615,14 @@ describe('v15 Workbench read-only API client', () => {
     });
 
     assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(calls[0][1].body), {
+      command: 'update',
+      task: 'task-3',
+      event: 'worker.evidence-recorded',
+      actor: 'codex-v21-task-3-worker',
+      evidenceRef: ['docs/plans/v21-task-3-worker-evidence-2026-05-29.md'],
+      planHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111'
+    });
     assert.deepEqual(calls.map(([path, init]) => [
       path,
       init.method,
@@ -1629,6 +1638,100 @@ describe('v15 Workbench read-only API client', () => {
       'application/json',
       'sha256:1111111111111111111111111111111111111111111111111111111111111111'
     ]]);
+  });
+
+  it('builds supervisor event confirm body only from eligibility shape and visible preview planHash', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const {
+        buildSupervisorEventConfirmBody,
+        projectSupervisorDashboardToWorkbenchView,
+        supervisorCanConfirmEventAppend,
+        supervisorConfirmPathFromRequestShape
+      } = await server.ssrLoadModule('/src/v46SupervisorWorkbench.jsx');
+      const supervisor = createGoalSupervisorAppReadModelPayload();
+      const eligibility = {
+        ...createSupervisorEventRegistrationEligibility(),
+        previewRequest: {
+          ...createSupervisorEventRegistrationEligibility().previewRequest,
+          query: {
+            ...createSupervisorEventRegistrationEligibility().previewRequest.query,
+            planHash: 'sha256:stale-stale-stale-stale-stale-stale-stale-stale-stale-stale-stale',
+            branch: 'codex/untrusted-branch',
+            commit: 'untrusted-commit',
+            commandText: 'pnpm test',
+            extraField: 'drop-me'
+          }
+        }
+      };
+
+      supervisor.supervisorEventRegistrationEligibility = eligibility;
+
+      const view = projectSupervisorDashboardToWorkbenchView(supervisor, {
+        source: '/api/goals/v44-4-live-supervisor/supervisor'
+      });
+      const previewResult = {
+        contract: 'goal-update-plan.v1 / 1',
+        eventType: 'worker.evidence-recorded',
+        taskId: 'task-3',
+        actorId: 'local-goal-supervisor-worker',
+        planHash: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        statement: 'Worker evidence recorded for task-3.',
+        blockerId: 'blocker-v50-api',
+        blockerReason: 'api client body test',
+        blockerSeverity: 'low'
+      };
+      const body = buildSupervisorEventConfirmBody({
+        eventPreview: view.eventPreview,
+        previewResult
+      });
+
+      assert.equal(supervisorConfirmPathFromRequestShape(eligibility.confirmRequestShape), '/api/goals/v44-4-live-supervisor/event-plan-confirm');
+      assert.equal(view.eventPreview.confirmRoute, eligibility.confirmRequestShape.route);
+      assert.equal(supervisorCanConfirmEventAppend({
+        eventPreview: view.eventPreview,
+        previewResult
+      }), true);
+      assert.deepEqual(body, {
+        command: 'update',
+        task: 'task-3',
+        event: 'worker.evidence-recorded',
+        actor: 'local-goal-supervisor-worker',
+        planHash: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        evidenceRef: ['artifact:v44-4:pending-result'],
+        statement: 'Worker evidence recorded for task-3.',
+        blockerId: 'blocker-v50-api',
+        blockerReason: 'api client body test',
+        blockerSeverity: 'low'
+      });
+      assert.deepEqual(Object.keys(body), [
+        'command',
+        'task',
+        'event',
+        'actor',
+        'planHash',
+        'evidenceRef',
+        'statement',
+        'blockerId',
+        'blockerReason',
+        'blockerSeverity'
+      ]);
+      assert.doesNotMatch(JSON.stringify(body), /stale|commandText|extraField|branch|commit|drop-me/u);
+      assert.equal(supervisorConfirmPathFromRequestShape({
+        ...eligibility.confirmRequestShape,
+        route: '/api/goals/v44-4-live-supervisor/event-plan-confirm?planHash=bad'
+      }), null);
+    } finally {
+      await server.close();
+    }
   });
 
   it('posts controlled implementation run confirms with only preview context fields', async () => {

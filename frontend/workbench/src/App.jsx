@@ -205,6 +205,7 @@ export function WorkbenchShell({
             selectedSupervisorDashboard(model),
             selectedSupervisorDashboardRouteState(model)
           )}
+          onSupervisorEventConfirmed={onRefreshWorkbenchContracts}
         />
       ) : model === null ? null : (
         workbenchRoute === 'desktop' ? (

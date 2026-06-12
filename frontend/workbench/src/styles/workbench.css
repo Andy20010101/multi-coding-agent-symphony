@@ -620,7 +620,9 @@ body {
 }
 
 .v50-preview-status,
-.v50-preview-result {
+.v50-preview-result,
+.v50-confirm-lane,
+.v50-confirm-result {
   margin-top: 10px;
 }
 
@@ -628,6 +630,27 @@ body {
   color: var(--v46-muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.v50-confirm-lane {
+  border-top: 1px solid color-mix(in oklab, var(--v46-border-soft), transparent 35%);
+  padding-top: 10px;
+}
+
+.v50-confirm-button {
+  max-width: 230px;
+  border: 1px solid color-mix(in oklab, var(--v46-accent), var(--v46-success) 35%);
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: color-mix(in oklab, var(--v46-accent), var(--v46-surface) 82%);
+  color: var(--v46-fg);
+  font: 700 12px/1.1 var(--v46-ui-font);
+}
+
+.v50-confirm-button:disabled {
+  border-color: var(--v46-border-soft);
+  background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-surface) 52%);
+  color: var(--v46-muted);
 }
 
 @media (max-width: 980px) {

@@ -22127,6 +22127,11 @@ var SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
 		requestMethod: "NULL",
 		route: "NULL",
 		previewPath: "NULL",
+		confirmMethod: "NULL",
+		confirmRoute: "NULL",
+		confirmContentType: "NULL",
+		canConfirmRoute: false,
+		confirmBodyBase: null,
 		queryRows: Object.freeze([]),
 		missingInputs: Object.freeze(["supervisorEventRegistrationEligibility"]),
 		recommendedEvent: Object.freeze({
@@ -22532,9 +22537,12 @@ function commandBoundaryView(commandBoundary) {
 }
 function supervisorEventPreviewView(eligibility) {
 	const previewRequest = objectValue(eligibility.previewRequest);
+	const confirmRequestShape = objectValue(eligibility.confirmRequestShape);
 	const query = objectValue(previewRequest.query);
 	const isEligible = eligibility.state === "eligible";
 	const previewPath = isEligible ? previewPathFromRequest(previewRequest) : null;
+	const confirmPath = isEligible ? supervisorConfirmPathFromRequestShape(confirmRequestShape) : null;
+	const confirmBodyBase = isEligible ? supervisorConfirmBodyBaseFromPreviewQuery(query) : null;
 	const previewResult = objectValue(eligibility.previewResult);
 	return Object.freeze({
 		contract: contractRefLabel(eligibility, "supervisorEventRegistrationEligibility.v1"),
@@ -22546,6 +22554,11 @@ function supervisorEventPreviewView(eligibility) {
 		requestMethod: textValue$1(previewRequest.method ?? "NULL"),
 		route: textValue$1(previewRequest.route ?? "NULL"),
 		previewPath: textValue$1(previewPath),
+		confirmMethod: textValue$1(confirmRequestShape.method ?? "NULL"),
+		confirmRoute: textValue$1(confirmPath),
+		confirmContentType: textValue$1(confirmRequestShape.contentType ?? "NULL"),
+		canConfirmRoute: isEligible && confirmPath !== null && supervisorConfirmShapeIsComplete(confirmRequestShape) && hasCompleteSupervisorConfirmBodyBase(confirmBodyBase),
+		confirmBodyBase: confirmBodyBase === null ? null : Object.freeze(confirmBodyBase),
 		queryRows: Object.freeze(queryRowsFromRequest(query)),
 		missingInputs: Object.freeze(listTextValues(eligibility.missingInputs, ["none"])),
 		recommendedEvent: recommendedEventView(objectValue(eligibility.recommendedEvent)),
@@ -22581,6 +22594,85 @@ function hasCompletePreviewQuery(query) {
 function hasPreviewQueryValue(value) {
 	if (Array.isArray(value)) return value.some((entry) => entry !== null && entry !== void 0 && String(entry).trim() !== "");
 	return value !== null && value !== void 0 && String(value).trim() !== "";
+}
+function supervisorConfirmPathFromRequestShape(confirmRequestShape) {
+	const shape = objectValue(confirmRequestShape);
+	const route = typeof shape.route === "string" ? shape.route.trim() : "";
+	if (shape.method !== "POST" || route.includes("?") || route.includes("#")) return null;
+	const match = route.match(/^\/api\/goals\/([^/?#]+)\/event-plan-confirm$/u);
+	if (match === null || match[1] === "latest") return null;
+	return route;
+}
+function supervisorConfirmShapeIsComplete(confirmRequestShape) {
+	const shape = objectValue(confirmRequestShape);
+	const required = Array.isArray(shape.requiredBodyFields) ? shape.requiredBodyFields : [];
+	return supervisorConfirmPathFromRequestShape(shape) !== null && shape.contentType === "application/json" && shape.confirmUsesPlanHash === true && [
+		"command",
+		"planHash",
+		"task",
+		"event",
+		"actor"
+	].every((field) => required.includes(field));
+}
+function supervisorConfirmBodyBaseFromPreviewQuery(query) {
+	const body = {};
+	assignSupervisorConfirmField(body, "command", query.command);
+	assignSupervisorConfirmField(body, "task", query.task);
+	assignSupervisorConfirmField(body, "event", query.event);
+	assignSupervisorConfirmField(body, "actor", query.actor);
+	assignSupervisorConfirmEvidenceRef(body, query.evidenceRef);
+	assignSupervisorConfirmField(body, "statement", query.statement);
+	assignSupervisorConfirmField(body, "blockerId", query.blockerId);
+	assignSupervisorConfirmField(body, "blockerReason", query.blockerReason);
+	assignSupervisorConfirmField(body, "blockerSeverity", query.blockerSeverity);
+	return body;
+}
+function assignSupervisorConfirmField(body, key, value) {
+	if (value === null || value === void 0 || Array.isArray(value)) return;
+	const text = String(value).trim();
+	if (text !== "" && text !== "NULL") body[key] = text;
+}
+function assignSupervisorConfirmEvidenceRef(body, value) {
+	const refs = Array.isArray(value) ? value.map((entry) => String(entry ?? "").trim()).filter((entry) => entry !== "" && entry !== "NULL") : String(value ?? "").trim() === "" || String(value ?? "").trim() === "NULL" ? [] : [String(value).trim()];
+	if (refs.length > 0) body.evidenceRef = refs;
+}
+function hasCompleteSupervisorConfirmBodyBase(body) {
+	if (body === null || typeof body !== "object") return false;
+	return body.command === "update" && [
+		"task",
+		"event",
+		"actor"
+	].every((field) => typeof body[field] === "string" && body[field].trim() !== "");
+}
+function buildSupervisorEventConfirmBody({ eventPreview, previewResult }) {
+	const bodyBase = objectValue(eventPreview?.confirmBodyBase);
+	const planHash = usableSupervisorPlanHash(previewResult?.planHash);
+	if (!supervisorCanConfirmEventAppend({
+		eventPreview,
+		previewResult
+	}) || planHash === null) return null;
+	const constrainedBody = {};
+	assignSupervisorConfirmField(constrainedBody, "command", bodyBase.command);
+	assignSupervisorConfirmField(constrainedBody, "task", bodyBase.task);
+	assignSupervisorConfirmField(constrainedBody, "event", bodyBase.event);
+	assignSupervisorConfirmField(constrainedBody, "actor", bodyBase.actor);
+	assignSupervisorConfirmField(constrainedBody, "planHash", planHash);
+	assignSupervisorConfirmEvidenceRef(constrainedBody, bodyBase.evidenceRef);
+	assignSupervisorConfirmField(constrainedBody, "statement", bodyBase.statement ?? previewResult?.statement);
+	assignSupervisorConfirmField(constrainedBody, "blockerId", bodyBase.blockerId ?? previewResult?.blockerId);
+	assignSupervisorConfirmField(constrainedBody, "blockerReason", bodyBase.blockerReason ?? previewResult?.blockerReason);
+	assignSupervisorConfirmField(constrainedBody, "blockerSeverity", bodyBase.blockerSeverity ?? previewResult?.blockerSeverity);
+	return constrainedBody;
+}
+function supervisorCanConfirmEventAppend({ eventPreview, previewResult }) {
+	const bodyBase = objectValue(eventPreview?.confirmBodyBase);
+	const planHash = usableSupervisorPlanHash(previewResult?.planHash);
+	if (eventPreview?.state !== "eligible" || eventPreview?.canPreview !== true || eventPreview?.canConfirmRoute !== true || planHash === null || !hasCompleteSupervisorConfirmBodyBase(bodyBase)) return false;
+	return bodyBase.task === previewResult?.taskId && bodyBase.event === previewResult?.eventType && bodyBase.actor === previewResult?.actorId;
+}
+function usableSupervisorPlanHash(value) {
+	const text = typeof value === "string" ? value.trim() : "";
+	return text === "" || text === "NULL" ? null : text;
 }
 function queryRowsFromRequest(query) {
 	return Object.entries(query).filter(([, value]) => hasPreviewQueryValue(value)).map(([key, value]) => [key, textValue$1(value)]);
@@ -22622,6 +22714,29 @@ function goalEventPlanPreviewResultView(plan) {
 		operationStatus: textValue$1(operationRun.status ?? plan.operationStatus ?? validation.status ?? "NULL"),
 		planHash: textValue$1(plan.planHash ?? "NULL"),
 		copyOnlyConfirmCommand: textValue$1(confirm.copyOnlyCommand ?? "NULL")
+	});
+}
+function goalEventConfirmationResultView(result) {
+	const eventSummary = objectValue(result.eventSummary);
+	const operationRun = objectValue(result.operationRun);
+	const refreshed = objectValue(result.refreshed);
+	return Object.freeze({
+		contract: contractRefLabel(result, "goal-event-confirmation.v1"),
+		status: textValue$1(result.status ?? "NULL"),
+		written: textValue$1(result.written ?? "NULL"),
+		appendOnly: textValue$1(result.appendOnly ?? "NULL"),
+		eventType: textValue$1(eventSummary.eventType ?? "NULL"),
+		eventId: textValue$1(eventSummary.eventId ?? "NULL"),
+		sequence: textValue$1(eventSummary.sequence ?? "NULL"),
+		eventHash: textValue$1(eventSummary.eventHash ?? "NULL"),
+		operationId: textValue$1(operationRun.operationId ?? "NULL"),
+		operationStatus: textValue$1(operationRun.status ?? "NULL"),
+		planHash: textValue$1(result.planHash ?? "NULL"),
+		confirmEndpoint: textValue$1(objectSummary(result.confirmEndpoint) ?? "NULL"),
+		refreshedProgress: textValue$1(objectValue(refreshed.progress).contractName ?? "NULL"),
+		refreshedEvents: textValue$1(objectValue(refreshed.events).contractName ?? "NULL"),
+		refreshedNextAction: textValue$1(objectValue(refreshed.nextAction).contractName ?? "NULL"),
+		refreshedCloseout: textValue$1(objectValue(refreshed.closeout).contractName ?? "NULL")
 	});
 }
 function evidenceRefsText(evidenceRefs) {
@@ -22737,17 +22852,25 @@ var SIDEBAR_ITEMS = Object.freeze([
 		tone: "neutral"
 	})
 ]);
-function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
+function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW, onSupervisorEventConfirmed }) {
 	const eventPreview = view.eventPreview ?? SUPERVISOR_WORKBENCH_VIEW.eventPreview;
 	const previewIdentity = supervisorEventPreviewIdentity(eventPreview);
 	const [previewState, setPreviewState] = (0, import_react.useState)(() => supervisorPreviewStateFromEventPreview(eventPreview));
+	const [confirmState, setConfirmState] = (0, import_react.useState)(() => supervisorConfirmStateFromEventPreview(eventPreview, previewState.result));
 	const visiblePreviewState = visibleSupervisorPreviewState({
 		eventPreview,
 		previewState
 	});
+	const visibleConfirmState = visibleSupervisorConfirmState({
+		eventPreview,
+		previewState: visiblePreviewState,
+		confirmState
+	});
 	const previewLoading = visiblePreviewState.phase === "loading";
+	const confirmLoading = visibleConfirmState.phase === "loading";
 	(0, import_react.useEffect)(() => {
 		setPreviewState(supervisorPreviewStateFromEventPreview(eventPreview));
+		setConfirmState(supervisorConfirmStateFromEventPreview(eventPreview, eventPreview.previewResult));
 	}, [previewIdentity]);
 	async function handlePreviewEventPlan() {
 		if (!eventPreview.canPreview || previewLoading) return;
@@ -22757,14 +22880,17 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 			result: null,
 			message: null
 		});
+		setConfirmState(supervisorConfirmStateFromEventPreview(eventPreview, null));
 		const result = await fetchGoalEventPlanPreview(eventPreview.previewPath);
 		if (result.ok) {
+			const resultView = goalEventPlanPreviewResultView(result.data);
 			setPreviewState({
 				identity: previewIdentity,
 				phase: "ready",
-				result: goalEventPlanPreviewResultView(result.data),
+				result: resultView,
 				message: null
 			});
+			setConfirmState(supervisorConfirmStateFromEventPreview(eventPreview, resultView));
 			return;
 		}
 		setPreviewState({
@@ -22773,6 +22899,24 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 			result: null,
 			message: textValue$1(result.message ?? "preview failed")
 		});
+		setConfirmState(supervisorConfirmStateFromEventPreview(eventPreview, null));
+	}
+	async function handleConfirmEventAppend() {
+		if (confirmLoading) return;
+		setConfirmState({
+			identity: supervisorEventConfirmIdentity({
+				eventPreview,
+				previewResult: visiblePreviewState.result
+			}),
+			phase: "loading",
+			result: null,
+			message: null
+		});
+		setConfirmState(await confirmSupervisorEventAppend({
+			eventPreview,
+			previewState: visiblePreviewState,
+			onEventConfirmed: onSupervisorEventConfirmed
+		}));
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "v46-supervisor-shell",
@@ -22797,7 +22941,10 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 						eventPreview,
 						previewState: visiblePreviewState,
 						previewLoading,
-						onPreviewEventPlan: handlePreviewEventPlan
+						confirmState: visibleConfirmState,
+						confirmLoading,
+						onPreviewEventPlan: handlePreviewEventPlan,
+						onConfirmEventAppend: handleConfirmEventAppend
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalTimelinePanel, { timeline: view.timeline }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipPanel, { ownership: view.ownership })
@@ -22818,14 +22965,62 @@ function visibleSupervisorPreviewState({ eventPreview, previewState }) {
 	const identity = supervisorEventPreviewIdentity(eventPreview);
 	return previewState?.identity === identity ? previewState : supervisorPreviewStateFromEventPreview(eventPreview);
 }
+function supervisorConfirmStateFromEventPreview(eventPreview, previewResult) {
+	return Object.freeze({
+		identity: supervisorEventConfirmIdentity({
+			eventPreview,
+			previewResult
+		}),
+		phase: "idle",
+		result: null,
+		message: null
+	});
+}
+function visibleSupervisorConfirmState({ eventPreview, previewState, confirmState }) {
+	const identity = supervisorEventConfirmIdentity({
+		eventPreview,
+		previewResult: previewState?.phase === "ready" ? previewState.result : null
+	});
+	return confirmState?.identity === identity ? confirmState : supervisorConfirmStateFromEventPreview(eventPreview, previewState?.result ?? null);
+}
+function supervisorEventConfirmIdentity({ eventPreview, previewResult }) {
+	return [
+		supervisorEventPreviewIdentity(eventPreview),
+		eventPreview.confirmMethod,
+		eventPreview.confirmRoute,
+		eventPreview.confirmContentType,
+		previewResult?.eventType,
+		previewResult?.taskId,
+		previewResult?.actorId,
+		previewResult?.planHash
+	].map(textValue$1).join("");
+}
 function supervisorEventPreviewIdentity(eventPreview) {
 	return [
 		eventPreview.state,
 		eventPreview.requestMethod,
 		String(eventPreview.canPreview),
 		eventPreview.previewPath,
+		eventPreview.confirmMethod,
+		eventPreview.confirmRoute,
+		String(eventPreview.canConfirmRoute),
+		supervisorConfirmBodyBaseIdentity(eventPreview.confirmBodyBase),
 		supervisorPreviewResultIdentity(eventPreview.previewResult)
 	].map(textValue$1).join("");
+}
+function supervisorConfirmBodyBaseIdentity(bodyBase) {
+	const body = objectValue(bodyBase);
+	return [
+		body.command,
+		body.task,
+		body.event,
+		body.actor,
+		textValue$1(body.evidenceRef),
+		body.statement,
+		body.blockerId,
+		body.blockerReason,
+		body.blockerSeverity
+	].map(textValue$1).join("");
 }
 function supervisorPreviewResultIdentity(previewResult) {
 	if (previewResult === null || previewResult === void 0) return "no-preview-result";
@@ -23198,7 +23393,7 @@ function PendingResultPanel({ pendingResult }) {
 		] })
 	});
 }
-function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading, onPreviewEventPlan }) {
+function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading, confirmState, confirmLoading, onPreviewEventPlan, onConfirmEventAppend }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
 		className: "v50-event-preview-panel",
 		odId: "supervisor-event-preview",
@@ -23212,6 +23407,9 @@ function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading
 				["method", eventPreview.requestMethod],
 				["route", eventPreview.route],
 				["preview path", eventPreview.previewPath],
+				["confirm method", eventPreview.confirmMethod],
+				["confirm route", eventPreview.confirmRoute],
+				["confirm content type", eventPreview.confirmContentType],
 				["readOnly", String(eventPreview.readOnly)],
 				["willMutate", String(eventPreview.willMutate)]
 			] }),
@@ -23236,7 +23434,14 @@ function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading
 				onClick: onPreviewEventPlan,
 				children: "Preview Event Plan"
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventPreviewResult, { previewState })
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventPreviewResult, { previewState }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventConfirmAction, {
+				eventPreview,
+				previewState,
+				confirmState,
+				confirmLoading,
+				onConfirmEventAppend
+			})
 		]
 	});
 }
@@ -23275,6 +23480,102 @@ function SupervisorEventPreviewResult({ previewState }) {
 			["copy-only confirm command", result.copyOnlyConfirmCommand]
 		] })
 	});
+}
+function SupervisorEventConfirmAction({ eventPreview, previewState, confirmState, confirmLoading, onConfirmEventAppend }) {
+	const previewResult = previewState.phase === "ready" ? previewState.result : null;
+	const canConfirm = supervisorCanConfirmEventAppend({
+		eventPreview,
+		previewResult
+	});
+	if (previewState.phase !== "ready" || previewResult === null) return null;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "v50-confirm-lane",
+		children: [canConfirm ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+			type: "button",
+			className: "v50-confirm-button",
+			disabled: confirmLoading,
+			onClick: onConfirmEventAppend,
+			children: "Confirm Event Append"
+		}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "v50-preview-status",
+			children: "confirm route or planHash unavailable"
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventConfirmResult, { confirmState })]
+	});
+}
+function SupervisorEventConfirmResult({ confirmState }) {
+	if (confirmState.phase === "idle") return null;
+	if (confirmState.phase === "loading") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "v50-preview-status",
+		children: "confirm request pending"
+	});
+	if (confirmState.phase === "failed") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "v50-preview-status",
+		children: confirmState.message
+	});
+	if (confirmState.result === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "v50-preview-status",
+		children: "confirmation result not loaded"
+	});
+	const result = confirmState.result;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "v50-confirm-result",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["confirmation contract", result.contract],
+			["status", result.status],
+			["written", result.written],
+			["appendOnly", result.appendOnly],
+			["event type", result.eventType],
+			["event id", result.eventId],
+			["sequence", result.sequence],
+			["event hash", result.eventHash],
+			["operation id", result.operationId],
+			["operation status", result.operationStatus],
+			["planHash", result.planHash],
+			["confirm endpoint", result.confirmEndpoint],
+			["refreshed.progress", result.refreshedProgress],
+			["refreshed.events", result.refreshedEvents],
+			["refreshed.nextAction", result.refreshedNextAction],
+			["refreshed.closeout", result.refreshedCloseout]
+		] })
+	});
+}
+async function confirmSupervisorEventAppend({ eventPreview, previewState, confirmGoalEventPlanImpl = confirmGoalEventPlan, onEventConfirmed }) {
+	const visiblePreviewState = visibleSupervisorPreviewState({
+		eventPreview,
+		previewState
+	});
+	const previewResult = visiblePreviewState.phase === "ready" ? visiblePreviewState.result : null;
+	const confirmIdentity = supervisorEventConfirmIdentity({
+		eventPreview,
+		previewResult
+	});
+	const confirmPath = eventPreview?.confirmRoute === "NULL" ? null : eventPreview?.confirmRoute;
+	const constrainedBody = buildSupervisorEventConfirmBody({
+		eventPreview,
+		previewResult
+	});
+	if (typeof confirmGoalEventPlanImpl !== "function" || confirmPath === null || constrainedBody === null) return {
+		identity: confirmIdentity,
+		phase: "failed",
+		result: null,
+		message: "confirm route unavailable"
+	};
+	const result = await confirmGoalEventPlanImpl(confirmPath, constrainedBody);
+	if (result.ok) {
+		if (typeof onEventConfirmed === "function") await onEventConfirmed(result.data);
+		return {
+			identity: confirmIdentity,
+			phase: "ready",
+			result: goalEventConfirmationResultView(result.data),
+			message: null
+		};
+	}
+	return {
+		identity: confirmIdentity,
+		phase: "failed",
+		result: null,
+		message: textValue$1(result.message ?? "confirm failed")
+	};
 }
 function CommandBoundaryPanel({ boundary }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
@@ -23550,7 +23851,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 				title: "读取失败",
 				copy: "错误摘要：只读 contract 未暴露或不可用。刷新页面后会重新读取只读 API。"
 			}) : null,
-			workbenchRoute === "supervisor" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorShell, { view: projectSupervisorDashboardToWorkbenchView(selectedSupervisorDashboard(model), selectedSupervisorDashboardRouteState(model)) }) : model === null ? null : workbenchRoute === "desktop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopShellRoute, {
+			workbenchRoute === "supervisor" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorShell, {
+				view: projectSupervisorDashboardToWorkbenchView(selectedSupervisorDashboard(model), selectedSupervisorDashboardRouteState(model)),
+				onSupervisorEventConfirmed: onRefreshWorkbenchContracts
+			}) : model === null ? null : workbenchRoute === "desktop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopShellRoute, {
 				desktopShell: model.desktopShell,
 				routeContext
 			}) : workbenchRoute === "prompts" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PromptWorkspaceRoute, {
