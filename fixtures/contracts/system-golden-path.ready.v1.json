@@ -1,0 +1,322 @@
+{
+  "contractName": "systemGoldenPath.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-12T10:30:00.000Z",
+  "project": {
+    "projectId": "multi-coding-agent-symphony",
+    "name": "multi-coding-agent-symphony",
+    "state": "ready",
+    "selected": true,
+    "sourceContract": "recent-projects.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "fixtures/contracts/recent-projects.available.v1.json"
+    }
+  },
+  "goal": {
+    "goalId": "v52-system-golden-path-closeout",
+    "title": "v52 System Golden Path Closeout",
+    "taskId": "pr-2-contracts-fixtures",
+    "taskLabel": "systemGoldenPath.v1 contracts and fixtures",
+    "state": "ready",
+    "sourceContract": "goal-supervisor-app-read-model.v1",
+    "sourceRef": {
+      "kind": "route",
+      "ref": "/api/goals/<goal-id>/supervisor"
+    }
+  },
+  "steps": [
+    {
+      "id": "project-binding",
+      "label": "Project Launcher",
+      "state": "ready",
+      "sourceContract": "recent-projects.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "fixtures/contracts/recent-projects.available.v1.json"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "project-binding-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "app-home",
+      "label": "App Home",
+      "state": "ready",
+      "sourceContract": "app-state-snapshot.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "fixtures/contracts/app-state-snapshot.healthy.v1.json"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "app-home-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "supervisor",
+      "label": "Supervisor",
+      "state": "ready",
+      "sourceContract": "goal-supervisor-app-read-model.v1",
+      "sourceRef": {
+        "kind": "route",
+        "ref": "/api/goals/<goal-id>/supervisor"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "supervisor-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "context-advisory",
+      "label": "Context Advisory",
+      "state": "ready",
+      "sourceContract": "contextAdvisory.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "contextAdvisory.v1"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "context-advisory-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "result-intake",
+      "label": "Result Intake",
+      "state": "ready",
+      "sourceContract": "pendingResult.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "pendingResult.v1"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "result-intake-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "event-preview",
+      "label": "Event Preview",
+      "state": "ready",
+      "sourceContract": "supervisorEventRegistrationEligibility.v1",
+      "sourceRef": {
+        "kind": "route",
+        "ref": "/api/goals/<goal-id>/event-plan-preview"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "event-preview-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "event-confirm",
+      "label": "Event Confirm",
+      "state": "ready",
+      "sourceContract": "supervisorEventRegistrationEligibility.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "supervisorEventRegistrationEligibility.v1:confirmRequestShape"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "event-confirm-shape-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "review-gate",
+      "label": "Review / Gate",
+      "state": "manual-required",
+      "sourceContract": "supervisorEventRegistrationEligibility.v1",
+      "sourceRef": {
+        "kind": "manual-cli",
+        "ref": "symphony goal review"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "manual-cli-required",
+        "label": "Manual CLI Required",
+        "reason": "review-gate-manual-required",
+        "commandName": "symphony goal review",
+        "willMutate": false
+      },
+      "willMutate": false
+    },
+    {
+      "id": "closeout",
+      "label": "Closeout",
+      "state": "ready",
+      "sourceContract": "goal-closeout-report.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "fixtures/contracts/goal-closeout-report.valid.v1.json"
+      },
+      "blockedReasons": [],
+      "nextSafeAction": {
+        "kind": "refresh-state",
+        "label": "Refresh State",
+        "reason": "closeout-ready",
+        "method": "GET",
+        "routeTemplate": "/api/goals/<goal-id>/supervisor",
+        "willMutate": false
+      },
+      "willMutate": false
+    }
+  ],
+  "overallState": "ready",
+  "nextSafeAction": {
+    "kind": "manual-cli-required",
+    "label": "Manual CLI Required",
+    "reason": "review-gate-manual-required",
+    "commandName": "symphony goal review",
+    "willMutate": false
+  },
+  "blockedReasons": [],
+  "sourceContracts": [
+    {
+      "contractName": "recent-projects.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": ["project-binding"],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "fixtures/contracts/recent-projects.available.v1.json"
+      }
+    },
+    {
+      "contractName": "app-state-snapshot.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": ["app-home"],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "fixtures/contracts/app-state-snapshot.healthy.v1.json"
+      }
+    },
+    {
+      "contractName": "goal-supervisor-app-read-model.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": ["supervisor"],
+      "sourceRef": {
+        "kind": "route",
+        "ref": "/api/goals/<goal-id>/supervisor"
+      }
+    },
+    {
+      "contractName": "contextAdvisory.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": ["context-advisory"],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "contextAdvisory.v1"
+      }
+    },
+    {
+      "contractName": "pendingResult.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": ["result-intake"],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "pendingResult.v1"
+      }
+    },
+    {
+      "contractName": "supervisorEventRegistrationEligibility.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": ["event-preview", "event-confirm", "review-gate"],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "supervisorEventRegistrationEligibility.v1"
+      }
+    },
+    {
+      "contractName": "goal-closeout-report.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": ["closeout"],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "fixtures/contracts/goal-closeout-report.valid.v1.json"
+      }
+    }
+  ],
+  "routeProvenance": {
+    "source": "v52-pr-2-contract-fixtures",
+    "readModelOwner": "backend",
+    "workbenchSurface": "/workbench/desktop/",
+    "refreshRouteTemplate": "/api/goals/<goal-id>/supervisor",
+    "refreshMethod": "GET",
+    "frontendLocalFileReads": false,
+    "mutationRoutes": []
+  },
+  "boundaries": {
+    "readOnly": true,
+    "readModelOnly": true,
+    "workbenchVisibilityOnly": true,
+    "acceptanceOnly": true,
+    "providerExecutionAvailable": false,
+    "providerLaunchAvailable": false,
+    "childDispatchAvailable": false,
+    "transcriptCompactAvailable": false,
+    "newThreadAvailable": false,
+    "genericShellRunnerAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "localSessionFileReadAvailable": false,
+    "rawProviderPayloadExposureAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "resultIntakeAppendsGoalEvent": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
