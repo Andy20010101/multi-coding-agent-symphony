@@ -15,6 +15,9 @@ import {
   GOAL_EVENT_LOG_CONTRACT_NAME
 } from '../goal-event-contracts.js';
 import {
+  readPendingResult
+} from '../result-intake-state.js';
+import {
   SUPERVISOR_OBSERVABILITY_CONTRACT_NAME,
   buildSupervisorObservability
 } from '../supervisor-runner.js';
@@ -79,6 +82,12 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     goalId: goalNext.goalId ?? context?.goalId ?? goalId,
     generatedAt
   });
+  const resolvedGoalId = context?.runbook?.goalId ?? goalNext.goalId ?? context?.goalId ?? goalId;
+  const pendingResultState = await readCurrentPendingResult({
+    stateDir,
+    goalId: resolvedGoalId,
+    taskId: goalNext.next?.taskId
+  });
   const active = activeLeaseFromObservability(observability);
   const normalizedSessionContext = sessionContext ?? await buildSessionContext({
     threadId: active?.threadId ?? null,
@@ -122,7 +131,8 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
       sessionContext: normalizedSessionContext,
       sessionSourceInventory: normalizedSessionSourceInventory,
       contextAdvisory: normalizedContextAdvisory,
-      threadContinuationDecision
+      threadContinuationDecision,
+      pendingResultState
     }),
     timelineEvents: timelineEventsFromEventLog(eventLog),
     state,
@@ -135,10 +145,27 @@ export async function buildGoalSupervisorAppReadModelFromContracts({
     sessionSourceInventory: normalizedSessionSourceInventory,
     contextAdvisory: normalizedContextAdvisory,
     threadContinuationDecision,
+    pendingResultState,
     ownership: {
       daemonState: observability.daemon?.state ?? 'external-orchestration-owner'
     },
     branch: branchFromRunbook(context?.runbook ?? null)
+  });
+}
+
+async function readCurrentPendingResult({
+  stateDir,
+  goalId,
+  taskId
+}) {
+  if (!nonEmptyString(goalId) || !nonEmptyString(taskId)) {
+    return null;
+  }
+
+  return await readPendingResult({
+    stateDir,
+    goalId,
+    taskId
   });
 }
 
@@ -187,7 +214,8 @@ function sourceContractsFor({
   sessionContext,
   sessionSourceInventory,
   contextAdvisory,
-  threadContinuationDecision
+  threadContinuationDecision,
+  pendingResultState
 }) {
   const contracts = [
     context === null ? null : GOAL_RUNBOOK_CONTRACT_NAME,
@@ -199,7 +227,8 @@ function sourceContractsFor({
     sessionContext?.contractName ?? SESSION_CONTEXT_CONTRACT_NAME,
     sessionSourceInventory?.contractName ?? SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
     contextAdvisory?.contractName ?? CONTEXT_ADVISORY_CONTRACT_NAME,
-    threadContinuationDecision?.contractName ?? THREAD_CONTINUATION_DECISION_CONTRACT_NAME
+    threadContinuationDecision?.contractName ?? THREAD_CONTINUATION_DECISION_CONTRACT_NAME,
+    pendingResultState?.contractName
   ];
 
   return [...new Set(contracts.filter(nonEmptyString))];

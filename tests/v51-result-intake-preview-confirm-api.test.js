@@ -238,7 +238,7 @@ describe('v51 result intake preview and confirm API', () => {
       assert.equal(confirmation.pendingResult.contractName, 'pendingResult.v1');
       assert.equal(confirmation.safety.writesGoalEventLog, false);
       assert.equal(confirmation.safety.writesOperationRegistry, false);
-      assert.equal(confirmation.refreshed.supervisor.pendingResultProjectionAvailable, false);
+      assert.equal(confirmation.refreshed.supervisor.pendingResultProjectionAvailable, true);
       assert.deepEqual(addedFiles, [
         `goals/pending-results/${GOAL_ID}/task-1.json`,
         `goals/result-evidence-escrow/${GOAL_ID}/${confirmation.resultEvidenceEscrow.escrowId}.json`
