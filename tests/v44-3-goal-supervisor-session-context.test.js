@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -239,6 +239,34 @@ describe('v49 session source inventory contract', () => {
     assert.deepEqual(providerByName(inventory, 'codex').degradedReasons, ['source-root-missing']);
   });
 
+  it('scans bounded Codex date folders newest-first before applying the file cap', async (t) => {
+    const temp = await temporaryDirectory(t);
+    const codexRoot = join(temp.path, 'codex', 'sessions');
+    const claudeRoot = join(temp.path, 'claude', 'projects');
+
+    for (const day of ['09', '10', '11', '12']) {
+      await writeJsonl(join(codexRoot, '2026', '06', day, `${day}.jsonl`), {
+        timestamp: `2026-06-${day}T01:00:00.000Z`
+      }, `2026-06-${day}T01:00:00.000Z`);
+    }
+
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      staleAfterMs: 24 * 60 * 60 * 1000,
+      maxFilesPerProvider: 2,
+      codexRoot,
+      claudeRoot
+    });
+    const codex = providerByName(inventory, 'codex');
+
+    assert.equal(codex.latestSessionRef, 'codex:2026/06/12/12.jsonl');
+    assert.equal(codex.latestModifiedAt, '2026-06-12T01:00:00.000Z');
+    assert.equal(codex.state, 'degraded');
+    assert.equal(codex.sourceSummary.stale, false);
+    assert.equal(codex.sourceSummary.scannedFileCount, 2);
+    assert.deepEqual(codex.degradedReasons, ['max-files-per-provider-reached']);
+  });
+
   it('marks stale readable sources separately from missing and unreadable sources', async (t) => {
     const temp = await temporaryDirectory(t);
     const codexRoot = join(temp.path, 'codex', 'sessions');
@@ -276,24 +304,20 @@ describe('v49 session source inventory contract', () => {
       timestamp: '2026-06-12T01:00:00.000Z',
       message: { role: 'assistant', content: 'hidden unreadable content' }
     }, '2026-06-12T01:00:00.000Z');
-    await chmod(unreadable, 0o000);
 
-    try {
-      const inventory = await buildSessionSourceInventory({
-        generatedAt: '2026-06-12T02:00:00.000Z',
-        codexRoot,
-        claudeRoot
-      });
-      const codex = providerByName(inventory, 'codex');
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      codexRoot,
+      claudeRoot,
+      readSessionFile: async (file) => (file === unreadable ? null : readFile(file, 'utf8'))
+    });
+    const codex = providerByName(inventory, 'codex');
 
-      assert.equal(codex.state, 'unreadable');
-      assert.equal(codex.candidateFileCount, 1);
-      assert.equal(codex.readableFileCount, 0);
-      assert.equal(codex.sourceSummary.readState, 'unreadable');
-      assert.equal(JSON.stringify(inventory).includes('hidden unreadable content'), false);
-    } finally {
-      await chmod(unreadable, 0o600);
-    }
+    assert.equal(codex.state, 'unreadable');
+    assert.equal(codex.candidateFileCount, 1);
+    assert.equal(codex.readableFileCount, 0);
+    assert.equal(codex.sourceSummary.readState, 'unreadable');
+    assert.equal(JSON.stringify(inventory).includes('hidden unreadable content'), false);
   });
 
   it('reports degraded and failed provider states explicitly', async (t) => {

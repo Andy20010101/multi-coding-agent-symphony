@@ -120,7 +120,8 @@ export async function buildSessionSourceInventory({
   codexRoot = join(homedir(), '.codex', 'sessions'),
   claudeRoot = join(homedir(), '.claude', 'projects'),
   codexRootDisplayPath = '~/.codex/sessions',
-  claudeRootDisplayPath = '~/.claude/projects'
+  claudeRootDisplayPath = '~/.claude/projects',
+  readSessionFile = safeReadFile
 } = {}) {
   const nowMs = millisOrNow(generatedAt);
   const effectiveGeneratedAt = new Date(nowMs).toISOString();
@@ -134,7 +135,8 @@ export async function buildSessionSourceInventory({
       generatedAt: effectiveGeneratedAt,
       staleAfterMs,
       maxFiles: effectiveMaxFiles,
-      matchesPattern: codexSessionSourcePath
+      matchesPattern: codexSessionSourcePath,
+      readSessionFile
     }),
     buildProviderSourceInventory({
       provider: 'claude',
@@ -144,7 +146,8 @@ export async function buildSessionSourceInventory({
       generatedAt: effectiveGeneratedAt,
       staleAfterMs,
       maxFiles: effectiveMaxFiles,
-      matchesPattern: () => true
+      matchesPattern: () => true,
+      readSessionFile
     })
   ]);
 
@@ -170,7 +173,8 @@ async function buildProviderSourceInventory({
   generatedAt,
   staleAfterMs,
   maxFiles,
-  matchesPattern
+  matchesPattern,
+  readSessionFile
 }) {
   const base = {
     provider,
@@ -233,7 +237,8 @@ async function buildProviderSourceInventory({
   }
 
   const candidates = await inspectCandidateSessionFiles({
-    files: discovered.files
+    files: discovered.files,
+    readSessionFile
   });
   const latest = candidates
     .filter((candidate) => candidate.stat !== null)
@@ -410,7 +415,7 @@ async function discoverProviderJsonlFiles({
       return { status: 'failed', reason: error?.code ?? 'readdir-failed', files: [], candidateFileCount: 0, truncated: false };
     }
 
-    for (const entry of entries.sort((left, right) => right.name.localeCompare(left.name))) {
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
       const fullPath = join(current, entry.name);
 
       if (entry.isDirectory()) {
@@ -447,12 +452,12 @@ async function discoverProviderJsonlFiles({
   };
 }
 
-async function inspectCandidateSessionFiles({ files }) {
+async function inspectCandidateSessionFiles({ files, readSessionFile }) {
   const inspected = [];
 
   for (const file of files) {
     const info = await safeStat(file);
-    const text = await safeReadFile(file);
+    const text = await safeReadSessionFile(readSessionFile, file);
 
     inspected.push({
       file,
@@ -468,6 +473,14 @@ async function inspectCandidateSessionFiles({ files }) {
 
     return rightMs - leftMs;
   });
+}
+
+async function safeReadSessionFile(readSessionFile, file) {
+  try {
+    return await readSessionFile(file);
+  } catch {
+    return null;
+  }
 }
 
 function codexSessionSourcePath(root, file) {
