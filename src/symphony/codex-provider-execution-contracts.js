@@ -216,7 +216,8 @@ export function buildCodexProviderExecutionPreview({
   taskPackRef = defaultTaskPackRef(),
   providerId = CODEX_PROVIDER_ID,
   role = CODEX_PROVIDER_ROLE,
-  sourceContracts = defaultPreviewSourceContracts()
+  sourceContracts = defaultPreviewSourceContracts(),
+  blockedReasons: inputBlockedReasons = []
 } = {}) {
   const normalizedGeneratedAt = new Date(millisOrNow(generatedAt)).toISOString();
   const taskPackAvailable = isPlainObject(taskPack);
@@ -224,6 +225,7 @@ export function buildCodexProviderExecutionPreview({
   const taskPackRole = taskPackAvailable ? taskPack.role : null;
   const returnPath = taskPackAvailable ? taskPack.returnPath : null;
   const blockedReasons = uniqueStrings([
+    ...safeTextArray(inputBlockedReasons),
     ...(!taskPackAvailable ? ['task-pack-missing'] : []),
     ...(providerId !== CODEX_PROVIDER_ID || (taskPackProvider !== null && taskPackProvider !== CODEX_PROVIDER_ID)
       ? ['unsupported-provider']
