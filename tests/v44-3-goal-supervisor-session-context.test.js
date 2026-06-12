@@ -6,8 +6,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  CONTEXT_ADVISORY_CONTRACT_NAME,
   SESSION_CONTEXT_CONTRACT_NAME,
   SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+  buildContextAdvisory,
   buildGoalSupervisorAppReadModel,
   buildGoalSupervisorAppReadModelFromContracts,
   buildSessionContext,
@@ -129,8 +131,8 @@ describe('v44.3 goal supervisor session hook runtime', () => {
     assert.ok(model.goalSnapshot.sourceContracts.includes(SESSION_CONTEXT_CONTRACT_NAME));
     assert.equal(model.contextStatus.transcriptAvailability, 'readable');
     assert.equal(model.contextStatus.latestToolCall.name, 'Bash');
-    assert.equal(model.contextStatus.tokenUsage.totalTokens, 2600);
-    assert.equal(model.contextStatus.contextUtilization.ratio, 0.055);
+    assert.equal(model.contextStatus.tokenUsage.totalTokens, 'missing');
+    assert.equal(model.contextStatus.contextUtilization.ratio, 'missing');
     assert.equal(model.contextStatus.resultBlockEvidence.present, true);
     assertNoRawTranscriptText(model);
   });
@@ -349,6 +351,201 @@ describe('v49 session source inventory contract', () => {
   });
 });
 
+describe('v49 context advisory projection', () => {
+  it('projects available session context into contextAdvisory.v1 policy inputs', async () => {
+    const context = await buildSessionContext({
+      threadId: 'thread-session-1',
+      generatedAt: '2026-06-10T03:26:00.000Z',
+      codexFiles: [CODEX_ACTIVE],
+      claudeFiles: [CLAUDE_ACTIVE]
+    });
+    const advisory = buildContextAdvisory({
+      sessionContext: context,
+      sessionSourceInventory: availableInventoryFixture(),
+      generatedAt: '2026-06-12T02:00:00.000Z'
+    });
+
+    assert.equal(advisory.contractName, CONTEXT_ADVISORY_CONTRACT_NAME);
+    assert.equal(advisory.readOnly, true);
+    assert.equal(advisory.willMutate, false);
+    assert.equal(advisory.sessionContextRef.contractName, SESSION_CONTEXT_CONTRACT_NAME);
+    assert.equal(advisory.inventoryRef.contractName, SESSION_SOURCE_INVENTORY_CONTRACT_NAME);
+    assert.equal(advisory.transcriptAvailability, 'readable');
+    assert.equal(advisory.exchangeCount, 5);
+    assert.equal(advisory.latestToolCall.name, 'Bash');
+    assert.equal(advisory.latestToolCall.status, 'completed');
+    assert.equal(advisory.tokenUsage.totalTokens, 'missing');
+    assert.equal(advisory.contextUtilization.ratio, 'missing');
+    assert.equal(advisory.contextBand, 'unknown');
+    assert.equal(advisory.resultBlockEvidence.status, 'present');
+    assert.equal(advisory.policyInputs.threadId, 'thread-session-1');
+    assert.equal(advisory.policyInputs.transcriptAvailability, 'readable');
+    assert.deepEqual(advisory.blockedFields, ['tokenUsage.totalTokens', 'contextUtilization.ratio']);
+  });
+
+  it('keeps adapter-sourced missing token totals and context ratio missing without inference', async () => {
+    const context = await buildSessionContext({
+      threadId: 'thread-session-1',
+      generatedAt: '2026-06-10T03:26:00.000Z',
+      codexFiles: [],
+      claudeFiles: [CLAUDE_ACTIVE]
+    });
+    const advisory = buildContextAdvisory({
+      sessionContext: context,
+      generatedAt: '2026-06-12T02:00:00.000Z'
+    });
+
+    assert.equal(context.tokenUsage.inputTokens, 900);
+    assert.equal(context.tokenUsage.outputTokens, 200);
+    assert.equal(context.tokenUsage.totalTokens, 'missing');
+    assert.equal(context.contextUtilization.usedTokens, 1100);
+    assert.equal(context.contextUtilization.maxTokens, 20000);
+    assert.equal(context.contextUtilization.ratio, 'missing');
+    assert.equal(advisory.tokenUsage.totalTokens, 'missing');
+    assert.equal(advisory.contextUtilization.ratio, 'missing');
+    assert.equal(advisory.contextBand, 'unknown');
+    assert.ok(advisory.blockedFields.includes('tokenUsage.totalTokens'));
+    assert.ok(advisory.blockedFields.includes('contextUtilization.ratio'));
+  });
+
+  it('keeps manually supplied missing token totals and context ratio missing without inference', () => {
+    const advisory = buildContextAdvisory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      sessionContext: {
+        contractName: SESSION_CONTEXT_CONTRACT_NAME,
+        contractVersion: 1,
+        generatedAt: '2026-06-12T01:59:00.000Z',
+        readOnly: true,
+        threadId: 'thread-missing-ratio',
+        sessionSourceSummaries: [],
+        transcriptAvailability: 'readable',
+        exchangeCount: 1,
+        latestTurnState: { status: 'completed', role: 'assistant', updatedAt: '2026-06-12T01:59:00.000Z' },
+        tokenUsage: {
+          status: 'available',
+          inputTokens: 100,
+          outputTokens: 40,
+          totalTokens: 'missing'
+        },
+        contextUtilization: {
+          status: 'available',
+          usedTokens: 140,
+          maxTokens: 1000,
+          ratio: 'missing'
+        },
+        resultBlockEvidence: { status: 'missing', present: false }
+      }
+    });
+
+    assert.equal(advisory.tokenUsage.inputTokens, 100);
+    assert.equal(advisory.tokenUsage.outputTokens, 40);
+    assert.equal(advisory.tokenUsage.totalTokens, 'missing');
+    assert.equal(advisory.contextUtilization.usedTokens, 140);
+    assert.equal(advisory.contextUtilization.maxTokens, 1000);
+    assert.equal(advisory.contextUtilization.ratio, 'missing');
+    assert.equal(advisory.contextBand, 'unknown');
+    assert.ok(advisory.blockedFields.includes('tokenUsage.totalTokens'));
+    assert.ok(advisory.blockedFields.includes('contextUtilization.ratio'));
+  });
+
+  it('does not leak raw transcript text, command stdout, raw JSONL, prompts, secrets, or local paths', () => {
+    const advisory = buildContextAdvisory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      sessionContext: {
+        contractName: SESSION_CONTEXT_CONTRACT_NAME,
+        contractVersion: 1,
+        generatedAt: '2026-06-12T01:59:00.000Z',
+        readOnly: true,
+        threadId: 'thread-secret',
+        sessionSourceSummaries: [{ provider: 'codex', status: 'readable', threadId: 'thread-secret', latestTurnAt: '2026-06-12T01:59:00.000Z' }],
+        transcriptAvailability: 'readable',
+        exchangeCount: 1,
+        latestToolCall: { name: 'Bash', status: 'completed', updatedAt: '2026-06-12T01:59:00.000Z' },
+        latestTurnState: { status: 'completed', role: 'assistant', updatedAt: '2026-06-12T01:59:00.000Z' },
+        tokenUsage: { status: 'missing', inputTokens: 'missing', outputTokens: 'missing', totalTokens: 'missing' },
+        contextUtilization: { status: 'missing', usedTokens: 'missing', maxTokens: 'missing', ratio: 'missing' },
+        resultBlockEvidence: {
+          status: 'present',
+          present: true,
+          sourceRef: '/var/folders/private/session.jsonl',
+          evidenceRef: 'stdout: SECRET_TOKEN=hidden\nraw JSONL prompt text'
+        },
+        rawTranscript: 'sanitized user request SECRET_TOKEN raw JSONL prompt text command stdout'
+      },
+      sessionSourceInventory: availableInventoryFixture()
+    });
+    const serialized = JSON.stringify(advisory);
+
+    assert.equal(serialized.includes('sanitized user request'), false);
+    assert.equal(serialized.includes('SECRET_TOKEN'), false);
+    assert.equal(serialized.includes('raw JSONL'), false);
+    assert.equal(serialized.includes('prompt text'), false);
+    assert.equal(serialized.includes('command stdout'), false);
+    assert.equal(serialized.includes('/var/folders/private'), false);
+  });
+
+  it('assigns contextBand only from available ratio boundaries', () => {
+    assert.equal(advisoryWithRatio('missing').contextBand, 'unknown');
+    assert.equal(advisoryWithRatio(0.49).contextBand, 'low');
+    assert.equal(advisoryWithRatio(0.5).contextBand, 'moderate');
+    assert.equal(advisoryWithRatio(0.8).contextBand, 'high');
+    assert.equal(advisoryWithRatio(0.95).contextBand, 'near-limit');
+    assert.equal(advisoryWithRatio(1).contextBand, 'over-limit');
+    assert.equal(advisoryWithRatio(1.2).contextBand, 'over-limit');
+  });
+
+  it('summarizes inventory degraded reasons into advisory reasons', () => {
+    const advisory = buildContextAdvisory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      sessionContext: {
+        transcriptAvailability: 'readable',
+        exchangeCount: 1,
+        latestTurnState: { status: 'completed' },
+        tokenUsage: { status: 'missing', inputTokens: 'missing', outputTokens: 'missing', totalTokens: 'missing' },
+        contextUtilization: { status: 'missing', usedTokens: 'missing', maxTokens: 'missing', ratio: 'missing' },
+        staleTranscriptState: {
+          stale: true,
+          reason: 'latest-session-turn-exceeded-stale-threshold'
+        },
+        missingTranscriptState: {
+          missing: false,
+          reason: null
+        }
+      },
+      sessionSourceInventory: {
+        contractName: SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+        contractVersion: 1,
+        generatedAt: '2026-06-12T01:59:00.000Z',
+        readOnly: true,
+        providers: [
+          { provider: 'codex', state: 'degraded', degradedReasons: ['max-files-per-provider-reached'] },
+          { provider: 'claude', state: 'failed', degradedReasons: ['root-stat-failed'] }
+        ]
+      }
+    });
+
+    assert.deepEqual(advisory.degradedReasons, [
+      'codex:max-files-per-provider-reached',
+      'claude:root-stat-failed',
+      'session:latest-session-turn-exceeded-stale-threshold'
+    ]);
+  });
+
+  it('stays read-only and does not expose execution or write permissions', () => {
+    const advisory = buildContextAdvisory();
+
+    assert.equal(advisory.readOnly, true);
+    assert.equal(advisory.willMutate, false);
+    assert.equal(advisory.boundaries.launchesProvider, false);
+    assert.equal(advisory.boundaries.writesGoalState, false);
+    assert.equal(advisory.boundaries.writesLedgers, false);
+    assert.equal(advisory.boundaries.writesEventLogs, false);
+    assert.equal(advisory.boundaries.writesSymphonyState, false);
+    assert.equal(advisory.boundaries.dispatchesChildren, false);
+    assert.equal(advisory.boundaries.compactsTranscripts, false);
+  });
+});
+
 function assertNoRawTranscriptText(value) {
   const serialized = JSON.stringify(value);
 
@@ -385,4 +582,48 @@ async function writeFileWithMtime(file, text, mtime) {
 
 function providerByName(inventory, provider) {
   return inventory.providers.find((candidate) => candidate.provider === provider);
+}
+
+function availableInventoryFixture() {
+  return {
+    contractName: SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+    contractVersion: 1,
+    generatedAt: '2026-06-12T01:59:00.000Z',
+    readOnly: true,
+    providers: [
+      {
+        provider: 'codex',
+        state: 'available',
+        degradedReasons: [],
+        sourceSummary: {
+          availability: 'available',
+          readState: 'readable',
+          candidateFileCount: 1,
+          scannedFileCount: 1,
+          readableFileCount: 1,
+          unreadableFileCount: 0,
+          latestModifiedAt: '2026-06-12T01:58:00.000Z',
+          stale: false,
+          latestSessionRef: 'codex:2026/06/12/thread-session-1.jsonl'
+        }
+      }
+    ]
+  };
+}
+
+function advisoryWithRatio(ratio) {
+  return buildContextAdvisory({
+    sessionContext: {
+      transcriptAvailability: 'readable',
+      exchangeCount: 1,
+      latestTurnState: { status: 'completed' },
+      tokenUsage: { status: 'missing', inputTokens: 'missing', outputTokens: 'missing', totalTokens: 'missing' },
+      contextUtilization: {
+        status: 'available',
+        usedTokens: 100,
+        maxTokens: 1000,
+        ratio
+      }
+    }
+  });
 }

@@ -6,6 +6,8 @@ export const SESSION_CONTEXT_CONTRACT_NAME = 'sessionContext.v1';
 export const SESSION_CONTEXT_CONTRACT_VERSION = 1;
 export const SESSION_SOURCE_INVENTORY_CONTRACT_NAME = 'sessionSourceInventory.v1';
 export const SESSION_SOURCE_INVENTORY_CONTRACT_VERSION = 1;
+export const CONTEXT_ADVISORY_CONTRACT_NAME = 'contextAdvisory.v1';
+export const CONTEXT_ADVISORY_CONTRACT_VERSION = 1;
 
 const DEFAULT_STALE_AFTER_MS = 30 * 60 * 1000;
 const DEFAULT_MAX_FILES_PER_PROVIDER = 200;
@@ -74,6 +76,7 @@ export async function buildSessionContext({
     readOnly: true,
     willMutate: false,
     generatedAt: new Date(nowMs).toISOString(),
+    threadId: normalizedThreadId,
     sessionSourceSummaries: providerContexts.map(sourceSummary),
     transcriptAvailability: missing ? 'missing' : 'readable',
     exchangeCount: readable.reduce((sum, context) => sum + context.exchangeCount, 0),
@@ -93,6 +96,86 @@ export async function buildSessionContext({
     },
     resultBlockEvidence: aggregateResultBlockEvidence(readable),
     driftMarkers: []
+  };
+}
+
+export function buildContextAdvisory({
+  sessionContext = null,
+  sessionSourceInventory = null,
+  generatedAt = new Date().toISOString()
+} = {}) {
+  const nowMs = millisOrNow(generatedAt);
+  const effectiveGeneratedAt = new Date(nowMs).toISOString();
+  const context = isPlainObject(sessionContext) ? sessionContext : {};
+  const inventory = isPlainObject(sessionSourceInventory) ? sessionSourceInventory : null;
+  const sessionSourceSummaries = normalizeAdvisorySourceSummaries(context.sessionSourceSummaries);
+  const threadId = firstNonEmptyString(
+    context.threadId,
+    ...sessionSourceSummaries.map((source) => source.threadId)
+  );
+  const transcriptAvailability = normalizeTranscriptAvailability(context.transcriptAvailability);
+  const latestToolCall = normalizeAdvisoryToolCall(context.latestToolCall);
+  const latestTurnState = normalizeAdvisoryLatestTurnState(context.latestTurnState);
+  const tokenUsage = normalizeAdvisoryTokenUsage(context.tokenUsage);
+  const contextUtilization = normalizeAdvisoryContextUtilization(context.contextUtilization);
+  const resultBlockEvidence = normalizeAdvisoryResultBlockEvidence(context.resultBlockEvidence);
+  const staleTranscriptState = normalizeAdvisoryStaleTranscriptState(context.staleTranscriptState);
+  const missingTranscriptState = normalizeAdvisoryMissingTranscriptState(context.missingTranscriptState);
+  const degradedReasons = advisoryDegradedReasons({ inventory, staleTranscriptState, missingTranscriptState });
+  const blockedFields = advisoryBlockedFields({
+    transcriptAvailability,
+    tokenUsage,
+    contextUtilization
+  });
+
+  return {
+    contractName: CONTEXT_ADVISORY_CONTRACT_NAME,
+    contractVersion: CONTEXT_ADVISORY_CONTRACT_VERSION,
+    generatedAt: effectiveGeneratedAt,
+    readOnly: true,
+    willMutate: false,
+    sessionContextRef: advisoryContractRef({
+      contract: context,
+      fallbackName: SESSION_CONTEXT_CONTRACT_NAME,
+      fallbackVersion: SESSION_CONTEXT_CONTRACT_VERSION
+    }),
+    inventoryRef: advisoryContractRef({
+      contract: inventory,
+      fallbackName: SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+      fallbackVersion: SESSION_SOURCE_INVENTORY_CONTRACT_VERSION
+    }),
+    transcriptAvailability,
+    exchangeCount: Number.isInteger(context.exchangeCount) ? context.exchangeCount : 'missing',
+    latestToolCall,
+    latestTurnState,
+    tokenUsage,
+    contextUtilization,
+    contextBand: contextBandFromRatio(contextUtilization.ratio),
+    resultBlockEvidence,
+    staleTranscriptState,
+    missingTranscriptState,
+    degradedReasons,
+    blockedFields,
+    policyInputs: {
+      threadId,
+      sessionSourceSummaries,
+      inventorySourceSummaries: normalizeAdvisoryInventorySources(inventory),
+      tokenUsage,
+      contextUtilization,
+      latestToolCall,
+      latestTurnState,
+      transcriptAvailability,
+      resultBlockEvidence,
+      staleTranscriptState: {
+        stale: staleTranscriptState.stale,
+        reason: staleTranscriptState.reason
+      },
+      missingTranscriptState: {
+        missing: missingTranscriptState.missing,
+        reason: missingTranscriptState.reason
+      }
+    },
+    boundaries: { ...SESSION_SOURCE_BOUNDARIES }
   };
 }
 
@@ -163,6 +246,218 @@ export async function buildSessionSourceInventory({
     summary: inventorySummary(providers),
     boundaries: { ...SESSION_SOURCE_BOUNDARIES }
   };
+}
+
+function advisoryContractRef({ contract, fallbackName, fallbackVersion }) {
+  return {
+    contractName: nonEmptyString(contract?.contractName) ? contract.contractName : fallbackName,
+    contractVersion: Number.isInteger(contract?.contractVersion) ? contract.contractVersion : fallbackVersion,
+    generatedAt: nonEmptyString(contract?.generatedAt) ? contract.generatedAt : null,
+    readOnly: contract?.readOnly === true,
+    threadId: nonEmptyString(contract?.threadId) ? contract.threadId : null
+  };
+}
+
+function normalizeAdvisorySourceSummaries(sources) {
+  return (Array.isArray(sources) ? sources : [])
+    .filter(isPlainObject)
+    .map((source) => ({
+      provider: nonEmptyString(source.provider) ? source.provider : null,
+      status: nonEmptyString(source.status) ? source.status : 'unknown',
+      threadId: nonEmptyString(source.threadId) ? source.threadId : null,
+      latestTurnAt: nonEmptyString(source.latestTurnAt) ? source.latestTurnAt : null
+    }));
+}
+
+function normalizeAdvisoryInventorySources(inventory) {
+  return (Array.isArray(inventory?.providers) ? inventory.providers : [])
+    .filter(isPlainObject)
+    .map((provider) => ({
+      provider: nonEmptyString(provider.provider) ? provider.provider : null,
+      state: nonEmptyString(provider.state) ? provider.state : 'unknown',
+      sourceSummary: normalizeInventorySourceSummary(provider.sourceSummary)
+    }));
+}
+
+function normalizeInventorySourceSummary(summary) {
+  if (!isPlainObject(summary)) {
+    return null;
+  }
+
+  return {
+    availability: nonEmptyString(summary.availability) ? summary.availability : 'unknown',
+    readState: nonEmptyString(summary.readState) ? summary.readState : 'unknown',
+    candidateFileCount: Number.isInteger(summary.candidateFileCount) ? summary.candidateFileCount : 'missing',
+    scannedFileCount: Number.isInteger(summary.scannedFileCount) ? summary.scannedFileCount : 'missing',
+    readableFileCount: Number.isInteger(summary.readableFileCount) ? summary.readableFileCount : 'missing',
+    unreadableFileCount: Number.isInteger(summary.unreadableFileCount) ? summary.unreadableFileCount : 'missing',
+    latestModifiedAt: nonEmptyString(summary.latestModifiedAt) ? summary.latestModifiedAt : null,
+    stale: summary.stale === true,
+    latestSessionRef: nonEmptyString(summary.latestSessionRef) ? summary.latestSessionRef : null,
+    failureReason: nonEmptyString(summary.failureReason) ? summary.failureReason : null
+  };
+}
+
+function normalizeTranscriptAvailability(value) {
+  return [
+    'readable',
+    'missing',
+    'stale',
+    'unreadable',
+    'degraded'
+  ].includes(value) ? value : 'missing';
+}
+
+function normalizeAdvisoryToolCall(toolCall) {
+  if (!isPlainObject(toolCall)) {
+    return null;
+  }
+
+  return {
+    name: nonEmptyString(toolCall.name) ? toolCall.name : null,
+    status: nonEmptyString(toolCall.status) ? toolCall.status : 'missing',
+    updatedAt: nonEmptyString(toolCall.updatedAt) ? toolCall.updatedAt : null
+  };
+}
+
+function normalizeAdvisoryLatestTurnState(turnState) {
+  if (!isPlainObject(turnState)) {
+    return missingValue();
+  }
+
+  return {
+    status: nonEmptyString(turnState.status) ? turnState.status : 'missing',
+    role: nonEmptyString(turnState.role) ? turnState.role : 'missing',
+    updatedAt: nonEmptyString(turnState.updatedAt) ? turnState.updatedAt : null
+  };
+}
+
+function normalizeAdvisoryTokenUsage(tokenUsage) {
+  if (!isPlainObject(tokenUsage) || tokenUsage.status !== 'available') {
+    return missingTokenUsage();
+  }
+
+  return {
+    status: 'available',
+    inputTokens: Number.isFinite(tokenUsage.inputTokens) ? tokenUsage.inputTokens : 'missing',
+    outputTokens: Number.isFinite(tokenUsage.outputTokens) ? tokenUsage.outputTokens : 'missing',
+    totalTokens: Number.isFinite(tokenUsage.totalTokens) ? tokenUsage.totalTokens : 'missing'
+  };
+}
+
+function normalizeAdvisoryContextUtilization(contextUtilization) {
+  if (!isPlainObject(contextUtilization) || contextUtilization.status !== 'available') {
+    return missingContextUtilization();
+  }
+
+  return {
+    status: 'available',
+    usedTokens: Number.isFinite(contextUtilization.usedTokens) ? contextUtilization.usedTokens : 'missing',
+    maxTokens: Number.isFinite(contextUtilization.maxTokens) ? contextUtilization.maxTokens : 'missing',
+    ratio: Number.isFinite(contextUtilization.ratio) ? contextUtilization.ratio : 'missing'
+  };
+}
+
+function normalizeAdvisoryResultBlockEvidence(resultBlockEvidence) {
+  if (!isPlainObject(resultBlockEvidence)) {
+    return { status: 'missing', present: false };
+  }
+
+  return {
+    status: nonEmptyString(resultBlockEvidence.status) ? resultBlockEvidence.status : 'missing',
+    present: resultBlockEvidence.present === true
+  };
+}
+
+function normalizeAdvisoryStaleTranscriptState(staleTranscriptState) {
+  if (!isPlainObject(staleTranscriptState)) {
+    return {
+      stale: false,
+      reason: null,
+      thresholdMs: DEFAULT_STALE_AFTER_MS,
+      ageMs: null
+    };
+  }
+
+  return {
+    stale: staleTranscriptState.stale === true,
+    reason: nonEmptyString(staleTranscriptState.reason) ? staleTranscriptState.reason : null,
+    thresholdMs: Number.isFinite(staleTranscriptState.thresholdMs) ? staleTranscriptState.thresholdMs : null,
+    ageMs: Number.isFinite(staleTranscriptState.ageMs) ? staleTranscriptState.ageMs : null
+  };
+}
+
+function normalizeAdvisoryMissingTranscriptState(missingTranscriptState) {
+  if (!isPlainObject(missingTranscriptState)) {
+    return {
+      missing: false,
+      reason: null
+    };
+  }
+
+  return {
+    missing: missingTranscriptState.missing === true,
+    reason: nonEmptyString(missingTranscriptState.reason) ? missingTranscriptState.reason : null
+  };
+}
+
+function contextBandFromRatio(ratio) {
+  if (!Number.isFinite(ratio)) {
+    return 'unknown';
+  }
+
+  if (ratio >= 1) {
+    return 'over-limit';
+  }
+
+  if (ratio >= 0.95) {
+    return 'near-limit';
+  }
+
+  if (ratio >= 0.8) {
+    return 'high';
+  }
+
+  if (ratio >= 0.5) {
+    return 'moderate';
+  }
+
+  return 'low';
+}
+
+function advisoryDegradedReasons({ inventory, staleTranscriptState, missingTranscriptState }) {
+  const inventoryReasons = (Array.isArray(inventory?.providers) ? inventory.providers : [])
+    .filter(isPlainObject)
+    .flatMap((provider) => (
+      (Array.isArray(provider.degradedReasons) ? provider.degradedReasons : [])
+        .filter(nonEmptyString)
+        .map((reason) => `${provider.provider ?? 'provider'}:${reason}`)
+    ));
+  const sessionReasons = [
+    staleTranscriptState.stale === true && nonEmptyString(staleTranscriptState.reason)
+      ? `session:${staleTranscriptState.reason}`
+      : null,
+    missingTranscriptState.missing === true && nonEmptyString(missingTranscriptState.reason)
+      ? `session:${missingTranscriptState.reason}`
+      : null
+  ].filter(nonEmptyString);
+
+  return [...new Set([...inventoryReasons, ...sessionReasons])];
+}
+
+function advisoryBlockedFields({
+  transcriptAvailability,
+  tokenUsage,
+  contextUtilization
+}) {
+  return [
+    transcriptAvailability === 'missing' ? 'transcriptAvailability' : null,
+    tokenUsage.status === 'missing' ? 'tokenUsage' : null,
+    tokenUsage.status === 'available' && tokenUsage.totalTokens === 'missing' ? 'tokenUsage.totalTokens' : null,
+    contextUtilization.status === 'missing' || contextUtilization.ratio === 'missing'
+      ? 'contextUtilization.ratio'
+      : null
+  ].filter(nonEmptyString);
 }
 
 async function buildProviderSourceInventory({
@@ -716,13 +1011,13 @@ function providerTokenUsage(entries) {
 
   const inputTokens = sumNumeric(usages.map((usage) => usage.inputTokens));
   const outputTokens = sumNumeric(usages.map((usage) => usage.outputTokens));
-  const totalTokens = sumNumeric(usages.map((usage) => usage.totalTokens));
+  const totalTokens = sumAllNumericOrMissing(usages.map((usage) => usage.totalTokens));
 
   return {
     status: 'available',
     inputTokens,
     outputTokens,
-    totalTokens: totalTokens ?? sumNumeric([inputTokens, outputTokens])
+    totalTokens
   };
 }
 
@@ -747,8 +1042,7 @@ function extractUsage(entry) {
   );
   const totalTokens = firstFiniteNumber(
     usage.total_tokens,
-    usage.totalTokens,
-    inputTokens === null || outputTokens === null ? null : inputTokens + outputTokens
+    usage.totalTokens
   );
 
   if (inputTokens === null && outputTokens === null && totalTokens === null) {
@@ -794,13 +1088,8 @@ function extractContextUtilization(entry) {
   const usedTokens = firstFiniteNumber(context.used_tokens, context.usedTokens, context.tokens_used, context.tokensUsed);
   const maxTokens = firstFiniteNumber(context.max_tokens, context.maxTokens, context.context_window, context.contextWindow);
   const ratio = firstFiniteNumber(context.ratio, context.utilization, context.context_utilization);
-  const normalizedRatio = ratio ?? (
-    usedTokens === null || maxTokens === null || maxTokens === 0
-      ? null
-      : usedTokens / maxTokens
-  );
 
-  if (usedTokens === null && maxTokens === null && normalizedRatio === null) {
+  if (usedTokens === null && maxTokens === null && ratio === null) {
     return missingContextUtilization();
   }
 
@@ -808,7 +1097,7 @@ function extractContextUtilization(entry) {
     status: 'available',
     usedTokens,
     maxTokens,
-    ratio: normalizedRatio
+    ratio: ratio ?? 'missing'
   };
 }
 
@@ -823,13 +1112,13 @@ function aggregateTokenUsage(contexts) {
 
   const inputTokens = sumNumeric(available.map((usage) => usage.inputTokens));
   const outputTokens = sumNumeric(available.map((usage) => usage.outputTokens));
-  const totalTokens = sumNumeric(available.map((usage) => usage.totalTokens));
+  const totalTokens = sumAllNumericOrMissing(available.map((usage) => usage.totalTokens));
 
   return {
     status: 'available',
     inputTokens,
     outputTokens,
-    totalTokens: totalTokens ?? sumNumeric([inputTokens, outputTokens])
+    totalTokens
   };
 }
 
@@ -1142,6 +1431,10 @@ function sumNumeric(values) {
   }
 
   return numeric.reduce((sum, value) => sum + value, 0);
+}
+
+function sumAllNumericOrMissing(values) {
+  return values.every(Number.isFinite) ? sumNumeric(values) : 'missing';
 }
 
 function firstNonEmptyString(...values) {
