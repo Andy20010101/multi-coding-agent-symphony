@@ -11769,6 +11769,7 @@ function projectSupervisorDashboard({
     sessionSourceInventory,
     contextAdvisory,
     threadContinuationDecision,
+    supervisorEventRegistrationEligibility: supervisor.supervisorEventRegistrationEligibility ?? null,
     goalTimeline: projectSupervisorTimeline(supervisor.goalTimeline)
   };
 }

@@ -995,6 +995,11 @@ describe('v16 Workbench route smoke and server parity', () => {
         assert.match(source, /function workbenchNavHref/u, 'App.jsx keeps anchors scoped to Workbench navigation');
         assert.match(source, /return `\/workbench\/\$\{query\}#\$\{item\.targetId\}`/u, 'App.jsx section anchors stay under /workbench/');
         assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:handlePreview|handleConfirm)\})/u, 'App.jsx exposes a non-preview/non-confirm click handler');
+      } else if (relativePath === 'v46SupervisorWorkbench.jsx') {
+        assert.match(source, /Preview Event Plan/u, 'v46 supervisor exposes only the v50 dry-run preview control');
+        assert.match(source, /fetchGoalEventPlanPreview/u, 'v46 supervisor uses the controlled GET preview wrapper');
+        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!onPreviewEventPlan\})/u, 'v46 supervisor exposes a non-preview click handler');
+        assert.doesNotMatch(source, /confirmGoalEventPlan|Confirm Event Append/u, 'v46 supervisor must not expose event append confirmation');
       } else {
         assert.doesNotMatch(source, /\bonClick\s*=/u, `${relativePath} exposes a click handler`);
       }

@@ -646,6 +646,10 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(defaultHtml, /Context Advisory/u);
       assert.match(defaultHtml, /Thread Continuation Decision/u);
       assert.match(defaultHtml, /Command Boundary/u);
+      assert.match(defaultHtml, /Event Plan Preview/u);
+      assert.match(defaultHtml, /Preview Event Plan/u);
+      assert.match(defaultHtml, /eligibility contract not available/u);
+      assert.match(defaultHtml, /preview result not loaded/u);
       assert.match(defaultHtml, /copyOnly true/u);
       assert.match(defaultHtml, /daemon-control/u);
       assert.match(defaultHtml, /provider-cli/u);
@@ -678,10 +682,11 @@ describe('v15 Workbench React/Vite shell', () => {
       const continuationIndex = defaultHtml.indexOf('data-od-id="thread-continuation-decision"');
       const boundaryIndex = defaultHtml.indexOf('data-od-id="command-boundary"');
       const pendingIndex = defaultHtml.indexOf('data-od-id="pending-result"');
+      const eventPreviewIndex = defaultHtml.indexOf('data-od-id="supervisor-event-preview"');
       const timelineIndex = defaultHtml.indexOf('data-od-id="goal-timeline"');
       const ownershipIndex = defaultHtml.indexOf('data-od-id="ownership"');
 
-      for (const index of [goalIndex, actionIndex, leaseIndex, inventoryIndex, contextIndex, advisoryIndex, continuationIndex, pendingIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
+      for (const index of [goalIndex, actionIndex, leaseIndex, inventoryIndex, contextIndex, advisoryIndex, continuationIndex, pendingIndex, eventPreviewIndex, boundaryIndex, timelineIndex, gateIndex, ownershipIndex]) {
         assert.notEqual(index, -1);
       }
 
@@ -692,7 +697,8 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.equal(actionIndex < continuationIndex, true);
       assert.equal(continuationIndex < boundaryIndex, true);
       assert.equal(boundaryIndex < pendingIndex, true);
-      assert.equal(pendingIndex < timelineIndex, true);
+      assert.equal(pendingIndex < eventPreviewIndex, true);
+      assert.equal(eventPreviewIndex < timelineIndex, true);
       assert.equal(timelineIndex < ownershipIndex, true);
 
       assert.doesNotMatch(defaultHtml, /Release readiness is present/u);
@@ -735,6 +741,8 @@ describe('v15 Workbench React/Vite shell', () => {
       'RecommendedNextActionBand',
       'ActiveLeasePanel',
       'PendingResultPanel',
+      'SupervisorEventPreviewLane',
+      'SupervisorEventPreviewResult',
       'SessionSourceInventoryPanel',
       'ContextAdvisoryPanel',
       'ThreadContinuationDecisionPanel',
@@ -761,13 +769,19 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(css, /\.v46-supervisor-shell/u);
     assert.match(css, /\.v46-supervisor-shell[\s\S]*grid-template-columns:\s*232px minmax\(0, 1fr\)/u);
     assert.match(css, /\.v46-dashboard-grid[\s\S]*grid-template-columns:\s*minmax\(0, 1\.05fr\) minmax\(360px, 0\.95fr\)/u);
-    assert.match(css, /grid-template-areas:[\s\S]*"goal lease"[\s\S]*"inventory context"[\s\S]*"decision continuation"[\s\S]*"ownership timeline"/u);
+    assert.match(css, /grid-template-areas:[\s\S]*"goal lease"[\s\S]*"inventory context"[\s\S]*"decision continuation"[\s\S]*"event-preview event-preview"[\s\S]*"ownership timeline"/u);
     assert.match(css, /@media \(max-width: 980px\)[\s\S]*\.v46-dashboard-grid[\s\S]*display:\s*flex/u);
     assert.match(css, /\.v46-family-list[\s\S]*flex-wrap:\s*wrap/u);
     assert.match(css, /\.v46-pending-panel[\s\S]*order:\s*5/u);
+    assert.match(css, /\.v50-event-preview-panel[\s\S]*order:\s*11/u);
+    assert.match(css, /\.v50-preview-button/u);
     assert.match(css, /\.v46-inventory-panel[\s\S]*order:\s*6/u);
     assert.match(css, /\.v46-context-panel[\s\S]*order:\s*7/u);
-    assert.doesNotMatch(supervisorSource, /fetch\(|confirmGoalEventPlan|GoalEventPlanPreview|<button\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|claude\/projects/u);
+    assert.match(supervisorSource, /fetchGoalEventPlanPreview/u);
+    assert.match(supervisorSource, /Preview Event Plan/u);
+    assert.doesNotMatch(supervisorSource, /\bfetch\s*\(/u);
+    assert.doesNotMatch(supervisorSource, /confirmGoalEventPlan|<GoalEventPlanPreview\b|function GoalEventPlanPreview\b|Confirm Event Append|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|provider folders|raw transcripts|claude\/projects/u);
+    assert.doesNotMatch(supervisorSource, />\s*(Run|Execute|Continue|Compact|New Thread|Dispatch|Launch)\s*</u);
     assert.doesNotMatch(fixtureSource, /\.symphony|runner state|jsonl|sessions\/|claude\/projects/u);
   });
 
@@ -811,6 +825,28 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /pending-result-registration/u);
       assert.match(html, /local-goal-supervisor-daemon/u);
       assert.match(html, /external-orchestration-owner/u);
+      assert.match(html, /Event Plan Preview/u);
+      assert.match(html, /Preview Event Plan/u);
+      assert.match(html, /supervisorEventRegistrationEligibility\.v1 \/ 1/u);
+      assert.match(html, /eligible-goal-update-event/u);
+      assert.match(html, /\/api\/goals\/v44-4-live-supervisor\/event-plan-preview\?command=update&amp;task=task-3&amp;event=worker\.evidence-recorded&amp;actor=local-goal-supervisor-worker&amp;evidenceRef=artifact%3Av44-4%3Apending-result&amp;statement=Worker\+evidence\+recorded\+for\+task-3\./u);
+      assert.match(html, /goal-update-plan\.v1 \/ 1/u);
+      assert.match(html, />event type<\/dt><dd[^>]*>worker\.evidence-recorded/u);
+      assert.match(html, />task id<\/dt><dd[^>]*>task-3/u);
+      assert.match(html, />actor role<\/dt><dd[^>]*>worker/u);
+      assert.match(html, />actor id<\/dt><dd[^>]*>local-goal-supervisor-worker/u);
+      assert.match(html, />evidence refs<\/dt><dd[^>]*>artifact:v44-4:pending-result/u);
+      assert.match(html, />statement<\/dt><dd[^>]*>Worker evidence recorded for task-3\./u);
+      assert.match(html, />blocker id<\/dt><dd[^>]*>blocker-v50-preview/u);
+      assert.match(html, />blocker reason<\/dt><dd[^>]*>preview-only blocker field/u);
+      assert.match(html, />blocker severity<\/dt><dd[^>]*>medium/u);
+      assert.match(html, />writesInDryRun<\/dt><dd[^>]*>false/u);
+      assert.match(html, />append target<\/dt><dd[^>]*>managed-goal-event-journal/u);
+      assert.match(html, />operation id<\/dt><dd[^>]*>op_v50_task3_event_preview/u);
+      assert.match(html, />operation status<\/dt><dd[^>]*>planned/u);
+      assert.match(html, />planHash<\/dt><dd[^>]*>sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/u);
+      assert.match(html, />copy-only confirm command<\/dt><dd[^>]*>symphony goal update/u);
+      assert.doesNotMatch(html, /\[object Object\]/u);
       assert.match(html, /42000 \/ 200000/u);
       assert.match(html, /21%/u);
       assert.match(html, /daemon-control/u);
@@ -823,6 +859,75 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.doesNotMatch(html, /href="(?:artifact:|docs\/plans\/|file:)/u);
       assert.doesNotMatch(html, /Release-ready|Healthy active lease|Pending result|Stale transcript|Blocked gate|Missing context/u);
       assert.doesNotMatch(html, />Register<|>Apply<|>Execute</u);
+      assert.doesNotMatch(html, /Confirm Event Append|confirmGoalEventPlan|<form|<textarea|\.symphony|jsonl|sessions\/|provider folders|raw transcripts/u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+  });
+
+  it('keeps the supervisor event preview lane blocked when eligibility is not eligible', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const {
+        projectSupervisorDashboardToWorkbenchView,
+        supervisorPreviewStateFromEventPreview,
+        visibleSupervisorPreviewState
+      } = await server.ssrLoadModule('/src/v46SupervisorWorkbench.jsx');
+      const eligibleModel = createWorkbenchRenderModelWithSupervisor();
+      const blockedPayload = {
+        ...createGoalSupervisorRenderPayload(),
+        supervisorEventRegistrationEligibility: {
+          ...createSupervisorEventEligibilityRenderPayload(),
+          state: 'blocked',
+          reason: 'event-routed-to-goal-gate',
+          missingInputs: ['gate-evidence'],
+          previewResult: null
+        }
+      };
+      const blockedModel = createWorkbenchRenderModelWithSupervisor(blockedPayload);
+      const eligibleView = projectSupervisorDashboardToWorkbenchView(
+        eligibleModel.supervisorDashboard,
+        eligibleModel.supervisorDashboard.route
+      );
+      const blockedView = projectSupervisorDashboardToWorkbenchView(
+        blockedModel.supervisorDashboard,
+        blockedModel.supervisorDashboard.route
+      );
+      const eligiblePreviewState = supervisorPreviewStateFromEventPreview(eligibleView.eventPreview);
+      const visibleAfterBlockedRerender = visibleSupervisorPreviewState({
+        eventPreview: blockedView.eventPreview,
+        previewState: eligiblePreviewState
+      });
+      const viewState = {
+        phase: 'ready',
+        model: blockedModel
+      };
+      const html = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
+
+      assert.equal(eligiblePreviewState.result.planHash, 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+      assert.equal(visibleAfterBlockedRerender.phase, 'idle');
+      assert.equal(visibleAfterBlockedRerender.result, null);
+      assert.match(html, /Event Plan Preview/u);
+      assert.match(html, />state<\/dt><dd[^>]*>blocked/u);
+      assert.match(html, /event-routed-to-goal-gate/u);
+      assert.match(html, />preview path<\/dt><dd[^>]*>NULL/u);
+      assert.match(html, /gate-evidence/u);
+      assert.match(html, /<button[^>]*disabled[^>]*>Preview Event Plan<\/button>/u);
+      assert.match(html, /preview result not loaded/u);
+      assert.doesNotMatch(html, /goal-update-plan\.v1/u);
+      assert.doesNotMatch(html, /sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/u);
+      assert.doesNotMatch(html, /copy-only confirm command/u);
+      assert.doesNotMatch(html, /Confirm Event Append|confirmGoalEventPlan/u);
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -2231,6 +2336,7 @@ function createGoalSupervisorRenderPayload() {
         blockedFamilies: ['child-dispatch', 'event-log-write']
       }
     },
+    supervisorEventRegistrationEligibility: createSupervisorEventEligibilityRenderPayload(),
     goalTimeline: [{
       eventId: 'evt-live-task-3',
       taskId: 'task-3',
@@ -2240,6 +2346,112 @@ function createGoalSupervisorRenderPayload() {
       hashChainState: 'linked',
       occurredAt: '2026-06-10T12:03:00.000Z'
     }]
+  };
+}
+
+function createSupervisorEventEligibilityRenderPayload() {
+  return {
+    contractName: 'supervisorEventRegistrationEligibility.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-10T12:04:00.000Z',
+    readOnly: true,
+    willMutate: false,
+    goalId: 'v44-4-live-supervisor',
+    taskId: 'task-3',
+    threadId: '019ea62d-live-task-3',
+    state: 'eligible',
+    reason: 'eligible-goal-update-event',
+    recommendedEvent: {
+      eventType: 'worker.evidence-recorded',
+      command: 'update',
+      commandName: 'symphony goal update',
+      actorRole: 'worker',
+      actorId: 'local-goal-supervisor-worker',
+      taskId: 'task-3',
+      evidenceRefs: ['artifact:v44-4:pending-result'],
+      statement: 'Worker evidence recorded for task-3.'
+    },
+    requiredInputs: ['goalId', 'taskId', 'command', 'event', 'actor', 'evidenceRef'],
+    missingInputs: [],
+    previewRequest: {
+      method: 'GET',
+      route: '/api/goals/v44-4-live-supervisor/event-plan-preview',
+      query: {
+        command: 'update',
+        task: 'task-3',
+        event: 'worker.evidence-recorded',
+        actor: 'local-goal-supervisor-worker',
+        evidenceRef: ['artifact:v44-4:pending-result'],
+        statement: 'Worker evidence recorded for task-3.'
+      }
+    },
+    previewResult: createSupervisorGoalUpdatePlanPreviewPayload()
+  };
+}
+
+function createSupervisorGoalUpdatePlanPreviewPayload() {
+  return {
+    contractName: 'goal-update-plan.v1',
+    contractVersion: 1,
+    planId: 'plan_v50_task3_event_preview',
+    planHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    goalId: 'v44-4-live-supervisor',
+    mode: 'dry-run',
+    command: {
+      name: 'symphony goal update',
+      intent: 'record-worker-task-event',
+      confirmRequired: true
+    },
+    actor: {
+      role: 'worker',
+      id: 'local-goal-supervisor-worker'
+    },
+    proposedEvents: [{
+      eventType: 'worker.evidence-recorded',
+      taskId: 'task-3',
+      phase: 'implement',
+      requiresEvidence: true,
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:v44-4:pending-result',
+        label: 'pending result registration'
+      }],
+      statement: 'Worker evidence recorded for task-3.',
+      blocker: {
+        blockerId: 'blocker-v50-preview',
+        reason: 'preview-only blocker field',
+        severity: 'medium'
+      }
+    }],
+    eventSummary: {
+      eventType: 'worker.evidence-recorded',
+      taskId: 'task-3',
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:v44-4:pending-result',
+        label: 'pending result registration'
+      }]
+    },
+    validation: {
+      status: 'ok',
+      errors: [],
+      warnings: []
+    },
+    wouldAppend: {
+      appendOnly: true,
+      eventCount: 1,
+      target: 'managed-goal-event-journal',
+      writesInDryRun: false
+    },
+    operationRun: {
+      operationId: 'op_v50_task3_event_preview',
+      status: 'planned'
+    },
+    confirm: {
+      available: true,
+      requiredFlags: ['--confirm', '--plan-hash'],
+      copyOnlyCommand: 'symphony goal update --goal v44-4-live-supervisor --task task-3 --event worker.evidence-recorded --actor local-goal-supervisor-worker --evidence-ref artifact:v44-4:pending-result --confirm --plan-hash sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --json'
+    }
   };
 }
 

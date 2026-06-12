@@ -533,6 +533,23 @@ describe('v15 Workbench read-only API client', () => {
     assert.deepEqual(dashboard.threadContinuationDecision.requiredEvidence, ['pending-result-registration']);
     assert.equal(dashboard.threadContinuationDecision.commandBoundary.executionAvailable, false);
     assert.equal(dashboard.threadContinuationDecision.commandBoundary.copyOnly, true);
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.contractName, 'supervisorEventRegistrationEligibility.v1');
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.state, 'eligible');
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.previewRequest.method, 'GET');
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.previewRequest.route, '/api/goals/v44-4-live-supervisor/event-plan-preview');
+    assert.deepEqual(dashboard.supervisorEventRegistrationEligibility.previewRequest.query, {
+      command: 'update',
+      task: 'task-3',
+      event: 'worker.evidence-recorded',
+      actor: 'local-goal-supervisor-worker',
+      evidenceRef: ['artifact:v44-4:pending-result'],
+      statement: 'Worker evidence recorded for task-3.'
+    });
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.recommendedEvent.eventType, 'worker.evidence-recorded');
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.recommendedEvent.taskId, 'task-3');
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.recommendedEvent.actorRole, 'worker');
+    assert.equal(dashboard.supervisorEventRegistrationEligibility.recommendedEvent.actorId, 'local-goal-supervisor-worker');
+    assert.deepEqual(dashboard.supervisorEventRegistrationEligibility.recommendedEvent.evidenceRefs, ['artifact:v44-4:pending-result']);
     assert.equal(dashboard.goalTimeline[0].hashState, 'linked');
     assert.equal(dashboard.currentGate.closeoutAuthorization, 'blocked-without-operator-authorization');
     assert.equal(dashboard.ownership.branch, 'codex/v44-4-pr2-supervisor-route-api-client');
@@ -1518,7 +1535,21 @@ describe('v15 Workbench read-only API client', () => {
 
   it('gets controlled goal event dry-run previews before confirm requests write event state', async () => {
     const calls = [];
-    const result = await fetchGoalEventPlanPreview('/api/goals/latest/event-plan-preview?command=update&task=task-3&event=worker.evidence-recorded&actor=codex-v22-task-3-worker&evidenceRef=docs/plans/v22-task-3-worker-evidence-2026-05-29.md', {
+    const eligibility = createSupervisorEventRegistrationEligibility();
+    const previewRequest = eligibility.previewRequest;
+    const previewQuery = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(previewRequest.query)) {
+      if (Array.isArray(value)) {
+        value.forEach((entry) => previewQuery.append(key, entry));
+        continue;
+      }
+
+      previewQuery.append(key, value);
+    }
+
+    const previewPath = `${previewRequest.route}?${previewQuery.toString()}`;
+    const result = await fetchGoalEventPlanPreview(previewPath, {
       fetchImpl: async (path, init) => {
         calls.push([path, init]);
 
@@ -1547,7 +1578,7 @@ describe('v15 Workbench read-only API client', () => {
       init.headers.Accept,
       Object.hasOwn(init, 'body')
     ]), [[
-      '/api/goals/latest/event-plan-preview?command=update&task=task-3&event=worker.evidence-recorded&actor=codex-v22-task-3-worker&evidenceRef=docs/plans/v22-task-3-worker-evidence-2026-05-29.md',
+      '/api/goals/v44-4-live-supervisor/event-plan-preview?command=update&task=task-3&event=worker.evidence-recorded&actor=local-goal-supervisor-worker&evidenceRef=artifact%3Av44-4%3Apending-result&statement=Worker+evidence+recorded+for+task-3.',
       'GET',
       'no-store',
       'application/json',
@@ -5817,6 +5848,7 @@ function createGoalSupervisorAppReadModelPayload() {
         confirmationReady: false
       }
     },
+    supervisorEventRegistrationEligibility: createSupervisorEventRegistrationEligibility(),
     goalTimeline: [{
       eventId: 'evt-live-task-3',
       taskId: 'task-3',
@@ -5826,6 +5858,76 @@ function createGoalSupervisorAppReadModelPayload() {
       hashChainState: 'linked',
       occurredAt: '2026-06-10T12:03:00.000Z'
     }]
+  };
+}
+
+function createSupervisorEventRegistrationEligibility() {
+  return {
+    contractName: 'supervisorEventRegistrationEligibility.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-10T12:04:00.000Z',
+    readOnly: true,
+    willMutate: false,
+    goalId: 'v44-4-live-supervisor',
+    taskId: 'task-3',
+    threadId: '019ea62d-live-task-3',
+    sourceContracts: [{
+      contractName: 'goal-supervisor-app-read-model.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-10T12:04:00.000Z',
+      readOnly: true,
+      threadId: '019ea62d-live-task-3'
+    }],
+    state: 'eligible',
+    reason: 'eligible-goal-update-event',
+    recommendedEvent: {
+      eventType: 'worker.evidence-recorded',
+      command: 'update',
+      commandName: 'symphony goal update',
+      actorRole: 'worker',
+      actorId: 'local-goal-supervisor-worker',
+      taskId: 'task-3',
+      evidenceRefs: ['artifact:v44-4:pending-result'],
+      statement: 'Worker evidence recorded for task-3.',
+      sourceReason: 'result-awaits-registration'
+    },
+    allowedEvents: ['worker.evidence-recorded'],
+    blockedEvents: [{
+      eventType: 'main.verification-passed',
+      command: 'gate',
+      commandName: 'symphony goal gate',
+      reason: 'route-to-goal-gate'
+    }],
+    requiredInputs: ['goalId', 'taskId', 'command', 'event', 'actor', 'evidenceRef'],
+    missingInputs: [],
+    previewRequest: {
+      method: 'GET',
+      route: '/api/goals/v44-4-live-supervisor/event-plan-preview',
+      query: {
+        command: 'update',
+        task: 'task-3',
+        event: 'worker.evidence-recorded',
+        actor: 'local-goal-supervisor-worker',
+        evidenceRef: ['artifact:v44-4:pending-result'],
+        statement: 'Worker evidence recorded for task-3.'
+      }
+    },
+    confirmRequestShape: {
+      method: 'POST',
+      route: '/api/goals/v44-4-live-supervisor/event-plan-confirm',
+      contentType: 'application/json',
+      requiredBodyFields: ['command', 'planHash', 'task', 'event', 'actor'],
+      optionalBodyFields: ['evidenceRef', 'statement'],
+      confirmUsesPlanHash: true
+    },
+    boundaries: {
+      readOnly: true,
+      willMutate: false,
+      dryRunWrites: false,
+      projectionAppendsEvent: false,
+      frontendFileReadAvailable: false,
+      eventLogWriteAvailable: false
+    }
   };
 }
 

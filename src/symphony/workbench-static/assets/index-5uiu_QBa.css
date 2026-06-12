@@ -233,6 +233,7 @@ body {
     "gate advisory"
     "decision continuation"
     "boundary pending"
+    "event-preview event-preview"
     "ownership timeline";
   gap: 12px;
   align-items: stretch;
@@ -338,6 +339,10 @@ body {
 
 .v46-pending-panel {
   grid-area: pending;
+}
+
+.v50-event-preview-panel {
+  grid-area: event-preview;
 }
 
 .v46-recommended-band {
@@ -597,6 +602,34 @@ body {
   background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-bg) 45%);
 }
 
+.v50-preview-button {
+  max-width: 220px;
+  margin-top: 10px;
+  border: 1px solid color-mix(in oklab, var(--v46-success), var(--v46-border-soft) 35%);
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: color-mix(in oklab, var(--v46-success), var(--v46-surface) 84%);
+  color: var(--v46-fg);
+  font: 700 12px/1.1 var(--v46-ui-font);
+}
+
+.v50-preview-button:disabled {
+  border-color: var(--v46-border-soft);
+  background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-surface) 52%);
+  color: var(--v46-muted);
+}
+
+.v50-preview-status,
+.v50-preview-result {
+  margin-top: 10px;
+}
+
+.v50-preview-status {
+  color: var(--v46-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 @media (max-width: 980px) {
   .v46-supervisor-shell {
     grid-template-columns: 1fr;
@@ -681,12 +714,16 @@ body {
     order: 10;
   }
 
-  .v46-timeline-panel {
+  .v50-event-preview-panel {
     order: 11;
   }
 
-  .v46-ownership-panel {
+  .v46-timeline-panel {
     order: 12;
+  }
+
+  .v46-ownership-panel {
+    order: 13;
   }
 
   .v46-owner-grid {
