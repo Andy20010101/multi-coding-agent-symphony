@@ -1,0 +1,104 @@
+{
+  "goalId": "v54-codex-provider-execution-pilot",
+  "taskId": "pr-1-contracts-fixtures-tests",
+  "role": "worker",
+  "preferredProvider": "codex",
+  "allowedProviders": [
+    "codex",
+    "claude-code"
+  ],
+  "projectContextRefs": [
+    "docs/plans/v54-codex-provider-execution-pilot-runbook-2026-06-12.md",
+    "fixtures/contracts/child-dispatch-preview.codex-worker.v1.json"
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "childDispatchPreview.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "task-pack-source"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "childDispatchPreview.v1"
+      }
+    },
+    {
+      "contractName": "resultIntakeRequest.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "result-return"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "resultIntakeRequest.v1"
+      }
+    }
+  ],
+  "taskPrompt": "Implement v54 PR-1 contract helpers, fixtures, and tests. Return a sanitized result through v51 Result Intake.",
+  "acceptanceCriteria": [
+    "Validate codexProviderExecutionPreview.v1 fixtures.",
+    "Validate codexProviderExecutionConfirmation.v1 confirmation binding.",
+    "Validate codexProviderRunRecord.v1 sanitized result return."
+  ],
+  "requiredEvidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v54-pr-1-codex-provider-execution-contracts-evidence-2026-06-12.md",
+      "label": "v54 PR-1 contract evidence"
+    }
+  ],
+  "forbiddenActions": [
+    "Do not start Codex from PR-1 contracts.",
+    "Do not append goal events directly from provider output.",
+    "Do not mark tasks complete from provider output.",
+    "Do not add Claude Code execution or provider parity."
+  ],
+  "expectedResultBlock": {
+    "returnPath": "v51-result-intake",
+    "contractName": "resultIntakeRequest.v1",
+    "contractVersion": 1,
+    "goalId": "v54-codex-provider-execution-pilot",
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "workerRole": "worker",
+    "source": "codex",
+    "submittedAt": "<submitted-at-iso>",
+    "resultBlock": {
+      "status": "<completed-or-blocked>",
+      "summary": "<sanitized-summary>",
+      "changedFiles": [],
+      "validationCommands": [],
+      "risks": [],
+      "blockers": []
+    },
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v54-pr-1-codex-provider-execution-contracts-evidence-2026-06-12.md",
+        "label": "v54 PR-1 contract evidence"
+      }
+    ],
+    "requestedEvent": {
+      "eventType": "worker.evidence-recorded",
+      "taskId": "pr-1-contracts-fixtures-tests"
+    },
+    "boundaries": {
+      "providerExecutionAvailable": false,
+      "childDispatchAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "untrustedTranscriptProjectionAvailable": false,
+      "frontendLocalFileReadAvailable": false,
+      "reviewerMutationAvailable": false,
+      "mainVerificationMutationAvailable": false,
+      "releaseGateMutationAvailable": false,
+      "gitMutationAvailable": false,
+      "githubReleaseAutomationAvailable": false
+    },
+    "willAppendGoalEvent": false
+  },
+  "returnPath": "v51-result-intake",
+  "copyOnly": true,
+  "willMutate": false
+}

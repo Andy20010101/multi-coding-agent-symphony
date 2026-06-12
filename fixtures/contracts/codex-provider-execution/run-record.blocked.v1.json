@@ -1,0 +1,152 @@
+{
+  "contractName": "codexProviderRunRecord.v1",
+  "contractVersion": 1,
+  "runId": "codex-v54-pr1-blocked",
+  "providerId": "codex",
+  "role": "worker",
+  "goalId": "v54-codex-provider-execution-pilot",
+  "taskId": "pr-1-contracts-fixtures-tests",
+  "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+  "taskPackHash": "sha256:5f768edec964dcfb8cde908a41f912425f8e0cb1414cb3ac1c0402dcfbf02cbf",
+  "startedAt": "2026-06-12T14:03:00.000Z",
+  "finishedAt": "2026-06-12T14:08:00.000Z",
+  "status": "blocked",
+  "sanitizedResult": {
+    "status": "blocked",
+    "summary": "Codex worker run did not produce the required evidence reference.",
+    "changedFiles": [],
+    "validationCommands": [],
+    "risks": [
+      "No run result should be registered without controlled evidence refs."
+    ],
+    "blockers": [
+      "missing controlled evidence ref"
+    ],
+    "blockerReason": "missing controlled evidence ref"
+  },
+  "resultIntakeRequest": {
+    "contractName": "resultIntakeRequest.v1",
+    "contractVersion": 1,
+    "goalId": "v54-codex-provider-execution-pilot",
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "workerRole": "worker",
+    "source": "codex",
+    "submittedAt": "2026-06-12T14:08:00.000Z",
+    "resultBlock": {
+      "status": "blocked",
+      "summary": "Codex worker run did not produce the required evidence reference.",
+      "changedFiles": [],
+      "validationCommands": [],
+      "risks": [
+        "No run result should be registered without controlled evidence refs."
+      ],
+      "blockers": [
+        "missing controlled evidence ref"
+      ],
+      "blockerReason": "missing controlled evidence ref"
+    },
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v54-pr-1-codex-provider-execution-contracts-evidence-2026-06-12.md",
+        "label": "v54 PR-1 contract evidence"
+      }
+    ],
+    "requestedEvent": {
+      "eventType": "blocker.opened",
+      "taskId": "pr-1-contracts-fixtures-tests",
+      "blocker": {
+        "blockerId": "blocker-pr-1-contracts-fixtures-tests",
+        "reason": "missing controlled evidence ref",
+        "severity": "medium"
+      }
+    },
+    "boundaries": {
+      "providerExecutionAvailable": false,
+      "childDispatchAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "untrustedTranscriptProjectionAvailable": false,
+      "frontendLocalFileReadAvailable": false,
+      "reviewerMutationAvailable": false,
+      "mainVerificationMutationAvailable": false,
+      "releaseGateMutationAvailable": false,
+      "gitMutationAvailable": false,
+      "githubReleaseAutomationAvailable": false
+    }
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v54-pr-1-codex-provider-execution-contracts-evidence-2026-06-12.md",
+      "label": "v54 PR-1 contract evidence"
+    }
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "codexProviderExecutionPreview.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "preview-hash",
+        "task-pack-hash"
+      ],
+      "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "codexProviderExecutionPreview.v1"
+      }
+    },
+    {
+      "contractName": "codexProviderExecutionConfirmation.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "operator-confirmation"
+      ],
+      "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "codexProviderExecutionConfirmation.v1"
+      }
+    },
+    {
+      "contractName": "resultIntakeRequest.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "result-return"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "resultIntakeRequest.v1"
+      }
+    }
+  ],
+  "boundaries": {
+    "codexOnly": true,
+    "workerRoleOnly": true,
+    "explicitOperatorConfirmationRequired": true,
+    "previewHashRequired": true,
+    "providerExecutionStartsOnPreview": false,
+    "providerExecutionStartsWithoutConfirmation": false,
+    "claudeCodeExecutionAvailable": false,
+    "providerParityAvailable": false,
+    "automaticReviewerVerdictAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "genericShellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "localSessionFileReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
