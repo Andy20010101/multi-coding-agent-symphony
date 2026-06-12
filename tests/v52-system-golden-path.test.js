@@ -437,6 +437,99 @@ describe('v52 systemGoldenPath.v1 contracts and fixtures', () => {
     assert.equal(stepById(manualRequired, 'closeout').state, 'pending');
     assert.equal(manualRequired.nextSafeAction.kind, 'manual-cli-required');
   });
+
+  it('preserves current gate blocked state in closeout projection', () => {
+    const model = buildProjectionModel({
+      currentGate: {
+        gateId: 'release-ready',
+        requiredCommandFamily: 'release-gate',
+        status: 'blocked',
+        evidenceRequirement: 'release-manager-result-block',
+        blockingReason: 'release-closeout-requires-operator-authorization',
+        closeoutAuthorizationState: 'blocked-without-operator-authorization'
+      },
+      goalCloseout: closeoutReport({
+        missing: []
+      })
+    });
+    const contract = model.systemGoldenPath;
+    const closeout = stepById(contract, 'closeout');
+    const validation = validateSystemGoldenPathContract(contract);
+
+    assert.equal(validation.ok, true, validation.errors.join('; '));
+    assert.equal(model.goalSnapshot.blockerCount, 1);
+    assert.equal(model.goalSnapshot.releaseReadiness, 'not-ready');
+    assert.equal(contract.overallState, 'blocked');
+    assert.equal(closeout.state, 'blocked');
+    assert.equal(closeout.sourceContract, 'goal-supervisor-app-read-model.v1');
+    assert.deepEqual(closeout.sourceRef, {
+      kind: 'route',
+      ref: '/api/goals/<goal-id>/supervisor'
+    });
+    assert.ok(closeout.blockedReasons.includes('release-closeout-requires-operator-authorization'));
+    assert.ok(contract.blockedReasons.includes('release-closeout-requires-operator-authorization'));
+    assert.equal(contract.nextSafeAction.kind, 'refresh-state');
+    assert.equal(contract.nextSafeAction.reason, 'release-closeout-requires-operator-authorization');
+    assertReadOnlyVisibilityBoundary(contract);
+  });
+
+  it('preserves transcriptAvailability source states without companion fields', () => {
+    const scenarios = [
+      {
+        availability: 'stale',
+        state: 'stale',
+        reason: 'context-advisory-stale'
+      },
+      {
+        availability: 'degraded',
+        state: 'degraded',
+        reason: 'context-advisory-degraded'
+      },
+      {
+        availability: 'unreadable',
+        state: 'blocked',
+        reason: 'context-advisory-unreadable'
+      },
+      {
+        availability: 'unavailable',
+        state: 'missing',
+        reason: 'context-advisory-unavailable'
+      },
+      {
+        availability: 'missing',
+        state: 'missing',
+        reason: 'context-advisory-missing'
+      }
+    ];
+
+    for (const scenario of scenarios) {
+      const contract = buildProjectionModel({
+        contextAdvisory: {
+          ...contextAdvisory(),
+          transcriptAvailability: scenario.availability,
+          staleTranscriptState: {
+            stale: false,
+            reason: null
+          },
+          missingTranscriptState: {
+            missing: false,
+            reason: null
+          },
+          degradedReasons: [],
+          blockedFields: []
+        }
+      }).systemGoldenPath;
+      const contextStep = stepById(contract, 'context-advisory');
+      const validation = validateSystemGoldenPathContract(contract);
+
+      assert.equal(validation.ok, true, `${scenario.availability}: ${validation.errors.join('; ')}`);
+      assert.equal(contract.overallState, scenario.state, scenario.availability);
+      assert.equal(contextStep.state, scenario.state, scenario.availability);
+      assert.ok(contextStep.blockedReasons.includes(scenario.reason), scenario.availability);
+      assert.equal(stepById(contract, 'result-intake').state, 'pending', scenario.availability);
+      assertReadOnlyVisibilityBoundary(contract);
+    }
+  });
 });
 
 function fixture(name) {

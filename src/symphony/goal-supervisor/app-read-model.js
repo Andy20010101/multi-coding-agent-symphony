@@ -196,6 +196,7 @@ export function buildGoalSupervisorAppReadModel({
     contextAdvisory: normalizedContextAdvisory,
     pendingResult: normalizedPendingResult,
     eventRegistrationEligibility: normalizedEventRegistrationEligibility,
+    currentGate: normalizedGate,
     goalCloseout
   });
 
@@ -250,6 +251,7 @@ export function buildGoalSupervisorSystemGoldenPath({
   contextAdvisory = null,
   pendingResult = null,
   eventRegistrationEligibility = null,
+  currentGate = null,
   goalCloseout
 } = {}) {
   const currentTask = currentTaskFrom({
@@ -298,6 +300,7 @@ export function buildGoalSupervisorSystemGoldenPath({
   };
   const closeout = closeoutStateFrom({
     goalCloseout,
+    currentGate,
     previous: eventConfirm
   });
   const steps = [
@@ -577,8 +580,10 @@ function contextAdvisoryStateFrom({
     });
   }
 
+  const transcriptAvailability = firstNonEmptyString(contextAdvisory.transcriptAvailability);
+
   if (contextAdvisory.missingTranscriptState?.missing === true ||
-      ['missing', 'unavailable'].includes(contextAdvisory.transcriptAvailability)) {
+      ['missing', 'unavailable'].includes(transcriptAvailability)) {
     return blockingStep({
       id: 'context-advisory',
       label: 'Context Advisory',
@@ -587,12 +592,25 @@ function contextAdvisoryStateFrom({
       sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
       reason: firstNonEmptyString(
         contextAdvisory.missingTranscriptState?.reason,
+        transcriptAvailability === null ? null : `context-advisory-${transcriptAvailability}`,
         'context-advisory-missing'
       )
     });
   }
 
-  if (contextAdvisory.staleTranscriptState?.stale === true) {
+  if (transcriptAvailability === 'unreadable') {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'blocked',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: 'context-advisory-unreadable'
+    });
+  }
+
+  if (contextAdvisory.staleTranscriptState?.stale === true ||
+      transcriptAvailability === 'stale') {
     return blockingStep({
       id: 'context-advisory',
       label: 'Context Advisory',
@@ -601,8 +619,20 @@ function contextAdvisoryStateFrom({
       sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
       reason: firstNonEmptyString(
         contextAdvisory.staleTranscriptState?.reason,
+        transcriptAvailability === 'stale' ? 'context-advisory-stale' : null,
         'context-advisory-stale'
       )
+    });
+  }
+
+  if (transcriptAvailability === 'degraded') {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'degraded',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: 'context-advisory-degraded'
     });
   }
 
@@ -866,6 +896,7 @@ function eventConfirmStateFrom({
 
 function closeoutStateFrom({
   goalCloseout,
+  currentGate,
   previous
 }) {
   if (previous.state !== 'ready') {
@@ -875,6 +906,21 @@ function closeoutStateFrom({
       sourceContract: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
       sourceRef: sourceRefForContractName(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
       reason: reasonForAwaitingStep(previous, 'event-confirm')
+    });
+  }
+
+  if (currentGate?.status === 'blocked') {
+    return blockingStep({
+      id: 'closeout',
+      label: 'Closeout',
+      state: 'blocked',
+      sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+      sourceRef: supervisorRouteSourceRef(),
+      reason: firstNonEmptyString(
+        currentGate.blockingReason,
+        currentGate.closeoutAuthorizationState,
+        'current-gate-blocked'
+      )
     });
   }
 
