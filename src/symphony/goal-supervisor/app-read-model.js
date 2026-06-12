@@ -15,6 +15,9 @@ import {
   THREAD_CONTINUATION_DECISION_CONTRACT_VERSION,
   buildThreadContinuationDecision
 } from './thread-continuation-decision.js';
+import {
+  buildSupervisorEventRegistrationEligibility
+} from './event-registration-eligibility.js';
 
 export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME = 'goal-supervisor-app-read-model.v1';
 export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_VERSION = 1;
@@ -70,6 +73,10 @@ export function buildGoalSupervisorAppReadModel({
     projection,
     routeInput: projection.routeInput
   });
+  const pendingResultRecord = pendingResultRecordFromProjection({
+    projection,
+    routeInput: projection.routeInput
+  });
   const normalizedActiveLease = normalizeActiveLease({
     active: state?.active ?? active ?? projection.routeInput?.activeLease,
     routeInput: projection.routeInput,
@@ -120,6 +127,20 @@ export function buildGoalSupervisorAppReadModel({
     }),
     generatedAt
   );
+  const normalizedEventRegistrationEligibility = buildSupervisorEventRegistrationEligibility({
+    goalId: normalizedGoalId,
+    pendingResult: normalizedPendingResult,
+    pendingResultRecord,
+    threadContinuationDecision: normalizedThreadContinuationDecision,
+    taskState: projection.current ?? projection.route?.current ?? null,
+    commandBoundary: normalizedCommandBoundary,
+    sourceContracts: [
+      ...safeSourceContracts(sourceContracts),
+      normalizedContextAdvisory,
+      normalizedThreadContinuationDecision
+    ],
+    generatedAt
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -153,7 +174,8 @@ export function buildGoalSupervisorAppReadModel({
     commandBoundary: normalizedCommandBoundary,
     sessionSourceInventory: normalizedSessionSourceInventory,
     contextAdvisory: normalizedContextAdvisory,
-    threadContinuationDecision: normalizedThreadContinuationDecision
+    threadContinuationDecision: normalizedThreadContinuationDecision,
+    supervisorEventRegistrationEligibility: normalizedEventRegistrationEligibility
   };
 }
 
@@ -299,6 +321,17 @@ function normalizePendingResult({
     missing: true,
     resultId: null
   };
+}
+
+function pendingResultRecordFromProjection({
+  projection,
+  routeInput
+}) {
+  const intake = routeInput?.resultIntake ?? routeInput?.resultAvailability ?? null;
+  const projected = projection.route?.pendingResult ?? projection.progress?.pendingResult ?? null;
+  const record = intake?.record ?? projected?.result ?? null;
+
+  return isPlainObject(record) ? record : null;
 }
 
 function normalizeCurrentGate({
