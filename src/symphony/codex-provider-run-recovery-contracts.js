@@ -119,6 +119,81 @@ export function buildCodexProviderRunRecovery({
   return recovery;
 }
 
+export function buildReviewerHandoffPreview({
+  generatedAt = new Date().toISOString(),
+  recovery,
+  pendingResult = null,
+  reviewerTask = null
+} = {}) {
+  if (!isPlainObject(recovery)) {
+    throw new CodexProviderRunRecoveryContractError(
+      'missing-codex-provider-run-recovery',
+      'Reviewer handoff preview requires a Codex provider run recovery contract.'
+    );
+  }
+
+  const recoveryValidation = validateCodexProviderRunRecoveryContract(recovery);
+
+  if (!recoveryValidation.ok) {
+    throw new CodexProviderRunRecoveryContractError(
+      'invalid-source-codex-provider-run-recovery',
+      'Reviewer handoff preview source recovery contract is invalid.',
+      { reason: recoveryValidation.errors[0] }
+    );
+  }
+
+  const pendingResultRef = pendingResultRefFromContract(pendingResult);
+  const pendingResultMatchesRecovery = pendingResultMatchesAcceptedRecovery({
+    recovery,
+    pendingResultRef
+  });
+  const ready = recovery.recoveryState === 'ready-for-reviewer-handoff' &&
+    pendingResultRef?.state === 'available' &&
+    pendingResultMatchesRecovery;
+  const acceptedResultSummary = ready ? resultSummaryFromPendingResult(pendingResult) : null;
+  const preview = {
+    contractName: REVIEWER_HANDOFF_PREVIEW_CONTRACT_NAME,
+    contractVersion: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_VERSION,
+    generatedAt: new Date(millisOrNow(generatedAt)).toISOString(),
+    goal: goalForHandoff(recovery.goal),
+    workerTask: workerTaskForHandoff({
+      task: recovery.task,
+      pendingResultRef,
+      ready
+    }),
+    reviewerTask: reviewerTaskForHandoff({ reviewerTask, recovery }),
+    pendingResultRef: pendingResultForRecoveryContract(pendingResultRef),
+    acceptedResultSummary,
+    handoffPack: ready
+      ? handoffPackFromAcceptedSummary({
+          summary: acceptedResultSummary,
+          workerTask: recovery.task,
+          reviewerTask
+        })
+      : null,
+    copyOnly: true,
+    willMutate: false,
+    blockedReasons: reviewerHandoffBlockedReasons({
+      recovery,
+      pendingResultRef,
+      pendingResultMatchesRecovery
+    }),
+    sourceContracts: sourceContractsForReviewerHandoff({ recovery, pendingResultRef }),
+    boundaries: buildRunRecoveryBoundaries()
+  };
+  const previewValidation = validateReviewerHandoffPreviewContract(preview);
+
+  if (!previewValidation.ok) {
+    throw new CodexProviderRunRecoveryContractError(
+      'invalid-built-reviewer-handoff-preview',
+      'Built reviewer handoff preview contract is invalid.',
+      { reason: previewValidation.errors[0] }
+    );
+  }
+
+  return preview;
+}
+
 const RECOVERY_ALLOWED_FIELDS = new Set([
   'contractName',
   'contractVersion',
@@ -225,7 +300,7 @@ const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v
 const RAW_FIELD_NAME_PATTERN =
   /^(?:rawTranscript|transcript|rawModelOutput|rawOutput|providerOutput|sessionLog|messages|conversation)$/iu;
 const UNSAFE_TEXT_PATTERN =
-  /\b(?:raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file|model[\s_-]*output|provider[\s_-]*parity)\b|(?:^|[/.])(?:\.codex|\.claude|\.git|\.symphony)(?:[/]|$)|\.jsonl(?:$|[/\s])|\/api\/(?:providers?|provider-parity|child(?:-dispatch)?|dispatch)(?:$|[/\s])|\/(?:event-append|append-event|mark-complete|complete-task|git|tag|publish|release)(?:$|[/\s])|\b(?:launch\s+claude\s+code|run\s+any\s+provider|run\s+shell|terminal|append\s+event|mark\s+complete|confirm\s+reviewer\s+verdict|confirm\s+main\s+gate|confirm\s+release\s+gate|git\s+(?:push|tag|checkout|merge|commit)|gh\s+release|tag\s+creation|github\s+release|publish\s+release)\b/iu;
+  /\b(?:raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file|model[\s_-]*output|provider[\s_-]*parity)\b|(?:^|[/.])(?:\.codex|\.claude|\.git|\.symphony)(?:[/]|$)|\.jsonl(?:$|[/\s])|\/api\/(?:providers?|provider-parity|child(?:-dispatch)?|dispatch)(?:$|[/\s])|\/(?:event-append|append-event|event-plan-confirm|confirm-event-plan|confirm-goal-event-plan|goal-event-confirm|record-result|mark-complete|complete-task|git|tag|publish|release)(?:$|[/\s])|\b(?:launch\s+claude\s+code|run\s+any\s+provider|run\s+shell|terminal|append\s+event|mark\s+complete|confirm\s+goal\s+event\s+plan|event\s+plan\s+confirm|confirm\s+reviewer\s+verdict|confirm\s+main\s+gate|confirm\s+release\s+gate|record\s+result|git\s+(?:push|tag|checkout|merge|commit)|gh\s+release|tag\s+creation|github\s+release|publish\s+release)\b/iu;
 const LOCAL_HIDDEN_PATH_SEGMENTS = new Set(['.codex', '.claude', '.git', '.symphony']);
 
 export function validateCodexProviderRunRecoveryContract(recovery) {
@@ -690,6 +765,212 @@ function buildRunRecoveryBoundaries() {
   return { ...CODEX_PROVIDER_RUN_RECOVERY_BOUNDARIES };
 }
 
+function goalForHandoff(goal) {
+  const source = isPlainObject(goal) ? goal : {};
+  const goalId = safeToken(source.goalId) ?? 'missing-goal';
+
+  return {
+    goalId,
+    title: safeDisplayText(source.title) ?? goalId,
+    state: GOAL_STATE_SET.has(source.state) ? source.state : 'active',
+    sourceContract: safeContractName(source.sourceContract) ?? CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME,
+    sourceRef: safeSourceRef(source.sourceRef) ?? {
+      kind: 'contract',
+      ref: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME
+    }
+  };
+}
+
+function workerTaskForHandoff({
+  task,
+  pendingResultRef,
+  ready
+}) {
+  const source = isPlainObject(task) ? task : {};
+  const taskId = safeToken(source.taskId) ?? 'missing-task';
+
+  return {
+    taskId,
+    title: safeDisplayText(source.title) ?? taskId,
+    state: ready ? 'accepted' : (GOAL_STATE_SET.has(source.state) ? source.state : 'pending'),
+    sourceContract: ready ? 'pendingResult.v1' : CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME,
+    sourceRef: pendingResultRef === null
+      ? {
+          kind: 'contract',
+          ref: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME
+        }
+      : {
+          kind: 'contract',
+          ref: 'pendingResult.v1'
+        }
+  };
+}
+
+function reviewerTaskForHandoff({
+  reviewerTask,
+  recovery
+}) {
+  const source = isPlainObject(reviewerTask) ? reviewerTask : {};
+  const workerTaskId = safeToken(recovery.task?.taskId) ?? 'missing-task';
+  const taskId = safeToken(source.taskId) ?? `${workerTaskId}-readonly-review`;
+  const workerTitle = safeDisplayText(recovery.task?.title) ?? workerTaskId;
+
+  return {
+    taskId,
+    title: safeDisplayText(source.title) ?? `Review ${workerTitle}`,
+    state: GOAL_STATE_SET.has(source.state) ? source.state : 'pending',
+    sourceContract: safeContractName(source.sourceContract) ?? 'childTaskPack.v1',
+    sourceRef: safeSourceRef(source.sourceRef) ?? {
+      kind: 'contract',
+      ref: 'childTaskPack.v1'
+    }
+  };
+}
+
+function resultSummaryFromPendingResult(pendingResult) {
+  const sanitizedSummary = isPlainObject(pendingResult?.sanitizedSummary)
+    ? pendingResult.sanitizedSummary
+    : {};
+  const evidenceRefs = controlledEvidenceRefs([
+    ...safeArray(sanitizedSummary.evidenceRefs),
+    ...safeArray(pendingResult?.evidenceRefs)
+  ]);
+  const summary = {
+    status: safeDisplayText(sanitizedSummary.status) ?? 'completed',
+    summary: safeDisplayText(sanitizedSummary.summary) ?? 'Pending result accepted with sanitized evidence.',
+    changedFiles: safeStringArray(sanitizedSummary.changedFiles),
+    validationCommands: safeStringArray(sanitizedSummary.validationCommands),
+    risks: safeStringArray(sanitizedSummary.risks),
+    blockers: safeStringArray(sanitizedSummary.blockers),
+    evidenceRefs
+  };
+  const blockerReason = safeDisplayText(sanitizedSummary.blockerReason);
+
+  return blockerReason === null
+    ? summary
+    : {
+        ...summary,
+        blockerReason
+      };
+}
+
+function handoffPackFromAcceptedSummary({
+  summary,
+  workerTask,
+  reviewerTask
+}) {
+  const workerTitle = safeDisplayText(workerTask?.title) ?? safeToken(workerTask?.taskId) ?? 'accepted worker result';
+
+  return {
+    title: safeDisplayText(reviewerTask?.handoffTitle) ?? `Review ${workerTitle}`,
+    body: safeDisplayText(reviewerTask?.handoffBody) ??
+      'Review the accepted pending result, recovery state, changed files, validation commands, risks, and blockers. This preview is copy-only and does not create a reviewer verdict.',
+    workerEvidenceRefs: controlledEvidenceRefs(summary.evidenceRefs),
+    changedFiles: safeStringArray(summary.changedFiles),
+    validationCommands: safeStringArray(summary.validationCommands),
+    risks: safeStringArray(summary.risks),
+    blockers: safeStringArray(summary.blockers)
+  };
+}
+
+function reviewerHandoffBlockedReasons({
+  recovery,
+  pendingResultRef,
+  pendingResultMatchesRecovery
+}) {
+  if (recovery.recoveryState === 'ready-for-reviewer-handoff' &&
+      pendingResultRef?.state === 'available' &&
+      pendingResultMatchesRecovery) {
+    return [];
+  }
+
+  return uniqueStrings([
+    ...safeStringArray(recovery.blockedReasons),
+    ...(recovery.recoveryState === 'ready-for-reviewer-handoff' ? [] : [recovery.recoveryState]),
+    ...(recovery.recoveryState === 'ready-for-reviewer-handoff' &&
+        pendingResultRef?.state === 'available' &&
+        !pendingResultMatchesRecovery
+      ? ['pending-result-mismatch']
+      : []),
+    ...(pendingResultRef?.state === 'blocked' ? ['pending-result-blocked'] : []),
+    ...(pendingResultRef?.state === 'consumed' ? ['pending-result-consumed'] : []),
+    ...(pendingResultRef?.state === 'superseded' ? ['pending-result-superseded'] : []),
+    ...(pendingResultRef?.state === 'available' ? [] : ['pending-result-not-accepted'])
+  ]);
+}
+
+function pendingResultMatchesAcceptedRecovery({
+  recovery,
+  pendingResultRef
+}) {
+  const accepted = recovery.resultIntake?.pendingResult;
+
+  return recovery.recoveryState === 'ready-for-reviewer-handoff' &&
+    isPlainObject(accepted) &&
+    pendingResultRef !== null &&
+    accepted.contractName === pendingResultRef.contractName &&
+    accepted.state === pendingResultRef.state &&
+    accepted.escrowRef === pendingResultRef.escrowRef;
+}
+
+function sourceContractsForReviewerHandoff({
+  recovery,
+  pendingResultRef
+}) {
+  return [
+    {
+      contractName: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME,
+      contractVersion: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_VERSION,
+      readOnly: true,
+      requiredFor: ['recovery-state', 'pending-result-linkage'],
+      sourceRef: {
+        kind: 'contract',
+        ref: CODEX_PROVIDER_RUN_RECOVERY_CONTRACT_NAME
+      }
+    },
+    pendingResultRef === null
+      ? null
+      : {
+          contractName: 'pendingResult.v1',
+          contractVersion: 1,
+          readOnly: true,
+          requiredFor: ['accepted-result-summary'],
+          sourceRef: {
+            kind: 'contract',
+            ref: 'pendingResult.v1'
+          }
+        }
+  ].filter((contract) => contract !== null);
+}
+
+function controlledEvidenceRefs(refs) {
+  const byKey = new Map();
+
+  for (const ref of safeArray(refs)) {
+    const controlled = controlledEvidenceRef(ref);
+
+    if (controlled !== null) {
+      byKey.set(`${controlled.kind}:${controlled.ref}`, controlled);
+    }
+  }
+
+  return [...byKey.values()];
+}
+
+function controlledEvidenceRef(ref) {
+  if (!isPlainObject(ref)) {
+    return null;
+  }
+
+  const controlled = {
+    kind: ref.kind,
+    ref: safeDisplayText(ref.ref),
+    label: safeDisplayText(ref.label)
+  };
+
+  return isControlledEvidenceRef(controlled) ? controlled : null;
+}
+
 function validateRecoveryStateBinding(errors, recovery) {
   if (!Array.isArray(recovery.blockedReasons) || !isPlainObject(recovery.resultIntake)) {
     return;
@@ -891,7 +1172,7 @@ function validateNullableResultSummary(errors, summary, path, blockedReasons) {
   validateAllowedFields(errors, summary, path, RESULT_SUMMARY_ALLOWED_FIELDS);
   requireNonEmptyString(errors, summary.status, `${path}.status`);
   requireNonEmptyString(errors, summary.summary, `${path}.summary`);
-  validateStringArray(errors, summary.changedFiles, `${path}.changedFiles`);
+  validateRepoPathArray(errors, summary.changedFiles, `${path}.changedFiles`);
   validateStringArray(errors, summary.validationCommands, `${path}.validationCommands`);
   validateStringArray(errors, summary.risks, `${path}.risks`);
   validateStringArray(errors, summary.blockers, `${path}.blockers`);
@@ -921,7 +1202,7 @@ function validateNullableHandoffPack(errors, handoffPack, path, blockedReasons) 
   validateEvidenceRefs(errors, handoffPack.workerEvidenceRefs, `${path}.workerEvidenceRefs`, {
     requireNonEmpty: true
   });
-  validateStringArray(errors, handoffPack.changedFiles, `${path}.changedFiles`);
+  validateRepoPathArray(errors, handoffPack.changedFiles, `${path}.changedFiles`);
   validateStringArray(errors, handoffPack.validationCommands, `${path}.validationCommands`);
   validateStringArray(errors, handoffPack.risks, `${path}.risks`);
   validateStringArray(errors, handoffPack.blockers, `${path}.blockers`);
@@ -1109,6 +1390,26 @@ function validateStringArray(errors, value, path) {
   });
 }
 
+function validateRepoPathArray(errors, value, path) {
+  if (!Array.isArray(value)) {
+    errors.push(`${path} must be an array`);
+    return;
+  }
+
+  value.forEach((entry, index) => {
+    const fieldPath = `${path}[${index}]`;
+
+    if (typeof entry !== 'string' || entry.trim() === '') {
+      errors.push(`${fieldPath} must be a non-empty string`);
+      return;
+    }
+
+    if (!isSafeRepoRelativePath(entry.trim())) {
+      errors.push(`${fieldPath} must be a safe repo-relative path`);
+    }
+  });
+}
+
 function requireStringArrayIncludes(errors, value, path, expected) {
   if (!Array.isArray(value) || !value.includes(expected)) {
     errors.push(`${path} must include ${JSON.stringify(expected)}`);
@@ -1286,6 +1587,10 @@ function safeStringArray(value) {
   return Array.isArray(value)
     ? value.map((entry) => safeDisplayText(entry)).filter((entry) => entry !== null)
     : [];
+}
+
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function safeTimestamp(value) {
