@@ -1,0 +1,118 @@
+{
+  "goalId": "v53-controlled-child-dispatch-preview",
+  "taskId": "pr-1-contracts-fixtures-tests",
+  "role": "worker",
+  "preferredProvider": "codex",
+  "allowedProviders": [
+    "codex",
+    "claude-code"
+  ],
+  "projectContextRefs": [
+    "docs/plans/v53-controlled-child-dispatch-preview-runbook-2026-06-12.md",
+    "fixtures/contracts/system-golden-path.ready.v1.json"
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "systemGoldenPath.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "preview-readiness",
+        "task-pack"
+      ],
+      "sourceRef": {
+        "kind": "fixture",
+        "ref": "fixtures/contracts/system-golden-path.ready.v1.json"
+      }
+    },
+    {
+      "contractName": "goal-supervisor-app-read-model.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "active-goal",
+        "active-task"
+      ],
+      "sourceRef": {
+        "kind": "route",
+        "ref": "/api/goals/<goal-id>/supervisor"
+      }
+    },
+    {
+      "contractName": "resultIntakeRequest.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "result-expectation"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "resultIntakeRequest.v1"
+      }
+    }
+  ],
+  "taskPrompt": "Work on pr-1-contracts-fixtures-tests as worker. Use the provided project context refs and return a sanitized result block through v51 Result Intake. Do not claim state changes outside the evidence you can cite.",
+  "acceptanceCriteria": [
+    "Return a sanitized result block for v51 Result Intake.",
+    "List controlled evidence refs for each claim.",
+    "Report remaining blockers without updating goal state."
+  ],
+  "requiredEvidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v53-pr-1-contracts-fixtures-tests-worker-evidence-2026-06-12.md",
+      "label": "v53 pr-1-contracts-fixtures-tests worker evidence"
+    }
+  ],
+  "forbiddenActions": [
+    "Provider execution stays unavailable.",
+    "Child work is copied manually by the operator.",
+    "Child result cannot update goal state directly.",
+    "Repository publication operations stay out of scope."
+  ],
+  "expectedResultBlock": {
+    "returnPath": "v51-result-intake",
+    "contractName": "resultIntakeRequest.v1",
+    "contractVersion": 1,
+    "goalId": "v53-controlled-child-dispatch-preview",
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "workerRole": "worker",
+    "source": "codex",
+    "submittedAt": "<submitted-at-iso>",
+    "resultBlock": {
+      "status": "<completed-or-blocked>",
+      "summary": "<sanitized-summary>",
+      "changedFiles": [],
+      "validationCommands": [],
+      "risks": [],
+      "blockers": []
+    },
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v53-pr-1-contracts-fixtures-tests-worker-evidence-2026-06-12.md",
+        "label": "v53 pr-1-contracts-fixtures-tests worker evidence"
+      }
+    ],
+    "requestedEvent": {
+      "eventType": "worker.evidence-recorded",
+      "taskId": "pr-1-contracts-fixtures-tests"
+    },
+    "boundaries": {
+      "providerExecutionAvailable": false,
+      "childDispatchAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "untrustedTranscriptProjectionAvailable": false,
+      "frontendLocalFileReadAvailable": false,
+      "reviewerMutationAvailable": false,
+      "mainVerificationMutationAvailable": false,
+      "releaseGateMutationAvailable": false,
+      "gitMutationAvailable": false,
+      "githubReleaseAutomationAvailable": false
+    },
+    "willAppendGoalEvent": false
+  },
+  "returnPath": "v51-result-intake",
+  "copyOnly": true,
+  "willMutate": false
+}
