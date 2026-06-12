@@ -1210,6 +1210,10 @@ export function projectWorkbenchContracts(results) {
     result: results.goalSupervisor,
     supervisor: goalSupervisorData
   });
+  const projectedSystemGoldenPath = projectSystemGoldenPath({
+    contract: goalSupervisorData?.systemGoldenPath,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1229,6 +1233,7 @@ export function projectWorkbenchContracts(results) {
     state: failedRequiredRoutes.length > 0 ? 'partial' : 'ready',
     routeStates,
     routeContext,
+    systemGoldenPath: projectedSystemGoldenPath,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
       routeStates
@@ -1250,6 +1255,7 @@ export function projectWorkbenchContracts(results) {
       diagnosticsBundle: projectedDiagnosticsBundle,
       providerHub: projectedProviderHub,
       supervisorDashboard: projectedSupervisorDashboard,
+      systemGoldenPath: projectedSystemGoldenPath,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1826,6 +1832,7 @@ function projectDesktopShell({
   diagnosticsBundle,
   providerHub,
   supervisorDashboard,
+  systemGoldenPath,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -2114,10 +2121,149 @@ function projectDesktopShell({
       diagnosticsBundleRoute
     }),
     providerHub,
+    systemGoldenPath,
     routeProvenance,
     appStates,
     boundaries,
     note: 'App Home is a first-screen desktop surface over existing read-only local API contracts. It does not execute shell commands, start jobs, open files, call models, self-approve, mutate goals, push git state, or declare release completion.'
+  };
+}
+
+function projectSystemGoldenPath({
+  contract,
+  supervisorRoute
+}) {
+  const hasContract = contract !== null && contract !== undefined && typeof contract === 'object' && !Array.isArray(contract);
+  const steps = hasContract && Array.isArray(contract.steps) ? contract.steps : [];
+  const sourceContracts = hasContract && Array.isArray(contract.sourceContracts) ? contract.sourceContracts : [];
+  const blockedReasons = hasContract && Array.isArray(contract.blockedReasons) ? contract.blockedReasons : [];
+  const manualActions = [
+    contract?.nextSafeAction,
+    ...steps.map((step) => step?.nextSafeAction)
+  ].filter((action) => action?.kind === 'manual-cli-required');
+
+  return {
+    state: hasContract ? contract.overallState ?? 'available' : 'missing',
+    contractName: valueState(contract?.contractName),
+    contractVersion: valueState(contract?.contractVersion),
+    generatedAt: valueState(contract?.generatedAt),
+    overallState: valueState(contract?.overallState),
+    project: {
+      projectId: valueState(contract?.project?.projectId),
+      selected: valueState(contract?.project?.selected),
+      state: valueState(contract?.project?.state)
+    },
+    goal: {
+      goalId: valueState(contract?.goal?.goalId),
+      taskId: valueState(contract?.goal?.taskId),
+      title: valueState(contract?.goal?.title)
+    },
+    nextSafeAction: projectSystemGoldenPathAction(contract?.nextSafeAction),
+    blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+    manualRequired: projectSystemGoldenPathManualActions(manualActions),
+    sourceContracts: {
+      state: sourceContracts.length === 0 ? (hasContract ? 'empty' : 'missing') : 'available',
+      count: valueState(hasContract ? sourceContracts.length : undefined),
+      items: sourceContracts.map(projectSystemGoldenPathSourceContract)
+    },
+    steps: {
+      state: steps.length === 0 ? (hasContract ? 'empty' : 'missing') : 'available',
+      count: valueState(hasContract ? steps.length : undefined),
+      items: steps.map(projectSystemGoldenPathStep)
+    },
+    routeProvenance: {
+      source: valueState(contract?.routeProvenance?.source),
+      readModelOwner: valueState(contract?.routeProvenance?.readModelOwner),
+      workbenchSurface: valueState(contract?.routeProvenance?.workbenchSurface),
+      refreshRouteTemplate: valueState(contract?.routeProvenance?.refreshRouteTemplate),
+      refreshMethod: valueState(contract?.routeProvenance?.refreshMethod),
+      frontendLocalFileReads: valueState(contract?.routeProvenance?.frontendLocalFileReads),
+      mutationRoutes: projectSystemGoldenPathTextItems(contract?.routeProvenance?.mutationRoutes)
+    },
+    boundaries: Object.fromEntries(
+      Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 systemGoldenPath projection')
+    },
+    note: hasContract
+      ? 'System Golden Path is projected from backend-owned systemGoldenPath.v1. Workbench displays state only and refreshes through the existing contract loader.'
+      : 'System Golden Path is unavailable until goal-supervisor-app-read-model.v1 exposes systemGoldenPath.v1.'
+  };
+}
+
+function projectSystemGoldenPathStep(step) {
+  return {
+    id: valueState(step?.id),
+    label: valueState(step?.label),
+    state: valueState(step?.state),
+    sourceContract: valueState(step?.sourceContract),
+    sourceRef: projectSystemGoldenPathSourceRef(step?.sourceRef),
+    blockedReasons: projectSystemGoldenPathTextItems(step?.blockedReasons),
+    nextSafeAction: projectSystemGoldenPathAction(step?.nextSafeAction),
+    willMutate: valueState(step?.willMutate)
+  };
+}
+
+function projectSystemGoldenPathSourceContract(sourceContract) {
+  return {
+    contractName: valueState(sourceContract?.contractName),
+    contractVersion: valueState(sourceContract?.contractVersion),
+    readOnly: valueState(sourceContract?.readOnly),
+    requiredFor: projectSystemGoldenPathTextItems(sourceContract?.requiredFor),
+    sourceRef: projectSystemGoldenPathSourceRef(sourceContract?.sourceRef)
+  };
+}
+
+function projectSystemGoldenPathSourceRef(sourceRef) {
+  return {
+    kind: valueState(sourceRef?.kind),
+    ref: valueState(sourceRef?.ref)
+  };
+}
+
+function projectSystemGoldenPathAction(action) {
+  return {
+    kind: valueState(action?.kind),
+    label: valueState(action?.label),
+    reason: valueState(action?.reason),
+    commandName: valueState(action?.commandName),
+    method: valueState(action?.method),
+    routeTemplate: valueState(action?.routeTemplate),
+    willMutate: valueState(action?.willMutate)
+  };
+}
+
+function projectSystemGoldenPathManualActions(actions) {
+  const items = actions.map((action) => ({
+    label: valueState(action?.label),
+    reason: valueState(action?.reason),
+    commandName: valueState(action?.commandName),
+    willMutate: valueState(action?.willMutate)
+  }));
+
+  return {
+    state: items.length === 0 ? 'empty' : 'available',
+    count: valueState(items.length),
+    items
+  };
+}
+
+function projectSystemGoldenPathTextItems(values) {
+  if (!Array.isArray(values)) {
+    return {
+      state: 'missing',
+      count: valueState(undefined),
+      items: []
+    };
+  }
+
+  return {
+    state: values.length === 0 ? 'empty' : 'available',
+    count: valueState(values.length),
+    items: values.map((value) => valueState(value))
   };
 }
 

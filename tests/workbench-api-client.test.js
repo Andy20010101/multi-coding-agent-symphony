@@ -1037,7 +1037,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.doesNotMatch(JSON.stringify(hub), /sk-test-secret-value/u);
   });
 
-  it('projects the v47 Desktop App Home view model from existing read-only contracts', () => {
+  it('projects the v47 Desktop App Home view model from existing read-only contracts', async () => {
     const runtimeSnapshotContract = JSON.parse(`{
         "contractName": "app-state-snapshot.v1",
         "contractVersion": 1,
@@ -1141,6 +1141,9 @@ describe('v15 Workbench read-only API client', () => {
     const currentProjectBindingContract = createV48CurrentProjectBindingPayload(projectRegistryContract.projects[0]);
     const latestRunContract = createV37LatestRunPayload();
     const [safePreviewRoute] = createSafeArtifactPreviewRoutes(latestRunContract.run.artifactRefs);
+    const systemGoldenPathContract = JSON.parse(
+      await readFile('fixtures/contracts/system-golden-path.result-intake-blocked.v1.json', 'utf8')
+    );
     const model = projectWorkbenchContracts({
       projectRegistry: createWorkbenchResult('projectRegistry', projectRegistryContract),
       recentProjects: createWorkbenchResult('recentProjects', recentProjectsContract),
@@ -1183,7 +1186,9 @@ describe('v15 Workbench read-only API client', () => {
       artifactIndex: createWorkbenchResult('artifactIndex', createV37ArtifactIndexPayload()),
       evidenceTimeline: createWorkbenchResult('evidenceTimeline', createV37EvidenceTimelinePayload()),
       releaseBundle: createWorkbenchResult('releaseBundle', createV37ReleaseBundlePayload()),
-      goalSupervisor: createWorkbenchResult('goalSupervisor', createGoalSupervisorAppReadModelPayload()),
+      goalSupervisor: createWorkbenchResult('goalSupervisor', createGoalSupervisorAppReadModelPayload({
+        systemGoldenPath: systemGoldenPathContract
+      })),
       safeArtifactPreviews: [
         createWorkbenchRouteResult(safePreviewRoute, createV37SafeArtifactPreviewPayload())
       ]
@@ -1245,6 +1250,22 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.supervisorSummary.willMutate.value, false);
     assert.equal(model.desktopShell.supervisorSummary.commandExecutionAvailable.value, false);
     assert.equal(model.desktopShell.supervisorSummary.routeState.text, 'ready');
+    assert.equal(model.systemGoldenPath.contractName.text, 'systemGoldenPath.v1');
+    assert.equal(model.systemGoldenPath.overallState.text, 'blocked');
+    assert.equal(model.systemGoldenPath.nextSafeAction.label.text, 'Refresh State');
+    assert.equal(model.systemGoldenPath.blockedReasons.items[0].text, 'pending-result-blocked');
+    assert.equal(model.systemGoldenPath.manualRequired.items[0].label.text, 'Manual CLI Required');
+    assert.equal(model.systemGoldenPath.manualRequired.items[0].commandName.text, 'symphony goal review');
+    assert.equal(model.systemGoldenPath.steps.count.value, 9);
+    assert.equal(model.systemGoldenPath.steps.items.find((step) => step.id.value === 'result-intake').state.text, 'blocked');
+    assert.equal(model.systemGoldenPath.steps.items.find((step) => step.id.value === 'result-intake').sourceContract.text, 'pendingResult.v1');
+    assert.equal(model.systemGoldenPath.steps.items.find((step) => step.id.value === 'result-intake').blockedReasons.items[0].text, 'pending-result-blocked');
+    assert.equal(model.systemGoldenPath.steps.items.find((step) => step.id.value === 'review-gate').nextSafeAction.label.text, 'Manual CLI Required');
+    assert.equal(model.systemGoldenPath.steps.items.every((step) => step.willMutate.value === false), true);
+    assert.equal(model.systemGoldenPath.routeProvenance.readModelOwner.text, 'backend');
+    assert.equal(model.systemGoldenPath.routeProvenance.refreshRouteTemplate.text, '/api/goals/<goal-id>/supervisor');
+    assert.equal(model.systemGoldenPath.routeProvenance.mutationRoutes.items.length, 0);
+    assert.equal(model.desktopShell.systemGoldenPath.contractName.text, 'systemGoldenPath.v1');
     assert.equal(model.desktopShell.firstRowCards.items.map((card) => card.label.text).join(', '), 'Active goal, Next action, Run health');
     assert.equal(model.desktopShell.jobRun.sourcePolicy.text, 'job-model.v1 + job-creation.v1 + job-timeline-log-stream.v1 + job-run-control.v1');
     assert.equal(model.desktopShell.jobRun.jobId.text, 'job-v37-task-4');
@@ -5958,7 +5979,7 @@ function createFailedWorkbenchResult(routeId, {
   };
 }
 
-function createGoalSupervisorAppReadModelPayload() {
+function createGoalSupervisorAppReadModelPayload(overrides = {}) {
   return {
     contractName: 'goal-supervisor-app-read-model.v1',
     contractVersion: 1,
@@ -6328,7 +6349,8 @@ function createGoalSupervisorAppReadModelPayload() {
       evidenceRef: 'artifact:v44-4:pending-result',
       hashChainState: 'linked',
       occurredAt: '2026-06-10T12:03:00.000Z'
-    }]
+    }],
+    ...overrides
   };
 }
 

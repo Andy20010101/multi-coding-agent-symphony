@@ -30,6 +30,12 @@ const initialState = {
 const GOAL_EVENT_PLAN_PREVIEW_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-preview';
 const GOAL_EVENT_PLAN_CONFIRM_PATH_TEMPLATE = '/api/goals/<goal-id>/event-plan-confirm';
 const GOAL_OPERATION_POLL_INTERVAL_MS = 2500;
+const SYSTEM_GOLDEN_PATH_REFRESH_IDLE_STATE = Object.freeze({
+  phase: 'idle',
+  source: 'fetchWorkbenchContracts',
+  result: 'not requested',
+  message: null
+});
 const WORKBENCH_NAV_ITEMS = Object.freeze([
   Object.freeze({ id: 'desktop', label: 'Desktop', route: '/workbench/desktop/' }),
   Object.freeze({ id: 'supervisor', label: 'Supervisor', route: '/workbench/supervisor/' }),
@@ -69,6 +75,8 @@ function LiveWorkbenchApp() {
       return {
         ok: true,
         source: 'fetchWorkbenchContracts',
+        systemGoldenPathState: model?.systemGoldenPath?.overallState?.value ?? null,
+        systemGoldenPathContractName: model?.systemGoldenPath?.contractName?.value ?? null,
         supervisorDashboardState: model?.supervisorDashboard?.state ?? null,
         supervisorRouteState: model?.supervisorDashboard?.route?.state ?? null
       };
@@ -228,6 +236,7 @@ export function WorkbenchShell({
           <DesktopShellRoute
             desktopShell={model.desktopShell}
             routeContext={routeContext}
+            onRefreshWorkbenchContracts={onRefreshWorkbenchContracts}
           />
         ) : workbenchRoute === 'prompts' ? (
           <PromptWorkspaceRoute
@@ -589,7 +598,11 @@ function JobConsolePanel({
   );
 }
 
-function DesktopShellRoute({ desktopShell, routeContext }) {
+function DesktopShellRoute({
+  desktopShell,
+  routeContext,
+  onRefreshWorkbenchContracts
+}) {
   return (
     <section className="desktop-shell-workspace" aria-label="v47 Mac App Home">
       <aside className="desktop-sidebar" aria-label="Desktop shell navigation">
@@ -600,6 +613,7 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
         <nav aria-label="Desktop shell sections">
           <a href="#desktop-project-launcher">Projects</a>
           <a href="#desktop-overview" aria-current="page">Home</a>
+          <a href="#system-golden-path-panel">System Path</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -634,6 +648,10 @@ function DesktopShellRoute({ desktopShell, routeContext }) {
 
         <DesktopProjectLauncherPanel desktopShell={desktopShell} />
         <DesktopAppHomePanel desktopShell={desktopShell} routeContext={routeContext} />
+        <SystemGoldenPathPanel
+          systemGoldenPath={desktopShell?.systemGoldenPath}
+          onRefreshWorkbenchContracts={onRefreshWorkbenchContracts}
+        />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -883,6 +901,225 @@ function DesktopAppHomePanel({ desktopShell, routeContext }) {
       ]} />
     </section>
   );
+}
+
+function SystemGoldenPathPanel({
+  systemGoldenPath,
+  onRefreshWorkbenchContracts
+}) {
+  const [refreshState, setRefreshState] = useState(SYSTEM_GOLDEN_PATH_REFRESH_IDLE_STATE);
+  const [refreshLoading, setRefreshLoading] = useState(false);
+  const steps = systemGoldenPath?.steps?.items ?? [];
+  const sources = systemGoldenPath?.sourceContracts?.items ?? [];
+
+  async function handleRefreshState() {
+    setRefreshLoading(true);
+    setRefreshState({
+      phase: 'loading',
+      source: 'fetchWorkbenchContracts',
+      result: 'pending',
+      message: 'contract refresh pending'
+    });
+
+    const nextState = await refreshSystemGoldenPathState({
+      onRefreshWorkbenchContracts
+    });
+
+    setRefreshState(nextState);
+    setRefreshLoading(false);
+  }
+
+  return (
+    <section
+      id="system-golden-path-panel"
+      className="system-golden-path-panel"
+      aria-label="System Golden Path"
+    >
+      <header className="system-golden-path-header">
+        <div>
+          <p className="section-kicker">v52 daily acceptance</p>
+          <h2>System Golden Path</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(systemGoldenPath?.overallState?.text)}`}>
+          {systemGoldenPath?.overallState?.text ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="system-golden-path-summary">
+        <FieldList rows={[
+          ['overall state', systemGoldenPath?.overallState],
+          ['Next Safe Action', systemGoldenPath?.nextSafeAction?.label],
+          ['Source Contract', systemGoldenPath?.contractName],
+          ['Blocked Reason', textValueFromItems(systemGoldenPath?.blockedReasons, '无')],
+          ['Manual CLI Required', manualCliRequiredState(systemGoldenPath)],
+          ['goal', systemGoldenPath?.goal?.goalId],
+          ['task', systemGoldenPath?.goal?.taskId],
+          ['refresh route', systemGoldenPath?.routeProvenance?.refreshRouteTemplate],
+          ['refresh method', systemGoldenPath?.routeProvenance?.refreshMethod],
+          ['willMutate', systemGoldenPath?.nextSafeAction?.willMutate]
+        ]} />
+
+        <SystemGoldenPathRefreshControl
+          refreshState={refreshState}
+          refreshLoading={refreshLoading}
+          onRefreshState={handleRefreshState}
+        />
+      </div>
+
+      <Subsection title="steps">
+        {steps.length === 0 ? (
+          <EmptyBlock copy="System Golden Path steps 未暴露。" />
+        ) : (
+          <ol className="system-golden-path-step-list">
+            {steps.map((step) => (
+              <SystemGoldenPathStep key={step.id.text} step={step} />
+            ))}
+          </ol>
+        )}
+      </Subsection>
+
+      <Subsection title="Source Contract">
+        {sources.length === 0 ? (
+          <EmptyBlock copy="Source Contract 未暴露。" />
+        ) : (
+          <ul className="system-golden-path-source-list">
+            {sources.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <p className="panel-note">{systemGoldenPath?.note ?? 'System Golden Path unavailable.'}</p>
+    </section>
+  );
+}
+
+function SystemGoldenPathStep({ step }) {
+  return (
+    <li>
+      <header className="system-golden-path-step-header">
+        <div>
+          <h3>{step.label.text}</h3>
+          <small>{step.id.text}</small>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(step.state.text)}`}>{step.state.text}</span>
+      </header>
+      <FieldList rows={[
+        ['state', step.state],
+        ['Source Contract', step.sourceContract],
+        ['source ref', step.sourceRef?.ref],
+        ['Blocked Reason', textValueFromItems(step.blockedReasons, '无')],
+        ['Next Safe Action', step.nextSafeAction?.label],
+        ['next reason', step.nextSafeAction?.reason],
+        ['willMutate', step.willMutate]
+      ]} />
+    </li>
+  );
+}
+
+export function SystemGoldenPathRefreshControl({
+  refreshState,
+  refreshLoading,
+  onRefreshState
+}) {
+  function handlePreview() {
+    onRefreshState();
+  }
+
+  return (
+    <div className="system-golden-path-refresh" aria-label="System Golden Path refresh state">
+      <button
+        className="v52-refresh-button"
+        type="button"
+        disabled={refreshLoading}
+        onClick={handlePreview}
+      >
+        Refresh State
+      </button>
+      <FieldList rows={[
+        ['refresh phase', textValue(refreshState?.phase)],
+        ['refresh source', textValue(refreshState?.source)],
+        ['refresh result', textValue(refreshState?.result)],
+        ['refresh message', textValue(refreshState?.message)]
+      ]} />
+    </div>
+  );
+}
+
+export async function refreshSystemGoldenPathState({
+  onRefreshWorkbenchContracts
+}) {
+  if (typeof onRefreshWorkbenchContracts !== 'function') {
+    return Object.freeze({
+      phase: 'failed',
+      source: 'fetchWorkbenchContracts',
+      result: 'NULL',
+      message: 'refresh callback unavailable'
+    });
+  }
+
+  try {
+    const result = await onRefreshWorkbenchContracts();
+
+    return systemGoldenPathRefreshStateFromContractResult(result);
+  } catch (error) {
+    return Object.freeze({
+      phase: 'failed',
+      source: 'fetchWorkbenchContracts',
+      result: 'NULL',
+      message: stringValue(error?.message ?? 'contract refresh failed')
+    });
+  }
+}
+
+function systemGoldenPathRefreshStateFromContractResult(result) {
+  const source = stringValue(result?.source ?? 'fetchWorkbenchContracts');
+  const summary = systemGoldenPathRefreshResultSummary(result);
+
+  if (result?.ok === false || result?.phase === 'failed') {
+    return Object.freeze({
+      phase: 'failed',
+      source,
+      result: summary,
+      message: stringValue(result?.message ?? 'contract refresh failed')
+    });
+  }
+
+  return Object.freeze({
+    phase: 'succeeded',
+    source,
+    result: summary,
+    message: 'contract refresh completed'
+  });
+}
+
+function systemGoldenPathRefreshResultSummary(result) {
+  if (result === null || result === undefined || result === '') {
+    return 'NULL';
+  }
+
+  if (typeof result !== 'object' || Array.isArray(result)) {
+    return stringValue(result);
+  }
+
+  const parts = [
+    result.systemGoldenPathState === null || result.systemGoldenPathState === undefined
+      ? null
+      : `systemGoldenPath ${stringValue(result.systemGoldenPathState)}`,
+    result.systemGoldenPathContractName === null || result.systemGoldenPathContractName === undefined
+      ? null
+      : `contract ${stringValue(result.systemGoldenPathContractName)}`
+  ].filter((part) => part !== null);
+
+  return parts.length > 0 ? parts.join('; ') : 'NULL';
 }
 
 function DesktopAppStateStrip({ appStates }) {
@@ -10298,6 +10535,27 @@ function firstText(...values) {
   }
 
   return '';
+}
+
+function textValueFromItems(collection, emptyText = '无') {
+  const values = (collection?.items ?? [])
+    .map((item) => textValueFromState(item))
+    .filter((item) => item !== '');
+
+  return textValue(values.length === 0 ? emptyText : values.join('、'));
+}
+
+function manualCliRequiredState(systemGoldenPath) {
+  const items = systemGoldenPath?.manualRequired?.items ?? [];
+  const commands = items
+    .map((item) => textValueFromState(item.commandName))
+    .filter((item) => item !== '');
+
+  if (commands.length === 0) {
+    return textValue('无');
+  }
+
+  return textValue(commands.join('、'));
 }
 
 function textValueFromState(value) {
