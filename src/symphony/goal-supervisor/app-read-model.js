@@ -34,6 +34,9 @@ import {
   validateChildDispatchPreviewContract
 } from '../child-dispatch-preview-contracts.js';
 import {
+  buildCodexProviderExecutionPreviewFromChildDispatch
+} from '../codex-provider-execution-backend.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -228,6 +231,10 @@ export function buildGoalSupervisorAppReadModel({
     systemGoldenPath,
     providerPolicy: childDispatchProviderPolicy
   });
+  const codexProviderExecutionPreview = buildCodexProviderExecutionPreviewFromChildDispatch({
+    childDispatchPreview,
+    generatedAt
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -264,7 +271,8 @@ export function buildGoalSupervisorAppReadModel({
     threadContinuationDecision: normalizedThreadContinuationDecision,
     supervisorEventRegistrationEligibility: normalizedEventRegistrationEligibility,
     systemGoldenPath,
-    childDispatchPreview
+    childDispatchPreview,
+    codexProviderExecutionPreview
   };
 }
 

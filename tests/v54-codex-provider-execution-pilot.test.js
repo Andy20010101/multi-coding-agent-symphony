@@ -24,11 +24,20 @@ import {
   validateCodexProviderRunRecordContract
 } from '../src/symphony/codex-provider-execution-contracts.js';
 import { validateChildTaskPackContract } from '../src/symphony/child-dispatch-preview-contracts.js';
+import {
+  buildCodexProviderExecutionPreviewFromChildDispatch,
+  confirmCodexProviderExecutionPreview,
+  validateCodexProviderExecutionConfirmInput
+} from '../src/symphony/codex-provider-execution-backend.js';
+import {
+  buildGoalSupervisorAppReadModel
+} from '../src/symphony/goal-supervisor/index.js';
 import { validateResultIntakeRequestContract } from '../src/symphony/result-intake-contracts.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 const FIXTURE_DIR = join(REPO_ROOT, 'fixtures/contracts/codex-provider-execution');
+const CONTRACT_FIXTURE_DIR = join(REPO_ROOT, 'fixtures/contracts');
 const GENERATED_AT = '2026-06-12T14:00:00.000Z';
 
 const VALID_PREVIEW_FIXTURES = Object.freeze([
@@ -270,10 +279,284 @@ describe('v54 Codex provider execution pilot contracts and fixtures', () => {
       )
     );
   });
+
+  it('builds a backend Codex execution preview from the v53 child dispatch task pack', () => {
+    const childDispatchPreview = contractFixture('child-dispatch-preview.codex-worker.v1.json');
+    const preview = buildCodexProviderExecutionPreviewFromChildDispatch({
+      childDispatchPreview,
+      generatedAt: GENERATED_AT
+    });
+    const confirmation = confirmCodexProviderExecutionPreview({
+      preview,
+      input: confirmInputFor(preview),
+      confirmedAt: '2026-06-12T14:02:00.000Z'
+    });
+
+    assert.equal(validateCodexProviderExecutionPreviewContract(preview).ok, true);
+    assert.equal(preview.contractName, CODEX_PROVIDER_EXECUTION_PREVIEW_CONTRACT_NAME);
+    assert.equal(preview.goal.goalId, childDispatchPreview.goal.goalId);
+    assert.equal(preview.task.taskId, childDispatchPreview.task.taskId);
+    assert.equal(preview.providerId, CODEX_PROVIDER_ID);
+    assert.equal(preview.role, CODEX_PROVIDER_ROLE);
+    assert.equal(preview.taskPackHash, codexProviderExecutionHash(childDispatchPreview.taskPack));
+    assert.deepEqual(preview.blockedReasons, []);
+    assert.equal(preview.executionPolicy.startsOnPreview, false);
+    assert.equal(preview.boundaries.providerExecutionStartsOnPreview, false);
+    assert.equal(confirmation.previewHash, preview.previewHash);
+    assert.equal(confirmation.providerId, CODEX_PROVIDER_ID);
+    assertNoMutationBoundaries(confirmation.boundaries);
+  });
+
+  it('blocks backend preview for non-Codex child packs and missing child state', () => {
+    const reviewerPreview = buildCodexProviderExecutionPreviewFromChildDispatch({
+      childDispatchPreview: contractFixture('child-dispatch-preview.claude-reviewer.v1.json'),
+      generatedAt: GENERATED_AT
+    });
+    const missingGoalPreview = buildCodexProviderExecutionPreviewFromChildDispatch({
+      childDispatchPreview: contractFixture('child-dispatch-preview.blocked-missing-goal.v1.json'),
+      generatedAt: GENERATED_AT
+    });
+
+    assert.equal(validateCodexProviderExecutionPreviewContract(reviewerPreview).ok, true);
+    assert.ok(reviewerPreview.blockedReasons.includes('unsupported-provider'));
+    assert.ok(reviewerPreview.blockedReasons.includes('unsupported-role'));
+    assert.equal(reviewerPreview.taskPackRef, null);
+    assert.equal(reviewerPreview.executionPolicy.startsOnPreview, false);
+
+    assert.equal(validateCodexProviderExecutionPreviewContract(missingGoalPreview).ok, true);
+    assert.equal(missingGoalPreview.goal.goalId, 'missing-goal');
+    assert.ok(missingGoalPreview.blockedReasons.includes('active-goal-missing'));
+    assert.ok(missingGoalPreview.blockedReasons.includes('child-dispatch-preview-blocked'));
+    assert.ok(missingGoalPreview.blockedReasons.includes('task-pack-missing'));
+  });
+
+  it('rejects backend confirmation without the current preview hash and safe fields', () => {
+    const preview = buildCodexProviderExecutionPreviewFromChildDispatch({
+      childDispatchPreview: contractFixture('child-dispatch-preview.codex-worker.v1.json'),
+      generatedAt: GENERATED_AT
+    });
+    const blockedPreview = buildCodexProviderExecutionPreviewFromChildDispatch({
+      childDispatchPreview: contractFixture('child-dispatch-preview.claude-reviewer.v1.json'),
+      generatedAt: GENERATED_AT
+    });
+    const stale = confirmInputFor(preview);
+    const extra = confirmInputFor(preview);
+
+    stale.previewHash = 'sha256:1111111111111111111111111111111111111111111111111111111111111111';
+    extra.command = 'codex run';
+
+    assertValidationIncludes(
+      validateCodexProviderExecutionConfirmInput({ preview, input: stale }),
+      'previewHash must match current codex provider execution preview'
+    );
+    assertValidationIncludes(
+      validateCodexProviderExecutionConfirmInput({ preview, input: extra }),
+      'command is not an allowed codex provider execution confirm field'
+    );
+    assertValidationIncludes(
+      validateCodexProviderExecutionConfirmInput({ preview: blockedPreview, input: confirmInputFor(blockedPreview) }),
+      'preview must be ready before confirmation'
+    );
+  });
+
+  it('projects codexProviderExecutionPreview.v1 from the supervisor app read model', () => {
+    const model = buildProjectionReadModel();
+    const preview = model.codexProviderExecutionPreview;
+
+    assert.equal(preview.contractName, CODEX_PROVIDER_EXECUTION_PREVIEW_CONTRACT_NAME);
+    assert.equal(validateCodexProviderExecutionPreviewContract(preview).ok, true);
+    assert.equal(preview.goal.goalId, 'v54-codex-provider-execution-pilot');
+    assert.equal(preview.task.taskId, 'pr-2-backend-preview-confirmation');
+    assert.equal(preview.providerId, CODEX_PROVIDER_ID);
+    assert.equal(preview.role, CODEX_PROVIDER_ROLE);
+    assert.deepEqual(preview.blockedReasons, []);
+    assert.equal(preview.executionPolicy.startsOnPreview, false);
+    assert.equal(preview.boundaries.providerExecutionStartsOnPreview, false);
+    assert.equal(preview.resultReturn.returnPath, CODEX_PROVIDER_RESULT_RETURN_PATH);
+    assert.equal(preview.resultReturn.directGoalEventAppendAvailable, false);
+  });
 });
 
 function fixture(name) {
   return JSON.parse(readFileSync(join(FIXTURE_DIR, name), 'utf8'));
+}
+
+function contractFixture(name) {
+  return JSON.parse(readFileSync(join(CONTRACT_FIXTURE_DIR, name), 'utf8'));
+}
+
+function confirmInputFor(preview) {
+  return {
+    previewHash: preview.previewHash,
+    providerId: CODEX_PROVIDER_ID,
+    goalId: preview.goal.goalId,
+    taskId: preview.task.taskId,
+    role: CODEX_PROVIDER_ROLE,
+    operatorId: 'operator-v54-pr2'
+  };
+}
+
+function buildProjectionReadModel() {
+  const goalId = 'v54-codex-provider-execution-pilot';
+  const taskId = 'pr-2-backend-preview-confirmation';
+
+  return buildGoalSupervisorAppReadModel({
+    goalId,
+    title: 'v54 Codex Provider Execution Pilot',
+    tasks: [
+      {
+        taskId,
+        title: 'Backend preview and confirmation',
+        status: 'active'
+      }
+    ],
+    sourceContracts: [
+      'goal-next-action.v1',
+      'goal-supervisor-core-projection.v1'
+    ],
+    goalNext: {
+      contractName: 'goal-next-action.v1',
+      contractVersion: 1,
+      goalId,
+      status: 'action-required',
+      next: {
+        taskId,
+        role: 'worker',
+        phase: 'implement'
+      },
+      reason: `${taskId} worker is next`
+    },
+    coreProjection: {
+      contractName: 'goal-supervisor-core-projection.v1',
+      contractVersion: 1,
+      goalId,
+      current: {
+        taskId,
+        role: 'worker',
+        threadId: 'thread-v54-pr2-worker'
+      },
+      route: {
+        state: 'dispatchable',
+        reason: 'next-action-ready',
+        current: {
+          taskId,
+          role: 'worker',
+          threadId: 'thread-v54-pr2-worker'
+        },
+        pendingResult: {
+          source: 'recorded-result-state',
+          result: workerResult({ goalId, taskId })
+        }
+      },
+      progress: {},
+      routeInput: {
+        resultIntake: {
+          source: 'thread-result',
+          status: 'pending',
+          record: workerResult({ goalId, taskId }),
+          reason: 'valid-result-awaits-registration'
+        }
+      }
+    },
+    currentProjectBinding: {
+      contractName: 'current-project-binding.v1',
+      contractVersion: 1,
+      generatedAt: GENERATED_AT,
+      state: 'bound',
+      selectedProjectId: 'multi-coding-agent-symphony',
+      selectedProjectName: 'Multi Coding Agent Symphony',
+      readOnly: true
+    },
+    appStateSnapshot: {
+      contractName: 'app-state-snapshot.v1',
+      contractVersion: 1,
+      generatedAt: GENERATED_AT,
+      readOnly: true,
+      freshness: {
+        status: 'current'
+      },
+      active_goal: {
+        goal_id: goalId,
+        goal_title: 'v54 Codex Provider Execution Pilot'
+      },
+      current_task: {
+        task_id: taskId,
+        title: 'Backend preview and confirmation',
+        blocked: false
+      },
+      next_action: {
+        status: 'action-required',
+        next: {
+          taskId,
+          blocked: false
+        }
+      },
+      known_blockers: []
+    },
+    contextAdvisory: {
+      contractName: 'contextAdvisory.v1',
+      contractVersion: 1,
+      generatedAt: GENERATED_AT,
+      readOnly: true,
+      willMutate: false,
+      transcriptAvailability: 'readable',
+      staleTranscriptState: {
+        stale: false,
+        reason: null
+      },
+      missingTranscriptState: {
+        missing: false,
+        reason: null
+      },
+      resultBlockEvidence: {
+        status: 'present',
+        present: true,
+        evidenceRef: 'docs/plans/v54-pr-2-backend-preview-confirmation-evidence-2026-06-12.md'
+      },
+      contextUtilization: {
+        status: 'available',
+        ratio: 0.2
+      },
+      degradedReasons: [],
+      blockedFields: []
+    },
+    threadContinuationDecision: {
+      contractName: 'threadContinuationDecision.v1',
+      contractVersion: 1,
+      generatedAt: GENERATED_AT,
+      readOnly: true,
+      willMutate: false,
+      decision: 'checkpoint',
+      reason: 'backend-preview-ready',
+      taskId,
+      threadId: 'thread-v54-pr2-worker',
+      checkpointRef: 'docs/plans/v54-pr-2-backend-preview-confirmation-evidence-2026-06-12.md',
+      blockedFields: [],
+      requiredEvidence: ['codex-provider-execution-preview'],
+      sourceContracts: [
+        {
+          contractName: 'contextAdvisory.v1',
+          contractVersion: 1,
+          generatedAt: GENERATED_AT,
+          readOnly: true
+        }
+      ]
+    },
+    nowMs: Date.parse(GENERATED_AT)
+  });
+}
+
+function workerResult({ goalId, taskId }) {
+  return {
+    goalId,
+    taskId,
+    role: 'worker',
+    threadId: 'thread-v54-pr2-worker',
+    eventToRegister: 'worker.evidence-recorded',
+    evidenceRef: 'docs/plans/v54-pr-2-backend-preview-confirmation-evidence-2026-06-12.md',
+    branch: 'codex/v54-codex-provider-execution-backend-preview',
+    headCommit: 'abcdef1234567890'
+  };
 }
 
 function assertNoMutationBoundaries(boundaries) {
