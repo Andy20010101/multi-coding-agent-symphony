@@ -73,9 +73,18 @@ const GATE_EVENTS = new Set([
 
 const HASH_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const COMMIT_PATTERN = /^[a-f0-9]{7,64}$/u;
+const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
 const PREVIEW_TTL_MS = 15 * 60 * 1000;
 const RAW_FIELD_NAME_PATTERN = /^(?:rawTranscript|transcript|rawModelOutput|rawOutput|providerOutput|sessionLog|messages|conversation)$/iu;
 const RAW_TEXT_PATTERN = /\b(?:raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file|model[\s_-]*output|\.jsonl|\.codex\/sessions|\.claude\/)/iu;
+const SOURCE_CONTRACT_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'escrowRef',
+  'previewPlanHash',
+  'generatedAt',
+  'readOnly'
+]);
 const LOCAL_HIDDEN_PATH_SEGMENTS = new Set([
   '.codex',
   '.claude',
@@ -581,10 +590,7 @@ export function validatePendingResultContract(pendingResult) {
   requireEnum(errors, pendingResult.state, 'state', PENDING_RESULT_STATES);
   validateStringArray(errors, pendingResult.blockedReasons, 'blockedReasons');
   requireIsoTimestamp(errors, pendingResult.createdAt, 'createdAt');
-
-  if (!Array.isArray(pendingResult.sourceContracts) || pendingResult.sourceContracts.length === 0) {
-    errors.push('sourceContracts must be a non-empty array');
-  }
+  validatePendingResultSourceContracts(errors, pendingResult.sourceContracts);
 
   validateBoundaryFlags(errors, pendingResult.boundaries, 'boundaries');
 
@@ -896,6 +902,58 @@ function validateConfirmRequestShape(errors, shape) {
   }
 }
 
+function validatePendingResultSourceContracts(errors, sourceContracts) {
+  if (!Array.isArray(sourceContracts) || sourceContracts.length === 0) {
+    errors.push('sourceContracts must be a non-empty array');
+    return;
+  }
+
+  sourceContracts.forEach((contract, index) => {
+    const path = `sourceContracts[${index}]`;
+
+    if (!isPlainObject(contract)) {
+      errors.push(`${path} must be a plain object`);
+      return;
+    }
+
+    for (const key of Object.keys(contract)) {
+      if (!SOURCE_CONTRACT_ALLOWED_FIELDS.has(key)) {
+        errors.push(`${path}.${key} is not allowed`);
+      }
+    }
+
+    requireSafeSourceContractName(errors, contract.contractName, `${path}.contractName`);
+
+    if (contract.contractVersion !== undefined && !Number.isInteger(contract.contractVersion)) {
+      errors.push(`${path}.contractVersion must be an integer`);
+    }
+
+    if (contract.escrowRef !== undefined) {
+      requireNonEmptyString(errors, contract.escrowRef, `${path}.escrowRef`);
+
+      if (isUnsafeSourceContractText(contract.escrowRef)) {
+        errors.push(`${path}.escrowRef must not contain raw or local session identifiers`);
+      }
+    }
+
+    if (contract.previewPlanHash !== undefined) {
+      requireHash(errors, contract.previewPlanHash, `${path}.previewPlanHash`);
+    }
+
+    if (contract.generatedAt !== undefined) {
+      requireIsoTimestamp(errors, contract.generatedAt, `${path}.generatedAt`);
+    }
+
+    if (contract.readOnly !== undefined) {
+      requireExact(errors, contract.readOnly, `${path}.readOnly`, true);
+    }
+
+    for (const field of findUnsafeRawFields(contract, path)) {
+      errors.push(`${field} must not contain raw or local session identifiers`);
+    }
+  });
+}
+
 function validateEvidenceRefs(errors, evidenceRefs, path, {
   requireNonEmpty
 }) {
@@ -1104,6 +1162,60 @@ function isSafeRepoRelativePath(value) {
   const segments = value.split('/');
 
   return !segments.some((segment) => segment === '..' || LOCAL_HIDDEN_PATH_SEGMENTS.has(segment));
+}
+
+function requireSafeSourceContractName(errors, value, path) {
+  requireNonEmptyString(errors, value, path);
+
+  if (typeof value === 'string' && !isSafeSourceContractName(value)) {
+    errors.push(`${path} must be a safe contract name`);
+  }
+}
+
+function isSafeSourceContractName(value) {
+  if (!isNonEmptyString(value)) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+
+  return SOURCE_CONTRACT_NAME_PATTERN.test(trimmed) &&
+    !isUnsafeSourceContractText(trimmed);
+}
+
+function isUnsafeSourceContractText(value) {
+  if (!isNonEmptyString(value)) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+  const compact = lower.replace(/[^a-z0-9]/gu, '');
+  const normalized = lower.replaceAll('\\', '/');
+  const segments = normalized.split('/').filter((segment) => segment !== '');
+
+  return RAW_TEXT_PATTERN.test(trimmed) ||
+    /[\x00-\x1F\x7F]/u.test(trimmed) ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('~') ||
+    /^[a-z]:[\\/]/iu.test(trimmed) ||
+    trimmed.includes('\\') ||
+    trimmed === '..' ||
+    trimmed.startsWith('../') ||
+    trimmed.includes('/../') ||
+    lower.startsWith('file:') ||
+    lower.includes('stdout') ||
+    lower.includes('prompt') ||
+    lower.includes('secret') ||
+    lower.endsWith('.jsonl') ||
+    lower.includes('.jsonl/') ||
+    compact.includes('rawtranscript') ||
+    compact.includes('rawmodeloutput') ||
+    compact.includes('providersession') ||
+    compact.includes('sessionlog') ||
+    compact.includes('sessionfile') ||
+    compact.includes('modeloutput') ||
+    segments.some((segment) => LOCAL_HIDDEN_PATH_SEGMENTS.has(segment));
 }
 
 function firstArray(...values) {

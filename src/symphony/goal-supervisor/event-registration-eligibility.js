@@ -148,6 +148,8 @@ const LOCAL_HIDDEN_PATH_SEGMENTS = new Set([
   '.symphony'
 ]);
 const RAW_TRANSCRIPT_PATTERN = /\braw[\s_-]*transcript\b/iu;
+const RAW_MODEL_OUTPUT_PATTERN = /\b(?:raw[\s_-]*model[\s_-]*output|model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file)\b/iu;
+const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
 
 export function buildSupervisorEventRegistrationEligibility({
   goalId = null,
@@ -717,13 +719,8 @@ function sourceContractRefs({
 
   return refs
     .filter((ref) => isPlainObject(ref) && nonEmptyString(ref.contractName))
-    .map((ref) => ({
-      contractName: ref.contractName,
-      contractVersion: Number.isInteger(ref.contractVersion) ? ref.contractVersion : null,
-      generatedAt: safeTimestamp(ref.generatedAt),
-      readOnly: ref.readOnly === true,
-      threadId: safeToken(ref.threadId)
-    }))
+    .map(normalizeSourceContractRef)
+    .filter((ref) => ref !== null)
     .filter((ref) => {
       const key = `${ref.contractName}:${ref.contractVersion ?? 'missing'}:${ref.generatedAt ?? 'missing'}:${ref.threadId ?? 'missing'}`;
 
@@ -762,8 +759,14 @@ function arrayOfContractRefs(sourceContracts) {
   return (Array.isArray(sourceContracts) ? sourceContracts : [])
     .map((contract) => {
       if (typeof contract === 'string') {
+        const contractName = safeSourceContractName(contract);
+
+        if (contractName === null) {
+          return null;
+        }
+
         return {
-          contractName: contract,
+          contractName,
           contractVersion: null,
           generatedAt: null,
           readOnly: null,
@@ -774,6 +777,37 @@ function arrayOfContractRefs(sourceContracts) {
       return isPlainObject(contract) ? contract : null;
     })
     .filter((contract) => contract !== null);
+}
+
+function normalizeSourceContractRef(ref) {
+  const contractName = safeSourceContractName(ref.contractName);
+
+  if (contractName === null) {
+    return null;
+  }
+
+  return {
+    contractName,
+    contractVersion: Number.isInteger(ref.contractVersion) ? ref.contractVersion : null,
+    generatedAt: safeTimestamp(ref.generatedAt),
+    readOnly: ref.readOnly === true,
+    threadId: safeToken(ref.threadId)
+  };
+}
+
+function safeSourceContractName(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return SOURCE_CONTRACT_NAME_PATTERN.test(trimmed) &&
+    !hasUnsafeText(trimmed) &&
+    !hasUnsafePathShape(trimmed) &&
+    !hasUnsafeLocalEvidencePath(trimmed)
+    ? trimmed
+    : null;
 }
 
 function isContinuationBlocked(decision) {
@@ -978,14 +1012,22 @@ function safeTimestamp(value) {
 
 function hasUnsafeText(value) {
   const lower = value.toLowerCase();
+  const compact = lower.replace(/[^a-z0-9]/gu, '');
 
   return /[\x00-\x1F\x7F]/u.test(value) ||
     RAW_TRANSCRIPT_PATTERN.test(value) ||
+    RAW_MODEL_OUTPUT_PATTERN.test(value) ||
     lower.includes('jsonl') ||
     lower.includes('prompt') ||
     lower.includes('stdout') ||
     lower.includes('secret') ||
-    lower.startsWith('file:');
+    lower.startsWith('file:') ||
+    compact.includes('rawtranscript') ||
+    compact.includes('rawmodeloutput') ||
+    compact.includes('providersession') ||
+    compact.includes('sessionlog') ||
+    compact.includes('sessionfile') ||
+    compact.includes('modeloutput');
 }
 
 function hasUnsafeLocalEvidencePath(value) {

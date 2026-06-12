@@ -179,6 +179,88 @@ describe('v51 pending result projection and eligibility integration', () => {
     assert.equal(eligibilityFor(gatePending).previewRequest, null);
   });
 
+  it('rejects pendingResult.v1 sourceContracts with raw or local session refs', () => {
+    const safePending = withoutTestEscrow(pendingResultFromFixture('safe-worker-result.v1.json'));
+    const unsafeNames = [
+      '.codex/sessions/raw-secret.jsonl',
+      '.claude/projects/raw-secret.jsonl',
+      '.symphony/goals/pending-result.jsonl',
+      '.git/logs/head',
+      'transcript.jsonl.v1',
+      'raw-model-output.v1',
+      'provider-session.v1',
+      'session-log.v1'
+    ];
+
+    for (const contractName of unsafeNames) {
+      const validation = validatePendingResultContract({
+        ...safePending,
+        sourceContracts: [{
+          ...safePending.sourceContracts[0],
+          contractName
+        }]
+      });
+
+      assert.equal(validation.ok, false, contractName);
+      assert.ok(validation.errors.includes('sourceContracts[0].contractName must be a safe contract name'), contractName);
+    }
+
+    const rawTimestampValidation = validatePendingResultContract({
+      ...safePending,
+      sourceContracts: [{
+        ...safePending.sourceContracts[0],
+        contractName: '.codex/sessions/raw-secret.jsonl',
+        generatedAt: 'raw transcript here'
+      }]
+    });
+
+    assert.equal(rawTimestampValidation.ok, false);
+    assert.ok(rawTimestampValidation.errors.includes('sourceContracts[0].contractName must be a safe contract name'));
+    assert.ok(rawTimestampValidation.errors.includes('sourceContracts[0].generatedAt must be an ISO timestamp'));
+  });
+
+  it('filters unsafe legacy pendingResult sourceContracts from read model and eligibility outputs', () => {
+    const pendingResult = withoutTestEscrow(pendingResultFromFixture('safe-worker-result.v1.json'));
+    const legacyUnsafePendingResult = {
+      ...pendingResult,
+      sourceContracts: [
+        {
+          contractName: '.codex/sessions/raw-secret.jsonl',
+          contractVersion: 1,
+          escrowRef: '.claude/projects/raw-secret.jsonl',
+          generatedAt: 'raw transcript here',
+          rawPayload: 'provider session secret raw model output'
+        },
+        {
+          ...pendingResult.sourceContracts[0],
+          generatedAt: GENERATED_AT,
+          rawPayload: 'session log secret'
+        }
+      ]
+    };
+    const model = buildGoalSupervisorAppReadModel({
+      goalId: GOAL_ID,
+      coreProjection: coreProjection(),
+      pendingResultState: legacyUnsafePendingResult,
+      threadContinuationDecision: checkpointDecision(),
+      nowMs: Date.parse(GENERATED_AT)
+    });
+    const directEligibility = buildSupervisorEventRegistrationEligibility({
+      goalId: GOAL_ID,
+      pendingResult: legacyUnsafePendingResult,
+      threadContinuationDecision: checkpointDecision(),
+      generatedAt: GENERATED_AT
+    });
+
+    assert.ok(model.pendingResult.sourceContracts.some((contract) => contract.contractName === 'resultEvidenceEscrow.v1'));
+    assert.equal(model.pendingResult.sourceContracts.some((contract) => contract.contractName.includes('.codex')), false);
+    assert.ok(model.supervisorEventRegistrationEligibility.sourceContracts.some((contract) => contract.contractName === 'pendingResult.v1'));
+    assert.equal(directEligibility.sourceContracts.some((contract) => contract.contractName.includes('.codex')), false);
+    assertNoUnsafePayload(model.pendingResult);
+    assertNoUnsafePayload(model.supervisorEventRegistrationEligibility);
+    assertNoUnsafePayload(directEligibility);
+  });
+
   it('reads PR-2 pending result state into the supervisor contract pipeline', async () => {
     const root = await mkdtemp(join(tmpdir(), 'symphony-v51-pending-result-projection-'));
     const stateDir = join(root, '.symphony');

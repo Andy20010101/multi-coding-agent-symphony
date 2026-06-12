@@ -26,6 +26,8 @@ export { GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT } from './policy.js';
 const PENDING_RESULT_CONTRACT_NAME = 'pendingResult.v1';
 const RESULT_EVIDENCE_ESCROW_CONTRACT_NAME = 'resultEvidenceEscrow.v1';
 const PENDING_RESULT_STATES = new Set(['available', 'blocked', 'consumed', 'superseded']);
+const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
+const UNSAFE_SOURCE_CONTRACT_TEXT_PATTERN = /\b(?:raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file|model[\s_-]*output)\b/iu;
 const PENDING_RESULT_UPDATE_EVENTS = new Set([
   'worker.evidence-recorded',
   'worker.self-check-passed',
@@ -220,7 +222,7 @@ function buildGoalSnapshot({
     activeRole: nonEmptyString(current?.role) ? current.role : null,
     releaseReadiness: projection.route?.state === 'complete' ? 'ready' : 'not-ready',
     blockerCount,
-    sourceContracts: Array.isArray(sourceContracts) ? sourceContracts.filter(nonEmptyString) : [],
+    sourceContracts: safeSourceContractNames(sourceContracts),
     generatedAt
   };
 }
@@ -555,16 +557,22 @@ function stringifyControlledEvidenceRef(evidenceRef) {
 function normalizePendingResultSourceContracts(sourceContracts) {
   return (Array.isArray(sourceContracts) ? sourceContracts : [])
     .map((contract) => {
-      if (!isPlainObject(contract) || !nonEmptyString(contract.contractName)) {
+      if (!isPlainObject(contract)) {
+        return null;
+      }
+
+      const contractName = safeContractName(contract.contractName);
+
+      if (contractName === null) {
         return null;
       }
 
       return stripEmptyObject({
-        contractName: contract.contractName,
+        contractName,
         contractVersion: Number.isInteger(contract.contractVersion) ? contract.contractVersion : null,
         escrowRef: safeDisplayRef(contract.escrowRef),
         previewPlanHash: safeHash(contract.previewPlanHash),
-        generatedAt: firstNonEmptyString(contract.generatedAt),
+        generatedAt: safeTimestamp(contract.generatedAt),
         readOnly: true
       });
     })
@@ -582,7 +590,7 @@ function pendingResultSourceContracts(pendingResult) {
       contractVersion: pendingResult.contractVersion,
       readOnly: true
     },
-    ...pendingResult.sourceContracts.map((contract) => ({
+    ...normalizePendingResultSourceContracts(pendingResult.sourceContracts).map((contract) => ({
       contractName: contract.contractName ?? RESULT_EVIDENCE_ESCROW_CONTRACT_NAME,
       contractVersion: contract.contractVersion ?? null,
       readOnly: true
@@ -939,8 +947,14 @@ function normalizeContractRefs(sourceContracts) {
 
 function normalizeContractRef(contract) {
   if (typeof contract === 'string') {
+    const contractName = safeContractName(contract);
+
+    if (contractName === null) {
+      return null;
+    }
+
     return {
-      contractName: contract,
+      contractName,
       contractVersion: null,
       generatedAt: null,
       readOnly: null,
@@ -952,12 +966,18 @@ function normalizeContractRef(contract) {
     return null;
   }
 
+  const contractName = safeContractName(contract.contractName);
+
+  if (contractName === null) {
+    return null;
+  }
+
   return {
-    contractName: contract.contractName,
+    contractName,
     contractVersion: Number.isInteger(contract.contractVersion) ? contract.contractVersion : null,
-    generatedAt: firstNonEmptyString(contract.generatedAt),
+    generatedAt: safeTimestamp(contract.generatedAt),
     readOnly: contract.readOnly === true,
-    threadId: firstNonEmptyString(contract.threadId)
+    threadId: safeDisplayRef(contract.threadId)
   };
 }
 
@@ -1039,9 +1059,70 @@ function normalizeMissingTranscriptState(missingTranscriptState) {
 }
 
 function safeSourceContracts(sourceContracts) {
-  return Array.isArray(sourceContracts) ? sourceContracts.filter((contract) => (
-    nonEmptyString(contract) || isPlainObject(contract)
-  )) : [];
+  return normalizeContractRefs(sourceContracts);
+}
+
+function safeSourceContractNames(sourceContracts) {
+  return safeSourceContracts(sourceContracts)
+    .map((contract) => contract.contractName)
+    .filter(nonEmptyString);
+}
+
+function safeContractName(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return SOURCE_CONTRACT_NAME_PATTERN.test(trimmed) && !hasUnsafeSourceContractText(trimmed)
+    ? trimmed
+    : null;
+}
+
+function safeTimestamp(value) {
+  if (!nonEmptyString(value) || hasUnsafeSourceContractText(value)) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function hasUnsafeSourceContractText(value) {
+  if (!nonEmptyString(value)) {
+    return false;
+  }
+
+  const ref = value.trim();
+  const lower = ref.toLowerCase();
+  const compact = lower.replace(/[^a-z0-9]/gu, '');
+  const normalized = lower.replaceAll('\\', '/');
+  const segments = normalized.split('/').filter((segment) => segment !== '');
+
+  return UNSAFE_SOURCE_CONTRACT_TEXT_PATTERN.test(ref) ||
+    /[\x00-\x1F\x7F]/u.test(ref) ||
+    ref.startsWith('/') ||
+    ref.startsWith('~') ||
+    /^[a-z]:[\\/]/iu.test(ref) ||
+    ref.includes('\\') ||
+    ref === '..' ||
+    ref.startsWith('../') ||
+    ref.includes('/../') ||
+    lower.startsWith('file:') ||
+    lower.includes('stdout') ||
+    lower.includes('prompt') ||
+    lower.includes('secret') ||
+    lower.endsWith('.jsonl') ||
+    lower.includes('.jsonl/') ||
+    compact.includes('rawtranscript') ||
+    compact.includes('rawmodeloutput') ||
+    compact.includes('providersession') ||
+    compact.includes('sessionlog') ||
+    compact.includes('sessionfile') ||
+    compact.includes('modeloutput') ||
+    segments.some((segment) => ['.codex', '.claude', '.git', '.symphony'].includes(segment));
 }
 
 function countProvidersByState(providers, states) {
