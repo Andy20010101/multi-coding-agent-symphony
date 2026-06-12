@@ -1,0 +1,136 @@
+{
+  "contractName": "codexProviderExecutionPreview.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-12T14:00:00.000Z",
+  "goal": {
+    "goalId": "v54-codex-provider-execution-pilot",
+    "title": "v54 Codex Provider Execution Pilot",
+    "state": "active",
+    "sourceContract": "goal-supervisor-app-read-model.v1",
+    "sourceRef": {
+      "kind": "route",
+      "ref": "/api/goals/<goal-id>/supervisor"
+    }
+  },
+  "task": {
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "title": "Contracts, fixtures, and tests",
+    "state": "active",
+    "sourceContract": "childTaskPack.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "childTaskPack.v1"
+    }
+  },
+  "providerId": "codex",
+  "role": "worker",
+  "taskPackRef": null,
+  "taskPackHash": null,
+  "inputSummary": {
+    "taskPackAvailable": false,
+    "taskPackSourceContract": null,
+    "taskPromptSummary": "Codex worker task pack is missing.",
+    "acceptanceCriteria": [],
+    "evidenceRefs": [],
+    "providerPolicyReason": "task-pack-missing"
+  },
+  "executionPolicy": {
+    "providerId": "codex",
+    "role": "worker",
+    "allowedProviders": [
+      "codex"
+    ],
+    "allowedRoles": [
+      "worker"
+    ],
+    "requiresOperatorConfirmation": true,
+    "requiresPreviewHash": true,
+    "startsOnPreview": false,
+    "arbitraryCommandAvailable": false,
+    "genericShellAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false
+  },
+  "resultReturn": {
+    "returnPath": "v51-result-intake",
+    "resultIntakeContract": "resultIntakeRequest.v1",
+    "resultIntakeRequestRequired": true,
+    "sanitizedResultRequired": true,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false
+  },
+  "blockedReasons": [
+    "task-pack-missing"
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "childDispatchPreview.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "task-pack-ref"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "childDispatchPreview.v1"
+      }
+    },
+    {
+      "contractName": "childTaskPack.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "task-pack-hash"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "childTaskPack.v1"
+      }
+    },
+    {
+      "contractName": "resultIntakeRequest.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "result-return"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "resultIntakeRequest.v1"
+      }
+    }
+  ],
+  "boundaries": {
+    "codexOnly": true,
+    "workerRoleOnly": true,
+    "explicitOperatorConfirmationRequired": true,
+    "previewHashRequired": true,
+    "providerExecutionStartsOnPreview": false,
+    "providerExecutionStartsWithoutConfirmation": false,
+    "claudeCodeExecutionAvailable": false,
+    "providerParityAvailable": false,
+    "automaticReviewerVerdictAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "genericShellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "localSessionFileReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  },
+  "previewHash": "sha256:ea894375c88e726d0defaedc5698762579450c95970a28f0a0a1178ceacbad33"
+}
