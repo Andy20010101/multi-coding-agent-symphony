@@ -701,6 +701,98 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function CodexProviderExecutionPreviewPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<textarea\b/u);
   });
 
+  it('renders the v55 recovery and reviewer handoff lanes on Desktop App Home as read-only state', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
+    const childDispatchPreview = JSON.parse(
+      await readFile('fixtures/contracts/child-dispatch-preview.codex-worker.v1.json', 'utf8')
+    );
+    const codexProviderExecutionPreview = JSON.parse(
+      await readFile('fixtures/contracts/codex-provider-execution/preview.ready.v1.json', 'utf8')
+    );
+    const codexProviderRunRecovery = JSON.parse(
+      await readFile('fixtures/contracts/codex-provider-run-recovery/recovery.completed-accepted.v1.json', 'utf8')
+    );
+    const reviewerHandoffPreview = JSON.parse(
+      await readFile('fixtures/contracts/codex-provider-run-recovery/reviewer-handoff.ready.v1.json', 'utf8')
+    );
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const supervisorRoute = READONLY_API_ROUTES.find((route) => route.id === 'goalSupervisor');
+      const viewState = createWorkbenchRenderViewState();
+
+      viewState.model = projectWorkbenchContracts({
+        goalSupervisor: readonlyRouteResult(supervisorRoute, {
+          ...createGoalSupervisorRenderPayload(),
+          childDispatchPreview,
+          codexProviderExecutionPreview,
+          codexProviderRunRecovery,
+          reviewerHandoffPreview
+        })
+      });
+      viewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', viewState);
+      const codexPanelIndex = desktopHtml.indexOf('id="codex-provider-execution-preview-panel"');
+      const recoveryPanelIndex = desktopHtml.indexOf('id="codex-run-recovery-panel"');
+      const handoffPanelIndex = desktopHtml.indexOf('id="reviewer-handoff-preview-panel"');
+      const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
+      const recoveryHtml = desktopHtml.slice(recoveryPanelIndex, handoffPanelIndex);
+      const handoffHtml = desktopHtml.slice(handoffPanelIndex, appStateIndex);
+
+      assert.notEqual(recoveryPanelIndex, -1);
+      assert.notEqual(handoffPanelIndex, -1);
+      assert.equal(codexPanelIndex < recoveryPanelIndex, true);
+      assert.equal(recoveryPanelIndex < handoffPanelIndex, true);
+      assert.equal(handoffPanelIndex < appStateIndex, true);
+      assert.match(desktopHtml, /href="#codex-run-recovery-panel">Recovery/u);
+      assert.match(desktopHtml, /href="#reviewer-handoff-preview-panel">Reviewer Handoff/u);
+
+      assert.match(recoveryHtml, /Codex Run Recovery/u);
+      assert.match(recoveryHtml, /codexProviderRunRecovery\.v1/u);
+      assert.match(recoveryHtml, /ready-for-reviewer-handoff/u);
+      assert.match(recoveryHtml, /Result Intake/u);
+      assert.match(recoveryHtml, />pending result state<\/dt><dd[^>]*>available/u);
+      assert.match(recoveryHtml, /Next Safe Action/u);
+      assert.match(recoveryHtml, />copy only<\/dt><dd[^>]*>true/u);
+      assert.match(recoveryHtml, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.match(recoveryHtml, />provider execution<\/dt><dd[^>]*>false/u);
+      assert.match(recoveryHtml, />goal event write<\/dt><dd[^>]*>false/u);
+      assert.match(recoveryHtml, />github publish automation<\/dt><dd[^>]*>false/u);
+
+      assert.match(handoffHtml, /Reviewer Handoff Preview/u);
+      assert.match(handoffHtml, /reviewerHandoffPreview\.v1/u);
+      assert.match(handoffHtml, /Accepted Result Summary/u);
+      assert.match(handoffHtml, /Handoff Pack/u);
+      assert.match(handoffHtml, /result-evidence-escrow/u);
+      assert.match(handoffHtml, />copy only<\/dt><dd[^>]*>true/u);
+      assert.match(handoffHtml, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.match(handoffHtml, />automatic reviewer verdict<\/dt><dd[^>]*>false/u);
+      assert.match(handoffHtml, />reviewer mutation<\/dt><dd[^>]*>false/u);
+      assert.match(handoffHtml, />git mutation<\/dt><dd[^>]*>false/u);
+      assert.doesNotMatch(`${recoveryHtml}${handoffHtml}`, /<button\b|<form\b|<textarea\b/u);
+      assert.doesNotMatch(`${recoveryHtml}${handoffHtml}`, /Launch Claude Code|Run Any Provider|Run Shell|Terminal|Append Event|Mark Complete|Confirm Reviewer Verdict|Confirm Main Gate|Confirm Release Gate|event-plan-confirm|>Push<|>Tag<|>Publish<|>Release/u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+
+    assert.match(app, /CodexRunRecoveryPanel/u);
+    assert.match(app, /ReviewerHandoffPreviewPanel/u);
+    assert.match(css, /\.codex-run-recovery-panel/u);
+    assert.match(css, /\.reviewer-handoff-preview-panel/u);
+    assert.doesNotMatch(app.slice(app.indexOf('function CodexRunRecoveryPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<textarea\b/u);
+  });
+
   it('renders the v48 Project Launcher as a read-only recent-projects preview', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
