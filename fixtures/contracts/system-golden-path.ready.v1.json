@@ -208,11 +208,10 @@
   ],
   "overallState": "ready",
   "nextSafeAction": {
-    "kind": "refresh-state",
-    "label": "Refresh State",
-    "reason": "path-visible",
-    "method": "GET",
-    "routeTemplate": "/api/goals/<goal-id>/supervisor",
+    "kind": "manual-cli-required",
+    "label": "Manual CLI Required",
+    "reason": "review-gate-manual-required",
+    "commandName": "symphony goal review",
     "willMutate": false
   },
   "blockedReasons": [],

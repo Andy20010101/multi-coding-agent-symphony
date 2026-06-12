@@ -148,6 +148,76 @@ describe('v52 systemGoldenPath.v1 contracts and fixtures', () => {
     assertReadOnlyVisibilityBoundary(built);
   });
 
+  it('rejects top-level state, blockers, and next action that drift from steps', () => {
+    const drift = fixture('system-golden-path.ready.v1.json');
+
+    drift.steps[0] = {
+      ...drift.steps[0],
+      state: 'blocked',
+      blockedReasons: ['project-binding-blocked']
+    };
+    drift.overallState = 'ready';
+    drift.blockedReasons = [];
+    drift.nextSafeAction = {
+      kind: 'manual-cli-required',
+      label: 'Manual CLI Required',
+      reason: 'review-gate-manual-required',
+      commandName: 'symphony goal review',
+      willMutate: false
+    };
+
+    const validation = validateSystemGoldenPathContract(drift);
+
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.includes('overallState must match derived step state "blocked"'));
+    assert.ok(validation.errors.includes('blockedReasons must match derived step blocked reasons'));
+    assert.ok(validation.errors.includes('nextSafeAction must match derived step next safe action'));
+  });
+
+  it('rejects extra fields across contract objects instead of accepting hidden write routes', () => {
+    const drift = fixture('system-golden-path.ready.v1.json');
+
+    drift.writeRoute = '/api/goals/<goal-id>/event-plan-confirm';
+    drift.project.writeRoute = '/api/goals/<goal-id>/event-plan-confirm';
+    drift.goal.writeRoute = '/api/goals/<goal-id>/event-plan-confirm';
+    drift.steps[0].executeRoute = '/api/providers/run';
+    drift.steps[0].nextSafeAction.writeRoute = '/api/goals/<goal-id>/event-plan-confirm';
+    drift.steps[0].sourceRef.writeRoute = '/api/goals/<goal-id>/event-plan-confirm';
+    drift.sourceContracts[0].writeRoute = '/api/goals/<goal-id>/event-plan-confirm';
+    drift.routeProvenance.writeRoute = '/api/goals/<goal-id>/event-plan-confirm';
+    drift.boundaries.providerExecutionRoute = '/api/providers/run';
+
+    const validation = validateSystemGoldenPathContract(drift);
+
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.includes('contract.writeRoute is not allowed'));
+    assert.ok(validation.errors.includes('project.writeRoute is not allowed'));
+    assert.ok(validation.errors.includes('goal.writeRoute is not allowed'));
+    assert.ok(validation.errors.includes('steps[0].executeRoute is not allowed'));
+    assert.ok(validation.errors.includes('steps[0].nextSafeAction.writeRoute is not allowed'));
+    assert.ok(validation.errors.includes('steps[0].sourceRef.writeRoute is not allowed'));
+    assert.ok(validation.errors.includes('sourceContracts[0].writeRoute is not allowed'));
+    assert.ok(validation.errors.includes('routeProvenance.writeRoute is not allowed'));
+    assert.ok(validation.errors.includes('boundaries.providerExecutionRoute is not allowed'));
+  });
+
+  it('returns validation errors when a blocking step omits blockedReasons', () => {
+    const drift = fixture('system-golden-path.ready.v1.json');
+
+    drift.steps[0] = {
+      ...drift.steps[0],
+      state: 'blocked'
+    };
+    delete drift.steps[0].blockedReasons;
+
+    const validation = validateSystemGoldenPathContract(drift);
+
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.includes('steps[0].blockedReasons is required'));
+    assert.ok(validation.errors.includes('steps[0].blockedReasons must be an array'));
+    assert.ok(validation.errors.includes('steps[0].blockedReasons must explain blocked state'));
+  });
+
   it('returns located validation errors for mutation drift and unsafe source refs', () => {
     const drift = fixture('system-golden-path.ready.v1.json');
 

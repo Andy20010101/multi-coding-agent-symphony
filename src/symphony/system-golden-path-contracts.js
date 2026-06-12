@@ -101,6 +101,80 @@ const ACTION_FORBIDDEN_FIELDS = Object.freeze([
   'bodyFields',
   'terminalCommand'
 ]);
+const CONTRACT_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'generatedAt',
+  'project',
+  'goal',
+  'steps',
+  'overallState',
+  'nextSafeAction',
+  'blockedReasons',
+  'sourceContracts',
+  'routeProvenance',
+  'boundaries'
+]);
+const PROJECT_ALLOWED_FIELDS = new Set([
+  'projectId',
+  'name',
+  'state',
+  'selected',
+  'sourceContract',
+  'sourceRef'
+]);
+const GOAL_ALLOWED_FIELDS = new Set([
+  'goalId',
+  'title',
+  'taskId',
+  'taskLabel',
+  'state',
+  'sourceContract',
+  'sourceRef'
+]);
+const STEP_ALLOWED_FIELDS = new Set([
+  'id',
+  'label',
+  'state',
+  'sourceContract',
+  'sourceRef',
+  'blockedReasons',
+  'nextSafeAction',
+  'willMutate'
+]);
+const NEXT_SAFE_ACTION_ALLOWED_FIELDS = new Set([
+  'kind',
+  'label',
+  'reason',
+  'method',
+  'routeTemplate',
+  'commandName',
+  'willMutate'
+]);
+const SOURCE_REF_ALLOWED_FIELDS = new Set([
+  'kind',
+  'ref',
+  'label',
+  'generatedAt'
+]);
+const SOURCE_CONTRACT_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'readOnly',
+  'generatedAt',
+  'requiredFor',
+  'sourceRef'
+]);
+const ROUTE_PROVENANCE_ALLOWED_FIELDS = new Set([
+  'source',
+  'readModelOwner',
+  'workbenchSurface',
+  'refreshRouteTemplate',
+  'refreshMethod',
+  'frontendLocalFileReads',
+  'mutationRoutes'
+]);
+const BOUNDARY_ALLOWED_FIELDS = new Set(Object.keys(SYSTEM_GOLDEN_PATH_BOUNDARIES));
 
 export class SystemGoldenPathContractError extends Error {
   constructor(code, message, details = {}) {
@@ -170,6 +244,7 @@ export function validateSystemGoldenPathContract(contract) {
     }
   }
 
+  validateAllowedFields(errors, contract, 'contract', CONTRACT_ALLOWED_FIELDS);
   requireExact(errors, contract.contractName, 'contractName', SYSTEM_GOLDEN_PATH_CONTRACT_NAME);
   requireExact(errors, contract.contractVersion, 'contractVersion', SYSTEM_GOLDEN_PATH_CONTRACT_VERSION);
   requireIsoTimestamp(errors, contract.generatedAt, 'generatedAt');
@@ -179,6 +254,7 @@ export function validateSystemGoldenPathContract(contract) {
   requireEnum(errors, contract.overallState, 'overallState', STEP_STATE_SET);
   validateNextSafeAction(errors, contract.nextSafeAction, 'nextSafeAction');
   validateStringArray(errors, contract.blockedReasons, 'blockedReasons');
+  validateDerivedTopLevelFields(errors, contract);
   validateSourceContracts(errors, contract.sourceContracts);
   validateRouteProvenance(errors, contract.routeProvenance);
   validateBoundaries(errors, contract.boundaries);
@@ -296,6 +372,8 @@ function validateProjectBinding(errors, project) {
     return;
   }
 
+  validateAllowedFields(errors, project, 'project', PROJECT_ALLOWED_FIELDS);
+
   for (const field of [
     'projectId',
     'name',
@@ -322,6 +400,8 @@ function validateGoalBinding(errors, goal) {
     errors.push('goal must be a plain object');
     return;
   }
+
+  validateAllowedFields(errors, goal, 'goal', GOAL_ALLOWED_FIELDS);
 
   for (const field of [
     'goalId',
@@ -366,6 +446,8 @@ function validateSteps(errors, steps) {
       return;
     }
 
+    validateAllowedFields(errors, step, path, STEP_ALLOWED_FIELDS);
+
     for (const field of [
       'id',
       'label',
@@ -401,7 +483,8 @@ function validateSteps(errors, steps) {
       errors.push(`${path}.id must be ${SYSTEM_GOLDEN_PATH_STEP_IDS[index]}`);
     }
 
-    if (BLOCKING_STATES.has(step.state) && step.blockedReasons.length === 0) {
+    if (BLOCKING_STATES.has(step.state) &&
+        (!Array.isArray(step.blockedReasons) || step.blockedReasons.length === 0)) {
       errors.push(`${path}.blockedReasons must explain ${step.state} state`);
     }
   });
@@ -424,6 +507,8 @@ function validateNextSafeAction(errors, action, path) {
     errors.push(`${path} must be a plain object`);
     return;
   }
+
+  validateAllowedFields(errors, action, path, NEXT_SAFE_ACTION_ALLOWED_FIELDS);
 
   for (const field of [
     'kind',
@@ -473,6 +558,7 @@ function validateSourceContracts(errors, sourceContracts) {
       return;
     }
 
+    validateAllowedFields(errors, contract, path, SOURCE_CONTRACT_ALLOWED_FIELDS);
     requireSafeSourceContractName(errors, contract.contractName, `${path}.contractName`);
 
     if (contract.contractVersion !== undefined && !Number.isInteger(contract.contractVersion)) {
@@ -503,6 +589,7 @@ function validateRouteProvenance(errors, routeProvenance) {
     return;
   }
 
+  validateAllowedFields(errors, routeProvenance, 'routeProvenance', ROUTE_PROVENANCE_ALLOWED_FIELDS);
   requireNonEmptyString(errors, routeProvenance.source, 'routeProvenance.source');
   requireEnum(
     errors,
@@ -532,6 +619,8 @@ function validateBoundaries(errors, boundaries) {
     errors.push('boundaries must be a plain object');
     return;
   }
+
+  validateAllowedFields(errors, boundaries, 'boundaries', BOUNDARY_ALLOWED_FIELDS);
 
   for (const [field, expected] of Object.entries(SYSTEM_GOLDEN_PATH_BOUNDARIES)) {
     requireExact(errors, boundaries[field], `boundaries.${field}`, expected);
@@ -568,6 +657,7 @@ function validateSourceRef(errors, sourceRef, path) {
     return;
   }
 
+  validateAllowedFields(errors, sourceRef, path, SOURCE_REF_ALLOWED_FIELDS);
   requireEnum(errors, sourceRef.kind, `${path}.kind`, SOURCE_REF_KIND_SET);
   requireNonEmptyString(errors, sourceRef.ref, `${path}.ref`);
 
@@ -600,6 +690,42 @@ function validateStringArray(errors, values, path) {
   values.forEach((value, index) => {
     requireNonEmptyString(errors, value, `${path}[${index}]`);
   });
+}
+
+function validateDerivedTopLevelFields(errors, contract) {
+  if (!Array.isArray(contract.steps)) {
+    return;
+  }
+
+  const expectedOverallState = deriveSystemGoldenPathOverallState(contract.steps);
+  const expectedBlockedReasons = collectSystemGoldenPathBlockedReasons(contract.steps);
+  const expectedNextSafeAction = chooseSystemGoldenPathNextSafeAction(contract.steps);
+
+  if (STEP_STATE_SET.has(contract.overallState) && contract.overallState !== expectedOverallState) {
+    errors.push(`overallState must match derived step state ${JSON.stringify(expectedOverallState)}`);
+  }
+
+  if (Array.isArray(contract.blockedReasons) &&
+      !stringArraysEqual(contract.blockedReasons, expectedBlockedReasons)) {
+    errors.push('blockedReasons must match derived step blocked reasons');
+  }
+
+  if (isPlainObject(contract.nextSafeAction) &&
+      !structuredValuesEqual(contract.nextSafeAction, expectedNextSafeAction)) {
+    errors.push('nextSafeAction must match derived step next safe action');
+  }
+}
+
+function validateAllowedFields(errors, value, path, allowedFields) {
+  if (!isPlainObject(value)) {
+    return;
+  }
+
+  for (const field of Object.keys(value)) {
+    if (!allowedFields.has(field)) {
+      errors.push(`${path}.${field} is not allowed`);
+    }
+  }
 }
 
 function validateUnsafeStringValues(errors, value, path) {
@@ -686,6 +812,32 @@ function millisOrNow(value) {
 
 function uniqueStrings(values) {
   return [...new Set(values.filter((value) => typeof value === 'string' && value.trim() !== ''))];
+}
+
+function stringArraysEqual(left, right) {
+  return Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === right.length &&
+    left.every((value, index) => value === right[index]);
+}
+
+function structuredValuesEqual(left, right) {
+  return canonicalJson(left) === canonicalJson(right);
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(',')}]`;
+  }
+
+  if (isPlainObject(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+
+  return JSON.stringify(value);
 }
 
 function cloneArray(value) {
