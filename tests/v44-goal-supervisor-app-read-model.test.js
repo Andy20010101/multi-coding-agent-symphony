@@ -12,6 +12,9 @@ import {
   buildGoalSupervisorAppReadModelFromContracts,
   projectGoalSupervisorCommandBoundary
 } from '../src/symphony/goal-supervisor/index.js';
+import {
+  validateSystemGoldenPathContract
+} from '../src/symphony/system-golden-path-contracts.js';
 
 const FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/app-read-model.v44-3.pr1.v1.json', import.meta.url);
 const POLICY_FIXTURE_PATH = new URL('../fixtures/contracts/goal-supervisor/app-read-model.v44-3.pr4.v1.json', import.meta.url);
@@ -289,12 +292,16 @@ function assertTopLevelContract(model, label) {
     'commandBoundary',
     'sessionSourceInventory',
     'contextAdvisory',
-    'threadContinuationDecision'
+    'threadContinuationDecision',
+    'systemGoldenPath'
   ]) {
     assert.equal(typeof model[field], 'object', `${label}: ${field}`);
     assert.notEqual(model[field], null, `${label}: ${field}`);
   }
 
+  const validation = validateSystemGoldenPathContract(model.systemGoldenPath);
+
+  assert.equal(validation.ok, true, `${label}: ${validation.errors.join('; ')}`);
   assert.equal(model.ownership.orchestrationOwner, 'local-goal-supervisor-daemon', label);
   assert.equal(model.ownership.deliveryBoundary, 'pull-request', label);
   assert.equal(model.commandBoundary.executionAvailable, false, label);
