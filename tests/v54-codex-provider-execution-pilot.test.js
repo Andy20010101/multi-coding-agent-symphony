@@ -32,6 +32,11 @@ import {
 import {
   buildGoalSupervisorAppReadModel
 } from '../src/symphony/goal-supervisor/index.js';
+import {
+  CodexProviderExecutionRunnerError,
+  buildCodexProviderExecutionRunnerRequest,
+  runConfirmedCodexProviderExecution
+} from '../src/symphony/codex-provider-execution-runner.js';
 import { validateResultIntakeRequestContract } from '../src/symphony/result-intake-contracts.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -375,6 +380,145 @@ describe('v54 Codex provider execution pilot contracts and fixtures', () => {
     assert.equal(preview.resultReturn.returnPath, CODEX_PROVIDER_RESULT_RETURN_PATH);
     assert.equal(preview.resultReturn.directGoalEventAppendAvailable, false);
   });
+
+  it('runs a confirmed Codex executor through a bounded request and sanitized result intake return', async () => {
+    const { preview, confirmation } = readyBackendPreviewAndConfirmation();
+    let capturedRequest = null;
+    const result = await runConfirmedCodexProviderExecution({
+      preview,
+      confirmation,
+      runId: 'codex-v54-pr3-completed',
+      cwd: '.',
+      timeoutMs: 120000,
+      startedAt: '2026-06-12T15:00:00.000Z',
+      finishedAt: '2026-06-12T15:03:00.000Z',
+      executeCodex: async (request) => {
+        capturedRequest = request;
+        return {
+          status: 'completed',
+          summary: 'Codex worker completed the bounded task.',
+          rawTranscript: 'raw transcript should not be projected',
+          rawModelOutput: 'raw model output should not be projected',
+          changedFiles: [
+            'src/symphony/codex-provider-execution-runner.js',
+            '.codex/sessions/raw.jsonl'
+          ],
+          validationCommands: [
+            'node --test tests/v54-codex-provider-execution-pilot.test.js',
+            'cat .codex/sessions/raw.jsonl'
+          ],
+          risks: [],
+          blockers: []
+        };
+      }
+    });
+
+    assert.equal(capturedRequest.contractName, 'codexProviderExecutionRunnerRequest.v1');
+    assert.equal(capturedRequest.providerId, CODEX_PROVIDER_ID);
+    assert.equal(capturedRequest.role, CODEX_PROVIDER_ROLE);
+    assert.equal(capturedRequest.previewHash, preview.previewHash);
+    assert.equal(capturedRequest.taskPackHash, preview.taskPackHash);
+    assert.equal(capturedRequest.timeoutMs, 120000);
+    assert.equal(capturedRequest.cwd, '.');
+    assert.equal(capturedRequest.boundaries.genericShellAvailable, false);
+    assert.equal(capturedRequest.boundaries.arbitraryCommandAvailable, false);
+    assert.equal(Object.hasOwn(capturedRequest, 'command'), false);
+    assert.equal(Object.hasOwn(capturedRequest, 'env'), false);
+    assert.equal(Object.hasOwn(capturedRequest, 'apiKey'), false);
+
+    assert.equal(result.contractName, 'codexProviderExecutionRunnerResult.v1');
+    assert.equal(result.status, 'completed');
+    assert.equal(result.runRecord.contractName, CODEX_PROVIDER_RUN_RECORD_CONTRACT_NAME);
+    assert.equal(result.runRecord.resultIntakeRequest.requestedEvent.eventType, 'worker.evidence-recorded');
+    assert.deepEqual(result.runRecord.sanitizedResult.changedFiles, [
+      'src/symphony/codex-provider-execution-runner.js'
+    ]);
+    assert.deepEqual(result.runRecord.sanitizedResult.validationCommands, [
+      'node --test tests/v54-codex-provider-execution-pilot.test.js'
+    ]);
+    assert.deepEqual(validateResultIntakeRequestContract(result.resultIntakeRequest), {
+      ok: true,
+      errors: []
+    });
+    assert.equal(result.safety.writesGoalEventLog, false);
+    assert.equal(result.safety.exposesRawTranscript, false);
+    assert.doesNotMatch(JSON.stringify(result.runRecord.sanitizedResult), /raw transcript|raw model output|\.jsonl/iu);
+    assert.doesNotMatch(JSON.stringify(result.resultIntakeRequest.resultBlock), /raw transcript|raw model output|\.jsonl/iu);
+  });
+
+  it('records a blocked Codex executor result as a sanitized blocker intake request', async () => {
+    const { preview, confirmation } = readyBackendPreviewAndConfirmation();
+    const result = await runConfirmedCodexProviderExecution({
+      preview,
+      confirmation,
+      runId: 'codex-v54-pr3-blocked',
+      startedAt: '2026-06-12T15:00:00.000Z',
+      finishedAt: '2026-06-12T15:02:00.000Z',
+      executeCodex: async () => ({
+        status: 'blocked',
+        summary: 'Codex worker could not complete the bounded task.',
+        blockerReason: 'dependency install failed',
+        blockers: ['dependency install failed']
+      })
+    });
+
+    assert.equal(result.status, 'blocked');
+    assert.equal(result.runRecord.status, 'blocked');
+    assert.equal(result.runRecord.resultIntakeRequest.requestedEvent.eventType, 'blocker.opened');
+    assert.equal(result.runRecord.resultIntakeRequest.resultBlock.blockerReason, 'dependency install failed');
+    assert.deepEqual(validateResultIntakeRequestContract(result.resultIntakeRequest), {
+      ok: true,
+      errors: []
+    });
+  });
+
+  it('rejects runner execution before ready preview, matching confirmation, safe cwd, and explicit executor', async () => {
+    const { preview, confirmation } = readyBackendPreviewAndConfirmation();
+    const blockedPreview = buildCodexProviderExecutionPreviewFromChildDispatch({
+      childDispatchPreview: contractFixture('child-dispatch-preview.claude-reviewer.v1.json'),
+      generatedAt: GENERATED_AT
+    });
+    const mismatchedConfirmation = structuredClone(confirmation);
+
+    mismatchedConfirmation.previewHash = 'sha256:2222222222222222222222222222222222222222222222222222222222222222';
+
+    assert.throws(
+      () => buildCodexProviderExecutionRunnerRequest({
+        preview,
+        confirmation,
+        runId: 'codex-v54-pr3-unsafe-cwd',
+        cwd: '.codex/sessions'
+      }),
+      (error) => error instanceof CodexProviderExecutionRunnerError && error.code === 'invalid-codex-provider-cwd'
+    );
+    await assert.rejects(
+      () => runConfirmedCodexProviderExecution({
+        preview,
+        confirmation,
+        runId: 'codex-v54-pr3-missing-executor'
+      }),
+      (error) => error instanceof CodexProviderExecutionRunnerError && error.code === 'missing-codex-executor'
+    );
+    await assert.rejects(
+      () => runConfirmedCodexProviderExecution({
+        preview: blockedPreview,
+        confirmation: confirmInputFor(blockedPreview),
+        runId: 'codex-v54-pr3-blocked-preview',
+        executeCodex: async () => ({ status: 'completed' })
+      }),
+      (error) => error instanceof CodexProviderExecutionRunnerError && error.code === 'blocked-codex-provider-execution-preview'
+    );
+    await assert.rejects(
+      () => runConfirmedCodexProviderExecution({
+        preview,
+        confirmation: mismatchedConfirmation,
+        runId: 'codex-v54-pr3-mismatched-confirmation',
+        executeCodex: async () => ({ status: 'completed' })
+      }),
+      (error) => error instanceof CodexProviderExecutionRunnerError &&
+        error.code === 'invalid-codex-provider-execution-confirmation'
+    );
+  });
 });
 
 function fixture(name) {
@@ -394,6 +538,20 @@ function confirmInputFor(preview) {
     role: CODEX_PROVIDER_ROLE,
     operatorId: 'operator-v54-pr2'
   };
+}
+
+function readyBackendPreviewAndConfirmation() {
+  const preview = buildCodexProviderExecutionPreviewFromChildDispatch({
+    childDispatchPreview: contractFixture('child-dispatch-preview.codex-worker.v1.json'),
+    generatedAt: GENERATED_AT
+  });
+  const confirmation = confirmCodexProviderExecutionPreview({
+    preview,
+    input: confirmInputFor(preview),
+    confirmedAt: '2026-06-12T14:02:00.000Z'
+  });
+
+  return { preview, confirmation };
 }
 
 function buildProjectionReadModel() {
