@@ -1,0 +1,92 @@
+{
+  "contractName": "resultIntakePreview.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-12T09:00:00.000Z",
+  "readOnly": true,
+  "willMutate": false,
+  "goalId": "v51-result-intake-evidence-escrow",
+  "taskId": "task-1",
+  "workerRole": "worker",
+  "source": "codex",
+  "sanitizedSummary": {
+    "status": "completed",
+    "summary": "Added result intake contract helpers, fixtures, and focused tests.",
+    "changedFiles": [
+      "src/symphony/result-intake-contracts.js",
+      "tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "evidenceRefs": [],
+    "risks": [],
+    "blockers": []
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v51-task-1-worker-evidence-2026-06-12.md",
+      "label": "v51 task 1 worker evidence"
+    }
+  ],
+  "blockedFields": [],
+  "eventCandidate": {
+    "eventType": "worker.evidence-recorded",
+    "taskId": "task-1",
+    "workerRole": "worker",
+    "command": "update",
+    "commandName": "symphony goal update",
+    "requiresEvidence": true,
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v51-task-1-worker-evidence-2026-06-12.md",
+        "label": "v51 task 1 worker evidence"
+      }
+    ],
+    "blocker": null,
+    "willAppendGoalEvent": false,
+    "state": "eligible",
+    "reason": "eligible-result-event"
+  },
+  "previewWriteTarget": {
+    "kind": "result-evidence-escrow",
+    "storage": "pending-result-escrow",
+    "writesOnPreview": false,
+    "writesOnConfirm": true,
+    "writesGoalEventLog": false
+  },
+  "planHash": "sha256:312972a634bddda17b13c524b295fc2f5369dc3696a165c0d6b6810c2406b6f9",
+  "expiresAt": "2026-06-12T09:05:00.000Z",
+  "confirmRequestShape": {
+    "method": "POST",
+    "route": "/api/goals/v51-result-intake-evidence-escrow/result-intake-confirm",
+    "contentType": "application/json",
+    "requiredBodyFields": [
+      "goalId",
+      "taskId",
+      "planHash"
+    ],
+    "optionalBodyFields": [
+      "previewId",
+      "escrowId"
+    ],
+    "confirmUsesPlanHash": true
+  },
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "childDispatchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "untrustedTranscriptProjectionAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "readOnly": true,
+    "willMutate": false,
+    "previewWrites": false,
+    "confirmWritesResultEscrow": true
+  }
+}

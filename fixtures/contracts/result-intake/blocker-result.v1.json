@@ -1,0 +1,54 @@
+{
+  "contractName": "resultIntakeRequest.v1",
+  "contractVersion": 1,
+  "goalId": "v51-result-intake-evidence-escrow",
+  "taskId": "task-1",
+  "workerRole": "worker",
+  "source": "manual-paste",
+  "submittedAt": "2026-06-12T09:05:00.000Z",
+  "resultBlock": {
+    "status": "blocked",
+    "summary": "Contract helper is ready, but backend confirm routing is not in this PR.",
+    "changedFiles": [
+      "src/symphony/result-intake-contracts.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "blockerReason": "backend result-intake confirm route belongs to PR-2",
+    "risks": [
+      "pending result projection is intentionally not wired in PR-1"
+    ],
+    "blockers": [
+      "backend result-intake confirm route belongs to PR-2"
+    ]
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v51-task-1-blocker-evidence-2026-06-12.md",
+      "label": "v51 task 1 blocker evidence"
+    }
+  ],
+  "requestedEvent": {
+    "eventType": "blocker.opened",
+    "taskId": "task-1",
+    "blocker": {
+      "blockerId": "v51-pr2-backend-confirm-route",
+      "reason": "backend result-intake confirm route belongs to PR-2",
+      "severity": "medium"
+    }
+  },
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "childDispatchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "untrustedTranscriptProjectionAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
