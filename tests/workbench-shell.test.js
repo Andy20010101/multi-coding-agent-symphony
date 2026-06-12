@@ -481,6 +481,72 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function DesktopShellRoute'), app.indexOf('function GoldenPathPanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
   });
 
+  it('renders the v52 System Golden Path panel on Desktop App Home without execution controls', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
+    const systemGoldenPathContract = JSON.parse(
+      await readFile('fixtures/contracts/system-golden-path.result-intake-blocked.v1.json', 'utf8')
+    );
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const supervisorRoute = READONLY_API_ROUTES.find((route) => route.id === 'goalSupervisor');
+      const viewState = createWorkbenchRenderViewState();
+
+      viewState.model = projectWorkbenchContracts({
+        goalSupervisor: readonlyRouteResult(supervisorRoute, {
+          ...createGoalSupervisorRenderPayload(),
+          systemGoldenPath: systemGoldenPathContract
+        })
+      });
+      viewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', viewState);
+      const appHomeIndex = desktopHtml.indexOf('class="desktop-app-home-panel"');
+      const panelIndex = desktopHtml.indexOf('id="system-golden-path-panel"');
+      const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
+      const panelHtml = desktopHtml.slice(panelIndex, appStateIndex);
+
+      assert.notEqual(panelIndex, -1);
+      assert.equal(appHomeIndex < panelIndex, true);
+      assert.equal(panelIndex < appStateIndex, true);
+      assert.match(desktopHtml, /href="#system-golden-path-panel">System Path/u);
+      assert.match(panelHtml, /System Golden Path/u);
+      assert.match(panelHtml, /systemGoldenPath\.v1/u);
+      assert.match(panelHtml, /Next Safe Action/u);
+      assert.match(panelHtml, /Source Contract/u);
+      assert.match(panelHtml, /Blocked Reason/u);
+      assert.match(panelHtml, /Manual CLI Required/u);
+      assert.match(panelHtml, /Refresh State/u);
+      assert.match(panelHtml, /pending-result-blocked/u);
+      assert.match(panelHtml, /pendingResult\.v1/u);
+      assert.match(panelHtml, /result-intake/u);
+      assert.match(panelHtml, /symphony goal review/u);
+      assert.match(panelHtml, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />refresh source<\/dt><dd[^>]*>fetchWorkbenchContracts/u);
+      assert.doesNotMatch(panelHtml, /<form\b|<textarea\b|confirmGoalEventPlan|Preview Event Plan|Confirm Event Append|Confirm Result Escrow/u);
+      assert.doesNotMatch(panelHtml, /Run Agent|>Execute<|Launch Provider|Dispatch Child|Compact Now|New Thread|>Push<|>Tag<|>Publish<|>Release</u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+
+    assert.match(app, /SystemGoldenPathPanel/u);
+    assert.match(app, /SystemGoldenPathRefreshControl/u);
+    assert.match(app, /refreshSystemGoldenPathState/u);
+    assert.match(css, /\.system-golden-path-panel/u);
+    assert.match(css, /\.system-golden-path-step-list/u);
+    assert.doesNotMatch(app.slice(app.indexOf('function SystemGoldenPathPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
+  });
+
   it('renders the v48 Project Launcher as a read-only recent-projects preview', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
@@ -1118,6 +1184,101 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(failedHtml, />refresh phase<\/dt><dd[^>]*>failed/u);
       assert.match(failedHtml, />refresh message<\/dt><dd[^>]*>fetchWorkbenchContracts failed/u);
       assert.doesNotMatch(`${loadingHtml}\n${succeededHtml}\n${failedHtml}`, /Preview Event Plan|Confirm Event Append|<form|<textarea|href="(?:artifact:|docs\/plans\/|file:)/u);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('renders v52 System Golden Path refresh status and calls only the Workbench contract refresh callback', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const {
+        SystemGoldenPathRefreshControl,
+        refreshSystemGoldenPathState
+      } = await server.ssrLoadModule('/src/App.jsx');
+      const calls = [];
+      const succeededState = await refreshSystemGoldenPathState({
+        onRefreshWorkbenchContracts: async () => {
+          calls.push('fetchWorkbenchContracts');
+
+          return {
+            ok: true,
+            source: 'fetchWorkbenchContracts',
+            systemGoldenPathState: 'blocked',
+            systemGoldenPathContractName: 'systemGoldenPath.v1'
+          };
+        }
+      });
+      const failedState = await refreshSystemGoldenPathState({
+        onRefreshWorkbenchContracts: async () => ({
+          ok: false,
+          source: 'fetchWorkbenchContracts',
+          systemGoldenPathState: null,
+          systemGoldenPathContractName: null,
+          message: 'fetchWorkbenchContracts failed'
+        })
+      });
+      const thrownState = await refreshSystemGoldenPathState({
+        onRefreshWorkbenchContracts: async () => {
+          throw new Error('network unavailable');
+        }
+      });
+      const loadingHtml = renderToStaticMarkup(React.createElement(SystemGoldenPathRefreshControl, {
+        refreshState: {
+          phase: 'loading',
+          source: 'fetchWorkbenchContracts',
+          result: 'pending',
+          message: 'contract refresh pending'
+        },
+        refreshLoading: true,
+        onRefreshState: () => undefined
+      }));
+      const succeededHtml = renderToStaticMarkup(React.createElement(SystemGoldenPathRefreshControl, {
+        refreshState: succeededState,
+        refreshLoading: false,
+        onRefreshState: () => undefined
+      }));
+      const failedHtml = renderToStaticMarkup(React.createElement(SystemGoldenPathRefreshControl, {
+        refreshState: failedState,
+        refreshLoading: false,
+        onRefreshState: () => undefined
+      }));
+
+      assert.deepEqual(calls, ['fetchWorkbenchContracts']);
+      assert.deepEqual(succeededState, {
+        phase: 'succeeded',
+        source: 'fetchWorkbenchContracts',
+        result: 'systemGoldenPath blocked; contract systemGoldenPath.v1',
+        message: 'contract refresh completed'
+      });
+      assert.deepEqual(failedState, {
+        phase: 'failed',
+        source: 'fetchWorkbenchContracts',
+        result: 'NULL',
+        message: 'fetchWorkbenchContracts failed'
+      });
+      assert.deepEqual(thrownState, {
+        phase: 'failed',
+        source: 'fetchWorkbenchContracts',
+        result: 'NULL',
+        message: 'network unavailable'
+      });
+      assert.match(loadingHtml, /Refresh State/u);
+      assert.match(loadingHtml, /<button[^>]*disabled[^>]*>Refresh State<\/button>/u);
+      assert.match(loadingHtml, />refresh phase<\/dt><dd[^>]*>loading/u);
+      assert.match(loadingHtml, />refresh source<\/dt><dd[^>]*>fetchWorkbenchContracts/u);
+      assert.match(succeededHtml, />refresh result<\/dt><dd[^>]*>systemGoldenPath blocked; contract systemGoldenPath\.v1/u);
+      assert.match(failedHtml, />refresh phase<\/dt><dd[^>]*>failed/u);
+      assert.match(failedHtml, />refresh message<\/dt><dd[^>]*>fetchWorkbenchContracts failed/u);
+      assert.doesNotMatch(`${loadingHtml}\n${succeededHtml}\n${failedHtml}`, /Preview Event Plan|Confirm Event Append|Confirm Result Escrow|<form|<textarea|Run Agent|Execute|Launch Provider|Dispatch Child|Compact Now|New Thread|Push|Tag|Publish|Release/u);
     } finally {
       await server.close();
     }

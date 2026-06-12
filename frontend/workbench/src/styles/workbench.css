@@ -1323,6 +1323,7 @@ h4 {
 .desktop-topbar,
 .desktop-project-launcher,
 .desktop-app-home-panel,
+.system-golden-path-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
@@ -1621,6 +1622,112 @@ h4 {
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
+}
+
+.system-golden-path-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.system-golden-path-header,
+.system-golden-path-step-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.system-golden-path-header {
+  border-bottom: 1px solid var(--dsk-line-soft);
+  padding-bottom: 8px;
+}
+
+.system-golden-path-header h2,
+.system-golden-path-step-header h3 {
+  margin: 0;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-weight: 500;
+  line-height: 1.18;
+}
+
+.system-golden-path-header h2 {
+  font-size: 18px;
+}
+
+.system-golden-path-step-header h3 {
+  font-size: 14px;
+}
+
+.system-golden-path-step-header small {
+  display: block;
+  margin-top: 3px;
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.system-golden-path-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.system-golden-path-refresh {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--dsk-line-soft);
+  border-radius: 4px;
+  padding: 9px;
+  background: color-mix(in oklab, var(--dsk-surface-warm), var(--dsk-bg) 52%);
+}
+
+.v52-refresh-button {
+  min-height: 34px;
+  border: 1px solid color-mix(in oklab, var(--dsk-accent), var(--dsk-border-soft) 38%);
+  border-radius: 4px;
+  padding: 7px 10px;
+  background: color-mix(in oklab, var(--dsk-accent), var(--dsk-surface) 88%);
+  color: var(--dsk-fg);
+  font: 650 12px/1 var(--dsk-ui);
+}
+
+.v52-refresh-button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.system-golden-path-step-list,
+.system-golden-path-source-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.system-golden-path-step-list li,
+.system-golden-path-source-list li {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--dsk-line-soft);
+  border-radius: 4px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--dsk-panel), var(--dsk-bg) 35%);
+}
+
+.system-golden-path-source-list strong {
+  color: var(--dsk-fg);
+  font-family: var(--dsk-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .desktop-app-state-strip {
@@ -3720,6 +3827,7 @@ h4 {
   .desktop-topbar,
   .desktop-project-launcher-header,
   .desktop-app-home-panel,
+  .system-golden-path-summary,
   .desktop-app-state-list,
   .desktop-development-status-list,
   .desktop-first-row,
@@ -3733,6 +3841,7 @@ h4 {
 
   .desktop-card,
   .desktop-project-launcher,
+  .system-golden-path-panel,
   .desktop-topbar {
     padding: 10px;
   }
