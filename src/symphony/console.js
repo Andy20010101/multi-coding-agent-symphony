@@ -162,6 +162,17 @@ import {
   confirmGoalGate
 } from './goal-gate.js';
 import {
+  ResultIntakeContractError,
+  buildPendingResultFromEscrow,
+  buildResultEvidenceEscrow,
+  buildResultIntakePreview,
+  toSerializableResultIntakeContract,
+  validateResultEscrowConfirmInput
+} from './result-intake-contracts.js';
+import {
+  writeResultIntakeConfirmState
+} from './result-intake-state.js';
+import {
   GoalOperationRunRegistryError,
   readGoalOperationRuns,
   recordGoalOperationRun
@@ -223,6 +234,7 @@ const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8765;
 const DEFAULT_READINESS_TIMEOUT_MS = 3000;
 const GOAL_EVENT_CONFIRM_MAX_BODY_BYTES = 32 * 1024;
+const RESULT_INTAKE_MAX_BODY_BYTES = 32 * 1024;
 const PROJECT_SELECTION_MAX_BODY_BYTES = 4 * 1024;
 const CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME = 'controlled-implementation-plan-preview.v1';
 const CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_VERSION = 1;
@@ -805,6 +817,34 @@ export function createSymphonyConsoleServer({
           return;
         }
 
+        const resultIntakePreviewRequest = parseResultIntakePreviewRequestPath(url.pathname, url.searchParams);
+
+        if (resultIntakePreviewRequest !== null) {
+          await writeResultIntakePreviewResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            request: resultIntakePreviewRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const resultIntakeConfirmRequest = parseResultIntakeConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (resultIntakeConfirmRequest !== null) {
+          await writeResultIntakeConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            request: resultIntakeConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
         const controlledProviderRunnerConfirmRequest = parseControlledProviderRunnerConfirmRequestPath(url.pathname, url.searchParams);
 
         if (controlledProviderRunnerConfirmRequest !== null) {
@@ -909,6 +949,18 @@ export function createSymphonyConsoleServer({
       }
 
       if (method !== 'GET') {
+        writeConsoleMethodNotAllowedResponse({
+          response,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      if (
+        parseResultIntakePreviewRequestPath(url.pathname, url.searchParams) !== null ||
+        parseResultIntakeConfirmRequestPath(url.pathname, url.searchParams) !== null
+      ) {
         writeConsoleMethodNotAllowedResponse({
           response,
           route: url.pathname,
@@ -2670,6 +2722,273 @@ async function writeGoalEventPlanConfirmResponse({
   }
 }
 
+async function writeResultIntakePreviewResponse({
+  requestMessage,
+  response,
+  stateDir,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-result-intake-preview-request',
+      message: 'Result intake preview request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for result intake preview was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const body = await readResultIntakeRequestBody(requestMessage, {
+      code: 'invalid-result-intake-preview-request',
+      label: 'Result intake preview'
+    });
+
+    assertResultIntakeRequestEnvelope(body, {
+      code: 'invalid-result-intake-preview-request'
+    });
+    assertResultIntakeRouteGoal({
+      routeGoalId: resolvedGoalId,
+      request: body,
+      code: 'invalid-result-intake-preview-request'
+    });
+
+    const preview = buildResultIntakePreview(body);
+
+    writeJsonResponse(response, 200, toSerializableResultIntakeContract({
+      ...preview,
+      previewEndpoint: {
+        method: 'POST',
+        route: `/api/goals/${encodeURIComponent(resolvedGoalId)}/result-intake-preview`,
+        acceptsQueryParameters: false,
+        writesOnPreview: false,
+        writesGoalEventLog: false,
+        writesOperationRegistry: false
+      }
+    }));
+  } catch (error) {
+    if (error instanceof ResultIntakeContractError || error instanceof GoalEventPlanPreviewError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: safeResultIntakeErrorDetails(error)
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeResultIntakeConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-result-intake-confirm-request',
+      message: 'Result intake confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId: request.goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for result intake confirm was not found.',
+      route,
+      method
+    });
+    return;
+  }
+
+  try {
+    const body = await readResultIntakeRequestBody(requestMessage, {
+      code: 'invalid-result-intake-confirm-request',
+      label: 'Result intake confirm'
+    });
+    const input = normalizeResultIntakeConfirmBody(body);
+
+    assertResultIntakeRouteGoal({
+      routeGoalId: resolvedGoalId,
+      request: input.resultIntakeRequest,
+      preview: input.resultIntakePreview,
+      code: 'invalid-result-intake-confirm-request'
+    });
+    assertResultIntakePreviewMatchesRequest(input);
+
+    const now = new Date().toISOString();
+    const validation = validateResultEscrowConfirmInput({
+      preview: input.resultIntakePreview,
+      planHash: input.planHash,
+      now
+    });
+
+    if (!validation.ok) {
+      throw new GoalEventPlanPreviewError(
+        'invalid-result-intake-confirm-request',
+        'Result intake confirm request is invalid.',
+        {
+          reason: validation.errors[0]
+        }
+      );
+    }
+
+    const escrow = buildResultEvidenceEscrow(input.resultIntakePreview, {
+      planHash: input.planHash,
+      createdAt: now,
+      now
+    });
+    const pendingResult = buildPendingResultFromEscrow(escrow, {
+      createdAt: now
+    });
+    const writeResult = await writeResultIntakeConfirmState({
+      stateDir,
+      escrow,
+      pendingResult
+    });
+
+    writeJsonResponse(response, 200, toSerializableResultIntakeContract({
+      contractName: 'result-intake-confirmation.v1',
+      contractVersion: 1,
+      goalId: resolvedGoalId,
+      taskId: pendingResult.taskId,
+      mode: 'confirm',
+      status: 'confirmed',
+      written: true,
+      planHash: input.planHash,
+      resultEvidenceEscrow: escrow,
+      pendingResult,
+      refs: {
+        escrowRef: writeResult.escrowRef,
+        pendingResultRef: writeResult.pendingResultRef
+      },
+      refreshed: {
+        supervisor: {
+          method: 'GET',
+          route: `/api/goals/${encodeURIComponent(resolvedGoalId)}/supervisor`,
+          pendingResultProjectionAvailable: false,
+          projectionPr: 'PR-3'
+        }
+      },
+      confirmEndpoint: {
+        method: 'POST',
+        route: `/api/goals/${encodeURIComponent(resolvedGoalId)}/result-intake-confirm`,
+        acceptsQueryParameters: false,
+        confirmUsesPlanHash: true,
+        writes: [
+          'resultEvidenceEscrow.v1',
+          'pendingResult.v1'
+        ]
+      },
+      safety: {
+        writesResultEvidenceEscrow: true,
+        writesPendingResult: true,
+        writesGoalEventLog: false,
+        writesOperationRegistry: false,
+        reviewerMutationAvailable: false,
+        mainVerificationMutationAvailable: false,
+        releaseGateMutationAvailable: false,
+        providerExecutionAvailable: false,
+        childDispatchAvailable: false,
+        gitMutationAvailable: false,
+        githubReleaseAutomationAvailable: false
+      }
+    }));
+  } catch (error) {
+    if (error instanceof ResultIntakeContractError || error instanceof GoalEventPlanPreviewError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: safeResultIntakeErrorDetails(error)
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function writeControlledImplementationPlanPreviewResponse({ response, stateDir, request, route, method }) {
   if (request.kind === 'invalid') {
     writeApiErrorResponse(response, {
@@ -4240,6 +4559,63 @@ function parseGoalEventPlanConfirmRequestPath(pathname, searchParams = new URLSe
 
   return {
     kind: hasSearchParams(searchParams) ? 'invalid' : 'goal-event-plan-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
+function parseResultIntakePreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseResultIntakeRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'result-intake-preview',
+    kind: 'result-intake-preview'
+  });
+}
+
+function parseResultIntakeConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  return parseResultIntakeRequestPath({
+    pathname,
+    searchParams,
+    suffix: 'result-intake-confirm',
+    kind: 'result-intake-confirm'
+  });
+}
+
+function parseResultIntakeRequestPath({
+  pathname,
+  searchParams = new URLSearchParams(),
+  suffix,
+  kind
+}) {
+  const latestPath = `/api/goals/latest/${suffix}`;
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : kind,
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = new RegExp(`^/api/goals/([^/]+)/${suffix}$`, 'u').exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : kind,
     goalId: decoded.value,
     reason: 'query-parameters-not-supported'
   };
@@ -6965,6 +7341,60 @@ async function readGoalEventConfirmRequestBody(request) {
   return body;
 }
 
+async function readResultIntakeRequestBody(request, {
+  code,
+  label
+}) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new GoalEventPlanPreviewError(
+      code,
+      `${label} requires application/json.`,
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > RESULT_INTAKE_MAX_BODY_BYTES) {
+      throw new GoalEventPlanPreviewError(
+        code,
+        `${label} request body is too large.`,
+        { reason: 'body-too-large' }
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  let body;
+
+  try {
+    body = JSON.parse(content);
+  } catch {
+    throw new GoalEventPlanPreviewError(
+      code,
+      `${label} requires a valid JSON object.`,
+      { reason: 'invalid-json' }
+    );
+  }
+
+  if (!isPlainObject(body)) {
+    throw new GoalEventPlanPreviewError(
+      code,
+      `${label} requires a valid JSON object.`,
+      { reason: 'invalid-json-body' }
+    );
+  }
+
+  return body;
+}
+
 async function readProjectSelectionRequestBody(request) {
   const contentType = request.headers['content-type'] ?? '';
 
@@ -7010,6 +7440,231 @@ async function readProjectSelectionRequestBody(request) {
   }
 
   return body;
+}
+
+function normalizeResultIntakeConfirmBody(body) {
+  assertOnlyResultIntakeBodyKeys(body, [
+    'resultIntakeRequest',
+    'resultIntakePreview',
+    'planHash'
+  ], {
+    code: 'invalid-result-intake-confirm-request'
+  });
+
+  const resultIntakeRequest = body.resultIntakeRequest;
+  const resultIntakePreview = body.resultIntakePreview;
+  const planHash = body.planHash;
+
+  if (!isPlainObject(resultIntakeRequest)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-result-intake-confirm-request',
+      'Result intake confirm requires resultIntakeRequest.',
+      { field: 'resultIntakeRequest' }
+    );
+  }
+
+  if (!isPlainObject(resultIntakePreview)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-result-intake-confirm-request',
+      'Result intake confirm requires resultIntakePreview.',
+      { field: 'resultIntakePreview' }
+    );
+  }
+
+  if (!isNonEmptyString(planHash)) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-result-intake-confirm-request',
+      'Result intake confirm requires planHash.',
+      { field: 'planHash' }
+    );
+  }
+
+  assertResultIntakeRequestEnvelope(resultIntakeRequest, {
+    code: 'invalid-result-intake-confirm-request'
+  });
+  assertNoUnsafeResultIntakeLocalRefs(resultIntakePreview, {
+    code: 'invalid-result-intake-confirm-request',
+    path: 'resultIntakePreview'
+  });
+
+  return {
+    resultIntakeRequest,
+    resultIntakePreview,
+    planHash
+  };
+}
+
+function assertResultIntakeRequestEnvelope(request, { code }) {
+  assertOnlyResultIntakeBodyKeys(request, [
+    'contractName',
+    'contractVersion',
+    'goalId',
+    'taskId',
+    'workerRole',
+    'source',
+    'submittedAt',
+    'resultBlock',
+    'evidenceRefs',
+    'requestedEvent',
+    'boundaries'
+  ], {
+    code
+  });
+  assertNoUnsafeResultIntakeLocalRefs(request, {
+    code,
+    path: 'resultIntakeRequest'
+  });
+}
+
+function assertOnlyResultIntakeBodyKeys(body, allowedKeys, { code }) {
+  const allowed = new Set(allowedKeys);
+  const unsupported = Object.keys(body).filter((key) => !allowed.has(key));
+
+  if (unsupported.length > 0) {
+    throw new GoalEventPlanPreviewError(
+      code,
+      'Result intake request received unsupported fields.',
+      { field: unsupported[0] }
+    );
+  }
+}
+
+function assertNoUnsafeResultIntakeLocalRefs(value, {
+  code,
+  path
+}) {
+  const unsafePath = findUnsafeResultIntakeLocalRef(value, path);
+
+  if (unsafePath !== null) {
+    throw new GoalEventPlanPreviewError(
+      code,
+      'Result intake request contains an unsupported local path or session reference.',
+      {
+        field: unsafePath
+      }
+    );
+  }
+}
+
+function findUnsafeResultIntakeLocalRef(value, path) {
+  if (Array.isArray(value)) {
+    for (const [index, entry] of value.entries()) {
+      const unsafe = findUnsafeResultIntakeLocalRef(entry, `${path}[${index}]`);
+
+      if (unsafe !== null) {
+        return unsafe;
+      }
+    }
+
+    return null;
+  }
+
+  if (isPlainObject(value)) {
+    for (const [key, entry] of Object.entries(value)) {
+      const fieldPath = `${path}.${key}`;
+
+      if (
+        isPotentialLocalPathField(key) &&
+        typeof entry === 'string' &&
+        isUnsafeResultIntakeLocalRef(entry)
+      ) {
+        return fieldPath;
+      }
+
+      const unsafe = findUnsafeResultIntakeLocalRef(entry, fieldPath);
+
+      if (unsafe !== null) {
+        return unsafe;
+      }
+    }
+  }
+
+  return null;
+}
+
+function isPotentialLocalPathField(key) {
+  return /(?:path|file|jsonl|session|transcript|local|absolute)/iu.test(key);
+}
+
+function isUnsafeResultIntakeLocalRef(value) {
+  if (!isNonEmptyString(value)) {
+    return false;
+  }
+
+  return value.startsWith('/') ||
+    value.includes('\\') ||
+    /(?:^|\/)\.\.(?:\/|$)/u.test(value) ||
+    /(?:^|\/)\.(?:codex|claude|git|symphony)(?:\/|$)/iu.test(value) ||
+    /\.jsonl(?:$|[?#])/iu.test(value);
+}
+
+function assertResultIntakeRouteGoal({
+  routeGoalId,
+  request,
+  preview,
+  code
+}) {
+  if (request.goalId !== routeGoalId) {
+    throw new GoalEventPlanPreviewError(
+      code,
+      'Result intake request goalId must match the route goal.',
+      {
+        reason: 'goal-mismatch'
+      }
+    );
+  }
+
+  if (preview === undefined) {
+    return;
+  }
+
+  if (preview.goalId !== request.goalId || preview.taskId !== request.taskId) {
+    throw new GoalEventPlanPreviewError(
+      code,
+      'Result intake preview must match the request goal and task.',
+      {
+        reason: 'preview-context-mismatch'
+      }
+    );
+  }
+}
+
+function assertResultIntakePreviewMatchesRequest({
+  resultIntakeRequest,
+  resultIntakePreview
+}) {
+  const regenerated = buildResultIntakePreview(resultIntakeRequest, {
+    generatedAt: resultIntakePreview.generatedAt,
+    expiresAt: resultIntakePreview.expiresAt
+  });
+
+  if (regenerated.planHash !== resultIntakePreview.planHash) {
+    throw new GoalEventPlanPreviewError(
+      'invalid-result-intake-confirm-request',
+      'Result intake preview is stale for the submitted request.',
+      {
+        reason: 'stale-preview'
+      }
+    );
+  }
+}
+
+function safeResultIntakeErrorDetails(error) {
+  const details = error.safeDetails ?? error.details;
+
+  if (!isPlainObject(details)) {
+    return details;
+  }
+
+  const serialized = JSON.stringify(details);
+
+  if (/(?:rawTranscript|rawModelOutput|raw transcript|raw model output|\.jsonl|\.codex|\.claude)/iu.test(serialized)) {
+    return {
+      reason: 'unsafe-result-intake-content'
+    };
+  }
+
+  return details;
 }
 
 async function confirmGoalEventPlan({ stateDir, goalId, body }) {
