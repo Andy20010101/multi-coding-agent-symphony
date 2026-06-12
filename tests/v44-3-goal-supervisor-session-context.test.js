@@ -1,12 +1,17 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
   SESSION_CONTEXT_CONTRACT_NAME,
+  SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
   buildGoalSupervisorAppReadModel,
   buildGoalSupervisorAppReadModelFromContracts,
-  buildSessionContext
+  buildSessionContext,
+  buildSessionSourceInventory
 } from '../src/symphony/goal-supervisor/index.js';
 
 const FIXTURE_DIR = new URL('../fixtures/contracts/goal-supervisor/session-context/', import.meta.url);
@@ -159,6 +164,191 @@ describe('v44.3 goal supervisor session hook runtime', () => {
   });
 });
 
+describe('v49 session source inventory contract', () => {
+  it('inventories bounded Codex and Claude sources without exposing transcript content', async (t) => {
+    const temp = await temporaryDirectory(t);
+    const codexRoot = join(temp.path, 'codex', 'sessions');
+    const claudeRoot = join(temp.path, 'claude', 'projects');
+
+    await writeJsonl(join(codexRoot, '2026', '06', '12', 'codex-newest.jsonl'), {
+      timestamp: '2026-06-12T01:00:00.000Z',
+      message: { role: 'user', content: 'do not expose secret transcript text' }
+    }, '2026-06-12T01:00:00.000Z');
+    await writeJsonl(join(codexRoot, '2026', '06', '11', 'codex-middle.jsonl'), {
+      timestamp: '2026-06-11T01:00:00.000Z'
+    }, '2026-06-11T01:00:00.000Z');
+    await writeJsonl(join(codexRoot, '2026', '06', '10', 'codex-oldest.jsonl'), {
+      timestamp: '2026-06-10T01:00:00.000Z'
+    }, '2026-06-10T01:00:00.000Z');
+    await writeJsonl(join(codexRoot, 'ignored-flat.jsonl'), {
+      timestamp: '2026-06-12T02:00:00.000Z'
+    }, '2026-06-12T02:00:00.000Z');
+    await writeJsonl(join(claudeRoot, 'project-a', 'claude-readable.jsonl'), {
+      timestamp: '2026-06-12T01:30:00.000Z'
+    }, '2026-06-12T01:30:00.000Z');
+
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      staleAfterMs: 24 * 60 * 60 * 1000,
+      maxFilesPerProvider: 2,
+      codexRoot,
+      claudeRoot
+    });
+
+    assert.equal(inventory.contractName, SESSION_SOURCE_INVENTORY_CONTRACT_NAME);
+    assert.equal(inventory.readOnly, true);
+    assert.equal(inventory.willMutate, false);
+    assert.equal(inventory.scanScope, 'bounded-provider-session-roots');
+    assert.equal(inventory.maxFilesPerProvider, 2);
+    assert.equal(inventory.boundaries.frontendMayScanFolders, false);
+    assert.equal(inventory.boundaries.exposesRawTranscript, false);
+    assert.equal(inventory.boundaries.launchesProvider, false);
+
+    const codex = providerByName(inventory, 'codex');
+    assert.equal(codex.rootDisplayPath, '~/.codex/sessions');
+    assert.equal(codex.pattern, '~/.codex/sessions/YYYY/MM/DD/*.jsonl');
+    assert.equal(codex.state, 'degraded');
+    assert.equal(codex.candidateFileCount, 2);
+    assert.equal(codex.readableFileCount, 2);
+    assert.equal(codex.latestSessionRef, 'codex:2026/06/12/codex-newest.jsonl');
+    assert.deepEqual(codex.degradedReasons, ['max-files-per-provider-reached']);
+    assert.equal(codex.sourceSummary.readState, 'readable');
+    assert.equal(codex.sourceSummary.scannedFileCount, 2);
+
+    const claude = providerByName(inventory, 'claude');
+    assert.equal(claude.pattern, '~/.claude/projects/**/*.jsonl');
+    assert.equal(claude.state, 'available');
+    assert.equal(claude.sourceSummary.readState, 'readable');
+    assert.equal(claude.latestSessionRef, 'claude:project-a/claude-readable.jsonl');
+
+    const serialized = JSON.stringify(inventory);
+    assert.equal(serialized.includes(temp.path), false);
+    assert.equal(serialized.includes('do not expose secret transcript text'), false);
+  });
+
+  it('reports missing source roots as inventory state instead of throwing', async (t) => {
+    const temp = await temporaryDirectory(t);
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      codexRoot: join(temp.path, 'missing-codex'),
+      claudeRoot: join(temp.path, 'missing-claude')
+    });
+
+    assert.equal(inventory.summary.state, 'missing');
+    assert.deepEqual(inventory.providers.map((provider) => provider.state), ['missing', 'missing']);
+    assert.deepEqual(providerByName(inventory, 'codex').degradedReasons, ['source-root-missing']);
+  });
+
+  it('scans bounded Codex date folders newest-first before applying the file cap', async (t) => {
+    const temp = await temporaryDirectory(t);
+    const codexRoot = join(temp.path, 'codex', 'sessions');
+    const claudeRoot = join(temp.path, 'claude', 'projects');
+
+    for (const day of ['09', '10', '11', '12']) {
+      await writeJsonl(join(codexRoot, '2026', '06', day, `${day}.jsonl`), {
+        timestamp: `2026-06-${day}T01:00:00.000Z`
+      }, `2026-06-${day}T01:00:00.000Z`);
+    }
+
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      staleAfterMs: 24 * 60 * 60 * 1000,
+      maxFilesPerProvider: 2,
+      codexRoot,
+      claudeRoot
+    });
+    const codex = providerByName(inventory, 'codex');
+
+    assert.equal(codex.latestSessionRef, 'codex:2026/06/12/12.jsonl');
+    assert.equal(codex.latestModifiedAt, '2026-06-12T01:00:00.000Z');
+    assert.equal(codex.state, 'degraded');
+    assert.equal(codex.sourceSummary.stale, false);
+    assert.equal(codex.sourceSummary.scannedFileCount, 2);
+    assert.deepEqual(codex.degradedReasons, ['max-files-per-provider-reached']);
+  });
+
+  it('marks stale readable sources separately from missing and unreadable sources', async (t) => {
+    const temp = await temporaryDirectory(t);
+    const codexRoot = join(temp.path, 'codex', 'sessions');
+    const claudeRoot = join(temp.path, 'claude', 'projects');
+
+    await writeJsonl(join(codexRoot, '2026', '06', '01', 'stale.jsonl'), {
+      timestamp: '2026-06-01T01:00:00.000Z'
+    }, '2026-06-01T01:00:00.000Z');
+    await writeJsonl(join(claudeRoot, 'project-a', 'fresh.jsonl'), {
+      timestamp: '2026-06-12T01:45:00.000Z'
+    }, '2026-06-12T01:45:00.000Z');
+
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      staleAfterMs: 60 * 60 * 1000,
+      codexRoot,
+      claudeRoot
+    });
+
+    const codex = providerByName(inventory, 'codex');
+    assert.equal(codex.state, 'stale');
+    assert.equal(codex.sourceSummary.readState, 'readable');
+    assert.equal(codex.sourceSummary.stale, true);
+    assert.deepEqual(codex.degradedReasons, ['latest-session-file-exceeded-stale-threshold']);
+    assert.equal(providerByName(inventory, 'claude').state, 'available');
+  });
+
+  it('reports unreadable candidate files without exposing paths or contents', async (t) => {
+    const temp = await temporaryDirectory(t);
+    const codexRoot = join(temp.path, 'codex', 'sessions');
+    const claudeRoot = join(temp.path, 'claude', 'projects');
+    const unreadable = join(codexRoot, '2026', '06', '12', 'unreadable.jsonl');
+
+    await writeJsonl(unreadable, {
+      timestamp: '2026-06-12T01:00:00.000Z',
+      message: { role: 'assistant', content: 'hidden unreadable content' }
+    }, '2026-06-12T01:00:00.000Z');
+
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      codexRoot,
+      claudeRoot,
+      readSessionFile: async (file) => (file === unreadable ? null : readFile(file, 'utf8'))
+    });
+    const codex = providerByName(inventory, 'codex');
+
+    assert.equal(codex.state, 'unreadable');
+    assert.equal(codex.candidateFileCount, 1);
+    assert.equal(codex.readableFileCount, 0);
+    assert.equal(codex.sourceSummary.readState, 'unreadable');
+    assert.equal(JSON.stringify(inventory).includes('hidden unreadable content'), false);
+  });
+
+  it('reports degraded and failed provider states explicitly', async (t) => {
+    const temp = await temporaryDirectory(t);
+    const codexRoot = join(temp.path, 'codex', 'sessions');
+
+    await writeFileWithMtime(
+      join(codexRoot, '2026', '06', '12', 'invalid.jsonl'),
+      '{not valid json}\n',
+      '2026-06-12T01:00:00.000Z'
+    );
+
+    const inventory = await buildSessionSourceInventory({
+      generatedAt: '2026-06-12T02:00:00.000Z',
+      staleAfterMs: 24 * 60 * 60 * 1000,
+      codexRoot,
+      claudeRoot: '\0invalid-claude-root'
+    });
+
+    const codex = providerByName(inventory, 'codex');
+    const claude = providerByName(inventory, 'claude');
+
+    assert.equal(codex.state, 'degraded');
+    assert.deepEqual(codex.degradedReasons, ['some-candidate-files-have-invalid-jsonl']);
+    assert.equal(codex.sourceSummary.readState, 'readable');
+    assert.equal(claude.state, 'failed');
+    assert.deepEqual(claude.degradedReasons, ['root-stat-failed']);
+    assert.equal(inventory.summary.state, 'failed');
+  });
+});
+
 function assertNoRawTranscriptText(value) {
   const serialized = JSON.stringify(value);
 
@@ -167,4 +357,32 @@ function assertNoRawTranscriptText(value) {
   assert.equal(serialized.includes('RESULT_BLOCK_START'), false);
   assert.equal(serialized.includes('RESULT_BLOCK_END'), false);
   assert.equal(serialized.includes('pnpm check'), false);
+}
+
+async function temporaryDirectory(t) {
+  const path = await mkdtemp(join(tmpdir(), 'session-source-inventory-'));
+
+  t.after(async () => {
+    await rm(path, { recursive: true, force: true });
+  });
+
+  return {
+    path
+  };
+}
+
+async function writeJsonl(file, entry, mtime) {
+  await writeFileWithMtime(file, `${JSON.stringify(entry)}\n`, mtime);
+}
+
+async function writeFileWithMtime(file, text, mtime) {
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, text, 'utf8');
+
+  const timestamp = new Date(mtime);
+  await utimes(file, timestamp, timestamp);
+}
+
+function providerByName(inventory, provider) {
+  return inventory.providers.find((candidate) => candidate.provider === provider);
 }
