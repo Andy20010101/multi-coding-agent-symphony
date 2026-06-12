@@ -1,5 +1,23 @@
 import { buildGoalSupervisorCoreProjection } from './core-projection.js';
 import {
+  APP_STATE_SNAPSHOT_CONTRACT_NAME,
+  APP_STATE_SNAPSHOT_CONTRACT_VERSION
+} from '../app-state-snapshot.js';
+import {
+  CURRENT_PROJECT_BINDING_CONTRACT_NAME,
+  PROJECT_REGISTRY_CONTRACT_VERSION,
+  RECENT_PROJECTS_CONTRACT_NAME
+} from '../project-registry.js';
+import {
+  GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+  GOAL_CLOSEOUT_REPORT_CONTRACT_VERSION
+} from '../goal-runbook-contracts.js';
+import {
+  buildSystemGoldenPathContract,
+  buildSystemGoldenPathManualCliAction,
+  buildSystemGoldenPathRefreshAction
+} from '../system-golden-path-contracts.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -16,6 +34,8 @@ import {
   buildThreadContinuationDecision
 } from './thread-continuation-decision.js';
 import {
+  SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+  SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_VERSION,
   buildSupervisorEventRegistrationEligibility
 } from './event-registration-eligibility.js';
 
@@ -24,6 +44,7 @@ export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_VERSION = 1;
 export { GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT } from './policy.js';
 
 const PENDING_RESULT_CONTRACT_NAME = 'pendingResult.v1';
+const PENDING_RESULT_CONTRACT_VERSION = 1;
 const RESULT_EVIDENCE_ESCROW_CONTRACT_NAME = 'resultEvidenceEscrow.v1';
 const PENDING_RESULT_STATES = new Set(['available', 'blocked', 'consumed', 'superseded']);
 const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
@@ -64,7 +85,11 @@ export function buildGoalSupervisorAppReadModel({
   threadContinuationDecision = null,
   activePr = null,
   branch = null,
-  pendingResultState = null
+  pendingResultState = null,
+  recentProjects = null,
+  currentProjectBinding = null,
+  appStateSnapshot = null,
+  goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
     state,
@@ -158,6 +183,22 @@ export function buildGoalSupervisorAppReadModel({
     ],
     generatedAt
   });
+  const systemGoldenPath = buildGoalSupervisorSystemGoldenPath({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    tasks,
+    sourceContracts,
+    recentProjects,
+    currentProjectBinding,
+    appStateSnapshot,
+    projection,
+    contextAdvisory: normalizedContextAdvisory,
+    pendingResult: normalizedPendingResult,
+    eventRegistrationEligibility: normalizedEventRegistrationEligibility,
+    currentGate: normalizedGate,
+    goalCloseout
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -192,7 +233,1161 @@ export function buildGoalSupervisorAppReadModel({
     sessionSourceInventory: normalizedSessionSourceInventory,
     contextAdvisory: normalizedContextAdvisory,
     threadContinuationDecision: normalizedThreadContinuationDecision,
-    supervisorEventRegistrationEligibility: normalizedEventRegistrationEligibility
+    supervisorEventRegistrationEligibility: normalizedEventRegistrationEligibility,
+    systemGoldenPath
+  };
+}
+
+export function buildGoalSupervisorSystemGoldenPath({
+  generatedAt = new Date().toISOString(),
+  goalId = null,
+  title = null,
+  tasks = [],
+  sourceContracts = [],
+  recentProjects = null,
+  currentProjectBinding = null,
+  appStateSnapshot = null,
+  projection = null,
+  contextAdvisory = null,
+  pendingResult = null,
+  eventRegistrationEligibility = null,
+  currentGate = null,
+  goalCloseout
+} = {}) {
+  const currentTask = currentTaskFrom({
+    tasks,
+    projection,
+    appStateSnapshot
+  });
+  const projectBinding = projectBindingFrom({
+    recentProjects,
+    currentProjectBinding,
+    appStateSnapshot
+  });
+  const appHome = appHomeStateFrom({
+    appStateSnapshot,
+    previous: projectBinding
+  });
+  const supervisor = supervisorStateFrom({ projection, previous: appHome });
+  const context = contextAdvisoryStateFrom({
+    contextAdvisory,
+    previous: supervisor
+  });
+  const resultIntake = resultIntakeStateFrom({
+    pendingResult,
+    previous: context
+  });
+  const eventPreview = eventPreviewStateFrom({
+    eventRegistrationEligibility,
+    previous: resultIntake
+  });
+  const eventConfirm = eventConfirmStateFrom({
+    eventRegistrationEligibility,
+    previous: eventPreview
+  });
+  const reviewGate = {
+    id: 'review-gate',
+    label: 'Review / Gate',
+    state: 'manual-required',
+    sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+    sourceRef: {
+      kind: 'manual-cli',
+      ref: 'symphony goal review'
+    },
+    blockedReasons: [],
+    nextSafeAction: buildSystemGoldenPathManualCliAction(),
+    willMutate: false
+  };
+  const closeout = closeoutStateFrom({
+    goalCloseout,
+    currentGate,
+    previous: eventConfirm
+  });
+  const steps = [
+    projectBinding,
+    appHome,
+    supervisor,
+    context,
+    resultIntake,
+    eventPreview,
+    eventConfirm,
+    reviewGate,
+    closeout
+  ].map(buildSystemGoldenPathStep);
+
+  return buildSystemGoldenPathContract({
+    generatedAt,
+    project: {
+      projectId: projectBinding.projectId,
+      name: projectBinding.projectName,
+      state: projectBinding.state,
+      selected: projectBinding.selected,
+      sourceContract: projectBinding.sourceContract,
+      sourceRef: projectBinding.sourceRef
+    },
+    goal: {
+      goalId: firstNonEmptyString(goalId, projection?.goalId),
+      title: firstNonEmptyString(title, appStateSnapshot?.active_goal?.goal_title),
+      taskId: currentTask.taskId,
+      taskLabel: currentTask.taskLabel,
+      state: stateForGoal(steps),
+      sourceContract: sourceContractForGoal(steps),
+      sourceRef: sourceRefForGoal(steps)
+    },
+    steps,
+    sourceContracts: buildSystemGoldenPathSourceContracts({
+      steps,
+      sourceContracts,
+      recentProjects,
+      currentProjectBinding,
+      appStateSnapshot,
+      contextAdvisory,
+      pendingResult,
+      eventRegistrationEligibility,
+      goalCloseout
+    }),
+    routeProvenance: {
+      source: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+      readModelOwner: 'backend',
+      workbenchSurface: '/workbench/desktop/',
+      refreshRouteTemplate: '/api/goals/<goal-id>/supervisor',
+      refreshMethod: 'GET',
+      frontendLocalFileReads: false,
+      mutationRoutes: []
+    }
+  });
+}
+
+function buildSystemGoldenPathStep({
+  id,
+  label,
+  state,
+  sourceContract,
+  sourceRef,
+  blockedReasons = [],
+  reason = null,
+  nextSafeAction = null
+}) {
+  const reasons = uniqueStrings(blockedReasons);
+  const action = nextSafeAction ?? (
+    state === 'manual-required'
+      ? buildSystemGoldenPathManualCliAction({
+          reason: firstNonEmptyString(reason, `${id}-manual-required`)
+        })
+      : buildSystemGoldenPathRefreshAction({
+          reason: firstNonEmptyString(reason, reasons[0], `${id}-${state}`)
+        })
+  );
+
+  return {
+    id,
+    label,
+    state,
+    sourceContract: sourceContract ?? null,
+    sourceRef: sourceRef ?? null,
+    blockedReasons: reasons,
+    nextSafeAction: action,
+    willMutate: false
+  };
+}
+
+function projectBindingFrom({
+  recentProjects,
+  currentProjectBinding,
+  appStateSnapshot
+}) {
+  const binding = isPlainObject(currentProjectBinding) ? currentProjectBinding : null;
+  const recent = isPlainObject(recentProjects) ? recentProjects : null;
+  const snapshotProject = isPlainObject(appStateSnapshot?.current_project?.currentProject)
+    ? appStateSnapshot.current_project.currentProject
+    : null;
+  const recentProject = Array.isArray(recent?.items) && recent.items.length > 0 && isPlainObject(recent.items[0])
+    ? recent.items[0]
+    : null;
+  const projectId = firstNonEmptyString(
+    binding?.selectedProjectId,
+    snapshotProject?.project_id,
+    recentProject?.projectId
+  );
+  const projectName = firstNonEmptyString(
+    binding?.selectedProjectName,
+    snapshotProject?.project_name,
+    recentProject?.displayName
+  );
+  const sourceContract = firstNonEmptyString(
+    binding?.contractName,
+    snapshotProject === null ? recent?.contractName : APP_STATE_SNAPSHOT_CONTRACT_NAME,
+    CURRENT_PROJECT_BINDING_CONTRACT_NAME
+  );
+  const sourceRef = sourceRefForContractObject(
+    binding ?? (snapshotProject === null ? recent : appStateSnapshot),
+    sourceContract
+  );
+  const mappedState = binding !== null
+    ? mapCurrentProjectBindingState(binding)
+    : snapshotProject !== null
+      ? 'ready'
+      : recent !== null
+        ? mapRecentProjectsState(recent)
+        : 'missing';
+  const state = mappedState === 'ready' && projectId === null ? 'missing' : mappedState;
+  const selected = state === 'ready' && projectId !== null;
+
+  return {
+    id: 'project-binding',
+    label: 'Project Launcher',
+    state,
+    sourceContract,
+    sourceRef,
+    blockedReasons: reasonsForState({
+      state,
+      readyReason: 'project-binding-ready',
+      defaultReason: reasonForProjectBindingState(state, binding, recent)
+    }),
+    reason: reasonForRefresh({
+      state,
+      readyReason: 'project-binding-ready',
+      defaultReason: reasonForProjectBindingState(state, binding, recent)
+    }),
+    projectId: selected ? projectId : null,
+    projectName: selected ? projectName : null,
+    selected
+  };
+}
+
+function appHomeStateFrom({
+  appStateSnapshot,
+  previous
+}) {
+  const waiting = waitingForPrevious(previous);
+
+  if (waiting !== null) {
+    return pendingStep({
+      id: 'app-home',
+      label: 'App Home',
+      sourceContract: APP_STATE_SNAPSHOT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(APP_STATE_SNAPSHOT_CONTRACT_NAME),
+      reason: waiting
+    });
+  }
+
+  if (!isPlainObject(appStateSnapshot)) {
+    return blockingStep({
+      id: 'app-home',
+      label: 'App Home',
+      state: 'missing',
+      sourceContract: APP_STATE_SNAPSHOT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(APP_STATE_SNAPSHOT_CONTRACT_NAME),
+      reason: 'app-state-snapshot-missing'
+    });
+  }
+
+  if (appStateSnapshot.freshness?.status === 'stale') {
+    return blockingStep({
+      id: 'app-home',
+      label: 'App Home',
+      state: 'stale',
+      sourceContract: APP_STATE_SNAPSHOT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(appStateSnapshot, APP_STATE_SNAPSHOT_CONTRACT_NAME),
+      reason: 'app-state-snapshot-stale'
+    });
+  }
+
+  if (appStateSnapshot.next_action?.status === 'blocked' || appStateSnapshot.current_task?.blocked === true) {
+    return blockingStep({
+      id: 'app-home',
+      label: 'App Home',
+      state: 'blocked',
+      sourceContract: APP_STATE_SNAPSHOT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(appStateSnapshot, APP_STATE_SNAPSHOT_CONTRACT_NAME),
+      reason: firstNonEmptyString(
+        appStateSnapshot.next_action?.reason,
+        appStateSnapshot.current_task?.reason,
+        'app-state-snapshot-blocked'
+      )
+    });
+  }
+
+  return readyStep({
+    id: 'app-home',
+    label: 'App Home',
+    sourceContract: APP_STATE_SNAPSHOT_CONTRACT_NAME,
+    sourceRef: sourceRefForContractObject(appStateSnapshot, APP_STATE_SNAPSHOT_CONTRACT_NAME),
+    reason: 'app-home-ready'
+  });
+}
+
+function supervisorStateFrom({
+  projection,
+  previous
+}) {
+  const waiting = waitingForPrevious(previous);
+
+  if (waiting !== null) {
+    return pendingStep({
+      id: 'supervisor',
+      label: 'Supervisor',
+      sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+      sourceRef: supervisorRouteSourceRef(),
+      reason: waiting
+    });
+  }
+
+  if (!isPlainObject(projection)) {
+    return blockingStep({
+      id: 'supervisor',
+      label: 'Supervisor',
+      state: 'missing',
+      sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+      sourceRef: supervisorRouteSourceRef(),
+      reason: 'supervisor-read-model-missing'
+    });
+  }
+
+  return readyStep({
+    id: 'supervisor',
+    label: 'Supervisor',
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: supervisorRouteSourceRef(),
+    reason: 'supervisor-ready'
+  });
+}
+
+function contextAdvisoryStateFrom({
+  contextAdvisory,
+  previous
+}) {
+  const waiting = waitingForPrevious(previous);
+
+  if (waiting !== null) {
+    return pendingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: waiting
+    });
+  }
+
+  if (!isPlainObject(contextAdvisory)) {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'missing',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: 'context-advisory-missing'
+    });
+  }
+
+  const transcriptAvailability = firstNonEmptyString(contextAdvisory.transcriptAvailability);
+
+  if (contextAdvisory.missingTranscriptState?.missing === true ||
+      ['missing', 'unavailable'].includes(transcriptAvailability)) {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'missing',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: firstNonEmptyString(
+        contextAdvisory.missingTranscriptState?.reason,
+        transcriptAvailability === null ? null : `context-advisory-${transcriptAvailability}`,
+        'context-advisory-missing'
+      )
+    });
+  }
+
+  if (transcriptAvailability === 'unreadable') {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'blocked',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: 'context-advisory-unreadable'
+    });
+  }
+
+  if (contextAdvisory.staleTranscriptState?.stale === true ||
+      transcriptAvailability === 'stale') {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'stale',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: firstNonEmptyString(
+        contextAdvisory.staleTranscriptState?.reason,
+        transcriptAvailability === 'stale' ? 'context-advisory-stale' : null,
+        'context-advisory-stale'
+      )
+    });
+  }
+
+  if (transcriptAvailability === 'degraded') {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'degraded',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: 'context-advisory-degraded'
+    });
+  }
+
+  if (Array.isArray(contextAdvisory.blockedFields) && contextAdvisory.blockedFields.length > 0) {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'blocked',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: `context-advisory-blocked:${contextAdvisory.blockedFields[0]}`
+    });
+  }
+
+  if (Array.isArray(contextAdvisory.degradedReasons) && contextAdvisory.degradedReasons.length > 0) {
+    return blockingStep({
+      id: 'context-advisory',
+      label: 'Context Advisory',
+      state: 'degraded',
+      sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+      reason: firstNonEmptyString(
+        contextAdvisory.degradedReasons[0],
+        'context-advisory-degraded'
+      )
+    });
+  }
+
+  return readyStep({
+    id: 'context-advisory',
+    label: 'Context Advisory',
+    sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+    sourceRef: sourceRefForContractObject(contextAdvisory, CONTEXT_ADVISORY_CONTRACT_NAME),
+    reason: 'context-advisory-ready'
+  });
+}
+
+function resultIntakeStateFrom({
+  pendingResult,
+  previous
+}) {
+  const waiting = waitingForPrevious(previous);
+
+  if (waiting !== null) {
+    return pendingStep({
+      id: 'result-intake',
+      label: 'Result Intake',
+      sourceContract: PENDING_RESULT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(PENDING_RESULT_CONTRACT_NAME),
+      reason: waiting
+    });
+  }
+
+  if (!isPlainObject(pendingResult)) {
+    return blockingStep({
+      id: 'result-intake',
+      label: 'Result Intake',
+      state: 'missing',
+      sourceContract: PENDING_RESULT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(PENDING_RESULT_CONTRACT_NAME),
+      reason: 'pending-result-missing'
+    });
+  }
+
+  if (pendingResult.stale === true) {
+    return blockingStep({
+      id: 'result-intake',
+      label: 'Result Intake',
+      state: 'stale',
+      sourceContract: PENDING_RESULT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(pendingResult, PENDING_RESULT_CONTRACT_NAME),
+      reason: 'pending-result-stale'
+    });
+  }
+
+  if (pendingResult.missing === true || ['missing', 'unavailable'].includes(pendingResult.status)) {
+    return blockingStep({
+      id: 'result-intake',
+      label: 'Result Intake',
+      state: 'missing',
+      sourceContract: PENDING_RESULT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(pendingResult, PENDING_RESULT_CONTRACT_NAME),
+      reason: firstNonEmptyString(pendingResult.parserReason, 'pending-result-missing')
+    });
+  }
+
+  if (pendingResult.status === 'blocked' ||
+      pendingResult.status === 'invalid' ||
+      pendingResult.state === 'blocked' ||
+      (Array.isArray(pendingResult.blockedReasons) && pendingResult.blockedReasons.length > 0)) {
+    return blockingStep({
+      id: 'result-intake',
+      label: 'Result Intake',
+      state: 'blocked',
+      sourceContract: PENDING_RESULT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(pendingResult, PENDING_RESULT_CONTRACT_NAME),
+      reason: firstNonEmptyString(
+        pendingResult.blockedReasons?.[0],
+        pendingResult.parserReason,
+        'pending-result-blocked'
+      )
+    });
+  }
+
+  if (['consumed', 'superseded'].includes(pendingResult.status)) {
+    return blockingStep({
+      id: 'result-intake',
+      label: 'Result Intake',
+      state: 'degraded',
+      sourceContract: PENDING_RESULT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(pendingResult, PENDING_RESULT_CONTRACT_NAME),
+      reason: `pending-result-${pendingResult.status}`
+    });
+  }
+
+  if (['pending', 'available'].includes(pendingResult.status)) {
+    return readyStep({
+      id: 'result-intake',
+      label: 'Result Intake',
+      sourceContract: PENDING_RESULT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(pendingResult, PENDING_RESULT_CONTRACT_NAME),
+      reason: 'result-intake-ready'
+    });
+  }
+
+  return blockingStep({
+    id: 'result-intake',
+    label: 'Result Intake',
+    state: 'degraded',
+    sourceContract: PENDING_RESULT_CONTRACT_NAME,
+    sourceRef: sourceRefForContractObject(pendingResult, PENDING_RESULT_CONTRACT_NAME),
+    reason: 'pending-result-status-unknown'
+  });
+}
+
+function eventPreviewStateFrom({
+  eventRegistrationEligibility,
+  previous
+}) {
+  const eligibility = isPlainObject(eventRegistrationEligibility) ? eventRegistrationEligibility : null;
+  const waiting = waitingForPrevious(previous);
+
+  if (waiting !== null) {
+    return pendingStep({
+      id: 'event-preview',
+      label: 'Event Preview',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventPreviewRouteSourceRef(),
+      reason: waiting
+    });
+  }
+
+  if (eligibility === null) {
+    return blockingStep({
+      id: 'event-preview',
+      label: 'Event Preview',
+      state: 'missing',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventPreviewRouteSourceRef(),
+      reason: 'event-preview-eligibility-missing'
+    });
+  }
+
+  if (eligibility.state === 'eligible') {
+    return readyStep({
+      id: 'event-preview',
+      label: 'Event Preview',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventPreviewRouteSourceRef(),
+      reason: 'event-preview-ready'
+    });
+  }
+
+  if (eligibility.state === 'blocked') {
+    return blockingStep({
+      id: 'event-preview',
+      label: 'Event Preview',
+      state: 'blocked',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventPreviewRouteSourceRef(),
+      reason: firstNonEmptyString(eligibility.reason, 'event-preview-not-eligible')
+    });
+  }
+
+  if (eligibility.state === 'not-applicable') {
+    return pendingStep({
+      id: 'event-preview',
+      label: 'Event Preview',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventPreviewRouteSourceRef(),
+      reason: firstNonEmptyString(waiting, 'awaiting-result-intake')
+    });
+  }
+
+  return blockingStep({
+    id: 'event-preview',
+    label: 'Event Preview',
+    state: 'degraded',
+    sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+    sourceRef: eventPreviewRouteSourceRef(),
+    reason: 'event-preview-eligibility-degraded'
+  });
+}
+
+function eventConfirmStateFrom({
+  eventRegistrationEligibility,
+  previous
+}) {
+  const eligibility = isPlainObject(eventRegistrationEligibility) ? eventRegistrationEligibility : null;
+
+  if (previous.state !== 'ready') {
+    return pendingStep({
+      id: 'event-confirm',
+      label: 'Event Confirm',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventConfirmSourceRef(),
+      reason: reasonForAwaitingStep(previous, 'event-preview')
+    });
+  }
+
+  if (eligibility === null) {
+    return blockingStep({
+      id: 'event-confirm',
+      label: 'Event Confirm',
+      state: 'missing',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventConfirmSourceRef(),
+      reason: 'event-confirm-eligibility-missing'
+    });
+  }
+
+  if (isPlainObject(eligibility.confirmRequestShape)) {
+    return readyStep({
+      id: 'event-confirm',
+      label: 'Event Confirm',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventConfirmSourceRef(),
+      reason: 'event-confirm-shape-ready'
+    });
+  }
+
+  if (eligibility.state === 'eligible') {
+    return blockingStep({
+      id: 'event-confirm',
+      label: 'Event Confirm',
+      state: 'degraded',
+      sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+      sourceRef: eventConfirmSourceRef(),
+      reason: 'event-confirm-shape-missing'
+    });
+  }
+
+  return pendingStep({
+    id: 'event-confirm',
+    label: 'Event Confirm',
+    sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+    sourceRef: eventConfirmSourceRef(),
+    reason: 'awaiting-event-preview'
+  });
+}
+
+function closeoutStateFrom({
+  goalCloseout,
+  currentGate,
+  previous
+}) {
+  if (previous.state !== 'ready') {
+    return pendingStep({
+      id: 'closeout',
+      label: 'Closeout',
+      sourceContract: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+      reason: reasonForAwaitingStep(previous, 'event-confirm')
+    });
+  }
+
+  if (currentGate?.status === 'blocked') {
+    return blockingStep({
+      id: 'closeout',
+      label: 'Closeout',
+      state: 'blocked',
+      sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+      sourceRef: supervisorRouteSourceRef(),
+      reason: firstNonEmptyString(
+        currentGate.blockingReason,
+        currentGate.closeoutAuthorizationState,
+        'current-gate-blocked'
+      )
+    });
+  }
+
+  if (goalCloseout === undefined) {
+    return pendingStep({
+      id: 'closeout',
+      label: 'Closeout',
+      sourceContract: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+      reason: 'awaiting-manual-review-gate'
+    });
+  }
+
+  if (!isPlainObject(goalCloseout)) {
+    return blockingStep({
+      id: 'closeout',
+      label: 'Closeout',
+      state: 'missing',
+      sourceContract: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractName(GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+      reason: 'closeout-report-missing'
+    });
+  }
+
+  if (Array.isArray(goalCloseout.missing) && goalCloseout.missing.length > 0) {
+    return blockingStep({
+      id: 'closeout',
+      label: 'Closeout',
+      state: 'blocked',
+      sourceContract: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(goalCloseout, GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+      reason: 'closeout-evidence-missing'
+    });
+  }
+
+  if (Array.isArray(goalCloseout.missing)) {
+    return readyStep({
+      id: 'closeout',
+      label: 'Closeout',
+      sourceContract: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+      sourceRef: sourceRefForContractObject(goalCloseout, GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+      reason: 'closeout-ready'
+    });
+  }
+
+  return blockingStep({
+    id: 'closeout',
+    label: 'Closeout',
+    state: 'degraded',
+    sourceContract: GOAL_CLOSEOUT_REPORT_CONTRACT_NAME,
+    sourceRef: sourceRefForContractObject(goalCloseout, GOAL_CLOSEOUT_REPORT_CONTRACT_NAME),
+    reason: 'closeout-report-degraded'
+  });
+}
+
+function readyStep({
+  id,
+  label,
+  sourceContract,
+  sourceRef,
+  reason
+}) {
+  return {
+    id,
+    label,
+    state: 'ready',
+    sourceContract,
+    sourceRef,
+    blockedReasons: [],
+    reason
+  };
+}
+
+function pendingStep({
+  id,
+  label,
+  sourceContract,
+  sourceRef,
+  reason
+}) {
+  return {
+    id,
+    label,
+    state: 'pending',
+    sourceContract,
+    sourceRef,
+    blockedReasons: [],
+    reason
+  };
+}
+
+function blockingStep({
+  id,
+  label,
+  state,
+  sourceContract,
+  sourceRef,
+  reason
+}) {
+  return {
+    id,
+    label,
+    state,
+    sourceContract,
+    sourceRef,
+    blockedReasons: [reason],
+    reason
+  };
+}
+
+function currentTaskFrom({
+  tasks,
+  projection,
+  appStateSnapshot
+}) {
+  const normalizedTasks = Array.isArray(tasks) ? tasks.filter(isPlainObject) : [];
+  const taskId = firstNonEmptyString(
+    projection?.current?.taskId,
+    projection?.route?.current?.taskId,
+    appStateSnapshot?.current_task?.task_id,
+    normalizedTasks[0]?.taskId
+  );
+  const matchedTask = taskId === null
+    ? null
+    : normalizedTasks.find((task) => task.taskId === taskId);
+
+  return {
+    taskId,
+    taskLabel: firstNonEmptyString(
+      appStateSnapshot?.current_task?.title,
+      matchedTask?.title,
+      normalizedTasks[0]?.title
+    )
+  };
+}
+
+function mapCurrentProjectBindingState(binding) {
+  if (binding.state === 'bound') {
+    return 'ready';
+  }
+
+  if (binding.state === 'stale') {
+    return 'stale';
+  }
+
+  if (['missing', 'unbound'].includes(binding.state)) {
+    return 'missing';
+  }
+
+  if (binding.state === 'failed') {
+    return 'blocked';
+  }
+
+  return 'degraded';
+}
+
+function mapRecentProjectsState(recentProjects) {
+  if (recentProjects.state === 'available') {
+    return 'ready';
+  }
+
+  if (recentProjects.state === 'stale') {
+    return 'stale';
+  }
+
+  if (recentProjects.state === 'degraded') {
+    return 'degraded';
+  }
+
+  if (recentProjects.state === 'failed') {
+    return 'blocked';
+  }
+
+  return 'missing';
+}
+
+function reasonForProjectBindingState(state, binding, recentProjects) {
+  if (state === 'ready') {
+    return 'project-binding-ready';
+  }
+
+  if (state === 'stale') {
+    return 'project-binding-stale';
+  }
+
+  if (state === 'degraded') {
+    return firstNonEmptyString(
+      recentProjects?.items?.[0]?.degradedReason,
+      binding?.fallbackReason,
+      'project-binding-degraded'
+    );
+  }
+
+  if (state === 'blocked') {
+    return firstNonEmptyString(
+      binding?.fallbackReason,
+      recentProjects?.source?.degradedReason,
+      'project-binding-blocked'
+    );
+  }
+
+  return firstNonEmptyString(
+    binding?.fallbackReason,
+    recentProjects?.source?.degradedReason,
+    'project-binding-missing'
+  );
+}
+
+function reasonsForState({
+  state,
+  readyReason,
+  defaultReason
+}) {
+  return ['blocked', 'missing', 'stale', 'degraded'].includes(state)
+    ? [firstNonEmptyString(defaultReason, readyReason)]
+    : [];
+}
+
+function reasonForRefresh({
+  state,
+  readyReason,
+  defaultReason
+}) {
+  return firstNonEmptyString(defaultReason, readyReason, `${state}-state`);
+}
+
+function waitingForPrevious(previous) {
+  if (!isPlainObject(previous) || previous.state === 'ready') {
+    return null;
+  }
+
+  return reasonForAwaitingStep(previous, previous.id);
+}
+
+function reasonForAwaitingStep(previous, fallbackStepId) {
+  if (previous.state === 'pending') {
+    return firstNonEmptyString(previous.reason, `awaiting-${fallbackStepId}`);
+  }
+
+  return `awaiting-${fallbackStepId}`;
+}
+
+function stateForGoal(steps) {
+  const states = steps.map((step) => step.state);
+
+  for (const state of ['blocked', 'missing', 'stale', 'degraded']) {
+    if (states.includes(state)) {
+      return state;
+    }
+  }
+
+  if (states.includes('pending') && states.includes('manual-required')) {
+    return 'manual-required';
+  }
+
+  if (states.includes('pending')) {
+    return 'pending';
+  }
+
+  return 'ready';
+}
+
+function sourceContractForGoal(steps) {
+  return sourceStepForGoal(steps)?.sourceContract ?? GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME;
+}
+
+function sourceRefForGoal(steps) {
+  return sourceStepForGoal(steps)?.sourceRef ?? supervisorRouteSourceRef();
+}
+
+function sourceStepForGoal(steps) {
+  return steps.find((step) => ['blocked', 'missing', 'stale', 'degraded'].includes(step.state)) ??
+    steps.find((step) => step.state === 'pending') ??
+    steps.find((step) => step.id === 'supervisor') ??
+    null;
+}
+
+function buildSystemGoldenPathSourceContracts({
+  steps,
+  sourceContracts,
+  recentProjects,
+  currentProjectBinding,
+  appStateSnapshot,
+  contextAdvisory,
+  pendingResult,
+  eventRegistrationEligibility,
+  goalCloseout
+}) {
+  const records = new Map();
+  const contractObjects = [
+    recentProjects,
+    currentProjectBinding,
+    appStateSnapshot,
+    contextAdvisory,
+    pendingResult,
+    eventRegistrationEligibility,
+    goalCloseout
+  ].filter(isPlainObject);
+
+  for (const step of steps) {
+    addSystemGoldenPathSourceContract(records, {
+      contractName: step.sourceContract,
+      requiredFor: [step.id],
+      sourceRef: contractSourceRefForStep(step),
+      contractObject: contractObjects.find((contract) => contract.contractName === step.sourceContract)
+    });
+  }
+
+  for (const contract of normalizeContractRefs(sourceContracts)) {
+    addSystemGoldenPathSourceContract(records, {
+      contractName: contract.contractName,
+      requiredFor: [],
+      sourceRef: sourceRefForContractName(contract.contractName),
+      contractObject: contract
+    });
+  }
+
+  return [...records.values()].map((record) => stripEmptyObject({
+    contractName: record.contractName,
+    contractVersion: record.contractVersion,
+    readOnly: true,
+    generatedAt: record.generatedAt,
+    requiredFor: record.requiredFor.length > 0 ? record.requiredFor : undefined,
+    sourceRef: record.sourceRef
+  }));
+}
+
+function addSystemGoldenPathSourceContract(records, {
+  contractName,
+  requiredFor,
+  sourceRef,
+  contractObject
+}) {
+  const safeName = safeContractName(contractName);
+
+  if (safeName === null) {
+    return;
+  }
+
+  const existing = records.get(safeName) ?? {
+    contractName: safeName,
+    contractVersion: knownContractVersion(safeName),
+    generatedAt: null,
+    requiredFor: [],
+    sourceRef: null
+  };
+  const version = Number.isInteger(contractObject?.contractVersion)
+    ? contractObject.contractVersion
+    : knownContractVersion(safeName);
+  const generatedAt = safeTimestamp(contractObject?.generatedAt);
+
+  existing.contractVersion = Number.isInteger(existing.contractVersion)
+    ? existing.contractVersion
+    : version;
+  existing.generatedAt = existing.generatedAt ?? generatedAt;
+  existing.requiredFor = uniqueStrings([
+    ...existing.requiredFor,
+    ...(Array.isArray(requiredFor) ? requiredFor : [])
+  ]);
+  existing.sourceRef = preferredSourceRef(existing.sourceRef, sourceRef);
+
+  records.set(safeName, existing);
+}
+
+function preferredSourceRef(existing, candidate) {
+  if (!isPlainObject(existing)) {
+    return candidate ?? null;
+  }
+
+  if (!isPlainObject(candidate)) {
+    return existing;
+  }
+
+  if (existing.kind !== 'contract' && candidate.kind === 'contract') {
+    return candidate;
+  }
+
+  return existing;
+}
+
+function contractSourceRefForStep(step) {
+  if (step.sourceContract === SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME) {
+    return sourceRefForContractName(SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME);
+  }
+
+  if (step.sourceContract === GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME) {
+    return supervisorRouteSourceRef();
+  }
+
+  return step.sourceRef;
+}
+
+function knownContractVersion(contractName) {
+  if (contractName === RECENT_PROJECTS_CONTRACT_NAME ||
+      contractName === CURRENT_PROJECT_BINDING_CONTRACT_NAME) {
+    return PROJECT_REGISTRY_CONTRACT_VERSION;
+  }
+
+  if (contractName === APP_STATE_SNAPSHOT_CONTRACT_NAME) {
+    return APP_STATE_SNAPSHOT_CONTRACT_VERSION;
+  }
+
+  if (contractName === PENDING_RESULT_CONTRACT_NAME) {
+    return PENDING_RESULT_CONTRACT_VERSION;
+  }
+
+  if (contractName === GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME) {
+    return GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_VERSION;
+  }
+
+  if (contractName === CONTEXT_ADVISORY_CONTRACT_NAME) {
+    return CONTEXT_ADVISORY_CONTRACT_VERSION;
+  }
+
+  if (contractName === SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME) {
+    return SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_VERSION;
+  }
+
+  if (contractName === GOAL_CLOSEOUT_REPORT_CONTRACT_NAME) {
+    return GOAL_CLOSEOUT_REPORT_CONTRACT_VERSION;
+  }
+
+  return undefined;
+}
+
+function sourceRefForContractObject(contractObject, fallbackContractName) {
+  const contractName = firstNonEmptyString(contractObject?.contractName, fallbackContractName);
+  const sourceRef = sourceRefForContractName(contractName);
+  const generatedAt = safeTimestamp(contractObject?.generatedAt);
+
+  return generatedAt === null
+    ? sourceRef
+    : {
+        ...sourceRef,
+        generatedAt
+      };
+}
+
+function sourceRefForContractName(contractName) {
+  if (contractName === GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME) {
+    return supervisorRouteSourceRef();
+  }
+
+  return {
+    kind: 'contract',
+    ref: contractName
+  };
+}
+
+function supervisorRouteSourceRef() {
+  return {
+    kind: 'route',
+    ref: '/api/goals/<goal-id>/supervisor'
+  };
+}
+
+function eventPreviewRouteSourceRef() {
+  return {
+    kind: 'route',
+    ref: '/api/goals/<goal-id>/event-plan-preview'
+  };
+}
+
+function eventConfirmSourceRef() {
+  return {
+    kind: 'contract',
+    ref: 'supervisorEventRegistrationEligibility.v1:confirmRequestShape'
   };
 }
 

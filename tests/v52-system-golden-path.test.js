@@ -16,10 +16,18 @@ import {
   deriveSystemGoldenPathOverallState,
   validateSystemGoldenPathContract
 } from '../src/symphony/system-golden-path-contracts.js';
+import {
+  buildGoalSupervisorAppReadModel
+} from '../src/symphony/goal-supervisor/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 const FIXTURE_DIR = join(REPO_ROOT, 'fixtures/contracts');
+const GENERATED_AT = '2026-06-12T08:00:00.000Z';
+const GOAL_ID = 'v52-system-golden-path-closeout';
+const TASK_ID = 'pr-3-backend-projection';
+const THREAD_ID = 'thread-v52-worker';
+const EVIDENCE_REF = 'docs/plans/v52-pr-3-worker-evidence-2026-06-12.md';
 
 const FIXTURES = Object.freeze([
   'system-golden-path.ready.v1.json',
@@ -307,6 +315,221 @@ describe('v52 systemGoldenPath.v1 contracts and fixtures', () => {
       )
     );
   });
+
+  it('projects the backend app read model into systemGoldenPath.v1', () => {
+    const model = buildProjectionModel({
+      goalCloseout: closeoutReport({
+        missing: []
+      })
+    });
+    const contract = model.systemGoldenPath;
+    const validation = validateSystemGoldenPathContract(contract);
+
+    assert.equal(validation.ok, true, validation.errors.join('; '));
+    assert.equal(contract.contractName, SYSTEM_GOLDEN_PATH_CONTRACT_NAME);
+    assert.equal(contract.project.projectId, 'multi-coding-agent-symphony');
+    assert.equal(contract.project.selected, true);
+    assert.equal(contract.goal.goalId, GOAL_ID);
+    assert.equal(contract.goal.taskId, TASK_ID);
+    assert.deepEqual(contract.steps.map((step) => step.id), SYSTEM_GOLDEN_PATH_STEP_IDS);
+    assert.equal(contract.overallState, 'ready');
+    assert.equal(stepById(contract, 'project-binding').state, 'ready');
+    assert.equal(stepById(contract, 'app-home').state, 'ready');
+    assert.equal(stepById(contract, 'supervisor').sourceRef.ref, '/api/goals/<goal-id>/supervisor');
+    assert.equal(stepById(contract, 'context-advisory').state, 'ready');
+    assert.equal(stepById(contract, 'result-intake').state, 'ready');
+    assert.equal(stepById(contract, 'event-preview').state, 'ready');
+    assert.equal(stepById(contract, 'event-confirm').state, 'ready');
+    assert.equal(stepById(contract, 'review-gate').state, 'manual-required');
+    assert.equal(stepById(contract, 'closeout').state, 'ready');
+    assert.ok(contract.sourceContracts.some((source) => (
+      source.contractName === 'supervisorEventRegistrationEligibility.v1' &&
+      source.requiredFor.includes('event-preview') &&
+      source.requiredFor.includes('event-confirm') &&
+      source.requiredFor.includes('review-gate')
+    )));
+    assert.equal(contract.nextSafeAction.kind, 'manual-cli-required');
+    assertReadOnlyVisibilityBoundary(contract);
+  });
+
+  it('preserves non-ready source states in backend projection', () => {
+    const missingProject = buildProjectionModel({
+      currentProjectBinding: {
+        ...currentProjectBinding(),
+        state: 'missing',
+        selectedProjectId: null,
+        selectedProjectName: null,
+        fallbackReason: 'project-binding-missing'
+      }
+    }).systemGoldenPath;
+    const staleContext = buildProjectionModel({
+      contextAdvisory: {
+        ...contextAdvisory(),
+        staleTranscriptState: {
+          stale: true,
+          reason: 'context-advisory-stale'
+        }
+      }
+    }).systemGoldenPath;
+    const degradedContext = buildProjectionModel({
+      contextAdvisory: {
+        ...contextAdvisory(),
+        degradedReasons: ['context-advisory-degraded']
+      }
+    }).systemGoldenPath;
+    const blockedResult = buildProjectionModel({
+      pendingResultState: {
+        contractName: 'pendingResult.v1',
+        contractVersion: 1,
+        goalId: GOAL_ID,
+        taskId: TASK_ID,
+        workerRole: 'worker',
+        source: 'result-intake-contract',
+        state: 'blocked',
+        escrowRef: 'artifact-ref:pending-result',
+        sanitizedSummary: {
+          status: 'blocked',
+          blockerReason: 'pending-result-blocked'
+        },
+        evidenceRefs: [],
+        eventCandidate: {
+          state: 'blocked',
+          reason: 'pending-result-blocked'
+        },
+        blockedReasons: ['pending-result-blocked'],
+        sourceContracts: [],
+        boundaries: {}
+      }
+    }).systemGoldenPath;
+    const manualRequired = buildProjectionModel().systemGoldenPath;
+
+    for (const contract of [
+      missingProject,
+      staleContext,
+      degradedContext,
+      blockedResult,
+      manualRequired
+    ]) {
+      const validation = validateSystemGoldenPathContract(contract);
+
+      assert.equal(validation.ok, true, validation.errors.join('; '));
+    }
+
+    assert.equal(missingProject.overallState, 'missing');
+    assert.equal(stepById(missingProject, 'project-binding').state, 'missing');
+    assert.ok(stepById(missingProject, 'project-binding').blockedReasons.includes('project-binding-missing'));
+
+    assert.equal(staleContext.overallState, 'stale');
+    assert.equal(stepById(staleContext, 'context-advisory').state, 'stale');
+    assert.ok(stepById(staleContext, 'context-advisory').blockedReasons.includes('context-advisory-stale'));
+
+    assert.equal(degradedContext.overallState, 'degraded');
+    assert.equal(stepById(degradedContext, 'context-advisory').state, 'degraded');
+    assert.ok(stepById(degradedContext, 'context-advisory').blockedReasons.includes('context-advisory-degraded'));
+
+    assert.equal(blockedResult.overallState, 'blocked');
+    assert.equal(stepById(blockedResult, 'result-intake').state, 'blocked');
+    assert.ok(stepById(blockedResult, 'result-intake').blockedReasons.includes('pending-result-blocked'));
+    assert.equal(stepById(blockedResult, 'event-preview').state, 'pending');
+
+    assert.equal(manualRequired.overallState, 'manual-required');
+    assert.equal(stepById(manualRequired, 'review-gate').state, 'manual-required');
+    assert.equal(stepById(manualRequired, 'closeout').state, 'pending');
+    assert.equal(manualRequired.nextSafeAction.kind, 'manual-cli-required');
+  });
+
+  it('preserves current gate blocked state in closeout projection', () => {
+    const model = buildProjectionModel({
+      currentGate: {
+        gateId: 'release-ready',
+        requiredCommandFamily: 'release-gate',
+        status: 'blocked',
+        evidenceRequirement: 'release-manager-result-block',
+        blockingReason: 'release-closeout-requires-operator-authorization',
+        closeoutAuthorizationState: 'blocked-without-operator-authorization'
+      },
+      goalCloseout: closeoutReport({
+        missing: []
+      })
+    });
+    const contract = model.systemGoldenPath;
+    const closeout = stepById(contract, 'closeout');
+    const validation = validateSystemGoldenPathContract(contract);
+
+    assert.equal(validation.ok, true, validation.errors.join('; '));
+    assert.equal(model.goalSnapshot.blockerCount, 1);
+    assert.equal(model.goalSnapshot.releaseReadiness, 'not-ready');
+    assert.equal(contract.overallState, 'blocked');
+    assert.equal(closeout.state, 'blocked');
+    assert.equal(closeout.sourceContract, 'goal-supervisor-app-read-model.v1');
+    assert.deepEqual(closeout.sourceRef, {
+      kind: 'route',
+      ref: '/api/goals/<goal-id>/supervisor'
+    });
+    assert.ok(closeout.blockedReasons.includes('release-closeout-requires-operator-authorization'));
+    assert.ok(contract.blockedReasons.includes('release-closeout-requires-operator-authorization'));
+    assert.equal(contract.nextSafeAction.kind, 'refresh-state');
+    assert.equal(contract.nextSafeAction.reason, 'release-closeout-requires-operator-authorization');
+    assertReadOnlyVisibilityBoundary(contract);
+  });
+
+  it('preserves transcriptAvailability source states without companion fields', () => {
+    const scenarios = [
+      {
+        availability: 'stale',
+        state: 'stale',
+        reason: 'context-advisory-stale'
+      },
+      {
+        availability: 'degraded',
+        state: 'degraded',
+        reason: 'context-advisory-degraded'
+      },
+      {
+        availability: 'unreadable',
+        state: 'blocked',
+        reason: 'context-advisory-unreadable'
+      },
+      {
+        availability: 'unavailable',
+        state: 'missing',
+        reason: 'context-advisory-unavailable'
+      },
+      {
+        availability: 'missing',
+        state: 'missing',
+        reason: 'context-advisory-missing'
+      }
+    ];
+
+    for (const scenario of scenarios) {
+      const contract = buildProjectionModel({
+        contextAdvisory: {
+          ...contextAdvisory(),
+          transcriptAvailability: scenario.availability,
+          staleTranscriptState: {
+            stale: false,
+            reason: null
+          },
+          missingTranscriptState: {
+            missing: false,
+            reason: null
+          },
+          degradedReasons: [],
+          blockedFields: []
+        }
+      }).systemGoldenPath;
+      const contextStep = stepById(contract, 'context-advisory');
+      const validation = validateSystemGoldenPathContract(contract);
+
+      assert.equal(validation.ok, true, `${scenario.availability}: ${validation.errors.join('; ')}`);
+      assert.equal(contract.overallState, scenario.state, scenario.availability);
+      assert.equal(contextStep.state, scenario.state, scenario.availability);
+      assert.ok(contextStep.blockedReasons.includes(scenario.reason), scenario.availability);
+      assert.equal(stepById(contract, 'result-intake').state, 'pending', scenario.availability);
+      assertReadOnlyVisibilityBoundary(contract);
+    }
+  });
 });
 
 function fixture(name) {
@@ -352,6 +575,193 @@ function actionLabels(contract) {
     contract.nextSafeAction.label,
     ...contract.steps.map((step) => step.nextSafeAction.label)
   ];
+}
+
+function buildProjectionModel(overrides = {}) {
+  return buildGoalSupervisorAppReadModel({
+    goalId: GOAL_ID,
+    title: 'v52 System Golden Path Closeout',
+    tasks: [
+      {
+        taskId: TASK_ID,
+        title: 'Backend read-model projection',
+        status: 'active'
+      }
+    ],
+    coreProjection: coreProjection(),
+    currentProjectBinding: currentProjectBinding(),
+    appStateSnapshot: appStateSnapshot(),
+    contextAdvisory: contextAdvisory(),
+    threadContinuationDecision: threadContinuationDecision(),
+    nowMs: Date.parse(GENERATED_AT),
+    ...overrides
+  });
+}
+
+function coreProjection() {
+  return {
+    contractName: 'goal-supervisor-core-projection.v1',
+    goalId: GOAL_ID,
+    current: {
+      taskId: TASK_ID,
+      role: 'worker',
+      threadId: THREAD_ID
+    },
+    route: {
+      state: 'active',
+      current: {
+        taskId: TASK_ID,
+        role: 'worker',
+        threadId: THREAD_ID
+      },
+      pendingResult: {
+        source: 'recorded-result-state',
+        result: workerResult()
+      }
+    },
+    progress: {},
+    routeInput: {
+      resultIntake: {
+        source: 'thread-result',
+        status: 'pending',
+        record: workerResult(),
+        reason: 'valid-result-awaits-registration'
+      }
+    }
+  };
+}
+
+function currentProjectBinding() {
+  return {
+    contractName: 'current-project-binding.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    state: 'bound',
+    selectedProjectId: 'multi-coding-agent-symphony',
+    selectedProjectName: 'Multi Coding Agent Symphony',
+    readOnly: true
+  };
+}
+
+function appStateSnapshot() {
+  return {
+    contractName: 'app-state-snapshot.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    readOnly: true,
+    freshness: {
+      status: 'current'
+    },
+    active_goal: {
+      goal_id: GOAL_ID,
+      goal_title: 'v52 System Golden Path Closeout'
+    },
+    current_task: {
+      task_id: TASK_ID,
+      title: 'Backend read-model projection',
+      blocked: false
+    },
+    next_action: {
+      status: 'action-required',
+      next: {
+        taskId: TASK_ID,
+        blocked: false
+      }
+    },
+    known_blockers: []
+  };
+}
+
+function contextAdvisory() {
+  return {
+    contractName: 'contextAdvisory.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    readOnly: true,
+    willMutate: false,
+    transcriptAvailability: 'readable',
+    staleTranscriptState: {
+      stale: false,
+      reason: null
+    },
+    missingTranscriptState: {
+      missing: false,
+      reason: null
+    },
+    resultBlockEvidence: {
+      status: 'present',
+      present: true,
+      evidenceRef: EVIDENCE_REF
+    },
+    contextUtilization: {
+      status: 'available',
+      ratio: 0.2
+    },
+    degradedReasons: [],
+    blockedFields: []
+  };
+}
+
+function threadContinuationDecision() {
+  return {
+    contractName: 'threadContinuationDecision.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    readOnly: true,
+    willMutate: false,
+    decision: 'checkpoint',
+    reason: 'result-awaits-registration',
+    taskId: TASK_ID,
+    threadId: THREAD_ID,
+    checkpointRef: EVIDENCE_REF,
+    blockedFields: [],
+    requiredEvidence: ['pending-result-registration'],
+    sourceContracts: [
+      {
+        contractName: 'contextAdvisory.v1',
+        contractVersion: 1,
+        generatedAt: GENERATED_AT,
+        readOnly: true
+      }
+    ]
+  };
+}
+
+function workerResult() {
+  return {
+    goalId: GOAL_ID,
+    taskId: TASK_ID,
+    role: 'worker',
+    threadId: THREAD_ID,
+    eventToRegister: 'worker.evidence-recorded',
+    evidenceRef: EVIDENCE_REF,
+    branch: 'codex/v52-system-golden-path-backend-projection',
+    headCommit: 'abcdef1234567890'
+  };
+}
+
+function closeoutReport(overrides = {}) {
+  return {
+    contractName: 'goal-closeout-report.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    goalId: GOAL_ID,
+    summary: {
+      totalTasks: 1,
+      workerEvidenceComplete: true,
+      reviewEvidenceComplete: true,
+      mainVerificationComplete: true,
+      releaseReady: false,
+      releaseReadySource: null
+    },
+    missing: [],
+    releaseGates: {},
+    safety: {
+      readOnly: true,
+      copyOnly: true
+    },
+    ...overrides
+  };
 }
 
 function stringValues(value) {
