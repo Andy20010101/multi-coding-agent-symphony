@@ -1,0 +1,124 @@
+{
+  "contractName": "reviewerHandoffPreview.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-13T01:07:00.000Z",
+  "goal": {
+    "goalId": "v55-codex-provider-run-recovery-reviewer-handoff",
+    "title": "v55 Codex Provider Run Recovery and Reviewer Handoff",
+    "state": "active",
+    "sourceContract": "goal-supervisor-app-read-model.v1",
+    "sourceRef": {
+      "kind": "route",
+      "ref": "/api/goals/<goal-id>/supervisor"
+    }
+  },
+  "workerTask": {
+    "taskId": "pr-2-backend-recovery-projection",
+    "title": "Backend recovery projection",
+    "state": "accepted",
+    "sourceContract": "pendingResult.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "pendingResult.v1"
+    }
+  },
+  "reviewerTask": {
+    "taskId": "pr-2-readonly-review",
+    "title": "Read-only backend recovery review",
+    "state": "pending",
+    "sourceContract": "childTaskPack.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "childTaskPack.v1"
+    }
+  },
+  "pendingResultRef": {
+    "contractName": "pendingResult.v1",
+    "state": "available",
+    "escrowRef": "result-evidence-escrow:v54-codex-provider-execution-pilot:pr-1-contracts-fixtures-tests:escrow_accepted",
+    "blockedReasons": [],
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "pendingResult.v1"
+    }
+  },
+  "acceptedResultSummary": {
+    "status": "completed",
+    "summary": "Backend recovery projection fixture is accepted through v51 pending result state.",
+    "changedFiles": [
+      "src/symphony/codex-provider-run-recovery-contracts.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v55-codex-provider-run-recovery-reviewer-handoff.test.js"
+    ],
+    "risks": [],
+    "blockers": [],
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v55-pr-1-run-recovery-contracts-evidence-2026-06-13.md",
+        "label": "v55 PR-1 contract evidence"
+      }
+    ]
+  },
+  "handoffPack": {
+    "title": "Review v55 backend recovery projection",
+    "body": "Confirm Reviewer Verdict after copying this pack.",
+    "workerEvidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v55-pr-1-run-recovery-contracts-evidence-2026-06-13.md",
+        "label": "v55 PR-1 contract evidence"
+      }
+    ],
+    "changedFiles": [
+      "src/symphony/codex-provider-run-recovery-contracts.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v55-codex-provider-run-recovery-reviewer-handoff.test.js"
+    ],
+    "risks": [],
+    "blockers": []
+  },
+  "copyOnly": true,
+  "willMutate": true,
+  "blockedReasons": [],
+  "sourceContracts": [
+    {
+      "contractName": "codexProviderRunRecovery.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "recovery-state"
+      ],
+      "sourceRef": {
+        "kind": "fixture",
+        "ref": "fixtures/contracts/codex-provider-run-recovery/recovery.completed-accepted.v1.json"
+      }
+    }
+  ],
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "claudeCodeExecutionAvailable": false,
+    "providerParityAvailable": false,
+    "automaticReviewerVerdictAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": true,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "genericShellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "localSessionFileReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "transcriptCompactAvailable": false,
+    "newThreadProductCapabilityAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}

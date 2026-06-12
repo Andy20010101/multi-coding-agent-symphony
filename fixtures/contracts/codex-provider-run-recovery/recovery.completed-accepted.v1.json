@@ -1,0 +1,126 @@
+{
+  "contractName": "codexProviderRunRecovery.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-13T01:00:00.000Z",
+  "goal": {
+    "goalId": "v55-codex-provider-run-recovery-reviewer-handoff",
+    "title": "v55 Codex Provider Run Recovery and Reviewer Handoff",
+    "state": "active",
+    "sourceContract": "goal-supervisor-app-read-model.v1",
+    "sourceRef": {
+      "kind": "route",
+      "ref": "/api/goals/<goal-id>/supervisor"
+    }
+  },
+  "task": {
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "title": "Contracts, fixtures, and tests",
+    "state": "active",
+    "sourceContract": "codexProviderRunRecord.v1",
+    "sourceRef": {
+      "kind": "fixture",
+      "ref": "fixtures/contracts/codex-provider-execution/run-record.completed.v1.json"
+    }
+  },
+  "runId": "codex-v54-pr1-completed",
+  "providerId": "codex",
+  "role": "worker",
+  "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+  "taskPackHash": "sha256:5f768edec964dcfb8cde908a41f912425f8e0cb1414cb3ac1c0402dcfbf02cbf",
+  "runStatus": "completed",
+  "resultIntake": {
+    "contractName": "resultIntakeRequest.v1",
+    "requestId": "result-intake:v54-pr1-completed",
+    "requestState": "accepted",
+    "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+    "planHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "pendingResult": {
+      "contractName": "pendingResult.v1",
+      "state": "available",
+      "escrowRef": "result-evidence-escrow:v54-codex-provider-execution-pilot:pr-1-contracts-fixtures-tests:escrow_accepted",
+      "blockedReasons": [],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "pendingResult.v1"
+      }
+    },
+    "blockedReasons": [],
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "resultIntakeRequest.v1"
+    }
+  },
+  "recoveryState": "ready-for-reviewer-handoff",
+  "nextSafeAction": {
+    "actionId": "copy-reviewer-handoff",
+    "label": "Copy reviewer handoff after accepted pending result",
+    "copyOnly": true,
+    "willMutate": false
+  },
+  "blockedReasons": [],
+  "sourceContracts": [
+    {
+      "contractName": "codexProviderRunRecord.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "run-id",
+        "preview-hash",
+        "task-pack-hash"
+      ],
+      "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+      "sourceRef": {
+        "kind": "fixture",
+        "ref": "fixtures/contracts/codex-provider-execution/run-record.completed.v1.json"
+      }
+    },
+    {
+      "contractName": "resultIntakeRequest.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "result-intake-state"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "resultIntakeRequest.v1"
+      }
+    },
+    {
+      "contractName": "pendingResult.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "accepted-pending-result"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "pendingResult.v1"
+      }
+    }
+  ],
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "claudeCodeExecutionAvailable": false,
+    "providerParityAvailable": false,
+    "automaticReviewerVerdictAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "genericShellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "localSessionFileReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "transcriptCompactAvailable": false,
+    "newThreadProductCapabilityAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "contractName": "reviewerHandoffPreview.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-13T01:06:00.000Z",
+  "goal": {
+    "goalId": "v55-codex-provider-run-recovery-reviewer-handoff",
+    "title": "v55 Codex Provider Run Recovery and Reviewer Handoff",
+    "state": "active",
+    "sourceContract": "goal-supervisor-app-read-model.v1",
+    "sourceRef": {
+      "kind": "route",
+      "ref": "/api/goals/<goal-id>/supervisor"
+    }
+  },
+  "workerTask": {
+    "taskId": "pr-2-backend-recovery-projection",
+    "title": "Backend recovery projection",
+    "state": "pending",
+    "sourceContract": "codexProviderRunRecovery.v1",
+    "sourceRef": {
+      "kind": "fixture",
+      "ref": "fixtures/contracts/codex-provider-run-recovery/recovery.missing-result-intake.v1.json"
+    }
+  },
+  "reviewerTask": {
+    "taskId": "pr-2-readonly-review",
+    "title": "Read-only backend recovery review",
+    "state": "pending",
+    "sourceContract": "childTaskPack.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "childTaskPack.v1"
+    }
+  },
+  "pendingResultRef": null,
+  "acceptedResultSummary": null,
+  "handoffPack": null,
+  "copyOnly": true,
+  "willMutate": false,
+  "blockedReasons": [
+    "pending-result-not-accepted"
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "codexProviderRunRecovery.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "recovery-state"
+      ],
+      "sourceRef": {
+        "kind": "fixture",
+        "ref": "fixtures/contracts/codex-provider-run-recovery/recovery.missing-result-intake.v1.json"
+      }
+    },
+    {
+      "contractName": "pendingResult.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "pending-result-accepted-state"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "pendingResult.v1"
+      }
+    }
+  ],
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "claudeCodeExecutionAvailable": false,
+    "providerParityAvailable": false,
+    "automaticReviewerVerdictAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "genericShellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "localSessionFileReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "transcriptCompactAvailable": false,
+    "newThreadProductCapabilityAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
