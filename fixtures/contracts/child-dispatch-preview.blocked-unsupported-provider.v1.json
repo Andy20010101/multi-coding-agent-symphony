@@ -1,0 +1,136 @@
+{
+  "contractName": "childDispatchPreview.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-12T11:00:00.000Z",
+  "goal": {
+    "goalId": "v53-controlled-child-dispatch-preview",
+    "title": "v53 Controlled Child Dispatch Preview",
+    "state": "active",
+    "sourceContract": "goal-supervisor-app-read-model.v1",
+    "sourceRef": {
+      "kind": "route",
+      "ref": "/api/goals/<goal-id>/supervisor"
+    }
+  },
+  "task": {
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "title": "Contracts, fixtures, and tests",
+    "state": "active",
+    "sourceContract": "systemGoldenPath.v1",
+    "sourceRef": {
+      "kind": "fixture",
+      "ref": "fixtures/contracts/system-golden-path.ready.v1.json"
+    }
+  },
+  "requestedRole": "worker",
+  "providerRecommendation": {
+    "contractName": "providerRoleRecommendation.v1",
+    "contractVersion": 1,
+    "providerId": "codex",
+    "role": "worker",
+    "allowedProviders": [
+      "codex",
+      "claude-code"
+    ],
+    "rationale": "requested-provider-not-supported",
+    "copyOnly": true,
+    "providerExecutionAvailable": false,
+    "actualChildDispatchAvailable": false
+  },
+  "readiness": {
+    "state": "blocked",
+    "canPreview": false,
+    "copyAvailable": false,
+    "requiresManualCopy": true,
+    "providerExecutionAvailable": false,
+    "actualChildDispatchAvailable": false
+  },
+  "blockedReasons": [
+    "unsupported-provider"
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "systemGoldenPath.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "preview-readiness",
+        "task-pack"
+      ],
+      "sourceRef": {
+        "kind": "fixture",
+        "ref": "fixtures/contracts/system-golden-path.ready.v1.json"
+      }
+    },
+    {
+      "contractName": "goal-supervisor-app-read-model.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "active-goal",
+        "active-task"
+      ],
+      "sourceRef": {
+        "kind": "route",
+        "ref": "/api/goals/<goal-id>/supervisor"
+      }
+    },
+    {
+      "contractName": "resultIntakeRequest.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "result-expectation"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "resultIntakeRequest.v1"
+      }
+    }
+  ],
+  "sourceRefs": [
+    {
+      "kind": "fixture",
+      "ref": "fixtures/contracts/system-golden-path.ready.v1.json",
+      "label": "systemGoldenPath.v1 ready fixture"
+    },
+    {
+      "kind": "route",
+      "ref": "/api/goals/<goal-id>/supervisor",
+      "label": "backend supervisor read model"
+    },
+    {
+      "kind": "docs",
+      "ref": "docs/plans/v53-controlled-child-dispatch-preview-runbook-2026-06-12.md",
+      "label": "v53 controlled child dispatch preview runbook"
+    }
+  ],
+  "taskPack": null,
+  "resultExpectation": null,
+  "boundaries": {
+    "copyOnly": true,
+    "willMutate": false,
+    "providerExecutionAvailable": false,
+    "actualChildDispatchAvailable": false,
+    "providerLaunchAvailable": false,
+    "childProcessSpawnAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "transcriptCompactionAvailable": false,
+    "newThreadAvailable": false,
+    "genericShellRunnerAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "localSessionFileReadAvailable": false,
+    "rawProviderPayloadExposureAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
