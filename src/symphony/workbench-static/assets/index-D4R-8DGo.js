@@ -11143,6 +11143,10 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.systemGoldenPath,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedChildDispatchPreview = projectChildDispatchPreview({
+		contract: goalSupervisorData?.childDispatchPreview,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11161,6 +11165,7 @@ function projectWorkbenchContracts(results) {
 		routeStates,
 		routeContext,
 		systemGoldenPath: projectedSystemGoldenPath,
+		childDispatchPreview: projectedChildDispatchPreview,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11183,6 +11188,7 @@ function projectWorkbenchContracts(results) {
 			providerHub: projectedProviderHub,
 			supervisorDashboard: projectedSupervisorDashboard,
 			systemGoldenPath: projectedSystemGoldenPath,
+			childDispatchPreview: projectedChildDispatchPreview,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11694,7 +11700,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -11970,6 +11976,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		}),
 		providerHub,
 		systemGoldenPath,
+		childDispatchPreview,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12055,6 +12062,161 @@ function projectSystemGoldenPathSourceRef(sourceRef) {
 		kind: valueState(sourceRef?.kind),
 		ref: valueState(sourceRef?.ref)
 	};
+}
+function projectChildDispatchPreview({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const taskPack = hasContract && contract.taskPack !== null && typeof contract.taskPack === "object" && !Array.isArray(contract.taskPack) ? contract.taskPack : null;
+	const resultExpectation = hasContract && contract.resultExpectation !== null && typeof contract.resultExpectation === "object" && !Array.isArray(contract.resultExpectation) ? contract.resultExpectation : null;
+	const allowedProviders = Array.isArray(contract?.providerRecommendation?.allowedProviders) ? contract.providerRecommendation.allowedProviders : taskPack?.allowedProviders;
+	return {
+		state: hasContract ? contract.readiness?.state ?? "available" : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		task: {
+			taskId: valueState(contract?.task?.taskId),
+			title: valueState(contract?.task?.title),
+			state: valueState(contract?.task?.state),
+			sourceContract: valueState(contract?.task?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+		},
+		requestedRole: valueState(contract?.requestedRole),
+		providerRecommendation: {
+			contractName: valueState(contract?.providerRecommendation?.contractName),
+			providerId: valueState(contract?.providerRecommendation?.providerId),
+			role: valueState(contract?.providerRecommendation?.role),
+			allowedProviders: projectSystemGoldenPathTextItems(allowedProviders),
+			rationale: valueState(contract?.providerRecommendation?.rationale),
+			copyOnly: valueState(contract?.providerRecommendation?.copyOnly),
+			providerExecutionAvailable: valueState(contract?.providerRecommendation?.providerExecutionAvailable),
+			actualChildDispatchAvailable: valueState(contract?.providerRecommendation?.actualChildDispatchAvailable)
+		},
+		readiness: {
+			state: valueState(contract?.readiness?.state),
+			canPreview: valueState(contract?.readiness?.canPreview),
+			copyAvailable: valueState(contract?.readiness?.copyAvailable),
+			requiresManualCopy: valueState(contract?.readiness?.requiresManualCopy),
+			providerExecutionAvailable: valueState(contract?.readiness?.providerExecutionAvailable),
+			actualChildDispatchAvailable: valueState(contract?.readiness?.actualChildDispatchAvailable)
+		},
+		blockedReasons: projectSystemGoldenPathTextItems(contract?.blockedReasons),
+		sourceContracts: {
+			state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : void 0),
+			items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectChildDispatchSourceContract)
+		},
+		sourceRefs: {
+			state: Array.isArray(contract?.sourceRefs) && contract.sourceRefs.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceRefs) ? contract.sourceRefs.length : void 0),
+			items: (Array.isArray(contract?.sourceRefs) ? contract.sourceRefs : []).map(projectSystemGoldenPathSourceRef)
+		},
+		taskPack: projectChildDispatchTaskPack(taskPack),
+		resultExpectation: projectChildDispatchResultExpectation(resultExpectation),
+		boundaries: projectChildDispatchBoundaries(contract?.boundaries),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 childDispatchPreview projection")
+		},
+		note: hasContract ? "Child Dispatch Preview is copy-only and returns external results through v51 Result Intake." : "Child Dispatch Preview is unavailable until goal-supervisor-app-read-model.v1 exposes childDispatchPreview.v1."
+	};
+}
+function projectChildDispatchSourceContract(sourceContract) {
+	return {
+		contractName: valueState(sourceContract?.contractName),
+		contractVersion: valueState(sourceContract?.contractVersion),
+		readOnly: valueState(sourceContract?.readOnly),
+		requiredFor: projectSystemGoldenPathTextItems(sourceContract?.requiredFor),
+		sourceRef: projectSystemGoldenPathSourceRef(sourceContract?.sourceRef)
+	};
+}
+function projectChildDispatchTaskPack(taskPack) {
+	const available = taskPack !== null && taskPack !== void 0 && typeof taskPack === "object" && !Array.isArray(taskPack);
+	return {
+		state: available ? "available" : "missing",
+		contractName: valueState(available ? "childTaskPack.v1" : void 0),
+		goalId: valueState(taskPack?.goalId),
+		taskId: valueState(taskPack?.taskId),
+		role: valueState(taskPack?.role),
+		preferredProvider: valueState(taskPack?.preferredProvider),
+		allowedProviders: projectSystemGoldenPathTextItems(taskPack?.allowedProviders),
+		returnPath: valueState(taskPack?.returnPath),
+		copyOnly: valueState(taskPack?.copyOnly),
+		willMutate: valueState(taskPack?.willMutate),
+		projectContextRefs: projectSystemGoldenPathTextItems(taskPack?.projectContextRefs),
+		acceptanceCriteria: projectSystemGoldenPathTextItems(taskPack?.acceptanceCriteria),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(taskPack?.requiredEvidenceRefs),
+		taskPrompt: valueState(taskPack?.taskPrompt),
+		json: valueState(available ? stableJsonText(taskPack) : void 0)
+	};
+}
+function projectChildDispatchResultExpectation(resultExpectation) {
+	const expectedResultBlock = resultExpectation?.expectedResultBlock;
+	const hasExpectation = resultExpectation !== null && resultExpectation !== void 0 && typeof resultExpectation === "object" && !Array.isArray(resultExpectation);
+	const hasBlock = expectedResultBlock !== null && expectedResultBlock !== void 0 && typeof expectedResultBlock === "object" && !Array.isArray(expectedResultBlock);
+	return {
+		state: hasExpectation ? "available" : "missing",
+		contractName: valueState(resultExpectation?.contractName),
+		returnPath: valueState(resultExpectation?.returnPath),
+		resultIntakeContract: valueState(resultExpectation?.resultIntakeContract),
+		directGoalEventAppendAvailable: valueState(resultExpectation?.directGoalEventAppendAvailable),
+		directTaskCompleteAvailable: valueState(resultExpectation?.directTaskCompleteAvailable),
+		reviewerMutationAvailable: valueState(resultExpectation?.reviewerMutationAvailable),
+		mainVerificationMutationAvailable: valueState(resultExpectation?.mainVerificationMutationAvailable),
+		releaseGateMutationAvailable: valueState(resultExpectation?.releaseGateMutationAvailable),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(resultExpectation?.requiredEvidenceRefs),
+		expectedResultBlock: {
+			state: hasBlock ? "available" : "missing",
+			contractName: valueState(expectedResultBlock?.contractName),
+			goalId: valueState(expectedResultBlock?.goalId),
+			taskId: valueState(expectedResultBlock?.taskId),
+			workerRole: valueState(expectedResultBlock?.workerRole),
+			source: valueState(expectedResultBlock?.source),
+			requestedEvent: valueState(expectedResultBlock?.requestedEvent?.eventType),
+			willAppendGoalEvent: valueState(expectedResultBlock?.willAppendGoalEvent),
+			json: valueState(hasBlock ? stableJsonText(expectedResultBlock) : void 0)
+		}
+	};
+}
+function projectChildDispatchEvidenceRefs(evidenceRefs) {
+	return {
+		state: Array.isArray(evidenceRefs) && evidenceRefs.length > 0 ? "available" : Array.isArray(evidenceRefs) ? "empty" : "missing",
+		count: valueState(Array.isArray(evidenceRefs) ? evidenceRefs.length : void 0),
+		items: (Array.isArray(evidenceRefs) ? evidenceRefs : []).map((evidenceRef) => ({
+			kind: valueState(evidenceRef?.kind),
+			ref: valueState(evidenceRef?.ref),
+			label: valueState(evidenceRef?.label)
+		}))
+	};
+}
+function projectChildDispatchBoundaries(boundaries) {
+	return {
+		copyOnly: valueState(boundaries?.copyOnly),
+		willMutate: valueState(boundaries?.willMutate),
+		providerExecutionAvailable: valueState(boundaries?.providerExecutionAvailable),
+		actualChildDispatchAvailable: valueState(boundaries?.actualChildDispatchAvailable),
+		childProcessSpawnAvailable: valueState(boundaries?.childProcessSpawnAvailable),
+		frontendLocalFileReadAvailable: valueState(boundaries?.frontendLocalFileReadAvailable),
+		directGoalEventAppendAvailable: valueState(boundaries?.directGoalEventAppendAvailable),
+		directTaskCompleteAvailable: valueState(boundaries?.directTaskCompleteAvailable),
+		reviewerMutationAvailable: valueState(boundaries?.reviewerMutationAvailable),
+		mainVerificationMutationAvailable: valueState(boundaries?.mainVerificationMutationAvailable),
+		releaseGateMutationAvailable: valueState(boundaries?.releaseGateMutationAvailable),
+		gitMutationAvailable: valueState(boundaries?.gitMutationAvailable),
+		tagAutomationAvailable: valueState(boundaries?.tagAutomationAvailable),
+		publishAutomationAvailable: valueState(boundaries?.publishAutomationAvailable),
+		githubReleaseAutomationAvailable: valueState(boundaries?.githubReleaseAutomationAvailable)
+	};
+}
+function stableJsonText(value) {
+	return JSON.stringify(value, null, 2);
 }
 function projectSystemGoldenPathAction(action) {
 	return {
@@ -25446,6 +25608,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "System Path"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#child-dispatch-preview-panel",
+							children: "Child Task"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -25499,6 +25665,7 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 					systemGoldenPath: desktopShell?.systemGoldenPath,
 					onRefreshWorkbenchContracts
 				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChildDispatchPreviewPanel, { childDispatchPreview: desktopShell?.childDispatchPreview }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -25907,6 +26074,173 @@ function systemGoldenPathRefreshResultSummary(result) {
 	if (typeof result !== "object" || Array.isArray(result)) return stringValue(result);
 	const parts = [result.systemGoldenPathState === null || result.systemGoldenPathState === void 0 ? null : `systemGoldenPath ${stringValue(result.systemGoldenPathState)}`, result.systemGoldenPathContractName === null || result.systemGoldenPathContractName === void 0 ? null : `contract ${stringValue(result.systemGoldenPathContractName)}`].filter((part) => part !== null);
 	return parts.length > 0 ? parts.join("; ") : "NULL";
+}
+function ChildDispatchPreviewPanel({ childDispatchPreview }) {
+	const taskPack = childDispatchPreview?.taskPack;
+	const resultExpectation = childDispatchPreview?.resultExpectation;
+	const sourceContracts = childDispatchPreview?.sourceContracts?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "child-dispatch-preview-panel",
+		className: "child-dispatch-preview-panel",
+		"aria-label": "Preview Child Task",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "child-dispatch-preview-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v53 controlled preview"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Preview Child Task" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(childDispatchPreview?.state)}`,
+					children: childDispatchPreview?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "child-dispatch-preview-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", childDispatchPreview?.contractName],
+					["goal", childDispatchPreview?.goal?.goalId],
+					["task", childDispatchPreview?.task?.taskId],
+					["requested role", childDispatchPreview?.requestedRole],
+					["provider", childDispatchPreview?.providerRecommendation?.providerId],
+					["allowed providers", textValueFromItems(childDispatchPreview?.providerRecommendation?.allowedProviders, "未暴露")],
+					["readiness", childDispatchPreview?.readiness?.state],
+					["copy available", childDispatchPreview?.readiness?.copyAvailable],
+					["manual copy required", childDispatchPreview?.readiness?.requiresManualCopy],
+					["provider execution", childDispatchPreview?.readiness?.providerExecutionAvailable],
+					["child start", childDispatchPreview?.readiness?.actualChildDispatchAvailable],
+					["blocked reasons", textValueFromItems(childDispatchPreview?.blockedReasons, "无")]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["copy only", taskPack?.copyOnly],
+					["willMutate", taskPack?.willMutate],
+					["return path", taskPack?.returnPath],
+					["result contract", resultExpectation?.resultIntakeContract],
+					["will append event", resultExpectation?.expectedResultBlock?.willAppendGoalEvent],
+					["goal event write", resultExpectation?.directGoalEventAppendAvailable],
+					["task completion write", resultExpectation?.directTaskCompleteAvailable],
+					["route", childDispatchPreview?.route?.path],
+					["route state", childDispatchPreview?.route?.routeState]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "provider copy targets",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChildDispatchProviderTargets, { childDispatchPreview })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "child-dispatch-copy-grid",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChildDispatchCopyBlock, {
+					title: "Copy Child Task Pack",
+					state: taskPack?.state,
+					rows: [
+						["pack contract", taskPack?.contractName],
+						["preferred provider", taskPack?.preferredProvider],
+						["role", taskPack?.role],
+						["required evidence refs", taskPack?.requiredEvidenceRefs?.count]
+					],
+					copyText: taskPack?.json?.text
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChildDispatchCopyBlock, {
+					title: "Expected Result Block",
+					state: resultExpectation?.expectedResultBlock?.state,
+					rows: [
+						["Return Through Result Intake", resultExpectation?.returnPath],
+						["result intake contract", resultExpectation?.resultIntakeContract],
+						["worker role", resultExpectation?.expectedResultBlock?.workerRole],
+						["requested event", resultExpectation?.expectedResultBlock?.requestedEvent],
+						["will append event", resultExpectation?.expectedResultBlock?.willAppendGoalEvent]
+					],
+					copyText: resultExpectation?.expectedResultBlock?.json?.text
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Return Through Result Intake",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["return path", resultExpectation?.returnPath],
+					["result intake contract", resultExpectation?.resultIntakeContract],
+					["goal event write", resultExpectation?.directGoalEventAppendAvailable],
+					["task completion write", resultExpectation?.directTaskCompleteAvailable],
+					["reviewer mutation", resultExpectation?.reviewerMutationAvailable],
+					["main gate mutation", resultExpectation?.mainVerificationMutationAvailable],
+					["gate mutation", resultExpectation?.releaseGateMutationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "source contracts",
+				children: sourceContracts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "childDispatchPreview source contracts 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "child-dispatch-source-list",
+					children: sourceContracts.map((source, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: source.contractName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["readOnly", source.readOnly],
+						["required for", textValueFromItems(source.requiredFor, "无")],
+						["source ref", source.sourceRef?.ref]
+					] })] }, `${source.contractName.text}-${index}`))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["copy only", childDispatchPreview?.boundaries?.copyOnly],
+					["willMutate", childDispatchPreview?.boundaries?.willMutate],
+					["provider execution", childDispatchPreview?.boundaries?.providerExecutionAvailable],
+					["child start", childDispatchPreview?.boundaries?.actualChildDispatchAvailable],
+					["child process", childDispatchPreview?.boundaries?.childProcessSpawnAvailable],
+					["frontend local file read", childDispatchPreview?.boundaries?.frontendLocalFileReadAvailable],
+					["goal event write", childDispatchPreview?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", childDispatchPreview?.boundaries?.directTaskCompleteAvailable],
+					["reviewer mutation", childDispatchPreview?.boundaries?.reviewerMutationAvailable],
+					["main gate mutation", childDispatchPreview?.boundaries?.mainVerificationMutationAvailable],
+					["gate mutation", childDispatchPreview?.boundaries?.releaseGateMutationAvailable],
+					["git mutation", childDispatchPreview?.boundaries?.gitMutationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: childDispatchPreview?.note ?? "Child Dispatch Preview unavailable."
+			})
+		]
+	});
+}
+function ChildDispatchProviderTargets({ childDispatchPreview }) {
+	const allowedProviders = (childDispatchPreview?.providerRecommendation?.allowedProviders?.items ?? []).map((item) => textValueFromState(item)).filter((item) => item !== "");
+	const preferredProvider = textValueFromState(childDispatchPreview?.providerRecommendation?.providerId);
+	const copyAvailable = textValueFromState(childDispatchPreview?.readiness?.copyAvailable) === "true";
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "child-dispatch-provider-targets",
+		children: [["codex", "Copy Codex Task Pack"], ["claude-code", "Copy Claude Code Task Pack"]].map(([providerId, label]) => {
+			const allowed = allowedProviders.includes(providerId);
+			const state = copyAvailable && allowed ? preferredProvider === providerId ? "ready" : "manual-preview" : "blocked";
+			return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: label }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+				className: `desktop-status ${desktopStatusClass(state)}`,
+				children: state
+			})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["provider id", textValue(providerId)],
+				["allowed by contract", textValue(allowed)],
+				["preferred in current preview", textValue(preferredProvider === providerId)],
+				["copy available", childDispatchPreview?.readiness?.copyAvailable],
+				["provider execution", childDispatchPreview?.readiness?.providerExecutionAvailable],
+				["child start", childDispatchPreview?.readiness?.actualChildDispatchAvailable]
+			] })] }, providerId);
+		})
+	});
+}
+function ChildDispatchCopyBlock({ title, state, rows, copyText }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", {
+		className: "child-dispatch-copy-card",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "desktop-mini-header desktop-recent-projects-title-row",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "copy-only"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: title })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(state)}`,
+					children: state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows }),
+			copyText === null || copyText === void 0 || copyText === "" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: `${title} 未暴露。` }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+				className: "copy-block child-dispatch-copy-block",
+				children: copyText
+			})
+		]
+	});
 }
 function DesktopAppStateStrip({ appStates }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {

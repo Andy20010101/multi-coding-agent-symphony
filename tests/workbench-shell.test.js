@@ -547,6 +547,73 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function SystemGoldenPathPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
   });
 
+  it('renders the v53 Child Dispatch Preview lane on Desktop App Home as copy-only text', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
+    const childDispatchPreview = JSON.parse(
+      await readFile('fixtures/contracts/child-dispatch-preview.codex-worker.v1.json', 'utf8')
+    );
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const supervisorRoute = READONLY_API_ROUTES.find((route) => route.id === 'goalSupervisor');
+      const viewState = createWorkbenchRenderViewState();
+
+      viewState.model = projectWorkbenchContracts({
+        goalSupervisor: readonlyRouteResult(supervisorRoute, {
+          ...createGoalSupervisorRenderPayload(),
+          childDispatchPreview
+        })
+      });
+      viewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', viewState);
+      const systemPathIndex = desktopHtml.indexOf('id="system-golden-path-panel"');
+      const panelIndex = desktopHtml.indexOf('id="child-dispatch-preview-panel"');
+      const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
+      const panelHtml = desktopHtml.slice(panelIndex, appStateIndex);
+
+      assert.notEqual(panelIndex, -1);
+      assert.equal(systemPathIndex < panelIndex, true);
+      assert.equal(panelIndex < appStateIndex, true);
+      assert.match(desktopHtml, /href="#child-dispatch-preview-panel">Child Task/u);
+      assert.match(desktopHtml, /Refresh State/u);
+      assert.match(panelHtml, /Preview Child Task/u);
+      assert.match(panelHtml, /childDispatchPreview\.v1/u);
+      assert.match(panelHtml, /Copy Child Task Pack/u);
+      assert.match(panelHtml, /Copy Codex Task Pack/u);
+      assert.match(panelHtml, /Copy Claude Code Task Pack/u);
+      assert.match(panelHtml, /Expected Result Block/u);
+      assert.match(panelHtml, /Return Through Result Intake/u);
+      assert.match(panelHtml, /resultIntakeRequest\.v1/u);
+      assert.match(panelHtml, /v51-result-intake/u);
+      assert.match(panelHtml, />provider execution<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />child start<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />goal event write<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />will append event<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.doesNotMatch(panelHtml, /<button\b|<form\b|<textarea\b/u);
+      assert.doesNotMatch(panelHtml, /Dispatch Child|Run Child|Launch Codex|Launch Claude Code|>Execute<|Run Provider|Confirm Child Result|Append Event|Mark Complete|>Push<|>Tag<|>Publish<|>Release</u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+
+    assert.match(app, /ChildDispatchPreviewPanel/u);
+    assert.match(app, /ChildDispatchCopyBlock/u);
+    assert.match(css, /\.child-dispatch-preview-panel/u);
+    assert.match(css, /\.child-dispatch-copy-grid/u);
+    assert.doesNotMatch(app.slice(app.indexOf('function ChildDispatchPreviewPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
+  });
+
   it('renders the v48 Project Launcher as a read-only recent-projects preview', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
