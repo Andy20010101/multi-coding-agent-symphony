@@ -636,6 +636,38 @@ describe('v49 thread continuation decision projection', () => {
     assert.ok(decision.requiredEvidence.includes('durable-checkpoint'));
   });
 
+  it('does not treat local source refs as durable compaction evidence', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        contextBand: 'near-limit',
+        contextUtilization: { status: 'available', usedTokens: 950, maxTokens: 1000, ratio: 0.95 },
+        resultBlockEvidence: {
+          status: 'present',
+          present: true,
+          sourceRef: '/var/folders/private/session.jsonl'
+        }
+      }),
+      activeChild: {
+        status: 'thread-active',
+        threadId: 'thread-session-1',
+        taskId: 'task-1',
+        role: 'implementer'
+      },
+      taskState: {
+        taskId: 'task-1'
+      },
+      supervisorProjection: supervisorProjectionFixture()
+    });
+    const serialized = JSON.stringify(decision);
+
+    assert.equal(decision.decision, 'blocked');
+    assert.equal(decision.reason, 'compact-checkpoint-missing');
+    assert.equal(decision.checkpointRef, null);
+    assert.ok(decision.blockedFields.includes('checkpointRef'));
+    assert.ok(decision.requiredEvidence.includes('durable-checkpoint'));
+    assert.equal(serialized.includes('/var/folders/private'), false);
+  });
+
   it('returns new-thread for stale transcript handoff advice without creating a thread', () => {
     const decision = buildThreadContinuationDecision({
       contextAdvisory: continuationContextFixture({

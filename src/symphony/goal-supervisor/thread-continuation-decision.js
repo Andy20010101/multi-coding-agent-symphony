@@ -92,15 +92,14 @@ export function buildThreadContinuationDecision({
     ...commandBoundaryBlockedFields(normalizedCommandBoundary)
   ]);
   const checkpointRef = firstNonEmptyString(
-    normalizedPendingResult.evidenceRef,
-    normalizedTaskState.checkpointRef,
-    supervisorProjection?.checkpointRef,
-    supervisorProjection?.contextStatus?.checkpointRef,
-    policyAction.checkpointRef
+    normalizeEvidenceRef(normalizedPendingResult.evidenceRef),
+    normalizeEvidenceRef(normalizedTaskState.checkpointRef),
+    normalizeEvidenceRef(supervisorProjection?.checkpointRef),
+    normalizeEvidenceRef(supervisorProjection?.contextStatus?.checkpointRef),
+    normalizeEvidenceRef(policyAction.checkpointRef)
   );
   const resultBlockEvidenceRef = firstNonEmptyString(
     normalizedContext.resultBlockEvidence.evidenceRef,
-    normalizedContext.resultBlockEvidence.sourceRef,
     normalizedContext.resultBlockEvidence.checkpointRef
   );
   const durableEvidenceRef = firstNonEmptyString(checkpointRef, resultBlockEvidenceRef);
@@ -728,17 +727,38 @@ function normalizeResultBlockEvidence(resultBlockEvidence) {
     status: firstNonEmptyString(evidence.status) ?? 'missing',
     present: evidence.present === true,
     evidenceRef: normalizeEvidenceRef(evidence.evidenceRef),
-    sourceRef: normalizeEvidenceRef(evidence.sourceRef),
+    sourceRef: null,
     checkpointRef: normalizeEvidenceRef(evidence.checkpointRef)
   };
 }
 
 function normalizeEvidenceRef(value) {
-  if (!nonEmptyString(value) || /\s/.test(value)) {
+  if (!nonEmptyString(value)) {
     return null;
   }
 
-  return value;
+  const ref = value.trim();
+  const lower = ref.toLowerCase();
+
+  if (/\s/.test(ref) ||
+      /[\x00-\x1F\x7F]/.test(ref) ||
+      ref.startsWith('/') ||
+      ref.startsWith('~') ||
+      /^[a-z]:[\\/]/i.test(ref) ||
+      ref.includes('\\') ||
+      ref === '..' ||
+      ref.startsWith('../') ||
+      ref.includes('/../') ||
+      lower.startsWith('file:') ||
+      lower.startsWith('stdout:') ||
+      lower.includes('prompt') ||
+      lower.includes('secret') ||
+      lower.endsWith('.jsonl') ||
+      lower.includes('.jsonl/')) {
+    return null;
+  }
+
+  return ref;
 }
 
 function arrayOfStrings(values) {
