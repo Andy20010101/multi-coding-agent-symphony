@@ -19333,6 +19333,7 @@ function projectSupervisorDashboard({ result, supervisor }) {
 		sessionSourceInventory,
 		contextAdvisory,
 		threadContinuationDecision,
+		supervisorEventRegistrationEligibility: supervisor.supervisorEventRegistrationEligibility ?? null,
 		goalTimeline: projectSupervisorTimeline(supervisor.goalTimeline)
 	};
 }
@@ -22116,6 +22117,29 @@ var SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
 		contract: "[ EMPTY ]",
 		reason: "NULL"
 	}),
+	eventPreview: Object.freeze({
+		contract: "supervisorEventRegistrationEligibility.v1",
+		state: "unknown",
+		reason: "eligibility contract not available",
+		readOnly: true,
+		willMutate: false,
+		canPreview: false,
+		requestMethod: "NULL",
+		route: "NULL",
+		previewPath: "NULL",
+		queryRows: Object.freeze([]),
+		missingInputs: Object.freeze(["supervisorEventRegistrationEligibility"]),
+		recommendedEvent: Object.freeze({
+			eventType: "NULL",
+			taskId: "NULL",
+			actorRole: "NULL",
+			actorId: "NULL",
+			evidenceRefs: "NULL",
+			statement: "NULL",
+			blocker: "NULL"
+		}),
+		previewResult: null
+	}),
 	commandBoundary: Object.freeze({
 		state: "disabled",
 		executionAvailable: false,
@@ -22180,6 +22204,7 @@ function projectSupervisorDashboardToWorkbenchView(dashboard, routeState = null)
 	const threadContinuationDecision = objectValue(dashboard.threadContinuationDecision);
 	const pendingResult = objectValue(dashboard.pendingResult);
 	const commandBoundary = objectValue(dashboard.commandBoundary);
+	const eventRegistrationEligibility = objectValue(dashboard.supervisorEventRegistrationEligibility);
 	const ownership = objectValue(dashboard.ownership);
 	const timeline = Array.isArray(dashboard.goalTimeline) ? dashboard.goalTimeline : [];
 	return Object.freeze({
@@ -22221,6 +22246,7 @@ function projectSupervisorDashboardToWorkbenchView(dashboard, routeState = null)
 			contract: textValue$1(pendingResult.eventToRegister ?? pendingResult.evidenceRef ?? "[ EMPTY ]"),
 			reason: textValue$1(pendingResult.parserReason ?? pendingResult.source ?? "NULL")
 		}),
+		eventPreview: supervisorEventPreviewView(eventRegistrationEligibility),
 		commandBoundary: commandBoundaryView(commandBoundary),
 		timeline: Object.freeze(timeline.length > 0 ? timeline.map((event, index) => Object.freeze({
 			index: textValue$1(event.index ?? event.eventId ?? `T-${String(index + 1).padStart(2, "0")}`),
@@ -22504,6 +22530,98 @@ function commandBoundaryView(commandBoundary) {
 		blockedMutationFamilies: Object.freeze(canonicalBoundaryFamilies(rawFamilies))
 	});
 }
+function supervisorEventPreviewView(eligibility) {
+	const previewRequest = objectValue(eligibility.previewRequest);
+	const query = objectValue(previewRequest.query);
+	const isEligible = eligibility.state === "eligible";
+	const previewPath = isEligible ? previewPathFromRequest(previewRequest) : null;
+	const previewResult = objectValue(eligibility.previewResult);
+	return Object.freeze({
+		contract: contractRefLabel(eligibility, "supervisorEventRegistrationEligibility.v1"),
+		state: textValue$1(eligibility.state ?? "unknown"),
+		reason: textValue$1(eligibility.reason ?? "eligibility contract not available"),
+		readOnly: eligibility.readOnly !== false,
+		willMutate: false,
+		canPreview: isEligible && previewRequest.method === "GET" && previewPath !== null,
+		requestMethod: textValue$1(previewRequest.method ?? "NULL"),
+		route: textValue$1(previewRequest.route ?? "NULL"),
+		previewPath: textValue$1(previewPath),
+		queryRows: Object.freeze(queryRowsFromRequest(query)),
+		missingInputs: Object.freeze(listTextValues(eligibility.missingInputs, ["none"])),
+		recommendedEvent: recommendedEventView(objectValue(eligibility.recommendedEvent)),
+		previewResult: previewResult.contractName === "goal-update-plan.v1" ? goalEventPlanPreviewResultView(previewResult) : null
+	});
+}
+function previewPathFromRequest(previewRequest) {
+	const route = typeof previewRequest.route === "string" ? previewRequest.route.trim() : "";
+	const query = objectValue(previewRequest.query);
+	if (previewRequest.method !== "GET" || route === "" || !route.startsWith("/api/goals/") || !route.endsWith("/event-plan-preview")) return null;
+	if (!hasCompletePreviewQuery(query)) return null;
+	const search = new URLSearchParams();
+	for (const [key, value] of Object.entries(query)) {
+		if (Array.isArray(value)) {
+			value.forEach((entry) => {
+				if (entry !== null && entry !== void 0 && String(entry) !== "") search.append(key, String(entry));
+			});
+			continue;
+		}
+		if (value !== null && value !== void 0 && String(value) !== "") search.append(key, String(value));
+	}
+	const queryText = search.toString();
+	return queryText === "" ? null : `${route}?${queryText}`;
+}
+function hasCompletePreviewQuery(query) {
+	return [
+		"command",
+		"task",
+		"event",
+		"actor"
+	].every((key) => hasPreviewQueryValue(query[key]));
+}
+function hasPreviewQueryValue(value) {
+	if (Array.isArray(value)) return value.some((entry) => entry !== null && entry !== void 0 && String(entry).trim() !== "");
+	return value !== null && value !== void 0 && String(value).trim() !== "";
+}
+function queryRowsFromRequest(query) {
+	return Object.entries(query).filter(([, value]) => hasPreviewQueryValue(value)).map(([key, value]) => [key, textValue$1(value)]);
+}
+function recommendedEventView(event) {
+	return Object.freeze({
+		eventType: textValue$1(event.eventType ?? "NULL"),
+		taskId: textValue$1(event.taskId ?? "NULL"),
+		actorRole: textValue$1(event.actorRole ?? "NULL"),
+		actorId: textValue$1(event.actorId ?? "NULL"),
+		evidenceRefs: textValue$1(event.evidenceRefs ?? "NULL"),
+		statement: textValue$1(event.statement ?? "NULL"),
+		blocker: textValue$1(objectSummary(event.blocker) ?? "NULL")
+	});
+}
+function goalEventPlanPreviewResultView(plan) {
+	const event = objectValue(Array.isArray(plan.proposedEvents) ? plan.proposedEvents[0] : null);
+	const actor = objectValue(plan.actor);
+	const wouldAppend = objectValue(plan.wouldAppend);
+	const validation = objectValue(plan.validation);
+	const confirm = objectValue(plan.confirm);
+	const blocker = objectValue(event.blocker);
+	return Object.freeze({
+		contract: contractRefLabel(plan, "goal-update-plan.v1"),
+		eventType: textValue$1(event.eventType ?? "NULL"),
+		taskId: textValue$1(event.taskId ?? "NULL"),
+		actorRole: textValue$1(actor.role ?? "NULL"),
+		actorId: textValue$1(actor.id ?? "NULL"),
+		evidenceRefs: textValue$1(event.evidenceRefs ?? "NULL"),
+		statement: textValue$1(event.statement ?? "NULL"),
+		blockerId: textValue$1(blocker.blockerId ?? "NULL"),
+		blockerReason: textValue$1(blocker.reason ?? "NULL"),
+		blockerSeverity: textValue$1(blocker.severity ?? "NULL"),
+		writesInDryRun: textValue$1(wouldAppend.writesInDryRun ?? plan.writesInDryRun ?? "NULL"),
+		appendTarget: textValue$1(wouldAppend.target ?? "NULL"),
+		operationId: textValue$1(plan.operationId ?? plan.planId ?? "NULL"),
+		operationStatus: textValue$1(plan.operationStatus ?? validation.status ?? "NULL"),
+		planHash: textValue$1(plan.planHash ?? "NULL"),
+		copyOnlyConfirmCommand: textValue$1(confirm.copyOnlyCommand ?? "NULL")
+	});
+}
 function defaultCommandBoundary() {
 	return Object.freeze({
 		state: "disabled",
@@ -22607,6 +22725,35 @@ var SIDEBAR_ITEMS = Object.freeze([
 	})
 ]);
 function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
+	const eventPreview = view.eventPreview ?? SUPERVISOR_WORKBENCH_VIEW.eventPreview;
+	const [previewState, setPreviewState] = (0, import_react.useState)(() => ({
+		phase: eventPreview.previewResult === null ? "idle" : "ready",
+		result: eventPreview.previewResult,
+		message: null
+	}));
+	const previewLoading = previewState.phase === "loading";
+	async function handlePreviewEventPlan() {
+		if (!eventPreview.canPreview || previewLoading) return;
+		setPreviewState({
+			phase: "loading",
+			result: null,
+			message: null
+		});
+		const result = await fetchGoalEventPlanPreview(eventPreview.previewPath);
+		if (result.ok) {
+			setPreviewState({
+				phase: "ready",
+				result: goalEventPlanPreviewResultView(result.data),
+				message: null
+			});
+			return;
+		}
+		setPreviewState({
+			phase: "failed",
+			result: null,
+			message: textValue$1(result.message ?? "preview failed")
+		});
+	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "v46-supervisor-shell",
 		"aria-labelledby": "v46-supervisor-title",
@@ -22626,6 +22773,12 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadContinuationDecisionPanel, { decision: view.threadContinuationDecision }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CommandBoundaryPanel, { boundary: view.commandBoundary }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PendingResultPanel, { pendingResult: view.pendingResult }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventPreviewLane, {
+						eventPreview,
+						previewState,
+						previewLoading,
+						onPreviewEventPlan: handlePreviewEventPlan
+					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalTimelinePanel, { timeline: view.timeline }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipPanel, { ownership: view.ownership })
 				]
@@ -22988,6 +23141,84 @@ function PendingResultPanel({ pendingResult }) {
 			["pendingResult.output", pendingResult.output === null ? "NULL" : pendingResult.output],
 			["contract", pendingResult.contract],
 			["reason", pendingResult.reason]
+		] })
+	});
+}
+function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading, onPreviewEventPlan }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
+		className: "v50-event-preview-panel",
+		odId: "supervisor-event-preview",
+		title: "Event Plan Preview",
+		meta: eventPreview.state,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+				["contract", eventPreview.contract],
+				["state", eventPreview.state],
+				["reason", eventPreview.reason],
+				["method", eventPreview.requestMethod],
+				["route", eventPreview.route],
+				["preview path", eventPreview.previewPath],
+				["readOnly", String(eventPreview.readOnly)],
+				["willMutate", String(eventPreview.willMutate)]
+			] }),
+			eventPreview.queryRows.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: eventPreview.queryRows }) : null,
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+				["event type", eventPreview.recommendedEvent.eventType],
+				["task id", eventPreview.recommendedEvent.taskId],
+				["actor role", eventPreview.recommendedEvent.actorRole],
+				["actor id", eventPreview.recommendedEvent.actorId],
+				["evidence refs", eventPreview.recommendedEvent.evidenceRefs],
+				["statement", eventPreview.recommendedEvent.statement],
+				["blocker", eventPreview.recommendedEvent.blocker]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextList, {
+				className: "v46-family-list",
+				items: eventPreview.missingInputs
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				className: "v50-preview-button",
+				disabled: !eventPreview.canPreview || previewLoading,
+				onClick: onPreviewEventPlan,
+				children: "Preview Event Plan"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventPreviewResult, { previewState })
+		]
+	});
+}
+function SupervisorEventPreviewResult({ previewState }) {
+	if (previewState.phase === "loading") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "v50-preview-status",
+		children: "preview request pending"
+	});
+	if (previewState.phase === "failed") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "v50-preview-status",
+		children: previewState.message
+	});
+	if (previewState.result === null) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+		className: "v50-preview-status",
+		children: "preview result not loaded"
+	});
+	const result = previewState.result;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "v50-preview-result",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["result contract", result.contract],
+			["event type", result.eventType],
+			["task id", result.taskId],
+			["actor role", result.actorRole],
+			["actor id", result.actorId],
+			["evidence refs", result.evidenceRefs],
+			["statement", result.statement],
+			["blocker id", result.blockerId],
+			["blocker reason", result.blockerReason],
+			["blocker severity", result.blockerSeverity],
+			["writesInDryRun", result.writesInDryRun],
+			["append target", result.appendTarget],
+			["operation id", result.operationId],
+			["operation status", result.operationStatus],
+			["planHash", result.planHash],
+			["copy-only confirm command", result.copyOnlyConfirmCommand]
 		] })
 	});
 }
