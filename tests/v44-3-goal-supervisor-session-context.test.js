@@ -9,11 +9,14 @@ import {
   CONTEXT_ADVISORY_CONTRACT_NAME,
   SESSION_CONTEXT_CONTRACT_NAME,
   SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+  THREAD_CONTINUATION_DECISION_CONTRACT_NAME,
+  THREAD_CONTINUATION_DECISION_CONTRACT_VERSION,
   buildContextAdvisory,
   buildGoalSupervisorAppReadModel,
   buildGoalSupervisorAppReadModelFromContracts,
   buildSessionContext,
-  buildSessionSourceInventory
+  buildSessionSourceInventory,
+  buildThreadContinuationDecision
 } from '../src/symphony/goal-supervisor/index.js';
 
 const FIXTURE_DIR = new URL('../fixtures/contracts/goal-supervisor/session-context/', import.meta.url);
@@ -546,6 +549,251 @@ describe('v49 context advisory projection', () => {
   });
 });
 
+describe('v49 thread continuation decision projection', () => {
+  it('returns continue for a healthy active child with recent context', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture(),
+      activeChild: {
+        status: 'thread-active',
+        threadId: 'thread-session-1',
+        taskId: 'task-1',
+        role: 'implementer',
+        ageMs: 60_000
+      },
+      taskState: {
+        taskId: 'task-1',
+        role: 'implementer',
+        status: 'in-progress'
+      },
+      supervisorProjection: supervisorProjectionFixture(),
+      supervisorPolicy: {
+        decision: 'continue',
+        reason: 'active-child-ready-to-continue'
+      },
+      generatedAt: '2026-06-12T02:00:00.000Z'
+    });
+
+    assert.equal(decision.contractName, THREAD_CONTINUATION_DECISION_CONTRACT_NAME);
+    assert.equal(decision.contractVersion, THREAD_CONTINUATION_DECISION_CONTRACT_VERSION);
+    assert.equal(decision.readOnly, true);
+    assert.equal(decision.willMutate, false);
+    assert.equal(decision.decision, 'continue');
+    assert.equal(decision.reason, 'active-child-ready-to-continue');
+    assert.equal(decision.confidence, 'known');
+    assert.equal(decision.targetRole, 'implementer');
+    assert.equal(decision.taskId, 'task-1');
+    assert.equal(decision.threadId, 'thread-session-1');
+  });
+
+  it('returns compact when context is near limit and durable evidence exists', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        contextBand: 'near-limit',
+        contextUtilization: { status: 'available', usedTokens: 950, maxTokens: 1000, ratio: 0.95 },
+        resultBlockEvidence: { status: 'present', present: true }
+      }),
+      activeChild: {
+        status: 'thread-active',
+        threadId: 'thread-session-1',
+        taskId: 'task-1',
+        role: 'implementer'
+      },
+      taskState: {
+        checkpointRef: 'result:task-1',
+        taskId: 'task-1'
+      },
+      supervisorProjection: supervisorProjectionFixture()
+    });
+
+    assert.equal(decision.decision, 'compact');
+    assert.equal(decision.reason, 'context-utilization-near-limit');
+    assert.equal(decision.checkpointRef, 'result:task-1');
+  });
+
+  it('returns new-thread for stale transcript handoff advice without creating a thread', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        staleTranscriptState: {
+          stale: true,
+          reason: 'latest-session-turn-exceeded-stale-threshold',
+          thresholdMs: 1_800_000,
+          ageMs: 3_600_000
+        }
+      }),
+      taskState: {
+        taskId: 'task-2',
+        role: 'verifier',
+        requiresHandoff: true,
+        handoffReason: 'phase-handoff-needed'
+      },
+      supervisorProjection: supervisorProjectionFixture({
+        current: { taskId: 'task-2', role: 'verifier', phase: 'verify' }
+      })
+    });
+
+    assert.equal(decision.decision, 'new-thread');
+    assert.equal(decision.reason, 'latest-session-turn-exceeded-stale-threshold');
+    assert.equal(decision.commandBoundary.executionAvailable, false);
+    assert.equal(decision.commandBoundary.copyOnly, true);
+  });
+
+  it('returns wait when an active child or tool call is still running with recent session signal', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        latestToolCall: {
+          name: 'Bash',
+          status: 'running',
+          updatedAt: '2026-06-12T01:59:30.000Z'
+        }
+      }),
+      activeChild: {
+        status: 'running',
+        threadId: 'thread-running',
+        taskId: 'task-3',
+        role: 'worker',
+        ageMs: 120_000
+      },
+      supervisorProjection: supervisorProjectionFixture({
+        current: { taskId: 'task-3', role: 'worker', phase: 'implement' }
+      })
+    });
+
+    assert.equal(decision.decision, 'wait');
+    assert.equal(decision.reason, 'active-tool-call-in-progress');
+    assert.deepEqual(decision.waitPolicy, {
+      activeLeaseAgeMs: 120_000,
+      staleThresholdMs: 1_800_000,
+      latestSignalAt: '2026-06-12T01:59:30.000Z'
+    });
+  });
+
+  it('returns blocked for missing transcript without another source of truth', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        transcriptAvailability: 'missing',
+        missingTranscriptState: {
+          missing: true,
+          reason: 'no-readable-session-transcript'
+        },
+        policyInputs: {
+          transcriptAvailability: 'missing',
+          threadId: null
+        }
+      }),
+      supervisorProjection: supervisorProjectionFixture()
+    });
+
+    assert.equal(decision.decision, 'blocked');
+    assert.equal(decision.reason, 'no-readable-session-transcript');
+    assert.equal(decision.confidence, 'unknown');
+    assert.ok(decision.blockedFields.includes('transcriptAvailability'));
+  });
+
+  it('returns checkpoint when pending result evidence needs registration', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture(),
+      pendingResult: {
+        status: 'pending',
+        evidenceRef: 'result:task-4',
+        parserReason: 'result-awaits-registration'
+      },
+      taskState: {
+        taskId: 'task-4',
+        role: 'verifier'
+      },
+      supervisorProjection: supervisorProjectionFixture({
+        current: { taskId: 'task-4', role: 'verifier', phase: 'verify' }
+      })
+    });
+
+    assert.equal(decision.decision, 'checkpoint');
+    assert.equal(decision.reason, 'result-awaits-registration');
+    assert.equal(decision.checkpointRef, 'result:task-4');
+    assert.ok(decision.requiredEvidence.includes('pending-result-registration'));
+  });
+
+  it('returns recover-drift when supervisor and context state disagree', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        mismatchList: ['daemon-supervisor-session-state-disagree']
+      }),
+      supervisorProjection: supervisorProjectionFixture({
+        route: {
+          state: 'dispatchable',
+          current: { taskId: 'task-5', role: 'worker', phase: 'implement' },
+          mismatchList: ['pr-state-disagrees-with-supervisor']
+        }
+      })
+    });
+
+    assert.equal(decision.decision, 'recover-drift');
+    assert.equal(decision.reason, 'supervisor-context-drift-detected');
+    assert.ok(decision.mismatchList.includes('daemon-supervisor-session-state-disagree'));
+    assert.ok(decision.mismatchList.includes('pr-state-disagrees-with-supervisor'));
+  });
+
+  it('keeps command boundary read-only and does not expose executable previews or raw source payloads', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: {
+        ...continuationContextFixture(),
+        rawTranscript: 'SECRET_TOKEN command stdout prompt text raw JSONL',
+        resultBlockEvidence: {
+          status: 'present',
+          present: true,
+          evidenceRef: 'stdout: SECRET_TOKEN command stdout'
+        }
+      },
+      activeChild: {
+        status: 'thread-active',
+        threadId: 'thread-secret',
+        taskId: 'task-secret',
+        role: 'worker'
+      },
+      supervisorProjection: supervisorProjectionFixture({
+        rawPayload: 'SECRET_TOKEN raw supervisor payload'
+      }),
+      sourceContracts: [
+        {
+          contractName: 'raw-source-contract.v1',
+          contractVersion: 1,
+          generatedAt: '2026-06-12T01:59:00.000Z',
+          readOnly: true,
+          rawPayload: 'SECRET_TOKEN local path /var/folders/private/session.jsonl'
+        }
+      ],
+      commandBoundary: {
+        state: 'confirm-required',
+        safeCommandPreview: 'goal dispatch task-secret worker --real',
+        confirmation: {
+          taskId: 'task-secret'
+        }
+      }
+    });
+    const serialized = JSON.stringify(decision);
+
+    assert.equal(decision.decision, 'blocked');
+    assert.equal(decision.reason, 'confirm-required-command-missing-context');
+    assert.equal(decision.commandBoundary.readOnly, true);
+    assert.equal(decision.commandBoundary.executionAvailable, false);
+    assert.equal(decision.commandBoundary.copyOnly, true);
+    assert.equal(Object.hasOwn(decision.commandBoundary, 'safeCommandPreview'), false);
+    assert.ok(decision.blockedFields.includes('planHash'));
+    assert.equal(serialized.includes('goal dispatch'), false);
+    assert.equal(serialized.includes('SECRET_TOKEN'), false);
+    assert.equal(serialized.includes('command stdout'), false);
+    assert.equal(serialized.includes('prompt text'), false);
+    assert.equal(serialized.includes('raw JSONL'), false);
+    assert.equal(serialized.includes('/var/folders/private'), false);
+    assert.deepEqual(decision.sourceContracts.find((ref) => ref.contractName === 'raw-source-contract.v1'), {
+      contractName: 'raw-source-contract.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-12T01:59:00.000Z',
+      readOnly: true,
+      threadId: null
+    });
+  });
+});
+
 function assertNoRawTranscriptText(value) {
   const serialized = JSON.stringify(value);
 
@@ -554,6 +802,92 @@ function assertNoRawTranscriptText(value) {
   assert.equal(serialized.includes('RESULT_BLOCK_START'), false);
   assert.equal(serialized.includes('RESULT_BLOCK_END'), false);
   assert.equal(serialized.includes('pnpm check'), false);
+}
+
+function continuationContextFixture(overrides = {}) {
+  return {
+    contractName: CONTEXT_ADVISORY_CONTRACT_NAME,
+    contractVersion: 1,
+    generatedAt: '2026-06-12T01:59:00.000Z',
+    readOnly: true,
+    willMutate: false,
+    sessionContextRef: {
+      contractName: SESSION_CONTEXT_CONTRACT_NAME,
+      contractVersion: 1,
+      generatedAt: '2026-06-12T01:58:00.000Z',
+      readOnly: true,
+      threadId: 'thread-session-1'
+    },
+    inventoryRef: {
+      contractName: SESSION_SOURCE_INVENTORY_CONTRACT_NAME,
+      contractVersion: 1,
+      generatedAt: '2026-06-12T01:57:00.000Z',
+      readOnly: true,
+      threadId: null
+    },
+    transcriptAvailability: 'readable',
+    contextBand: 'low',
+    contextUtilization: { status: 'available', usedTokens: 100, maxTokens: 1000, ratio: 0.1 },
+    latestToolCall: {
+      name: 'Bash',
+      status: 'completed',
+      updatedAt: '2026-06-12T01:58:30.000Z'
+    },
+    latestTurnState: {
+      status: 'completed',
+      role: 'assistant',
+      updatedAt: '2026-06-12T01:59:00.000Z'
+    },
+    staleTranscriptState: {
+      stale: false,
+      reason: null,
+      thresholdMs: 1_800_000,
+      ageMs: 60_000
+    },
+    missingTranscriptState: {
+      missing: false,
+      reason: null
+    },
+    resultBlockEvidence: {
+      status: 'missing',
+      present: false
+    },
+    blockedFields: [],
+    mismatchList: [],
+    policyInputs: {
+      threadId: 'thread-session-1',
+      transcriptAvailability: 'readable'
+    },
+    ...overrides
+  };
+}
+
+function supervisorProjectionFixture(overrides = {}) {
+  return {
+    contractName: 'goal-supervisor-core-projection.v1',
+    contractVersion: 1,
+    generatedAt: '2026-06-12T01:59:00.000Z',
+    readOnly: true,
+    willMutate: false,
+    current: {
+      taskId: 'task-1',
+      role: 'implementer',
+      phase: 'implement'
+    },
+    route: {
+      state: 'active',
+      current: {
+        taskId: 'task-1',
+        role: 'implementer',
+        phase: 'implement'
+      }
+    },
+    progress: {
+      state: 'recent-progress',
+      reason: 'active-thread-healthy'
+    },
+    ...overrides
+  };
 }
 
 async function temporaryDirectory(t) {

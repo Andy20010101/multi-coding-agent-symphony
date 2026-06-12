@@ -8,3 +8,4 @@ export * from './result-protocol.js';
 export * from './route-progress.js';
 export * from './session-context.js';
 export * from './state-writer.js';
+export * from './thread-continuation-decision.js';
