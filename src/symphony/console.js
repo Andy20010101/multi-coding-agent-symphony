@@ -2944,7 +2944,7 @@ async function writeResultIntakeConfirmResponse({
         supervisor: {
           method: 'GET',
           route: `/api/goals/${encodeURIComponent(resolvedGoalId)}/supervisor`,
-          pendingResultProjectionAvailable: false,
+          pendingResultProjectionAvailable: true,
           projectionPr: 'PR-3'
         }
       },

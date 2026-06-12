@@ -148,6 +148,8 @@ const LOCAL_HIDDEN_PATH_SEGMENTS = new Set([
   '.symphony'
 ]);
 const RAW_TRANSCRIPT_PATTERN = /\braw[\s_-]*transcript\b/iu;
+const RAW_MODEL_OUTPUT_PATTERN = /\b(?:raw[\s_-]*model[\s_-]*output|model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file)\b/iu;
+const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
 
 export function buildSupervisorEventRegistrationEligibility({
   goalId = null,
@@ -194,6 +196,7 @@ export function buildSupervisorEventRegistrationEligibility({
     sourceContracts: sourceContractRefs({
       sourceContracts,
       threadContinuationDecision,
+      pendingResult,
       generatedAt: effectiveGeneratedAt,
       threadId: result.threadId
     }),
@@ -220,12 +223,18 @@ export function buildSupervisorEventRegistrationEligibility({
   }
 
   if (result.status !== 'pending') {
+    if (result.status !== 'missing') {
+      return {
+        ...base,
+        state: 'blocked',
+        reason: safeReason(result.reason, `pending-result-${result.status}`)
+      };
+    }
+
     return {
       ...base,
       state: 'not-applicable',
-      reason: result.status === 'missing'
-        ? 'no-pending-result-registration'
-        : safeReason(result.reason, `pending-result-${result.status}`)
+      reason: 'no-pending-result-registration'
     };
   }
 
@@ -273,6 +282,14 @@ export function buildSupervisorEventRegistrationEligibility({
       state: 'blocked',
       reason: 'required-inputs-missing',
       missingInputs
+    };
+  }
+
+  if (result.eventCandidateState !== null && result.eventCandidateState !== 'eligible') {
+    return {
+      ...base,
+      state: 'blocked',
+      reason: safeReason(result.reason, 'pending-result-event-candidate-blocked')
     };
   }
 
@@ -332,6 +349,7 @@ function normalizePendingResult({
   goalId
 }) {
   const pending = isPlainObject(pendingResult) ? pendingResult : {};
+  const eventCandidate = isPlainObject(pending.eventCandidate) ? pending.eventCandidate : {};
   const record = firstPlainObject(
     pendingResultRecord,
     pending.result,
@@ -339,27 +357,44 @@ function normalizePendingResult({
     pending.pendingResult?.result,
     pending.pendingResult?.record
   );
+  const v51PendingResult = isV51PendingResult(pending);
   const eventType = safeEventType(firstNonEmptyString(
     record?.eventToRegister,
     pending.eventToRegister,
+    eventCandidate.eventType,
     taskState.eventToRegister
   ));
   const role = safeRole(firstNonEmptyString(
     record?.role,
     pending.role,
+    pending.workerRole,
     taskState.role,
     inferRoleForEvent(eventType)
   ));
   const actorRole = actorRoleFor({ eventType, role });
   const evidenceCandidates = [
+    record?.evidenceRefs,
+    pending.evidenceRefs,
+    eventCandidate.evidenceRefs,
     record?.evidenceRef,
     pending.evidenceRef,
     taskState.evidenceRef
-  ].filter(nonEmptyString);
+  ].filter((value) => value !== null && value !== undefined);
+  const eventCandidateState = safeReason(eventCandidate.state);
 
   return {
-    status: firstNonEmptyString(pending.status, record === null ? null : 'pending', 'missing'),
-    reason: safeReason(firstNonEmptyString(pending.reason, pending.parserReason)),
+    status: normalizePendingResultStatus({
+      pending,
+      record,
+      eventCandidate,
+      v51PendingResult
+    }),
+    reason: safeReason(firstNonEmptyString(
+      pending.reason,
+      pending.parserReason,
+      eventCandidate.reason,
+      Array.isArray(pending.blockedReasons) ? pending.blockedReasons[0] : null
+    )),
     goalId: safeToken(firstNonEmptyString(record?.goalId, pending.goalId, goalId)),
     taskId: safeToken(firstNonEmptyString(record?.taskId, pending.taskId, taskState.taskId, decision.taskId)),
     threadId: safeToken(firstNonEmptyString(record?.threadId, pending.threadId, decision.threadId, taskState.threadId)),
@@ -376,11 +411,49 @@ function normalizePendingResult({
     evidenceRefs: normalizeEvidenceRefs(evidenceCandidates.length > 0
       ? evidenceCandidates
       : [decision.checkpointRef]),
-    statement: safeStatement(firstNonEmptyString(record?.statement, pending.statement)),
+    statement: safeStatement(firstNonEmptyString(
+      record?.statement,
+      pending.statement,
+      pending.sanitizedSummary?.summary
+    )),
     branch: safeOptionalRef(firstNonEmptyString(record?.branch, pending.branch, taskState.branch)),
     commit: safeOptionalRef(firstNonEmptyString(record?.headCommit, record?.commit, pending.headCommit, pending.commit, taskState.commit)),
-    blocker: normalizeBlocker(firstPlainObject(record?.blocker, pending.blocker, taskState.blocker))
+    blocker: normalizeBlocker(firstPlainObject(
+      record?.blocker,
+      pending.blocker,
+      eventCandidate.blocker,
+      isPlainObject(pending.sanitizedSummary) && nonEmptyString(pending.sanitizedSummary.blockerReason)
+        ? { reason: pending.sanitizedSummary.blockerReason }
+        : null,
+      taskState.blocker
+    )),
+    eventCandidateState,
+    requiresControlledEvidence: v51PendingResult ||
+      eventCandidate.requiresEvidence === true ||
+      UPDATE_EVENTS_REQUIRING_EVIDENCE.has(eventType)
   };
+}
+
+function isV51PendingResult(pendingResult) {
+  return pendingResult.contractName === 'pendingResult.v1' ||
+    (nonEmptyString(pendingResult.state) && isPlainObject(pendingResult.eventCandidate));
+}
+
+function normalizePendingResultStatus({
+  pending,
+  record,
+  eventCandidate,
+  v51PendingResult
+}) {
+  if (v51PendingResult) {
+    if (pending.state === 'consumed' || pending.state === 'superseded') {
+      return pending.state;
+    }
+
+    return 'pending';
+  }
+
+  return firstNonEmptyString(pending.status, record === null ? null : 'pending', 'missing');
 }
 
 function routeForEvent(eventType) {
@@ -517,6 +590,10 @@ function missingInputsFor({
     }
   }
 
+  if (result.requiresControlledEvidence === true && result.evidenceRefs.length === 0) {
+    missing.push('evidenceRef');
+  }
+
   return uniqueStrings(missing);
 }
 
@@ -600,6 +677,7 @@ function buildBoundaries(commandBoundary) {
 function sourceContractRefs({
   sourceContracts,
   threadContinuationDecision,
+  pendingResult,
   generatedAt,
   threadId
 }) {
@@ -633,6 +711,7 @@ function sourceContractRefs({
       readOnly: true,
       threadId: null
     },
+    ...arrayOfContractRefs(pendingResultSourceContracts(pendingResult)),
     ...arrayOfContractRefs(threadContinuationDecision?.sourceContracts),
     ...arrayOfContractRefs(sourceContracts)
   ];
@@ -640,13 +719,8 @@ function sourceContractRefs({
 
   return refs
     .filter((ref) => isPlainObject(ref) && nonEmptyString(ref.contractName))
-    .map((ref) => ({
-      contractName: ref.contractName,
-      contractVersion: Number.isInteger(ref.contractVersion) ? ref.contractVersion : null,
-      generatedAt: safeTimestamp(ref.generatedAt),
-      readOnly: ref.readOnly === true,
-      threadId: safeToken(ref.threadId)
-    }))
+    .map(normalizeSourceContractRef)
+    .filter((ref) => ref !== null)
     .filter((ref) => {
       const key = `${ref.contractName}:${ref.contractVersion ?? 'missing'}:${ref.generatedAt ?? 'missing'}:${ref.threadId ?? 'missing'}`;
 
@@ -659,12 +733,40 @@ function sourceContractRefs({
     });
 }
 
+function pendingResultSourceContracts(pendingResult) {
+  const pending = isPlainObject(pendingResult) ? pendingResult : {};
+
+  if (!isV51PendingResult(pending)) {
+    return [];
+  }
+
+  return [
+    {
+      contractName: 'pendingResult.v1',
+      contractVersion: Number.isInteger(pending.contractVersion) ? pending.contractVersion : 1,
+      generatedAt: safeTimestamp(pending.createdAt),
+      readOnly: true,
+      threadId: safeToken(pending.threadId)
+    },
+    ...arrayOfContractRefs(pending.sourceContracts).map((contract) => ({
+      ...contract,
+      readOnly: true
+    }))
+  ];
+}
+
 function arrayOfContractRefs(sourceContracts) {
   return (Array.isArray(sourceContracts) ? sourceContracts : [])
     .map((contract) => {
       if (typeof contract === 'string') {
+        const contractName = safeSourceContractName(contract);
+
+        if (contractName === null) {
+          return null;
+        }
+
         return {
-          contractName: contract,
+          contractName,
           contractVersion: null,
           generatedAt: null,
           readOnly: null,
@@ -677,7 +779,42 @@ function arrayOfContractRefs(sourceContracts) {
     .filter((contract) => contract !== null);
 }
 
+function normalizeSourceContractRef(ref) {
+  const contractName = safeSourceContractName(ref.contractName);
+
+  if (contractName === null) {
+    return null;
+  }
+
+  return {
+    contractName,
+    contractVersion: Number.isInteger(ref.contractVersion) ? ref.contractVersion : null,
+    generatedAt: safeTimestamp(ref.generatedAt),
+    readOnly: ref.readOnly === true,
+    threadId: safeToken(ref.threadId)
+  };
+}
+
+function safeSourceContractName(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return SOURCE_CONTRACT_NAME_PATTERN.test(trimmed) &&
+    !hasUnsafeText(trimmed) &&
+    !hasUnsafePathShape(trimmed) &&
+    !hasUnsafeLocalEvidencePath(trimmed)
+    ? trimmed
+    : null;
+}
+
 function isContinuationBlocked(decision) {
+  if (decision.decision === 'checkpoint') {
+    return false;
+  }
+
   return decision.decision === 'blocked' ||
     decision.reason === 'no-readable-session-transcript' ||
     decision.reason === 'transcript-missing-with-active-lease' ||
@@ -686,7 +823,45 @@ function isContinuationBlocked(decision) {
 }
 
 function normalizeEvidenceRefs(values) {
-  return uniqueStrings(values.map(safeEvidenceRef));
+  return uniqueStrings(flattenEvidenceRefValues(values).map(safeEvidenceRef));
+}
+
+function flattenEvidenceRefValues(values) {
+  const refs = [];
+
+  for (const value of Array.isArray(values) ? values : []) {
+    if (Array.isArray(value)) {
+      refs.push(...flattenEvidenceRefValues(value));
+      continue;
+    }
+
+    if (isPlainObject(value)) {
+      refs.push(stringifyEvidenceRef(value));
+      continue;
+    }
+
+    refs.push(value);
+  }
+
+  return refs;
+}
+
+function stringifyEvidenceRef(evidenceRef) {
+  if (!isPlainObject(evidenceRef) ||
+      !nonEmptyString(evidenceRef.kind) ||
+      !nonEmptyString(evidenceRef.ref)) {
+    return null;
+  }
+
+  if (evidenceRef.kind === 'repo-doc') {
+    return evidenceRef.ref;
+  }
+
+  if (evidenceRef.kind === 'artifact-ref') {
+    return `artifact-ref:${evidenceRef.ref}`;
+  }
+
+  return null;
 }
 
 function safeEvidenceRef(value) {
@@ -837,14 +1012,22 @@ function safeTimestamp(value) {
 
 function hasUnsafeText(value) {
   const lower = value.toLowerCase();
+  const compact = lower.replace(/[^a-z0-9]/gu, '');
 
   return /[\x00-\x1F\x7F]/u.test(value) ||
     RAW_TRANSCRIPT_PATTERN.test(value) ||
+    RAW_MODEL_OUTPUT_PATTERN.test(value) ||
     lower.includes('jsonl') ||
     lower.includes('prompt') ||
     lower.includes('stdout') ||
     lower.includes('secret') ||
-    lower.startsWith('file:');
+    lower.startsWith('file:') ||
+    compact.includes('rawtranscript') ||
+    compact.includes('rawmodeloutput') ||
+    compact.includes('providersession') ||
+    compact.includes('sessionlog') ||
+    compact.includes('sessionfile') ||
+    compact.includes('modeloutput');
 }
 
 function hasUnsafeLocalEvidencePath(value) {

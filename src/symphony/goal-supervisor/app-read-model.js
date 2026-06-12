@@ -23,6 +23,19 @@ export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME = 'goal-supervisor-app
 export const GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_VERSION = 1;
 export { GOAL_SUPERVISOR_APP_COMMAND_BOUNDARY_DEFAULT } from './policy.js';
 
+const PENDING_RESULT_CONTRACT_NAME = 'pendingResult.v1';
+const RESULT_EVIDENCE_ESCROW_CONTRACT_NAME = 'resultEvidenceEscrow.v1';
+const PENDING_RESULT_STATES = new Set(['available', 'blocked', 'consumed', 'superseded']);
+const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
+const UNSAFE_SOURCE_CONTRACT_TEXT_PATTERN = /\b(?:raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log|session[\s_-]*file|model[\s_-]*output)\b/iu;
+const PENDING_RESULT_UPDATE_EVENTS = new Set([
+  'worker.evidence-recorded',
+  'worker.self-check-passed',
+  'worker.self-check-failed',
+  'blocker.opened',
+  'blocker.resolved'
+]);
+
 export function buildGoalSupervisorAppReadModel({
   goalId = null,
   title = null,
@@ -50,7 +63,8 @@ export function buildGoalSupervisorAppReadModel({
   contextAdvisory = null,
   threadContinuationDecision = null,
   activePr = null,
-  branch = null
+  branch = null,
+  pendingResultState = null
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
     state,
@@ -71,11 +85,13 @@ export function buildGoalSupervisorAppReadModel({
   const normalizedContext = normalizeContextStatus(sessionContext, projection);
   const normalizedPendingResult = normalizePendingResult({
     projection,
-    routeInput: projection.routeInput
+    routeInput: projection.routeInput,
+    pendingResultState
   });
   const pendingResultRecord = pendingResultRecordFromProjection({
     projection,
-    routeInput: projection.routeInput
+    routeInput: projection.routeInput,
+    pendingResultState
   });
   const normalizedActiveLease = normalizeActiveLease({
     active: state?.active ?? active ?? projection.routeInput?.activeLease,
@@ -137,7 +153,8 @@ export function buildGoalSupervisorAppReadModel({
     sourceContracts: [
       ...safeSourceContracts(sourceContracts),
       normalizedContextAdvisory,
-      normalizedThreadContinuationDecision
+      normalizedThreadContinuationDecision,
+      ...pendingResultSourceContracts(normalizedPendingResult)
     ],
     generatedAt
   });
@@ -205,7 +222,7 @@ function buildGoalSnapshot({
     activeRole: nonEmptyString(current?.role) ? current.role : null,
     releaseReadiness: projection.route?.state === 'complete' ? 'ready' : 'not-ready',
     blockerCount,
-    sourceContracts: Array.isArray(sourceContracts) ? sourceContracts.filter(nonEmptyString) : [],
+    sourceContracts: safeSourceContractNames(sourceContracts),
     generatedAt
   };
 }
@@ -279,8 +296,18 @@ function normalizeActiveLease({
 
 function normalizePendingResult({
   projection,
-  routeInput
+  routeInput,
+  pendingResultState = null
 }) {
+  const contracted = firstPendingResultContract(
+    pendingResultState,
+    routeInput?.pendingResult
+  );
+
+  if (contracted !== null) {
+    return normalizeContractedPendingResult(contracted);
+  }
+
   const intake = routeInput?.resultIntake ?? routeInput?.resultAvailability ?? null;
   const projected = projection.route?.pendingResult ?? projection.progress?.pendingResult ?? null;
   const record = intake?.record ?? projected?.result ?? null;
@@ -325,13 +352,292 @@ function normalizePendingResult({
 
 function pendingResultRecordFromProjection({
   projection,
-  routeInput
+  routeInput,
+  pendingResultState = null
 }) {
+  const contracted = firstPendingResultContract(
+    pendingResultState,
+    routeInput?.pendingResult
+  );
+
+  if (contracted !== null) {
+    return pendingResultRecordFromContract(contracted);
+  }
+
   const intake = routeInput?.resultIntake ?? routeInput?.resultAvailability ?? null;
   const projected = projection.route?.pendingResult ?? projection.progress?.pendingResult ?? null;
   const record = intake?.record ?? projected?.result ?? null;
 
   return isPlainObject(record) ? record : null;
+}
+
+function firstPendingResultContract(...values) {
+  return values.find((value) => (
+    isPlainObject(value) &&
+    value.contractName === PENDING_RESULT_CONTRACT_NAME
+  )) ?? null;
+}
+
+function normalizeContractedPendingResult(pendingResult) {
+  const evidenceRefs = normalizeControlledEvidenceRefs(pendingResult.evidenceRefs);
+  const eventCandidate = normalizePendingResultEventCandidate(
+    pendingResult.eventCandidate,
+    evidenceRefs
+  );
+  const state = PENDING_RESULT_STATES.has(pendingResult.state)
+    ? pendingResult.state
+    : 'blocked';
+  const status = pendingResultRegistrationStatus({
+    state,
+    eventCandidate
+  });
+  const evidenceRef = evidenceRefs
+    .map(stringifyControlledEvidenceRef)
+    .find(nonEmptyString) ?? null;
+
+  return {
+    contractName: PENDING_RESULT_CONTRACT_NAME,
+    contractVersion: Number.isInteger(pendingResult.contractVersion) ? pendingResult.contractVersion : null,
+    goalId: firstNonEmptyString(pendingResult.goalId),
+    taskId: firstNonEmptyString(pendingResult.taskId),
+    workerRole: firstNonEmptyString(pendingResult.workerRole),
+    source: firstNonEmptyString(pendingResult.source),
+    status,
+    state,
+    escrowRef: safeDisplayRef(pendingResult.escrowRef),
+    sanitizedSummary: normalizeSanitizedSummary(pendingResult.sanitizedSummary),
+    evidenceRefs,
+    eventCandidate,
+    eventToRegister: eventCandidate.eventType,
+    evidenceRef,
+    parserReason: firstNonEmptyString(eventCandidate.reason, pendingResult.blockedReasons?.[0], 'pending-result-v1'),
+    stale: false,
+    missing: false,
+    resultId: safeDisplayRef(pendingResult.escrowRef),
+    blockedReasons: uniqueStrings(Array.isArray(pendingResult.blockedReasons) ? pendingResult.blockedReasons : []),
+    sourceContracts: normalizePendingResultSourceContracts(pendingResult.sourceContracts),
+    boundaries: normalizePendingResultBoundaries(pendingResult.boundaries)
+  };
+}
+
+function pendingResultRecordFromContract(pendingResult) {
+  const evidenceRefs = normalizeControlledEvidenceRefs(pendingResult.evidenceRefs);
+  const eventCandidate = normalizePendingResultEventCandidate(
+    pendingResult.eventCandidate,
+    evidenceRefs
+  );
+  const evidenceRef = evidenceRefs
+    .map(stringifyControlledEvidenceRef)
+    .find(nonEmptyString) ?? null;
+  const summary = normalizeSanitizedSummary(pendingResult.sanitizedSummary);
+
+  return {
+    contractName: PENDING_RESULT_CONTRACT_NAME,
+    contractVersion: Number.isInteger(pendingResult.contractVersion) ? pendingResult.contractVersion : null,
+    goalId: firstNonEmptyString(pendingResult.goalId),
+    taskId: firstNonEmptyString(pendingResult.taskId),
+    role: firstNonEmptyString(pendingResult.workerRole),
+    eventToRegister: eventCandidate.eventType,
+    evidenceRef,
+    evidenceRefs,
+    statement: firstNonEmptyString(summary.summary),
+    blocker: eventCandidate.blocker,
+    sourceContracts: normalizePendingResultSourceContracts(pendingResult.sourceContracts),
+    escrowRef: safeDisplayRef(pendingResult.escrowRef)
+  };
+}
+
+function pendingResultRegistrationStatus({
+  state,
+  eventCandidate
+}) {
+  if (state === 'consumed' || state === 'superseded') {
+    return state;
+  }
+
+  if (!PENDING_RESULT_UPDATE_EVENTS.has(eventCandidate.eventType) &&
+      eventCandidate.command !== 'review' &&
+      eventCandidate.command !== 'gate') {
+    return 'invalid';
+  }
+
+  return 'pending';
+}
+
+function normalizeSanitizedSummary(summary) {
+  const source = isPlainObject(summary) ? summary : {};
+
+  return stripEmptyObject({
+    status: safeSummaryText(source.status) ?? 'unknown',
+    summary: safeSummaryText(source.summary),
+    changedFiles: safeSummaryStrings(source.changedFiles, safeDisplayRef),
+    validationCommands: safeSummaryStrings(source.validationCommands, safeSummaryText),
+    evidenceRefs: normalizeControlledEvidenceRefs(source.evidenceRefs),
+    blockerReason: safeSummaryText(source.blockerReason),
+    risks: safeSummaryStrings(source.risks, safeSummaryText),
+    blockers: safeSummaryStrings(source.blockers, safeSummaryText)
+  });
+}
+
+function normalizePendingResultEventCandidate(candidate, fallbackEvidenceRefs) {
+  const event = isPlainObject(candidate) ? candidate : {};
+  const evidenceRefs = normalizeControlledEvidenceRefs(event.evidenceRefs);
+  const eventType = firstNonEmptyString(event.eventType);
+
+  return stripEmptyObject({
+    eventType,
+    taskId: firstNonEmptyString(event.taskId),
+    workerRole: firstNonEmptyString(event.workerRole),
+    command: firstNonEmptyString(event.command),
+    commandName: firstNonEmptyString(event.commandName),
+    requiresEvidence: event.requiresEvidence === true,
+    evidenceRefs: evidenceRefs.length > 0 ? evidenceRefs : fallbackEvidenceRefs,
+    blocker: normalizePendingResultBlocker(event.blocker),
+    willAppendGoalEvent: false,
+    state: firstNonEmptyString(event.state, 'not-applicable'),
+    reason: firstNonEmptyString(event.reason)
+  });
+}
+
+function normalizePendingResultBlocker(blocker) {
+  const source = isPlainObject(blocker) ? blocker : {};
+  const normalized = stripEmptyObject({
+    blockerId: firstNonEmptyString(source.blockerId),
+    reason: safeSummaryText(source.reason),
+    severity: safeSummaryText(source.severity)
+  });
+
+  return Object.keys(normalized).length === 0 ? null : normalized;
+}
+
+function normalizeControlledEvidenceRefs(evidenceRefs) {
+  return (Array.isArray(evidenceRefs) ? evidenceRefs : [])
+    .map(normalizeControlledEvidenceRef)
+    .filter((evidenceRef) => evidenceRef !== null);
+}
+
+function normalizeControlledEvidenceRef(evidenceRef) {
+  if (!isPlainObject(evidenceRef)) {
+    return null;
+  }
+
+  const kind = firstNonEmptyString(evidenceRef.kind);
+  const ref = safeDisplayRef(evidenceRef.ref);
+  const label = safeSummaryText(evidenceRef.label);
+
+  if (!['repo-doc', 'artifact-ref', 'commit', 'command-evidence', 'external-note'].includes(kind) ||
+      ref === null ||
+      label === null) {
+    return null;
+  }
+
+  if (kind === 'repo-doc' && !ref.startsWith('docs/plans/')) {
+    return null;
+  }
+
+  return { kind, ref, label };
+}
+
+function stringifyControlledEvidenceRef(evidenceRef) {
+  if (!isPlainObject(evidenceRef)) {
+    return null;
+  }
+
+  if (evidenceRef.kind === 'repo-doc') {
+    return evidenceRef.ref;
+  }
+
+  if (evidenceRef.kind === 'artifact-ref') {
+    return `artifact-ref:${evidenceRef.ref}`;
+  }
+
+  return null;
+}
+
+function normalizePendingResultSourceContracts(sourceContracts) {
+  return (Array.isArray(sourceContracts) ? sourceContracts : [])
+    .map((contract) => {
+      if (!isPlainObject(contract)) {
+        return null;
+      }
+
+      const contractName = safeContractName(contract.contractName);
+
+      if (contractName === null) {
+        return null;
+      }
+
+      return stripEmptyObject({
+        contractName,
+        contractVersion: Number.isInteger(contract.contractVersion) ? contract.contractVersion : null,
+        escrowRef: safeDisplayRef(contract.escrowRef),
+        previewPlanHash: safeHash(contract.previewPlanHash),
+        generatedAt: safeTimestamp(contract.generatedAt),
+        readOnly: true
+      });
+    })
+    .filter((contract) => contract !== null);
+}
+
+function pendingResultSourceContracts(pendingResult) {
+  if (!isPlainObject(pendingResult) || pendingResult.contractName !== PENDING_RESULT_CONTRACT_NAME) {
+    return [];
+  }
+
+  return [
+    {
+      contractName: PENDING_RESULT_CONTRACT_NAME,
+      contractVersion: pendingResult.contractVersion,
+      readOnly: true
+    },
+    ...normalizePendingResultSourceContracts(pendingResult.sourceContracts).map((contract) => ({
+      contractName: contract.contractName ?? RESULT_EVIDENCE_ESCROW_CONTRACT_NAME,
+      contractVersion: contract.contractVersion ?? null,
+      readOnly: true
+    }))
+  ];
+}
+
+function normalizePendingResultBoundaries(boundaries) {
+  return {
+    providerExecutionAvailable: false,
+    childDispatchAvailable: false,
+    directGoalEventAppendAvailable: false,
+    untrustedTranscriptProjectionAvailable: false,
+    frontendLocalFileReadAvailable: false,
+    reviewerMutationAvailable: false,
+    mainVerificationMutationAvailable: false,
+    releaseGateMutationAvailable: false,
+    gitMutationAvailable: false,
+    githubReleaseAutomationAvailable: false,
+    projectionAppendsGoalEvent: false
+  };
+}
+
+function safeSummaryStrings(values, sanitizer) {
+  return (Array.isArray(values) ? values : [])
+    .map((value) => sanitizer(value))
+    .filter(nonEmptyString);
+}
+
+function safeSummaryText(value) {
+  const ref = safeDisplayRef(value);
+
+  if (ref === null || /raw[\s_-]*transcript|raw[\s_-]*model[\s_-]*output|provider[\s_-]*session|session[\s_-]*log/iu.test(ref)) {
+    return null;
+  }
+
+  return ref;
+}
+
+function safeHash(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return /^sha256:[a-f0-9]{64}$/u.test(trimmed) ? trimmed : null;
 }
 
 function normalizeCurrentGate({
@@ -641,8 +947,14 @@ function normalizeContractRefs(sourceContracts) {
 
 function normalizeContractRef(contract) {
   if (typeof contract === 'string') {
+    const contractName = safeContractName(contract);
+
+    if (contractName === null) {
+      return null;
+    }
+
     return {
-      contractName: contract,
+      contractName,
       contractVersion: null,
       generatedAt: null,
       readOnly: null,
@@ -654,12 +966,18 @@ function normalizeContractRef(contract) {
     return null;
   }
 
+  const contractName = safeContractName(contract.contractName);
+
+  if (contractName === null) {
+    return null;
+  }
+
   return {
-    contractName: contract.contractName,
+    contractName,
     contractVersion: Number.isInteger(contract.contractVersion) ? contract.contractVersion : null,
-    generatedAt: firstNonEmptyString(contract.generatedAt),
+    generatedAt: safeTimestamp(contract.generatedAt),
     readOnly: contract.readOnly === true,
-    threadId: firstNonEmptyString(contract.threadId)
+    threadId: safeDisplayRef(contract.threadId)
   };
 }
 
@@ -741,9 +1059,70 @@ function normalizeMissingTranscriptState(missingTranscriptState) {
 }
 
 function safeSourceContracts(sourceContracts) {
-  return Array.isArray(sourceContracts) ? sourceContracts.filter((contract) => (
-    nonEmptyString(contract) || isPlainObject(contract)
-  )) : [];
+  return normalizeContractRefs(sourceContracts);
+}
+
+function safeSourceContractNames(sourceContracts) {
+  return safeSourceContracts(sourceContracts)
+    .map((contract) => contract.contractName)
+    .filter(nonEmptyString);
+}
+
+function safeContractName(value) {
+  if (!nonEmptyString(value)) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return SOURCE_CONTRACT_NAME_PATTERN.test(trimmed) && !hasUnsafeSourceContractText(trimmed)
+    ? trimmed
+    : null;
+}
+
+function safeTimestamp(value) {
+  if (!nonEmptyString(value) || hasUnsafeSourceContractText(value)) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function hasUnsafeSourceContractText(value) {
+  if (!nonEmptyString(value)) {
+    return false;
+  }
+
+  const ref = value.trim();
+  const lower = ref.toLowerCase();
+  const compact = lower.replace(/[^a-z0-9]/gu, '');
+  const normalized = lower.replaceAll('\\', '/');
+  const segments = normalized.split('/').filter((segment) => segment !== '');
+
+  return UNSAFE_SOURCE_CONTRACT_TEXT_PATTERN.test(ref) ||
+    /[\x00-\x1F\x7F]/u.test(ref) ||
+    ref.startsWith('/') ||
+    ref.startsWith('~') ||
+    /^[a-z]:[\\/]/iu.test(ref) ||
+    ref.includes('\\') ||
+    ref === '..' ||
+    ref.startsWith('../') ||
+    ref.includes('/../') ||
+    lower.startsWith('file:') ||
+    lower.includes('stdout') ||
+    lower.includes('prompt') ||
+    lower.includes('secret') ||
+    lower.endsWith('.jsonl') ||
+    lower.includes('.jsonl/') ||
+    compact.includes('rawtranscript') ||
+    compact.includes('rawmodeloutput') ||
+    compact.includes('providersession') ||
+    compact.includes('sessionlog') ||
+    compact.includes('sessionfile') ||
+    compact.includes('modeloutput') ||
+    segments.some((segment) => ['.codex', '.claude', '.git', '.symphony'].includes(segment));
 }
 
 function countProvidersByState(providers, states) {
@@ -771,6 +1150,7 @@ function safeDisplayRef(value) {
 
   const ref = value.trim();
   const lower = ref.toLowerCase();
+  const segments = lower.replaceAll('\\', '/').split('/').filter((segment) => segment !== '');
 
   if (/[\x00-\x1F\x7F]/u.test(ref) ||
       ref.startsWith('/') ||
@@ -785,11 +1165,18 @@ function safeDisplayRef(value) {
       lower.includes('prompt') ||
       lower.includes('secret') ||
       lower.endsWith('.jsonl') ||
-      lower.includes('.jsonl/')) {
+      lower.includes('.jsonl/') ||
+      segments.some((segment) => ['.codex', '.claude', '.git', '.symphony'].includes(segment))) {
     return null;
   }
 
   return ref;
+}
+
+function stripEmptyObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== null && entry !== undefined)
+  );
 }
 
 function uniqueStrings(values) {
