@@ -201,6 +201,56 @@ describe('v52 systemGoldenPath.v1 contracts and fixtures', () => {
     assert.ok(validation.errors.includes('boundaries.providerExecutionRoute is not allowed'));
   });
 
+  it('rejects unsafe routes carried in otherwise allowed route fields', () => {
+    const confirmRoute = fixture('system-golden-path.ready.v1.json');
+    const providerRoute = fixture('system-golden-path.ready.v1.json');
+
+    confirmRoute.steps[0].nextSafeAction.routeTemplate = '/api/goals/<goal-id>/event-plan-confirm';
+    providerRoute.routeProvenance.refreshRouteTemplate = '/api/providers/run';
+
+    const confirmValidation = validateSystemGoldenPathContract(confirmRoute);
+    const providerValidation = validateSystemGoldenPathContract(providerRoute);
+
+    assert.equal(confirmValidation.ok, false);
+    assert.ok(confirmValidation.errors.includes(
+      'steps[0].nextSafeAction.routeTemplate must be one of /api/goals/<goal-id>/supervisor'
+    ));
+    assert.equal(providerValidation.ok, false);
+    assert.ok(providerValidation.errors.includes(
+      'routeProvenance.refreshRouteTemplate must be one of /api/goals/<goal-id>/supervisor'
+    ));
+  });
+
+  it('rejects action-kind fields that do not belong to that action shape', () => {
+    const manualWithRoute = fixture('system-golden-path.ready.v1.json');
+    const refreshWithCommand = fixture('system-golden-path.ready.v1.json');
+
+    manualWithRoute.steps[7].nextSafeAction = {
+      ...manualWithRoute.steps[7].nextSafeAction,
+      method: 'GET',
+      routeTemplate: '/api/goals/<goal-id>/supervisor'
+    };
+    refreshWithCommand.steps[0].nextSafeAction = {
+      ...refreshWithCommand.steps[0].nextSafeAction,
+      commandName: 'symphony goal review'
+    };
+
+    const manualValidation = validateSystemGoldenPathContract(manualWithRoute);
+    const refreshValidation = validateSystemGoldenPathContract(refreshWithCommand);
+
+    assert.equal(manualValidation.ok, false);
+    assert.ok(manualValidation.errors.includes(
+      'steps[7].nextSafeAction.method is not allowed for manual-cli-required'
+    ));
+    assert.ok(manualValidation.errors.includes(
+      'steps[7].nextSafeAction.routeTemplate is not allowed for manual-cli-required'
+    ));
+    assert.equal(refreshValidation.ok, false);
+    assert.ok(refreshValidation.errors.includes(
+      'steps[0].nextSafeAction.commandName is not allowed for refresh-state'
+    ));
+  });
+
   it('returns validation errors when a blocking step omits blockedReasons', () => {
     const drift = fixture('system-golden-path.ready.v1.json');
 

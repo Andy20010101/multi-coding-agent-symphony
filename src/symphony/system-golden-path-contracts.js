@@ -43,6 +43,10 @@ export const SYSTEM_GOLDEN_PATH_ACTION_LABELS = Object.freeze([
   'Manual CLI Required'
 ]);
 
+export const SYSTEM_GOLDEN_PATH_REFRESH_ROUTE_TEMPLATES = Object.freeze([
+  '/api/goals/<goal-id>/supervisor'
+]);
+
 export const SYSTEM_GOLDEN_PATH_BOUNDARIES = Object.freeze({
   readOnly: true,
   readModelOnly: true,
@@ -71,6 +75,7 @@ const STEP_ID_SET = new Set(SYSTEM_GOLDEN_PATH_STEP_IDS);
 const STEP_STATE_SET = new Set(SYSTEM_GOLDEN_PATH_STEP_STATES);
 const ACTION_KIND_SET = new Set(SYSTEM_GOLDEN_PATH_ACTION_KINDS);
 const ACTION_LABEL_SET = new Set(SYSTEM_GOLDEN_PATH_ACTION_LABELS);
+const REFRESH_ROUTE_TEMPLATE_SET = new Set(SYSTEM_GOLDEN_PATH_REFRESH_ROUTE_TEMPLATES);
 const SOURCE_REF_KIND_SET = new Set(SYSTEM_GOLDEN_PATH_SOURCE_REF_KINDS);
 const SOURCE_CONTRACT_NAME_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
 const UNSAFE_REFERENCE_PATTERN =
@@ -536,11 +541,21 @@ function validateNextSafeAction(errors, action, path) {
 
   if (action.kind === 'refresh-state') {
     requireExact(errors, action.method, `${path}.method`, 'GET');
-    requireNonEmptyString(errors, action.routeTemplate, `${path}.routeTemplate`);
+    requireEnum(errors, action.routeTemplate, `${path}.routeTemplate`, REFRESH_ROUTE_TEMPLATE_SET);
+
+    if (Object.hasOwn(action, 'commandName')) {
+      errors.push(`${path}.commandName is not allowed for refresh-state`);
+    }
   }
 
   if (action.kind === 'manual-cli-required') {
     requireNonEmptyString(errors, action.commandName, `${path}.commandName`);
+
+    for (const field of ['method', 'routeTemplate']) {
+      if (Object.hasOwn(action, field)) {
+        errors.push(`${path}.${field} is not allowed for manual-cli-required`);
+      }
+    }
   }
 }
 
@@ -603,7 +618,12 @@ function validateRouteProvenance(errors, routeProvenance) {
     'routeProvenance.workbenchSurface',
     new Set(['/workbench/desktop/', '/workbench/supervisor/'])
   );
-  requireNonEmptyString(errors, routeProvenance.refreshRouteTemplate, 'routeProvenance.refreshRouteTemplate');
+  requireEnum(
+    errors,
+    routeProvenance.refreshRouteTemplate,
+    'routeProvenance.refreshRouteTemplate',
+    REFRESH_ROUTE_TEMPLATE_SET
+  );
   requireExact(errors, routeProvenance.refreshMethod, 'routeProvenance.refreshMethod', 'GET');
   requireExact(errors, routeProvenance.frontendLocalFileReads, 'routeProvenance.frontendLocalFileReads', false);
 
