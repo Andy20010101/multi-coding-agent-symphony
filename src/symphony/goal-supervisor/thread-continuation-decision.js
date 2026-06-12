@@ -98,9 +98,13 @@ export function buildThreadContinuationDecision({
     supervisorProjection?.contextStatus?.checkpointRef,
     policyAction.checkpointRef
   );
-  const durableResultEvidence = checkpointRef !== null ||
-    normalizedContext.resultBlockEvidence.present === true ||
-    normalizedContext.resultBlockEvidence.status === 'present';
+  const resultBlockEvidenceRef = firstNonEmptyString(
+    normalizedContext.resultBlockEvidence.evidenceRef,
+    normalizedContext.resultBlockEvidence.sourceRef,
+    normalizedContext.resultBlockEvidence.checkpointRef
+  );
+  const durableEvidenceRef = firstNonEmptyString(checkpointRef, resultBlockEvidenceRef);
+  const durableResultEvidence = durableEvidenceRef !== null;
   const requiredEvidence = uniqueStrings([
     ...normalizedTaskState.requiredEvidence,
     ...arrayOfStrings(normalizedPendingResult.requiredEvidence),
@@ -141,7 +145,8 @@ export function buildThreadContinuationDecision({
     mismatchList,
     blockedFields,
     durableResultEvidence,
-    checkpointRef
+    checkpointRef,
+    durableEvidenceRef
   });
 
   return {
@@ -183,7 +188,8 @@ function decideContinuation({
   mismatchList,
   blockedFields,
   durableResultEvidence,
-  checkpointRef
+  checkpointRef,
+  durableEvidenceRef
 }) {
   if (mismatchList.length > 0 || policyAction.decision === 'recover-drift') {
     return {
@@ -210,7 +216,6 @@ function decideContinuation({
   }
 
   if (contextAdvisory.missingTranscriptState.missing === true &&
-      activeChild.threadId === null &&
       durableResultEvidence !== true) {
     return {
       decision: 'blocked',
@@ -248,7 +253,7 @@ function decideContinuation({
     return {
       decision: 'compact',
       reason: 'context-utilization-near-limit',
-      checkpointRef
+      checkpointRef: durableEvidenceRef
     };
   }
 
@@ -721,8 +726,19 @@ function normalizeResultBlockEvidence(resultBlockEvidence) {
 
   return {
     status: firstNonEmptyString(evidence.status) ?? 'missing',
-    present: evidence.present === true
+    present: evidence.present === true,
+    evidenceRef: normalizeEvidenceRef(evidence.evidenceRef),
+    sourceRef: normalizeEvidenceRef(evidence.sourceRef),
+    checkpointRef: normalizeEvidenceRef(evidence.checkpointRef)
   };
+}
+
+function normalizeEvidenceRef(value) {
+  if (!nonEmptyString(value) || /\s/.test(value)) {
+    return null;
+  }
+
+  return value;
 }
 
 function arrayOfStrings(values) {

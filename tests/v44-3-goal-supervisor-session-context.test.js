@@ -610,6 +610,32 @@ describe('v49 thread continuation decision projection', () => {
     assert.equal(decision.checkpointRef, 'result:task-1');
   });
 
+  it('blocks near-limit compaction when result block evidence has no durable ref', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        contextBand: 'near-limit',
+        contextUtilization: { status: 'available', usedTokens: 950, maxTokens: 1000, ratio: 0.95 },
+        resultBlockEvidence: { status: 'present', present: true }
+      }),
+      activeChild: {
+        status: 'thread-active',
+        threadId: 'thread-session-1',
+        taskId: 'task-1',
+        role: 'implementer'
+      },
+      taskState: {
+        taskId: 'task-1'
+      },
+      supervisorProjection: supervisorProjectionFixture()
+    });
+
+    assert.equal(decision.decision, 'blocked');
+    assert.equal(decision.reason, 'compact-checkpoint-missing');
+    assert.equal(decision.checkpointRef, null);
+    assert.ok(decision.blockedFields.includes('checkpointRef'));
+    assert.ok(decision.requiredEvidence.includes('durable-checkpoint'));
+  });
+
   it('returns new-thread for stale transcript handoff advice without creating a thread', () => {
     const decision = buildThreadContinuationDecision({
       contextAdvisory: continuationContextFixture({
@@ -681,6 +707,43 @@ describe('v49 thread continuation decision projection', () => {
         }
       }),
       supervisorProjection: supervisorProjectionFixture()
+    });
+
+    assert.equal(decision.decision, 'blocked');
+    assert.equal(decision.reason, 'no-readable-session-transcript');
+    assert.equal(decision.confidence, 'unknown');
+    assert.ok(decision.blockedFields.includes('transcriptAvailability'));
+  });
+
+  it('blocks missing transcript even when explicit policy wants to continue an active thread', () => {
+    const decision = buildThreadContinuationDecision({
+      contextAdvisory: continuationContextFixture({
+        transcriptAvailability: 'missing',
+        missingTranscriptState: {
+          missing: true,
+          reason: 'no-readable-session-transcript'
+        },
+        policyInputs: {
+          transcriptAvailability: 'missing',
+          threadId: 'thread-session-1'
+        }
+      }),
+      activeChild: {
+        status: 'thread-active',
+        threadId: 'thread-session-1',
+        taskId: 'task-1',
+        role: 'implementer'
+      },
+      taskState: {
+        taskId: 'task-1',
+        role: 'implementer',
+        status: 'in-progress'
+      },
+      supervisorProjection: supervisorProjectionFixture(),
+      supervisorPolicy: {
+        decision: 'continue',
+        reason: 'active-child-ready-to-continue'
+      }
     });
 
     assert.equal(decision.decision, 'blocked');
