@@ -22024,6 +22024,12 @@ var DEFAULT_HEALTH = Object.freeze({
 	duplicateDispatchAllowed: false,
 	reason: "local read-only sample"
 });
+var SUPERVISOR_REFRESH_IDLE_STATE = Object.freeze({
+	phase: "idle",
+	source: "NULL",
+	result: "NULL",
+	message: "NULL"
+});
 var SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
 	contractName: "supervisor-dashboard-state.v46",
 	contractVersion: 1,
@@ -22852,11 +22858,12 @@ var SIDEBAR_ITEMS = Object.freeze([
 		tone: "neutral"
 	})
 ]);
-function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW, onSupervisorEventConfirmed }) {
+function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW, onSupervisorEventConfirmed, onRefreshSupervisorState }) {
 	const eventPreview = view.eventPreview ?? SUPERVISOR_WORKBENCH_VIEW.eventPreview;
 	const previewIdentity = supervisorEventPreviewIdentity(eventPreview);
 	const [previewState, setPreviewState] = (0, import_react.useState)(() => supervisorPreviewStateFromEventPreview(eventPreview));
 	const [confirmState, setConfirmState] = (0, import_react.useState)(() => supervisorConfirmStateFromEventPreview(eventPreview, previewState.result));
+	const [refreshState, setRefreshState] = (0, import_react.useState)(SUPERVISOR_REFRESH_IDLE_STATE);
 	const visiblePreviewState = visibleSupervisorPreviewState({
 		eventPreview,
 		previewState
@@ -22868,6 +22875,7 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW, onSupervisorEventCo
 	});
 	const previewLoading = visiblePreviewState.phase === "loading";
 	const confirmLoading = visibleConfirmState.phase === "loading";
+	const refreshLoading = refreshState.phase === "loading";
 	(0, import_react.useEffect)(() => {
 		setPreviewState(supervisorPreviewStateFromEventPreview(eventPreview));
 		setConfirmState(supervisorConfirmStateFromEventPreview(eventPreview, eventPreview.previewResult));
@@ -22918,6 +22926,16 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW, onSupervisorEventCo
 			onEventConfirmed: onSupervisorEventConfirmed
 		}));
 	}
+	async function handleRefreshSupervisorState() {
+		if (refreshLoading) return;
+		setRefreshState({
+			phase: "loading",
+			source: "fetchWorkbenchContracts",
+			result: "pending",
+			message: "contract refresh pending"
+		});
+		setRefreshState(await refreshSupervisorState({ onRefreshSupervisorState }));
+	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", {
 		className: "v46-supervisor-shell",
 		"aria-labelledby": "v46-supervisor-title",
@@ -22943,8 +22961,11 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW, onSupervisorEventCo
 						previewLoading,
 						confirmState: visibleConfirmState,
 						confirmLoading,
+						refreshState,
+						refreshLoading,
 						onPreviewEventPlan: handlePreviewEventPlan,
-						onConfirmEventAppend: handleConfirmEventAppend
+						onConfirmEventAppend: handleConfirmEventAppend,
+						onRefreshSupervisorState: handleRefreshSupervisorState
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(GoalTimelinePanel, { timeline: view.timeline }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OwnershipPanel, { ownership: view.ownership })
@@ -22960,6 +22981,53 @@ function supervisorPreviewStateFromEventPreview(eventPreview) {
 		result: eventPreview.previewResult,
 		message: null
 	});
+}
+async function refreshSupervisorState({ onRefreshSupervisorState }) {
+	if (typeof onRefreshSupervisorState !== "function") return Object.freeze({
+		phase: "failed",
+		source: "fetchWorkbenchContracts",
+		result: "NULL",
+		message: "refresh callback unavailable"
+	});
+	try {
+		return supervisorRefreshStateFromContractResult(await onRefreshSupervisorState());
+	} catch (error) {
+		return Object.freeze({
+			phase: "failed",
+			source: "fetchWorkbenchContracts",
+			result: "NULL",
+			message: textValue$1(error?.message ?? "contract refresh failed")
+		});
+	}
+}
+function supervisorRefreshStateFromContractResult(result) {
+	const source = textValue$1(result?.source ?? "fetchWorkbenchContracts");
+	const summary = supervisorRefreshResultSummary(result);
+	if (result?.ok === false || result?.phase === "failed") return Object.freeze({
+		phase: "failed",
+		source,
+		result: summary,
+		message: textValue$1(result?.message ?? "contract refresh failed")
+	});
+	return Object.freeze({
+		phase: "succeeded",
+		source,
+		result: summary,
+		message: "contract refresh completed"
+	});
+}
+function supervisorRefreshResultSummary(result) {
+	if (result === null || result === void 0 || result === "") return "NULL";
+	if (typeof result !== "object" || Array.isArray(result)) return textValue$1(result);
+	const dashboardState = result.supervisorDashboardState ?? result.supervisorDashboard?.state ?? null;
+	const routeState = result.supervisorRouteState ?? result.routeState ?? result.supervisorDashboard?.route?.state ?? null;
+	const contractName = result.contractName ?? result.supervisorDashboard?.contractName ?? null;
+	const parts = [
+		dashboardState === null ? null : `supervisorDashboard ${textValue$1(dashboardState)}`,
+		routeState === null ? null : `route ${textValue$1(routeState)}`,
+		contractName === null ? null : `contract ${textValue$1(contractName)}`
+	].filter((part) => part !== null);
+	return parts.length > 0 ? parts.join("; ") : "NULL";
 }
 function visibleSupervisorPreviewState({ eventPreview, previewState }) {
 	const identity = supervisorEventPreviewIdentity(eventPreview);
@@ -23393,7 +23461,7 @@ function PendingResultPanel({ pendingResult }) {
 		] })
 	});
 }
-function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading, confirmState, confirmLoading, onPreviewEventPlan, onConfirmEventAppend }) {
+function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading, confirmState, confirmLoading, refreshState = SUPERVISOR_REFRESH_IDLE_STATE, refreshLoading = false, onPreviewEventPlan, onConfirmEventAppend, onRefreshSupervisorState = () => void 0 }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Panel, {
 		className: "v50-event-preview-panel",
 		odId: "supervisor-event-preview",
@@ -23413,6 +23481,7 @@ function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading
 				["readOnly", String(eventPreview.readOnly)],
 				["willMutate", String(eventPreview.willMutate)]
 			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventEligibilityNotice, { eventPreview }),
 			eventPreview.queryRows.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: eventPreview.queryRows }) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
 				["event type", eventPreview.recommendedEvent.eventType],
@@ -23427,12 +23496,19 @@ function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading
 				className: "v46-family-list",
 				items: eventPreview.missingInputs
 			}),
-			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-				type: "button",
-				className: "v50-preview-button",
-				disabled: !eventPreview.canPreview || previewLoading,
-				onClick: onPreviewEventPlan,
-				children: "Preview Event Plan"
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "v50-event-controls",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+					type: "button",
+					className: "v50-preview-button",
+					disabled: !eventPreview.canPreview || previewLoading,
+					onClick: onPreviewEventPlan,
+					children: "Preview Event Plan"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorRefreshStateControl, {
+					refreshState,
+					refreshLoading,
+					onRefreshSupervisorState
+				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventPreviewResult, { previewState }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventConfirmAction, {
@@ -23443,6 +23519,39 @@ function SupervisorEventPreviewLane({ eventPreview, previewState, previewLoading
 				onConfirmEventAppend
 			})
 		]
+	});
+}
+function SupervisorEventEligibilityNotice({ eventPreview }) {
+	if (![
+		"blocked",
+		"not-applicable",
+		"unknown"
+	].includes(eventPreview.state)) return null;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+		className: "v50-eligibility-notice",
+		"aria-label": "Event registration eligibility",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["eligibility", eventPreview.state],
+			["blocked / missing reason", eventPreview.reason],
+			["missing inputs", eventPreview.missingInputs.join(", ") || "NULL"]
+		] })
+	});
+}
+function SupervisorRefreshStateControl({ refreshState = SUPERVISOR_REFRESH_IDLE_STATE, refreshLoading = false, onRefreshSupervisorState = () => void 0 }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "v50-refresh-control",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+			type: "button",
+			className: "v50-refresh-button",
+			disabled: refreshLoading,
+			onClick: onRefreshSupervisorState,
+			children: "Refresh Supervisor State"
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KeyValues, { rows: [
+			["refresh phase", refreshState.phase],
+			["refresh source", refreshState.source],
+			["refresh result", refreshState.result],
+			["refresh message", refreshState.message]
+		] })]
 	});
 }
 function SupervisorEventPreviewResult({ previewState }) {
@@ -23726,15 +23835,29 @@ function LiveWorkbenchApp() {
 			model: current.model
 		}));
 		try {
+			const model = await fetchWorkbenchContracts();
 			setViewState({
 				phase: "ready",
-				model: await fetchWorkbenchContracts()
+				model
 			});
+			return {
+				ok: true,
+				source: "fetchWorkbenchContracts",
+				supervisorDashboardState: model?.supervisorDashboard?.state ?? null,
+				supervisorRouteState: model?.supervisorDashboard?.route?.state ?? null
+			};
 		} catch {
 			setViewState({
 				phase: "failed",
 				model: null
 			});
+			return {
+				ok: false,
+				source: "fetchWorkbenchContracts",
+				supervisorDashboardState: null,
+				supervisorRouteState: null,
+				message: "fetchWorkbenchContracts failed"
+			};
 		}
 	}
 	(0, import_react.useEffect)(() => {
@@ -23853,7 +23976,8 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 			}) : null,
 			workbenchRoute === "supervisor" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorShell, {
 				view: projectSupervisorDashboardToWorkbenchView(selectedSupervisorDashboard(model), selectedSupervisorDashboardRouteState(model)),
-				onSupervisorEventConfirmed: onRefreshWorkbenchContracts
+				onSupervisorEventConfirmed: onRefreshWorkbenchContracts,
+				onRefreshSupervisorState: onRefreshWorkbenchContracts
 			}) : model === null ? null : workbenchRoute === "desktop" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopShellRoute, {
 				desktopShell: model.desktopShell,
 				routeContext

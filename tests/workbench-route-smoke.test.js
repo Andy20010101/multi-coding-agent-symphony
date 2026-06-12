@@ -998,9 +998,10 @@ describe('v16 Workbench route smoke and server parity', () => {
       } else if (relativePath === 'v46SupervisorWorkbench.jsx') {
         assert.match(source, /Preview Event Plan/u, 'v46 supervisor exposes the v50 dry-run preview control');
         assert.match(source, /Confirm Event Append/u, 'v46 supervisor exposes the v50 append-only confirm control');
+        assert.match(source, /Refresh Supervisor State/u, 'v46 supervisor exposes the v50 contract refresh control');
         assert.match(source, /fetchGoalEventPlanPreview/u, 'v46 supervisor uses the controlled GET preview wrapper');
         assert.match(source, /confirmGoalEventPlan/u, 'v46 supervisor uses the controlled POST confirm wrapper');
-        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:onPreviewEventPlan|onConfirmEventAppend)\})/u, 'v46 supervisor exposes a non-preview/non-confirm click handler');
+        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:onPreviewEventPlan|onConfirmEventAppend|onRefreshSupervisorState)\})/u, 'v46 supervisor exposes a non-preview/non-confirm/non-refresh click handler');
         assert.doesNotMatch(source, /<form\b|<textarea\b|navigator\.clipboard|window\.open|child_process|exec\(|spawn\(/u, 'v46 supervisor exposes a forbidden browser or shell control');
       } else {
         assert.doesNotMatch(source, /\bonClick\s*=/u, `${relativePath} exposes a click handler`);

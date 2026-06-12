@@ -23,6 +23,13 @@ const DEFAULT_HEALTH = Object.freeze({
   reason: 'local read-only sample'
 });
 
+export const SUPERVISOR_REFRESH_IDLE_STATE = Object.freeze({
+  phase: 'idle',
+  source: 'NULL',
+  result: 'NULL',
+  message: 'NULL'
+});
+
 export const SUPERVISOR_WORKBENCH_VIEW = Object.freeze({
   contractName: 'supervisor-dashboard-state.v46',
   contractVersion: 1,
@@ -1096,12 +1103,14 @@ const SIDEBAR_ITEMS = Object.freeze([
 
 export function SupervisorShell({
   view = SUPERVISOR_WORKBENCH_VIEW,
-  onSupervisorEventConfirmed
+  onSupervisorEventConfirmed,
+  onRefreshSupervisorState
 }) {
   const eventPreview = view.eventPreview ?? SUPERVISOR_WORKBENCH_VIEW.eventPreview;
   const previewIdentity = supervisorEventPreviewIdentity(eventPreview);
   const [previewState, setPreviewState] = useState(() => supervisorPreviewStateFromEventPreview(eventPreview));
   const [confirmState, setConfirmState] = useState(() => supervisorConfirmStateFromEventPreview(eventPreview, previewState.result));
+  const [refreshState, setRefreshState] = useState(SUPERVISOR_REFRESH_IDLE_STATE);
   const visiblePreviewState = visibleSupervisorPreviewState({
     eventPreview,
     previewState
@@ -1113,6 +1122,7 @@ export function SupervisorShell({
   });
   const previewLoading = visiblePreviewState.phase === 'loading';
   const confirmLoading = visibleConfirmState.phase === 'loading';
+  const refreshLoading = refreshState.phase === 'loading';
 
   useEffect(() => {
     setPreviewState(supervisorPreviewStateFromEventPreview(eventPreview));
@@ -1182,6 +1192,23 @@ export function SupervisorShell({
     setConfirmState(nextConfirmState);
   }
 
+  async function handleRefreshSupervisorState() {
+    if (refreshLoading) {
+      return;
+    }
+
+    setRefreshState({
+      phase: 'loading',
+      source: 'fetchWorkbenchContracts',
+      result: 'pending',
+      message: 'contract refresh pending'
+    });
+
+    setRefreshState(await refreshSupervisorState({
+      onRefreshSupervisorState
+    }));
+  }
+
   return (
     <main className="v46-supervisor-shell" aria-labelledby="v46-supervisor-title">
       <SupervisorSidebar items={SIDEBAR_ITEMS} />
@@ -1204,8 +1231,11 @@ export function SupervisorShell({
             previewLoading={previewLoading}
             confirmState={visibleConfirmState}
             confirmLoading={confirmLoading}
+            refreshState={refreshState}
+            refreshLoading={refreshLoading}
             onPreviewEventPlan={handlePreviewEventPlan}
             onConfirmEventAppend={handleConfirmEventAppend}
+            onRefreshSupervisorState={handleRefreshSupervisorState}
           />
           <GoalTimelinePanel timeline={view.timeline} />
           <OwnershipPanel ownership={view.ownership} />
@@ -1222,6 +1252,74 @@ export function supervisorPreviewStateFromEventPreview(eventPreview) {
     result: eventPreview.previewResult,
     message: null
   });
+}
+
+export async function refreshSupervisorState({
+  onRefreshSupervisorState
+}) {
+  if (typeof onRefreshSupervisorState !== 'function') {
+    return Object.freeze({
+      phase: 'failed',
+      source: 'fetchWorkbenchContracts',
+      result: 'NULL',
+      message: 'refresh callback unavailable'
+    });
+  }
+
+  try {
+    const result = await onRefreshSupervisorState();
+
+    return supervisorRefreshStateFromContractResult(result);
+  } catch (error) {
+    return Object.freeze({
+      phase: 'failed',
+      source: 'fetchWorkbenchContracts',
+      result: 'NULL',
+      message: textValue(error?.message ?? 'contract refresh failed')
+    });
+  }
+}
+
+function supervisorRefreshStateFromContractResult(result) {
+  const source = textValue(result?.source ?? 'fetchWorkbenchContracts');
+  const summary = supervisorRefreshResultSummary(result);
+
+  if (result?.ok === false || result?.phase === 'failed') {
+    return Object.freeze({
+      phase: 'failed',
+      source,
+      result: summary,
+      message: textValue(result?.message ?? 'contract refresh failed')
+    });
+  }
+
+  return Object.freeze({
+    phase: 'succeeded',
+    source,
+    result: summary,
+    message: 'contract refresh completed'
+  });
+}
+
+function supervisorRefreshResultSummary(result) {
+  if (result === null || result === undefined || result === '') {
+    return 'NULL';
+  }
+
+  if (typeof result !== 'object' || Array.isArray(result)) {
+    return textValue(result);
+  }
+
+  const dashboardState = result.supervisorDashboardState ?? result.supervisorDashboard?.state ?? null;
+  const routeState = result.supervisorRouteState ?? result.routeState ?? result.supervisorDashboard?.route?.state ?? null;
+  const contractName = result.contractName ?? result.supervisorDashboard?.contractName ?? null;
+  const parts = [
+    dashboardState === null ? null : `supervisorDashboard ${textValue(dashboardState)}`,
+    routeState === null ? null : `route ${textValue(routeState)}`,
+    contractName === null ? null : `contract ${textValue(contractName)}`
+  ].filter((part) => part !== null);
+
+  return parts.length > 0 ? parts.join('; ') : 'NULL';
 }
 
 export function visibleSupervisorPreviewState({
@@ -1589,8 +1687,11 @@ export function SupervisorEventPreviewLane({
   previewLoading,
   confirmState,
   confirmLoading,
+  refreshState = SUPERVISOR_REFRESH_IDLE_STATE,
+  refreshLoading = false,
   onPreviewEventPlan,
-  onConfirmEventAppend
+  onConfirmEventAppend,
+  onRefreshSupervisorState = () => undefined
 }) {
   return (
     <Panel className="v50-event-preview-panel" odId="supervisor-event-preview" title="Event Plan Preview" meta={eventPreview.state}>
@@ -1607,6 +1708,7 @@ export function SupervisorEventPreviewLane({
         ['readOnly', String(eventPreview.readOnly)],
         ['willMutate', String(eventPreview.willMutate)]
       ]} />
+      <SupervisorEventEligibilityNotice eventPreview={eventPreview} />
       {eventPreview.queryRows.length > 0 ? <KeyValues rows={eventPreview.queryRows} /> : null}
       <KeyValues rows={[
         ['event type', eventPreview.recommendedEvent.eventType],
@@ -1618,14 +1720,21 @@ export function SupervisorEventPreviewLane({
         ['blocker', eventPreview.recommendedEvent.blocker]
       ]} />
       <TextList className="v46-family-list" items={eventPreview.missingInputs} />
-      <button
-        type="button"
-        className="v50-preview-button"
-        disabled={!eventPreview.canPreview || previewLoading}
-        onClick={onPreviewEventPlan}
-      >
-        Preview Event Plan
-      </button>
+      <div className="v50-event-controls">
+        <button
+          type="button"
+          className="v50-preview-button"
+          disabled={!eventPreview.canPreview || previewLoading}
+          onClick={onPreviewEventPlan}
+        >
+          Preview Event Plan
+        </button>
+        <SupervisorRefreshStateControl
+          refreshState={refreshState}
+          refreshLoading={refreshLoading}
+          onRefreshSupervisorState={onRefreshSupervisorState}
+        />
+      </div>
       <SupervisorEventPreviewResult previewState={previewState} />
       <SupervisorEventConfirmAction
         eventPreview={eventPreview}
@@ -1635,6 +1744,47 @@ export function SupervisorEventPreviewLane({
         onConfirmEventAppend={onConfirmEventAppend}
       />
     </Panel>
+  );
+}
+
+function SupervisorEventEligibilityNotice({ eventPreview }) {
+  if (!['blocked', 'not-applicable', 'unknown'].includes(eventPreview.state)) {
+    return null;
+  }
+
+  return (
+    <section className="v50-eligibility-notice" aria-label="Event registration eligibility">
+      <KeyValues rows={[
+        ['eligibility', eventPreview.state],
+        ['blocked / missing reason', eventPreview.reason],
+        ['missing inputs', eventPreview.missingInputs.join(', ') || 'NULL']
+      ]} />
+    </section>
+  );
+}
+
+export function SupervisorRefreshStateControl({
+  refreshState = SUPERVISOR_REFRESH_IDLE_STATE,
+  refreshLoading = false,
+  onRefreshSupervisorState = () => undefined
+}) {
+  return (
+    <div className="v50-refresh-control">
+      <button
+        type="button"
+        className="v50-refresh-button"
+        disabled={refreshLoading}
+        onClick={onRefreshSupervisorState}
+      >
+        Refresh Supervisor State
+      </button>
+      <KeyValues rows={[
+        ['refresh phase', refreshState.phase],
+        ['refresh source', refreshState.source],
+        ['refresh result', refreshState.result],
+        ['refresh message', refreshState.message]
+      ]} />
+    </div>
   );
 }
 
