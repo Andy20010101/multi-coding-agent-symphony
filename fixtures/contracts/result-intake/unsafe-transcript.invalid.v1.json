@@ -1,0 +1,46 @@
+{
+  "contractName": "resultIntakeRequest.v1",
+  "contractVersion": 1,
+  "goalId": "v51-result-intake-evidence-escrow",
+  "taskId": "task-1",
+  "workerRole": "worker",
+  "source": "codex",
+  "submittedAt": "2026-06-12T09:15:00.000Z",
+  "resultBlock": {
+    "status": "completed",
+    "summary": "This object tries to include raw provider material.",
+    "changedFiles": [
+      "src/symphony/result-intake-contracts.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "rawTranscript": "provider session secret should never be projected",
+    "rawModelOutput": "raw model output should never be serialized",
+    "risks": [],
+    "blockers": []
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v51-task-1-worker-evidence-2026-06-12.md",
+      "label": "v51 task 1 worker evidence"
+    }
+  ],
+  "requestedEvent": {
+    "eventType": "worker.evidence-recorded",
+    "taskId": "task-1"
+  },
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "childDispatchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "untrustedTranscriptProjectionAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}

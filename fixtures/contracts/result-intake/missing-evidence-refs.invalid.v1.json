@@ -1,0 +1,38 @@
+{
+  "contractName": "resultIntakeRequest.v1",
+  "contractVersion": 1,
+  "goalId": "v51-result-intake-evidence-escrow",
+  "taskId": "task-1",
+  "workerRole": "worker",
+  "source": "external-worker",
+  "submittedAt": "2026-06-12T09:10:00.000Z",
+  "resultBlock": {
+    "status": "completed",
+    "summary": "Worker result has no controlled evidence reference.",
+    "changedFiles": [
+      "src/symphony/result-intake-contracts.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v51-result-intake-evidence-escrow.test.js"
+    ],
+    "risks": [],
+    "blockers": []
+  },
+  "evidenceRefs": [],
+  "requestedEvent": {
+    "eventType": "worker.evidence-recorded",
+    "taskId": "task-1"
+  },
+  "boundaries": {
+    "providerExecutionAvailable": false,
+    "childDispatchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "untrustedTranscriptProjectionAvailable": false,
+    "frontendLocalFileReadAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
