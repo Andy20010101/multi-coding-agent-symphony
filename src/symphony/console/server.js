@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 
 import { writeApiErrorResponse } from './response.js';
 
-const POST_METHOD_NOT_ALLOWED_MESSAGE = 'Console API is read-only except controlled goal event plan confirm, controlled implementation run confirm, controlled verification run confirm, controlled provider runner confirm, controlled adoption plan freeze, and controlled adoption confirm.';
+const POST_METHOD_NOT_ALLOWED_MESSAGE = 'Console API is read-only except controlled result intake preview, controlled result intake confirm, controlled goal event plan confirm, controlled implementation run confirm, controlled verification run confirm, controlled provider runner confirm, controlled adoption plan freeze, and controlled adoption confirm.';
 const READONLY_METHOD_NOT_ALLOWED_MESSAGE = 'Console API is read-only.';
 
 export function createConsoleHttpServer(handleRequest) {
