@@ -614,6 +614,93 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function ChildDispatchPreviewPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
   });
 
+  it('renders the v54 Codex provider execution lane on Desktop App Home as read-only state', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
+    const childDispatchPreview = JSON.parse(
+      await readFile('fixtures/contracts/child-dispatch-preview.codex-worker.v1.json', 'utf8')
+    );
+    const codexProviderExecutionPreview = JSON.parse(
+      await readFile('fixtures/contracts/codex-provider-execution/preview.ready.v1.json', 'utf8')
+    );
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const supervisorRoute = READONLY_API_ROUTES.find((route) => route.id === 'goalSupervisor');
+      const viewState = createWorkbenchRenderViewState();
+
+      viewState.model = projectWorkbenchContracts({
+        goalSupervisor: readonlyRouteResult(supervisorRoute, {
+          ...createGoalSupervisorRenderPayload(),
+          childDispatchPreview,
+          codexProviderExecutionPreview
+        })
+      });
+      viewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', viewState);
+      const childPanelIndex = desktopHtml.indexOf('id="child-dispatch-preview-panel"');
+      const panelIndex = desktopHtml.indexOf('id="codex-provider-execution-preview-panel"');
+      const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
+      const panelHtml = desktopHtml.slice(panelIndex, appStateIndex);
+
+      assert.notEqual(panelIndex, -1);
+      assert.equal(childPanelIndex < panelIndex, true);
+      assert.equal(panelIndex < appStateIndex, true);
+      assert.match(desktopHtml, /href="#codex-provider-execution-preview-panel">Codex Run/u);
+      assert.match(panelHtml, /Codex Execution Preview/u);
+      assert.match(panelHtml, /Confirm Codex Run/u);
+      assert.match(panelHtml, /Codex Run Status/u);
+      assert.match(panelHtml, /Return Through Result Intake/u);
+      assert.match(panelHtml, /Refresh State/u);
+      assert.match(panelHtml, /codexProviderExecutionPreview\.v1/u);
+      assert.match(panelHtml, /codexProviderExecutionRunnerResult\.v1/u);
+      assert.match(panelHtml, /resultIntakeRequest\.v1/u);
+      assert.match(panelHtml, /v51-result-intake/u);
+      assert.match(panelHtml, />provider<\/dt><dd[^>]*>codex/u);
+      assert.match(panelHtml, />role<\/dt><dd[^>]*>worker/u);
+      assert.match(panelHtml, />preview hash<\/dt><dd[^>]*>sha256:[a-f0-9]{64}/u);
+      assert.match(panelHtml, />task pack hash<\/dt><dd[^>]*>sha256:[a-f0-9]{64}/u);
+      assert.match(panelHtml, />starts on preview<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />starts without confirmation<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />goal event write<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />task completion write<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />reviewer mutation<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />main gate mutation<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />gate mutation<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />claude-code execution<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />provider parity<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />generic shell<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />arbitrary command<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />frontend JSONL read<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />local session file read<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />transcript exposure<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />model-output exposure<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />git mutation<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />tag automation<\/dt><dd[^>]*>false/u);
+      assert.match(panelHtml, />publish automation<\/dt><dd[^>]*>false/u);
+      assert.doesNotMatch(panelHtml, /<button\b|<form\b|<textarea\b/u);
+      assert.doesNotMatch(panelHtml, /Launch Claude Code|Run Any Provider|Run Shell|Terminal|Append Event|Mark Complete|Confirm Reviewer Verdict|Confirm Main Gate|Confirm Release Gate|>Push<|>Tag<|>Publish<|>Release</u);
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+
+    assert.match(app, /CodexProviderExecutionPreviewPanel/u);
+    assert.match(css, /\.codex-provider-execution-panel/u);
+    assert.match(css, /\.codex-provider-source-list/u);
+    assert.doesNotMatch(app.slice(app.indexOf('function CodexProviderExecutionPreviewPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<textarea\b/u);
+  });
+
   it('renders the v48 Project Launcher as a read-only recent-projects preview', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');

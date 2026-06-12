@@ -1218,6 +1218,10 @@ export function projectWorkbenchContracts(results) {
     contract: goalSupervisorData?.childDispatchPreview,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
+  const projectedCodexProviderExecutionPreview = projectCodexProviderExecutionPreview({
+    contract: goalSupervisorData?.codexProviderExecutionPreview,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1239,6 +1243,7 @@ export function projectWorkbenchContracts(results) {
     routeContext,
     systemGoldenPath: projectedSystemGoldenPath,
     childDispatchPreview: projectedChildDispatchPreview,
+    codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
       routeStates
@@ -1262,6 +1267,7 @@ export function projectWorkbenchContracts(results) {
       supervisorDashboard: projectedSupervisorDashboard,
       systemGoldenPath: projectedSystemGoldenPath,
       childDispatchPreview: projectedChildDispatchPreview,
+      codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1840,6 +1846,7 @@ function projectDesktopShell({
   supervisorDashboard,
   systemGoldenPath,
   childDispatchPreview,
+  codexProviderExecutionPreview,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -2130,6 +2137,7 @@ function projectDesktopShell({
     providerHub,
     systemGoldenPath,
     childDispatchPreview,
+    codexProviderExecutionPreview,
     routeProvenance,
     appStates,
     boundaries,
@@ -2317,6 +2325,133 @@ function projectChildDispatchSourceContract(sourceContract) {
     readOnly: valueState(sourceContract?.readOnly),
     requiredFor: projectSystemGoldenPathTextItems(sourceContract?.requiredFor),
     sourceRef: projectSystemGoldenPathSourceRef(sourceContract?.sourceRef)
+  };
+}
+
+function projectCodexProviderExecutionPreview({
+  contract,
+  supervisorRoute
+}) {
+  const hasContract = contract !== null && contract !== undefined && typeof contract === 'object' && !Array.isArray(contract);
+  const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+  const ready = hasContract && blockedReasons.length === 0;
+
+  return {
+    state: hasContract ? (ready ? 'ready' : 'blocked') : 'missing',
+    contractName: valueState(contract?.contractName),
+    contractVersion: valueState(contract?.contractVersion),
+    generatedAt: valueState(contract?.generatedAt),
+    previewHash: valueState(contract?.previewHash),
+    taskPackHash: valueState(contract?.taskPackHash),
+    goal: {
+      goalId: valueState(contract?.goal?.goalId),
+      title: valueState(contract?.goal?.title),
+      state: valueState(contract?.goal?.state),
+      sourceContract: valueState(contract?.goal?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+    },
+    task: {
+      taskId: valueState(contract?.task?.taskId),
+      title: valueState(contract?.task?.title),
+      state: valueState(contract?.task?.state),
+      sourceContract: valueState(contract?.task?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+    },
+    providerId: valueState(contract?.providerId),
+    role: valueState(contract?.role),
+    taskPackRef: projectSystemGoldenPathSourceRef(contract?.taskPackRef),
+    inputSummary: projectCodexProviderExecutionInputSummary(contract?.inputSummary),
+    executionPolicy: projectCodexProviderExecutionPolicy(contract?.executionPolicy),
+    resultReturn: projectCodexProviderExecutionResultReturn(contract?.resultReturn),
+    confirmation: {
+      state: valueState(hasContract ? (ready ? 'ready' : 'blocked') : 'missing'),
+      label: valueState('Confirm Codex Run'),
+      previewHash: valueState(contract?.previewHash),
+      providerId: valueState(contract?.providerId),
+      goalId: valueState(contract?.goal?.goalId),
+      taskId: valueState(contract?.task?.taskId),
+      role: valueState(contract?.role),
+      requiredFields: projectSystemGoldenPathTextItems(['previewHash', 'providerId', 'goalId', 'taskId', 'role', 'operatorId']),
+      explicitOperatorConfirmationRequired: valueState(contract?.boundaries?.explicitOperatorConfirmationRequired),
+      providerExecutionStartsOnPreview: valueState(contract?.boundaries?.providerExecutionStartsOnPreview),
+      providerExecutionStartsWithoutConfirmation: valueState(contract?.boundaries?.providerExecutionStartsWithoutConfirmation),
+      willMutate: valueState(false)
+    },
+    runStatus: {
+      state: valueState(hasContract ? (ready ? 'not-started' : 'blocked') : 'missing'),
+      label: valueState('Codex Run Status'),
+      runnerContract: valueState('codexProviderExecutionRunnerResult.v1'),
+      providerId: valueState(contract?.providerId),
+      role: valueState(contract?.role),
+      returnPath: valueState(contract?.resultReturn?.returnPath),
+      resultIntakeContract: valueState(contract?.resultReturn?.resultIntakeContract),
+      rawTranscriptAvailable: valueState(contract?.boundaries?.rawTranscriptAvailable),
+      rawModelOutputAvailable: valueState(contract?.boundaries?.rawModelOutputAvailable),
+      source: valueState('backend-owned run record after explicit confirmation')
+    },
+    blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+    sourceContracts: {
+      state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : undefined),
+      items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectChildDispatchSourceContract)
+    },
+    boundaries: Object.fromEntries(
+      Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 codexProviderExecutionPreview projection')
+    },
+    note: hasContract
+      ? 'Codex provider execution preview is backend-owned state. Workbench shows readiness and Result Intake return state only.'
+      : 'Codex provider execution preview is unavailable until goal-supervisor-app-read-model.v1 exposes codexProviderExecutionPreview.v1.'
+  };
+}
+
+function projectCodexProviderExecutionInputSummary(inputSummary) {
+  return {
+    state: inputSummary !== null && inputSummary !== undefined && typeof inputSummary === 'object' && !Array.isArray(inputSummary) ? 'available' : 'missing',
+    taskPackAvailable: valueState(inputSummary?.taskPackAvailable),
+    taskPackSourceContract: valueState(inputSummary?.taskPackSourceContract),
+    taskPromptSummary: valueState(inputSummary?.taskPromptSummary),
+    providerPolicyReason: valueState(inputSummary?.providerPolicyReason),
+    acceptanceCriteria: projectSystemGoldenPathTextItems(inputSummary?.acceptanceCriteria),
+    evidenceRefs: projectChildDispatchEvidenceRefs(inputSummary?.evidenceRefs)
+  };
+}
+
+function projectCodexProviderExecutionPolicy(executionPolicy) {
+  return {
+    state: executionPolicy !== null && executionPolicy !== undefined && typeof executionPolicy === 'object' && !Array.isArray(executionPolicy) ? 'available' : 'missing',
+    providerId: valueState(executionPolicy?.providerId),
+    role: valueState(executionPolicy?.role),
+    allowedProviders: projectSystemGoldenPathTextItems(executionPolicy?.allowedProviders),
+    allowedRoles: projectSystemGoldenPathTextItems(executionPolicy?.allowedRoles),
+    requiresOperatorConfirmation: valueState(executionPolicy?.requiresOperatorConfirmation),
+    requiresPreviewHash: valueState(executionPolicy?.requiresPreviewHash),
+    startsOnPreview: valueState(executionPolicy?.startsOnPreview),
+    arbitraryCommandAvailable: valueState(executionPolicy?.arbitraryCommandAvailable),
+    genericShellAvailable: valueState(executionPolicy?.genericShellAvailable),
+    rawTranscriptAvailable: valueState(executionPolicy?.rawTranscriptAvailable),
+    rawModelOutputAvailable: valueState(executionPolicy?.rawModelOutputAvailable)
+  };
+}
+
+function projectCodexProviderExecutionResultReturn(resultReturn) {
+  return {
+    state: resultReturn !== null && resultReturn !== undefined && typeof resultReturn === 'object' && !Array.isArray(resultReturn) ? 'available' : 'missing',
+    returnPath: valueState(resultReturn?.returnPath),
+    resultIntakeContract: valueState(resultReturn?.resultIntakeContract),
+    resultIntakeRequestRequired: valueState(resultReturn?.resultIntakeRequestRequired),
+    sanitizedResultRequired: valueState(resultReturn?.sanitizedResultRequired),
+    directGoalEventAppendAvailable: valueState(resultReturn?.directGoalEventAppendAvailable),
+    directTaskCompleteAvailable: valueState(resultReturn?.directTaskCompleteAvailable),
+    reviewerMutationAvailable: valueState(resultReturn?.reviewerMutationAvailable),
+    mainVerificationMutationAvailable: valueState(resultReturn?.mainVerificationMutationAvailable),
+    releaseGateMutationAvailable: valueState(resultReturn?.releaseGateMutationAvailable),
+    rawTranscriptAvailable: valueState(resultReturn?.rawTranscriptAvailable),
+    rawModelOutputAvailable: valueState(resultReturn?.rawModelOutputAvailable)
   };
 }
 

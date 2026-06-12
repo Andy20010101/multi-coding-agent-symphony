@@ -11147,6 +11147,10 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.childDispatchPreview,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedCodexProviderExecutionPreview = projectCodexProviderExecutionPreview({
+		contract: goalSupervisorData?.codexProviderExecutionPreview,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11166,6 +11170,7 @@ function projectWorkbenchContracts(results) {
 		routeContext,
 		systemGoldenPath: projectedSystemGoldenPath,
 		childDispatchPreview: projectedChildDispatchPreview,
+		codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11189,6 +11194,7 @@ function projectWorkbenchContracts(results) {
 			supervisorDashboard: projectedSupervisorDashboard,
 			systemGoldenPath: projectedSystemGoldenPath,
 			childDispatchPreview: projectedChildDispatchPreview,
+			codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11700,7 +11706,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -11977,6 +11983,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		providerHub,
 		systemGoldenPath,
 		childDispatchPreview,
+		codexProviderExecutionPreview,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12135,6 +12142,128 @@ function projectChildDispatchSourceContract(sourceContract) {
 		readOnly: valueState(sourceContract?.readOnly),
 		requiredFor: projectSystemGoldenPathTextItems(sourceContract?.requiredFor),
 		sourceRef: projectSystemGoldenPathSourceRef(sourceContract?.sourceRef)
+	};
+}
+function projectCodexProviderExecutionPreview({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	const ready = hasContract && blockedReasons.length === 0;
+	return {
+		state: hasContract ? ready ? "ready" : "blocked" : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		previewHash: valueState(contract?.previewHash),
+		taskPackHash: valueState(contract?.taskPackHash),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		task: {
+			taskId: valueState(contract?.task?.taskId),
+			title: valueState(contract?.task?.title),
+			state: valueState(contract?.task?.state),
+			sourceContract: valueState(contract?.task?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+		},
+		providerId: valueState(contract?.providerId),
+		role: valueState(contract?.role),
+		taskPackRef: projectSystemGoldenPathSourceRef(contract?.taskPackRef),
+		inputSummary: projectCodexProviderExecutionInputSummary(contract?.inputSummary),
+		executionPolicy: projectCodexProviderExecutionPolicy(contract?.executionPolicy),
+		resultReturn: projectCodexProviderExecutionResultReturn(contract?.resultReturn),
+		confirmation: {
+			state: valueState(hasContract ? ready ? "ready" : "blocked" : "missing"),
+			label: valueState("Confirm Codex Run"),
+			previewHash: valueState(contract?.previewHash),
+			providerId: valueState(contract?.providerId),
+			goalId: valueState(contract?.goal?.goalId),
+			taskId: valueState(contract?.task?.taskId),
+			role: valueState(contract?.role),
+			requiredFields: projectSystemGoldenPathTextItems([
+				"previewHash",
+				"providerId",
+				"goalId",
+				"taskId",
+				"role",
+				"operatorId"
+			]),
+			explicitOperatorConfirmationRequired: valueState(contract?.boundaries?.explicitOperatorConfirmationRequired),
+			providerExecutionStartsOnPreview: valueState(contract?.boundaries?.providerExecutionStartsOnPreview),
+			providerExecutionStartsWithoutConfirmation: valueState(contract?.boundaries?.providerExecutionStartsWithoutConfirmation),
+			willMutate: valueState(false)
+		},
+		runStatus: {
+			state: valueState(hasContract ? ready ? "not-started" : "blocked" : "missing"),
+			label: valueState("Codex Run Status"),
+			runnerContract: valueState("codexProviderExecutionRunnerResult.v1"),
+			providerId: valueState(contract?.providerId),
+			role: valueState(contract?.role),
+			returnPath: valueState(contract?.resultReturn?.returnPath),
+			resultIntakeContract: valueState(contract?.resultReturn?.resultIntakeContract),
+			rawTranscriptAvailable: valueState(contract?.boundaries?.rawTranscriptAvailable),
+			rawModelOutputAvailable: valueState(contract?.boundaries?.rawModelOutputAvailable),
+			source: valueState("backend-owned run record after explicit confirmation")
+		},
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		sourceContracts: {
+			state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : void 0),
+			items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectChildDispatchSourceContract)
+		},
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 codexProviderExecutionPreview projection")
+		},
+		note: hasContract ? "Codex provider execution preview is backend-owned state. Workbench shows readiness and Result Intake return state only." : "Codex provider execution preview is unavailable until goal-supervisor-app-read-model.v1 exposes codexProviderExecutionPreview.v1."
+	};
+}
+function projectCodexProviderExecutionInputSummary(inputSummary) {
+	return {
+		state: inputSummary !== null && inputSummary !== void 0 && typeof inputSummary === "object" && !Array.isArray(inputSummary) ? "available" : "missing",
+		taskPackAvailable: valueState(inputSummary?.taskPackAvailable),
+		taskPackSourceContract: valueState(inputSummary?.taskPackSourceContract),
+		taskPromptSummary: valueState(inputSummary?.taskPromptSummary),
+		providerPolicyReason: valueState(inputSummary?.providerPolicyReason),
+		acceptanceCriteria: projectSystemGoldenPathTextItems(inputSummary?.acceptanceCriteria),
+		evidenceRefs: projectChildDispatchEvidenceRefs(inputSummary?.evidenceRefs)
+	};
+}
+function projectCodexProviderExecutionPolicy(executionPolicy) {
+	return {
+		state: executionPolicy !== null && executionPolicy !== void 0 && typeof executionPolicy === "object" && !Array.isArray(executionPolicy) ? "available" : "missing",
+		providerId: valueState(executionPolicy?.providerId),
+		role: valueState(executionPolicy?.role),
+		allowedProviders: projectSystemGoldenPathTextItems(executionPolicy?.allowedProviders),
+		allowedRoles: projectSystemGoldenPathTextItems(executionPolicy?.allowedRoles),
+		requiresOperatorConfirmation: valueState(executionPolicy?.requiresOperatorConfirmation),
+		requiresPreviewHash: valueState(executionPolicy?.requiresPreviewHash),
+		startsOnPreview: valueState(executionPolicy?.startsOnPreview),
+		arbitraryCommandAvailable: valueState(executionPolicy?.arbitraryCommandAvailable),
+		genericShellAvailable: valueState(executionPolicy?.genericShellAvailable),
+		rawTranscriptAvailable: valueState(executionPolicy?.rawTranscriptAvailable),
+		rawModelOutputAvailable: valueState(executionPolicy?.rawModelOutputAvailable)
+	};
+}
+function projectCodexProviderExecutionResultReturn(resultReturn) {
+	return {
+		state: resultReturn !== null && resultReturn !== void 0 && typeof resultReturn === "object" && !Array.isArray(resultReturn) ? "available" : "missing",
+		returnPath: valueState(resultReturn?.returnPath),
+		resultIntakeContract: valueState(resultReturn?.resultIntakeContract),
+		resultIntakeRequestRequired: valueState(resultReturn?.resultIntakeRequestRequired),
+		sanitizedResultRequired: valueState(resultReturn?.sanitizedResultRequired),
+		directGoalEventAppendAvailable: valueState(resultReturn?.directGoalEventAppendAvailable),
+		directTaskCompleteAvailable: valueState(resultReturn?.directTaskCompleteAvailable),
+		reviewerMutationAvailable: valueState(resultReturn?.reviewerMutationAvailable),
+		mainVerificationMutationAvailable: valueState(resultReturn?.mainVerificationMutationAvailable),
+		releaseGateMutationAvailable: valueState(resultReturn?.releaseGateMutationAvailable),
+		rawTranscriptAvailable: valueState(resultReturn?.rawTranscriptAvailable),
+		rawModelOutputAvailable: valueState(resultReturn?.rawModelOutputAvailable)
 	};
 }
 function projectChildDispatchTaskPack(taskPack) {
@@ -25612,6 +25741,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Child Task"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#codex-provider-execution-preview-panel",
+							children: "Codex Run"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -25666,6 +25799,7 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 					onRefreshWorkbenchContracts
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChildDispatchPreviewPanel, { childDispatchPreview: desktopShell?.childDispatchPreview }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodexProviderExecutionPreviewPanel, { codexProviderExecutionPreview: desktopShell?.codexProviderExecutionPreview }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -26238,6 +26372,143 @@ function ChildDispatchCopyBlock({ title, state, rows, copyText }) {
 			copyText === null || copyText === void 0 || copyText === "" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: `${title} 未暴露。` }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
 				className: "copy-block child-dispatch-copy-block",
 				children: copyText
+			})
+		]
+	});
+}
+function CodexProviderExecutionPreviewPanel({ codexProviderExecutionPreview }) {
+	const preview = codexProviderExecutionPreview;
+	const sourceContracts = preview?.sourceContracts?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "codex-provider-execution-preview-panel",
+		className: "codex-provider-execution-panel",
+		"aria-label": "Codex Execution Preview",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "codex-provider-execution-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v54 codex provider pilot"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Codex Execution Preview" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(preview?.state)}`,
+					children: preview?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "codex-provider-execution-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", preview?.contractName],
+					["goal", preview?.goal?.goalId],
+					["task", preview?.task?.taskId],
+					["provider", preview?.providerId],
+					["role", preview?.role],
+					["preview hash", preview?.previewHash],
+					["task pack hash", preview?.taskPackHash],
+					["blocked reasons", textValueFromItems(preview?.blockedReasons, "无")]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["task pack available", preview?.inputSummary?.taskPackAvailable],
+					["task pack source", preview?.inputSummary?.taskPackSourceContract],
+					["provider policy", preview?.inputSummary?.providerPolicyReason],
+					["allowed providers", textValueFromItems(preview?.executionPolicy?.allowedProviders, "未暴露")],
+					["allowed roles", textValueFromItems(preview?.executionPolicy?.allowedRoles, "未暴露")],
+					["route", preview?.route?.path],
+					["route state", preview?.route?.routeState]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Confirm Codex Run",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["confirmation state", preview?.confirmation?.state],
+					["required fields", textValueFromItems(preview?.confirmation?.requiredFields, "未暴露")],
+					["preview hash", preview?.confirmation?.previewHash],
+					["provider", preview?.confirmation?.providerId],
+					["goal", preview?.confirmation?.goalId],
+					["task", preview?.confirmation?.taskId],
+					["role", preview?.confirmation?.role],
+					["explicit operator confirmation", preview?.confirmation?.explicitOperatorConfirmationRequired],
+					["starts on preview", preview?.confirmation?.providerExecutionStartsOnPreview],
+					["starts without confirmation", preview?.confirmation?.providerExecutionStartsWithoutConfirmation],
+					["willMutate", preview?.confirmation?.willMutate]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Codex Run Status",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["run state", preview?.runStatus?.state],
+					["runner contract", preview?.runStatus?.runnerContract],
+					["provider", preview?.runStatus?.providerId],
+					["role", preview?.runStatus?.role],
+					["return path", preview?.runStatus?.returnPath],
+					["result intake contract", preview?.runStatus?.resultIntakeContract],
+					["transcript exposure", preview?.runStatus?.rawTranscriptAvailable],
+					["model-output exposure", preview?.runStatus?.rawModelOutputAvailable],
+					["source", preview?.runStatus?.source]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Return Through Result Intake",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["return path", preview?.resultReturn?.returnPath],
+					["result intake contract", preview?.resultReturn?.resultIntakeContract],
+					["request required", preview?.resultReturn?.resultIntakeRequestRequired],
+					["sanitized result required", preview?.resultReturn?.sanitizedResultRequired],
+					["goal event write", preview?.resultReturn?.directGoalEventAppendAvailable],
+					["task completion write", preview?.resultReturn?.directTaskCompleteAvailable],
+					["reviewer mutation", preview?.resultReturn?.reviewerMutationAvailable],
+					["main gate mutation", preview?.resultReturn?.mainVerificationMutationAvailable],
+					["gate mutation", preview?.resultReturn?.releaseGateMutationAvailable],
+					["transcript exposure", preview?.resultReturn?.rawTranscriptAvailable],
+					["model-output exposure", preview?.resultReturn?.rawModelOutputAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Refresh State",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["read model source", preview?.route?.source],
+					["generated at", preview?.generatedAt],
+					["contract version", preview?.contractVersion]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "source contracts",
+				children: sourceContracts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "codexProviderExecutionPreview source contracts 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: sourceContracts.map((source, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: source.contractName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["readOnly", source.readOnly],
+						["required for", textValueFromItems(source.requiredFor, "无")],
+						["source ref", source.sourceRef?.ref]
+					] })] }, `${source.contractName.text}-${index}`))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["codex only", preview?.boundaries?.codexOnly],
+					["worker role only", preview?.boundaries?.workerRoleOnly],
+					["explicit confirmation", preview?.boundaries?.explicitOperatorConfirmationRequired],
+					["preview hash required", preview?.boundaries?.previewHashRequired],
+					["provider parity", preview?.boundaries?.providerParityAvailable],
+					["claude-code execution", preview?.boundaries?.claudeCodeExecutionAvailable],
+					["generic shell", preview?.boundaries?.genericShellAvailable],
+					["arbitrary command", preview?.boundaries?.arbitraryCommandExecutionAvailable],
+					["frontend JSONL read", preview?.boundaries?.frontendLocalJsonlReadAvailable],
+					["local session file read", preview?.boundaries?.localSessionFileReadAvailable],
+					["transcript exposure", preview?.boundaries?.rawTranscriptAvailable],
+					["model-output exposure", preview?.boundaries?.rawModelOutputAvailable],
+					["goal event write", preview?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", preview?.boundaries?.directTaskCompleteAvailable],
+					["reviewer mutation", preview?.boundaries?.reviewerMutationAvailable],
+					["main gate mutation", preview?.boundaries?.mainVerificationMutationAvailable],
+					["gate mutation", preview?.boundaries?.releaseGateMutationAvailable],
+					["git mutation", preview?.boundaries?.gitMutationAvailable],
+					["tag automation", preview?.boundaries?.tagAutomationAvailable],
+					["publish automation", preview?.boundaries?.publishAutomationAvailable],
+					["github publish automation", preview?.boundaries?.githubReleaseAutomationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: preview?.note ?? "Codex provider execution preview unavailable."
 			})
 		]
 	});
