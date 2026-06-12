@@ -22598,29 +22598,42 @@ function recommendedEventView(event) {
 }
 function goalEventPlanPreviewResultView(plan) {
 	const event = objectValue(Array.isArray(plan.proposedEvents) ? plan.proposedEvents[0] : null);
+	const eventSummary = objectValue(plan.eventSummary);
 	const actor = objectValue(plan.actor);
 	const wouldAppend = objectValue(plan.wouldAppend);
 	const validation = objectValue(plan.validation);
 	const confirm = objectValue(plan.confirm);
 	const blocker = objectValue(event.blocker);
+	const operationRun = objectValue(plan.operationRun);
 	return Object.freeze({
 		contract: contractRefLabel(plan, "goal-update-plan.v1"),
 		eventType: textValue$1(event.eventType ?? "NULL"),
 		taskId: textValue$1(event.taskId ?? "NULL"),
 		actorRole: textValue$1(actor.role ?? "NULL"),
 		actorId: textValue$1(actor.id ?? "NULL"),
-		evidenceRefs: textValue$1(event.evidenceRefs ?? "NULL"),
+		evidenceRefs: evidenceRefsText(eventSummary.evidenceRefs ?? event.evidenceRefs),
 		statement: textValue$1(event.statement ?? "NULL"),
 		blockerId: textValue$1(blocker.blockerId ?? "NULL"),
 		blockerReason: textValue$1(blocker.reason ?? "NULL"),
 		blockerSeverity: textValue$1(blocker.severity ?? "NULL"),
 		writesInDryRun: textValue$1(wouldAppend.writesInDryRun ?? plan.writesInDryRun ?? "NULL"),
 		appendTarget: textValue$1(wouldAppend.target ?? "NULL"),
-		operationId: textValue$1(plan.operationId ?? plan.planId ?? "NULL"),
-		operationStatus: textValue$1(plan.operationStatus ?? validation.status ?? "NULL"),
+		operationId: textValue$1(operationRun.operationId ?? plan.operationId ?? plan.planId ?? "NULL"),
+		operationStatus: textValue$1(operationRun.status ?? plan.operationStatus ?? validation.status ?? "NULL"),
 		planHash: textValue$1(plan.planHash ?? "NULL"),
 		copyOnlyConfirmCommand: textValue$1(confirm.copyOnlyCommand ?? "NULL")
 	});
+}
+function evidenceRefsText(evidenceRefs) {
+	if (!Array.isArray(evidenceRefs) || evidenceRefs.length === 0) return "NULL";
+	return evidenceRefs.map(evidenceRefText).filter((value) => value !== "").join(", ") || "NULL";
+}
+function evidenceRefText(evidenceRef) {
+	if (evidenceRef === null || evidenceRef === void 0 || evidenceRef === "") return "";
+	if (typeof evidenceRef !== "object" || Array.isArray(evidenceRef)) return textValue$1(evidenceRef);
+	const ref = textValue$1(evidenceRef.ref ?? evidenceRef.evidenceRef ?? evidenceRef.uri ?? "NULL");
+	const details = [textValue$1(evidenceRef.kind ?? "NULL"), textValue$1(evidenceRef.label ?? "NULL")].filter((value) => value !== "NULL" && value !== ref);
+	return details.length > 0 ? `${ref} (${details.join(" / ")})` : ref;
 }
 function defaultCommandBoundary() {
 	return Object.freeze({
@@ -22726,15 +22739,20 @@ var SIDEBAR_ITEMS = Object.freeze([
 ]);
 function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 	const eventPreview = view.eventPreview ?? SUPERVISOR_WORKBENCH_VIEW.eventPreview;
-	const [previewState, setPreviewState] = (0, import_react.useState)(() => ({
-		phase: eventPreview.previewResult === null ? "idle" : "ready",
-		result: eventPreview.previewResult,
-		message: null
-	}));
-	const previewLoading = previewState.phase === "loading";
+	const previewIdentity = supervisorEventPreviewIdentity(eventPreview);
+	const [previewState, setPreviewState] = (0, import_react.useState)(() => supervisorPreviewStateFromEventPreview(eventPreview));
+	const visiblePreviewState = visibleSupervisorPreviewState({
+		eventPreview,
+		previewState
+	});
+	const previewLoading = visiblePreviewState.phase === "loading";
+	(0, import_react.useEffect)(() => {
+		setPreviewState(supervisorPreviewStateFromEventPreview(eventPreview));
+	}, [previewIdentity]);
 	async function handlePreviewEventPlan() {
 		if (!eventPreview.canPreview || previewLoading) return;
 		setPreviewState({
+			identity: previewIdentity,
 			phase: "loading",
 			result: null,
 			message: null
@@ -22742,6 +22760,7 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 		const result = await fetchGoalEventPlanPreview(eventPreview.previewPath);
 		if (result.ok) {
 			setPreviewState({
+				identity: previewIdentity,
 				phase: "ready",
 				result: goalEventPlanPreviewResultView(result.data),
 				message: null
@@ -22749,6 +22768,7 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 			return;
 		}
 		setPreviewState({
+			identity: previewIdentity,
 			phase: "failed",
 			result: null,
 			message: textValue$1(result.message ?? "preview failed")
@@ -22775,7 +22795,7 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(PendingResultPanel, { pendingResult: view.pendingResult }),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupervisorEventPreviewLane, {
 						eventPreview,
-						previewState,
+						previewState: visiblePreviewState,
 						previewLoading,
 						onPreviewEventPlan: handlePreviewEventPlan
 					}),
@@ -22785,6 +22805,40 @@ function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 			})]
 		})]
 	});
+}
+function supervisorPreviewStateFromEventPreview(eventPreview) {
+	return Object.freeze({
+		identity: supervisorEventPreviewIdentity(eventPreview),
+		phase: eventPreview.previewResult === null ? "idle" : "ready",
+		result: eventPreview.previewResult,
+		message: null
+	});
+}
+function visibleSupervisorPreviewState({ eventPreview, previewState }) {
+	const identity = supervisorEventPreviewIdentity(eventPreview);
+	return previewState?.identity === identity ? previewState : supervisorPreviewStateFromEventPreview(eventPreview);
+}
+function supervisorEventPreviewIdentity(eventPreview) {
+	return [
+		eventPreview.state,
+		eventPreview.requestMethod,
+		String(eventPreview.canPreview),
+		eventPreview.previewPath,
+		supervisorPreviewResultIdentity(eventPreview.previewResult)
+	].map(textValue$1).join("");
+}
+function supervisorPreviewResultIdentity(previewResult) {
+	if (previewResult === null || previewResult === void 0) return "no-preview-result";
+	return [
+		previewResult.contract,
+		previewResult.eventType,
+		previewResult.taskId,
+		previewResult.actorId,
+		previewResult.planHash,
+		previewResult.copyOnlyConfirmCommand,
+		previewResult.operationId,
+		previewResult.operationStatus
+	].map(textValue$1).join("");
 }
 function SupervisorSidebar({ items }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("aside", {

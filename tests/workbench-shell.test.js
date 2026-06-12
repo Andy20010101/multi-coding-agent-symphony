@@ -842,10 +842,11 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, />blocker severity<\/dt><dd[^>]*>medium/u);
       assert.match(html, />writesInDryRun<\/dt><dd[^>]*>false/u);
       assert.match(html, />append target<\/dt><dd[^>]*>managed-goal-event-journal/u);
-      assert.match(html, />operation id<\/dt><dd[^>]*>plan_v50_task3_event_preview/u);
-      assert.match(html, />operation status<\/dt><dd[^>]*>ok/u);
+      assert.match(html, />operation id<\/dt><dd[^>]*>op_v50_task3_event_preview/u);
+      assert.match(html, />operation status<\/dt><dd[^>]*>planned/u);
       assert.match(html, />planHash<\/dt><dd[^>]*>sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/u);
       assert.match(html, />copy-only confirm command<\/dt><dd[^>]*>symphony goal update/u);
+      assert.doesNotMatch(html, /\[object Object\]/u);
       assert.match(html, /42000 \/ 200000/u);
       assert.match(html, /21%/u);
       assert.match(html, /daemon-control/u);
@@ -877,6 +878,12 @@ describe('v15 Workbench React/Vite shell', () => {
 
     try {
       const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const {
+        projectSupervisorDashboardToWorkbenchView,
+        supervisorPreviewStateFromEventPreview,
+        visibleSupervisorPreviewState
+      } = await server.ssrLoadModule('/src/v46SupervisorWorkbench.jsx');
+      const eligibleModel = createWorkbenchRenderModelWithSupervisor();
       const blockedPayload = {
         ...createGoalSupervisorRenderPayload(),
         supervisorEventRegistrationEligibility: {
@@ -887,12 +894,29 @@ describe('v15 Workbench React/Vite shell', () => {
           previewResult: null
         }
       };
+      const blockedModel = createWorkbenchRenderModelWithSupervisor(blockedPayload);
+      const eligibleView = projectSupervisorDashboardToWorkbenchView(
+        eligibleModel.supervisorDashboard,
+        eligibleModel.supervisorDashboard.route
+      );
+      const blockedView = projectSupervisorDashboardToWorkbenchView(
+        blockedModel.supervisorDashboard,
+        blockedModel.supervisorDashboard.route
+      );
+      const eligiblePreviewState = supervisorPreviewStateFromEventPreview(eligibleView.eventPreview);
+      const visibleAfterBlockedRerender = visibleSupervisorPreviewState({
+        eventPreview: blockedView.eventPreview,
+        previewState: eligiblePreviewState
+      });
       const viewState = {
         phase: 'ready',
-        model: createWorkbenchRenderModelWithSupervisor(blockedPayload)
+        model: blockedModel
       };
       const html = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', viewState);
 
+      assert.equal(eligiblePreviewState.result.planHash, 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+      assert.equal(visibleAfterBlockedRerender.phase, 'idle');
+      assert.equal(visibleAfterBlockedRerender.result, null);
       assert.match(html, /Event Plan Preview/u);
       assert.match(html, />state<\/dt><dd[^>]*>blocked/u);
       assert.match(html, /event-routed-to-goal-gate/u);
@@ -901,6 +925,8 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /<button[^>]*disabled[^>]*>Preview Event Plan<\/button>/u);
       assert.match(html, /preview result not loaded/u);
       assert.doesNotMatch(html, /goal-update-plan\.v1/u);
+      assert.doesNotMatch(html, /sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/u);
+      assert.doesNotMatch(html, /copy-only confirm command/u);
       assert.doesNotMatch(html, /Confirm Event Append|confirmGoalEventPlan/u);
     } finally {
       await server.close();
@@ -2385,7 +2411,11 @@ function createSupervisorGoalUpdatePlanPreviewPayload() {
       taskId: 'task-3',
       phase: 'implement',
       requiresEvidence: true,
-      evidenceRefs: ['artifact:v44-4:pending-result'],
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:v44-4:pending-result',
+        label: 'pending result registration'
+      }],
       statement: 'Worker evidence recorded for task-3.',
       blocker: {
         blockerId: 'blocker-v50-preview',
@@ -2393,6 +2423,15 @@ function createSupervisorGoalUpdatePlanPreviewPayload() {
         severity: 'medium'
       }
     }],
+    eventSummary: {
+      eventType: 'worker.evidence-recorded',
+      taskId: 'task-3',
+      evidenceRefs: [{
+        kind: 'artifact-ref',
+        ref: 'artifact:v44-4:pending-result',
+        label: 'pending result registration'
+      }]
+    },
     validation: {
       status: 'ok',
       errors: [],
@@ -2403,6 +2442,10 @@ function createSupervisorGoalUpdatePlanPreviewPayload() {
       eventCount: 1,
       target: 'managed-goal-event-journal',
       writesInDryRun: false
+    },
+    operationRun: {
+      operationId: 'op_v50_task3_event_preview',
+      status: 'planned'
     },
     confirm: {
       available: true,

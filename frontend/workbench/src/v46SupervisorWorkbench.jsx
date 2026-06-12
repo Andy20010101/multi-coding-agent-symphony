@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { fetchGoalEventPlanPreview } from './api/client.js';
 
@@ -749,11 +749,13 @@ function recommendedEventView(event) {
 
 function goalEventPlanPreviewResultView(plan) {
   const event = objectValue(Array.isArray(plan.proposedEvents) ? plan.proposedEvents[0] : null);
+  const eventSummary = objectValue(plan.eventSummary);
   const actor = objectValue(plan.actor);
   const wouldAppend = objectValue(plan.wouldAppend);
   const validation = objectValue(plan.validation);
   const confirm = objectValue(plan.confirm);
   const blocker = objectValue(event.blocker);
+  const operationRun = objectValue(plan.operationRun);
 
   return Object.freeze({
     contract: contractRefLabel(plan, 'goal-update-plan.v1'),
@@ -761,18 +763,43 @@ function goalEventPlanPreviewResultView(plan) {
     taskId: textValue(event.taskId ?? 'NULL'),
     actorRole: textValue(actor.role ?? 'NULL'),
     actorId: textValue(actor.id ?? 'NULL'),
-    evidenceRefs: textValue(event.evidenceRefs ?? 'NULL'),
+    evidenceRefs: evidenceRefsText(eventSummary.evidenceRefs ?? event.evidenceRefs),
     statement: textValue(event.statement ?? 'NULL'),
     blockerId: textValue(blocker.blockerId ?? 'NULL'),
     blockerReason: textValue(blocker.reason ?? 'NULL'),
     blockerSeverity: textValue(blocker.severity ?? 'NULL'),
     writesInDryRun: textValue(wouldAppend.writesInDryRun ?? plan.writesInDryRun ?? 'NULL'),
     appendTarget: textValue(wouldAppend.target ?? 'NULL'),
-    operationId: textValue(plan.operationId ?? plan.planId ?? 'NULL'),
-    operationStatus: textValue(plan.operationStatus ?? validation.status ?? 'NULL'),
+    operationId: textValue(operationRun.operationId ?? plan.operationId ?? plan.planId ?? 'NULL'),
+    operationStatus: textValue(operationRun.status ?? plan.operationStatus ?? validation.status ?? 'NULL'),
     planHash: textValue(plan.planHash ?? 'NULL'),
     copyOnlyConfirmCommand: textValue(confirm.copyOnlyCommand ?? 'NULL')
   });
+}
+
+function evidenceRefsText(evidenceRefs) {
+  if (!Array.isArray(evidenceRefs) || evidenceRefs.length === 0) {
+    return 'NULL';
+  }
+
+  return evidenceRefs.map(evidenceRefText).filter((value) => value !== '').join(', ') || 'NULL';
+}
+
+function evidenceRefText(evidenceRef) {
+  if (evidenceRef === null || evidenceRef === undefined || evidenceRef === '') {
+    return '';
+  }
+
+  if (typeof evidenceRef !== 'object' || Array.isArray(evidenceRef)) {
+    return textValue(evidenceRef);
+  }
+
+  const ref = textValue(evidenceRef.ref ?? evidenceRef.evidenceRef ?? evidenceRef.uri ?? 'NULL');
+  const kind = textValue(evidenceRef.kind ?? 'NULL');
+  const label = textValue(evidenceRef.label ?? 'NULL');
+  const details = [kind, label].filter((value) => value !== 'NULL' && value !== ref);
+
+  return details.length > 0 ? `${ref} (${details.join(' / ')})` : ref;
 }
 
 function defaultCommandBoundary() {
@@ -899,12 +926,17 @@ const SIDEBAR_ITEMS = Object.freeze([
 
 export function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
   const eventPreview = view.eventPreview ?? SUPERVISOR_WORKBENCH_VIEW.eventPreview;
-  const [previewState, setPreviewState] = useState(() => ({
-    phase: eventPreview.previewResult === null ? 'idle' : 'ready',
-    result: eventPreview.previewResult,
-    message: null
-  }));
-  const previewLoading = previewState.phase === 'loading';
+  const previewIdentity = supervisorEventPreviewIdentity(eventPreview);
+  const [previewState, setPreviewState] = useState(() => supervisorPreviewStateFromEventPreview(eventPreview));
+  const visiblePreviewState = visibleSupervisorPreviewState({
+    eventPreview,
+    previewState
+  });
+  const previewLoading = visiblePreviewState.phase === 'loading';
+
+  useEffect(() => {
+    setPreviewState(supervisorPreviewStateFromEventPreview(eventPreview));
+  }, [previewIdentity]);
 
   async function handlePreviewEventPlan() {
     if (!eventPreview.canPreview || previewLoading) {
@@ -912,6 +944,7 @@ export function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
     }
 
     setPreviewState({
+      identity: previewIdentity,
       phase: 'loading',
       result: null,
       message: null
@@ -921,6 +954,7 @@ export function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
 
     if (result.ok) {
       setPreviewState({
+        identity: previewIdentity,
         phase: 'ready',
         result: goalEventPlanPreviewResultView(result.data),
         message: null
@@ -929,6 +963,7 @@ export function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
     }
 
     setPreviewState({
+      identity: previewIdentity,
       phase: 'failed',
       result: null,
       message: textValue(result.message ?? 'preview failed')
@@ -953,7 +988,7 @@ export function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
           <PendingResultPanel pendingResult={view.pendingResult} />
           <SupervisorEventPreviewLane
             eventPreview={eventPreview}
-            previewState={previewState}
+            previewState={visiblePreviewState}
             previewLoading={previewLoading}
             onPreviewEventPlan={handlePreviewEventPlan}
           />
@@ -963,6 +998,53 @@ export function SupervisorShell({ view = SUPERVISOR_WORKBENCH_VIEW }) {
       </section>
     </main>
   );
+}
+
+export function supervisorPreviewStateFromEventPreview(eventPreview) {
+  return Object.freeze({
+    identity: supervisorEventPreviewIdentity(eventPreview),
+    phase: eventPreview.previewResult === null ? 'idle' : 'ready',
+    result: eventPreview.previewResult,
+    message: null
+  });
+}
+
+export function visibleSupervisorPreviewState({
+  eventPreview,
+  previewState
+}) {
+  const identity = supervisorEventPreviewIdentity(eventPreview);
+
+  return previewState?.identity === identity
+    ? previewState
+    : supervisorPreviewStateFromEventPreview(eventPreview);
+}
+
+function supervisorEventPreviewIdentity(eventPreview) {
+  return [
+    eventPreview.state,
+    eventPreview.requestMethod,
+    String(eventPreview.canPreview),
+    eventPreview.previewPath,
+    supervisorPreviewResultIdentity(eventPreview.previewResult)
+  ].map(textValue).join('\u001f');
+}
+
+function supervisorPreviewResultIdentity(previewResult) {
+  if (previewResult === null || previewResult === undefined) {
+    return 'no-preview-result';
+  }
+
+  return [
+    previewResult.contract,
+    previewResult.eventType,
+    previewResult.taskId,
+    previewResult.actorId,
+    previewResult.planHash,
+    previewResult.copyOnlyConfirmCommand,
+    previewResult.operationId,
+    previewResult.operationStatus
+  ].map(textValue).join('\u001e');
 }
 
 export function SupervisorSidebar({ items }) {
