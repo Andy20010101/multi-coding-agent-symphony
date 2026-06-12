@@ -648,7 +648,16 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(defaultHtml, /Command Boundary/u);
       assert.match(defaultHtml, /Event Plan Preview/u);
       assert.match(defaultHtml, /Preview Event Plan/u);
+      assert.match(defaultHtml, /Refresh Supervisor State/u);
       assert.match(defaultHtml, /eligibility contract not available/u);
+      assert.match(defaultHtml, /Event registration eligibility/u);
+      assert.match(defaultHtml, />eligibility<\/dt><dd[^>]*>unknown/u);
+      assert.match(defaultHtml, />blocked \/ missing reason<\/dt><dd[^>]*>eligibility contract not available/u);
+      assert.match(defaultHtml, />missing inputs<\/dt><dd[^>]*>supervisorEventRegistrationEligibility/u);
+      assert.match(defaultHtml, />refresh phase<\/dt><dd[^>]*>idle/u);
+      assert.match(defaultHtml, />refresh source<\/dt><dd[^>]*>NULL/u);
+      assert.match(defaultHtml, />refresh result<\/dt><dd[^>]*>NULL/u);
+      assert.match(defaultHtml, />refresh message<\/dt><dd[^>]*>NULL/u);
       assert.match(defaultHtml, /preview result not loaded/u);
       assert.match(defaultHtml, /copyOnly true/u);
       assert.match(defaultHtml, /daemon-control/u);
@@ -742,9 +751,11 @@ describe('v15 Workbench React/Vite shell', () => {
       'ActiveLeasePanel',
       'PendingResultPanel',
       'SupervisorEventPreviewLane',
+      'SupervisorEventEligibilityNotice',
       'SupervisorEventPreviewResult',
       'SupervisorEventConfirmAction',
       'SupervisorEventConfirmResult',
+      'SupervisorRefreshStateControl',
       'SessionSourceInventoryPanel',
       'ContextAdvisoryPanel',
       'ThreadContinuationDecisionPanel',
@@ -776,13 +787,18 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(css, /\.v46-family-list[\s\S]*flex-wrap:\s*wrap/u);
     assert.match(css, /\.v46-pending-panel[\s\S]*order:\s*5/u);
     assert.match(css, /\.v50-event-preview-panel[\s\S]*order:\s*11/u);
+    assert.match(css, /\.v50-event-controls/u);
     assert.match(css, /\.v50-preview-button/u);
+    assert.match(css, /\.v50-refresh-button/u);
+    assert.match(css, /\.v50-eligibility-notice/u);
     assert.match(css, /\.v46-inventory-panel[\s\S]*order:\s*6/u);
     assert.match(css, /\.v46-context-panel[\s\S]*order:\s*7/u);
     assert.match(supervisorSource, /fetchGoalEventPlanPreview/u);
     assert.match(supervisorSource, /confirmGoalEventPlan/u);
     assert.match(supervisorSource, /Preview Event Plan/u);
     assert.match(supervisorSource, /Confirm Event Append/u);
+    assert.match(supervisorSource, /Refresh Supervisor State/u);
+    assert.match(supervisorSource, /refreshSupervisorState/u);
     assert.doesNotMatch(supervisorSource, /\bfetch\s*\(/u);
     assert.doesNotMatch(supervisorSource, /<GoalEventPlanPreview\b|function GoalEventPlanPreview\b|<form\b|<textarea\b|navigator\.clipboard|child_process|exec\(|spawn\(|\.symphony|jsonl|sessions\/|provider folders|raw transcripts|claude\/projects/u);
     assert.doesNotMatch(supervisorSource, />\s*(Run|Execute|Continue|Compact|New Thread|Dispatch|Launch)\s*</u);
@@ -831,6 +847,8 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(html, /external-orchestration-owner/u);
       assert.match(html, /Event Plan Preview/u);
       assert.match(html, /Preview Event Plan/u);
+      assert.match(html, /Refresh Supervisor State/u);
+      assert.match(html, />refresh phase<\/dt><dd[^>]*>idle/u);
       assert.match(html, /supervisorEventRegistrationEligibility\.v1 \/ 1/u);
       assert.match(html, /eligible-goal-update-event/u);
       assert.match(html, /\/api\/goals\/v44-4-live-supervisor\/event-plan-preview\?command=update&amp;task=task-3&amp;event=worker\.evidence-recorded&amp;actor=local-goal-supervisor-worker&amp;evidenceRef=artifact%3Av44-4%3Apending-result&amp;statement=Worker\+evidence\+recorded\+for\+task-3\./u);
@@ -936,9 +954,141 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.doesNotMatch(html, /sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/u);
       assert.doesNotMatch(html, /copy-only confirm command/u);
       assert.doesNotMatch(html, /Confirm Event Append|confirmGoalEventPlan/u);
+
+      for (const scenario of [
+        {
+          state: 'not-applicable',
+          reason: 'event-routed-to-goal-review',
+          missingInput: 'review-verdict-contract'
+        },
+        {
+          state: 'unknown',
+          reason: 'eligibility contract not available',
+          missingInput: 'supervisorEventRegistrationEligibility'
+        }
+      ]) {
+        const scenarioPayload = {
+          ...createGoalSupervisorRenderPayload(),
+          supervisorEventRegistrationEligibility: {
+            ...createSupervisorEventEligibilityRenderPayload(),
+            state: scenario.state,
+            reason: scenario.reason,
+            missingInputs: [scenario.missingInput],
+            previewResult: null
+          }
+        };
+        const scenarioHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/supervisor/', {
+          phase: 'ready',
+          model: createWorkbenchRenderModelWithSupervisor(scenarioPayload)
+        });
+
+        assert.match(scenarioHtml, /Event registration eligibility/u, scenario.state);
+        assert.match(scenarioHtml, new RegExp(`>eligibility<\\/dt><dd[^>]*>${scenario.state}`, 'u'), scenario.state);
+        assert.match(scenarioHtml, new RegExp(scenario.reason, 'u'), scenario.state);
+        assert.match(scenarioHtml, new RegExp(scenario.missingInput, 'u'), scenario.state);
+        assert.match(scenarioHtml, /<button[^>]*disabled[^>]*>Preview Event Plan<\/button>/u, scenario.state);
+        assert.doesNotMatch(scenarioHtml, /goal-update-plan\.v1|Confirm Event Append|confirmGoalEventPlan/u, scenario.state);
+      }
     } finally {
       await server.close();
       restoreSsrLocation();
+    }
+  });
+
+  it('renders supervisor refresh status and calls only the Workbench contract refresh callback', async () => {
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const {
+        SupervisorRefreshStateControl,
+        refreshSupervisorState
+      } = await server.ssrLoadModule('/src/v46SupervisorWorkbench.jsx');
+      const calls = [];
+      const succeededState = await refreshSupervisorState({
+        onRefreshSupervisorState: async () => {
+          calls.push('fetchWorkbenchContracts');
+
+          return {
+            ok: true,
+            source: 'fetchWorkbenchContracts',
+            supervisorDashboardState: 'available',
+            supervisorRouteState: 'ready'
+          };
+        }
+      });
+      const failedState = await refreshSupervisorState({
+        onRefreshSupervisorState: async () => ({
+          ok: false,
+          source: 'fetchWorkbenchContracts',
+          supervisorDashboardState: null,
+          supervisorRouteState: null,
+          message: 'fetchWorkbenchContracts failed'
+        })
+      });
+      const thrownState = await refreshSupervisorState({
+        onRefreshSupervisorState: async () => {
+          throw new Error('network unavailable');
+        }
+      });
+      const loadingHtml = renderToStaticMarkup(React.createElement(SupervisorRefreshStateControl, {
+        refreshState: {
+          phase: 'loading',
+          source: 'fetchWorkbenchContracts',
+          result: 'pending',
+          message: 'contract refresh pending'
+        },
+        refreshLoading: true,
+        onRefreshSupervisorState: () => undefined
+      }));
+      const succeededHtml = renderToStaticMarkup(React.createElement(SupervisorRefreshStateControl, {
+        refreshState: succeededState,
+        refreshLoading: false,
+        onRefreshSupervisorState: () => undefined
+      }));
+      const failedHtml = renderToStaticMarkup(React.createElement(SupervisorRefreshStateControl, {
+        refreshState: failedState,
+        refreshLoading: false,
+        onRefreshSupervisorState: () => undefined
+      }));
+
+      assert.deepEqual(calls, ['fetchWorkbenchContracts']);
+      assert.deepEqual(succeededState, {
+        phase: 'succeeded',
+        source: 'fetchWorkbenchContracts',
+        result: 'supervisorDashboard available; route ready',
+        message: 'contract refresh completed'
+      });
+      assert.deepEqual(failedState, {
+        phase: 'failed',
+        source: 'fetchWorkbenchContracts',
+        result: 'NULL',
+        message: 'fetchWorkbenchContracts failed'
+      });
+      assert.deepEqual(thrownState, {
+        phase: 'failed',
+        source: 'fetchWorkbenchContracts',
+        result: 'NULL',
+        message: 'network unavailable'
+      });
+      assert.match(loadingHtml, /Refresh Supervisor State/u);
+      assert.match(loadingHtml, /<button[^>]*disabled[^>]*>Refresh Supervisor State<\/button>/u);
+      assert.match(loadingHtml, />refresh phase<\/dt><dd[^>]*>loading/u);
+      assert.match(loadingHtml, />refresh source<\/dt><dd[^>]*>fetchWorkbenchContracts/u);
+      assert.match(loadingHtml, />refresh result<\/dt><dd[^>]*>pending/u);
+      assert.match(succeededHtml, />refresh phase<\/dt><dd[^>]*>succeeded/u);
+      assert.match(succeededHtml, />refresh result<\/dt><dd[^>]*>supervisorDashboard available; route ready/u);
+      assert.match(failedHtml, />refresh phase<\/dt><dd[^>]*>failed/u);
+      assert.match(failedHtml, />refresh message<\/dt><dd[^>]*>fetchWorkbenchContracts failed/u);
+      assert.doesNotMatch(`${loadingHtml}\n${succeededHtml}\n${failedHtml}`, /Preview Event Plan|Confirm Event Append|<form|<textarea|href="(?:artifact:|docs\/plans\/|file:)/u);
+    } finally {
+      await server.close();
     }
   });
 

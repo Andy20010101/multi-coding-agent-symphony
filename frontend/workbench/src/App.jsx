@@ -65,11 +65,26 @@ function LiveWorkbenchApp() {
         phase: 'ready',
         model
       });
+
+      return {
+        ok: true,
+        source: 'fetchWorkbenchContracts',
+        supervisorDashboardState: model?.supervisorDashboard?.state ?? null,
+        supervisorRouteState: model?.supervisorDashboard?.route?.state ?? null
+      };
     } catch {
       setViewState({
         phase: 'failed',
         model: null
       });
+
+      return {
+        ok: false,
+        source: 'fetchWorkbenchContracts',
+        supervisorDashboardState: null,
+        supervisorRouteState: null,
+        message: 'fetchWorkbenchContracts failed'
+      };
     }
   }
 
@@ -206,6 +221,7 @@ export function WorkbenchShell({
             selectedSupervisorDashboardRouteState(model)
           )}
           onSupervisorEventConfirmed={onRefreshWorkbenchContracts}
+          onRefreshSupervisorState={onRefreshWorkbenchContracts}
         />
       ) : model === null ? null : (
         workbenchRoute === 'desktop' ? (

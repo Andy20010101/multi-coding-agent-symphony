@@ -602,9 +602,17 @@ body {
   background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-bg) 45%);
 }
 
-.v50-preview-button {
-  max-width: 220px;
+.v50-event-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-start;
   margin-top: 10px;
+}
+
+.v50-preview-button,
+.v50-refresh-button {
+  max-width: 220px;
   border: 1px solid color-mix(in oklab, var(--v46-success), var(--v46-border-soft) 35%);
   border-radius: 4px;
   padding: 8px 12px;
@@ -613,7 +621,13 @@ body {
   font: 700 12px/1.1 var(--v46-ui-font);
 }
 
-.v50-preview-button:disabled {
+.v50-refresh-button {
+  border-color: color-mix(in oklab, var(--v46-muted), var(--v46-border-soft) 42%);
+  background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-surface) 40%);
+}
+
+.v50-preview-button:disabled,
+.v50-refresh-button:disabled {
   border-color: var(--v46-border-soft);
   background: color-mix(in oklab, var(--v46-surface-warm), var(--v46-surface) 52%);
   color: var(--v46-muted);
@@ -621,9 +635,27 @@ body {
 
 .v50-preview-status,
 .v50-preview-result,
+.v50-eligibility-notice,
+.v50-refresh-control,
 .v50-confirm-lane,
 .v50-confirm-result {
   margin-top: 10px;
+}
+
+.v50-eligibility-notice {
+  border-left: 3px solid color-mix(in oklab, var(--v46-accent), var(--v46-warn) 26%);
+  padding-left: 10px;
+}
+
+.v50-refresh-control {
+  display: grid;
+  flex: 1 1 320px;
+  gap: 8px;
+  min-width: min(100%, 280px);
+}
+
+.v50-refresh-control .v46-key-values {
+  max-width: 100%;
 }
 
 .v50-preview-status {
