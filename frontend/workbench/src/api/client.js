@@ -33,6 +33,8 @@ import {
 const READONLY_ERROR_MESSAGE = '读取失败 / contract 未暴露 / 不可用';
 const GOAL_PLAN_PREVIEW_ERROR_MESSAGE = 'dry-run plan preview 未返回可用 contract';
 const GOAL_PLAN_CONFIRM_ERROR_MESSAGE = 'event confirm 未返回可用 contract';
+const RESULT_INTAKE_PREVIEW_ERROR_MESSAGE = 'result intake preview 未返回可用 contract';
+const RESULT_ESCROW_CONFIRM_ERROR_MESSAGE = 'result escrow confirm 未返回可用 contract';
 const CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE = 'implementation confirm 未返回可用 contract';
 const CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE = 'provider runner confirm 未返回可用 contract';
 const CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE = 'verification confirm 未返回可用 contract';
@@ -399,6 +401,26 @@ export async function confirmGoalEventPlan(path, body, {
     httpStatus: response.status,
     data
   };
+}
+
+export async function previewResultIntake(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  return postJsonContract(path, body, {
+    fetchImpl,
+    expectedContractName: 'resultIntakePreview.v1',
+    errorMessage: RESULT_INTAKE_PREVIEW_ERROR_MESSAGE
+  });
+}
+
+export async function confirmResultEscrow(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  return postJsonContract(path, body, {
+    fetchImpl,
+    expectedContractName: 'result-intake-confirmation.v1',
+    errorMessage: RESULT_ESCROW_CONFIRM_ERROR_MESSAGE
+  });
 }
 
 export async function confirmControlledImplementationRunPlan(path, body, {
@@ -949,6 +971,79 @@ export async function fetchPromptWorkspaceHandoffBoard(goalId, options = {}) {
       next: nextResult,
       closeout: closeoutResult
     }
+  };
+}
+
+async function postJsonContract(path, body, {
+  fetchImpl,
+  expectedContractName,
+  errorMessage
+}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: errorMessage,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: errorMessage,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessage,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== expectedContractName) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessage,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
   };
 }
 

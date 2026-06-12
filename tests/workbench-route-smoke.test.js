@@ -998,11 +998,16 @@ describe('v16 Workbench route smoke and server parity', () => {
       } else if (relativePath === 'v46SupervisorWorkbench.jsx') {
         assert.match(source, /Preview Event Plan/u, 'v46 supervisor exposes the v50 dry-run preview control');
         assert.match(source, /Confirm Event Append/u, 'v46 supervisor exposes the v50 append-only confirm control');
+        assert.match(source, /Preview Result Intake/u, 'v46 supervisor exposes the v51 result intake preview control');
+        assert.match(source, /Confirm Result Escrow/u, 'v46 supervisor exposes the v51 result escrow confirm control');
         assert.match(source, /Refresh Supervisor State/u, 'v46 supervisor exposes the v50 contract refresh control');
         assert.match(source, /fetchGoalEventPlanPreview/u, 'v46 supervisor uses the controlled GET preview wrapper');
         assert.match(source, /confirmGoalEventPlan/u, 'v46 supervisor uses the controlled POST confirm wrapper');
-        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:onPreviewEventPlan|onConfirmEventAppend|onRefreshSupervisorState)\})/u, 'v46 supervisor exposes a non-preview/non-confirm/non-refresh click handler');
-        assert.doesNotMatch(source, /<form\b|<textarea\b|navigator\.clipboard|window\.open|child_process|exec\(|spawn\(/u, 'v46 supervisor exposes a forbidden browser or shell control');
+        assert.match(source, /previewResultIntake/u, 'v46 supervisor uses the controlled result intake preview wrapper');
+        assert.match(source, /confirmResultEscrow/u, 'v46 supervisor uses the controlled result escrow confirm wrapper');
+        assert.doesNotMatch(source, /\bonClick\s*=\s*\{(?!(?:onPreviewEventPlan|onConfirmEventAppend|onPreviewResultIntake|onConfirmResultEscrow|onRefreshSupervisorState)\})/u, 'v46 supervisor exposes a non-preview/non-confirm/non-refresh click handler');
+        assert.doesNotMatch(source, /<form\b|navigator\.clipboard|window\.open|child_process|exec\(|spawn\(/u, 'v46 supervisor exposes a forbidden browser or shell control');
+        assert.match(source, /<textarea[\s\S]*maxLength=\{RESULT_INTAKE_MAX_BLOCK_LENGTH\}/u, 'v46 result intake paste input remains bounded');
       } else {
         assert.doesNotMatch(source, /\bonClick\s*=/u, `${relativePath} exposes a click handler`);
       }
