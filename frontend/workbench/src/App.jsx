@@ -614,6 +614,7 @@ function DesktopShellRoute({
           <a href="#desktop-project-launcher">Projects</a>
           <a href="#desktop-overview" aria-current="page">Home</a>
           <a href="#system-golden-path-panel">System Path</a>
+          <a href="#child-dispatch-preview-panel">Child Task</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -652,6 +653,7 @@ function DesktopShellRoute({
           systemGoldenPath={desktopShell?.systemGoldenPath}
           onRefreshWorkbenchContracts={onRefreshWorkbenchContracts}
         />
+        <ChildDispatchPreviewPanel childDispatchPreview={desktopShell?.childDispatchPreview} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -1120,6 +1122,202 @@ function systemGoldenPathRefreshResultSummary(result) {
   ].filter((part) => part !== null);
 
   return parts.length > 0 ? parts.join('; ') : 'NULL';
+}
+
+function ChildDispatchPreviewPanel({ childDispatchPreview }) {
+  const taskPack = childDispatchPreview?.taskPack;
+  const resultExpectation = childDispatchPreview?.resultExpectation;
+  const sourceContracts = childDispatchPreview?.sourceContracts?.items ?? [];
+
+  return (
+    <section
+      id="child-dispatch-preview-panel"
+      className="child-dispatch-preview-panel"
+      aria-label="Preview Child Task"
+    >
+      <header className="child-dispatch-preview-header">
+        <div>
+          <p className="section-kicker">v53 controlled preview</p>
+          <h2>Preview Child Task</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(childDispatchPreview?.state)}`}>
+          {childDispatchPreview?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="child-dispatch-preview-summary">
+        <FieldList rows={[
+          ['contract', childDispatchPreview?.contractName],
+          ['goal', childDispatchPreview?.goal?.goalId],
+          ['task', childDispatchPreview?.task?.taskId],
+          ['requested role', childDispatchPreview?.requestedRole],
+          ['provider', childDispatchPreview?.providerRecommendation?.providerId],
+          ['allowed providers', textValueFromItems(childDispatchPreview?.providerRecommendation?.allowedProviders, '未暴露')],
+          ['readiness', childDispatchPreview?.readiness?.state],
+          ['copy available', childDispatchPreview?.readiness?.copyAvailable],
+          ['manual copy required', childDispatchPreview?.readiness?.requiresManualCopy],
+          ['provider execution', childDispatchPreview?.readiness?.providerExecutionAvailable],
+          ['child start', childDispatchPreview?.readiness?.actualChildDispatchAvailable],
+          ['blocked reasons', textValueFromItems(childDispatchPreview?.blockedReasons, '无')]
+        ]} />
+
+        <FieldList rows={[
+          ['copy only', taskPack?.copyOnly],
+          ['willMutate', taskPack?.willMutate],
+          ['return path', taskPack?.returnPath],
+          ['result contract', resultExpectation?.resultIntakeContract],
+          ['will append event', resultExpectation?.expectedResultBlock?.willAppendGoalEvent],
+          ['goal event write', resultExpectation?.directGoalEventAppendAvailable],
+          ['task completion write', resultExpectation?.directTaskCompleteAvailable],
+          ['route', childDispatchPreview?.route?.path],
+          ['route state', childDispatchPreview?.route?.routeState]
+        ]} />
+      </div>
+
+      <Subsection title="provider copy targets">
+        <ChildDispatchProviderTargets childDispatchPreview={childDispatchPreview} />
+      </Subsection>
+
+      <div className="child-dispatch-copy-grid">
+        <ChildDispatchCopyBlock
+          title="Copy Child Task Pack"
+          state={taskPack?.state}
+          rows={[
+            ['pack contract', taskPack?.contractName],
+            ['preferred provider', taskPack?.preferredProvider],
+            ['role', taskPack?.role],
+            ['required evidence refs', taskPack?.requiredEvidenceRefs?.count]
+          ]}
+          copyText={taskPack?.json?.text}
+        />
+        <ChildDispatchCopyBlock
+          title="Expected Result Block"
+          state={resultExpectation?.expectedResultBlock?.state}
+          rows={[
+            ['Return Through Result Intake', resultExpectation?.returnPath],
+            ['result intake contract', resultExpectation?.resultIntakeContract],
+            ['worker role', resultExpectation?.expectedResultBlock?.workerRole],
+            ['requested event', resultExpectation?.expectedResultBlock?.requestedEvent],
+            ['will append event', resultExpectation?.expectedResultBlock?.willAppendGoalEvent]
+          ]}
+          copyText={resultExpectation?.expectedResultBlock?.json?.text}
+        />
+      </div>
+
+      <Subsection title="Return Through Result Intake">
+        <FieldList rows={[
+          ['return path', resultExpectation?.returnPath],
+          ['result intake contract', resultExpectation?.resultIntakeContract],
+          ['goal event write', resultExpectation?.directGoalEventAppendAvailable],
+          ['task completion write', resultExpectation?.directTaskCompleteAvailable],
+          ['reviewer mutation', resultExpectation?.reviewerMutationAvailable],
+          ['main gate mutation', resultExpectation?.mainVerificationMutationAvailable],
+          ['gate mutation', resultExpectation?.releaseGateMutationAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="source contracts">
+        {sourceContracts.length === 0 ? (
+          <EmptyBlock copy="childDispatchPreview source contracts 未暴露。" />
+        ) : (
+          <ul className="child-dispatch-source-list">
+            {sourceContracts.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="safety boundaries">
+        <FieldList rows={[
+          ['copy only', childDispatchPreview?.boundaries?.copyOnly],
+          ['willMutate', childDispatchPreview?.boundaries?.willMutate],
+          ['provider execution', childDispatchPreview?.boundaries?.providerExecutionAvailable],
+          ['child start', childDispatchPreview?.boundaries?.actualChildDispatchAvailable],
+          ['child process', childDispatchPreview?.boundaries?.childProcessSpawnAvailable],
+          ['frontend local file read', childDispatchPreview?.boundaries?.frontendLocalFileReadAvailable],
+          ['goal event write', childDispatchPreview?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', childDispatchPreview?.boundaries?.directTaskCompleteAvailable],
+          ['reviewer mutation', childDispatchPreview?.boundaries?.reviewerMutationAvailable],
+          ['main gate mutation', childDispatchPreview?.boundaries?.mainVerificationMutationAvailable],
+          ['gate mutation', childDispatchPreview?.boundaries?.releaseGateMutationAvailable],
+          ['git mutation', childDispatchPreview?.boundaries?.gitMutationAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{childDispatchPreview?.note ?? 'Child Dispatch Preview unavailable.'}</p>
+    </section>
+  );
+}
+
+function ChildDispatchProviderTargets({ childDispatchPreview }) {
+  const allowedProviders = (childDispatchPreview?.providerRecommendation?.allowedProviders?.items ?? [])
+    .map((item) => textValueFromState(item))
+    .filter((item) => item !== '');
+  const preferredProvider = textValueFromState(childDispatchPreview?.providerRecommendation?.providerId);
+  const copyAvailable = textValueFromState(childDispatchPreview?.readiness?.copyAvailable) === 'true';
+  const targets = [
+    ['codex', 'Copy Codex Task Pack'],
+    ['claude-code', 'Copy Claude Code Task Pack']
+  ];
+
+  return (
+    <div className="child-dispatch-provider-targets">
+      {targets.map(([providerId, label]) => {
+        const allowed = allowedProviders.includes(providerId);
+        const state = copyAvailable && allowed ? (preferredProvider === providerId ? 'ready' : 'manual-preview') : 'blocked';
+
+        return (
+          <article key={providerId}>
+            <header>
+              <h4>{label}</h4>
+              <span className={`desktop-status ${desktopStatusClass(state)}`}>{state}</span>
+            </header>
+            <FieldList rows={[
+              ['provider id', textValue(providerId)],
+              ['allowed by contract', textValue(allowed)],
+              ['preferred in current preview', textValue(preferredProvider === providerId)],
+              ['copy available', childDispatchPreview?.readiness?.copyAvailable],
+              ['provider execution', childDispatchPreview?.readiness?.providerExecutionAvailable],
+              ['child start', childDispatchPreview?.readiness?.actualChildDispatchAvailable]
+            ]} />
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChildDispatchCopyBlock({
+  title,
+  state,
+  rows,
+  copyText
+}) {
+  return (
+    <article className="child-dispatch-copy-card">
+      <header className="desktop-mini-header desktop-recent-projects-title-row">
+        <div>
+          <p className="section-kicker">copy-only</p>
+          <h3>{title}</h3>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(state)}`}>{state ?? 'missing'}</span>
+      </header>
+      <FieldList rows={rows} />
+      {copyText === null || copyText === undefined || copyText === '' ? (
+        <EmptyBlock copy={`${title} 未暴露。`} />
+      ) : (
+        <pre className="copy-block child-dispatch-copy-block">{copyText}</pre>
+      )}
+    </article>
+  );
 }
 
 function DesktopAppStateStrip({ appStates }) {

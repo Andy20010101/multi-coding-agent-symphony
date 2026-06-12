@@ -1342,6 +1342,42 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(missingSidecarHostModel.desktopShell.sidecarHealth.lifecycleContract.state, 'missing');
   });
 
+  it('projects v53 child dispatch preview into the Workbench desktop shell as copy-only state', async () => {
+    const childDispatchPreview = JSON.parse(
+      await readFile('fixtures/contracts/child-dispatch-preview.codex-worker.v1.json', 'utf8')
+    );
+    const supervisor = {
+      ...createGoalSupervisorAppReadModelPayload(),
+      childDispatchPreview
+    };
+    const model = projectWorkbenchContracts({
+      goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
+    });
+    const preview = model.childDispatchPreview;
+
+    assert.equal(preview.contractName.text, 'childDispatchPreview.v1');
+    assert.equal(preview.state, 'ready');
+    assert.equal(preview.goal.goalId.text, 'v53-controlled-child-dispatch-preview');
+    assert.equal(preview.task.taskId.text, 'pr-1-contracts-fixtures-tests');
+    assert.equal(preview.providerRecommendation.providerId.text, 'codex');
+    assert.equal(preview.providerRecommendation.allowedProviders.items.map((item) => item.text).join(', '), 'codex, claude-code');
+    assert.equal(preview.readiness.copyAvailable.value, true);
+    assert.equal(preview.readiness.providerExecutionAvailable.value, false);
+    assert.equal(preview.readiness.actualChildDispatchAvailable.value, false);
+    assert.equal(preview.taskPack.copyOnly.value, true);
+    assert.equal(preview.taskPack.willMutate.value, false);
+    assert.equal(preview.taskPack.returnPath.text, 'v51-result-intake');
+    assert.match(preview.taskPack.json.text, /"contractName": "resultIntakeRequest\.v1"/u);
+    assert.equal(preview.resultExpectation.resultIntakeContract.text, 'resultIntakeRequest.v1');
+    assert.equal(preview.resultExpectation.expectedResultBlock.workerRole.text, 'worker');
+    assert.equal(preview.resultExpectation.expectedResultBlock.willAppendGoalEvent.value, false);
+    assert.equal(preview.resultExpectation.directGoalEventAppendAvailable.value, false);
+    assert.equal(preview.boundaries.providerExecutionAvailable.value, false);
+    assert.equal(preview.boundaries.childProcessSpawnAvailable.value, false);
+    assert.equal(preview.boundaries.frontendLocalFileReadAvailable.value, false);
+    assert.equal(model.desktopShell.childDispatchPreview.contractName.text, 'childDispatchPreview.v1');
+  });
+
   it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {
     const healthySnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.healthy.v1.json', 'utf8'));
     const missingProjectSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.missing-project.v1.json', 'utf8'));

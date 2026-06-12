@@ -1214,6 +1214,10 @@ export function projectWorkbenchContracts(results) {
     contract: goalSupervisorData?.systemGoldenPath,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
+  const projectedChildDispatchPreview = projectChildDispatchPreview({
+    contract: goalSupervisorData?.childDispatchPreview,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1234,6 +1238,7 @@ export function projectWorkbenchContracts(results) {
     routeStates,
     routeContext,
     systemGoldenPath: projectedSystemGoldenPath,
+    childDispatchPreview: projectedChildDispatchPreview,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
       routeStates
@@ -1256,6 +1261,7 @@ export function projectWorkbenchContracts(results) {
       providerHub: projectedProviderHub,
       supervisorDashboard: projectedSupervisorDashboard,
       systemGoldenPath: projectedSystemGoldenPath,
+      childDispatchPreview: projectedChildDispatchPreview,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1833,6 +1839,7 @@ function projectDesktopShell({
   providerHub,
   supervisorDashboard,
   systemGoldenPath,
+  childDispatchPreview,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -2122,6 +2129,7 @@ function projectDesktopShell({
     }),
     providerHub,
     systemGoldenPath,
+    childDispatchPreview,
     routeProvenance,
     appStates,
     boundaries,
@@ -2222,6 +2230,188 @@ function projectSystemGoldenPathSourceRef(sourceRef) {
     kind: valueState(sourceRef?.kind),
     ref: valueState(sourceRef?.ref)
   };
+}
+
+function projectChildDispatchPreview({
+  contract,
+  supervisorRoute
+}) {
+  const hasContract = contract !== null && contract !== undefined && typeof contract === 'object' && !Array.isArray(contract);
+  const taskPack = hasContract && contract.taskPack !== null && typeof contract.taskPack === 'object' && !Array.isArray(contract.taskPack)
+    ? contract.taskPack
+    : null;
+  const resultExpectation = hasContract && contract.resultExpectation !== null && typeof contract.resultExpectation === 'object' && !Array.isArray(contract.resultExpectation)
+    ? contract.resultExpectation
+    : null;
+  const allowedProviders = Array.isArray(contract?.providerRecommendation?.allowedProviders)
+    ? contract.providerRecommendation.allowedProviders
+    : taskPack?.allowedProviders;
+
+  return {
+    state: hasContract ? contract.readiness?.state ?? 'available' : 'missing',
+    contractName: valueState(contract?.contractName),
+    contractVersion: valueState(contract?.contractVersion),
+    generatedAt: valueState(contract?.generatedAt),
+    goal: {
+      goalId: valueState(contract?.goal?.goalId),
+      title: valueState(contract?.goal?.title),
+      state: valueState(contract?.goal?.state),
+      sourceContract: valueState(contract?.goal?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+    },
+    task: {
+      taskId: valueState(contract?.task?.taskId),
+      title: valueState(contract?.task?.title),
+      state: valueState(contract?.task?.state),
+      sourceContract: valueState(contract?.task?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+    },
+    requestedRole: valueState(contract?.requestedRole),
+    providerRecommendation: {
+      contractName: valueState(contract?.providerRecommendation?.contractName),
+      providerId: valueState(contract?.providerRecommendation?.providerId),
+      role: valueState(contract?.providerRecommendation?.role),
+      allowedProviders: projectSystemGoldenPathTextItems(allowedProviders),
+      rationale: valueState(contract?.providerRecommendation?.rationale),
+      copyOnly: valueState(contract?.providerRecommendation?.copyOnly),
+      providerExecutionAvailable: valueState(contract?.providerRecommendation?.providerExecutionAvailable),
+      actualChildDispatchAvailable: valueState(contract?.providerRecommendation?.actualChildDispatchAvailable)
+    },
+    readiness: {
+      state: valueState(contract?.readiness?.state),
+      canPreview: valueState(contract?.readiness?.canPreview),
+      copyAvailable: valueState(contract?.readiness?.copyAvailable),
+      requiresManualCopy: valueState(contract?.readiness?.requiresManualCopy),
+      providerExecutionAvailable: valueState(contract?.readiness?.providerExecutionAvailable),
+      actualChildDispatchAvailable: valueState(contract?.readiness?.actualChildDispatchAvailable)
+    },
+    blockedReasons: projectSystemGoldenPathTextItems(contract?.blockedReasons),
+    sourceContracts: {
+      state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : undefined),
+      items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectChildDispatchSourceContract)
+    },
+    sourceRefs: {
+      state: Array.isArray(contract?.sourceRefs) && contract.sourceRefs.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contract?.sourceRefs) ? contract.sourceRefs.length : undefined),
+      items: (Array.isArray(contract?.sourceRefs) ? contract.sourceRefs : []).map(projectSystemGoldenPathSourceRef)
+    },
+    taskPack: projectChildDispatchTaskPack(taskPack),
+    resultExpectation: projectChildDispatchResultExpectation(resultExpectation),
+    boundaries: projectChildDispatchBoundaries(contract?.boundaries),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 childDispatchPreview projection')
+    },
+    note: hasContract
+      ? 'Child Dispatch Preview is copy-only and returns external results through v51 Result Intake.'
+      : 'Child Dispatch Preview is unavailable until goal-supervisor-app-read-model.v1 exposes childDispatchPreview.v1.'
+  };
+}
+
+function projectChildDispatchSourceContract(sourceContract) {
+  return {
+    contractName: valueState(sourceContract?.contractName),
+    contractVersion: valueState(sourceContract?.contractVersion),
+    readOnly: valueState(sourceContract?.readOnly),
+    requiredFor: projectSystemGoldenPathTextItems(sourceContract?.requiredFor),
+    sourceRef: projectSystemGoldenPathSourceRef(sourceContract?.sourceRef)
+  };
+}
+
+function projectChildDispatchTaskPack(taskPack) {
+  const available = taskPack !== null && taskPack !== undefined && typeof taskPack === 'object' && !Array.isArray(taskPack);
+
+  return {
+    state: available ? 'available' : 'missing',
+    contractName: valueState(available ? 'childTaskPack.v1' : undefined),
+    goalId: valueState(taskPack?.goalId),
+    taskId: valueState(taskPack?.taskId),
+    role: valueState(taskPack?.role),
+    preferredProvider: valueState(taskPack?.preferredProvider),
+    allowedProviders: projectSystemGoldenPathTextItems(taskPack?.allowedProviders),
+    returnPath: valueState(taskPack?.returnPath),
+    copyOnly: valueState(taskPack?.copyOnly),
+    willMutate: valueState(taskPack?.willMutate),
+    projectContextRefs: projectSystemGoldenPathTextItems(taskPack?.projectContextRefs),
+    acceptanceCriteria: projectSystemGoldenPathTextItems(taskPack?.acceptanceCriteria),
+    requiredEvidenceRefs: projectChildDispatchEvidenceRefs(taskPack?.requiredEvidenceRefs),
+    taskPrompt: valueState(taskPack?.taskPrompt),
+    json: valueState(available ? stableJsonText(taskPack) : undefined)
+  };
+}
+
+function projectChildDispatchResultExpectation(resultExpectation) {
+  const expectedResultBlock = resultExpectation?.expectedResultBlock;
+  const hasExpectation = resultExpectation !== null &&
+    resultExpectation !== undefined &&
+    typeof resultExpectation === 'object' &&
+    !Array.isArray(resultExpectation);
+  const hasBlock = expectedResultBlock !== null &&
+    expectedResultBlock !== undefined &&
+    typeof expectedResultBlock === 'object' &&
+    !Array.isArray(expectedResultBlock);
+
+  return {
+    state: hasExpectation ? 'available' : 'missing',
+    contractName: valueState(resultExpectation?.contractName),
+    returnPath: valueState(resultExpectation?.returnPath),
+    resultIntakeContract: valueState(resultExpectation?.resultIntakeContract),
+    directGoalEventAppendAvailable: valueState(resultExpectation?.directGoalEventAppendAvailable),
+    directTaskCompleteAvailable: valueState(resultExpectation?.directTaskCompleteAvailable),
+    reviewerMutationAvailable: valueState(resultExpectation?.reviewerMutationAvailable),
+    mainVerificationMutationAvailable: valueState(resultExpectation?.mainVerificationMutationAvailable),
+    releaseGateMutationAvailable: valueState(resultExpectation?.releaseGateMutationAvailable),
+    requiredEvidenceRefs: projectChildDispatchEvidenceRefs(resultExpectation?.requiredEvidenceRefs),
+    expectedResultBlock: {
+      state: hasBlock ? 'available' : 'missing',
+      contractName: valueState(expectedResultBlock?.contractName),
+      goalId: valueState(expectedResultBlock?.goalId),
+      taskId: valueState(expectedResultBlock?.taskId),
+      workerRole: valueState(expectedResultBlock?.workerRole),
+      source: valueState(expectedResultBlock?.source),
+      requestedEvent: valueState(expectedResultBlock?.requestedEvent?.eventType),
+      willAppendGoalEvent: valueState(expectedResultBlock?.willAppendGoalEvent),
+      json: valueState(hasBlock ? stableJsonText(expectedResultBlock) : undefined)
+    }
+  };
+}
+
+function projectChildDispatchEvidenceRefs(evidenceRefs) {
+  return {
+    state: Array.isArray(evidenceRefs) && evidenceRefs.length > 0 ? 'available' : Array.isArray(evidenceRefs) ? 'empty' : 'missing',
+    count: valueState(Array.isArray(evidenceRefs) ? evidenceRefs.length : undefined),
+    items: (Array.isArray(evidenceRefs) ? evidenceRefs : []).map((evidenceRef) => ({
+      kind: valueState(evidenceRef?.kind),
+      ref: valueState(evidenceRef?.ref),
+      label: valueState(evidenceRef?.label)
+    }))
+  };
+}
+
+function projectChildDispatchBoundaries(boundaries) {
+  return {
+    copyOnly: valueState(boundaries?.copyOnly),
+    willMutate: valueState(boundaries?.willMutate),
+    providerExecutionAvailable: valueState(boundaries?.providerExecutionAvailable),
+    actualChildDispatchAvailable: valueState(boundaries?.actualChildDispatchAvailable),
+    childProcessSpawnAvailable: valueState(boundaries?.childProcessSpawnAvailable),
+    frontendLocalFileReadAvailable: valueState(boundaries?.frontendLocalFileReadAvailable),
+    directGoalEventAppendAvailable: valueState(boundaries?.directGoalEventAppendAvailable),
+    directTaskCompleteAvailable: valueState(boundaries?.directTaskCompleteAvailable),
+    reviewerMutationAvailable: valueState(boundaries?.reviewerMutationAvailable),
+    mainVerificationMutationAvailable: valueState(boundaries?.mainVerificationMutationAvailable),
+    releaseGateMutationAvailable: valueState(boundaries?.releaseGateMutationAvailable),
+    gitMutationAvailable: valueState(boundaries?.gitMutationAvailable),
+    tagAutomationAvailable: valueState(boundaries?.tagAutomationAvailable),
+    publishAutomationAvailable: valueState(boundaries?.publishAutomationAvailable),
+    githubReleaseAutomationAvailable: valueState(boundaries?.githubReleaseAutomationAvailable)
+  };
+}
+
+function stableJsonText(value) {
+  return JSON.stringify(value, null, 2);
 }
 
 function projectSystemGoldenPathAction(action) {
