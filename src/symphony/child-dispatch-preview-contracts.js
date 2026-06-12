@@ -51,7 +51,7 @@ const GOAL_STATE_SET = new Set(['ready', 'active', 'blocked', 'missing', 'pendin
 const REF_KIND_SET = new Set(['contract', 'route', 'fixture', 'docs']);
 const EVIDENCE_REF_KIND_SET = new Set(['repo-doc', 'artifact-ref', 'commit', 'command-evidence', 'external-note']);
 const RESULT_SOURCE_SET = new Set(['codex', 'claude', 'manual-paste', 'external-worker']);
-const RESULT_ROLE_SET = new Set(['worker', 'reviewer', 'main-verifier', 'release-manager']);
+const RESULT_ROLE_SET = new Set(['worker', 'reviewer']);
 const RESULT_EVENT_SET = new Set([
   'worker.evidence-recorded',
   'worker.self-check-passed',

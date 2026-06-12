@@ -141,6 +141,24 @@ describe('v53 childDispatchPreview.v1 contracts and fixtures', () => {
     assert.ok(standaloneValidation.errors.includes('taskPack.allowedProviders must be exactly codex, claude-code'));
   });
 
+  it('rejects main verifier and release manager result roles from child task packs', () => {
+    for (const workerRole of ['main-verifier', 'release-manager']) {
+      const preview = fixture('child-dispatch-preview.codex-worker.v1.json');
+      preview.taskPack.expectedResultBlock.workerRole = workerRole;
+      preview.resultExpectation.expectedResultBlock.workerRole = workerRole;
+
+      const validation = validateChildDispatchPreviewContract(preview);
+
+      assert.equal(validation.ok, false, workerRole);
+      assert.ok(validation.errors.includes(
+        'taskPack.expectedResultBlock.workerRole must be one of worker, reviewer'
+      ));
+      assert.ok(validation.errors.includes(
+        'resultExpectation.expectedResultBlock.workerRole must be one of worker, reviewer'
+      ));
+    }
+  });
+
   it('rejects execution, dispatch, local state, raw output, event append, and release-route drift', () => {
     const cases = [
       {
