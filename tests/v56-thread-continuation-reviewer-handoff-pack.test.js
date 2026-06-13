@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -28,6 +30,11 @@ import {
 import {
   buildGoalSupervisorAppReadModel
 } from '../src/symphony/goal-supervisor/index.js';
+import {
+  ThreadHandoffPackStateError,
+  readThreadHandoffCheckpointSnapshot,
+  writeThreadHandoffCheckpointSnapshot
+} from '../src/symphony/thread-handoff-pack-state.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -404,6 +411,81 @@ describe('v56 thread continuation and reviewer handoff pack contracts', () => {
     );
     assert.equal(validateThreadHandoffPackContract(pack).ok, true);
     assertNoUnsafePayload(pack);
+  });
+
+  it('writes a bounded checkpoint snapshot artifact without goal, provider, git, or release mutation', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'symphony-v56-checkpoint-'));
+    const pack = fixture('thread-handoff-pack.ready-continuation.v1.json');
+
+    try {
+      const write = await writeThreadHandoffCheckpointSnapshot({
+        stateDir,
+        pack
+      });
+      const disk = await readThreadHandoffCheckpointSnapshot({
+        stateDir,
+        goalId: pack.goal.goalId,
+        snapshotId: pack.checkpointRef.snapshotId
+      });
+      const raw = await readFile(write.path, 'utf8');
+
+      assert.equal(write.contractName, 'threadHandoffCheckpointArtifactWrite.v1');
+      assert.equal(write.snapshotId, pack.checkpointRef.snapshotId);
+      assert.equal(write.artifactRef.kind, 'artifact-ref');
+      assert.equal(write.boundaries.writesGoalEventLog, false);
+      assert.equal(write.boundaries.writesTaskCompletion, false);
+      assert.equal(write.boundaries.createsProviderThread, false);
+      assert.equal(write.boundaries.createsWorktree, false);
+      assert.equal(write.boundaries.gitMutationAvailable, false);
+      assert.equal(write.boundaries.tagAutomationAvailable, false);
+      assert.equal(write.boundaries.publishAutomationAvailable, false);
+      assert.equal(write.boundaries.githubReleaseAutomationAvailable, false);
+      assert.equal(disk.contractName, CHECKPOINT_SNAPSHOT_CONTRACT_NAME);
+      const snapshotContract = { ...disk };
+
+      delete snapshotContract.artifactWrite;
+
+      assert.equal(validateCheckpointSnapshotContract(snapshotContract).ok, true);
+      assert.equal(disk.artifactWrite.writesGoalEventLog, false);
+      assert.equal(disk.artifactWrite.createsProviderThread, false);
+      assertNoUnsafePayload(write);
+      assertNoUnsafePayload(disk);
+      assert.doesNotMatch(raw, /raw transcript|raw model output|provider output|provider session|session path|goal ledger|\.jsonl/iu);
+      assert.doesNotMatch(raw, /event-plan-confirm|append event|mark complete|Confirm Reviewer Verdict|git push|gh release|tag creation|publish release/iu);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unsafe checkpoint snapshot artifacts before writing local session or raw payload refs', async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), 'symphony-v56-checkpoint-unsafe-'));
+    const rawTranscriptPack = fixture('thread-handoff-pack.raw-transcript.invalid.v1.json');
+    const localSessionPack = fixture('thread-handoff-pack.local-session.invalid.v1.json');
+
+    try {
+      await assert.rejects(
+        () => writeThreadHandoffCheckpointSnapshot({
+          stateDir,
+          pack: rawTranscriptPack
+        }),
+        (error) => (
+          error instanceof ThreadHandoffPackStateError &&
+          error.code === 'invalid-thread-handoff-pack'
+        )
+      );
+      await assert.rejects(
+        () => writeThreadHandoffCheckpointSnapshot({
+          stateDir,
+          pack: localSessionPack
+        }),
+        (error) => (
+          error instanceof ThreadHandoffPackStateError &&
+          error.code === 'invalid-thread-handoff-pack'
+        )
+      );
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
   });
 
   it('throws before building a pack from unsafe source payloads', () => {
