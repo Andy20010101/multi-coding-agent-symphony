@@ -1328,6 +1328,7 @@ h4 {
 .codex-provider-execution-panel,
 .codex-run-recovery-panel,
 .reviewer-handoff-preview-panel,
+.thread-handoff-pack-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
@@ -1632,7 +1633,8 @@ h4 {
 .child-dispatch-preview-panel,
 .codex-provider-execution-panel,
 .codex-run-recovery-panel,
-.reviewer-handoff-preview-panel {
+.reviewer-handoff-preview-panel,
+.thread-handoff-pack-panel {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
@@ -1643,6 +1645,7 @@ h4 {
 .codex-provider-execution-header,
 .codex-run-recovery-header,
 .reviewer-handoff-preview-header,
+.thread-handoff-pack-header,
 .system-golden-path-step-header {
   display: flex;
   flex-wrap: wrap;
@@ -1655,7 +1658,8 @@ h4 {
 .child-dispatch-preview-header,
 .codex-provider-execution-header,
 .codex-run-recovery-header,
-.reviewer-handoff-preview-header {
+.reviewer-handoff-preview-header,
+.thread-handoff-pack-header {
   border-bottom: 1px solid var(--dsk-line-soft);
   padding-bottom: 8px;
 }
@@ -1665,6 +1669,7 @@ h4 {
 .codex-provider-execution-header h2,
 .codex-run-recovery-header h2,
 .reviewer-handoff-preview-header h2,
+.thread-handoff-pack-header h2,
 .system-golden-path-step-header h3 {
   margin: 0;
   color: var(--dsk-fg);
@@ -1677,7 +1682,8 @@ h4 {
 .child-dispatch-preview-header h2,
 .codex-provider-execution-header h2,
 .codex-run-recovery-header h2,
-.reviewer-handoff-preview-header h2 {
+.reviewer-handoff-preview-header h2,
+.thread-handoff-pack-header h2 {
   font-size: 18px;
 }
 
@@ -1699,7 +1705,8 @@ h4 {
 .child-dispatch-preview-summary,
 .codex-provider-execution-summary,
 .codex-run-recovery-summary,
-.reviewer-handoff-preview-summary {
+.reviewer-handoff-preview-summary,
+.thread-handoff-pack-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
   gap: 12px;
