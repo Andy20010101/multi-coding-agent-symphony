@@ -44,6 +44,10 @@ import {
   validateCodexProviderRunRecoveryContract
 } from '../codex-provider-run-recovery-contracts.js';
 import {
+  buildThreadHandoffPack,
+  validateThreadHandoffPackContract
+} from '../thread-handoff-pack-contracts.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -176,6 +180,7 @@ export function buildGoalSupervisorAppReadModel({
     }),
     generatedAt
   );
+  const threadHandoffContextBlockedReasons = threadHandoffUnsafeContextBlockedReasons(contextAdvisory);
   const normalizedThreadContinuationDecision = normalizeThreadContinuationDecisionDisplay(
     threadContinuationDecision ?? buildThreadContinuationDecision({
       contextAdvisory: normalizedContextAdvisory,
@@ -257,6 +262,18 @@ export function buildGoalSupervisorAppReadModel({
     codexProviderRunRecovery,
     pendingResultState
   });
+  const threadHandoffPack = buildGoalSupervisorThreadHandoffPack({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    tasks,
+    projection,
+    codexProviderRunRecovery,
+    reviewerHandoffPreview,
+    contextAdvisory: normalizedContextAdvisory,
+    threadContinuationDecision: normalizedThreadContinuationDecision,
+    contextBlockedReasons: threadHandoffContextBlockedReasons
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -296,7 +313,8 @@ export function buildGoalSupervisorAppReadModel({
     childDispatchPreview,
     codexProviderExecutionPreview,
     codexProviderRunRecovery,
-    reviewerHandoffPreview
+    reviewerHandoffPreview,
+    threadHandoffPack
   };
 }
 
@@ -370,6 +388,285 @@ function buildGoalSupervisorReviewerHandoffPreview({
   }
 
   return preview;
+}
+
+function buildGoalSupervisorThreadHandoffPack({
+  generatedAt,
+  goalId,
+  title,
+  tasks,
+  projection,
+  codexProviderRunRecovery,
+  reviewerHandoffPreview,
+  contextAdvisory,
+  threadContinuationDecision,
+  contextBlockedReasons = []
+}) {
+  const decisionContext = threadHandoffDecisionContext({
+    threadContinuationDecision,
+    reviewerHandoffPreview,
+    contextBlockedReasons,
+    sourcesReady: threadHandoffSourcesReady({
+      codexProviderRunRecovery,
+      reviewerHandoffPreview
+    })
+  });
+  const pack = buildThreadHandoffPack({
+    generatedAt,
+    goal: threadHandoffGoal({
+      goalId,
+      title
+    }),
+    task: threadHandoffTask({
+      tasks,
+      projection,
+      codexProviderRunRecovery,
+      reviewerHandoffPreview,
+      threadContinuationDecision
+    }),
+    recovery: codexProviderRunRecovery,
+    reviewerHandoff: reviewerHandoffPreview,
+    contextAdvisory,
+    decision: decisionContext.decision,
+    blockedReasons: decisionContext.blockedReasons,
+    openRisks: decisionContext.openRisks
+  });
+  const validation = validateThreadHandoffPackContract(pack);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid thread handoff pack projection: ${validation.errors.join('; ')}`);
+  }
+
+  return pack;
+}
+
+function threadHandoffGoal({
+  goalId,
+  title
+}) {
+  const safeGoalId = firstNonEmptyString(goalId, 'missing-goal');
+
+  return {
+    goalId: safeGoalId,
+    title: firstNonEmptyString(title, safeGoalId),
+    state: 'active',
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: supervisorRouteSourceRef()
+  };
+}
+
+function threadHandoffTask({
+  tasks,
+  projection,
+  codexProviderRunRecovery,
+  reviewerHandoffPreview,
+  threadContinuationDecision
+}) {
+  const taskId = firstNonEmptyString(
+    threadContinuationDecision?.taskId,
+    codexProviderRunRecovery?.task?.taskId,
+    reviewerHandoffPreview?.reviewerTask?.taskId,
+    projection?.current?.taskId,
+    projection?.route?.current?.taskId,
+    Array.isArray(tasks) ? tasks.find((entry) => isPlainObject(entry))?.taskId : null,
+    'missing-task'
+  );
+  const task = Array.isArray(tasks)
+    ? tasks.find((entry) => isPlainObject(entry) && entry.taskId === taskId)
+    : null;
+  const sourceTask = isPlainObject(codexProviderRunRecovery?.task)
+    ? codexProviderRunRecovery.task
+    : {};
+  const reviewerTask = isPlainObject(reviewerHandoffPreview?.reviewerTask)
+    ? reviewerHandoffPreview.reviewerTask
+    : {};
+
+  return {
+    taskId,
+    title: firstNonEmptyString(
+      task?.title,
+      sourceTask.title,
+      reviewerTask.title,
+      taskId
+    ),
+    state: task?.status === 'blocked' || sourceTask.state === 'blocked' ? 'blocked' : 'active',
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: supervisorRouteSourceRef()
+  };
+}
+
+function threadHandoffDecisionContext({
+  threadContinuationDecision,
+  reviewerHandoffPreview,
+  contextBlockedReasons = [],
+  sourcesReady = false
+}) {
+  const unsafeContextReasons = uniqueStrings(contextBlockedReasons);
+  const decision = firstNonEmptyString(threadContinuationDecision?.decision);
+  const reason = firstNonEmptyString(threadContinuationDecision?.reason);
+  const blockedFields = Array.isArray(threadContinuationDecision?.blockedFields)
+    ? threadContinuationDecision.blockedFields
+    : [];
+  const mismatchList = Array.isArray(threadContinuationDecision?.mismatchList)
+    ? threadContinuationDecision.mismatchList
+    : [];
+  const reviewerReady = isPlainObject(reviewerHandoffPreview) &&
+    reviewerHandoffPreview.blockedReasons?.length === 0;
+
+  if (unsafeContextReasons.length > 0) {
+    return {
+      decision: 'blocked',
+      blockedReasons: unsafeContextReasons,
+      openRisks: []
+    };
+  }
+
+  if (sourcesReady !== true) {
+    return {
+      decision: null,
+      blockedReasons: [],
+      openRisks: []
+    };
+  }
+
+  if (decision === 'checkpoint') {
+    return {
+      decision: 'checkpoint',
+      blockedReasons: [],
+      openRisks: []
+    };
+  }
+
+  if (decision === 'recover-drift') {
+    return {
+      decision: 'recover-drift',
+      blockedReasons: [],
+      openRisks: uniqueStrings([
+        ...mismatchList,
+        reason
+      ])
+    };
+  }
+
+  if (decision === 'blocked') {
+    return {
+      decision: 'blocked',
+      blockedReasons: uniqueStrings([
+        reason,
+        ...blockedFields,
+        'thread-continuation-blocked'
+      ]),
+      openRisks: []
+    };
+  }
+
+  if (decision === 'compact') {
+    return {
+      decision: 'blocked',
+      blockedReasons: uniqueStrings([
+        reason,
+        'automatic-compact-disabled'
+      ]),
+      openRisks: []
+    };
+  }
+
+  if (decision === 'new-thread') {
+    return {
+      decision: 'blocked',
+      blockedReasons: uniqueStrings([
+        reason,
+        'automatic-new-thread-disabled'
+      ]),
+      openRisks: []
+    };
+  }
+
+  if (decision === 'wait') {
+    return {
+      decision: 'blocked',
+      blockedReasons: uniqueStrings([
+        reason,
+        'thread-continuation-waiting'
+      ]),
+      openRisks: []
+    };
+  }
+
+  if (threadContinuationDecision?.targetRole === 'reviewer' && reviewerReady) {
+    return {
+      decision: 'reviewer-handoff',
+      blockedReasons: [],
+      openRisks: []
+    };
+  }
+
+  return {
+    decision: null,
+    blockedReasons: [],
+    openRisks: []
+  };
+}
+
+function threadHandoffSourcesReady({
+  codexProviderRunRecovery,
+  reviewerHandoffPreview
+}) {
+  return isPlainObject(codexProviderRunRecovery) &&
+    codexProviderRunRecovery.recoveryState === 'ready-for-reviewer-handoff' &&
+    isPlainObject(reviewerHandoffPreview) &&
+    Array.isArray(reviewerHandoffPreview.blockedReasons) &&
+    reviewerHandoffPreview.blockedReasons.length === 0;
+}
+
+function threadHandoffUnsafeContextBlockedReasons(contextAdvisory) {
+  const unsafeField = findUnsafeThreadHandoffContextField(contextAdvisory, 'contextAdvisory');
+
+  return unsafeField === null ? [] : [`unsafe-context-advisory-ref:${unsafeField}`];
+}
+
+function findUnsafeThreadHandoffContextField(value, path, seen = new Set()) {
+  if (typeof value === 'string') {
+    return hasUnsafeSourceContractText(value) ? path : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const [index, entry] of value.entries()) {
+      const unsafe = findUnsafeThreadHandoffContextField(entry, `${path}[${index}]`, seen);
+
+      if (unsafe !== null) {
+        return unsafe;
+      }
+    }
+
+    return null;
+  }
+
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  if (seen.has(value)) {
+    return null;
+  }
+
+  seen.add(value);
+
+  for (const [key, entry] of Object.entries(value)) {
+    const fieldPath = `${path}.${key}`;
+
+    if (/^(?:rawTranscript|transcript|rawModelOutput|rawOutput|providerOutput|providerPayload|sessionLog|sessionPath|messages|conversation|goalLedgerInternals)$/iu.test(key)) {
+      return fieldPath;
+    }
+
+    const unsafe = findUnsafeThreadHandoffContextField(entry, fieldPath, seen);
+
+    if (unsafe !== null) {
+      return unsafe;
+    }
+  }
+
+  return null;
 }
 
 function buildGoalSupervisorChildDispatchPreview({

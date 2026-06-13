@@ -20,11 +20,20 @@ import {
   validateThreadBoundaryNoticeContract,
   validateThreadHandoffPackContract
 } from '../src/symphony/thread-handoff-pack-contracts.js';
+import {
+  buildPendingResultFromEscrow,
+  buildResultEvidenceEscrow,
+  buildResultIntakePreview
+} from '../src/symphony/result-intake-contracts.js';
+import {
+  buildGoalSupervisorAppReadModel
+} from '../src/symphony/goal-supervisor/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
 const FIXTURE_DIR = join(REPO_ROOT, 'fixtures/contracts/thread-handoff-pack');
 const V55_FIXTURE_DIR = join(REPO_ROOT, 'fixtures/contracts/codex-provider-run-recovery');
+const V54_FIXTURE_DIR = join(REPO_ROOT, 'fixtures/contracts/codex-provider-execution');
 const GENERATED_AT = '2026-06-13T02:00:00.000Z';
 const GOAL_ID = 'v56-thread-continuation-reviewer-handoff-pack';
 const TASK_ID = 'pr-1-contracts-fixtures-tests';
@@ -261,6 +270,142 @@ describe('v56 thread continuation and reviewer handoff pack contracts', () => {
     assertNoMutationBoundary(checkpoint.checkpointRef);
   });
 
+  it('projects thread handoff pack from backend supervisor read model state', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const previewOnlyModel = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: completedRun,
+      nowMs: Date.parse(GENERATED_AT)
+    }));
+    const alignedRun = alignRunRecordWithPreview(
+      completedRun,
+      previewOnlyModel.codexProviderExecutionPreview
+    );
+    const pendingResult = pendingResultForRunRecord(alignedRun);
+    const model = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: alignedRun,
+      pendingResult,
+      threadContinuationDecision: continuationDecision({
+        decision: 'continue',
+        targetRole: 'reviewer',
+        taskId: alignedRun.taskId
+      }),
+      nowMs: Date.parse(GENERATED_AT)
+    }));
+    const pack = model.threadHandoffPack;
+
+    assert.equal(pack.contractName, THREAD_HANDOFF_PACK_CONTRACT_NAME);
+    assert.equal(validateThreadHandoffPackContract(pack).ok, true);
+    assert.equal(pack.decision, 'reviewer-handoff');
+    assert.equal(pack.sourceRecovery.state, 'ready-for-reviewer-handoff');
+    assert.equal(pack.sourceReviewerHandoff.readiness, 'ready');
+    assert.deepEqual(pack.blockedReasons, []);
+    assert.equal(pack.copyBlocks[0].blockType, 'reviewer-handoff');
+    assert.deepEqual(
+      pack.sourceContracts.map((contract) => contract.contractName),
+      ['codexProviderRunRecovery.v1', 'reviewerHandoffPreview.v1', 'contextAdvisory.v1']
+    );
+    assertNoMutationBoundary(pack);
+    assertNoUnsafePayload(pack);
+  });
+
+  it('projects blocked thread handoff pack when backend source state is missing or stale', () => {
+    const missingModel = buildGoalSupervisorAppReadModel({
+      goalId: GOAL_ID,
+      title: 'v56 Thread Continuation and Reviewer Handoff Pack',
+      tasks: [{
+        taskId: TASK_ID,
+        title: 'Backend handoff projection',
+        status: 'active'
+      }],
+      contextAdvisory: contextAdvisory(),
+      threadContinuationDecision: continuationDecision({
+        decision: 'continue',
+        taskId: TASK_ID
+      }),
+      nowMs: Date.parse(GENERATED_AT)
+    });
+    const missingCheckpointModel = buildGoalSupervisorAppReadModel({
+      goalId: GOAL_ID,
+      title: 'v56 Thread Continuation and Reviewer Handoff Pack',
+      tasks: [{
+        taskId: TASK_ID,
+        title: 'Backend handoff projection',
+        status: 'active'
+      }],
+      contextAdvisory: contextAdvisory(),
+      threadContinuationDecision: continuationDecision({
+        decision: 'checkpoint',
+        taskId: TASK_ID
+      }),
+      nowMs: Date.parse(GENERATED_AT)
+    });
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const staleModel = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: completedRun,
+      pendingResult: pendingResultForRunRecord(completedRun),
+      threadContinuationDecision: continuationDecision({
+        decision: 'continue',
+        taskId: completedRun.taskId
+      }),
+      nowMs: Date.parse(GENERATED_AT)
+    }));
+
+    assert.equal(missingModel.threadHandoffPack.decision, 'blocked');
+    assert.equal(missingModel.threadHandoffPack.sourceRecovery.state, 'missing');
+    assert.ok(
+      missingModel.threadHandoffPack.blockedReasons.includes('missing-codex-provider-run-recovery'),
+      missingModel.threadHandoffPack.blockedReasons.join('; ')
+    );
+    assert.equal(validateThreadHandoffPackContract(missingModel.threadHandoffPack).ok, true);
+    assert.equal(missingCheckpointModel.threadHandoffPack.decision, 'blocked');
+    assert.equal(missingCheckpointModel.threadHandoffPack.sourceRecovery.state, 'missing');
+    assert.ok(
+      missingCheckpointModel.threadHandoffPack.blockedReasons.includes('missing-codex-provider-run-recovery'),
+      missingCheckpointModel.threadHandoffPack.blockedReasons.join('; ')
+    );
+    assert.equal(validateThreadHandoffPackContract(missingCheckpointModel.threadHandoffPack).ok, true);
+
+    assert.equal(staleModel.threadHandoffPack.decision, 'blocked');
+    assert.equal(staleModel.threadHandoffPack.sourceRecovery.state, 'stale-preview-hash');
+    assert.ok(
+      staleModel.threadHandoffPack.blockedReasons.includes('stale-preview-hash'),
+      staleModel.threadHandoffPack.blockedReasons.join('; ')
+    );
+    assert.equal(validateThreadHandoffPackContract(staleModel.threadHandoffPack).ok, true);
+  });
+
+  it('blocks unsafe context refs before backend read model projection exposes a ready handoff pack', () => {
+    const completedRun = v54Fixture('run-record.completed.v1.json');
+    const previewOnlyModel = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: completedRun,
+      nowMs: Date.parse(GENERATED_AT)
+    }));
+    const alignedRun = alignRunRecordWithPreview(
+      completedRun,
+      previewOnlyModel.codexProviderExecutionPreview
+    );
+    const pendingResult = pendingResultForRunRecord(alignedRun);
+    const unsafeContext = contextAdvisory();
+
+    unsafeContext.resultBlockEvidence.evidenceRef = '/Users/andy/.codex/sessions/2026/06/13/session.jsonl';
+
+    const model = buildGoalSupervisorAppReadModel(readModelInputForRun({
+      runRecord: alignedRun,
+      pendingResult,
+      contextAdvisory: unsafeContext,
+      nowMs: Date.parse(GENERATED_AT)
+    }));
+    const pack = model.threadHandoffPack;
+
+    assert.equal(pack.decision, 'blocked');
+    assert.ok(
+      pack.blockedReasons.some((reason) => reason.startsWith('unsafe-context-advisory-ref:')),
+      pack.blockedReasons.join('; ')
+    );
+    assert.equal(validateThreadHandoffPackContract(pack).ok, true);
+    assertNoUnsafePayload(pack);
+  });
+
   it('throws before building a pack from unsafe source payloads', () => {
     const recovery = v55Fixture('recovery.completed-accepted.v1.json');
 
@@ -306,6 +451,10 @@ function v55Fixture(name) {
   return JSON.parse(readFileSync(join(V55_FIXTURE_DIR, name), 'utf8'));
 }
 
+function v54Fixture(name) {
+  return JSON.parse(readFileSync(join(V54_FIXTURE_DIR, name), 'utf8'));
+}
+
 function contextAdvisory() {
   return {
     contractName: 'contextAdvisory.v1',
@@ -319,6 +468,112 @@ function contextAdvisory() {
       evidenceRef: 'docs/plans/v56-thread-continuation-reviewer-handoff-pack-runbook-2026-06-13.md'
     }
   };
+}
+
+function pendingResultForRunRecord(runRecord) {
+  const preview = buildResultIntakePreview(runRecord.resultIntakeRequest, {
+    generatedAt: '2026-06-13T01:10:00.000Z',
+    expiresAt: '2026-06-13T01:25:00.000Z'
+  });
+  const escrow = buildResultEvidenceEscrow(preview, {
+    createdAt: '2026-06-13T01:11:00.000Z',
+    now: '2026-06-13T01:11:00.000Z'
+  });
+
+  return buildPendingResultFromEscrow(escrow);
+}
+
+function readModelInputForRun({
+  runRecord,
+  pendingResult = null,
+  contextAdvisory: contextAdvisoryInput = contextAdvisory(),
+  threadContinuationDecision = continuationDecision({
+    decision: 'continue',
+    taskId: runRecord.taskId
+  }),
+  nowMs
+}) {
+  return {
+    goalId: runRecord.goalId,
+    title: 'v56 Thread Continuation and Reviewer Handoff Pack',
+    tasks: [{
+      taskId: runRecord.taskId,
+      title: 'Backend handoff projection',
+      status: 'active'
+    }],
+    goalNext: {
+      contractName: 'goal-next-action.v1',
+      contractVersion: 1,
+      goalId: runRecord.goalId,
+      status: 'action-required',
+      next: {
+        taskId: runRecord.taskId,
+        role: 'worker',
+        phase: 'implement'
+      },
+      reason: 'backend handoff projection is next'
+    },
+    contextAdvisory: contextAdvisoryInput,
+    threadContinuationDecision,
+    pendingResultState: pendingResult,
+    codexProviderRunRecord: runRecord,
+    nowMs
+  };
+}
+
+function continuationDecision({
+  decision,
+  targetRole = 'worker',
+  taskId = TASK_ID,
+  reason = 'copy-only handoff pack projection'
+} = {}) {
+  return {
+    contractName: 'threadContinuationDecision.v1',
+    contractVersion: 1,
+    generatedAt: GENERATED_AT,
+    readOnly: true,
+    willMutate: false,
+    decision,
+    reason,
+    confidence: 'known',
+    targetRole,
+    taskId,
+    threadId: 'thread-v56-pr-2',
+    checkpointRef: null,
+    waitPolicy: null,
+    blockedFields: [],
+    mismatchList: [],
+    requiredEvidence: [],
+    sourceContracts: [{
+      contractName: 'contextAdvisory.v1',
+      contractVersion: 1,
+      readOnly: true,
+      sourceRef: {
+        kind: 'contract',
+        ref: 'contextAdvisory.v1'
+      }
+    }],
+    commandBoundary: {
+      executionAvailable: false,
+      copyOnly: true
+    }
+  };
+}
+
+function alignRunRecordWithPreview(runRecord, preview) {
+  const aligned = structuredClone(runRecord);
+
+  aligned.previewHash = preview.previewHash;
+  aligned.sourceContracts = aligned.sourceContracts.map((contract) => (
+    contract.previewHash === undefined
+      ? contract
+      : {
+          ...contract,
+          previewHash: preview.previewHash
+        }
+  ));
+
+  return aligned;
 }
 
 function goalInput() {
