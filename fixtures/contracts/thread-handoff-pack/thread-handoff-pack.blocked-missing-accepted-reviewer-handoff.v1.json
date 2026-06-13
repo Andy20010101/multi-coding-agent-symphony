@@ -1,0 +1,393 @@
+{
+  "contractName": "threadHandoffPack.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-13T02:00:00.000Z",
+  "goal": {
+    "goalId": "v56-thread-continuation-reviewer-handoff-pack",
+    "title": "v56 Thread Continuation and Reviewer Handoff Pack",
+    "state": "active",
+    "sourceContract": "codexProviderRunRecovery.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "codexProviderRunRecovery.v1"
+    }
+  },
+  "task": {
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "title": "Contracts, fixtures, and tests",
+    "state": "active",
+    "sourceContract": "codexProviderRunRecovery.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "codexProviderRunRecovery.v1"
+    }
+  },
+  "decision": "blocked",
+  "sourceRecovery": {
+    "contractName": "codexProviderRunRecovery.v1",
+    "contractVersion": 1,
+    "state": "ready-for-reviewer-handoff",
+    "runId": "codex-v54-pr1-completed",
+    "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+    "blockedReasons": [],
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "codexProviderRunRecovery.v1"
+    }
+  },
+  "sourceReviewerHandoff": {
+    "contractName": "reviewerHandoffPreview.v1",
+    "contractVersion": 1,
+    "readiness": "blocked",
+    "pendingResultState": null,
+    "blockedReasons": [
+      "pending-result-not-accepted"
+    ],
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "reviewerHandoffPreview.v1"
+    }
+  },
+  "summary": "Thread handoff pack is blocked: missing-accepted-reviewer-handoff.",
+  "knownFacts": [
+    "recovery state: ready-for-reviewer-handoff",
+    "reviewer handoff readiness: blocked",
+    "context advisory contract is present"
+  ],
+  "openRisks": [],
+  "blockedReasons": [
+    "missing-accepted-reviewer-handoff"
+  ],
+  "nextSafeAction": {
+    "actionId": "copy-blocked-continuation-pack",
+    "label": "Copy blocked continuation pack",
+    "copyOnly": true,
+    "willMutate": false
+  },
+  "requiredEvidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v56-thread-continuation-reviewer-handoff-pack-runbook-2026-06-13.md",
+      "label": "Context advisory evidence"
+    }
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "codexProviderRunRecovery.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "source-recovery-state"
+      ],
+      "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "codexProviderRunRecovery.v1"
+      }
+    },
+    {
+      "contractName": "reviewerHandoffPreview.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "reviewer-handoff-readiness"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "reviewerHandoffPreview.v1"
+      }
+    },
+    {
+      "contractName": "contextAdvisory.v1",
+      "contractVersion": 1,
+      "generatedAt": "2026-06-13T02:00:00.000Z",
+      "readOnly": true,
+      "requiredFor": [
+        "context-carryover-refs"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "contextAdvisory.v1"
+      }
+    }
+  ],
+  "copyBlocks": [
+    {
+      "contractName": "providerContinuationPrompt.v1",
+      "contractVersion": 1,
+      "generatedAt": "2026-06-13T02:00:00.000Z",
+      "blockId": "blocked-continuation:v56-thread-continuation-reviewer-handoff-pack:pr-1-contracts-fixtures-tests",
+      "blockType": "blocked-continuation",
+      "title": "Copy Continuation Pack",
+      "body": "Goal v56-thread-continuation-reviewer-handoff-pack; task pr-1-contracts-fixtures-tests; decision blocked. Thread handoff pack is blocked: missing-accepted-reviewer-handoff. Blocked reasons: missing-accepted-reviewer-handoff. Next safe action: Copy blocked continuation pack. This text is copy-only and does not mutate goal state.",
+      "summary": "Thread handoff pack is blocked: missing-accepted-reviewer-handoff.",
+      "nextSafeAction": {
+        "actionId": "copy-blocked-continuation-pack",
+        "label": "Copy blocked continuation pack",
+        "copyOnly": true,
+        "willMutate": false
+      },
+      "requiredEvidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v56-thread-continuation-reviewer-handoff-pack-runbook-2026-06-13.md",
+          "label": "Context advisory evidence"
+        }
+      ],
+      "blockedReasons": [
+        "missing-accepted-reviewer-handoff"
+      ],
+      "copyOnly": true,
+      "willMutate": false,
+      "contextCarryoverRefs": {
+        "contractName": "contextCarryoverRefs.v1",
+        "contractVersion": 1,
+        "generatedAt": "2026-06-13T02:00:00.000Z",
+        "copyOnly": true,
+        "willMutate": false,
+        "goalId": "v56-thread-continuation-reviewer-handoff-pack",
+        "taskId": "pr-1-contracts-fixtures-tests",
+        "contextRefs": [
+          {
+            "kind": "contract",
+            "ref": "codexProviderRunRecovery.v1"
+          },
+          {
+            "kind": "contract",
+            "ref": "reviewerHandoffPreview.v1"
+          },
+          {
+            "kind": "contract",
+            "ref": "contextAdvisory.v1"
+          }
+        ],
+        "evidenceRefs": [
+          {
+            "kind": "repo-doc",
+            "ref": "docs/plans/v56-thread-continuation-reviewer-handoff-pack-runbook-2026-06-13.md",
+            "label": "Context advisory evidence"
+          }
+        ],
+        "sourceContracts": [
+          {
+            "contractName": "codexProviderRunRecovery.v1",
+            "contractVersion": 1,
+            "readOnly": true,
+            "requiredFor": [
+              "source-recovery-state"
+            ],
+            "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+            "sourceRef": {
+              "kind": "contract",
+              "ref": "codexProviderRunRecovery.v1"
+            }
+          },
+          {
+            "contractName": "reviewerHandoffPreview.v1",
+            "contractVersion": 1,
+            "readOnly": true,
+            "requiredFor": [
+              "reviewer-handoff-readiness"
+            ],
+            "sourceRef": {
+              "kind": "contract",
+              "ref": "reviewerHandoffPreview.v1"
+            }
+          },
+          {
+            "contractName": "contextAdvisory.v1",
+            "contractVersion": 1,
+            "generatedAt": "2026-06-13T02:00:00.000Z",
+            "readOnly": true,
+            "requiredFor": [
+              "context-carryover-refs"
+            ],
+            "sourceRef": {
+              "kind": "contract",
+              "ref": "contextAdvisory.v1"
+            }
+          }
+        ],
+        "knownFacts": [
+          "recovery state: ready-for-reviewer-handoff",
+          "reviewer handoff readiness: blocked",
+          "context advisory contract is present"
+        ],
+        "blockedReasons": [
+          "missing-accepted-reviewer-handoff"
+        ]
+      },
+      "threadBoundaryNotice": {
+        "contractName": "threadBoundaryNotice.v1",
+        "contractVersion": 1,
+        "generatedAt": "2026-06-13T02:00:00.000Z",
+        "copyOnly": true,
+        "willMutate": false,
+        "disabledCapabilities": [
+          "automaticCompactAvailable",
+          "automaticNewThreadAvailable",
+          "providerLaunchAvailable",
+          "directGoalEventAppendAvailable",
+          "directTaskCompleteAvailable",
+          "reviewerMutationAvailable",
+          "mainVerificationMutationAvailable",
+          "releaseGateMutationAvailable",
+          "gitMutationAvailable",
+          "tagAutomationAvailable",
+          "publishAutomationAvailable"
+        ],
+        "boundaries": {
+          "automaticCompactAvailable": false,
+          "automaticNewThreadAvailable": false,
+          "providerLaunchAvailable": false,
+          "directGoalEventAppendAvailable": false,
+          "directTaskCompleteAvailable": false,
+          "reviewerMutationAvailable": false,
+          "mainVerificationMutationAvailable": false,
+          "releaseGateMutationAvailable": false,
+          "gitMutationAvailable": false,
+          "tagAutomationAvailable": false,
+          "publishAutomationAvailable": false
+        }
+      },
+      "sourceContracts": [
+        {
+          "contractName": "codexProviderRunRecovery.v1",
+          "contractVersion": 1,
+          "readOnly": true,
+          "requiredFor": [
+            "source-recovery-state"
+          ],
+          "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+          "sourceRef": {
+            "kind": "contract",
+            "ref": "codexProviderRunRecovery.v1"
+          }
+        },
+        {
+          "contractName": "reviewerHandoffPreview.v1",
+          "contractVersion": 1,
+          "readOnly": true,
+          "requiredFor": [
+            "reviewer-handoff-readiness"
+          ],
+          "sourceRef": {
+            "kind": "contract",
+            "ref": "reviewerHandoffPreview.v1"
+          }
+        },
+        {
+          "contractName": "contextAdvisory.v1",
+          "contractVersion": 1,
+          "generatedAt": "2026-06-13T02:00:00.000Z",
+          "readOnly": true,
+          "requiredFor": [
+            "context-carryover-refs"
+          ],
+          "sourceRef": {
+            "kind": "contract",
+            "ref": "contextAdvisory.v1"
+          }
+        }
+      ]
+    }
+  ],
+  "checkpointRef": {
+    "contractName": "checkpointSnapshot.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-13T02:00:00.000Z",
+    "snapshotId": "checkpoint:v56-thread-continuation-reviewer-handoff-pack:pr-1-contracts-fixtures-tests:blocked",
+    "copyOnly": true,
+    "willMutate": false,
+    "summary": "Thread handoff pack is blocked: missing-accepted-reviewer-handoff.",
+    "knownFacts": [
+      "recovery state: ready-for-reviewer-handoff",
+      "reviewer handoff readiness: blocked",
+      "context advisory contract is present"
+    ],
+    "blockedReasons": [
+      "missing-accepted-reviewer-handoff"
+    ],
+    "nextSafeAction": {
+      "actionId": "copy-blocked-continuation-pack",
+      "label": "Copy blocked continuation pack",
+      "copyOnly": true,
+      "willMutate": false
+    },
+    "requiredEvidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v56-thread-continuation-reviewer-handoff-pack-runbook-2026-06-13.md",
+        "label": "Context advisory evidence"
+      }
+    ],
+    "sourceContracts": [
+      {
+        "contractName": "codexProviderRunRecovery.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "source-recovery-state"
+        ],
+        "previewHash": "sha256:07891e8c58a03ce37ef6b096b890992fd70da668bc7768ae5f7c3e33db334121",
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "codexProviderRunRecovery.v1"
+        }
+      },
+      {
+        "contractName": "reviewerHandoffPreview.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "reviewer-handoff-readiness"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "reviewerHandoffPreview.v1"
+        }
+      },
+      {
+        "contractName": "contextAdvisory.v1",
+        "contractVersion": 1,
+        "generatedAt": "2026-06-13T02:00:00.000Z",
+        "readOnly": true,
+        "requiredFor": [
+          "context-carryover-refs"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "contextAdvisory.v1"
+        }
+      }
+    ],
+    "boundaries": {
+      "automaticCompactAvailable": false,
+      "automaticNewThreadAvailable": false,
+      "providerLaunchAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "directTaskCompleteAvailable": false,
+      "reviewerMutationAvailable": false,
+      "mainVerificationMutationAvailable": false,
+      "releaseGateMutationAvailable": false,
+      "gitMutationAvailable": false,
+      "tagAutomationAvailable": false,
+      "publishAutomationAvailable": false
+    }
+  },
+  "boundaries": {
+    "automaticCompactAvailable": false,
+    "automaticNewThreadAvailable": false,
+    "providerLaunchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "reviewerMutationAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false
+  },
+  "copyOnly": true,
+  "willMutate": false
+}
