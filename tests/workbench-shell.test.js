@@ -701,7 +701,7 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function CodexProviderExecutionPreviewPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<textarea\b/u);
   });
 
-  it('renders the v55 recovery and reviewer handoff lanes on Desktop App Home as read-only state', async () => {
+  it('renders the v55 recovery and v56 thread handoff lanes on Desktop App Home as read-only state', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
     const childDispatchPreview = JSON.parse(
@@ -715,6 +715,9 @@ describe('v15 Workbench React/Vite shell', () => {
     );
     const reviewerHandoffPreview = JSON.parse(
       await readFile('fixtures/contracts/codex-provider-run-recovery/reviewer-handoff.ready.v1.json', 'utf8')
+    );
+    const threadHandoffPack = JSON.parse(
+      await readFile('fixtures/contracts/thread-handoff-pack/thread-handoff-pack.ready-reviewer-handoff.v1.json', 'utf8')
     );
     const server = await createViteServer({
       configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
@@ -736,7 +739,8 @@ describe('v15 Workbench React/Vite shell', () => {
           childDispatchPreview,
           codexProviderExecutionPreview,
           codexProviderRunRecovery,
-          reviewerHandoffPreview
+          reviewerHandoffPreview,
+          threadHandoffPack
         })
       });
       viewState.model.routeContext = createWorkbenchRenderRouteContext();
@@ -745,17 +749,22 @@ describe('v15 Workbench React/Vite shell', () => {
       const codexPanelIndex = desktopHtml.indexOf('id="codex-provider-execution-preview-panel"');
       const recoveryPanelIndex = desktopHtml.indexOf('id="codex-run-recovery-panel"');
       const handoffPanelIndex = desktopHtml.indexOf('id="reviewer-handoff-preview-panel"');
+      const threadPackPanelIndex = desktopHtml.indexOf('id="thread-handoff-pack-panel"');
       const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
       const recoveryHtml = desktopHtml.slice(recoveryPanelIndex, handoffPanelIndex);
-      const handoffHtml = desktopHtml.slice(handoffPanelIndex, appStateIndex);
+      const handoffHtml = desktopHtml.slice(handoffPanelIndex, threadPackPanelIndex);
+      const threadPackHtml = desktopHtml.slice(threadPackPanelIndex, appStateIndex);
 
       assert.notEqual(recoveryPanelIndex, -1);
       assert.notEqual(handoffPanelIndex, -1);
+      assert.notEqual(threadPackPanelIndex, -1);
       assert.equal(codexPanelIndex < recoveryPanelIndex, true);
       assert.equal(recoveryPanelIndex < handoffPanelIndex, true);
-      assert.equal(handoffPanelIndex < appStateIndex, true);
+      assert.equal(handoffPanelIndex < threadPackPanelIndex, true);
+      assert.equal(threadPackPanelIndex < appStateIndex, true);
       assert.match(desktopHtml, /href="#codex-run-recovery-panel">Recovery/u);
       assert.match(desktopHtml, /href="#reviewer-handoff-preview-panel">Reviewer Handoff/u);
+      assert.match(desktopHtml, /href="#thread-handoff-pack-panel">Thread Pack/u);
 
       assert.match(recoveryHtml, /Codex Run Recovery/u);
       assert.match(recoveryHtml, /codexProviderRunRecovery\.v1/u);
@@ -779,8 +788,29 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(handoffHtml, />automatic reviewer verdict<\/dt><dd[^>]*>false/u);
       assert.match(handoffHtml, />reviewer mutation<\/dt><dd[^>]*>false/u);
       assert.match(handoffHtml, />git mutation<\/dt><dd[^>]*>false/u);
-      assert.doesNotMatch(`${recoveryHtml}${handoffHtml}`, /<button\b|<form\b|<textarea\b/u);
-      assert.doesNotMatch(`${recoveryHtml}${handoffHtml}`, /Launch Claude Code|Run Any Provider|Run Shell|Terminal|Append Event|Mark Complete|Confirm Reviewer Verdict|Confirm Main Gate|Confirm Release Gate|event-plan-confirm|>Push<|>Tag<|>Publish<|>Release/u);
+
+      assert.match(threadPackHtml, /Thread Continuation Pack/u);
+      assert.match(threadPackHtml, /threadHandoffPack\.v1/u);
+      assert.match(threadPackHtml, /Continuation Decision/u);
+      assert.match(threadPackHtml, />decision<\/dt><dd[^>]*>reviewer-handoff/u);
+      assert.match(threadPackHtml, /Copy Blocks/u);
+      assert.match(threadPackHtml, /Copy Reviewer Handoff Pack/u);
+      assert.match(threadPackHtml, /contextCarryoverRefs\.v1/u);
+      assert.match(threadPackHtml, /threadBoundaryNotice\.v1/u);
+      assert.match(threadPackHtml, /Checkpoint Snapshot/u);
+      assert.match(threadPackHtml, /checkpointSnapshot\.v1/u);
+      assert.match(threadPackHtml, /Refresh State/u);
+      assert.match(threadPackHtml, />copy only<\/dt><dd[^>]*>true/u);
+      assert.match(threadPackHtml, />willMutate<\/dt><dd[^>]*>false/u);
+      assert.match(threadPackHtml, />automatic compact<\/dt><dd[^>]*>false/u);
+      assert.match(threadPackHtml, />automatic new thread<\/dt><dd[^>]*>false/u);
+      assert.match(threadPackHtml, />provider launch<\/dt><dd[^>]*>false/u);
+      assert.match(threadPackHtml, />goal event write<\/dt><dd[^>]*>false/u);
+      assert.match(threadPackHtml, />git mutation<\/dt><dd[^>]*>false/u);
+      assert.match(threadPackHtml, />tag automation<\/dt><dd[^>]*>false/u);
+      assert.match(threadPackHtml, />publish automation<\/dt><dd[^>]*>false/u);
+      assert.doesNotMatch(`${recoveryHtml}${handoffHtml}${threadPackHtml}`, /<button\b|<form\b|<textarea\b/u);
+      assert.doesNotMatch(`${recoveryHtml}${handoffHtml}${threadPackHtml}`, /Compact Now|Create New Thread|Launch Codex|Launch Claude Code|Run Provider|Run Any Provider|Run Shell|Terminal|Read Session File|Open Transcript|Append Event|Mark Complete|Confirm Reviewer Verdict|Confirm Main Gate|Confirm Release Gate|event-plan-confirm|>Push<|>Tag<|>Publish<|>Release/u);
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -788,8 +818,10 @@ describe('v15 Workbench React/Vite shell', () => {
 
     assert.match(app, /CodexRunRecoveryPanel/u);
     assert.match(app, /ReviewerHandoffPreviewPanel/u);
+    assert.match(app, /ThreadHandoffPackPanel/u);
     assert.match(css, /\.codex-run-recovery-panel/u);
     assert.match(css, /\.reviewer-handoff-preview-panel/u);
+    assert.match(css, /\.thread-handoff-pack-panel/u);
     assert.doesNotMatch(app.slice(app.indexOf('function CodexRunRecoveryPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<textarea\b/u);
   });
 

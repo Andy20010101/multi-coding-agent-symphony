@@ -1433,23 +1433,28 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.codexProviderExecutionPreview.contractName.text, 'codexProviderExecutionPreview.v1');
   });
 
-  it('projects v55 Codex run recovery and reviewer handoff preview into the Workbench desktop shell', async () => {
+  it('projects v55 recovery and v56 thread handoff pack state into the Workbench desktop shell', async () => {
     const codexProviderRunRecovery = JSON.parse(
       await readFile('fixtures/contracts/codex-provider-run-recovery/recovery.completed-accepted.v1.json', 'utf8')
     );
     const reviewerHandoffPreview = JSON.parse(
       await readFile('fixtures/contracts/codex-provider-run-recovery/reviewer-handoff.ready.v1.json', 'utf8')
     );
+    const threadHandoffPack = JSON.parse(
+      await readFile('fixtures/contracts/thread-handoff-pack/thread-handoff-pack.ready-reviewer-handoff.v1.json', 'utf8')
+    );
     const supervisor = {
       ...createGoalSupervisorAppReadModelPayload(),
       codexProviderRunRecovery,
-      reviewerHandoffPreview
+      reviewerHandoffPreview,
+      threadHandoffPack
     };
     const model = projectWorkbenchContracts({
       goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
     });
     const recovery = model.codexProviderRunRecovery;
     const handoff = model.reviewerHandoffPreview;
+    const threadPack = model.threadHandoffPack;
 
     assert.equal(recovery.contractName.text, 'codexProviderRunRecovery.v1');
     assert.equal(recovery.state, 'ready-for-reviewer-handoff');
@@ -1478,6 +1483,30 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(handoff.boundaries.gitMutationAvailable.value, false);
     assert.equal(model.desktopShell.codexProviderRunRecovery.contractName.text, 'codexProviderRunRecovery.v1');
     assert.equal(model.desktopShell.reviewerHandoffPreview.contractName.text, 'reviewerHandoffPreview.v1');
+
+    assert.equal(threadPack.contractName.text, 'threadHandoffPack.v1');
+    assert.equal(threadPack.state, 'ready');
+    assert.equal(threadPack.decision.text, 'reviewer-handoff');
+    assert.equal(threadPack.copyOnly.value, true);
+    assert.equal(threadPack.willMutate.value, false);
+    assert.equal(threadPack.sourceRecovery.recoveryState.text, 'ready-for-reviewer-handoff');
+    assert.equal(threadPack.sourceReviewerHandoff.readiness.text, 'ready');
+    assert.equal(threadPack.nextSafeAction.actionId.text, 'copy-reviewer-handoff-pack');
+    assert.equal(threadPack.copyBlocks.count.value, 1);
+    assert.equal(threadPack.copyBlocks.items[0].title.text, 'Copy Reviewer Handoff Pack');
+    assert.equal(threadPack.copyBlocks.items[0].contextCarryoverRefs.contractName.text, 'contextCarryoverRefs.v1');
+    assert.equal(threadPack.copyBlocks.items[0].threadBoundaryNotice.contractName.text, 'threadBoundaryNotice.v1');
+    assert.equal(threadPack.checkpointRef.contractName.text, 'checkpointSnapshot.v1');
+    assert.equal(threadPack.checkpointRef.copyOnly.value, true);
+    assert.equal(threadPack.checkpointRef.willMutate.value, false);
+    assert.equal(threadPack.sourceContracts.items.some((contract) => contract.contractName.text === 'contextAdvisory.v1'), true);
+    assert.equal(threadPack.boundaries.automaticNewThreadAvailable.value, false);
+    assert.equal(threadPack.boundaries.providerLaunchAvailable.value, false);
+    assert.equal(threadPack.boundaries.directGoalEventAppendAvailable.value, false);
+    assert.equal(threadPack.boundaries.gitMutationAvailable.value, false);
+    assert.equal(threadPack.boundaries.tagAutomationAvailable.value, false);
+    assert.equal(threadPack.boundaries.publishAutomationAvailable.value, false);
+    assert.equal(model.desktopShell.threadHandoffPack.contractName.text, 'threadHandoffPack.v1');
   });
 
   it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {

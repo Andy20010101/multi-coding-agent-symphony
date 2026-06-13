@@ -618,6 +618,7 @@ function DesktopShellRoute({
           <a href="#codex-provider-execution-preview-panel">Codex Run</a>
           <a href="#codex-run-recovery-panel">Recovery</a>
           <a href="#reviewer-handoff-preview-panel">Reviewer Handoff</a>
+          <a href="#thread-handoff-pack-panel">Thread Pack</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -662,6 +663,7 @@ function DesktopShellRoute({
         />
         <CodexRunRecoveryPanel codexProviderRunRecovery={desktopShell?.codexProviderRunRecovery} />
         <ReviewerHandoffPreviewPanel reviewerHandoffPreview={desktopShell?.reviewerHandoffPreview} />
+        <ThreadHandoffPackPanel threadHandoffPack={desktopShell?.threadHandoffPack} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -1702,6 +1704,162 @@ function ReviewerHandoffPreviewPanel({ reviewerHandoffPreview }) {
       </Subsection>
 
       <p className="panel-note">{preview?.note ?? 'Reviewer handoff preview unavailable.'}</p>
+    </section>
+  );
+}
+
+function ThreadHandoffPackPanel({ threadHandoffPack }) {
+  const pack = threadHandoffPack;
+  const sourceContracts = pack?.sourceContracts?.items ?? [];
+  const copyBlocks = pack?.copyBlocks?.items ?? [];
+
+  return (
+    <section
+      id="thread-handoff-pack-panel"
+      className="thread-handoff-pack-panel"
+      aria-label="Thread Continuation Pack"
+    >
+      <header className="thread-handoff-pack-header">
+        <div>
+          <p className="section-kicker">v56 continuation handoff</p>
+          <h2>Thread Continuation Pack</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(pack?.state)}`}>
+          {pack?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="thread-handoff-pack-summary">
+        <FieldList rows={[
+          ['contract', pack?.contractName],
+          ['goal', pack?.goal?.goalId],
+          ['task', pack?.task?.taskId],
+          ['decision', pack?.decision],
+          ['summary', pack?.summary],
+          ['copy only', pack?.copyOnly],
+          ['willMutate', pack?.willMutate],
+          ['blocked reasons', textValueFromItems(pack?.blockedReasons, '无')]
+        ]} />
+
+        <FieldList rows={[
+          ['next safe action', pack?.nextSafeAction?.label],
+          ['action id', pack?.nextSafeAction?.actionId],
+          ['required evidence refs', evidenceRefsTextFromCollection(pack?.requiredEvidenceRefs)],
+          ['known facts', textValueFromItems(pack?.knownFacts, '无')],
+          ['open risks', textValueFromItems(pack?.openRisks, '无')],
+          ['route', pack?.route?.path],
+          ['route state', pack?.route?.routeState],
+          ['generated at', pack?.generatedAt]
+        ]} />
+      </div>
+
+      <Subsection title="Continuation Decision">
+        <FieldList rows={[
+          ['source recovery contract', pack?.sourceRecovery?.contractName],
+          ['source recovery state', pack?.sourceRecovery?.recoveryState],
+          ['source recovery run', pack?.sourceRecovery?.runId],
+          ['source recovery preview hash', pack?.sourceRecovery?.previewHash],
+          ['recovery blocked reasons', textValueFromItems(pack?.sourceRecovery?.blockedReasons, '无')],
+          ['reviewer handoff contract', pack?.sourceReviewerHandoff?.contractName],
+          ['reviewer handoff readiness', pack?.sourceReviewerHandoff?.readiness],
+          ['pending result state', pack?.sourceReviewerHandoff?.pendingResultState],
+          ['reviewer blocked reasons', textValueFromItems(pack?.sourceReviewerHandoff?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Copy Blocks">
+        {copyBlocks.length === 0 ? (
+          <EmptyBlock copy="threadHandoffPack copyBlocks 未暴露。" />
+        ) : (
+          <ul className="codex-provider-source-list">
+            {copyBlocks.map((block, index) => (
+              <li key={`${block.blockId.text}-${index}`}>
+                <strong>{block.title.text}</strong>
+                <FieldList rows={[
+                  ['contract', block.contractName],
+                  ['block type', block.blockType],
+                  ['block id', block.blockId],
+                  ['summary', block.summary],
+                  ['copy only', block.copyOnly],
+                  ['willMutate', block.willMutate],
+                  ['next safe action', block.nextSafeAction?.label],
+                  ['required evidence refs', evidenceRefsTextFromCollection(block.requiredEvidenceRefs)],
+                  ['context refs', sourceRefsTextFromCollection(block.contextCarryoverRefs?.contextRefs)],
+                  ['context carryover contract', block.contextCarryoverRefs?.contractName],
+                  ['thread boundary notice', block.threadBoundaryNotice?.contractName],
+                  ['disabled capabilities', textValueFromItems(block.threadBoundaryNotice?.disabledCapabilities, '无')],
+                  ['blocked reasons', textValueFromItems(block.blockedReasons, '无')]
+                ]} />
+                {block.copyText?.state === 'available' ? (
+                  <pre className="copy-block child-dispatch-copy-block">{block.copyText.text}</pre>
+                ) : (
+                  <EmptyBlock copy="copy block body 未暴露。" />
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="Checkpoint Snapshot">
+        <FieldList rows={[
+          ['contract', pack?.checkpointRef?.contractName],
+          ['snapshot id', pack?.checkpointRef?.snapshotId],
+          ['summary', pack?.checkpointRef?.summary],
+          ['copy only', pack?.checkpointRef?.copyOnly],
+          ['willMutate', pack?.checkpointRef?.willMutate],
+          ['next safe action', pack?.checkpointRef?.nextSafeAction?.label],
+          ['required evidence refs', evidenceRefsTextFromCollection(pack?.checkpointRef?.requiredEvidenceRefs)],
+          ['known facts', textValueFromItems(pack?.checkpointRef?.knownFacts, '无')],
+          ['blocked reasons', textValueFromItems(pack?.checkpointRef?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="source contracts">
+        {sourceContracts.length === 0 ? (
+          <EmptyBlock copy="threadHandoffPack source contracts 未暴露。" />
+        ) : (
+          <ul className="codex-provider-source-list">
+            {sourceContracts.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['preview hash', source.previewHash],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="safety boundaries">
+        <FieldList rows={[
+          ['automatic compact', pack?.boundaries?.automaticCompactAvailable],
+          ['automatic new thread', pack?.boundaries?.automaticNewThreadAvailable],
+          ['provider launch', pack?.boundaries?.providerLaunchAvailable],
+          ['goal event write', pack?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', pack?.boundaries?.directTaskCompleteAvailable],
+          ['reviewer mutation', pack?.boundaries?.reviewerMutationAvailable],
+          ['main gate mutation', pack?.boundaries?.mainVerificationMutationAvailable],
+          ['gate mutation', pack?.boundaries?.releaseGateMutationAvailable],
+          ['git mutation', pack?.boundaries?.gitMutationAvailable],
+          ['tag automation', pack?.boundaries?.tagAutomationAvailable],
+          ['publish automation', pack?.boundaries?.publishAutomationAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Refresh State">
+        <FieldList rows={[
+          ['read model source', pack?.route?.source],
+          ['route', pack?.route?.path],
+          ['route state', pack?.route?.routeState]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{pack?.note ?? 'Thread handoff pack unavailable.'}</p>
     </section>
   );
 }
@@ -11132,6 +11290,14 @@ function textValueFromItems(collection, emptyText = '无') {
 function evidenceRefsTextFromCollection(collection) {
   const values = (collection?.items ?? [])
     .map((item) => firstText(item.ref, item.label, item.kind))
+    .filter((item) => item !== '');
+
+  return textValue(values.length === 0 ? '无' : values.join('、'));
+}
+
+function sourceRefsTextFromCollection(collection) {
+  const values = (collection?.items ?? [])
+    .map((item) => firstText(item.ref, item.kind))
     .filter((item) => item !== '');
 
   return textValue(values.length === 0 ? '无' : values.join('、'));

@@ -11159,6 +11159,10 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.reviewerHandoffPreview,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedThreadHandoffPack = projectThreadHandoffPack({
+		contract: goalSupervisorData?.threadHandoffPack,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11181,6 +11185,7 @@ function projectWorkbenchContracts(results) {
 		codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
 		codexProviderRunRecovery: projectedCodexProviderRunRecovery,
 		reviewerHandoffPreview: projectedReviewerHandoffPreview,
+		threadHandoffPack: projectedThreadHandoffPack,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11207,6 +11212,7 @@ function projectWorkbenchContracts(results) {
 			codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
 			codexProviderRunRecovery: projectedCodexProviderRunRecovery,
 			reviewerHandoffPreview: projectedReviewerHandoffPreview,
+			threadHandoffPack: projectedThreadHandoffPack,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11718,7 +11724,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -11998,6 +12004,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		codexProviderExecutionPreview,
 		codexProviderRunRecovery,
 		reviewerHandoffPreview,
+		threadHandoffPack,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12427,6 +12434,188 @@ function projectReviewerHandoffPack(handoffPack) {
 		risks: projectSystemGoldenPathTextItems(handoffPack?.risks),
 		blockers: projectSystemGoldenPathTextItems(handoffPack?.blockers),
 		json: valueState(hasPack ? stableJsonText(handoffPack) : void 0)
+	};
+}
+function projectThreadHandoffPack({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	return {
+		state: hasContract ? blockedReasons.length === 0 ? "ready" : "blocked" : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		task: {
+			taskId: valueState(contract?.task?.taskId),
+			title: valueState(contract?.task?.title),
+			state: valueState(contract?.task?.state),
+			sourceContract: valueState(contract?.task?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+		},
+		decision: valueState(contract?.decision),
+		summary: valueState(contract?.summary),
+		sourceRecovery: projectThreadHandoffSourceRecovery(contract?.sourceRecovery),
+		sourceReviewerHandoff: projectThreadHandoffSourceReviewerHandoff(contract?.sourceReviewerHandoff),
+		knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+		openRisks: projectSystemGoldenPathTextItems(contract?.openRisks),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		nextSafeAction: projectThreadHandoffNextSafeAction(contract?.nextSafeAction),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(contract?.requiredEvidenceRefs),
+		sourceContracts: {
+			state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : void 0),
+			items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectThreadHandoffSourceContract)
+		},
+		copyBlocks: {
+			state: Array.isArray(contract?.copyBlocks) && contract.copyBlocks.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.copyBlocks) ? contract.copyBlocks.length : void 0),
+			items: (Array.isArray(contract?.copyBlocks) ? contract.copyBlocks : []).map(projectThreadHandoffCopyBlock)
+		},
+		checkpointRef: projectThreadHandoffCheckpointRef(contract?.checkpointRef),
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		copyOnly: valueState(contract?.copyOnly),
+		willMutate: valueState(contract?.willMutate),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 threadHandoffPack projection")
+		},
+		note: hasContract ? "Thread handoff pack is backend-owned, copy-only state. Workbench displays continuation and reviewer handoff text without creating threads, launching providers, or mutating goals." : "Thread handoff pack is unavailable until goal-supervisor-app-read-model.v1 exposes threadHandoffPack.v1."
+	};
+}
+function projectThreadHandoffSourceRecovery(sourceRecovery) {
+	return {
+		state: sourceRecovery !== null && sourceRecovery !== void 0 && typeof sourceRecovery === "object" && !Array.isArray(sourceRecovery) ? "available" : "missing",
+		contractName: valueState(sourceRecovery?.contractName),
+		contractVersion: valueState(sourceRecovery?.contractVersion),
+		recoveryState: valueState(sourceRecovery?.state),
+		runId: valueState(sourceRecovery?.runId),
+		previewHash: valueState(sourceRecovery?.previewHash),
+		blockedReasons: projectSystemGoldenPathTextItems(sourceRecovery?.blockedReasons),
+		sourceRef: projectSystemGoldenPathSourceRef(sourceRecovery?.sourceRef)
+	};
+}
+function projectThreadHandoffSourceReviewerHandoff(sourceReviewerHandoff) {
+	return {
+		state: sourceReviewerHandoff !== null && sourceReviewerHandoff !== void 0 && typeof sourceReviewerHandoff === "object" && !Array.isArray(sourceReviewerHandoff) ? "available" : "missing",
+		contractName: valueState(sourceReviewerHandoff?.contractName),
+		contractVersion: valueState(sourceReviewerHandoff?.contractVersion),
+		readiness: valueState(sourceReviewerHandoff?.readiness),
+		pendingResultState: valueState(sourceReviewerHandoff?.pendingResultState),
+		blockedReasons: projectSystemGoldenPathTextItems(sourceReviewerHandoff?.blockedReasons),
+		sourceRef: projectSystemGoldenPathSourceRef(sourceReviewerHandoff?.sourceRef)
+	};
+}
+function projectThreadHandoffNextSafeAction(nextSafeAction) {
+	return {
+		actionId: valueState(nextSafeAction?.actionId),
+		label: valueState(nextSafeAction?.label),
+		copyOnly: valueState(nextSafeAction?.copyOnly),
+		willMutate: valueState(nextSafeAction?.willMutate)
+	};
+}
+function projectThreadHandoffSourceContract(sourceContract) {
+	return {
+		contractName: valueState(sourceContract?.contractName),
+		contractVersion: valueState(sourceContract?.contractVersion),
+		generatedAt: valueState(sourceContract?.generatedAt),
+		readOnly: valueState(sourceContract?.readOnly),
+		requiredFor: projectSystemGoldenPathTextItems(sourceContract?.requiredFor),
+		previewHash: valueState(sourceContract?.previewHash),
+		sourceRef: projectSystemGoldenPathSourceRef(sourceContract?.sourceRef)
+	};
+}
+function projectThreadHandoffCopyBlock(copyBlock) {
+	const hasBlock = copyBlock !== null && copyBlock !== void 0 && typeof copyBlock === "object" && !Array.isArray(copyBlock);
+	return {
+		state: hasBlock ? "available" : "missing",
+		contractName: valueState(copyBlock?.contractName),
+		contractVersion: valueState(copyBlock?.contractVersion),
+		generatedAt: valueState(copyBlock?.generatedAt),
+		blockId: valueState(copyBlock?.blockId),
+		blockType: valueState(copyBlock?.blockType),
+		title: valueState(copyBlock?.title),
+		copyText: valueState(copyBlock?.body),
+		summary: valueState(copyBlock?.summary),
+		nextSafeAction: projectThreadHandoffNextSafeAction(copyBlock?.nextSafeAction),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(copyBlock?.requiredEvidenceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(copyBlock?.blockedReasons),
+		copyOnly: valueState(copyBlock?.copyOnly),
+		willMutate: valueState(copyBlock?.willMutate),
+		contextCarryoverRefs: projectThreadHandoffContextCarryoverRefs(copyBlock?.contextCarryoverRefs),
+		threadBoundaryNotice: projectThreadBoundaryNotice(copyBlock?.threadBoundaryNotice),
+		sourceContracts: {
+			state: Array.isArray(copyBlock?.sourceContracts) && copyBlock.sourceContracts.length > 0 ? "available" : hasBlock ? "empty" : "missing",
+			count: valueState(Array.isArray(copyBlock?.sourceContracts) ? copyBlock.sourceContracts.length : void 0),
+			items: (Array.isArray(copyBlock?.sourceContracts) ? copyBlock.sourceContracts : []).map(projectThreadHandoffSourceContract)
+		}
+	};
+}
+function projectThreadHandoffContextCarryoverRefs(contextCarryoverRefs) {
+	const hasCarryover = contextCarryoverRefs !== null && contextCarryoverRefs !== void 0 && typeof contextCarryoverRefs === "object" && !Array.isArray(contextCarryoverRefs);
+	return {
+		state: hasCarryover ? "available" : "missing",
+		contractName: valueState(contextCarryoverRefs?.contractName),
+		contractVersion: valueState(contextCarryoverRefs?.contractVersion),
+		generatedAt: valueState(contextCarryoverRefs?.generatedAt),
+		copyOnly: valueState(contextCarryoverRefs?.copyOnly),
+		willMutate: valueState(contextCarryoverRefs?.willMutate),
+		goalId: valueState(contextCarryoverRefs?.goalId),
+		taskId: valueState(contextCarryoverRefs?.taskId),
+		contextRefs: {
+			state: Array.isArray(contextCarryoverRefs?.contextRefs) && contextCarryoverRefs.contextRefs.length > 0 ? "available" : hasCarryover ? "empty" : "missing",
+			count: valueState(Array.isArray(contextCarryoverRefs?.contextRefs) ? contextCarryoverRefs.contextRefs.length : void 0),
+			items: (Array.isArray(contextCarryoverRefs?.contextRefs) ? contextCarryoverRefs.contextRefs : []).map(projectSystemGoldenPathSourceRef)
+		},
+		evidenceRefs: projectChildDispatchEvidenceRefs(contextCarryoverRefs?.evidenceRefs),
+		sourceContracts: {
+			state: Array.isArray(contextCarryoverRefs?.sourceContracts) && contextCarryoverRefs.sourceContracts.length > 0 ? "available" : hasCarryover ? "empty" : "missing",
+			count: valueState(Array.isArray(contextCarryoverRefs?.sourceContracts) ? contextCarryoverRefs.sourceContracts.length : void 0),
+			items: (Array.isArray(contextCarryoverRefs?.sourceContracts) ? contextCarryoverRefs.sourceContracts : []).map(projectThreadHandoffSourceContract)
+		},
+		knownFacts: projectSystemGoldenPathTextItems(contextCarryoverRefs?.knownFacts),
+		blockedReasons: projectSystemGoldenPathTextItems(contextCarryoverRefs?.blockedReasons)
+	};
+}
+function projectThreadBoundaryNotice(threadBoundaryNotice) {
+	return {
+		state: threadBoundaryNotice !== null && threadBoundaryNotice !== void 0 && typeof threadBoundaryNotice === "object" && !Array.isArray(threadBoundaryNotice) ? "available" : "missing",
+		contractName: valueState(threadBoundaryNotice?.contractName),
+		contractVersion: valueState(threadBoundaryNotice?.contractVersion),
+		generatedAt: valueState(threadBoundaryNotice?.generatedAt),
+		copyOnly: valueState(threadBoundaryNotice?.copyOnly),
+		willMutate: valueState(threadBoundaryNotice?.willMutate),
+		disabledCapabilities: projectSystemGoldenPathTextItems(threadBoundaryNotice?.disabledCapabilities),
+		boundaries: Object.fromEntries(Object.entries(threadBoundaryNotice?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)]))
+	};
+}
+function projectThreadHandoffCheckpointRef(checkpointRef) {
+	const hasCheckpoint = checkpointRef !== null && checkpointRef !== void 0 && typeof checkpointRef === "object" && !Array.isArray(checkpointRef);
+	return {
+		state: hasCheckpoint ? "available" : "missing",
+		contractName: valueState(checkpointRef?.contractName),
+		contractVersion: valueState(checkpointRef?.contractVersion),
+		generatedAt: valueState(checkpointRef?.generatedAt),
+		snapshotId: valueState(checkpointRef?.snapshotId),
+		copyOnly: valueState(checkpointRef?.copyOnly),
+		willMutate: valueState(checkpointRef?.willMutate),
+		summary: valueState(checkpointRef?.summary),
+		knownFacts: projectSystemGoldenPathTextItems(checkpointRef?.knownFacts),
+		blockedReasons: projectSystemGoldenPathTextItems(checkpointRef?.blockedReasons),
+		nextSafeAction: projectThreadHandoffNextSafeAction(checkpointRef?.nextSafeAction),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(checkpointRef?.requiredEvidenceRefs),
+		sourceContracts: {
+			state: Array.isArray(checkpointRef?.sourceContracts) && checkpointRef.sourceContracts.length > 0 ? "available" : hasCheckpoint ? "empty" : "missing",
+			count: valueState(Array.isArray(checkpointRef?.sourceContracts) ? checkpointRef.sourceContracts.length : void 0),
+			items: (Array.isArray(checkpointRef?.sourceContracts) ? checkpointRef.sourceContracts : []).map(projectThreadHandoffSourceContract)
+		},
+		boundaries: Object.fromEntries(Object.entries(checkpointRef?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)]))
 	};
 }
 function projectChildDispatchTaskPack(taskPack) {
@@ -25916,6 +26105,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Reviewer Handoff"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#thread-handoff-pack-panel",
+							children: "Thread Pack"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -25973,6 +26166,7 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodexProviderExecutionPreviewPanel, { codexProviderExecutionPreview: desktopShell?.codexProviderExecutionPreview }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodexRunRecoveryPanel, { codexProviderRunRecovery: desktopShell?.codexProviderRunRecovery }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewerHandoffPreviewPanel, { reviewerHandoffPreview: desktopShell?.reviewerHandoffPreview }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadHandoffPackPanel, { threadHandoffPack: desktopShell?.threadHandoffPack }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -26891,6 +27085,146 @@ function ReviewerHandoffPreviewPanel({ reviewerHandoffPreview }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: preview?.note ?? "Reviewer handoff preview unavailable."
+			})
+		]
+	});
+}
+function ThreadHandoffPackPanel({ threadHandoffPack }) {
+	const pack = threadHandoffPack;
+	const sourceContracts = pack?.sourceContracts?.items ?? [];
+	const copyBlocks = pack?.copyBlocks?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "thread-handoff-pack-panel",
+		className: "thread-handoff-pack-panel",
+		"aria-label": "Thread Continuation Pack",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "thread-handoff-pack-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v56 continuation handoff"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Thread Continuation Pack" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(pack?.state)}`,
+					children: pack?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "thread-handoff-pack-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", pack?.contractName],
+					["goal", pack?.goal?.goalId],
+					["task", pack?.task?.taskId],
+					["decision", pack?.decision],
+					["summary", pack?.summary],
+					["copy only", pack?.copyOnly],
+					["willMutate", pack?.willMutate],
+					["blocked reasons", textValueFromItems(pack?.blockedReasons, "无")]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["next safe action", pack?.nextSafeAction?.label],
+					["action id", pack?.nextSafeAction?.actionId],
+					["required evidence refs", evidenceRefsTextFromCollection(pack?.requiredEvidenceRefs)],
+					["known facts", textValueFromItems(pack?.knownFacts, "无")],
+					["open risks", textValueFromItems(pack?.openRisks, "无")],
+					["route", pack?.route?.path],
+					["route state", pack?.route?.routeState],
+					["generated at", pack?.generatedAt]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Continuation Decision",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["source recovery contract", pack?.sourceRecovery?.contractName],
+					["source recovery state", pack?.sourceRecovery?.recoveryState],
+					["source recovery run", pack?.sourceRecovery?.runId],
+					["source recovery preview hash", pack?.sourceRecovery?.previewHash],
+					["recovery blocked reasons", textValueFromItems(pack?.sourceRecovery?.blockedReasons, "无")],
+					["reviewer handoff contract", pack?.sourceReviewerHandoff?.contractName],
+					["reviewer handoff readiness", pack?.sourceReviewerHandoff?.readiness],
+					["pending result state", pack?.sourceReviewerHandoff?.pendingResultState],
+					["reviewer blocked reasons", textValueFromItems(pack?.sourceReviewerHandoff?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Copy Blocks",
+				children: copyBlocks.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "threadHandoffPack copyBlocks 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: copyBlocks.map((block, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: block.title.text }),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+							["contract", block.contractName],
+							["block type", block.blockType],
+							["block id", block.blockId],
+							["summary", block.summary],
+							["copy only", block.copyOnly],
+							["willMutate", block.willMutate],
+							["next safe action", block.nextSafeAction?.label],
+							["required evidence refs", evidenceRefsTextFromCollection(block.requiredEvidenceRefs)],
+							["context refs", sourceRefsTextFromCollection(block.contextCarryoverRefs?.contextRefs)],
+							["context carryover contract", block.contextCarryoverRefs?.contractName],
+							["thread boundary notice", block.threadBoundaryNotice?.contractName],
+							["disabled capabilities", textValueFromItems(block.threadBoundaryNotice?.disabledCapabilities, "无")],
+							["blocked reasons", textValueFromItems(block.blockedReasons, "无")]
+						] }),
+						block.copyText?.state === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", {
+							className: "copy-block child-dispatch-copy-block",
+							children: block.copyText.text
+						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "copy block body 未暴露。" })
+					] }, `${block.blockId.text}-${index}`))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Checkpoint Snapshot",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", pack?.checkpointRef?.contractName],
+					["snapshot id", pack?.checkpointRef?.snapshotId],
+					["summary", pack?.checkpointRef?.summary],
+					["copy only", pack?.checkpointRef?.copyOnly],
+					["willMutate", pack?.checkpointRef?.willMutate],
+					["next safe action", pack?.checkpointRef?.nextSafeAction?.label],
+					["required evidence refs", evidenceRefsTextFromCollection(pack?.checkpointRef?.requiredEvidenceRefs)],
+					["known facts", textValueFromItems(pack?.checkpointRef?.knownFacts, "无")],
+					["blocked reasons", textValueFromItems(pack?.checkpointRef?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "source contracts",
+				children: sourceContracts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "threadHandoffPack source contracts 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: sourceContracts.map((source, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: source.contractName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["readOnly", source.readOnly],
+						["required for", textValueFromItems(source.requiredFor, "无")],
+						["preview hash", source.previewHash],
+						["source ref", source.sourceRef?.ref]
+					] })] }, `${source.contractName.text}-${index}`))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "safety boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["automatic compact", pack?.boundaries?.automaticCompactAvailable],
+					["automatic new thread", pack?.boundaries?.automaticNewThreadAvailable],
+					["provider launch", pack?.boundaries?.providerLaunchAvailable],
+					["goal event write", pack?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", pack?.boundaries?.directTaskCompleteAvailable],
+					["reviewer mutation", pack?.boundaries?.reviewerMutationAvailable],
+					["main gate mutation", pack?.boundaries?.mainVerificationMutationAvailable],
+					["gate mutation", pack?.boundaries?.releaseGateMutationAvailable],
+					["git mutation", pack?.boundaries?.gitMutationAvailable],
+					["tag automation", pack?.boundaries?.tagAutomationAvailable],
+					["publish automation", pack?.boundaries?.publishAutomationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Refresh State",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["read model source", pack?.route?.source],
+					["route", pack?.route?.path],
+					["route state", pack?.route?.routeState]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: pack?.note ?? "Thread handoff pack unavailable."
 			})
 		]
 	});
@@ -35151,6 +35485,10 @@ function textValueFromItems(collection, emptyText = "无") {
 }
 function evidenceRefsTextFromCollection(collection) {
 	const values = (collection?.items ?? []).map((item) => firstText(item.ref, item.label, item.kind)).filter((item) => item !== "");
+	return textValue(values.length === 0 ? "无" : values.join("、"));
+}
+function sourceRefsTextFromCollection(collection) {
+	const values = (collection?.items ?? []).map((item) => firstText(item.ref, item.kind)).filter((item) => item !== "");
 	return textValue(values.length === 0 ? "无" : values.join("、"));
 }
 function manualCliRequiredState(systemGoldenPath) {

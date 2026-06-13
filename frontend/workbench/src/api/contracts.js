@@ -1230,6 +1230,10 @@ export function projectWorkbenchContracts(results) {
     contract: goalSupervisorData?.reviewerHandoffPreview,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
+  const projectedThreadHandoffPack = projectThreadHandoffPack({
+    contract: goalSupervisorData?.threadHandoffPack,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1254,6 +1258,7 @@ export function projectWorkbenchContracts(results) {
     codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
     codexProviderRunRecovery: projectedCodexProviderRunRecovery,
     reviewerHandoffPreview: projectedReviewerHandoffPreview,
+    threadHandoffPack: projectedThreadHandoffPack,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
       routeStates
@@ -1280,6 +1285,7 @@ export function projectWorkbenchContracts(results) {
       codexProviderExecutionPreview: projectedCodexProviderExecutionPreview,
       codexProviderRunRecovery: projectedCodexProviderRunRecovery,
       reviewerHandoffPreview: projectedReviewerHandoffPreview,
+      threadHandoffPack: projectedThreadHandoffPack,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1861,6 +1867,7 @@ function projectDesktopShell({
   codexProviderExecutionPreview,
   codexProviderRunRecovery,
   reviewerHandoffPreview,
+  threadHandoffPack,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -2154,6 +2161,7 @@ function projectDesktopShell({
     codexProviderExecutionPreview,
     codexProviderRunRecovery,
     reviewerHandoffPreview,
+    threadHandoffPack,
     routeProvenance,
     appStates,
     boundaries,
@@ -2642,6 +2650,218 @@ function projectReviewerHandoffPack(handoffPack) {
     risks: projectSystemGoldenPathTextItems(handoffPack?.risks),
     blockers: projectSystemGoldenPathTextItems(handoffPack?.blockers),
     json: valueState(hasPack ? stableJsonText(handoffPack) : undefined)
+  };
+}
+
+function projectThreadHandoffPack({
+  contract,
+  supervisorRoute
+}) {
+  const hasContract = contract !== null && contract !== undefined && typeof contract === 'object' && !Array.isArray(contract);
+  const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+
+  return {
+    state: hasContract ? (blockedReasons.length === 0 ? 'ready' : 'blocked') : 'missing',
+    contractName: valueState(contract?.contractName),
+    contractVersion: valueState(contract?.contractVersion),
+    generatedAt: valueState(contract?.generatedAt),
+    goal: {
+      goalId: valueState(contract?.goal?.goalId),
+      title: valueState(contract?.goal?.title),
+      state: valueState(contract?.goal?.state),
+      sourceContract: valueState(contract?.goal?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+    },
+    task: {
+      taskId: valueState(contract?.task?.taskId),
+      title: valueState(contract?.task?.title),
+      state: valueState(contract?.task?.state),
+      sourceContract: valueState(contract?.task?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+    },
+    decision: valueState(contract?.decision),
+    summary: valueState(contract?.summary),
+    sourceRecovery: projectThreadHandoffSourceRecovery(contract?.sourceRecovery),
+    sourceReviewerHandoff: projectThreadHandoffSourceReviewerHandoff(contract?.sourceReviewerHandoff),
+    knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+    openRisks: projectSystemGoldenPathTextItems(contract?.openRisks),
+    blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+    nextSafeAction: projectThreadHandoffNextSafeAction(contract?.nextSafeAction),
+    requiredEvidenceRefs: projectChildDispatchEvidenceRefs(contract?.requiredEvidenceRefs),
+    sourceContracts: {
+      state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : undefined),
+      items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectThreadHandoffSourceContract)
+    },
+    copyBlocks: {
+      state: Array.isArray(contract?.copyBlocks) && contract.copyBlocks.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contract?.copyBlocks) ? contract.copyBlocks.length : undefined),
+      items: (Array.isArray(contract?.copyBlocks) ? contract.copyBlocks : []).map(projectThreadHandoffCopyBlock)
+    },
+    checkpointRef: projectThreadHandoffCheckpointRef(contract?.checkpointRef),
+    boundaries: Object.fromEntries(
+      Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    copyOnly: valueState(contract?.copyOnly),
+    willMutate: valueState(contract?.willMutate),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 threadHandoffPack projection')
+    },
+    note: hasContract
+      ? 'Thread handoff pack is backend-owned, copy-only state. Workbench displays continuation and reviewer handoff text without creating threads, launching providers, or mutating goals.'
+      : 'Thread handoff pack is unavailable until goal-supervisor-app-read-model.v1 exposes threadHandoffPack.v1.'
+  };
+}
+
+function projectThreadHandoffSourceRecovery(sourceRecovery) {
+  const hasSource = sourceRecovery !== null && sourceRecovery !== undefined && typeof sourceRecovery === 'object' && !Array.isArray(sourceRecovery);
+
+  return {
+    state: hasSource ? 'available' : 'missing',
+    contractName: valueState(sourceRecovery?.contractName),
+    contractVersion: valueState(sourceRecovery?.contractVersion),
+    recoveryState: valueState(sourceRecovery?.state),
+    runId: valueState(sourceRecovery?.runId),
+    previewHash: valueState(sourceRecovery?.previewHash),
+    blockedReasons: projectSystemGoldenPathTextItems(sourceRecovery?.blockedReasons),
+    sourceRef: projectSystemGoldenPathSourceRef(sourceRecovery?.sourceRef)
+  };
+}
+
+function projectThreadHandoffSourceReviewerHandoff(sourceReviewerHandoff) {
+  const hasSource = sourceReviewerHandoff !== null && sourceReviewerHandoff !== undefined && typeof sourceReviewerHandoff === 'object' && !Array.isArray(sourceReviewerHandoff);
+
+  return {
+    state: hasSource ? 'available' : 'missing',
+    contractName: valueState(sourceReviewerHandoff?.contractName),
+    contractVersion: valueState(sourceReviewerHandoff?.contractVersion),
+    readiness: valueState(sourceReviewerHandoff?.readiness),
+    pendingResultState: valueState(sourceReviewerHandoff?.pendingResultState),
+    blockedReasons: projectSystemGoldenPathTextItems(sourceReviewerHandoff?.blockedReasons),
+    sourceRef: projectSystemGoldenPathSourceRef(sourceReviewerHandoff?.sourceRef)
+  };
+}
+
+function projectThreadHandoffNextSafeAction(nextSafeAction) {
+  return {
+    actionId: valueState(nextSafeAction?.actionId),
+    label: valueState(nextSafeAction?.label),
+    copyOnly: valueState(nextSafeAction?.copyOnly),
+    willMutate: valueState(nextSafeAction?.willMutate)
+  };
+}
+
+function projectThreadHandoffSourceContract(sourceContract) {
+  return {
+    contractName: valueState(sourceContract?.contractName),
+    contractVersion: valueState(sourceContract?.contractVersion),
+    generatedAt: valueState(sourceContract?.generatedAt),
+    readOnly: valueState(sourceContract?.readOnly),
+    requiredFor: projectSystemGoldenPathTextItems(sourceContract?.requiredFor),
+    previewHash: valueState(sourceContract?.previewHash),
+    sourceRef: projectSystemGoldenPathSourceRef(sourceContract?.sourceRef)
+  };
+}
+
+function projectThreadHandoffCopyBlock(copyBlock) {
+  const hasBlock = copyBlock !== null && copyBlock !== undefined && typeof copyBlock === 'object' && !Array.isArray(copyBlock);
+
+  return {
+    state: hasBlock ? 'available' : 'missing',
+    contractName: valueState(copyBlock?.contractName),
+    contractVersion: valueState(copyBlock?.contractVersion),
+    generatedAt: valueState(copyBlock?.generatedAt),
+    blockId: valueState(copyBlock?.blockId),
+    blockType: valueState(copyBlock?.blockType),
+    title: valueState(copyBlock?.title),
+    copyText: valueState(copyBlock?.body),
+    summary: valueState(copyBlock?.summary),
+    nextSafeAction: projectThreadHandoffNextSafeAction(copyBlock?.nextSafeAction),
+    requiredEvidenceRefs: projectChildDispatchEvidenceRefs(copyBlock?.requiredEvidenceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(copyBlock?.blockedReasons),
+    copyOnly: valueState(copyBlock?.copyOnly),
+    willMutate: valueState(copyBlock?.willMutate),
+    contextCarryoverRefs: projectThreadHandoffContextCarryoverRefs(copyBlock?.contextCarryoverRefs),
+    threadBoundaryNotice: projectThreadBoundaryNotice(copyBlock?.threadBoundaryNotice),
+    sourceContracts: {
+      state: Array.isArray(copyBlock?.sourceContracts) && copyBlock.sourceContracts.length > 0 ? 'available' : hasBlock ? 'empty' : 'missing',
+      count: valueState(Array.isArray(copyBlock?.sourceContracts) ? copyBlock.sourceContracts.length : undefined),
+      items: (Array.isArray(copyBlock?.sourceContracts) ? copyBlock.sourceContracts : []).map(projectThreadHandoffSourceContract)
+    }
+  };
+}
+
+function projectThreadHandoffContextCarryoverRefs(contextCarryoverRefs) {
+  const hasCarryover = contextCarryoverRefs !== null && contextCarryoverRefs !== undefined && typeof contextCarryoverRefs === 'object' && !Array.isArray(contextCarryoverRefs);
+
+  return {
+    state: hasCarryover ? 'available' : 'missing',
+    contractName: valueState(contextCarryoverRefs?.contractName),
+    contractVersion: valueState(contextCarryoverRefs?.contractVersion),
+    generatedAt: valueState(contextCarryoverRefs?.generatedAt),
+    copyOnly: valueState(contextCarryoverRefs?.copyOnly),
+    willMutate: valueState(contextCarryoverRefs?.willMutate),
+    goalId: valueState(contextCarryoverRefs?.goalId),
+    taskId: valueState(contextCarryoverRefs?.taskId),
+    contextRefs: {
+      state: Array.isArray(contextCarryoverRefs?.contextRefs) && contextCarryoverRefs.contextRefs.length > 0 ? 'available' : hasCarryover ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contextCarryoverRefs?.contextRefs) ? contextCarryoverRefs.contextRefs.length : undefined),
+      items: (Array.isArray(contextCarryoverRefs?.contextRefs) ? contextCarryoverRefs.contextRefs : []).map(projectSystemGoldenPathSourceRef)
+    },
+    evidenceRefs: projectChildDispatchEvidenceRefs(contextCarryoverRefs?.evidenceRefs),
+    sourceContracts: {
+      state: Array.isArray(contextCarryoverRefs?.sourceContracts) && contextCarryoverRefs.sourceContracts.length > 0 ? 'available' : hasCarryover ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contextCarryoverRefs?.sourceContracts) ? contextCarryoverRefs.sourceContracts.length : undefined),
+      items: (Array.isArray(contextCarryoverRefs?.sourceContracts) ? contextCarryoverRefs.sourceContracts : []).map(projectThreadHandoffSourceContract)
+    },
+    knownFacts: projectSystemGoldenPathTextItems(contextCarryoverRefs?.knownFacts),
+    blockedReasons: projectSystemGoldenPathTextItems(contextCarryoverRefs?.blockedReasons)
+  };
+}
+
+function projectThreadBoundaryNotice(threadBoundaryNotice) {
+  const hasNotice = threadBoundaryNotice !== null && threadBoundaryNotice !== undefined && typeof threadBoundaryNotice === 'object' && !Array.isArray(threadBoundaryNotice);
+
+  return {
+    state: hasNotice ? 'available' : 'missing',
+    contractName: valueState(threadBoundaryNotice?.contractName),
+    contractVersion: valueState(threadBoundaryNotice?.contractVersion),
+    generatedAt: valueState(threadBoundaryNotice?.generatedAt),
+    copyOnly: valueState(threadBoundaryNotice?.copyOnly),
+    willMutate: valueState(threadBoundaryNotice?.willMutate),
+    disabledCapabilities: projectSystemGoldenPathTextItems(threadBoundaryNotice?.disabledCapabilities),
+    boundaries: Object.fromEntries(
+      Object.entries(threadBoundaryNotice?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    )
+  };
+}
+
+function projectThreadHandoffCheckpointRef(checkpointRef) {
+  const hasCheckpoint = checkpointRef !== null && checkpointRef !== undefined && typeof checkpointRef === 'object' && !Array.isArray(checkpointRef);
+
+  return {
+    state: hasCheckpoint ? 'available' : 'missing',
+    contractName: valueState(checkpointRef?.contractName),
+    contractVersion: valueState(checkpointRef?.contractVersion),
+    generatedAt: valueState(checkpointRef?.generatedAt),
+    snapshotId: valueState(checkpointRef?.snapshotId),
+    copyOnly: valueState(checkpointRef?.copyOnly),
+    willMutate: valueState(checkpointRef?.willMutate),
+    summary: valueState(checkpointRef?.summary),
+    knownFacts: projectSystemGoldenPathTextItems(checkpointRef?.knownFacts),
+    blockedReasons: projectSystemGoldenPathTextItems(checkpointRef?.blockedReasons),
+    nextSafeAction: projectThreadHandoffNextSafeAction(checkpointRef?.nextSafeAction),
+    requiredEvidenceRefs: projectChildDispatchEvidenceRefs(checkpointRef?.requiredEvidenceRefs),
+    sourceContracts: {
+      state: Array.isArray(checkpointRef?.sourceContracts) && checkpointRef.sourceContracts.length > 0 ? 'available' : hasCheckpoint ? 'empty' : 'missing',
+      count: valueState(Array.isArray(checkpointRef?.sourceContracts) ? checkpointRef.sourceContracts.length : undefined),
+      items: (Array.isArray(checkpointRef?.sourceContracts) ? checkpointRef.sourceContracts : []).map(projectThreadHandoffSourceContract)
+    },
+    boundaries: Object.fromEntries(
+      Object.entries(checkpointRef?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    )
   };
 }
 
