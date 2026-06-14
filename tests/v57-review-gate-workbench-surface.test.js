@@ -8,11 +8,14 @@ import {
   REVIEW_GATE_BOUNDARIES,
   REVIEW_GATE_BOUNDARY_NOTICE_CONTRACT_NAME,
   REVIEW_GATE_CONFIRMATION_PREVIEW_CONTRACT_NAME,
+  REVIEW_GATE_CONTROLLED_CONFIRMATION_STATE_CONTRACT_NAME,
   REVIEW_GATE_PREVIEW_CONTRACT_NAME,
   REVIEW_GATE_SOURCE_EVIDENCE_CONTRACT_NAME,
   ReviewGatePreviewContractError,
   assertReviewGatePreviewContract,
+  buildReviewGateControlledConfirmationState,
   buildReviewGatePreview,
+  validateReviewGateControlledConfirmationStateContract,
   validateReviewGateBoundaryNoticeContract,
   validateReviewGateConfirmationPreviewContract,
   validateReviewGatePreviewContract,
@@ -158,6 +161,74 @@ describe('v57 review gate Workbench surface contracts', () => {
         'docs/plans/v57-main-gate-evidence-2026-06-14.md'
       ]
     );
+  });
+
+  it('builds controlled confirmation state only with an explicit operator and current plan hash', () => {
+    const preview = fixture('review-gate-preview.ready-reviewer-verdict.v1.json');
+    const confirmationState = buildReviewGateControlledConfirmationState({
+      generatedAt: GENERATED_AT,
+      reviewGatePreview: preview,
+      operatorId: 'operator-v57-controller'
+    });
+
+    assert.equal(confirmationState.contractName, REVIEW_GATE_CONTROLLED_CONFIRMATION_STATE_CONTRACT_NAME);
+    assert.equal(validateReviewGateControlledConfirmationStateContract(confirmationState).ok, true);
+    assert.equal(confirmationState.state, 'ready');
+    assert.equal(confirmationState.eventFamily, 'reviewer-verdict');
+    assert.equal(confirmationState.eventType, 'reviewer.approved');
+    assert.equal(confirmationState.planHash, preview.confirmationPreviews[0].planHash);
+    assert.equal(confirmationState.previewHash, preview.confirmationPreviews[0].previewHash);
+    assert.equal(confirmationState.operator.operatorId, 'operator-v57-controller');
+    assert.equal(confirmationState.operator.providerOriginated, false);
+    assert.equal(confirmationState.previewRequest.method, 'GET');
+    assert.equal(confirmationState.previewRequest.query.command, 'review');
+    assert.equal(confirmationState.previewRequest.query.reviewer, 'operator-v57-controller');
+    assert.equal(confirmationState.confirmRequestShape.method, 'POST');
+    assert.equal(confirmationState.confirmRequestShape.confirmUsesPlanHash, true);
+    assert.ok(confirmationState.confirmRequestShape.requiredBodyFields.includes('planHash'));
+    assert.equal(confirmationState.readOnly, true);
+    assert.equal(confirmationState.willMutate, false);
+    assert.deepEqual(confirmationState.boundaries, REVIEW_GATE_BOUNDARIES);
+  });
+
+  it('blocks controlled confirmation state for missing operator, provider operator, stale plan, and mismatch', () => {
+    const readyPreview = fixture('review-gate-preview.ready-reviewer-verdict.v1.json');
+    const stalePreview = fixture('review-gate-preview.blocked-stale-plan-hash.v1.json');
+    const missingOperator = buildReviewGateControlledConfirmationState({
+      generatedAt: GENERATED_AT,
+      reviewGatePreview: readyPreview
+    });
+    const providerOperator = buildReviewGateControlledConfirmationState({
+      generatedAt: GENERATED_AT,
+      reviewGatePreview: readyPreview,
+      operatorId: 'codex-v57-reviewer'
+    });
+    const mismatchedPlanHash = buildReviewGateControlledConfirmationState({
+      generatedAt: GENERATED_AT,
+      reviewGatePreview: readyPreview,
+      operatorId: 'operator-v57-controller',
+      planHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+    });
+    const stalePlan = buildReviewGateControlledConfirmationState({
+      generatedAt: GENERATED_AT,
+      reviewGatePreview: stalePreview,
+      eventFamily: 'reviewer-verdict',
+      operatorId: 'operator-v57-controller'
+    });
+
+    for (const state of [missingOperator, providerOperator, mismatchedPlanHash, stalePlan]) {
+      assert.equal(validateReviewGateControlledConfirmationStateContract(state).ok, true);
+      assert.equal(state.state, 'blocked');
+      assert.equal(state.previewRequest, null);
+      assert.equal(state.confirmRequestShape, null);
+      assert.equal(state.readOnly, true);
+      assert.equal(state.willMutate, false);
+    }
+
+    assert.ok(missingOperator.blockedReasons.includes('missing-explicit-operator-id'));
+    assert.ok(providerOperator.blockedReasons.includes('provider-originated-approval'));
+    assert.ok(mismatchedPlanHash.blockedReasons.includes('plan-hash-mismatch'));
+    assert.ok(stalePlan.blockedReasons.includes('stale-plan-hash'));
   });
 
   it('blocks missing source or missing evidence without creating confirmation previews', () => {

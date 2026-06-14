@@ -14,7 +14,9 @@ import {
 } from '../src/symphony/result-intake-contracts.js';
 import {
   REVIEW_GATE_BOUNDARIES,
+  REVIEW_GATE_CONTROLLED_CONFIRMATION_STATE_CONTRACT_NAME,
   REVIEW_GATE_PREVIEW_CONTRACT_NAME,
+  validateReviewGateControlledConfirmationStateContract,
   validateReviewGatePreviewContract
 } from '../src/symphony/review-gate-workbench-surface-contracts.js';
 import {
@@ -49,6 +51,14 @@ describe('v57 review gate backend projection', () => {
     assert.equal(preview.boundaries.directGoalEventAppendAvailable, false);
     assert.ok(preview.requiredEvidenceRefs.length > 0);
     assertNoUnsafePayload(preview);
+
+    assert.equal(model.reviewGateConfirmationState.contractName, REVIEW_GATE_CONTROLLED_CONFIRMATION_STATE_CONTRACT_NAME);
+    assert.equal(validateReviewGateControlledConfirmationStateContract(model.reviewGateConfirmationState).ok, true);
+    assert.equal(model.reviewGateConfirmationState.state, 'ready');
+    assert.equal(model.reviewGateConfirmationState.planHash, preview.confirmationPreviews[0].planHash);
+    assert.equal(model.reviewGateConfirmationState.operator.operatorId, 'operator-v57-controller');
+    assert.equal(model.reviewGateConfirmationState.previewRequest.query.command, 'review');
+    assert.equal(model.reviewGateConfirmationState.confirmRequestShape.confirmUsesPlanHash, true);
   });
 
   it('can project a controlled main gate preview when backend evidence is present', () => {
@@ -72,6 +82,9 @@ describe('v57 review gate backend projection', () => {
     assert.equal(preview.confirmationPreviews.length, 1);
     assert.equal(preview.confirmationPreviews[0].eventType, 'main.verification-passed');
     assert.equal(preview.nextSafeAction.actionId, 'preview-main-gate-registration');
+    assert.equal(model.reviewGateConfirmationState.state, 'ready');
+    assert.equal(model.reviewGateConfirmationState.previewRequest.query.command, 'gate');
+    assert.equal(model.reviewGateConfirmationState.previewRequest.query.gate, 'main-verification');
     assert.ok(
       preview.requiredEvidenceRefs.some((ref) => ref.ref === 'docs/plans/v57-main-gate-evidence-2026-06-14.md'),
       JSON.stringify(preview.requiredEvidenceRefs)
@@ -123,6 +136,22 @@ describe('v57 review gate backend projection', () => {
       staleModel.reviewGatePreview.blockedReasons.join('; ')
     );
     assert.equal(staleModel.reviewGatePreview.confirmationPreviews.length, 0);
+    assert.equal(validateReviewGateControlledConfirmationStateContract(missingModel.reviewGateConfirmationState).ok, true);
+    assert.equal(missingModel.reviewGateConfirmationState.state, 'blocked');
+    assert.ok(missingModel.reviewGateConfirmationState.blockedReasons.includes('missing-eligible-confirmation-preview'));
+  });
+
+  it('blocks controlled confirmation state until an explicit operator id is supplied', () => {
+    const model = readyReadModel({
+      reviewGateOperatorId: null
+    });
+
+    assert.equal(validateReviewGateControlledConfirmationStateContract(model.reviewGateConfirmationState).ok, true);
+    assert.equal(model.reviewGateConfirmationState.state, 'blocked');
+    assert.ok(model.reviewGateConfirmationState.blockedReasons.includes('missing-explicit-operator-id'));
+    assert.equal(model.reviewGateConfirmationState.previewRequest, null);
+    assert.equal(model.reviewGateConfirmationState.confirmRequestShape, null);
+    assertNoUnsafePayload(model.reviewGateConfirmationState);
   });
 
   it('keeps unsafe context refs out of the review gate projection payload', () => {
@@ -160,6 +189,8 @@ describe('v57 review gate backend projection', () => {
 
 function readyReadModel({
   reviewGateTarget = null,
+  reviewGateOperatorId = 'operator-v57-controller',
+  reviewGatePlanHash = null,
   timelineEvents = []
 } = {}) {
   const completedRun = v54Fixture('run-record.completed.v1.json');
@@ -182,6 +213,8 @@ function readyReadModel({
       taskId: alignedRun.taskId
     }),
     reviewGateTarget,
+    reviewGateOperatorId,
+    reviewGatePlanHash,
     timelineEvents,
     nowMs: Date.parse(GENERATED_AT)
   }));
@@ -229,6 +262,8 @@ function readModelInputForRun({
     taskId: runRecord.taskId
   }),
   reviewGateTarget = null,
+  reviewGateOperatorId = 'operator-v57-controller',
+  reviewGatePlanHash = null,
   timelineEvents = [],
   nowMs
 }) {
@@ -258,6 +293,8 @@ function readModelInputForRun({
     pendingResultState: pendingResult,
     codexProviderRunRecord: runRecord,
     reviewGateTarget,
+    reviewGateOperatorId,
+    reviewGatePlanHash,
     nowMs
   };
 }

@@ -9,6 +9,7 @@ export const REVIEW_GATE_PREVIEW_CONTRACT_NAME = 'reviewGatePreview.v1';
 export const REVIEW_GATE_CONFIRMATION_PREVIEW_CONTRACT_NAME = 'reviewGateConfirmationPreview.v1';
 export const REVIEW_GATE_SOURCE_EVIDENCE_CONTRACT_NAME = 'reviewGateSourceEvidence.v1';
 export const REVIEW_GATE_BOUNDARY_NOTICE_CONTRACT_NAME = 'reviewGateBoundaryNotice.v1';
+export const REVIEW_GATE_CONTROLLED_CONFIRMATION_STATE_CONTRACT_NAME = 'reviewGateControlledConfirmationState.v1';
 export const REVIEW_GATE_CONTRACT_VERSION = 1;
 
 export const REVIEW_GATE_BOUNDARIES = Object.freeze({
@@ -94,6 +95,51 @@ const BOUNDARY_NOTICE_ALLOWED_FIELDS = new Set([
   'readOnly',
   'willMutate'
 ]);
+const CONTROLLED_CONFIRMATION_STATE_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'generatedAt',
+  'state',
+  'goalId',
+  'taskId',
+  'eventFamily',
+  'eventType',
+  'gateName',
+  'planHash',
+  'planHashState',
+  'previewHash',
+  'requiredEvidenceRefs',
+  'operator',
+  'previewRequest',
+  'confirmRequestShape',
+  'sourceConfirmationPreview',
+  'blockedReasons',
+  'boundaries',
+  'readOnly',
+  'willMutate'
+]);
+const CONTROLLED_CONFIRMATION_OPERATOR_ALLOWED_FIELDS = new Set([
+  'required',
+  'operatorId',
+  'state',
+  'providerOriginated'
+]);
+const CONTROLLED_CONFIRMATION_PREVIEW_REQUEST_ALLOWED_FIELDS = new Set([
+  'method',
+  'route',
+  'query',
+  'writesInPreview',
+  'willMutate'
+]);
+const CONTROLLED_CONFIRMATION_CONFIRM_REQUEST_ALLOWED_FIELDS = new Set([
+  'method',
+  'route',
+  'contentType',
+  'requiredBodyFields',
+  'confirmUsesPlanHash',
+  'writesInPreview',
+  'willMutate'
+]);
 const GOAL_ALLOWED_FIELDS = new Set(['goalId', 'title', 'state', 'sourceContract', 'sourceRef']);
 const TASK_ALLOWED_FIELDS = new Set(['taskId', 'title', 'state', 'sourceContract', 'sourceRef']);
 const THREAD_PACK_SOURCE_ALLOWED_FIELDS = new Set([
@@ -134,6 +180,8 @@ const EVIDENCE_REF_ALLOWED_FIELDS = new Set(['kind', 'ref', 'label']);
 const GOAL_STATE_SET = new Set(['active', 'ready', 'blocked', 'pending', 'missing', 'accepted']);
 const THREAD_SOURCE_STATE_SET = new Set(['ready', 'blocked', 'missing', 'invalid']);
 const READINESS_STATE_SET = new Set(['ready', 'blocked', 'missing', 'stale', 'not-requested']);
+const CONTROLLED_CONFIRMATION_STATE_SET = new Set(['ready', 'blocked']);
+const OPERATOR_STATE_SET = new Set(['bound', 'missing', 'provider-originated']);
 const PLAN_HASH_STATE_SET = new Set(['current', 'stale', 'missing', 'not-required']);
 const EVENT_FAMILY_SET = new Set(['reviewer-verdict', 'main-gate', 'release-gate']);
 const REVIEW_EVENT_SET = new Set(['reviewer.approved', 'reviewer.needs-revision']);
@@ -375,6 +423,176 @@ export function assertReviewGatePreviewContract(preview) {
   return preview;
 }
 
+export function buildReviewGateControlledConfirmationState({
+  generatedAt = new Date().toISOString(),
+  reviewGatePreview = null,
+  eventFamily = null,
+  planHash = null,
+  operatorId = null
+} = {}) {
+  const normalizedGeneratedAt = new Date(millisOrNow(generatedAt)).toISOString();
+  const previewValidation = validateReviewGatePreviewContract(reviewGatePreview);
+  const requestedEventFamily = EVENT_FAMILY_SET.has(eventFamily)
+    ? eventFamily
+    : firstReadyConfirmationEventFamily(reviewGatePreview);
+  const sourceConfirmationPreview = previewValidation.ok
+    ? firstConfirmationPreviewForFamily(reviewGatePreview, requestedEventFamily)
+    : null;
+  const normalizedOperatorId = safeToken(operatorId);
+  const providerOriginated = normalizedOperatorId !== null && isProviderOriginatedOperatorId(normalizedOperatorId);
+  const normalizedPlanHash = planHash ?? sourceConfirmationPreview?.planHash ?? null;
+  const blockedReasons = controlledConfirmationBlockedReasons({
+    previewValidation,
+    requestedEventFamily,
+    sourceConfirmationPreview,
+    normalizedPlanHash,
+    normalizedOperatorId,
+    providerOriginated
+  });
+  const state = blockedReasons.length === 0 ? 'ready' : 'blocked';
+  const confirmation = sourceConfirmationPreview ?? {};
+  const goalId = safeToken(confirmation.goalId) ?? safeToken(reviewGatePreview?.goal?.goalId) ?? 'missing-goal';
+  const taskId = safeToken(confirmation.taskId) ?? safeToken(reviewGatePreview?.task?.taskId) ?? 'missing-task';
+  const resolvedEventFamily = EVENT_FAMILY_SET.has(requestedEventFamily)
+    ? requestedEventFamily
+    : (EVENT_FAMILY_SET.has(confirmation.eventFamily) ? confirmation.eventFamily : 'reviewer-verdict');
+  const resolvedEventType = safeEventType({
+    eventFamily: resolvedEventFamily,
+    eventType: confirmation.eventType
+  });
+  const requiredEvidenceRefs = controlledEvidenceRefs(confirmation.requiredEvidenceRefs);
+  const previewRequest = state === 'ready'
+    ? controlledPreviewRequest({
+      goalId,
+      taskId,
+      eventFamily: resolvedEventFamily,
+      eventType: resolvedEventType,
+      gateName: confirmation.gateName,
+      operatorId: normalizedOperatorId,
+      evidenceRefs: requiredEvidenceRefs
+    })
+    : null;
+  const confirmRequestShape = state === 'ready'
+    ? controlledConfirmRequestShape({
+      goalId,
+      eventFamily: resolvedEventFamily
+    })
+    : null;
+  const confirmationState = {
+    contractName: REVIEW_GATE_CONTROLLED_CONFIRMATION_STATE_CONTRACT_NAME,
+    contractVersion: REVIEW_GATE_CONTRACT_VERSION,
+    generatedAt: normalizedGeneratedAt,
+    state,
+    goalId,
+    taskId,
+    eventFamily: resolvedEventFamily,
+    eventType: resolvedEventType,
+    gateName: confirmation.gateName ?? null,
+    planHash: typeof normalizedPlanHash === 'string' ? normalizedPlanHash : null,
+    planHashState: confirmation.planHashState ?? 'missing',
+    previewHash: confirmation.previewHash ?? null,
+    requiredEvidenceRefs,
+    operator: {
+      required: true,
+      operatorId: normalizedOperatorId,
+      state: providerOriginated ? 'provider-originated' : (normalizedOperatorId === null ? 'missing' : 'bound'),
+      providerOriginated
+    },
+    previewRequest,
+    confirmRequestShape,
+    sourceConfirmationPreview,
+    blockedReasons,
+    boundaries: buildReviewGateBoundaries(),
+    readOnly: true,
+    willMutate: false
+  };
+  const validation = validateReviewGateControlledConfirmationStateContract(confirmationState);
+
+  if (!validation.ok) {
+    throw new ReviewGatePreviewContractError(
+      'invalid-built-review-gate-controlled-confirmation-state',
+      'Built review gate controlled confirmation state is invalid.',
+      { reason: validation.errors[0] }
+    );
+  }
+
+  return confirmationState;
+}
+
+export function validateReviewGateControlledConfirmationStateContract(confirmationState) {
+  const errors = [];
+
+  if (!isPlainObject(confirmationState)) {
+    return invalidResult('controlled confirmation state must be a plain object');
+  }
+
+  for (const field of CONTROLLED_CONFIRMATION_STATE_ALLOWED_FIELDS) {
+    if (!Object.hasOwn(confirmationState, field)) {
+      errors.push(`${field} is required`);
+    }
+  }
+
+  validateAllowedFields(errors, confirmationState, 'controlledConfirmationState', CONTROLLED_CONFIRMATION_STATE_ALLOWED_FIELDS);
+  requireExact(errors, confirmationState.contractName, 'contractName', REVIEW_GATE_CONTROLLED_CONFIRMATION_STATE_CONTRACT_NAME);
+  requireExact(errors, confirmationState.contractVersion, 'contractVersion', REVIEW_GATE_CONTRACT_VERSION);
+  requireIsoTimestamp(errors, confirmationState.generatedAt, 'generatedAt');
+  requireEnum(errors, confirmationState.state, 'state', CONTROLLED_CONFIRMATION_STATE_SET);
+  requireSafeToken(errors, confirmationState.goalId, 'goalId');
+  requireSafeToken(errors, confirmationState.taskId, 'taskId');
+  validateEventFamilyAndType(errors, confirmationState, 'controlledConfirmationState');
+
+  if (confirmationState.gateName !== null && confirmationState.gateName !== undefined) {
+    requireSafeToken(errors, confirmationState.gateName, 'gateName');
+  }
+
+  if (confirmationState.planHash !== null && confirmationState.planHash !== undefined) {
+    requireHash(errors, confirmationState.planHash, 'planHash');
+  }
+
+  requireEnum(errors, confirmationState.planHashState, 'planHashState', PLAN_HASH_STATE_SET);
+
+  if (confirmationState.previewHash !== null && confirmationState.previewHash !== undefined) {
+    requireHash(errors, confirmationState.previewHash, 'previewHash');
+  }
+
+  validateEvidenceRefs(errors, confirmationState.requiredEvidenceRefs, 'requiredEvidenceRefs');
+  validateControlledConfirmationOperator(errors, confirmationState.operator, 'operator');
+  validateControlledConfirmationPreviewRequest(errors, confirmationState.previewRequest, 'previewRequest', confirmationState.state);
+  validateControlledConfirmationConfirmRequest(errors, confirmationState.confirmRequestShape, 'confirmRequestShape', confirmationState.state);
+  validateControlledConfirmationSourcePreview(errors, confirmationState.sourceConfirmationPreview, 'sourceConfirmationPreview', confirmationState.state);
+  validateStringArray(errors, confirmationState.blockedReasons, 'blockedReasons');
+  validateBoundaries(errors, confirmationState.boundaries, 'boundaries');
+  requireExact(errors, confirmationState.readOnly, 'readOnly', true);
+  requireExact(errors, confirmationState.willMutate, 'willMutate', false);
+
+  if (confirmationState.state === 'ready') {
+    if (confirmationState.blockedReasons.length > 0) {
+      errors.push('blockedReasons must be empty when controlled confirmation state is ready');
+    }
+
+    if (confirmationState.planHashState !== 'current') {
+      errors.push('planHashState must be current when controlled confirmation state is ready');
+    }
+
+    if (confirmationState.requiredEvidenceRefs.length === 0) {
+      errors.push('requiredEvidenceRefs must contain at least one evidence ref when controlled confirmation state is ready');
+    }
+
+    if (confirmationState.operator?.state !== 'bound') {
+      errors.push('operator.state must be bound when controlled confirmation state is ready');
+    }
+  }
+
+  for (const field of findUnsafeFields(confirmationStateForUnsafeScan(confirmationState), 'controlledConfirmationState')) {
+    errors.push(`${field} must not contain raw provider output, local session refs, provider self-approval, or direct mutation routes`);
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors
+  };
+}
+
 export function validateReviewGateConfirmationPreviewContract(preview) {
   const errors = [];
 
@@ -475,6 +693,293 @@ export function validateReviewGateBoundaryNoticeContract(notice) {
   return {
     ok: errors.length === 0,
     errors
+  };
+}
+
+function firstReadyConfirmationEventFamily(reviewGatePreview) {
+  return safeArray(reviewGatePreview?.confirmationPreviews)
+    .find((confirmationPreview) => confirmationPreview?.state === 'ready')?.eventFamily ?? null;
+}
+
+function firstConfirmationPreviewForFamily(reviewGatePreview, eventFamily) {
+  if (!EVENT_FAMILY_SET.has(eventFamily)) {
+    return null;
+  }
+
+  return safeArray(reviewGatePreview?.confirmationPreviews)
+    .find((confirmationPreview) => confirmationPreview?.eventFamily === eventFamily) ?? null;
+}
+
+function controlledConfirmationBlockedReasons({
+  previewValidation,
+  requestedEventFamily,
+  sourceConfirmationPreview,
+  normalizedPlanHash,
+  normalizedOperatorId,
+  providerOriginated
+}) {
+  const blockedReasons = [];
+
+  if (!previewValidation.ok) {
+    blockedReasons.push('invalid-review-gate-preview');
+  }
+
+  if (!EVENT_FAMILY_SET.has(requestedEventFamily)) {
+    blockedReasons.push('missing-event-family');
+  }
+
+  if (!isPlainObject(sourceConfirmationPreview)) {
+    blockedReasons.push('missing-eligible-confirmation-preview');
+    return uniqueStrings(blockedReasons);
+  }
+
+  if (sourceConfirmationPreview.state !== 'ready') {
+    blockedReasons.push('confirmation-preview-not-ready');
+  }
+
+  if (sourceConfirmationPreview.planHashState !== 'current') {
+    blockedReasons.push('stale-plan-hash');
+  }
+
+  if (normalizedPlanHash !== sourceConfirmationPreview.planHash) {
+    blockedReasons.push('plan-hash-mismatch');
+  }
+
+  if (controlledEvidenceRefs(sourceConfirmationPreview.requiredEvidenceRefs).length === 0) {
+    blockedReasons.push('missing-evidence');
+  }
+
+  if (normalizedOperatorId === null) {
+    blockedReasons.push('missing-explicit-operator-id');
+  }
+
+  if (providerOriginated) {
+    blockedReasons.push('provider-originated-approval');
+  }
+
+  return uniqueStrings(blockedReasons);
+}
+
+function controlledPreviewRequest({
+  goalId,
+  taskId,
+  eventFamily,
+  eventType,
+  gateName,
+  operatorId,
+  evidenceRefs
+}) {
+  return {
+    method: 'GET',
+    route: `/api/goals/${encodeURIComponent(goalId)}/event-plan-preview`,
+    query: controlledPreviewQuery({
+      taskId,
+      eventFamily,
+      eventType,
+      gateName,
+      operatorId,
+      evidenceRefs
+    }),
+    writesInPreview: false,
+    willMutate: false
+  };
+}
+
+function controlledPreviewQuery({
+  taskId,
+  eventFamily,
+  eventType,
+  gateName,
+  operatorId,
+  evidenceRefs
+}) {
+  const evidenceRef = evidenceRefQueryValues(evidenceRefs);
+
+  if (eventFamily === 'reviewer-verdict') {
+    return {
+      command: 'review',
+      task: taskId,
+      reviewer: operatorId,
+      verdict: eventType === 'reviewer.approved' ? 'approved' : 'needs-revision',
+      evidenceRef
+    };
+  }
+
+  return {
+    command: 'gate',
+    task: taskId,
+    gate: eventType === 'release.ready-declared'
+      ? 'release.ready'
+      : (gateName ?? (eventFamily === 'main-gate' ? 'main-verification' : 'release.validation')),
+    status: eventType === 'release.ready-declared' ? 'declared' : (eventType.endsWith('-passed') ? 'passed' : 'failed'),
+    verifier: operatorId,
+    evidenceRef
+  };
+}
+
+function controlledConfirmRequestShape({
+  goalId,
+  eventFamily
+}) {
+  const requiredBodyFields = eventFamily === 'reviewer-verdict'
+    ? ['command', 'planHash', 'task', 'reviewer', 'verdict', 'evidenceRef']
+    : ['command', 'planHash', 'task', 'gate', 'status', 'verifier', 'evidenceRef'];
+
+  return {
+    method: 'POST',
+    route: `/api/goals/${encodeURIComponent(goalId)}/event-plan-confirm`,
+    contentType: 'application/json',
+    requiredBodyFields,
+    confirmUsesPlanHash: true,
+    writesInPreview: false,
+    willMutate: false
+  };
+}
+
+function evidenceRefQueryValues(evidenceRefs) {
+  return controlledEvidenceRefs(evidenceRefs).map((evidenceRef) => (
+    evidenceRef.kind === 'repo-doc'
+      ? evidenceRef.ref
+      : `${evidenceRef.kind}:${evidenceRef.ref}`
+  ));
+}
+
+function safeEventType({
+  eventFamily,
+  eventType
+}) {
+  if (eventFamily === 'reviewer-verdict' && REVIEW_EVENT_SET.has(eventType)) {
+    return eventType;
+  }
+
+  if (eventFamily === 'main-gate' && MAIN_GATE_EVENT_SET.has(eventType)) {
+    return eventType;
+  }
+
+  if (eventFamily === 'release-gate' && RELEASE_GATE_EVENT_SET.has(eventType)) {
+    return eventType;
+  }
+
+  if (eventFamily === 'main-gate') {
+    return 'main.verification-passed';
+  }
+
+  if (eventFamily === 'release-gate') {
+    return 'release.gate-passed';
+  }
+
+  return 'reviewer.approved';
+}
+
+function isProviderOriginatedOperatorId(operatorId) {
+  return /(?:codex|claude|provider|worker|reviewer|main-verifier|release-manager|model)/iu.test(operatorId);
+}
+
+function validateControlledConfirmationOperator(errors, operator, path) {
+  if (!isPlainObject(operator)) {
+    errors.push(`${path} must be a plain object`);
+    return;
+  }
+
+  validateAllowedFields(errors, operator, path, CONTROLLED_CONFIRMATION_OPERATOR_ALLOWED_FIELDS);
+  requireExact(errors, operator.required, `${path}.required`, true);
+  requireEnum(errors, operator.state, `${path}.state`, OPERATOR_STATE_SET);
+
+  if (operator.operatorId !== null && operator.operatorId !== undefined) {
+    requireSafeToken(errors, operator.operatorId, `${path}.operatorId`);
+  }
+
+  requireExact(errors, operator.providerOriginated, `${path}.providerOriginated`, operator.state === 'provider-originated');
+}
+
+function validateControlledConfirmationPreviewRequest(errors, previewRequest, path, state) {
+  if (state === 'blocked' && previewRequest === null) {
+    return;
+  }
+
+  if (!isPlainObject(previewRequest)) {
+    errors.push(`${path} must be a plain object when controlled confirmation state is ready`);
+    return;
+  }
+
+  validateAllowedFields(errors, previewRequest, path, CONTROLLED_CONFIRMATION_PREVIEW_REQUEST_ALLOWED_FIELDS);
+  requireExact(errors, previewRequest.method, `${path}.method`, 'GET');
+  validateControlledRoute(errors, previewRequest.route, `${path}.route`, 'event-plan-preview');
+  validateControlledQuery(errors, previewRequest.query, `${path}.query`);
+  requireExact(errors, previewRequest.writesInPreview, `${path}.writesInPreview`, false);
+  requireExact(errors, previewRequest.willMutate, `${path}.willMutate`, false);
+}
+
+function validateControlledConfirmationConfirmRequest(errors, confirmRequestShape, path, state) {
+  if (state === 'blocked' && confirmRequestShape === null) {
+    return;
+  }
+
+  if (!isPlainObject(confirmRequestShape)) {
+    errors.push(`${path} must be a plain object when controlled confirmation state is ready`);
+    return;
+  }
+
+  validateAllowedFields(errors, confirmRequestShape, path, CONTROLLED_CONFIRMATION_CONFIRM_REQUEST_ALLOWED_FIELDS);
+  requireExact(errors, confirmRequestShape.method, `${path}.method`, 'POST');
+  validateControlledRoute(errors, confirmRequestShape.route, `${path}.route`, 'event-plan-confirm');
+  requireExact(errors, confirmRequestShape.contentType, `${path}.contentType`, 'application/json');
+  validateStringArray(errors, confirmRequestShape.requiredBodyFields, `${path}.requiredBodyFields`);
+  requireStringArrayIncludes(errors, confirmRequestShape.requiredBodyFields, `${path}.requiredBodyFields`, 'planHash');
+  requireExact(errors, confirmRequestShape.confirmUsesPlanHash, `${path}.confirmUsesPlanHash`, true);
+  requireExact(errors, confirmRequestShape.writesInPreview, `${path}.writesInPreview`, false);
+  requireExact(errors, confirmRequestShape.willMutate, `${path}.willMutate`, false);
+}
+
+function validateControlledConfirmationSourcePreview(errors, sourceConfirmationPreview, path, state) {
+  if (state === 'blocked' && sourceConfirmationPreview === null) {
+    return;
+  }
+
+  appendPrefixedErrors(
+    errors,
+    validateReviewGateConfirmationPreviewContract(sourceConfirmationPreview),
+    path
+  );
+}
+
+function validateControlledRoute(errors, route, path, suffix) {
+  if (typeof route !== 'string' || !route.startsWith('/api/goals/') || !route.endsWith(`/${suffix}`)) {
+    errors.push(`${path} must target /api/goals/<goal-id>/${suffix}`);
+  }
+}
+
+function validateControlledQuery(errors, query, path) {
+  if (!isPlainObject(query)) {
+    errors.push(`${path} must be a plain object`);
+    return;
+  }
+
+  for (const [key, value] of Object.entries(query)) {
+    requireSafeToken(errors, key, `${path}.${key}.key`);
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => requireNonEmptyString(errors, item, `${path}.${key}[${index}]`));
+      continue;
+    }
+
+    requireNonEmptyString(errors, value, `${path}.${key}`);
+  }
+}
+
+function confirmationStateForUnsafeScan(confirmationState) {
+  if (!isPlainObject(confirmationState)) {
+    return confirmationState;
+  }
+
+  return {
+    ...confirmationState,
+    confirmRequestShape: isPlainObject(confirmationState.confirmRequestShape)
+      ? {
+          ...confirmationState.confirmRequestShape,
+          route: 'controlled-event-plan-confirm-route'
+        }
+      : confirmationState.confirmRequestShape
   };
 }
 
