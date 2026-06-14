@@ -6,6 +6,7 @@ import {
   confirmControlledImplementationRunPlan,
   confirmControlledProviderRunnerPlan,
   confirmControlledVerificationRun,
+  confirmWorkerRunPreview,
   confirmGoalEventPlan,
   fetchAdoptionInspection,
   fetchGoalEventPlanPreview,
@@ -287,6 +288,13 @@ export function WorkbenchShell({
 
           <section className="provider-runner-preview-grid" aria-label="v41 controlled provider runner preview">
             <ControlledProviderRunnerPreviewPanel preview={model.activeGoal.controlledProviderRunnerPreview} />
+          </section>
+
+          <section className="provider-runner-preview-grid" aria-label="v66 controlled Codex worker execution">
+            <WorkerRunPreviewPanel
+              preview={model.activeGoal.workerRunPreview}
+              onWorkerRunConfirmed={onRefreshWorkbenchContracts}
+            />
           </section>
 
           <section className="main-verification-readiness-grid" aria-label="v24 main verification readiness">
@@ -6716,6 +6724,259 @@ function ControlledProviderRunnerPreviewPanel({ preview }) {
       <p className="panel-note">{preview?.note}</p>
     </DataPanel>
   );
+}
+
+function WorkerRunPreviewPanel({ preview, onWorkerRunConfirmed }) {
+  const [confirmState, setConfirmState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+  const confirmRoute = preview?.confirm?.endpoint?.route?.value;
+  const confirmBody = buildWorkerRunConfirmBody(preview);
+  const confirmAvailable = preview?.state === 'preview-ready'
+    && preview?.confirm?.available?.value === true
+    && typeof confirmRoute === 'string'
+    && confirmRoute.trim() !== ''
+    && confirmBody !== null;
+
+  async function handleConfirm() {
+    if (!confirmAvailable) {
+      setConfirmState({
+        phase: 'failed',
+        result: null,
+        error: 'worker run confirm route unavailable'
+      });
+      return;
+    }
+
+    setConfirmState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await confirmWorkerRunPreview(confirmRoute, confirmBody);
+
+    if (result.ok) {
+      setConfirmState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+      if (typeof onWorkerRunConfirmed === 'function') {
+        await onWorkerRunConfirmed();
+      }
+      return;
+    }
+
+    setConfirmState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  return (
+    <DataPanel
+      id="worker-run-preview-panel"
+      kicker="v66 worker execution"
+      title="Controlled Codex Worker Run"
+      state={preview?.state ?? 'unavailable'}
+    >
+      <FieldList rows={[
+        ['modelName', preview?.modelName],
+        ['routeState', preview?.routeState],
+        ['goalId', preview?.goalId],
+        ['taskId', preview?.taskId],
+        ['providerId', preview?.provider?.providerId],
+        ['providerReadiness', preview?.provider?.readinessState],
+        ['commandTemplateId', preview?.plan?.commandTemplateId],
+        ['planHash', preview?.plan?.planHash],
+        ['timeoutMs', preview?.plan?.timeoutMs],
+        ['blockedReasons', preview?.blockedReasons]
+      ]} />
+
+      <Subsection title="active task">
+        <FieldList rows={[
+          ['goal.title', preview?.goal?.title],
+          ['goal.state', preview?.goal?.state],
+          ['goal.sourceContract', preview?.goal?.sourceContract],
+          ['task.title', preview?.task?.title],
+          ['task.state', preview?.task?.state],
+          ['task.sourceContract', preview?.task?.sourceContract]
+        ]} />
+      </Subsection>
+
+      <Subsection title="fixed execution plan">
+        <FieldList rows={[
+          ['provider.role', preview?.provider?.role],
+          ['provider.lane', preview?.provider?.lane],
+          ['commandProviderId', preview?.plan?.commandProviderId],
+          ['commandFamily', preview?.plan?.commandFamily],
+          ['commandTemplateFixed', preview?.plan?.commandTemplateFixed],
+          ['acceptsFreeformCommand', preview?.plan?.acceptsFreeformCommand],
+          ['rendererSuppliedCommandAvailable', preview?.plan?.rendererSuppliedCommandAvailable],
+          ['workspacePolicyId', preview?.workspacePolicy?.policyId],
+          ['workspaceKind', preview?.workspacePolicy?.workspaceKind],
+          ['backendOwned', preview?.workspacePolicy?.backendOwned],
+          ['mainWorktreeWrite', preview?.workspacePolicy?.mainWorktreeWrite],
+          ['rendererSuppliedPathAvailable', preview?.workspacePolicy?.rendererSuppliedPathAvailable],
+          ['allowedWriteScope', preview?.workspacePolicy?.allowedWriteScope]
+        ]} />
+      </Subsection>
+
+      <Subsection title="confirm handoff">
+        <FieldList rows={[
+          ['available', preview?.confirm?.available],
+          ['endpoint.method', preview?.confirm?.endpoint?.method],
+          ['endpoint.route', preview?.confirm?.endpoint?.route],
+          ['requiredFields', preview?.confirm?.endpoint?.requiredFields],
+          ['requiresPlanHash', preview?.confirm?.endpoint?.requiresPlanHash],
+          ['providerId', preview?.confirm?.endpoint?.providerId],
+          ['commandTemplateId', preview?.confirm?.endpoint?.commandTemplateId],
+          ['timeoutMs', preview?.confirm?.endpoint?.timeoutMs],
+          ['workspacePolicyId', preview?.confirm?.endpoint?.workspacePolicyId]
+        ]} />
+        <div className="goal-event-confirm-actions">
+          <button type="button" onClick={handleConfirm} disabled={!confirmAvailable || confirmState.phase === 'loading'}>
+            Confirm worker run
+          </button>
+          <code>{confirmRoute ?? 'confirm route unavailable'}</code>
+        </div>
+        {confirmState.phase === 'failed' ? (
+          <p className="error-copy">confirm 错误摘要：{confirmState.error}</p>
+        ) : null}
+        {confirmState.phase === 'loading' ? (
+          <p className="empty-copy">正在按 workerRunPreview.v1 的 plan hash 确认 worker run。</p>
+        ) : null}
+        {confirmState.phase === 'ready' ? (
+          <FieldList rows={[
+            ['contractName', textValue(confirmState.result.contractName)],
+            ['status', textValue(confirmState.result.status)],
+            ['runId', textValue(confirmState.result.runId)],
+            ['providerId', textValue(confirmState.result.providerId)],
+            ['commandTemplateId', textValue(confirmState.result.commandTemplateId)],
+            ['planHash', textValue(confirmState.result.planHash)],
+            ['adapter', textValue(confirmState.result.adapter)],
+            ['realCodexOptIn', textValue(confirmState.result.realCodexOptIn)],
+            ['result.status', textValue(confirmState.result.result?.status)],
+            ['verifier.state', textValue(confirmState.result.result?.verifier?.state)],
+            ['failureLayer', textValue(confirmState.result.result?.failureLayer?.kind)],
+            ['nextState.taskState', textValue(confirmState.result.result?.nextState?.taskState)],
+            ['nextState.taskCompleted', textValue(confirmState.result.result?.nextState?.taskCompleted)],
+            ['nextState.reviewApproved', textValue(confirmState.result.result?.nextState?.reviewApproved)],
+            ['safety.rawProviderOutputAvailable', textValue(confirmState.result.safety?.rawProviderOutputAvailable)],
+            ['safety.gitMutationAvailable', textValue(confirmState.result.safety?.gitMutationAvailable)],
+            ['safety.githubReleaseAutomationAvailable', textValue(confirmState.result.safety?.githubReleaseAutomationAvailable)]
+          ]} />
+        ) : null}
+      </Subsection>
+
+      <Subsection title="result policy">
+        <FieldList rows={[
+          ['successState', preview?.resultPolicy?.successState],
+          ['reviewRequired', preview?.resultPolicy?.reviewRequired],
+          ['taskCompletionAvailable', preview?.resultPolicy?.taskCompletionAvailable],
+          ['reviewApprovalAvailable', preview?.resultPolicy?.reviewApprovalAvailable],
+          ['mainVerificationAvailable', preview?.resultPolicy?.mainVerificationAvailable],
+          ['releaseReadinessAvailable', preview?.resultPolicy?.releaseReadinessAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="operation status">
+        <FieldList rows={[
+          ['state', textValue(preview?.operationStatus?.state)],
+          ['sourceContract', preview?.operationStatus?.sourceContract],
+          ['operationId', preview?.operationStatus?.operationId],
+          ['commandKind', preview?.operationStatus?.commandKind],
+          ['commandName', preview?.operationStatus?.commandName],
+          ['status', preview?.operationStatus?.status],
+          ['runId', preview?.operationStatus?.runId],
+          ['workerRunStatus', preview?.operationStatus?.workerRunStatus],
+          ['providerId', preview?.operationStatus?.providerId],
+          ['commandTemplateId', preview?.operationStatus?.commandTemplateId],
+          ['previewPlanHash', preview?.operationStatus?.previewPlanHash],
+          ['adapter', preview?.operationStatus?.adapter],
+          ['realCodexOptIn', preview?.operationStatus?.realCodexOptIn],
+          ['sanitizedSummary', preview?.operationStatus?.sanitizedSummary],
+          ['changedFiles', preview?.operationStatus?.changedFiles],
+          ['validationCommands', preview?.operationStatus?.validationCommands],
+          ['verifierState', preview?.operationStatus?.verifierState],
+          ['failureLayer', preview?.operationStatus?.failureLayer],
+          ['taskState', preview?.operationStatus?.taskState],
+          ['taskCompleted', preview?.operationStatus?.taskCompleted],
+          ['reviewApproved', preview?.operationStatus?.reviewApproved],
+          ['mainVerified', preview?.operationStatus?.mainVerified],
+          ['releaseReady', preview?.operationStatus?.releaseReady],
+          ['rawProviderOutputAvailable', preview?.operationStatus?.rawProviderOutputAvailable]
+        ]} />
+        <OperationArtifactRefList artifactRefs={preview?.operationStatus?.artifactRefs} />
+      </Subsection>
+
+      <Subsection title="boundaries">
+        <FieldList rows={[
+          ['backendOwnedPreviewConfirm', preview?.boundaries?.backendOwnedPreviewConfirm],
+          ['fixedProviderId', preview?.boundaries?.fixedProviderId],
+          ['fixedCommandTemplateId', preview?.boundaries?.fixedCommandTemplateId],
+          ['rendererSuppliedCommandAvailable', preview?.boundaries?.rendererSuppliedCommandAvailable],
+          ['freeformProviderCommandAvailable', preview?.boundaries?.freeformProviderCommandAvailable],
+          ['genericShellAvailable', preview?.boundaries?.genericShellAvailable],
+          ['genericTerminalAvailable', preview?.boundaries?.genericTerminalAvailable],
+          ['rendererCommandExecutionAvailable', preview?.boundaries?.rendererCommandExecutionAvailable],
+          ['frontendLocalJsonlReadAvailable', preview?.boundaries?.frontendLocalJsonlReadAvailable],
+          ['frontendLocalSessionReadAvailable', preview?.boundaries?.frontendLocalSessionReadAvailable],
+          ['frontendProviderFolderReadAvailable', preview?.boundaries?.frontendProviderFolderReadAvailable],
+          ['rawTranscriptAvailable', preview?.boundaries?.rawTranscriptAvailable],
+          ['rawModelOutputAvailable', preview?.boundaries?.rawModelOutputAvailable],
+          ['rawProviderOutputAvailable', preview?.boundaries?.rawProviderOutputAvailable],
+          ['directGoalEventAppendAvailable', preview?.boundaries?.directGoalEventAppendAvailable],
+          ['directTaskCompletionAvailable', preview?.boundaries?.directTaskCompletionAvailable],
+          ['providerSuccessCompletesTask', preview?.boundaries?.providerSuccessCompletesTask],
+          ['providerOutputApprovesReview', preview?.boundaries?.providerOutputApprovesReview],
+          ['automaticSelfReviewAvailable', preview?.boundaries?.automaticSelfReviewAvailable],
+          ['automaticWorktreeCreationAvailable', preview?.boundaries?.automaticWorktreeCreationAvailable],
+          ['automaticNextVersionGoalAvailable', preview?.boundaries?.automaticNextVersionGoalAvailable],
+          ['writesMainWorktree', preview?.boundaries?.writesMainWorktree],
+          ['gitMutationAvailable', preview?.boundaries?.gitMutationAvailable],
+          ['githubReleaseAutomationAvailable', preview?.boundaries?.githubReleaseAutomationAvailable],
+          ['realCodexRequiresOptIn', preview?.boundaries?.realCodexRequiresOptIn]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note}</p>
+    </DataPanel>
+  );
+}
+
+function buildWorkerRunConfirmBody(preview) {
+  const goalId = preview?.goalId?.value;
+  const taskId = preview?.taskId?.value;
+  const providerId = preview?.provider?.providerId?.value;
+  const commandTemplateId = preview?.plan?.commandTemplateId?.value;
+  const planHash = preview?.plan?.planHash?.value;
+  const timeoutMs = preview?.plan?.timeoutMs?.value;
+  const workspacePolicyId = preview?.workspacePolicy?.policyId?.value;
+
+  if (![goalId, taskId, providerId, commandTemplateId, planHash, workspacePolicyId].every((value) => typeof value === 'string' && value.trim() !== '')) {
+    return null;
+  }
+
+  if (!Number.isInteger(timeoutMs)) {
+    return null;
+  }
+
+  return {
+    planHash,
+    goalId,
+    taskId,
+    providerId,
+    commandTemplateId,
+    timeoutMs,
+    workspacePolicyId
+  };
 }
 
 function buildControlledProviderRunnerConfirmBody(preview) {
