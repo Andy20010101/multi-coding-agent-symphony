@@ -118,10 +118,11 @@ describe('v57 review gate Workbench surface contracts', () => {
     );
   });
 
-  it('builds a reviewer verdict and main gate preview from a v56 thread handoff pack', () => {
+  it('builds reviewer, main gate, and release gate previews from a v56 thread handoff pack', () => {
     const threadHandoffPack = threadFixture('thread-handoff-pack.ready-reviewer-handoff.v1.json');
     const reviewerEvidenceRefs = [repoDocEvidence('docs/plans/v57-reviewer-evidence-2026-06-14.md', 'v57 reviewer evidence')];
     const mainGateEvidenceRefs = [repoDocEvidence('docs/plans/v57-main-gate-evidence-2026-06-14.md', 'v57 main gate evidence')];
+    const releaseGateEvidenceRefs = [repoDocEvidence('docs/plans/v57-release-gate-evidence-2026-06-14.md', 'v57 release gate evidence')];
     const reviewerPreview = buildReviewGatePreview({
       generatedAt: GENERATED_AT,
       goal: goalInput(),
@@ -138,6 +139,16 @@ describe('v57 review gate Workbench surface contracts', () => {
       target: 'main-gate',
       reviewerEvidenceRefs,
       mainGateEvidenceRefs
+    });
+    const releaseGatePreview = buildReviewGatePreview({
+      generatedAt: GENERATED_AT,
+      goal: goalInput(),
+      task: taskInput(),
+      threadHandoffPack,
+      target: 'release-gate',
+      reviewerEvidenceRefs,
+      mainGateEvidenceRefs,
+      releaseGateEvidenceRefs
     });
 
     assert.equal(validateReviewGatePreviewContract(reviewerPreview).ok, true);
@@ -161,6 +172,23 @@ describe('v57 review gate Workbench surface contracts', () => {
         'docs/plans/v57-main-gate-evidence-2026-06-14.md'
       ]
     );
+
+    assert.equal(validateReviewGatePreviewContract(releaseGatePreview).ok, true);
+    assert.equal(releaseGatePreview.reviewReadiness.state, 'ready');
+    assert.equal(releaseGatePreview.mainGateReadiness.state, 'ready');
+    assert.equal(releaseGatePreview.releaseGateReadiness.state, 'ready');
+    assert.equal(releaseGatePreview.confirmationPreviews[0].eventType, 'release.gate-passed');
+    assert.equal(releaseGatePreview.confirmationPreviews[0].eventFamily, 'release-gate');
+    assert.equal(releaseGatePreview.nextSafeAction.actionId, 'preview-release-gate-registration');
+    assert.deepEqual(
+      releaseGatePreview.requiredEvidenceRefs.map((evidenceRef) => evidenceRef.ref),
+      [
+        'docs/plans/v57-reviewer-evidence-2026-06-14.md',
+        'docs/plans/v57-main-gate-evidence-2026-06-14.md',
+        'docs/plans/v57-release-gate-evidence-2026-06-14.md'
+      ]
+    );
+    assert.deepEqual(releaseGatePreview.boundaries, REVIEW_GATE_BOUNDARIES);
   });
 
   it('builds controlled confirmation state only with an explicit operator and current plan hash', () => {
