@@ -124,4 +124,6 @@ cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/
 
 These checks are enough for v63 host boundary validation. A full native bundle is not required for the v63 smoke path and is not evidence of public distribution.
 
+Operator-facing launch and recovery commands are documented in `docs/desktop-local-launch-guide.md`.
+
 Distribution packaging remains off. The smoke check and `cargo check` validate source-level host boundaries and compileability only; they do not produce or validate a signed app, notarized app, auto-update channel, publish endpoint, or release automation. This workspace does not enable auto-update, publish, signing, notarization, tag, push, release gates, release readiness, a generic shell runner, or arbitrary local file access. Release/distribution work belongs to a later release-manager or native distribution task after independent review and main verification.
