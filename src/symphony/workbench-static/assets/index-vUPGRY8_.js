@@ -11175,6 +11175,10 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.releaseCloseoutHandoffPack,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedReleasePublicationEvidence = projectReleasePublicationEvidence({
+		contract: goalSupervisorData?.releasePublicationEvidence,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11201,6 +11205,7 @@ function projectWorkbenchContracts(results) {
 		reviewGatePreview: projectedReviewGatePreview,
 		reviewGateConfirmationState: projectedReviewGateConfirmationState,
 		releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
+		releasePublicationEvidence: projectedReleasePublicationEvidence,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11231,6 +11236,7 @@ function projectWorkbenchContracts(results) {
 			reviewGatePreview: projectedReviewGatePreview,
 			reviewGateConfirmationState: projectedReviewGateConfirmationState,
 			releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
+			releasePublicationEvidence: projectedReleasePublicationEvidence,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11742,7 +11748,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, releasePublicationEvidence, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -12026,6 +12032,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		reviewGatePreview,
 		reviewGateConfirmationState,
 		releaseCloseoutHandoffPack,
+		releasePublicationEvidence,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12745,6 +12752,135 @@ function projectReleaseCloseoutHandoffPack({ contract, supervisorRoute }) {
 			source: valueState("goal-supervisor-app-read-model.v1 releaseCloseoutHandoffPack projection")
 		},
 		note: hasContract ? "Release closeout handoff is backend-owned read-only state. Workbench displays evidence refs, target metadata, blockers, rollback refs, and next-version context without running tag or publication commands." : "Release closeout handoff is unavailable until goal-supervisor-app-read-model.v1 exposes releaseCloseoutHandoffPack.v1."
+	};
+}
+function projectReleasePublicationEvidence({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	return {
+		state: hasContract ? contract.state ?? (blockedReasons.length === 0 ? "ready" : "blocked") : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		sourceCloseoutHandoff: projectReleasePublicationSourceCloseout(contract?.sourceCloseoutHandoff),
+		tagEvidence: projectReleasePublicationTagEvidence(contract?.tagEvidence),
+		githubReleaseEvidence: projectReleasePublicationGithubReleaseEvidence(contract?.githubReleaseEvidence),
+		targetCommit: projectReleasePublicationTargetCommit(contract?.targetCommit),
+		knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		nextVersionStartAudit: projectReleasePublicationNextStartAudit(contract?.nextVersionStartAudit),
+		publicationEvidenceBoundaryNotice: {
+			contractName: valueState(contract?.publicationEvidenceBoundaryNotice?.contractName),
+			message: valueState(contract?.publicationEvidenceBoundaryNotice?.message),
+			readOnly: valueState(contract?.publicationEvidenceBoundaryNotice?.readOnly),
+			willMutate: valueState(contract?.publicationEvidenceBoundaryNotice?.willMutate)
+		},
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(contract?.readOnly),
+		willMutate: valueState(contract?.willMutate),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 releasePublicationEvidence projection")
+		},
+		note: hasContract ? "Release publication evidence is backend-owned read-only state. Workbench displays tag evidence, GitHub Release evidence, target checks, blockers, rollback refs, and next-start audit without write or runtime controls." : "Release publication evidence is unavailable until goal-supervisor-app-read-model.v1 exposes releasePublicationEvidence.v1."
+	};
+}
+function projectReleasePublicationSourceCloseout(source) {
+	return {
+		state: source !== null && source !== void 0 && typeof source === "object" && !Array.isArray(source) ? source.state ?? "available" : "missing",
+		contractName: valueState(source?.contractName),
+		goalId: valueState(source?.goalId),
+		releaseTag: valueState(source?.releaseTag),
+		targetCommit: valueState(source?.targetCommit),
+		sourceRef: projectSystemGoldenPathSourceRef(source?.sourceRef),
+		evidenceRefs: projectChildDispatchEvidenceRefs(source?.evidenceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(source?.blockedReasons)
+	};
+}
+function projectReleasePublicationTagEvidence(tagEvidence) {
+	return {
+		state: tagEvidence !== null && tagEvidence !== void 0 && typeof tagEvidence === "object" && !Array.isArray(tagEvidence) ? tagEvidence.state ?? "available" : "missing",
+		contractName: valueState(tagEvidence?.contractName),
+		tagName: valueState(tagEvidence?.tagName),
+		tagObjectSha: valueState(tagEvidence?.tagObjectSha),
+		dereferencedCommit: valueState(tagEvidence?.dereferencedCommit),
+		targetCommit: valueState(tagEvidence?.targetCommit),
+		annotated: valueState(tagEvidence?.annotated),
+		sourceRefs: projectChildDispatchEvidenceRefs(tagEvidence?.sourceRefs),
+		rollbackRefs: projectChildDispatchEvidenceRefs(tagEvidence?.rollbackRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(tagEvidence?.blockedReasons),
+		readOnly: valueState(tagEvidence?.readOnly),
+		willMutate: valueState(tagEvidence?.willMutate)
+	};
+}
+function projectReleasePublicationGithubReleaseEvidence(releaseEvidence) {
+	return {
+		state: releaseEvidence !== null && releaseEvidence !== void 0 && typeof releaseEvidence === "object" && !Array.isArray(releaseEvidence) ? releaseEvidence.state ?? "available" : "missing",
+		contractName: valueState(releaseEvidence?.contractName),
+		tagName: valueState(releaseEvidence?.tagName),
+		name: valueState(releaseEvidence?.name),
+		url: valueState(releaseEvidence?.url),
+		isDraft: valueState(releaseEvidence?.isDraft),
+		isPrerelease: valueState(releaseEvidence?.isPrerelease),
+		publishedAt: valueState(releaseEvidence?.publishedAt),
+		assets: projectReleasePublicationAssets(releaseEvidence?.assets),
+		targetCommitish: valueState(releaseEvidence?.targetCommitish),
+		targetCommitMatches: valueState(releaseEvidence?.targetCommitMatches),
+		sourceRefs: projectChildDispatchEvidenceRefs(releaseEvidence?.sourceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(releaseEvidence?.blockedReasons),
+		readOnly: valueState(releaseEvidence?.readOnly),
+		willMutate: valueState(releaseEvidence?.willMutate)
+	};
+}
+function projectReleasePublicationAssets(assets) {
+	const items = (Array.isArray(assets) ? assets : []).map((asset) => ({
+		name: valueState(asset?.name),
+		label: valueState(asset?.label),
+		url: valueState(asset?.url),
+		size: valueState(asset?.size)
+	}));
+	return {
+		state: Array.isArray(assets) && assets.length > 0 ? "available" : Array.isArray(assets) ? "empty" : "missing",
+		count: valueState(Array.isArray(assets) ? assets.length : void 0),
+		items
+	};
+}
+function projectReleasePublicationTargetCommit(targetCommit) {
+	return {
+		state: targetCommit !== null && targetCommit !== void 0 && typeof targetCommit === "object" && !Array.isArray(targetCommit) ? targetCommit.state ?? "available" : "missing",
+		expectedCommit: valueState(targetCommit?.expectedCommit),
+		tagDereferencedCommit: valueState(targetCommit?.tagDereferencedCommit),
+		releaseTargetCommitish: valueState(targetCommit?.releaseTargetCommitish),
+		matchesTag: valueState(targetCommit?.matchesTag),
+		matchesReleaseTarget: valueState(targetCommit?.matchesReleaseTarget),
+		blockedReasons: projectSystemGoldenPathTextItems(targetCommit?.blockedReasons)
+	};
+}
+function projectReleasePublicationNextStartAudit(audit) {
+	return {
+		state: audit !== null && audit !== void 0 && typeof audit === "object" && !Array.isArray(audit) ? audit.state ?? "available" : "missing",
+		contractName: valueState(audit?.contractName),
+		currentVersion: valueState(audit?.currentVersion),
+		nextVersion: valueState(audit?.nextVersion),
+		nextRunbookRef: projectSystemGoldenPathSourceRef(audit?.nextRunbookRef),
+		releaseEvidenceCommit: valueState(audit?.releaseEvidenceCommit),
+		mainHead: valueState(audit?.mainHead),
+		originMainHead: valueState(audit?.originMainHead),
+		openPrCount: valueState(audit?.openPrCount),
+		nextVersionGoalCreated: valueState(audit?.nextVersionGoalCreated),
+		startAllowed: valueState(audit?.startAllowed),
+		sourceRefs: projectChildDispatchEvidenceRefs(audit?.sourceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(audit?.blockedReasons),
+		readOnly: valueState(audit?.readOnly),
+		willMutate: valueState(audit?.willMutate)
 	};
 }
 function projectReleaseCloseoutReviewGateSource(source) {
@@ -26480,6 +26616,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Release Handoff"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#release-publication-evidence-panel",
+							children: "Publication Evidence"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -26543,6 +26683,7 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 					reviewGateConfirmationState: desktopShell?.reviewGateConfirmationState
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseCloseoutHandoffPanel, { releaseCloseoutHandoffPack: desktopShell?.releaseCloseoutHandoffPack }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleasePublicationEvidencePanel, { releasePublicationEvidence: desktopShell?.releasePublicationEvidence }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -27905,6 +28046,132 @@ function ReleaseCloseoutHandoffPanel({ releaseCloseoutHandoffPack }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: pack?.note ?? "Release closeout handoff unavailable."
+			})
+		]
+	});
+}
+function ReleasePublicationEvidencePanel({ releasePublicationEvidence }) {
+	const evidence = releasePublicationEvidence;
+	const tagEvidence = evidence?.tagEvidence;
+	const githubReleaseEvidence = evidence?.githubReleaseEvidence;
+	const targetCommit = evidence?.targetCommit;
+	const nextStartAudit = evidence?.nextVersionStartAudit;
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "release-publication-evidence-panel",
+		className: "release-publication-evidence-panel",
+		"aria-label": "Release Publication Evidence",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "release-publication-evidence-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v59 publication evidence"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Release Publication Evidence" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(evidence?.state)}`,
+					children: evidence?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "release-publication-evidence-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", evidence?.contractName],
+					["goal", evidence?.goal?.goalId],
+					["source closeout", evidence?.sourceCloseoutHandoff?.contractName],
+					["release tag", evidence?.sourceCloseoutHandoff?.releaseTag],
+					["readOnly", evidence?.readOnly],
+					["willMutate", evidence?.willMutate]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["release URL", githubReleaseEvidence?.url],
+					["assets", releaseAssetsTextFromCollection(githubReleaseEvidence?.assets)],
+					["known facts", textValueFromItems(evidence?.knownFacts, "无")],
+					["blocked reasons", textValueFromItems(evidence?.blockedReasons, "无")],
+					["generated at", evidence?.generatedAt]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Tag Evidence",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["tag name", tagEvidence?.tagName],
+					["tag object SHA", tagEvidence?.tagObjectSha],
+					["dereferenced commit", tagEvidence?.dereferencedCommit],
+					["target commit", tagEvidence?.targetCommit],
+					["annotated", tagEvidence?.annotated],
+					["source refs", evidenceRefsTextFromCollection(tagEvidence?.sourceRefs)],
+					["blocked reasons", textValueFromItems(tagEvidence?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "GitHub Release Evidence",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["release URL", githubReleaseEvidence?.url],
+					["release name", githubReleaseEvidence?.name],
+					["draft", githubReleaseEvidence?.isDraft],
+					["prerelease", githubReleaseEvidence?.isPrerelease],
+					["published at", githubReleaseEvidence?.publishedAt],
+					["target commitish", githubReleaseEvidence?.targetCommitish],
+					["target matches", githubReleaseEvidence?.targetCommitMatches],
+					["assets", releaseAssetsTextFromCollection(githubReleaseEvidence?.assets)],
+					["source refs", evidenceRefsTextFromCollection(githubReleaseEvidence?.sourceRefs)],
+					["blocked reasons", textValueFromItems(githubReleaseEvidence?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Target Commit Check",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["expected commit", targetCommit?.expectedCommit],
+					["tag dereferenced commit", targetCommit?.tagDereferencedCommit],
+					["release target commitish", targetCommit?.releaseTargetCommitish],
+					["tag matches target", targetCommit?.matchesTag],
+					["release target matches", targetCommit?.matchesReleaseTarget],
+					["blocked reasons", textValueFromItems(targetCommit?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Publication Blockers",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["evidence blocked reasons", textValueFromItems(evidence?.blockedReasons, "无")],
+					["tag blocked reasons", textValueFromItems(tagEvidence?.blockedReasons, "无")],
+					["release blocked reasons", textValueFromItems(githubReleaseEvidence?.blockedReasons, "无")],
+					["target blocked reasons", textValueFromItems(targetCommit?.blockedReasons, "无")],
+					["next-start blocked reasons", textValueFromItems(nextStartAudit?.blockedReasons, "无")],
+					["tag write available", evidence?.boundaries?.gitTagAvailable],
+					["remote tag write available", evidence?.boundaries?.gitPushAvailable],
+					["release create flag", evidence?.boundaries?.githubReleaseCreateAvailable],
+					["release update flag", evidence?.boundaries?.githubReleaseEditAvailable],
+					["provider control", evidence?.boundaries?.providerLaunchAvailable],
+					["local command control", evidence?.boundaries?.shellAvailable],
+					["goal event write", evidence?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", evidence?.boundaries?.directTaskCompleteAvailable],
+					["worktree automation", evidence?.boundaries?.automaticWorktreeCreationAvailable],
+					["next goal automation", evidence?.boundaries?.automaticNextVersionGoalAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Rollback Refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [["tag rollback refs", evidenceRefsTextFromCollection(tagEvidence?.rollbackRefs)], ["source closeout refs", evidenceRefsTextFromCollection(evidence?.sourceCloseoutHandoff?.evidenceRefs)]] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Next Version Start Audit",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", nextStartAudit?.contractName],
+					["state", nextStartAudit?.state],
+					["current version", nextStartAudit?.currentVersion],
+					["next version", nextStartAudit?.nextVersion],
+					["runbook ref", nextStartAudit?.nextRunbookRef?.ref],
+					["release evidence commit", nextStartAudit?.releaseEvidenceCommit],
+					["main head", nextStartAudit?.mainHead],
+					["origin main head", nextStartAudit?.originMainHead],
+					["open PR count", nextStartAudit?.openPrCount],
+					["next-version goal exists", nextStartAudit?.nextVersionGoalCreated],
+					["start allowed", nextStartAudit?.startAllowed],
+					["source refs", evidenceRefsTextFromCollection(nextStartAudit?.sourceRefs)],
+					["readOnly", nextStartAudit?.readOnly],
+					["willMutate", nextStartAudit?.willMutate]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: evidence?.note ?? "Release publication evidence unavailable."
 			})
 		]
 	});
@@ -36165,6 +36432,11 @@ function textValueFromItems(collection, emptyText = "无") {
 }
 function evidenceRefsTextFromCollection(collection) {
 	const values = (collection?.items ?? []).map((item) => firstText(item.ref, item.label, item.kind)).filter((item) => item !== "");
+	return textValue(values.length === 0 ? "无" : values.join("、"));
+}
+function releaseAssetsTextFromCollection(collection) {
+	const values = (collection?.items ?? []).map((item) => [firstText(item.name), firstText(item.size)].filter((value) => value !== "").join(" ")).filter((item) => item !== "");
+	if (values.length === 0 && collection?.count?.value === 0) return textValue("0 assets");
 	return textValue(values.length === 0 ? "无" : values.join("、"));
 }
 function sourceRefsTextFromCollection(collection) {

@@ -1246,6 +1246,10 @@ export function projectWorkbenchContracts(results) {
     contract: goalSupervisorData?.releaseCloseoutHandoffPack,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
+  const projectedReleasePublicationEvidence = projectReleasePublicationEvidence({
+    contract: goalSupervisorData?.releasePublicationEvidence,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1274,6 +1278,7 @@ export function projectWorkbenchContracts(results) {
     reviewGatePreview: projectedReviewGatePreview,
     reviewGateConfirmationState: projectedReviewGateConfirmationState,
     releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
+    releasePublicationEvidence: projectedReleasePublicationEvidence,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
       routeStates
@@ -1304,6 +1309,7 @@ export function projectWorkbenchContracts(results) {
       reviewGatePreview: projectedReviewGatePreview,
       reviewGateConfirmationState: projectedReviewGateConfirmationState,
       releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
+      releasePublicationEvidence: projectedReleasePublicationEvidence,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1889,6 +1895,7 @@ function projectDesktopShell({
   reviewGatePreview,
   reviewGateConfirmationState,
   releaseCloseoutHandoffPack,
+  releasePublicationEvidence,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -2186,6 +2193,7 @@ function projectDesktopShell({
     reviewGatePreview,
     reviewGateConfirmationState,
     releaseCloseoutHandoffPack,
+    releasePublicationEvidence,
     routeProvenance,
     appStates,
     boundaries,
@@ -3012,6 +3020,161 @@ function projectReleaseCloseoutHandoffPack({
     note: hasContract
       ? 'Release closeout handoff is backend-owned read-only state. Workbench displays evidence refs, target metadata, blockers, rollback refs, and next-version context without running tag or publication commands.'
       : 'Release closeout handoff is unavailable until goal-supervisor-app-read-model.v1 exposes releaseCloseoutHandoffPack.v1.'
+  };
+}
+
+function projectReleasePublicationEvidence({
+  contract,
+  supervisorRoute
+}) {
+  const hasContract = contract !== null && contract !== undefined && typeof contract === 'object' && !Array.isArray(contract);
+  const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+
+  return {
+    state: hasContract ? contract.state ?? (blockedReasons.length === 0 ? 'ready' : 'blocked') : 'missing',
+    contractName: valueState(contract?.contractName),
+    contractVersion: valueState(contract?.contractVersion),
+    generatedAt: valueState(contract?.generatedAt),
+    goal: {
+      goalId: valueState(contract?.goal?.goalId),
+      title: valueState(contract?.goal?.title),
+      state: valueState(contract?.goal?.state),
+      sourceContract: valueState(contract?.goal?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+    },
+    sourceCloseoutHandoff: projectReleasePublicationSourceCloseout(contract?.sourceCloseoutHandoff),
+    tagEvidence: projectReleasePublicationTagEvidence(contract?.tagEvidence),
+    githubReleaseEvidence: projectReleasePublicationGithubReleaseEvidence(contract?.githubReleaseEvidence),
+    targetCommit: projectReleasePublicationTargetCommit(contract?.targetCommit),
+    knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+    blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+    nextVersionStartAudit: projectReleasePublicationNextStartAudit(contract?.nextVersionStartAudit),
+    publicationEvidenceBoundaryNotice: {
+      contractName: valueState(contract?.publicationEvidenceBoundaryNotice?.contractName),
+      message: valueState(contract?.publicationEvidenceBoundaryNotice?.message),
+      readOnly: valueState(contract?.publicationEvidenceBoundaryNotice?.readOnly),
+      willMutate: valueState(contract?.publicationEvidenceBoundaryNotice?.willMutate)
+    },
+    boundaries: Object.fromEntries(
+      Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    readOnly: valueState(contract?.readOnly),
+    willMutate: valueState(contract?.willMutate),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 releasePublicationEvidence projection')
+    },
+    note: hasContract
+      ? 'Release publication evidence is backend-owned read-only state. Workbench displays tag evidence, GitHub Release evidence, target checks, blockers, rollback refs, and next-start audit without write or runtime controls.'
+      : 'Release publication evidence is unavailable until goal-supervisor-app-read-model.v1 exposes releasePublicationEvidence.v1.'
+  };
+}
+
+function projectReleasePublicationSourceCloseout(source) {
+  const hasSource = source !== null && source !== undefined && typeof source === 'object' && !Array.isArray(source);
+
+  return {
+    state: hasSource ? source.state ?? 'available' : 'missing',
+    contractName: valueState(source?.contractName),
+    goalId: valueState(source?.goalId),
+    releaseTag: valueState(source?.releaseTag),
+    targetCommit: valueState(source?.targetCommit),
+    sourceRef: projectSystemGoldenPathSourceRef(source?.sourceRef),
+    evidenceRefs: projectChildDispatchEvidenceRefs(source?.evidenceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(source?.blockedReasons)
+  };
+}
+
+function projectReleasePublicationTagEvidence(tagEvidence) {
+  const hasEvidence = tagEvidence !== null && tagEvidence !== undefined && typeof tagEvidence === 'object' && !Array.isArray(tagEvidence);
+
+  return {
+    state: hasEvidence ? tagEvidence.state ?? 'available' : 'missing',
+    contractName: valueState(tagEvidence?.contractName),
+    tagName: valueState(tagEvidence?.tagName),
+    tagObjectSha: valueState(tagEvidence?.tagObjectSha),
+    dereferencedCommit: valueState(tagEvidence?.dereferencedCommit),
+    targetCommit: valueState(tagEvidence?.targetCommit),
+    annotated: valueState(tagEvidence?.annotated),
+    sourceRefs: projectChildDispatchEvidenceRefs(tagEvidence?.sourceRefs),
+    rollbackRefs: projectChildDispatchEvidenceRefs(tagEvidence?.rollbackRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(tagEvidence?.blockedReasons),
+    readOnly: valueState(tagEvidence?.readOnly),
+    willMutate: valueState(tagEvidence?.willMutate)
+  };
+}
+
+function projectReleasePublicationGithubReleaseEvidence(releaseEvidence) {
+  const hasEvidence = releaseEvidence !== null && releaseEvidence !== undefined && typeof releaseEvidence === 'object' && !Array.isArray(releaseEvidence);
+
+  return {
+    state: hasEvidence ? releaseEvidence.state ?? 'available' : 'missing',
+    contractName: valueState(releaseEvidence?.contractName),
+    tagName: valueState(releaseEvidence?.tagName),
+    name: valueState(releaseEvidence?.name),
+    url: valueState(releaseEvidence?.url),
+    isDraft: valueState(releaseEvidence?.isDraft),
+    isPrerelease: valueState(releaseEvidence?.isPrerelease),
+    publishedAt: valueState(releaseEvidence?.publishedAt),
+    assets: projectReleasePublicationAssets(releaseEvidence?.assets),
+    targetCommitish: valueState(releaseEvidence?.targetCommitish),
+    targetCommitMatches: valueState(releaseEvidence?.targetCommitMatches),
+    sourceRefs: projectChildDispatchEvidenceRefs(releaseEvidence?.sourceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(releaseEvidence?.blockedReasons),
+    readOnly: valueState(releaseEvidence?.readOnly),
+    willMutate: valueState(releaseEvidence?.willMutate)
+  };
+}
+
+function projectReleasePublicationAssets(assets) {
+  const items = (Array.isArray(assets) ? assets : []).map((asset) => ({
+    name: valueState(asset?.name),
+    label: valueState(asset?.label),
+    url: valueState(asset?.url),
+    size: valueState(asset?.size)
+  }));
+
+  return {
+    state: Array.isArray(assets) && assets.length > 0 ? 'available' : Array.isArray(assets) ? 'empty' : 'missing',
+    count: valueState(Array.isArray(assets) ? assets.length : undefined),
+    items
+  };
+}
+
+function projectReleasePublicationTargetCommit(targetCommit) {
+  const hasTarget = targetCommit !== null && targetCommit !== undefined && typeof targetCommit === 'object' && !Array.isArray(targetCommit);
+
+  return {
+    state: hasTarget ? targetCommit.state ?? 'available' : 'missing',
+    expectedCommit: valueState(targetCommit?.expectedCommit),
+    tagDereferencedCommit: valueState(targetCommit?.tagDereferencedCommit),
+    releaseTargetCommitish: valueState(targetCommit?.releaseTargetCommitish),
+    matchesTag: valueState(targetCommit?.matchesTag),
+    matchesReleaseTarget: valueState(targetCommit?.matchesReleaseTarget),
+    blockedReasons: projectSystemGoldenPathTextItems(targetCommit?.blockedReasons)
+  };
+}
+
+function projectReleasePublicationNextStartAudit(audit) {
+  const hasAudit = audit !== null && audit !== undefined && typeof audit === 'object' && !Array.isArray(audit);
+
+  return {
+    state: hasAudit ? audit.state ?? 'available' : 'missing',
+    contractName: valueState(audit?.contractName),
+    currentVersion: valueState(audit?.currentVersion),
+    nextVersion: valueState(audit?.nextVersion),
+    nextRunbookRef: projectSystemGoldenPathSourceRef(audit?.nextRunbookRef),
+    releaseEvidenceCommit: valueState(audit?.releaseEvidenceCommit),
+    mainHead: valueState(audit?.mainHead),
+    originMainHead: valueState(audit?.originMainHead),
+    openPrCount: valueState(audit?.openPrCount),
+    nextVersionGoalCreated: valueState(audit?.nextVersionGoalCreated),
+    startAllowed: valueState(audit?.startAllowed),
+    sourceRefs: projectChildDispatchEvidenceRefs(audit?.sourceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(audit?.blockedReasons),
+    readOnly: valueState(audit?.readOnly),
+    willMutate: valueState(audit?.willMutate)
   };
 }
 

@@ -621,6 +621,7 @@ function DesktopShellRoute({
           <a href="#thread-handoff-pack-panel">Thread Pack</a>
           <a href="#review-gate-workbench-panel">Review Gate</a>
           <a href="#release-closeout-handoff-panel">Release Handoff</a>
+          <a href="#release-publication-evidence-panel">Publication Evidence</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -671,6 +672,7 @@ function DesktopShellRoute({
           reviewGateConfirmationState={desktopShell?.reviewGateConfirmationState}
         />
         <ReleaseCloseoutHandoffPanel releaseCloseoutHandoffPack={desktopShell?.releaseCloseoutHandoffPack} />
+        <ReleasePublicationEvidencePanel releasePublicationEvidence={desktopShell?.releasePublicationEvidence} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -2208,6 +2210,136 @@ function ReleaseCloseoutHandoffPanel({ releaseCloseoutHandoffPack }) {
       </Subsection>
 
       <p className="panel-note">{pack?.note ?? 'Release closeout handoff unavailable.'}</p>
+    </section>
+  );
+}
+
+function ReleasePublicationEvidencePanel({ releasePublicationEvidence }) {
+  const evidence = releasePublicationEvidence;
+  const tagEvidence = evidence?.tagEvidence;
+  const githubReleaseEvidence = evidence?.githubReleaseEvidence;
+  const targetCommit = evidence?.targetCommit;
+  const nextStartAudit = evidence?.nextVersionStartAudit;
+
+  return (
+    <section
+      id="release-publication-evidence-panel"
+      className="release-publication-evidence-panel"
+      aria-label="Release Publication Evidence"
+    >
+      <header className="release-publication-evidence-header">
+        <div>
+          <p className="section-kicker">v59 publication evidence</p>
+          <h2>Release Publication Evidence</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(evidence?.state)}`}>
+          {evidence?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="release-publication-evidence-summary">
+        <FieldList rows={[
+          ['contract', evidence?.contractName],
+          ['goal', evidence?.goal?.goalId],
+          ['source closeout', evidence?.sourceCloseoutHandoff?.contractName],
+          ['release tag', evidence?.sourceCloseoutHandoff?.releaseTag],
+          ['readOnly', evidence?.readOnly],
+          ['willMutate', evidence?.willMutate]
+        ]} />
+        <FieldList rows={[
+          ['release URL', githubReleaseEvidence?.url],
+          ['assets', releaseAssetsTextFromCollection(githubReleaseEvidence?.assets)],
+          ['known facts', textValueFromItems(evidence?.knownFacts, '无')],
+          ['blocked reasons', textValueFromItems(evidence?.blockedReasons, '无')],
+          ['generated at', evidence?.generatedAt]
+        ]} />
+      </div>
+
+      <Subsection title="Tag Evidence">
+        <FieldList rows={[
+          ['tag name', tagEvidence?.tagName],
+          ['tag object SHA', tagEvidence?.tagObjectSha],
+          ['dereferenced commit', tagEvidence?.dereferencedCommit],
+          ['target commit', tagEvidence?.targetCommit],
+          ['annotated', tagEvidence?.annotated],
+          ['source refs', evidenceRefsTextFromCollection(tagEvidence?.sourceRefs)],
+          ['blocked reasons', textValueFromItems(tagEvidence?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="GitHub Release Evidence">
+        <FieldList rows={[
+          ['release URL', githubReleaseEvidence?.url],
+          ['release name', githubReleaseEvidence?.name],
+          ['draft', githubReleaseEvidence?.isDraft],
+          ['prerelease', githubReleaseEvidence?.isPrerelease],
+          ['published at', githubReleaseEvidence?.publishedAt],
+          ['target commitish', githubReleaseEvidence?.targetCommitish],
+          ['target matches', githubReleaseEvidence?.targetCommitMatches],
+          ['assets', releaseAssetsTextFromCollection(githubReleaseEvidence?.assets)],
+          ['source refs', evidenceRefsTextFromCollection(githubReleaseEvidence?.sourceRefs)],
+          ['blocked reasons', textValueFromItems(githubReleaseEvidence?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Target Commit Check">
+        <FieldList rows={[
+          ['expected commit', targetCommit?.expectedCommit],
+          ['tag dereferenced commit', targetCommit?.tagDereferencedCommit],
+          ['release target commitish', targetCommit?.releaseTargetCommitish],
+          ['tag matches target', targetCommit?.matchesTag],
+          ['release target matches', targetCommit?.matchesReleaseTarget],
+          ['blocked reasons', textValueFromItems(targetCommit?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Publication Blockers">
+        <FieldList rows={[
+          ['evidence blocked reasons', textValueFromItems(evidence?.blockedReasons, '无')],
+          ['tag blocked reasons', textValueFromItems(tagEvidence?.blockedReasons, '无')],
+          ['release blocked reasons', textValueFromItems(githubReleaseEvidence?.blockedReasons, '无')],
+          ['target blocked reasons', textValueFromItems(targetCommit?.blockedReasons, '无')],
+          ['next-start blocked reasons', textValueFromItems(nextStartAudit?.blockedReasons, '无')],
+          ['tag write available', evidence?.boundaries?.gitTagAvailable],
+          ['remote tag write available', evidence?.boundaries?.gitPushAvailable],
+          ['release create flag', evidence?.boundaries?.githubReleaseCreateAvailable],
+          ['release update flag', evidence?.boundaries?.githubReleaseEditAvailable],
+          ['provider control', evidence?.boundaries?.providerLaunchAvailable],
+          ['local command control', evidence?.boundaries?.shellAvailable],
+          ['goal event write', evidence?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', evidence?.boundaries?.directTaskCompleteAvailable],
+          ['worktree automation', evidence?.boundaries?.automaticWorktreeCreationAvailable],
+          ['next goal automation', evidence?.boundaries?.automaticNextVersionGoalAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Rollback Refs">
+        <FieldList rows={[
+          ['tag rollback refs', evidenceRefsTextFromCollection(tagEvidence?.rollbackRefs)],
+          ['source closeout refs', evidenceRefsTextFromCollection(evidence?.sourceCloseoutHandoff?.evidenceRefs)]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Next Version Start Audit">
+        <FieldList rows={[
+          ['contract', nextStartAudit?.contractName],
+          ['state', nextStartAudit?.state],
+          ['current version', nextStartAudit?.currentVersion],
+          ['next version', nextStartAudit?.nextVersion],
+          ['runbook ref', nextStartAudit?.nextRunbookRef?.ref],
+          ['release evidence commit', nextStartAudit?.releaseEvidenceCommit],
+          ['main head', nextStartAudit?.mainHead],
+          ['origin main head', nextStartAudit?.originMainHead],
+          ['open PR count', nextStartAudit?.openPrCount],
+          ['next-version goal exists', nextStartAudit?.nextVersionGoalCreated],
+          ['start allowed', nextStartAudit?.startAllowed],
+          ['source refs', evidenceRefsTextFromCollection(nextStartAudit?.sourceRefs)],
+          ['readOnly', nextStartAudit?.readOnly],
+          ['willMutate', nextStartAudit?.willMutate]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{evidence?.note ?? 'Release publication evidence unavailable.'}</p>
     </section>
   );
 }
@@ -11639,6 +11771,18 @@ function evidenceRefsTextFromCollection(collection) {
   const values = (collection?.items ?? [])
     .map((item) => firstText(item.ref, item.label, item.kind))
     .filter((item) => item !== '');
+
+  return textValue(values.length === 0 ? '无' : values.join('、'));
+}
+
+function releaseAssetsTextFromCollection(collection) {
+  const values = (collection?.items ?? [])
+    .map((item) => [firstText(item.name), firstText(item.size)].filter((value) => value !== '').join(' '))
+    .filter((item) => item !== '');
+
+  if (values.length === 0 && collection?.count?.value === 0) {
+    return textValue('0 assets');
+  }
 
   return textValue(values.length === 0 ? '无' : values.join('、'));
 }
