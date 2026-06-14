@@ -18,6 +18,18 @@ v68 starts only after the v67 release boundary is verified:
 - v67 reviewer verdict state is explicit `approved`, `needs-revision`, or `blocked`;
 - approved reviewer evidence does not mark adoption ready, main verified, release ready, or task completed.
 
+## Start Evidence Snapshot
+
+Checked on 2026-06-15 before opening PR-0:
+
+- `origin/main` was `d2c754b80afef370e3e886b0bb6d267eda7e1652`, the v67 closeout merge commit.
+- `git rev-list --left-right --count main...origin/main` returned `0 65`; local `main` was stale, but the v68 branch starts from `origin/main`.
+- Open GitHub PR list for `Andy20010101/multi-coding-agent-symphony` returned `[]`.
+- Annotated tag `v67` existed: tag object `ac24c3d1e3ae155d04db7164d49be3bc6fb22e40`; `v67^{}` resolved to `d2c754b80afef370e3e886b0bb6d267eda7e1652`.
+- GitHub Release `v67` existed at `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v67`, with name `v67: Claude Code Reviewer Lane`, `isDraft=false`, `isPrerelease=false`, assets `[]`, `publishedAt=2026-06-14T22:45:33Z`, and `targetCommitish=main`.
+- `v68` tag was absent and `gh release view v68` returned `release not found`.
+- v67 reviewer output remains adoption- and verification-bound. `fixtures/contracts/reviewer-run/verdict.approved.v1.json`, `tests/v67-claude-code-reviewer-lane.test.js`, and `docs/qa/v67-claude-code-reviewer-lane-acceptance.md` record `reviewApproved: true`, `taskCompleted: false`, `adoptionReady: false`, `mainVerified: false`, and `releaseReady: false`.
+
 ## Objective
 
 v68 should connect the practical development loop. Approved worker and reviewer evidence can be previewed for adoption, confirmed safely into the main worktree, then verified through explicit main verification evidence and gate confirmation.
