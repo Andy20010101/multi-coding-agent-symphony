@@ -2,6 +2,7 @@ import { NodeProcessRunner } from '../../process-runner.js';
 import { classifyPrompt } from '../prompt-router.js';
 import { runArtifactsCommand } from './commands/artifacts.js';
 import { runGoalCommand, runGoalStatusCommand } from './commands/goal.js';
+import { runInstallCommand } from './commands/install.js';
 import { runStatusCommand } from './commands/status.js';
 import { runSupervisorCommand } from './commands/supervisor.js';
 import { EXIT_CODES, UsageError, readRequiredValue } from './errors.js';
@@ -21,6 +22,7 @@ const KNOWN_COMMANDS = new Set([
   'do',
   'verify',
   'status',
+  'install',
   'artifacts',
   'continue',
   'console',
@@ -183,6 +185,14 @@ export async function runSymphonyCli({
       return await runStatusCommand({
         args: rest,
         stdout
+      });
+    }
+
+    if (command === 'install') {
+      return await runInstallCommand({
+        args: rest,
+        stdout,
+        env
       });
     }
 
