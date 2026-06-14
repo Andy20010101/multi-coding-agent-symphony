@@ -1329,6 +1329,7 @@ h4 {
 .codex-run-recovery-panel,
 .reviewer-handoff-preview-panel,
 .thread-handoff-pack-panel,
+.review-gate-workbench-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
@@ -1634,7 +1635,8 @@ h4 {
 .codex-provider-execution-panel,
 .codex-run-recovery-panel,
 .reviewer-handoff-preview-panel,
-.thread-handoff-pack-panel {
+.thread-handoff-pack-panel,
+.review-gate-workbench-panel {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
@@ -1646,6 +1648,7 @@ h4 {
 .codex-run-recovery-header,
 .reviewer-handoff-preview-header,
 .thread-handoff-pack-header,
+.review-gate-workbench-header,
 .system-golden-path-step-header {
   display: flex;
   flex-wrap: wrap;
@@ -1659,7 +1662,8 @@ h4 {
 .codex-provider-execution-header,
 .codex-run-recovery-header,
 .reviewer-handoff-preview-header,
-.thread-handoff-pack-header {
+.thread-handoff-pack-header,
+.review-gate-workbench-header {
   border-bottom: 1px solid var(--dsk-line-soft);
   padding-bottom: 8px;
 }
@@ -1670,6 +1674,7 @@ h4 {
 .codex-run-recovery-header h2,
 .reviewer-handoff-preview-header h2,
 .thread-handoff-pack-header h2,
+.review-gate-workbench-header h2,
 .system-golden-path-step-header h3 {
   margin: 0;
   color: var(--dsk-fg);
@@ -1683,7 +1688,8 @@ h4 {
 .codex-provider-execution-header h2,
 .codex-run-recovery-header h2,
 .reviewer-handoff-preview-header h2,
-.thread-handoff-pack-header h2 {
+.thread-handoff-pack-header h2,
+.review-gate-workbench-header h2 {
   font-size: 18px;
 }
 
@@ -1706,7 +1712,9 @@ h4 {
 .codex-provider-execution-summary,
 .codex-run-recovery-summary,
 .reviewer-handoff-preview-summary,
-.thread-handoff-pack-summary {
+.thread-handoff-pack-summary,
+.review-gate-workbench-summary,
+.review-gate-confirmation-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
   gap: 12px;
@@ -1788,6 +1796,65 @@ h4 {
   gap: 8px;
   align-items: baseline;
   justify-content: space-between;
+}
+
+.review-gate-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+
+.review-gate-readiness-grid article,
+.review-gate-query-list li {
+  min-width: 0;
+  border: 1px solid var(--dsk-line-soft);
+  border-radius: 4px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--dsk-panel), var(--dsk-bg) 35%);
+}
+
+.review-gate-readiness-grid h4 {
+  margin: 0 0 8px;
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-display);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.review-gate-query-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-gate-query-list li {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.28fr) minmax(0, 0.72fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.review-gate-query-list span {
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.review-gate-query-list strong {
+  color: var(--dsk-fg);
+  font-family: var(--dsk-mono);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .child-dispatch-provider-targets h4 {
@@ -3857,7 +3924,8 @@ h4 {
   }
 
   .desktop-project-launcher-grid,
-  .desktop-project-launcher-footer {
+  .desktop-project-launcher-footer,
+  .review-gate-readiness-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3909,6 +3977,8 @@ h4 {
   .desktop-project-launcher-header,
   .desktop-app-home-panel,
   .system-golden-path-summary,
+  .review-gate-workbench-summary,
+  .review-gate-confirmation-grid,
   .desktop-app-state-list,
   .desktop-development-status-list,
   .desktop-first-row,
@@ -3923,6 +3993,7 @@ h4 {
   .desktop-card,
   .desktop-project-launcher,
   .system-golden-path-panel,
+  .review-gate-workbench-panel,
   .desktop-topbar {
     padding: 10px;
   }

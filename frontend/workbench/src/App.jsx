@@ -619,6 +619,7 @@ function DesktopShellRoute({
           <a href="#codex-run-recovery-panel">Recovery</a>
           <a href="#reviewer-handoff-preview-panel">Reviewer Handoff</a>
           <a href="#thread-handoff-pack-panel">Thread Pack</a>
+          <a href="#review-gate-workbench-panel">Review Gate</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -664,6 +665,10 @@ function DesktopShellRoute({
         <CodexRunRecoveryPanel codexProviderRunRecovery={desktopShell?.codexProviderRunRecovery} />
         <ReviewerHandoffPreviewPanel reviewerHandoffPreview={desktopShell?.reviewerHandoffPreview} />
         <ThreadHandoffPackPanel threadHandoffPack={desktopShell?.threadHandoffPack} />
+        <ReviewGateWorkbenchPanel
+          reviewGatePreview={desktopShell?.reviewGatePreview}
+          reviewGateConfirmationState={desktopShell?.reviewGateConfirmationState}
+        />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -1861,6 +1866,185 @@ function ThreadHandoffPackPanel({ threadHandoffPack }) {
 
       <p className="panel-note">{pack?.note ?? 'Thread handoff pack unavailable.'}</p>
     </section>
+  );
+}
+
+function ReviewGateWorkbenchPanel({
+  reviewGatePreview,
+  reviewGateConfirmationState
+}) {
+  const preview = reviewGatePreview;
+  const confirmation = reviewGateConfirmationState;
+  const sourceContracts = preview?.sourceContracts?.items ?? [];
+
+  return (
+    <section
+      id="review-gate-workbench-panel"
+      className="review-gate-workbench-panel"
+      aria-label="Review Gate Preview"
+    >
+      <header className="review-gate-workbench-header">
+        <div>
+          <p className="section-kicker">v57 review gate</p>
+          <h2>Review Gate Preview</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(preview?.state)}`}>
+          {preview?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="review-gate-workbench-summary">
+        <FieldList rows={[
+          ['contract', preview?.contractName],
+          ['goal', preview?.goal?.goalId],
+          ['task', preview?.task?.taskId],
+          ['thread pack state', preview?.sourceThreadHandoffPack?.sourceState],
+          ['thread pack decision', preview?.sourceThreadHandoffPack?.decision],
+          ['next safe action', preview?.nextSafeAction?.label],
+          ['readOnly', preview?.readOnly],
+          ['willMutate', preview?.willMutate],
+          ['blocked reasons', textValueFromItems(preview?.blockedReasons, '无')]
+        ]} />
+
+        <FieldList rows={[
+          ['confirmation state', textValue(confirmation?.state)],
+          ['confirmation contract', confirmation?.contractName],
+          ['event family', confirmation?.eventFamily],
+          ['event type', confirmation?.eventType],
+          ['plan hash state', confirmation?.planHashState],
+          ['operator state', confirmation?.operator?.state],
+          ['provider originated', confirmation?.operator?.providerOriginated],
+          ['confirmation blocked reasons', textValueFromItems(confirmation?.blockedReasons, '无')]
+        ]} />
+      </div>
+
+      <Subsection title="Readiness">
+        <div className="review-gate-readiness-grid">
+          <ReviewGateReadinessBlock title="Reviewer Verdict" readiness={preview?.reviewReadiness} />
+          <ReviewGateReadinessBlock title="Main Gate" readiness={preview?.mainGateReadiness} />
+          <ReviewGateReadinessBlock title="Release Gate" readiness={preview?.releaseGateReadiness} />
+        </div>
+      </Subsection>
+
+      <Subsection title="Evidence Refs">
+        <FieldList rows={[
+          ['required evidence refs', evidenceRefsTextFromCollection(preview?.requiredEvidenceRefs)],
+          ['reviewer evidence refs', evidenceRefsTextFromCollection(preview?.sourceEvidence?.reviewerEvidenceRefs)],
+          ['main gate evidence refs', evidenceRefsTextFromCollection(preview?.sourceEvidence?.mainGateEvidenceRefs)],
+          ['release gate evidence refs', evidenceRefsTextFromCollection(preview?.sourceEvidence?.releaseGateEvidenceRefs)],
+          ['source evidence contract', preview?.sourceEvidence?.contractName],
+          ['thread handoff source ref', preview?.sourceEvidence?.threadHandoffPackRef?.ref]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Controlled Confirmation State">
+        <div className="review-gate-confirmation-grid">
+          <FieldList rows={[
+            ['contract', confirmation?.contractName],
+            ['goal', confirmation?.goalId],
+            ['task', confirmation?.taskId],
+            ['gate name', confirmation?.gateName],
+            ['plan hash', confirmation?.planHash],
+            ['preview hash', confirmation?.previewHash],
+            ['operator id', confirmation?.operator?.operatorId],
+            ['requires operator', confirmation?.operator?.required],
+            ['readOnly', confirmation?.readOnly],
+            ['willMutate', confirmation?.willMutate]
+          ]} />
+          <FieldList rows={[
+            ['preview method', confirmation?.previewRequest?.method],
+            ['preview route', confirmation?.previewRequest?.route],
+            ['preview writes', confirmation?.previewRequest?.writesInPreview],
+            ['preview willMutate', confirmation?.previewRequest?.willMutate],
+            ['confirm method', confirmation?.confirmRequestShape?.method],
+            ['confirm route', confirmation?.confirmRequestShape?.route],
+            ['confirm uses plan hash', confirmation?.confirmRequestShape?.confirmUsesPlanHash],
+            ['confirm writes in preview', confirmation?.confirmRequestShape?.writesInPreview],
+            ['confirm willMutate', confirmation?.confirmRequestShape?.willMutate],
+            ['confirmation mode', confirmation?.sourceConfirmationPreview?.confirmationMode],
+            ['required body fields', textValueFromItems(confirmation?.confirmRequestShape?.requiredBodyFields, '未暴露')]
+          ]} />
+        </div>
+        <ReviewGateRequestQueryList request={confirmation?.previewRequest} />
+      </Subsection>
+
+      <Subsection title="Source Contracts">
+        {sourceContracts.length === 0 ? (
+          <EmptyBlock copy="reviewGatePreview source contracts 未暴露。" />
+        ) : (
+          <ul className="codex-provider-source-list">
+            {sourceContracts.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['preview hash', source.previewHash],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="Safety Boundaries">
+        <FieldList rows={[
+          ['automatic reviewer verdict', preview?.boundaries?.automaticReviewerVerdictAvailable],
+          ['provider self approval', preview?.boundaries?.providerSelfApprovalAvailable],
+          ['provider launch', preview?.boundaries?.providerLaunchAvailable],
+          ['goal event write', preview?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', preview?.boundaries?.directTaskCompleteAvailable],
+          ['generic shell', preview?.boundaries?.genericShellAvailable],
+          ['main gate mutation', preview?.boundaries?.mainVerificationMutationAvailable],
+          ['release gate mutation', preview?.boundaries?.releaseGateMutationAvailable],
+          ['git mutation', preview?.boundaries?.gitMutationAvailable],
+          ['tag automation', preview?.boundaries?.tagAutomationAvailable],
+          ['publish automation', preview?.boundaries?.publishAutomationAvailable],
+          ['controlled event registration', preview?.boundaries?.controlledEventRegistrationAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note ?? 'Review gate preview unavailable.'}</p>
+    </section>
+  );
+}
+
+function ReviewGateReadinessBlock({ title, readiness }) {
+  return (
+    <article>
+      <h4>{title}</h4>
+      <FieldList rows={[
+        ['state', readiness?.readinessState],
+        ['event family', readiness?.eventFamily],
+        ['event type', readiness?.eventType],
+        ['gate name', readiness?.gateName],
+        ['plan hash state', readiness?.planHashState],
+        ['plan hash', readiness?.planHash],
+        ['preview hash', readiness?.previewHash],
+        ['evidence refs', evidenceRefsTextFromCollection(readiness?.evidenceRefs)],
+        ['blocked reasons', textValueFromItems(readiness?.blockedReasons, '无')]
+      ]} />
+    </article>
+  );
+}
+
+function ReviewGateRequestQueryList({ request }) {
+  const items = request?.query?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="controlled confirmation query 未暴露。" />;
+  }
+
+  return (
+    <ul className="review-gate-query-list">
+      {items.map((item) => (
+        <li key={item.key.text}>
+          <span>{item.key.text}</span>
+          <strong>{item.value.text}</strong>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -11163,6 +11163,14 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.threadHandoffPack,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedReviewGatePreview = projectReviewGatePreview({
+		contract: goalSupervisorData?.reviewGatePreview,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
+	const projectedReviewGateConfirmationState = projectReviewGateConfirmationState({
+		contract: goalSupervisorData?.reviewGateConfirmationState,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11186,6 +11194,8 @@ function projectWorkbenchContracts(results) {
 		codexProviderRunRecovery: projectedCodexProviderRunRecovery,
 		reviewerHandoffPreview: projectedReviewerHandoffPreview,
 		threadHandoffPack: projectedThreadHandoffPack,
+		reviewGatePreview: projectedReviewGatePreview,
+		reviewGateConfirmationState: projectedReviewGateConfirmationState,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11213,6 +11223,8 @@ function projectWorkbenchContracts(results) {
 			codexProviderRunRecovery: projectedCodexProviderRunRecovery,
 			reviewerHandoffPreview: projectedReviewerHandoffPreview,
 			threadHandoffPack: projectedThreadHandoffPack,
+			reviewGatePreview: projectedReviewGatePreview,
+			reviewGateConfirmationState: projectedReviewGateConfirmationState,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11724,7 +11736,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -12005,6 +12017,8 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		codexProviderRunRecovery,
 		reviewerHandoffPreview,
 		threadHandoffPack,
+		reviewGatePreview,
+		reviewGateConfirmationState,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12487,6 +12501,192 @@ function projectThreadHandoffPack({ contract, supervisorRoute }) {
 			source: valueState("goal-supervisor-app-read-model.v1 threadHandoffPack projection")
 		},
 		note: hasContract ? "Thread handoff pack is backend-owned, copy-only state. Workbench displays continuation and reviewer handoff text without creating threads, launching providers, or mutating goals." : "Thread handoff pack is unavailable until goal-supervisor-app-read-model.v1 exposes threadHandoffPack.v1."
+	};
+}
+function projectReviewGatePreview({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	const confirmationPreviews = Array.isArray(contract?.confirmationPreviews) ? contract.confirmationPreviews : [];
+	return {
+		state: hasContract ? blockedReasons.length === 0 ? "ready" : "blocked" : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		task: {
+			taskId: valueState(contract?.task?.taskId),
+			title: valueState(contract?.task?.title),
+			state: valueState(contract?.task?.state),
+			sourceContract: valueState(contract?.task?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.task?.sourceRef)
+		},
+		sourceThreadHandoffPack: projectReviewGateThreadHandoffSource(contract?.sourceThreadHandoffPack),
+		reviewReadiness: projectReviewGateReadiness(contract?.reviewReadiness),
+		mainGateReadiness: projectReviewGateReadiness(contract?.mainGateReadiness),
+		releaseGateReadiness: projectReviewGateReadiness(contract?.releaseGateReadiness),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(contract?.requiredEvidenceRefs),
+		sourceContracts: {
+			state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : void 0),
+			items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectThreadHandoffSourceContract)
+		},
+		sourceEvidence: projectReviewGateSourceEvidence(contract?.sourceEvidence),
+		confirmationPreviews: {
+			state: confirmationPreviews.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(confirmationPreviews.length),
+			items: confirmationPreviews.map(projectReviewGateConfirmationPreview)
+		},
+		nextSafeAction: projectThreadHandoffNextSafeAction(contract?.nextSafeAction),
+		boundaryNotice: {
+			contractName: valueState(contract?.boundaryNotice?.contractName),
+			disabledCapabilities: projectSystemGoldenPathTextItems(contract?.boundaryNotice?.disabledCapabilities),
+			readOnly: valueState(contract?.boundaryNotice?.readOnly),
+			willMutate: valueState(contract?.boundaryNotice?.willMutate)
+		},
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(contract?.readOnly),
+		willMutate: valueState(contract?.willMutate),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 reviewGatePreview projection")
+		},
+		note: hasContract ? "Review gate preview is backend-owned read-only state from threadHandoffPack.v1 and bounded evidence refs. Workbench displays readiness and controlled confirmation metadata without approving review, mutating gates, or appending events." : "Review gate preview is unavailable until goal-supervisor-app-read-model.v1 exposes reviewGatePreview.v1."
+	};
+}
+function projectReviewGateThreadHandoffSource(source) {
+	return {
+		state: source !== null && source !== void 0 && typeof source === "object" && !Array.isArray(source) ? "available" : "missing",
+		contractName: valueState(source?.contractName),
+		contractVersion: valueState(source?.contractVersion),
+		sourceState: valueState(source?.state),
+		decision: valueState(source?.decision),
+		goalId: valueState(source?.goalId),
+		taskId: valueState(source?.taskId),
+		copyOnly: valueState(source?.copyOnly),
+		willMutate: valueState(source?.willMutate),
+		blockedReasons: projectSystemGoldenPathTextItems(source?.blockedReasons),
+		sourceRef: projectSystemGoldenPathSourceRef(source?.sourceRef)
+	};
+}
+function projectReviewGateReadiness(readiness) {
+	return {
+		state: readiness !== null && readiness !== void 0 && typeof readiness === "object" && !Array.isArray(readiness) ? "available" : "missing",
+		readinessState: valueState(readiness?.state),
+		eventFamily: valueState(readiness?.eventFamily),
+		eventType: valueState(readiness?.eventType),
+		gateName: valueState(readiness?.gateName),
+		planHash: valueState(readiness?.planHash),
+		planHashState: valueState(readiness?.planHashState),
+		previewHash: valueState(readiness?.previewHash),
+		evidenceRefs: projectChildDispatchEvidenceRefs(readiness?.evidenceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(readiness?.blockedReasons),
+		sourceRef: projectSystemGoldenPathSourceRef(readiness?.sourceRef)
+	};
+}
+function projectReviewGateSourceEvidence(sourceEvidence) {
+	return {
+		state: sourceEvidence !== null && sourceEvidence !== void 0 && typeof sourceEvidence === "object" && !Array.isArray(sourceEvidence) ? "available" : "missing",
+		contractName: valueState(sourceEvidence?.contractName),
+		generatedAt: valueState(sourceEvidence?.generatedAt),
+		threadHandoffPackRef: projectSystemGoldenPathSourceRef(sourceEvidence?.threadHandoffPackRef),
+		reviewerEvidenceRefs: projectChildDispatchEvidenceRefs(sourceEvidence?.reviewerEvidenceRefs),
+		mainGateEvidenceRefs: projectChildDispatchEvidenceRefs(sourceEvidence?.mainGateEvidenceRefs),
+		releaseGateEvidenceRefs: projectChildDispatchEvidenceRefs(sourceEvidence?.releaseGateEvidenceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(sourceEvidence?.blockedReasons),
+		readOnly: valueState(sourceEvidence?.readOnly),
+		willMutate: valueState(sourceEvidence?.willMutate)
+	};
+}
+function projectReviewGateConfirmationPreview(preview) {
+	return {
+		contractName: valueState(preview?.contractName),
+		state: valueState(preview?.state),
+		eventFamily: valueState(preview?.eventFamily),
+		eventType: valueState(preview?.eventType),
+		goalId: valueState(preview?.goalId),
+		taskId: valueState(preview?.taskId),
+		gateName: valueState(preview?.gateName),
+		planHash: valueState(preview?.planHash),
+		planHashState: valueState(preview?.planHashState),
+		previewHash: valueState(preview?.previewHash),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(preview?.requiredEvidenceRefs),
+		confirmationMode: valueState(preview?.confirmationMode),
+		requiresOperatorConfirmation: valueState(preview?.requiresOperatorConfirmation),
+		providerSelfApprovalAvailable: valueState(preview?.providerSelfApprovalAvailable),
+		automaticMutationAvailable: valueState(preview?.automaticMutationAvailable),
+		directGoalEventAppendAvailable: valueState(preview?.directGoalEventAppendAvailable),
+		controlledEventRegistrationAvailable: valueState(preview?.controlledEventRegistrationAvailable),
+		readOnly: valueState(preview?.readOnly),
+		willMutate: valueState(preview?.willMutate),
+		blockedReasons: projectSystemGoldenPathTextItems(preview?.blockedReasons),
+		boundaries: Object.fromEntries(Object.entries(preview?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)]))
+	};
+}
+function projectReviewGateConfirmationState({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	return {
+		state: hasContract ? contract.state ?? (blockedReasons.length === 0 ? "ready" : "blocked") : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goalId: valueState(contract?.goalId),
+		taskId: valueState(contract?.taskId),
+		eventFamily: valueState(contract?.eventFamily),
+		eventType: valueState(contract?.eventType),
+		gateName: valueState(contract?.gateName),
+		planHash: valueState(contract?.planHash),
+		planHashState: valueState(contract?.planHashState),
+		previewHash: valueState(contract?.previewHash),
+		requiredEvidenceRefs: projectChildDispatchEvidenceRefs(contract?.requiredEvidenceRefs),
+		operator: {
+			required: valueState(contract?.operator?.required),
+			operatorId: valueState(contract?.operator?.operatorId),
+			state: valueState(contract?.operator?.state),
+			providerOriginated: valueState(contract?.operator?.providerOriginated)
+		},
+		previewRequest: projectReviewGateControlledRequest(contract?.previewRequest),
+		confirmRequestShape: projectReviewGateControlledRequest(contract?.confirmRequestShape),
+		sourceConfirmationPreview: projectReviewGateConfirmationPreview(contract?.sourceConfirmationPreview),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(contract?.readOnly),
+		willMutate: valueState(contract?.willMutate),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 reviewGateConfirmationState projection")
+		},
+		note: hasContract ? "Controlled confirmation state is read-only. A ready state only describes the existing controlled event registration request shape and required plan hash; it does not submit confirmation." : "Controlled confirmation state is unavailable until goal-supervisor-app-read-model.v1 exposes reviewGateControlledConfirmationState.v1."
+	};
+}
+function projectReviewGateControlledRequest(request) {
+	const hasRequest = request !== null && request !== void 0 && typeof request === "object" && !Array.isArray(request);
+	const query = request?.query !== null && request?.query !== void 0 && typeof request.query === "object" && !Array.isArray(request.query) ? request.query : {};
+	return {
+		state: hasRequest ? "available" : "missing",
+		method: valueState(request?.method),
+		route: valueState(request?.route),
+		contentType: valueState(request?.contentType),
+		query: {
+			state: Object.keys(query).length > 0 ? "available" : hasRequest ? "empty" : "missing",
+			items: Object.entries(query).map(([key, value]) => ({
+				key: valueState(key),
+				value: valueState(Array.isArray(value) ? value.join("、") : value)
+			}))
+		},
+		requiredBodyFields: projectSystemGoldenPathTextItems(request?.requiredBodyFields),
+		confirmUsesPlanHash: valueState(request?.confirmUsesPlanHash),
+		writesInPreview: valueState(request?.writesInPreview),
+		willMutate: valueState(request?.willMutate)
 	};
 }
 function projectThreadHandoffSourceRecovery(sourceRecovery) {
@@ -26109,6 +26309,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Thread Pack"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#review-gate-workbench-panel",
+							children: "Review Gate"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -26167,6 +26371,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CodexRunRecoveryPanel, { codexProviderRunRecovery: desktopShell?.codexProviderRunRecovery }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewerHandoffPreviewPanel, { reviewerHandoffPreview: desktopShell?.reviewerHandoffPreview }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ThreadHandoffPackPanel, { threadHandoffPack: desktopShell?.threadHandoffPack }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewGateWorkbenchPanel, {
+					reviewGatePreview: desktopShell?.reviewGatePreview,
+					reviewGateConfirmationState: desktopShell?.reviewGateConfirmationState
+				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -27227,6 +27435,166 @@ function ThreadHandoffPackPanel({ threadHandoffPack }) {
 				children: pack?.note ?? "Thread handoff pack unavailable."
 			})
 		]
+	});
+}
+function ReviewGateWorkbenchPanel({ reviewGatePreview, reviewGateConfirmationState }) {
+	const preview = reviewGatePreview;
+	const confirmation = reviewGateConfirmationState;
+	const sourceContracts = preview?.sourceContracts?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "review-gate-workbench-panel",
+		className: "review-gate-workbench-panel",
+		"aria-label": "Review Gate Preview",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "review-gate-workbench-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v57 review gate"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Review Gate Preview" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(preview?.state)}`,
+					children: preview?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "review-gate-workbench-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", preview?.contractName],
+					["goal", preview?.goal?.goalId],
+					["task", preview?.task?.taskId],
+					["thread pack state", preview?.sourceThreadHandoffPack?.sourceState],
+					["thread pack decision", preview?.sourceThreadHandoffPack?.decision],
+					["next safe action", preview?.nextSafeAction?.label],
+					["readOnly", preview?.readOnly],
+					["willMutate", preview?.willMutate],
+					["blocked reasons", textValueFromItems(preview?.blockedReasons, "无")]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["confirmation state", textValue(confirmation?.state)],
+					["confirmation contract", confirmation?.contractName],
+					["event family", confirmation?.eventFamily],
+					["event type", confirmation?.eventType],
+					["plan hash state", confirmation?.planHashState],
+					["operator state", confirmation?.operator?.state],
+					["provider originated", confirmation?.operator?.providerOriginated],
+					["confirmation blocked reasons", textValueFromItems(confirmation?.blockedReasons, "无")]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Readiness",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "review-gate-readiness-grid",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewGateReadinessBlock, {
+							title: "Reviewer Verdict",
+							readiness: preview?.reviewReadiness
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewGateReadinessBlock, {
+							title: "Main Gate",
+							readiness: preview?.mainGateReadiness
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewGateReadinessBlock, {
+							title: "Release Gate",
+							readiness: preview?.releaseGateReadiness
+						})
+					]
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Evidence Refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["required evidence refs", evidenceRefsTextFromCollection(preview?.requiredEvidenceRefs)],
+					["reviewer evidence refs", evidenceRefsTextFromCollection(preview?.sourceEvidence?.reviewerEvidenceRefs)],
+					["main gate evidence refs", evidenceRefsTextFromCollection(preview?.sourceEvidence?.mainGateEvidenceRefs)],
+					["release gate evidence refs", evidenceRefsTextFromCollection(preview?.sourceEvidence?.releaseGateEvidenceRefs)],
+					["source evidence contract", preview?.sourceEvidence?.contractName],
+					["thread handoff source ref", preview?.sourceEvidence?.threadHandoffPackRef?.ref]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "Controlled Confirmation State",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "review-gate-confirmation-grid",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["contract", confirmation?.contractName],
+						["goal", confirmation?.goalId],
+						["task", confirmation?.taskId],
+						["gate name", confirmation?.gateName],
+						["plan hash", confirmation?.planHash],
+						["preview hash", confirmation?.previewHash],
+						["operator id", confirmation?.operator?.operatorId],
+						["requires operator", confirmation?.operator?.required],
+						["readOnly", confirmation?.readOnly],
+						["willMutate", confirmation?.willMutate]
+					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["preview method", confirmation?.previewRequest?.method],
+						["preview route", confirmation?.previewRequest?.route],
+						["preview writes", confirmation?.previewRequest?.writesInPreview],
+						["preview willMutate", confirmation?.previewRequest?.willMutate],
+						["confirm method", confirmation?.confirmRequestShape?.method],
+						["confirm route", confirmation?.confirmRequestShape?.route],
+						["confirm uses plan hash", confirmation?.confirmRequestShape?.confirmUsesPlanHash],
+						["confirm writes in preview", confirmation?.confirmRequestShape?.writesInPreview],
+						["confirm willMutate", confirmation?.confirmRequestShape?.willMutate],
+						["confirmation mode", confirmation?.sourceConfirmationPreview?.confirmationMode],
+						["required body fields", textValueFromItems(confirmation?.confirmRequestShape?.requiredBodyFields, "未暴露")]
+					] })]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewGateRequestQueryList, { request: confirmation?.previewRequest })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Source Contracts",
+				children: sourceContracts.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "reviewGatePreview source contracts 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: sourceContracts.map((source, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: source.contractName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["readOnly", source.readOnly],
+						["required for", textValueFromItems(source.requiredFor, "无")],
+						["preview hash", source.previewHash],
+						["source ref", source.sourceRef?.ref]
+					] })] }, `${source.contractName.text}-${index}`))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Safety Boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["automatic reviewer verdict", preview?.boundaries?.automaticReviewerVerdictAvailable],
+					["provider self approval", preview?.boundaries?.providerSelfApprovalAvailable],
+					["provider launch", preview?.boundaries?.providerLaunchAvailable],
+					["goal event write", preview?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", preview?.boundaries?.directTaskCompleteAvailable],
+					["generic shell", preview?.boundaries?.genericShellAvailable],
+					["main gate mutation", preview?.boundaries?.mainVerificationMutationAvailable],
+					["release gate mutation", preview?.boundaries?.releaseGateMutationAvailable],
+					["git mutation", preview?.boundaries?.gitMutationAvailable],
+					["tag automation", preview?.boundaries?.tagAutomationAvailable],
+					["publish automation", preview?.boundaries?.publishAutomationAvailable],
+					["controlled event registration", preview?.boundaries?.controlledEventRegistrationAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: preview?.note ?? "Review gate preview unavailable."
+			})
+		]
+	});
+}
+function ReviewGateReadinessBlock({ title, readiness }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("article", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h4", { children: title }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+		["state", readiness?.readinessState],
+		["event family", readiness?.eventFamily],
+		["event type", readiness?.eventType],
+		["gate name", readiness?.gateName],
+		["plan hash state", readiness?.planHashState],
+		["plan hash", readiness?.planHash],
+		["preview hash", readiness?.previewHash],
+		["evidence refs", evidenceRefsTextFromCollection(readiness?.evidenceRefs)],
+		["blocked reasons", textValueFromItems(readiness?.blockedReasons, "无")]
+	] })] });
+}
+function ReviewGateRequestQueryList({ request }) {
+	const items = request?.query?.items ?? [];
+	if (items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "controlled confirmation query 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "review-gate-query-list",
+		children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.key.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: item.value.text })] }, item.key.text))
 	});
 }
 function DesktopAppStateStrip({ appStates }) {
