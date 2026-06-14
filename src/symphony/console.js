@@ -111,6 +111,12 @@ import {
   confirmReviewerRunPreview
 } from './reviewer-run-backend.js';
 import {
+  V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID,
+  AdoptionBackendError,
+  buildAdoptionPreviewFromBackend,
+  confirmAdoptionPreview
+} from './adoption-main-verification-loop-backend.js';
+import {
   buildAppSchemaMigrationContract
 } from './app-schema-migration.js';
 import {
@@ -765,6 +771,13 @@ export function createSymphonyConsoleServer({
   reviewerRunProviderReadiness = null,
   reviewerRunWorkerEvidence = null,
   reviewerRunExecutor = null,
+  adoptionWorkerEvidence = null,
+  adoptionReviewerVerdict = null,
+  adoptionWorktreeState = null,
+  adoptionSourceFingerprint = null,
+  adoptionPatchPlan = null,
+  adoptionArtifactRefs = null,
+  adoptionApplicator = null,
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS,
   runtimeStartedAt = new Date().toISOString()
 } = {}) {
@@ -916,6 +929,27 @@ export function createSymphonyConsoleServer({
             reviewerRunWorkerEvidence,
             reviewerRunExecutor,
             request: reviewerRunConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const adoptionReadinessConfirmRequest = parseAdoptionReadinessConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (adoptionReadinessConfirmRequest !== null) {
+          await writeAdoptionReadinessConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            adoptionWorkerEvidence,
+            adoptionReviewerVerdict,
+            adoptionWorktreeState,
+            adoptionSourceFingerprint,
+            adoptionPatchPlan,
+            adoptionArtifactRefs,
+            adoptionApplicator,
+            request: adoptionReadinessConfirmRequest,
             route: url.pathname,
             method
           });
@@ -1146,6 +1180,25 @@ export function createSymphonyConsoleServer({
           reviewerRunProviderReadiness,
           reviewerRunWorkerEvidence,
           request: reviewerRunPreviewRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const adoptionReadinessPreviewRequest = parseAdoptionReadinessPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (adoptionReadinessPreviewRequest !== null) {
+        await writeAdoptionReadinessPreviewResponse({
+          response,
+          stateDir,
+          adoptionWorkerEvidence,
+          adoptionReviewerVerdict,
+          adoptionWorktreeState,
+          adoptionSourceFingerprint,
+          adoptionPatchPlan,
+          adoptionArtifactRefs,
+          request: adoptionReadinessPreviewRequest,
           route: url.pathname,
           method
         });
@@ -3812,6 +3865,176 @@ async function writeReviewerRunConfirmResponse({
   }
 }
 
+async function writeAdoptionReadinessPreviewResponse({
+  response,
+  stateDir,
+  adoptionWorkerEvidence,
+  adoptionReviewerVerdict,
+  adoptionWorktreeState,
+  adoptionSourceFingerprint,
+  adoptionPatchPlan,
+  adoptionArtifactRefs,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-adoption-readiness-preview-request',
+      message: 'Adoption readiness preview request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveAdoptionReadinessGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, buildAdoptionPreviewFromBackend({
+      ...buildAdoptionReadinessPreviewRequestFromSearchParams({
+        goalId: resolvedGoalId,
+        searchParams: request.searchParams
+      }),
+      workerEvidence: adoptionWorkerEvidence,
+      reviewerVerdict: adoptionReviewerVerdict,
+      worktreeState: adoptionWorktreeState,
+      sourceFingerprint: adoptionSourceFingerprint,
+      patchPlan: adoptionPatchPlan,
+      artifactRefs: adoptionArtifactRefs
+    }));
+  } catch (error) {
+    if (error instanceof AdoptionBackendError || error instanceof GoalEventPlanPreviewError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-adoption-readiness-preview-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeAdoptionReadinessConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  adoptionWorkerEvidence,
+  adoptionReviewerVerdict,
+  adoptionWorktreeState,
+  adoptionSourceFingerprint,
+  adoptionPatchPlan,
+  adoptionArtifactRefs,
+  adoptionApplicator,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-adoption-readiness-confirm-request',
+      message: 'Adoption readiness confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveAdoptionReadinessGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    const body = await readAdoptionReadinessConfirmRequestBody(requestMessage);
+    const preview = buildAdoptionPreviewFromBackend({
+      goalId: resolvedGoalId,
+      taskId: requiredAdoptionReadinessBodyString(body, 'taskId'),
+      workerEvidence: adoptionWorkerEvidence,
+      reviewerVerdict: adoptionReviewerVerdict,
+      worktreeState: adoptionWorktreeState,
+      sourceFingerprint: adoptionSourceFingerprint,
+      patchPlan: adoptionPatchPlan,
+      artifactRefs: adoptionArtifactRefs
+    });
+    const confirmation = await confirmAdoptionPreview({
+      preview,
+      input: body,
+      writeJournal: async (journal) => await recordAdoptionReadinessJournalOperationRun({
+        stateDir,
+        goalId: resolvedGoalId,
+        preview,
+        journal
+      }),
+      ...(typeof adoptionApplicator === 'function' ? { applyAdoption: adoptionApplicator } : {})
+    });
+    const operationRun = await recordAdoptionReadinessOperationRunFromConfirmation({
+      stateDir,
+      goalId: resolvedGoalId,
+      confirmation
+    });
+
+    writeJsonResponse(response, 200, {
+      ...confirmation,
+      operationRun,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof AdoptionBackendError ||
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-adoption-readiness-confirm-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function resolveWorkerRunGoalId({
   stateDir,
   goalId,
@@ -3899,6 +4122,54 @@ async function resolveReviewerRunGoalId({
       status: 404,
       code: 'goal-not-found',
       message: 'Goal for reviewer run preview/confirm was not found.',
+      route,
+      method
+    });
+    return null;
+  }
+
+  return resolvedGoalId;
+}
+
+async function resolveAdoptionReadinessGoalId({
+  stateDir,
+  goalId,
+  route,
+  method,
+  response
+}) {
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return null;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    if (goalId === V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID) {
+      return V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID;
+    }
+
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for adoption readiness preview/confirm was not found.',
       route,
       method
     });
@@ -5444,6 +5715,77 @@ function parseReviewerRunConfirmRequestPath(pathname, searchParams = new URLSear
   };
 }
 
+function parseAdoptionReadinessPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/adoption-readiness-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'adoption-readiness-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/adoption-readiness-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'adoption-readiness-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
+function parseAdoptionReadinessConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/adoption-readiness-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'adoption-readiness-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/adoption-readiness-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'adoption-readiness-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
 function parseControlledVerificationRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
   const latestPath = '/api/goals/latest/verification-run-confirm';
 
@@ -6287,6 +6629,59 @@ async function readReviewerRunConfirmRequestBody(request) {
   }
 }
 
+async function readAdoptionReadinessConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new AdoptionBackendError(
+      'invalid-adoption-readiness-confirm-request',
+      'Adoption readiness confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new AdoptionBackendError(
+        'invalid-adoption-readiness-confirm-request',
+        'Adoption readiness confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  try {
+    const body = JSON.parse(content);
+
+    if (!isPlainObject(body)) {
+      throw new AdoptionBackendError(
+        'invalid-adoption-readiness-confirm-request',
+        'Adoption readiness confirm requires a valid JSON object.',
+        { reason: 'invalid-json-body' }
+      );
+    }
+
+    return body;
+  } catch (error) {
+    if (error instanceof AdoptionBackendError) {
+      throw error;
+    }
+
+    throw new AdoptionBackendError(
+      'invalid-adoption-readiness-confirm-request',
+      'Adoption readiness confirm requires a valid JSON object.',
+      { reason: 'invalid-json' }
+    );
+  }
+}
+
 function buildControlledProviderRunnerRequestFromSearchParams({ goalId, searchParams }) {
   assertOnlySearchParams(searchParams, [
     'task',
@@ -6330,6 +6725,15 @@ function buildReviewerRunPreviewRequestFromSearchParams({ goalId, searchParams }
   };
 }
 
+function buildAdoptionReadinessPreviewRequestFromSearchParams({ goalId, searchParams }) {
+  assertOnlySearchParams(searchParams, ['task']);
+
+  return {
+    goalId,
+    taskId: requiredSingleSearchParam(searchParams, 'task')
+  };
+}
+
 function requiredWorkerRunBodyString(body, field) {
   const value = body?.[field];
 
@@ -6337,6 +6741,20 @@ function requiredWorkerRunBodyString(body, field) {
     throw new WorkerRunBackendError(
       'invalid-worker-run-confirm-request',
       `Worker run confirm requires ${field}.`,
+      { field }
+    );
+  }
+
+  return value;
+}
+
+function requiredAdoptionReadinessBodyString(body, field) {
+  const value = body?.[field];
+
+  if (!isNonEmptyString(value)) {
+    throw new AdoptionBackendError(
+      'invalid-adoption-readiness-confirm-request',
+      `Adoption readiness confirm requires ${field}.`,
       { field }
     );
   }
@@ -8852,6 +9270,128 @@ function reviewerRunArtifactRefs(verdict) {
       status: verdict.status
     }))
   ];
+}
+
+async function recordAdoptionReadinessJournalOperationRun({
+  stateDir,
+  goalId,
+  preview,
+  journal
+}) {
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: journal.adoptionId,
+    goalId,
+    taskId: preview.task.taskId,
+    role: 'worker',
+    commandKind: 'adoption-confirm',
+    commandName: 'adoption readiness preview/confirm',
+    status: 'running',
+    planHash: journal.planHash,
+    source: 'workbench.adoption-readiness-journal',
+    output: {
+      stdout: `status=${journal.status}\nadoptionId=${journal.adoptionId}`,
+      stderr: '',
+      rawProviderOutputAvailable: false
+    },
+    runResult: {
+      adoptionId: journal.adoptionId,
+      status: journal.status,
+      journalId: journal.journalId,
+      workerRunId: journal.workerRunId,
+      reviewerVerdictId: journal.reviewerVerdictId,
+      patchFingerprint: journal.patchFingerprint,
+      sourceFingerprint: journal.sourceFingerprint,
+      rollbackRef: journal.rollbackRef,
+      taskCompleted: false,
+      mainVerified: false,
+      gateDraftReady: false,
+      releaseReady: false
+    },
+    artifactRefs: [{
+      kind: 'adoption-journal',
+      ref: journal.journalId,
+      title: 'Adoption confirm journal',
+      sourceRunId: journal.adoptionId,
+      status: journal.status
+    }],
+    verifierSummary: {
+      status: journal.status,
+      adoptionApplied: false,
+      taskCompleted: false,
+      mainVerified: false,
+      gateDraftReady: false,
+      releaseReady: false,
+      journalWrittenBeforeApply: true
+    },
+    failureReason: null
+  });
+}
+
+async function recordAdoptionReadinessOperationRunFromConfirmation({
+  stateDir,
+  goalId,
+  confirmation
+}) {
+  const status = confirmation.status === 'applied' ? 'confirmed' : 'failed';
+
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: confirmation.adoptionId,
+    goalId,
+    taskId: confirmation.taskId,
+    role: 'worker',
+    commandKind: 'adoption-confirm',
+    commandName: 'adoption readiness preview/confirm',
+    status,
+    planHash: confirmation.planHash,
+    source: 'workbench.adoption-readiness-confirm',
+    output: {
+      stdout: `status=${confirmation.status}\nadoptionId=${confirmation.adoptionId}`,
+      stderr: '',
+      rawProviderOutputAvailable: false
+    },
+    runResult: {
+      adoptionId: confirmation.adoptionId,
+      status: confirmation.status,
+      journalId: confirmation.journal.journalId,
+      workerRunId: confirmation.workerRunId,
+      reviewerVerdictId: confirmation.reviewerVerdictId,
+      patchFingerprint: confirmation.patchFingerprint,
+      sourceFingerprint: confirmation.sourceFingerprint,
+      changedFiles: confirmation.applyResult.changedFiles,
+      mainVerified: false,
+      gateDraftReady: false,
+      releaseReady: false
+    },
+    artifactRefs: adoptionReadinessArtifactRefs(confirmation),
+    verifierSummary: {
+      status: confirmation.status,
+      adoptionApplied: confirmation.nextState.adoptionApplied,
+      taskCompleted: false,
+      mainVerified: false,
+      gateDraftReady: false,
+      releaseReady: false,
+      journalWrittenBeforeApply: confirmation.confirmContext.journalWrittenBeforeApply
+    },
+    failureReason: confirmation.applyResult.failureReason
+  });
+}
+
+function adoptionReadinessArtifactRefs(confirmation) {
+  return [{
+    kind: 'adoption-journal',
+    ref: confirmation.journal.journalId,
+    title: 'Adoption confirm journal',
+    sourceRunId: confirmation.adoptionId,
+    status: confirmation.status
+  }, {
+    kind: 'adoption-patch',
+    ref: confirmation.applyRequest.patchRef,
+    title: 'Frozen adoption patch',
+    sourceRunId: confirmation.adoptionId,
+    status: confirmation.status
+  }];
 }
 
 async function buildRefreshedGoalEventLog({ stateDir, goalId }) {
