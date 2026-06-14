@@ -92,6 +92,9 @@ const CHECKLIST_ALLOWED_FIELDS = new Set([
   'releaseTitle',
   'targetCommit',
   'releaseNotesRefs',
+  'validationEvidenceRefs',
+  'rollbackRefs',
+  'nextVersionRunbookRef',
   'steps',
   'commandResults',
   'boundaries',
@@ -193,6 +196,7 @@ export function buildReleaseCloseoutHandoffPack({
   validationEvidenceRefs = [],
   tagEvidenceRefs = [],
   releaseNotesRefs = [],
+  rollbackRefs = [],
   githubReleaseUrl = null,
   nextVersion = null,
   nextVersionRunbookRef = null,
@@ -214,6 +218,7 @@ export function buildReleaseCloseoutHandoffPack({
     validationEvidenceRefs,
     tagEvidenceRefs,
     releaseNotesRefs,
+    rollbackRefs,
     githubReleaseUrl,
     nextVersion,
     nextVersionRunbookRef,
@@ -245,6 +250,7 @@ export function buildReleaseCloseoutHandoffPack({
   const normalizedValidationRefs = controlledEvidenceRefs(validationEvidenceRefs);
   const normalizedTagRefs = controlledEvidenceRefs(tagEvidenceRefs);
   const normalizedNotesRefs = controlledEvidenceRefs(releaseNotesRefs);
+  const normalizedRollbackRefs = controlledEvidenceRefs(rollbackRefs);
   const nextContext = buildNextVersionStartContext({
     generatedAt: normalizedGeneratedAt,
     nextVersion,
@@ -263,6 +269,7 @@ export function buildReleaseCloseoutHandoffPack({
     ...normalizedValidationRefs,
     ...normalizedTagRefs,
     ...normalizedNotesRefs,
+    ...normalizedRollbackRefs,
     ...(nextContext.runbookRef === null ? [] : [nextContext.runbookRef])
   ]);
   const derivedBlockedReasons = uniqueStrings([
@@ -287,7 +294,10 @@ export function buildReleaseCloseoutHandoffPack({
     targetTag: normalizedReleaseTag,
     releaseTitle: normalizedReleaseTitle,
     targetCommit: targetCommitSource.commit,
-    releaseNotesRefs: normalizedNotesRefs
+    releaseNotesRefs: normalizedNotesRefs,
+    validationEvidenceRefs: normalizedValidationRefs,
+    rollbackRefs: normalizedRollbackRefs,
+    nextVersionRunbookRef: nextContext.runbookRef
   });
   const releaseEvidenceCarryoverRefs = buildReleaseEvidenceCarryoverRefs({
     generatedAt: normalizedGeneratedAt,
@@ -411,7 +421,10 @@ function buildTagReleaseOperatorChecklist({
   targetTag,
   releaseTitle,
   targetCommit,
-  releaseNotesRefs
+  releaseNotesRefs,
+  validationEvidenceRefs,
+  rollbackRefs,
+  nextVersionRunbookRef
 }) {
   return {
     contractName: TAG_RELEASE_OPERATOR_CHECKLIST_CONTRACT_NAME,
@@ -422,10 +435,20 @@ function buildTagReleaseOperatorChecklist({
     releaseTitle,
     targetCommit,
     releaseNotesRefs,
+    validationEvidenceRefs,
+    rollbackRefs,
+    nextVersionRunbookRef,
     steps: [
       {
         stepId: 'inspect-target-commit',
         label: 'Inspect target commit and evidence refs outside product code',
+        status: state,
+        copyOnly: true,
+        willMutate: false
+      },
+      {
+        stepId: 'inspect-validation-and-rollback-refs',
+        label: 'Inspect validation evidence refs and rollback refs outside product code',
         status: state,
         copyOnly: true,
         willMutate: false
@@ -884,6 +907,11 @@ function validateTagReleaseOperatorChecklistInto(errors, checklist, path) {
   requireNonEmptyString(errors, checklist.releaseTitle, `${path}.releaseTitle`);
   optionalCommit(errors, checklist.targetCommit, `${path}.targetCommit`);
   validateEvidenceRefs(errors, checklist.releaseNotesRefs, `${path}.releaseNotesRefs`);
+  validateEvidenceRefs(errors, checklist.validationEvidenceRefs, `${path}.validationEvidenceRefs`);
+  validateEvidenceRefs(errors, checklist.rollbackRefs, `${path}.rollbackRefs`);
+  if (checklist.nextVersionRunbookRef !== null) {
+    validateEvidenceRef(errors, checklist.nextVersionRunbookRef, `${path}.nextVersionRunbookRef`);
+  }
   validateChecklistSteps(errors, checklist.steps, `${path}.steps`);
   validateCommandResults(errors, checklist.commandResults, `${path}.commandResults`);
   validateBoundaries(errors, checklist.boundaries, `${path}.boundaries`);

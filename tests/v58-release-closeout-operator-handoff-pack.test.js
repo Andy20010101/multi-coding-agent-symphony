@@ -78,6 +78,9 @@ describe('v58 release closeout operator handoff pack contracts', () => {
       for (const status of Object.values(pack.tagReleaseChecklist.commandResults)) {
         assert.equal(status, 'not-run-by-product-code', name);
       }
+
+      assert.equal(Array.isArray(pack.tagReleaseChecklist.validationEvidenceRefs), true);
+      assert.equal(Array.isArray(pack.tagReleaseChecklist.rollbackRefs), true);
     }
 
     const ready = fixture('release-closeout-handoff-pack.ready.v1.json');
@@ -94,6 +97,9 @@ describe('v58 release closeout operator handoff pack contracts', () => {
     assert.equal(ready.nextVersionContext.createsGoal, false);
     assert.equal(ready.nextVersionContext.entersNextVersion, false);
     assert.equal(ready.githubReleaseDraftNotice.assetsExpected.length, 0);
+    assert.ok(ready.tagReleaseChecklist.validationEvidenceRefs.some((ref) => ref.ref === 'docs/plans/v58-validation-evidence-2026-06-14.md'));
+    assert.ok(ready.tagReleaseChecklist.rollbackRefs.some((ref) => ref.ref === 'docs/plans/v58-rollback-path-2026-06-14.md'));
+    assert.equal(ready.tagReleaseChecklist.nextVersionRunbookRef.ref, 'docs/plans/v59-runbook-2026-06-14.md');
 
     assert.equal(missingReviewer.state, 'blocked');
     assert.ok(missingReviewer.blockedReasons.includes('missing-reviewer-verdict'));
@@ -134,6 +140,9 @@ describe('v58 release closeout operator handoff pack contracts', () => {
     assert.equal(pack.releaseBaseline.state, 'ready');
     assert.equal(pack.targetCommit.commit, TARGET_COMMIT);
     assert.equal(pack.tagReleaseChecklist.targetTag, 'v58');
+    assert.ok(pack.tagReleaseChecklist.validationEvidenceRefs.some((ref) => ref.ref === 'docs/plans/v58-validation-evidence-2026-06-14.md'));
+    assert.ok(pack.tagReleaseChecklist.rollbackRefs.some((ref) => ref.ref === 'docs/plans/v58-rollback-path-2026-06-14.md'));
+    assert.equal(pack.tagReleaseChecklist.nextVersionRunbookRef.ref, 'docs/plans/v59-runbook-2026-06-14.md');
     assert.equal(pack.githubReleaseDraftNotice.releaseUrlState, 'not-published-by-product-code');
     assert.equal(pack.nextVersionContext.nextVersion, 'v59');
     assert.equal(pack.nextVersionContext.createsGoal, false);
@@ -280,6 +289,7 @@ function readyInput() {
     validationEvidenceRefs: [repoDocEvidence('docs/plans/v58-validation-evidence-2026-06-14.md', 'v58 validation evidence')],
     tagEvidenceRefs: [repoDocEvidence('docs/plans/v58-tag-release-evidence-2026-06-14.md', 'v58 tag and release evidence')],
     releaseNotesRefs: [repoDocEvidence('docs/plans/v58-release-notes-2026-06-14.md', 'v58 release notes')],
+    rollbackRefs: [repoDocEvidence('docs/plans/v58-rollback-path-2026-06-14.md', 'v58 rollback path')],
     nextVersion: 'v59',
     nextVersionRunbookRef: repoDocEvidence('docs/plans/v59-runbook-2026-06-14.md', 'v59 runbook'),
     knownFacts: [

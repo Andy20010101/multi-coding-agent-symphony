@@ -618,6 +618,12 @@ function buildGoalSupervisorReleaseCloseoutHandoffPack({
       blockedReasons,
       reason: 'unsafe-release-notes-ref'
     }),
+    rollbackRefs: releaseCloseoutEvidenceRefs({
+      explicitRefs: config.rollbackRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-rollback-ref'
+    }),
     githubReleaseUrl: config.githubReleaseUrl ?? null,
     nextVersion: config.nextVersion ?? null,
     nextVersionRunbookRef: releaseCloseoutSingleEvidenceRef({

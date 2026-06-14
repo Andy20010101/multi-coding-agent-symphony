@@ -142,6 +142,11 @@
       "kind": "repo-doc",
       "ref": "docs/plans/v58-release-notes-2026-06-14.md",
       "label": "v58 release notes"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v58-rollback-path-2026-06-14.md",
+      "label": "v58 rollback path"
     }
   ],
   "knownFacts": [
@@ -166,10 +171,32 @@
         "label": "v58 release notes"
       }
     ],
+    "validationEvidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-validation-evidence-2026-06-14.md",
+        "label": "v58 validation evidence"
+      }
+    ],
+    "rollbackRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-rollback-path-2026-06-14.md",
+        "label": "v58 rollback path"
+      }
+    ],
+    "nextVersionRunbookRef": null,
     "steps": [
       {
         "stepId": "inspect-target-commit",
         "label": "Inspect target commit and evidence refs outside product code",
+        "status": "blocked",
+        "copyOnly": true,
+        "willMutate": false
+      },
+      {
+        "stepId": "inspect-validation-and-rollback-refs",
+        "label": "Inspect validation evidence refs and rollback refs outside product code",
         "status": "blocked",
         "copyOnly": true,
         "willMutate": false
@@ -225,10 +252,32 @@
         "label": "v58 release notes"
       }
     ],
+    "validationEvidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-validation-evidence-2026-06-14.md",
+        "label": "v58 validation evidence"
+      }
+    ],
+    "rollbackRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-rollback-path-2026-06-14.md",
+        "label": "v58 rollback path"
+      }
+    ],
+    "nextVersionRunbookRef": null,
     "steps": [
       {
         "stepId": "inspect-target-commit",
         "label": "Inspect target commit and evidence refs outside product code",
+        "status": "blocked",
+        "copyOnly": true,
+        "willMutate": false
+      },
+      {
+        "stepId": "inspect-validation-and-rollback-refs",
+        "label": "Inspect validation evidence refs and rollback refs outside product code",
         "status": "blocked",
         "copyOnly": true,
         "willMutate": false
@@ -303,6 +352,11 @@
         "kind": "repo-doc",
         "ref": "docs/plans/v58-release-notes-2026-06-14.md",
         "label": "v58 release notes"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-rollback-path-2026-06-14.md",
+        "label": "v58 rollback path"
       }
     ],
     "sourceContracts": [

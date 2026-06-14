@@ -50,6 +50,9 @@ describe('v58 release closeout backend projection', () => {
     assert.ok(pack.evidenceRefs.some((ref) => ref.ref === 'docs/plans/v58-main-gate-evidence-2026-06-14.md'));
     assert.ok(pack.evidenceRefs.some((ref) => ref.ref === 'docs/plans/v58-release-gate-evidence-2026-06-14.md'));
     assert.ok(pack.evidenceRefs.some((ref) => ref.ref === 'docs/plans/v58-validation-evidence-2026-06-14.md'));
+    assert.ok(pack.evidenceRefs.some((ref) => ref.ref === 'docs/plans/v58-rollback-path-2026-06-14.md'));
+    assert.ok(pack.tagReleaseChecklist.rollbackRefs.some((ref) => ref.ref === 'docs/plans/v58-rollback-path-2026-06-14.md'));
+    assert.equal(pack.tagReleaseChecklist.nextVersionRunbookRef.ref, 'docs/plans/v59-runbook-2026-06-14.md');
     assertNoUnsafePayload(pack);
   });
 
@@ -296,6 +299,7 @@ function readyReleaseCloseout() {
     validationEvidenceRefs: [repoDocEvidence('docs/plans/v58-validation-evidence-2026-06-14.md', 'v58 validation evidence')],
     tagEvidenceRefs: [repoDocEvidence('docs/plans/v58-tag-release-evidence-2026-06-14.md', 'v58 tag and release evidence')],
     releaseNotesRefs: [repoDocEvidence('docs/plans/v58-release-notes-2026-06-14.md', 'v58 release notes')],
+    rollbackRefs: [repoDocEvidence('docs/plans/v58-rollback-path-2026-06-14.md', 'v58 rollback path')],
     nextVersion: 'v59',
     nextVersionRunbookRef: repoDocEvidence('docs/plans/v59-runbook-2026-06-14.md', 'v59 runbook'),
     knownFacts: [
