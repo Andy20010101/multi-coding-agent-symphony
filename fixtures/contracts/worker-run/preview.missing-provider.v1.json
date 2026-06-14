@@ -1,0 +1,122 @@
+{
+  "contractName": "workerRunPreview.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T04:10:00.000Z",
+  "state": "blocked",
+  "goal": {
+    "goalId": "v66-controlled-codex-worker-execution",
+    "title": "v66 Controlled Codex Worker Execution",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v66"
+  },
+  "task": {
+    "taskId": "pr-1-worker-run-contracts",
+    "title": "Worker run preview and result contracts",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v66:pr-1"
+  },
+  "provider": {
+    "providerId": "codex-cli",
+    "role": "worker",
+    "lane": "codex-worker-candidate",
+    "readinessState": "missing",
+    "sourceContract": "providerReadiness.v1",
+    "sourceRef": "fixtures/contracts/provider-readiness/provider-readiness.codex-missing.v1.json"
+  },
+  "commandTemplate": {
+    "templateId": "codex-worker-controlled-v1",
+    "providerId": "codex-cli",
+    "commandFamily": "codex-worker-execution",
+    "fixed": true,
+    "acceptsFreeformCommand": false,
+    "rendererSuppliedCommandAvailable": false,
+    "sourceRef": "src/symphony/worker-run-contracts.js"
+  },
+  "timeoutMs": 900000,
+  "workspacePolicy": {
+    "policyId": "isolated-provider-workspace-v1",
+    "workspaceKind": "isolated-worktree",
+    "backendOwned": true,
+    "mainWorktreeWrite": false,
+    "rendererSuppliedPathAvailable": false,
+    "allowedWriteScope": "provider-workspace-only"
+  },
+  "confirmation": {
+    "requiresPlanHash": true,
+    "requiredFields": [
+      "planHash",
+      "goalId",
+      "taskId",
+      "providerId",
+      "commandTemplateId",
+      "timeoutMs",
+      "workspacePolicyId"
+    ],
+    "providerId": "codex-cli",
+    "commandTemplateId": "codex-worker-controlled-v1",
+    "timeoutMs": 900000,
+    "workspacePolicyId": "isolated-provider-workspace-v1"
+  },
+  "resultPolicy": {
+    "successState": "needs-review",
+    "reviewRequired": true,
+    "taskCompletionAvailable": false,
+    "reviewApprovalAvailable": false,
+    "mainVerificationAvailable": false,
+    "releaseReadinessAvailable": false
+  },
+  "blockedReasons": [
+    "codex-cli-provider-missing"
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "goal-next-action.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "active-goal",
+        "active-task"
+      ],
+      "sourceRef": "goal-next-action.v1"
+    },
+    {
+      "contractName": "providerReadiness.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "codex-cli-readiness"
+      ],
+      "sourceRef": "providerReadiness.v1"
+    }
+  ],
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "fixedProviderId": "codex-cli",
+    "fixedCommandTemplateId": "codex-worker-controlled-v1",
+    "rendererSuppliedCommandAvailable": false,
+    "freeformProviderCommandAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "providerSuccessCompletesTask": false,
+    "providerOutputApprovesReview": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "writesMainWorktree": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "realCodexRequiresOptIn": true
+  },
+  "planHash": "sha256:3e912af227ece2e6b90808ec1e11f4169f8ae09ac7992ab0c3311980ed310926"
+}

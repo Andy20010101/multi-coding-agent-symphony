@@ -1,0 +1,85 @@
+{
+  "contractName": "workerRunResult.v1",
+  "contractVersion": 1,
+  "runId": "worker-run-v66-pr1-timeout",
+  "goalId": "v66-controlled-codex-worker-execution",
+  "taskId": "pr-1-worker-run-contracts",
+  "providerId": "codex-cli",
+  "commandTemplateId": "codex-worker-controlled-v1",
+  "previewPlanHash": "sha256:42e927770a7fc13c4a07d71dbd6746bd94bd7c7d2dfa2cb24b8257233abc9515",
+  "startedAt": "2026-06-15T04:11:00.000Z",
+  "finishedAt": "2026-06-15T04:26:00.000Z",
+  "status": "blocked",
+  "adapter": "fake-codex-worker",
+  "realCodexOptIn": false,
+  "sanitizedResult": {
+    "summary": "Worker run timed out before verifier execution.",
+    "changedFiles": [],
+    "validationCommands": [],
+    "artifactRefs": [],
+    "verifierSummary": "Worker run exceeded the controlled timeout.",
+    "risks": [],
+    "blockers": [
+      "controlled timeout exceeded"
+    ]
+  },
+  "verifier": {
+    "state": "not-run",
+    "summary": "Worker run exceeded the controlled timeout.",
+    "commands": [],
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/qa/v66-controlled-codex-worker-execution-acceptance.md",
+        "label": "v66 acceptance evidence"
+      }
+    ]
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/qa/v66-controlled-codex-worker-execution-acceptance.md",
+      "label": "v66 acceptance evidence"
+    }
+  ],
+  "nextState": {
+    "taskState": "blocked",
+    "reviewRequired": false,
+    "taskCompleted": false,
+    "reviewApproved": false,
+    "mainVerified": false,
+    "releaseReady": false
+  },
+  "failureLayer": {
+    "kind": "provider-timeout",
+    "reason": "Fake adapter exceeded the controlled timeout.",
+    "retryable": true
+  },
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "fixedProviderId": "codex-cli",
+    "fixedCommandTemplateId": "codex-worker-controlled-v1",
+    "rendererSuppliedCommandAvailable": false,
+    "freeformProviderCommandAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "providerSuccessCompletesTask": false,
+    "providerOutputApprovesReview": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "writesMainWorktree": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "realCodexRequiresOptIn": true
+  }
+}
