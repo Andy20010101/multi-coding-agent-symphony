@@ -620,6 +620,7 @@ function DesktopShellRoute({
           <a href="#reviewer-handoff-preview-panel">Reviewer Handoff</a>
           <a href="#thread-handoff-pack-panel">Thread Pack</a>
           <a href="#review-gate-workbench-panel">Review Gate</a>
+          <a href="#release-closeout-handoff-panel">Release Handoff</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -669,6 +670,7 @@ function DesktopShellRoute({
           reviewGatePreview={desktopShell?.reviewGatePreview}
           reviewGateConfirmationState={desktopShell?.reviewGateConfirmationState}
         />
+        <ReleaseCloseoutHandoffPanel releaseCloseoutHandoffPack={desktopShell?.releaseCloseoutHandoffPack} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -2045,6 +2047,168 @@ function ReviewGateRequestQueryList({ request }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function ReleaseCloseoutHandoffPanel({ releaseCloseoutHandoffPack }) {
+  const pack = releaseCloseoutHandoffPack;
+  const checklist = pack?.tagReleaseChecklist;
+  const checklistSteps = checklist?.steps?.items ?? [];
+  const sourceContracts = pack?.sourceContracts?.items ?? [];
+
+  return (
+    <section
+      id="release-closeout-handoff-panel"
+      className="release-closeout-handoff-panel"
+      aria-label="Release Closeout Handoff"
+    >
+      <header className="release-closeout-handoff-header">
+        <div>
+          <p className="section-kicker">v58 release closeout</p>
+          <h2>Release Closeout Handoff</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(pack?.state)}`}>
+          {pack?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="release-closeout-handoff-summary">
+        <FieldList rows={[
+          ['contract', pack?.contractName],
+          ['goal', pack?.goal?.goalId],
+          ['review gate state', pack?.reviewGateSource?.state],
+          ['closeout state', pack?.closeoutSource?.state],
+          ['baseline state', pack?.releaseBaseline?.state],
+          ['readOnly', pack?.readOnly],
+          ['willMutate', pack?.willMutate]
+        ]} />
+        <FieldList rows={[
+          ['target tag', checklist?.targetTag],
+          ['release title', checklist?.releaseTitle],
+          ['checklist state', checklist?.state],
+          ['copy only', checklist?.copyOnly],
+          ['known facts', textValueFromItems(pack?.knownFacts, '无')],
+          ['blocked reasons', textValueFromItems(pack?.blockedReasons, '无')],
+          ['generated at', pack?.generatedAt]
+        ]} />
+      </div>
+
+      <Subsection title="Release Evidence Refs">
+        <FieldList rows={[
+          ['all evidence refs', evidenceRefsTextFromCollection(pack?.evidenceRefs)],
+          ['reviewer evidence refs', evidenceRefsTextFromCollection(pack?.reviewGateSource?.reviewReadiness?.evidenceRefs)],
+          ['main gate evidence refs', evidenceRefsTextFromCollection(pack?.reviewGateSource?.mainGateReadiness?.evidenceRefs)],
+          ['release gate evidence refs', evidenceRefsTextFromCollection(pack?.reviewGateSource?.releaseGateReadiness?.evidenceRefs)],
+          ['validation evidence refs', evidenceRefsTextFromCollection(checklist?.validationEvidenceRefs)],
+          ['release notes refs', evidenceRefsTextFromCollection(checklist?.releaseNotesRefs)],
+          ['source contract count', pack?.sourceContracts?.count]
+        ]} />
+        {sourceContracts.length === 0 ? null : (
+          <ul className="codex-provider-source-list">
+            {sourceContracts.map((source, index) => (
+              <li key={`${source.contractName.text}-${index}`}>
+                <strong>{source.contractName.text}</strong>
+                <FieldList rows={[
+                  ['readOnly', source.readOnly],
+                  ['required for', textValueFromItems(source.requiredFor, '无')],
+                  ['source ref', source.sourceRef?.ref]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="Target Commit">
+        <FieldList rows={[
+          ['target commit', pack?.targetCommit?.commit],
+          ['expected commit', pack?.targetCommit?.expectedCommit],
+          ['commit state', pack?.targetCommit?.state],
+          ['stale', pack?.targetCommit?.stale],
+          ['baseline branch', pack?.releaseBaseline?.currentBranch],
+          ['main head', pack?.releaseBaseline?.mainHead],
+          ['origin main head', pack?.releaseBaseline?.originMainHead],
+          ['worktree clean', pack?.releaseBaseline?.clean]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Tag and Release Checklist">
+        <div className="release-closeout-checklist-grid">
+          <FieldList rows={[
+            ['checklist contract', checklist?.contractName],
+            ['target tag', checklist?.targetTag],
+            ['release title', checklist?.releaseTitle],
+            ['target commit', checklist?.targetCommit],
+            ['external tag result', checklist?.commandResults?.tag],
+            ['external remote tag result', checklist?.commandResults?.pushTag],
+            ['external release page result', checklist?.commandResults?.githubRelease],
+            ['release-ready result', checklist?.commandResults?.releaseReadyDeclaration]
+          ]} />
+          <div>
+            {checklistSteps.length === 0 ? (
+              <EmptyBlock copy="tagReleaseOperatorChecklist steps 未暴露。" />
+            ) : (
+              <ul className="codex-provider-source-list">
+                {checklistSteps.map((step, index) => (
+                  <li key={`${step.stepId.text}-${index}`}>
+                    <strong>{step.label.text}</strong>
+                    <FieldList rows={[
+                      ['step id', step.stepId],
+                      ['status', step.status],
+                      ['copy only', step.copyOnly],
+                      ['willMutate', step.willMutate]
+                    ]} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Subsection>
+
+      <Subsection title="Known Blockers">
+        <FieldList rows={[
+          ['pack blocked reasons', textValueFromItems(pack?.blockedReasons, '无')],
+          ['review gate blocked reasons', textValueFromItems(pack?.reviewGateSource?.blockedReasons, '无')],
+          ['closeout blocked reasons', textValueFromItems(pack?.closeoutSource?.blockedReasons, '无')],
+          ['baseline blocked reasons', textValueFromItems(pack?.releaseBaseline?.blockedReasons, '无')],
+          ['target blocked reasons', textValueFromItems(pack?.targetCommit?.blockedReasons, '无')],
+          ['release-ready declaration', pack?.boundaries?.releaseReadyDeclarationAvailable],
+          ['tag capability', pack?.boundaries?.gitTagAvailable],
+          ['remote tag capability', pack?.boundaries?.gitPushAvailable],
+          ['release page creation', pack?.boundaries?.githubReleaseCreateAvailable],
+          ['provider launch', pack?.boundaries?.providerLaunchAvailable],
+          ['shell', pack?.boundaries?.shellAvailable],
+          ['goal event write', pack?.boundaries?.directGoalEventAppendAvailable],
+          ['task completion write', pack?.boundaries?.directTaskCompleteAvailable],
+          ['automatic next version goal', pack?.boundaries?.automaticNextVersionGoalAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Rollback Path">
+        <FieldList rows={[
+          ['rollback refs', evidenceRefsTextFromCollection(checklist?.rollbackRefs)],
+          ['carryover evidence refs', evidenceRefsTextFromCollection(pack?.releaseEvidenceCarryoverRefs?.evidenceRefs)],
+          ['carryover contract', pack?.releaseEvidenceCarryoverRefs?.contractName],
+          ['carryover readOnly', pack?.releaseEvidenceCarryoverRefs?.readOnly],
+          ['carryover willMutate', pack?.releaseEvidenceCarryoverRefs?.willMutate]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Next Version Context">
+        <FieldList rows={[
+          ['contract', pack?.nextVersionContext?.contractName],
+          ['state', pack?.nextVersionContext?.state],
+          ['next version', pack?.nextVersionContext?.nextVersion],
+          ['runbook ref', pack?.nextVersionContext?.runbookRef?.ref],
+          ['start after release', pack?.nextVersionContext?.startAfterRelease],
+          ['creates goal', pack?.nextVersionContext?.createsGoal],
+          ['enters next version', pack?.nextVersionContext?.entersNextVersion]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{pack?.note ?? 'Release closeout handoff unavailable.'}</p>
+    </section>
   );
 }
 

@@ -1330,6 +1330,7 @@ h4 {
 .reviewer-handoff-preview-panel,
 .thread-handoff-pack-panel,
 .review-gate-workbench-panel,
+.release-closeout-handoff-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
@@ -1636,7 +1637,8 @@ h4 {
 .codex-run-recovery-panel,
 .reviewer-handoff-preview-panel,
 .thread-handoff-pack-panel,
-.review-gate-workbench-panel {
+.review-gate-workbench-panel,
+.release-closeout-handoff-panel {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
@@ -1649,6 +1651,7 @@ h4 {
 .reviewer-handoff-preview-header,
 .thread-handoff-pack-header,
 .review-gate-workbench-header,
+.release-closeout-handoff-header,
 .system-golden-path-step-header {
   display: flex;
   flex-wrap: wrap;
@@ -1663,7 +1666,8 @@ h4 {
 .codex-run-recovery-header,
 .reviewer-handoff-preview-header,
 .thread-handoff-pack-header,
-.review-gate-workbench-header {
+.review-gate-workbench-header,
+.release-closeout-handoff-header {
   border-bottom: 1px solid var(--dsk-line-soft);
   padding-bottom: 8px;
 }
@@ -1675,6 +1679,7 @@ h4 {
 .reviewer-handoff-preview-header h2,
 .thread-handoff-pack-header h2,
 .review-gate-workbench-header h2,
+.release-closeout-handoff-header h2,
 .system-golden-path-step-header h3 {
   margin: 0;
   color: var(--dsk-fg);
@@ -1689,7 +1694,8 @@ h4 {
 .codex-run-recovery-header h2,
 .reviewer-handoff-preview-header h2,
 .thread-handoff-pack-header h2,
-.review-gate-workbench-header h2 {
+.review-gate-workbench-header h2,
+.release-closeout-handoff-header h2 {
   font-size: 18px;
 }
 
@@ -1714,6 +1720,8 @@ h4 {
 .reviewer-handoff-preview-summary,
 .thread-handoff-pack-summary,
 .review-gate-workbench-summary,
+.release-closeout-handoff-summary,
+.release-closeout-checklist-grid,
 .review-gate-confirmation-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
@@ -3978,6 +3986,8 @@ h4 {
   .desktop-app-home-panel,
   .system-golden-path-summary,
   .review-gate-workbench-summary,
+  .release-closeout-handoff-summary,
+  .release-closeout-checklist-grid,
   .review-gate-confirmation-grid,
   .desktop-app-state-list,
   .desktop-development-status-list,
@@ -3994,6 +4004,7 @@ h4 {
   .desktop-project-launcher,
   .system-golden-path-panel,
   .review-gate-workbench-panel,
+  .release-closeout-handoff-panel,
   .desktop-topbar {
     padding: 10px;
   }
