@@ -10,6 +10,9 @@ import { createServer as createViteServer } from 'vite';
 
 import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 import {
+  buildReviewGateControlledConfirmationState
+} from '../src/symphony/review-gate-workbench-surface-contracts.js';
+import {
   GOAL_EVENTS_ROUTE_TEMPLATE,
   GOAL_OPERATIONS_ROUTE_TEMPLATE,
   GOAL_PROMPT_PACK_ROUTE_TEMPLATE,
@@ -719,6 +722,14 @@ describe('v15 Workbench React/Vite shell', () => {
     const threadHandoffPack = JSON.parse(
       await readFile('fixtures/contracts/thread-handoff-pack/thread-handoff-pack.ready-reviewer-handoff.v1.json', 'utf8')
     );
+    const reviewGatePreview = JSON.parse(
+      await readFile('fixtures/contracts/review-gate-workbench-surface/review-gate-preview.ready-reviewer-verdict.v1.json', 'utf8')
+    );
+    const reviewGateConfirmationState = buildReviewGateControlledConfirmationState({
+      generatedAt: '2026-06-14T02:00:00.000Z',
+      reviewGatePreview,
+      operatorId: 'operator-v57-controller'
+    });
     const server = await createViteServer({
       configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
       server: {
@@ -740,7 +751,9 @@ describe('v15 Workbench React/Vite shell', () => {
           codexProviderExecutionPreview,
           codexProviderRunRecovery,
           reviewerHandoffPreview,
-          threadHandoffPack
+          threadHandoffPack,
+          reviewGatePreview,
+          reviewGateConfirmationState
         })
       });
       viewState.model.routeContext = createWorkbenchRenderRouteContext();
@@ -750,21 +763,26 @@ describe('v15 Workbench React/Vite shell', () => {
       const recoveryPanelIndex = desktopHtml.indexOf('id="codex-run-recovery-panel"');
       const handoffPanelIndex = desktopHtml.indexOf('id="reviewer-handoff-preview-panel"');
       const threadPackPanelIndex = desktopHtml.indexOf('id="thread-handoff-pack-panel"');
+      const reviewGatePanelIndex = desktopHtml.indexOf('id="review-gate-workbench-panel"');
       const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
       const recoveryHtml = desktopHtml.slice(recoveryPanelIndex, handoffPanelIndex);
       const handoffHtml = desktopHtml.slice(handoffPanelIndex, threadPackPanelIndex);
-      const threadPackHtml = desktopHtml.slice(threadPackPanelIndex, appStateIndex);
+      const threadPackHtml = desktopHtml.slice(threadPackPanelIndex, reviewGatePanelIndex);
+      const reviewGateHtml = desktopHtml.slice(reviewGatePanelIndex, appStateIndex);
 
       assert.notEqual(recoveryPanelIndex, -1);
       assert.notEqual(handoffPanelIndex, -1);
       assert.notEqual(threadPackPanelIndex, -1);
+      assert.notEqual(reviewGatePanelIndex, -1);
       assert.equal(codexPanelIndex < recoveryPanelIndex, true);
       assert.equal(recoveryPanelIndex < handoffPanelIndex, true);
       assert.equal(handoffPanelIndex < threadPackPanelIndex, true);
-      assert.equal(threadPackPanelIndex < appStateIndex, true);
+      assert.equal(threadPackPanelIndex < reviewGatePanelIndex, true);
+      assert.equal(reviewGatePanelIndex < appStateIndex, true);
       assert.match(desktopHtml, /href="#codex-run-recovery-panel">Recovery/u);
       assert.match(desktopHtml, /href="#reviewer-handoff-preview-panel">Reviewer Handoff/u);
       assert.match(desktopHtml, /href="#thread-handoff-pack-panel">Thread Pack/u);
+      assert.match(desktopHtml, /href="#review-gate-workbench-panel">Review Gate/u);
 
       assert.match(recoveryHtml, /Codex Run Recovery/u);
       assert.match(recoveryHtml, /codexProviderRunRecovery\.v1/u);
@@ -811,6 +829,31 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(threadPackHtml, />publish automation<\/dt><dd[^>]*>false/u);
       assert.doesNotMatch(`${recoveryHtml}${handoffHtml}${threadPackHtml}`, /<button\b|<form\b|<textarea\b/u);
       assert.doesNotMatch(`${recoveryHtml}${handoffHtml}${threadPackHtml}`, /Compact Now|Create New Thread|Launch Codex|Launch Claude Code|Run Provider|Run Any Provider|Run Shell|Terminal|Read Session File|Open Transcript|Append Event|Mark Complete|Confirm Reviewer Verdict|Confirm Main Gate|Confirm Release Gate|event-plan-confirm|>Push<|>Tag<|>Publish<|>Release/u);
+
+      assert.match(reviewGateHtml, /Review Gate Preview/u);
+      assert.match(reviewGateHtml, /reviewGatePreview\.v1/u);
+      assert.match(reviewGateHtml, /Reviewer Verdict/u);
+      assert.match(reviewGateHtml, /Main Gate/u);
+      assert.match(reviewGateHtml, /Release Gate/u);
+      assert.match(reviewGateHtml, /reviewGateControlledConfirmationState\.v1/u);
+      assert.match(reviewGateHtml, /operator-v57-controller/u);
+      assert.match(reviewGateHtml, /controlled-event-registration/u);
+      assert.match(reviewGateHtml, /event-plan-preview/u);
+      assert.match(reviewGateHtml, /event-plan-confirm/u);
+      assert.match(reviewGateHtml, />automatic reviewer verdict<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />provider self approval<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />provider launch<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />goal event write<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />task completion write<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />generic shell<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />main gate mutation<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />release gate mutation<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />git mutation<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />tag automation<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />publish automation<\/dt><dd[^>]*>false/u);
+      assert.match(reviewGateHtml, />controlled event registration<\/dt><dd[^>]*>true/u);
+      assert.doesNotMatch(reviewGateHtml, /<button\b|<form\b|<textarea\b|fetchGoalEventPlanPreview|confirmGoalEventPlan|window\.open|navigator\.clipboard/u);
+      assert.doesNotMatch(reviewGateHtml, /Launch Codex|Launch Claude Code|Run Provider|Run Any Provider|Run Shell|Terminal|Read Session File|Open Transcript|Append Event|Mark Complete|git push|gh release|tag creation|publish release/u);
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -819,9 +862,11 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /CodexRunRecoveryPanel/u);
     assert.match(app, /ReviewerHandoffPreviewPanel/u);
     assert.match(app, /ThreadHandoffPackPanel/u);
+    assert.match(app, /ReviewGateWorkbenchPanel/u);
     assert.match(css, /\.codex-run-recovery-panel/u);
     assert.match(css, /\.reviewer-handoff-preview-panel/u);
     assert.match(css, /\.thread-handoff-pack-panel/u);
+    assert.match(css, /\.review-gate-workbench-panel/u);
     assert.doesNotMatch(app.slice(app.indexOf('function CodexRunRecoveryPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<textarea\b/u);
   });
 
