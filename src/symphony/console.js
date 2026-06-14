@@ -96,6 +96,9 @@ import {
   buildAgentCliLaneAssignmentPreviewContract
 } from './agent-cli-lane-assignment-preview.js';
 import {
+  buildProviderReadinessProjection
+} from './provider-readiness-contracts.js';
+import {
   buildAppSchemaMigrationContract
 } from './app-schema-migration.js';
 import {
@@ -1029,6 +1032,24 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, buildAgentCliLaneAssignmentPreviewContract({
+          env
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/providers/readiness') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-provider-readiness-request',
+            message: 'Provider readiness does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildProviderReadinessProjection({
           env
         }));
         return;

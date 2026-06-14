@@ -60,6 +60,9 @@ import {
   buildAgentCliLaneAssignmentPreviewContract
 } from '../src/symphony/agent-cli-lane-assignment-preview.js';
 import {
+  buildProviderReadinessProjection
+} from '../src/symphony/provider-readiness-contracts.js';
+import {
   buildAppSchemaMigrationContract
 } from '../src/symphony/app-schema-migration.js';
 import {
@@ -124,6 +127,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
         ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
+        ['GET', '/api/providers/readiness', 'providerReadiness.v1'],
         ['GET', '/api/app-data/migration', 'app-schema-migration.v1'],
         ['GET', '/api/workflow/router-categories', 'workflow-router-categories.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
@@ -175,6 +179,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/providers/health', 'agent-cli-provider-health.v1'],
         ['GET', '/api/providers/capabilities', 'agent-cli-capability-profile.v1'],
         ['GET', '/api/providers/lane-preview', 'agent-cli-lane-assignment-preview.v1'],
+        ['GET', '/api/providers/readiness', 'providerReadiness.v1'],
         ['GET', '/api/app-data/migration', 'app-schema-migration.v1'],
         ['GET', '/api/workflow/router-categories', 'workflow-router-categories.v1'],
         ['GET', '/api/jobs', 'job-model.v1'],
@@ -1068,13 +1073,18 @@ describe('v15 Workbench read-only API client', () => {
       generatedAt: '2026-06-04T00:00:00.000Z',
       env
     });
+    const readiness = buildProviderReadinessProjection({
+      generatedAt: '2026-06-15T03:05:00.000Z',
+      env
+    });
     const model = projectWorkbenchContracts({
       goalRunbook: createWorkbenchResult('goalRunbook', createV38ProviderHubRunbookPayload()),
       goalProgress: createWorkbenchResult('goalProgress', createV38ProviderHubLedgerPayload()),
       goalNextAction: createWorkbenchResult('goalNextAction', createV38ProviderHubNextActionPayload()),
       providerHealth: createWorkbenchResult('providerHealth', health),
       providerCapabilities: createWorkbenchResult('providerCapabilities', capabilities),
-      providerLanePreview: createWorkbenchResult('providerLanePreview', lanePreview)
+      providerLanePreview: createWorkbenchResult('providerLanePreview', lanePreview),
+      providerReadiness: createWorkbenchResult('providerReadiness', readiness)
     });
     const hub = model.providerHub;
     const claude = hub.providers.items.find((provider) => provider.providerId.value === 'claude-code-cli');
@@ -1085,7 +1095,13 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(hub.routeStates.health.value, 'ready');
     assert.equal(hub.routeStates.capabilities.value, 'ready');
     assert.equal(hub.routeStates.lanePreview.value, 'ready');
-    assert.equal(hub.summary.activeProviderIds.value, 'claude-code-cli、codex-cli');
+    assert.equal(hub.routeStates.readiness.value, 'ready');
+    assert.equal(hub.contracts.readiness.value, 'providerReadiness.v1');
+    assert.equal(hub.summary.activeProviderIds.value, 'codex-cli、claude-code-cli');
+    assert.equal(hub.summary.readinessState.value, 'missing');
+    assert.equal(hub.readiness.activeProviderCount.value, 2);
+    assert.equal(hub.readiness.evidencePolicy.rawProviderOutputAllowed.value, false);
+    assert.equal(hub.readiness.unsupportedProviders.items.find((provider) => provider.providerId.value === 'deepseek-cli').activeWorkbenchProvider.value, false);
     assert.equal(hub.providers.count.value, 2);
     assert.equal(claude.healthState.value, 'configured');
     assert.equal(claude.requiredEnvPresence.items[0].valueAvailable.value, false);
@@ -1095,9 +1111,11 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(hub.evidenceAnchors.count.value, 1);
     assert.equal(hub.evidenceAnchors.items[0].workerEvidenceRef.value, 'docs/plans/v38-task-5-worker-evidence-2026-06-02.md');
     assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'providerCliExecutionAvailable').available.value, false);
+    assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'providerExecutionFromReadinessAvailable').available.value, false);
+    assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'genericProviderPickerAvailable').available.value, false);
     assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'envValueExposureAvailable').available.value, false);
     assert.equal(hub.boundaries.find((boundary) => boundary.boundary.value === 'selfApprovalAvailable').available.value, false);
-    assert.equal(model.desktopShell.providerHub.summary.activeProviderIds.value, 'claude-code-cli、codex-cli');
+    assert.equal(model.desktopShell.providerHub.summary.activeProviderIds.value, 'codex-cli、claude-code-cli');
     assert.doesNotMatch(JSON.stringify(hub), /sk-test-secret-value/u);
   });
 

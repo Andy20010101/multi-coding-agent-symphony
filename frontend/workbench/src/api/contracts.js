@@ -32,6 +32,7 @@ const GOAL_DRAFT_HANDOFF_CONTRACT_NAME = 'goal-draft-handoff.v1';
 const AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = 'agent-cli-provider-health.v1';
 const AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = 'agent-cli-capability-profile.v1';
 const AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME = 'agent-cli-lane-assignment-preview.v1';
+const PROVIDER_READINESS_CONTRACT_NAME = 'providerReadiness.v1';
 const APP_SCHEMA_MIGRATION_CONTRACT_NAME = 'app-schema-migration.v1';
 const WORKFLOW_ROUTER_CATEGORIES_CONTRACT_NAME = 'workflow-router-categories.v1';
 const JOB_MODEL_CONTRACT_NAME = 'job-model.v1';
@@ -618,6 +619,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     contractName: AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME
   }),
   Object.freeze({
+    id: 'providerReadiness',
+    label: 'Provider Readiness',
+    path: '/api/providers/readiness',
+    method: 'GET',
+    contractName: PROVIDER_READINESS_CONTRACT_NAME
+  }),
+  Object.freeze({
     id: 'appSchemaMigration',
     label: 'App Schema Migration',
     path: '/api/app-data/migration',
@@ -1001,6 +1009,7 @@ export function projectWorkbenchContracts(results) {
   const providerHealthData = dataFrom(results.providerHealth);
   const providerCapabilitiesData = dataFrom(results.providerCapabilities);
   const providerLanePreviewData = dataFrom(results.providerLanePreview);
+  const providerReadinessData = dataFrom(results.providerReadiness);
   const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
   const workflowRouterCategoriesData = dataFrom(results.workflowRouterCategories);
   const diagnosticsData = dataFrom(results.diagnostics);
@@ -1230,6 +1239,8 @@ export function projectWorkbenchContracts(results) {
     capability: providerCapabilitiesData,
     laneResult: results.providerLanePreview,
     lanePreview: providerLanePreviewData,
+    readinessResult: results.providerReadiness,
+    readiness: providerReadinessData,
     activeGoal: activeGoalControl
   });
   const projectedSupervisorDashboard = projectSupervisorDashboard({
@@ -13099,6 +13110,8 @@ function projectProviderHubPanel({
   capability,
   laneResult,
   lanePreview,
+  readinessResult,
+  readiness,
   activeGoal
 }) {
   const providers = Array.isArray(health?.providers) ? health.providers : [];
@@ -13107,14 +13120,17 @@ function projectProviderHubPanel({
       .map((providerGate) => [providerGate?.providerId, providerGate])
   );
   const lanePreviews = Array.isArray(lanePreview?.lanePreviews) ? lanePreview.lanePreviews : [];
-  const boundaries = projectProviderHubBoundaries({ health, capability, lanePreview });
+  const boundaries = projectProviderHubBoundaries({ health, capability, lanePreview, readiness });
   const evidenceAnchors = projectProviderHubEvidenceAnchors(activeGoal);
-  const activeProviderIds = health?.boundaries?.activeProviderIds ?? lanePreview?.activeProviderIds ?? [];
+  const activeProviderIds = readiness?.activeProviders?.map((provider) => provider?.providerId).filter(isNonEmptyString) ??
+    health?.boundaries?.activeProviderIds ??
+    lanePreview?.activeProviderIds ??
+    [];
 
   return {
-    state: health === null && capability === null && lanePreview === null ? 'missing' : 'available',
+    state: health === null && capability === null && lanePreview === null && readiness === null ? 'missing' : 'available',
     modelName: valueState(PROVIDER_HUB_PANEL_MODEL_NAME),
-    sourcePolicy: valueState('agent-cli-provider-health.v1 + agent-cli-capability-profile.v1 + agent-cli-lane-assignment-preview.v1 + goal-progress-ledger.v1 + goal-event-log.v1'),
+    sourcePolicy: valueState('providerReadiness.v1 + agent-cli-provider-health.v1 + agent-cli-capability-profile.v1 + agent-cli-lane-assignment-preview.v1 + goal-progress-ledger.v1 + goal-event-log.v1'),
     goalId: valueState(firstNonEmptyString(
       health?.context?.goalId,
       capability?.context?.goalId,
@@ -13124,16 +13140,20 @@ function projectProviderHubPanel({
     routeStates: {
       health: valueState(routeStateFromResult(healthResult)),
       capabilities: valueState(routeStateFromResult(capabilityResult)),
-      lanePreview: valueState(routeStateFromResult(laneResult))
+      lanePreview: valueState(routeStateFromResult(laneResult)),
+      readiness: valueState(routeStateFromResult(readinessResult))
     },
     contracts: {
       health: valueState(health?.contractName),
       capabilities: valueState(capability?.contractName),
-      lanePreview: valueState(lanePreview?.contractName)
+      lanePreview: valueState(lanePreview?.contractName),
+      readiness: valueState(readiness?.contractName)
     },
     summary: {
       activeProviderIds: arrayTextState(activeProviderIds),
       activeProviderCount: valueState(health?.summary?.activeProviderCount ?? capability?.summary?.activeProviderCount ?? lanePreview?.summary?.activeProviderCount),
+      readinessState: valueState(readiness?.state),
+      readinessBlockedReasons: arrayTextState(readiness?.blockedReasons),
       configuredProviderCount: valueState(health?.summary?.configuredProviderCount),
       missingProviderCount: valueState(health?.summary?.missingProviderCount),
       healthState: valueState(health?.summary?.state),
@@ -13144,6 +13164,22 @@ function projectProviderHubPanel({
       laneCount: valueState(lanePreview?.summary?.laneCount),
       independentReviewRequired: valueState(lanePreview?.summary?.independentReviewRequired),
       mainVerifierLaneOperatorControlled: valueState(lanePreview?.summary?.mainVerifierLaneOperatorControlled)
+    },
+    readiness: {
+      state: readiness === null ? 'missing' : 'available',
+      contractName: valueState(readiness?.contractName),
+      activeProviderCount: valueState(Array.isArray(readiness?.activeProviders) ? readiness.activeProviders.length : undefined),
+      historicalProviderCount: valueState(Array.isArray(readiness?.historicalProviders) ? readiness.historicalProviders.length : undefined),
+      unsupportedProviderCount: valueState(Array.isArray(readiness?.unsupportedProviders) ? readiness.unsupportedProviders.length : undefined),
+      activeProviders: projectProviderReadinessProviders(readiness?.activeProviders),
+      historicalProviders: projectProviderReadinessHistoricalProviders(readiness?.historicalProviders),
+      unsupportedProviders: projectProviderReadinessUnsupportedProviders(readiness?.unsupportedProviders),
+      evidencePolicy: {
+        sanitizedReadinessOnly: valueState(readiness?.evidencePolicy?.sanitizedReadinessOnly),
+        rawProviderOutputAllowed: valueState(readiness?.evidencePolicy?.rawProviderOutputAllowed),
+        localSessionPathAllowed: valueState(readiness?.evidencePolicy?.localSessionPathAllowed),
+        secretValueAllowed: valueState(readiness?.evidencePolicy?.secretValueAllowed)
+      }
     },
     providers: {
       state: providers.length === 0 ? 'missing' : 'available',
@@ -13177,6 +13213,53 @@ function projectProviderHubPanel({
     evidenceAnchors,
     boundaries,
     note: 'Provider Hub displays provider availability, blockers, capability gates, lane separation, and explicit evidence refs from backend contracts only. It does not expose secret values, execute provider CLIs, dispatch prompts, invoke models, assign agents, approve review, pass main verification, or declare release readiness.'
+  };
+}
+
+function projectProviderReadinessProviders(providers) {
+  return {
+    state: Array.isArray(providers) && providers.length > 0 ? 'available' : 'missing',
+    items: (Array.isArray(providers) ? providers : []).map((provider) => ({
+      providerId: valueState(provider?.providerId),
+      label: valueState(provider?.label),
+      role: valueState(provider?.role),
+      lane: valueState(provider?.lane),
+      status: valueState(provider?.status),
+      binaryPresence: valueState(provider?.binaryPresence?.state),
+      modelProfile: valueState(provider?.modelProfile?.state),
+      helpSmoke: valueState(provider?.helpSmoke?.state),
+      optionalRealSmoke: valueState(provider?.optionalRealSmoke?.state),
+      configurationKind: valueState(provider?.configuration?.kind),
+      deepSeekConfigStatus: valueState(provider?.configuration?.deepSeekConfigStatus),
+      deepSeekAsIndependentProvider: valueState(provider?.configuration?.deepSeekAsIndependentProvider),
+      blockedReasons: arrayTextState(provider?.blockedReasons)
+    }))
+  };
+}
+
+function projectProviderReadinessHistoricalProviders(providers) {
+  return {
+    state: Array.isArray(providers) && providers.length > 0 ? 'available' : 'missing',
+    items: (Array.isArray(providers) ? providers : []).map((provider) => ({
+      providerId: valueState(provider?.providerId),
+      label: valueState(provider?.label),
+      status: valueState(provider?.status),
+      activeWorkbenchProvider: valueState(provider?.activeWorkbenchProvider),
+      reason: valueState(provider?.reason)
+    }))
+  };
+}
+
+function projectProviderReadinessUnsupportedProviders(providers) {
+  return {
+    state: Array.isArray(providers) && providers.length > 0 ? 'available' : 'missing',
+    items: (Array.isArray(providers) ? providers : []).map((provider) => ({
+      providerId: valueState(provider?.providerId),
+      claim: valueState(provider?.claim),
+      status: valueState(provider?.status),
+      activeWorkbenchProvider: valueState(provider?.activeWorkbenchProvider),
+      blockedReasons: arrayTextState(provider?.blockedReasons)
+    }))
   };
 }
 
@@ -13247,21 +13330,35 @@ function projectProviderHubProvider({ provider, gateProfile, lanePreviews }) {
   };
 }
 
-function projectProviderHubBoundaries({ health, capability, lanePreview }) {
+function projectProviderHubBoundaries({ health, capability, lanePreview, readiness }) {
   const boundaryKeys = [
     'providerCliExecutionAvailable',
+    'providerExecutionFromReadinessAvailable',
     'rendererProviderInvocationAvailable',
     'promptDispatchAvailable',
     'modelInvocationAvailable',
     'genericShellRunnerAvailable',
+    'genericProviderPickerAvailable',
+    'rawProviderCliLauncherAvailable',
     'arbitraryCommandExecutionAvailable',
     'commandProbeAvailable',
     'capabilityProbeAvailable',
+    'secretValueExposureAvailable',
     'envValueExposureAvailable',
     'credentialMaterialAvailable',
     'rawProviderConfigAvailable',
+    'rawTranscriptExposureAvailable',
+    'rawStdoutExposureAvailable',
+    'rawStderrExposureAvailable',
+    'rawModelOutputExposureAvailable',
+    'frontendLocalJsonlReadAvailable',
+    'frontendLocalSessionReadAvailable',
+    'frontendProviderFolderReadAvailable',
     'automaticInstallAvailable',
     'automaticOauthAvailable',
+    'automaticSelfReviewAvailable',
+    'automaticWorktreeCreationAvailable',
+    'automaticNextVersionGoalAvailable',
     'actionExecutionAvailable',
     'repoWriteAvailable',
     'workspaceWritesAvailable',
@@ -13274,7 +13371,7 @@ function projectProviderHubBoundaries({ health, capability, lanePreview }) {
     'reviewerApprovalInferenceAvailable',
     'mainVerificationInferenceAvailable'
   ];
-  const sources = [health?.boundaries, capability?.boundaries, lanePreview?.boundaries]
+  const sources = [readiness?.boundaries, health?.boundaries, capability?.boundaries, lanePreview?.boundaries]
     .filter((source) => source !== null && source !== undefined);
 
   return boundaryKeys.map((boundary) => {

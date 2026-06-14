@@ -1,9 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createSymphonyConsoleServer } from '../src/symphony/console.js';
 import {
   ACTIVE_PROVIDER_IDS,
   PROVIDER_READINESS_BOUNDARIES,
@@ -11,6 +14,7 @@ import {
   ProviderReadinessContractError,
   assertProviderReadinessContract,
   buildProviderReadiness,
+  buildProviderReadinessProjection,
   deriveProviderReadinessBlockedReasons,
   validateProviderReadinessContract
 } from '../src/symphony/provider-readiness-contracts.js';
@@ -192,6 +196,68 @@ describe('v65 Provider Readiness: Codex and Claude Code only', () => {
     assert.ok(missingCodex.blockedReasons.includes('codex-cli-missing'));
   });
 
+  it('projects provider readiness from backend provider health without running provider CLIs', async () => {
+    const env = {
+      OPENAI_API_KEY: 'sk-test-secret-value',
+      ANTHROPIC_API_KEY: 'sk-test-secret-value',
+      DEEPSEEK_API_KEY: 'sk-test-secret-value'
+    };
+    const readiness = buildProviderReadinessProjection({
+      generatedAt: '2026-06-15T03:05:00.000Z',
+      env
+    });
+
+    assert.equal(validateProviderReadinessContract(readiness).ok, true);
+    assert.equal(readiness.contractName, PROVIDER_READINESS_CONTRACT_NAME);
+    assert.equal(readiness.state, 'degraded');
+    assert.deepEqual(readiness.activeProviders.map((provider) => provider.providerId), ACTIVE_PROVIDER_IDS);
+    assert.equal(readiness.activeProviders[0].binaryPresence.state, 'unknown');
+    assert.equal(readiness.activeProviders[0].helpSmoke.state, 'not-run');
+    assert.equal(readiness.activeProviders[1].configuration.kind, 'claude-code-provider-config');
+    assert.equal(readiness.activeProviders[1].configuration.deepSeekConfigStatus, 'present');
+    assert.equal(readiness.activeProviders[1].configuration.deepSeekAsIndependentProvider, false);
+    assert.equal(readiness.unsupportedProviders.find((provider) => provider.providerId === 'deepseek-cli').status, 'blocked');
+    assert.equal(readiness.evidencePolicy.rawProviderOutputAllowed, false);
+    assert.equal(readiness.boundaries.providerExecutionFromReadinessAvailable, false);
+    assert.doesNotMatch(JSON.stringify(readiness), /sk-test-secret-value/u);
+
+    const root = await mkdtemp(join(tmpdir(), 'symphony-v65-provider-readiness-api-'));
+
+    try {
+      await mkdir(join(root, '.git'));
+      const server = createSymphonyConsoleServer({
+        stateDir: join(root, '.symphony'),
+        cwd: root,
+        env
+      });
+      const baseUrl = await listenOnRandomPort(server);
+
+      try {
+        const response = await fetch(`${baseUrl}/api/providers/readiness`);
+
+        assert.equal(response.status, 200);
+
+        const apiReadiness = await response.json();
+
+        assert.equal(validateProviderReadinessContract(apiReadiness).ok, true);
+        assert.equal(apiReadiness.contractName, PROVIDER_READINESS_CONTRACT_NAME);
+        assert.doesNotMatch(JSON.stringify(apiReadiness), /sk-test-secret-value/u);
+
+        const postResponse = await fetch(`${baseUrl}/api/providers/readiness`, { method: 'POST' });
+        const queryResponse = await fetch(`${baseUrl}/api/providers/readiness?provider=deepseek-cli`);
+
+        assert.equal(postResponse.status, 405);
+        assert.equal((await postResponse.json()).contractName, 'error-envelope.v1');
+        assert.equal(queryResponse.status, 400);
+        assert.equal((await queryResponse.json()).error.code, 'invalid-provider-readiness-request');
+      } finally {
+        await closeServer(server);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('throws before building from unsafe provider readiness source material', () => {
     const ready = fixture('provider-readiness.both-ready.v1.json');
 
@@ -255,4 +321,34 @@ function collectStrings(value) {
   }
 
   return typeof value === 'string' ? [value] : [];
+}
+
+async function listenOnRandomPort(server) {
+  await new Promise((resolvePromise, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolvePromise();
+    });
+  });
+
+  const address = server.address();
+
+  assert.equal(typeof address, 'object');
+  assert.notEqual(address, null);
+
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function closeServer(server) {
+  await new Promise((resolvePromise, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolvePromise();
+    });
+  });
 }
