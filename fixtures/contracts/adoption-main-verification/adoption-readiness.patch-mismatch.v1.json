@@ -1,0 +1,166 @@
+{
+  "contractName": "adoptionReadiness.v1",
+  "contractVersion": 1,
+  "adoptionId": "adoption-v68-pr1-patch-mismatch",
+  "generatedAt": "2026-06-15T06:20:00.000Z",
+  "state": "blocked",
+  "goal": {
+    "goalId": "v68-adoption-main-verification-loop",
+    "title": "v68 Adoption and Main Verification Workbench Loop",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v68"
+  },
+  "task": {
+    "taskId": "pr-1-adoption-readiness-contracts",
+    "title": "Adoption readiness contracts",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v68:pr-1"
+  },
+  "workerEvidence": {
+    "sourceContract": "workerRunResult.v1",
+    "sourceRef": "fixtures/contracts/worker-run/result.sanitized-success.v1.json",
+    "workerRunId": "worker-run-v66-pr1-success",
+    "taskId": "pr-1-worker-run-contracts",
+    "workerProviderId": "codex-cli",
+    "workerRole": "worker",
+    "taskState": "needs-review",
+    "reviewRequired": true,
+    "taskCompleted": false,
+    "reviewApproved": false,
+    "mainVerified": false,
+    "releaseReady": false,
+    "changedFiles": [
+      "src/symphony/worker-run-contracts.js",
+      "tests/v66-controlled-codex-worker-execution.test.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v66-controlled-codex-worker-execution.test.js"
+    ],
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/qa/v66-controlled-codex-worker-execution-acceptance.md",
+        "label": "v66 acceptance evidence"
+      }
+    ]
+  },
+  "reviewerEvidence": {
+    "sourceContract": "reviewerRunVerdict.v1",
+    "sourceRef": "fixtures/contracts/reviewer-run/verdict.approved.v1.json",
+    "verdictId": "reviewer-verdict-v67-pr1-approved",
+    "status": "approved",
+    "reviewedWorkerRunId": "worker-run-v66-pr1-success",
+    "reviewerActorId": "claude-reviewer-v67",
+    "workerActorId": "codex-worker-v66",
+    "reviewApproved": true,
+    "revisionRequired": false,
+    "taskCompleted": false,
+    "adoptionReady": false,
+    "mainVerified": false,
+    "releaseReady": false,
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/qa/v67-claude-code-reviewer-lane-acceptance.md",
+        "label": "v67 reviewer acceptance evidence"
+      }
+    ]
+  },
+  "worktreeState": {
+    "state": "clean",
+    "branch": "main",
+    "dirty": false,
+    "expectedMainWorktree": true,
+    "sourceRef": "backend-worktree-state:v68-clean"
+  },
+  "sourceFingerprint": {
+    "expected": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "current": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "workerRecorded": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "reviewerRecorded": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "patchPlan": {
+    "patchId": "patch-v68-pr1-ready",
+    "patchRef": "artifact-ref:v68:pr1-ready-patch",
+    "patchFingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "expectedPatchFingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "appliesToFingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "applyCheck": "passed",
+    "fileChanges": [
+      {
+        "path": "src/symphony/adoption-main-verification-loop-contracts.js",
+        "operation": "modify",
+        "fingerprintBefore": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "fingerprintAfter": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    ]
+  },
+  "adoptionPolicy": {
+    "requiresApprovedReviewer": true,
+    "requiresCleanWorktree": true,
+    "requiresPatchFingerprintMatch": true,
+    "requiresSourceFingerprintMatch": true,
+    "supportsDeletion": false,
+    "writesAdoptionJournal": true,
+    "rollbackRequired": true,
+    "providerInvocationAllowed": false
+  },
+  "confirmation": {
+    "requiresPlanHash": true,
+    "requiredFields": [
+      "planHash",
+      "adoptionId",
+      "workerRunId",
+      "reviewerVerdictId",
+      "patchFingerprint",
+      "sourceFingerprint"
+    ],
+    "adoptionId": "adoption-v68-pr1-patch-mismatch",
+    "workerRunId": "worker-run-v66-pr1-success",
+    "reviewerVerdictId": "reviewer-verdict-v67-pr1-approved",
+    "patchFingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "sourceFingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "artifactRefs": [
+    {
+      "kind": "artifact-ref",
+      "ref": "artifact-ref:v68:pr1-ready-patch",
+      "label": "bounded adoption patch"
+    }
+  ],
+  "blockedReasons": [
+    "patch-fingerprint-mismatch"
+  ],
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "approvedReviewerEvidenceRequired": true,
+    "requiresPlanHash": true,
+    "sourceFingerprintBinding": true,
+    "patchFingerprintBinding": true,
+    "dirtyWorktreeBlocksAdoption": true,
+    "gitApplyCheckRequired": true,
+    "rollbackPlanRequired": true,
+    "rendererSuppliedPatchAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawWorkerTranscriptAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "rawModelOutputAvailable": false,
+    "providerInvocationDuringAdoption": false,
+    "directTaskCompletionAvailable": false,
+    "reviewerOutputApprovesAdoption": false,
+    "reviewerVerdictPassesMainVerification": false,
+    "verificationSuccessRegistersGate": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "gitMergePushTagAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  },
+  "planHash": "sha256:23360353406837024eca7482622d0920d77291466797d983a7d94b1ad6263c92"
+}
