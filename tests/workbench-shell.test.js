@@ -2404,6 +2404,37 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(providerHubSource, /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b|exec|spawn|shell/u);
   });
 
+  it('renders the v66 Worker Run panel as a backend-owned preview confirm lane', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const client = await readFile('frontend/workbench/src/api/client.js', 'utf8');
+    const panelSource = app.slice(
+      app.indexOf('function WorkerRunPreviewPanel'),
+      app.indexOf('function buildWorkerRunConfirmBody')
+    );
+    const confirmBodySource = app.slice(
+      app.indexOf('function buildWorkerRunConfirmBody'),
+      app.indexOf('function buildControlledProviderRunnerConfirmBody')
+    );
+
+    assert.match(app, /<WorkerRunPreviewPanel/u);
+    assert.match(app, /confirmWorkerRunPreview/u);
+    assert.match(app, /Confirm worker run/u);
+    assert.match(contracts, /workerRunPreview\.v1/u);
+    assert.match(contracts, /\/api\/goals\/<goal-id>\/worker-run-preview/u);
+    assert.match(client, /workerRunConfirmation\.v1/u);
+    assert.match(confirmBodySource, /planHash/u);
+    assert.match(confirmBodySource, /providerId/u);
+    assert.match(confirmBodySource, /commandTemplateId/u);
+    assert.match(confirmBodySource, /timeoutMs/u);
+    assert.match(confirmBodySource, /workspacePolicyId/u);
+    assert.match(panelSource, /resultPolicy/u);
+    assert.match(panelSource, /taskCompletionAvailable/u);
+    assert.match(panelSource, /reviewApprovalAvailable/u);
+    assert.doesNotMatch(panelSource, /<form\b|<textarea\b|<input\b|window\.open|navigator\.clipboard|document\.execCommand|fetch\(|exec\(|spawn\(|commandText|providerCommand|sessionPath|jsonl/u);
+    assert.doesNotMatch(confirmBodySource, /commandText|providerCommand|workspacePath|rawTranscript|rawModelOutput|rawProviderOutput/u);
+  });
+
   it('keeps the next action card and prompt drawer display-only', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
@@ -2889,6 +2920,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/diagnostics/bundle',
       '/api/evidence/timeline',
       '/api/goals',
+      '/api/goals/${encodeURIComponent(goalId)}/worker-run-confirm',
       '/api/goals/${goalId}/verification-run-confirm',
       '/api/goals/<goal-id>/adoption-confirm',
       '/api/goals/<goal-id>/adoption-plan-freeze',
@@ -2905,6 +2937,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/goals/<goal-id>/release-baseline',
       '/api/goals/<goal-id>/runbook',
       '/api/goals/<goal-id>/supervisor',
+      '/api/goals/<goal-id>/worker-run-preview',
       '/api/goals/latest/closeout',
       '/api/goals/latest/events',
       '/api/goals/latest/next',

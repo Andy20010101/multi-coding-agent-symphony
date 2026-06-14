@@ -17,6 +17,7 @@ import {
   confirmControlledAdoptionPlanFreeze,
   confirmControlledImplementationRunPlan,
   confirmGoalEventPlan,
+  confirmWorkerRunPreview,
   confirmResultEscrow,
   fetchAdoptionInspection,
   fetchGoalEventPlanPreview,
@@ -31,6 +32,7 @@ import {
   CONTRACT_TEXT,
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   READONLY_API_ROUTE_ALLOWLIST,
+  WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
   createSafeArtifactPreviewRoutes,
   createRunTimelineRoute,
   projectArtifactRefs,
@@ -50,6 +52,12 @@ import {
   buildControlledProviderRunnerPlanPreview,
   buildControlledProviderRunnerOperationRecord
 } from '../src/symphony/controlled-provider-runner.js';
+import {
+  WORKER_RUN_COMMAND_TEMPLATE_ID,
+  WORKER_RUN_PROVIDER_ID,
+  buildWorkerRunPreview,
+  buildWorkerRunResult
+} from '../src/symphony/worker-run-contracts.js';
 import {
   buildAgentCliProviderHealthContract
 } from '../src/symphony/agent-cli-provider-health.js';
@@ -87,6 +95,7 @@ const V29_GOAL_ID = 'v29-active-task-controlled-implementation-workspace';
 const V29_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v29-active-task-controlled-implementation-workspace.v1.json';
 const V30_GOAL_ID = 'v30-verified-adoption-workspace-v2';
 const V41_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
+const V66_GOAL_ID = 'v66-controlled-codex-worker-execution';
 const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
 const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
 const BACKEND_ACTIVE_GOAL_ID = 'v20-workbench-backend-event-test';
@@ -208,6 +217,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/<goal-id>/release-baseline', 'release-baseline-resolver.v1'],
         ['GET', '/api/goals/<goal-id>/implementation-plan-preview', 'controlled-implementation-plan-preview.v1'],
         ['GET', '/api/goals/<goal-id>/provider-runner-preview', 'controlled-provider-runner-plan-preview.v1'],
+        ['GET', '/api/goals/<goal-id>/worker-run-preview', 'workerRunPreview.v1'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
         ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
@@ -1000,6 +1010,144 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(preview.operationStatus.reviewerApproved.value, false);
     assert.equal(preview.operationStatus.mainVerified.value, false);
     assert.equal(preview.operationStatus.releaseReady.value, false);
+  });
+
+  it('projects the v66 controlled worker run preview with fixed Codex worker boundaries', () => {
+    const previewPayload = buildWorkerRunPreview({
+      generatedAt: '2026-06-15T04:20:00.000Z',
+      goal: {
+        goalId: V66_GOAL_ID,
+        title: 'v66 Controlled Codex Worker Execution',
+        state: 'active',
+        sourceContract: 'goal-next-action.v1',
+        sourceRef: `goal-next-action:${V66_GOAL_ID}`
+      },
+      task: {
+        taskId: 'task-2',
+        title: 'Backend preview confirm fake adapter',
+        state: 'active',
+        sourceContract: 'goal-next-action.v1',
+        sourceRef: `goal-next-action:${V66_GOAL_ID}:task-2`
+      },
+      providerReadiness: {
+        sourceRef: 'fixtures/contracts/provider-readiness/provider-readiness.both-ready.v1.json',
+        activeProviders: [{
+          providerId: WORKER_RUN_PROVIDER_ID,
+          status: 'ready'
+        }]
+      }
+    });
+    const runResult = buildWorkerRunResult({
+      preview: previewPayload,
+      runId: 'worker-run-v66-task-2-fake',
+      startedAt: '2026-06-15T04:21:00.000Z',
+      finishedAt: '2026-06-15T04:21:05.000Z',
+      providerResult: {
+        summary: 'Fake worker generated sanitized evidence.',
+        changedFiles: ['src/symphony/worker-run-backend.js'],
+        validationCommands: ['node --test tests/v66-controlled-codex-worker-execution.test.js'],
+        artifactRefs: ['artifact-ref:v66:task-2:fake-worker-run'],
+        verifierSummary: 'Focused verifier passed.',
+        evidenceRefs: [{
+          kind: 'repo-doc',
+          ref: 'docs/qa/v66-controlled-codex-worker-execution-acceptance.md',
+          label: 'v66 fake worker run evidence'
+        }]
+      }
+    });
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchRouteResult({
+        id: 'goalRunbook',
+        label: 'Goal Runbook',
+        path: `/api/goals/${V66_GOAL_ID}/runbook`,
+        method: 'GET',
+        contractName: 'goal-runbook.v1'
+      }, {
+        contractName: 'goal-runbook.v1',
+        contractVersion: 1,
+        goalId: V66_GOAL_ID,
+        goalTitle: 'v66 Controlled Codex Worker Execution',
+        baseline: {},
+        tasks: [{
+          taskId: 'task-2',
+          title: 'Backend preview confirm fake adapter',
+          roleOrder: ['worker', 'reviewer', 'main-verifier'],
+          acceptance: [],
+          expectedEvidence: {}
+        }],
+        releaseGates: []
+      }),
+      workerRunPreview: createWorkbenchRouteResult(WORKER_RUN_PREVIEW_ROUTE_TEMPLATE, previewPayload),
+      activeGoalOperations: createWorkbenchRouteResult({
+        id: 'activeGoalOperations',
+        label: 'Active Goal Operations',
+        path: `/api/goals/${V66_GOAL_ID}/operations`,
+        method: 'GET',
+        contractName: 'goal-operation-runs.v1'
+      }, {
+        contractName: 'goal-operation-runs.v1',
+        contractVersion: 1,
+        goalId: V66_GOAL_ID,
+        operationCount: 1,
+        latestOperationId: 'worker-run-v66-task-2-fake',
+        runs: [{
+          operationId: 'worker-run-v66-task-2-fake',
+          goalId: V66_GOAL_ID,
+          taskId: 'task-2',
+          role: 'worker',
+          commandKind: 'provider-runner',
+          commandName: 'worker run preview/confirm',
+          status: 'confirmed',
+          planHash: previewPayload.planHash,
+          source: 'workbench.worker-run-confirm',
+          output: {
+            rawProviderOutputAvailable: false
+          },
+          artifactRefs: [{
+            kind: 'repo-doc',
+            ref: 'docs/qa/v66-controlled-codex-worker-execution-acceptance.md',
+            title: 'v66 fake worker run evidence',
+            status: runResult.status
+          }],
+          runResult,
+          verifierSummary: {
+            status: runResult.verifier.state,
+            workerRunStatus: runResult.status,
+            taskCompleted: false,
+            reviewerApproved: false,
+            mainVerified: false,
+            releaseReady: false
+          }
+        }]
+      })
+    });
+    const preview = model.activeGoal.workerRunPreview;
+
+    assert.equal(preview.state, 'preview-ready');
+    assert.equal(preview.goalId.value, V66_GOAL_ID);
+    assert.equal(preview.taskId.value, 'task-2');
+    assert.equal(preview.provider.providerId.value, WORKER_RUN_PROVIDER_ID);
+    assert.equal(preview.plan.commandTemplateId.value, WORKER_RUN_COMMAND_TEMPLATE_ID);
+    assert.equal(preview.plan.planHash.value, previewPayload.planHash);
+    assert.equal(preview.confirm.endpoint.route.value, `/api/goals/${V66_GOAL_ID}/worker-run-confirm`);
+    assert.equal(preview.confirm.endpoint.requiresPlanHash.value, true);
+    assert.equal(preview.workspacePolicy.backendOwned.value, true);
+    assert.equal(preview.workspacePolicy.mainWorktreeWrite.value, false);
+    assert.equal(preview.resultPolicy.successState.value, 'needs-review');
+    assert.equal(preview.resultPolicy.taskCompletionAvailable.value, false);
+    assert.equal(preview.resultPolicy.reviewApprovalAvailable.value, false);
+    assert.equal(preview.boundaries.freeformProviderCommandAvailable.value, false);
+    assert.equal(preview.boundaries.rendererCommandExecutionAvailable.value, false);
+    assert.equal(preview.boundaries.rawProviderOutputAvailable.value, false);
+    assert.equal(preview.boundaries.gitMutationAvailable.value, false);
+    assert.equal(preview.boundaries.githubReleaseAutomationAvailable.value, false);
+    assert.equal(preview.boundaries.realCodexRequiresOptIn.value, true);
+    assert.equal(preview.operationStatus.workerRunStatus.value, 'needs-review');
+    assert.equal(preview.operationStatus.taskCompleted.value, false);
+    assert.equal(preview.operationStatus.reviewApproved.value, false);
+    assert.equal(preview.operationStatus.mainVerified.value, false);
+    assert.equal(preview.operationStatus.releaseReady.value, false);
+    assert.equal(preview.operationStatus.rawProviderOutputAvailable.value, false);
   });
 
   it('projects the v39 Schema Migration Preview panel as dry-run only', () => {
@@ -2446,6 +2594,65 @@ describe('v15 Workbench read-only API client', () => {
       'application/json',
       'application/json',
       ['goalId', 'planHash', 'planId', 'taskId']
+    ]]);
+  });
+
+  it('posts worker run confirms with only preview-bound fields', async () => {
+    const calls = [];
+    const body = {
+      planHash: 'sha256:6666666666666666666666666666666666666666666666666666666666666666',
+      goalId: V66_GOAL_ID,
+      taskId: 'task-2',
+      providerId: WORKER_RUN_PROVIDER_ID,
+      commandTemplateId: WORKER_RUN_COMMAND_TEMPLATE_ID,
+      timeoutMs: 900000,
+      workspacePolicyId: 'isolated-provider-workspace-v1'
+    };
+    const result = await confirmWorkerRunPreview(`/api/goals/${V66_GOAL_ID}/worker-run-confirm`, body, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'workerRunConfirmation.v1',
+              contractVersion: 1,
+              status: 'needs-review',
+              providerId: WORKER_RUN_PROVIDER_ID,
+              commandTemplateId: WORKER_RUN_COMMAND_TEMPLATE_ID,
+              planHash: body.planHash,
+              result: {
+                status: 'needs-review',
+                nextState: {
+                  taskCompleted: false,
+                  reviewApproved: false,
+                  mainVerified: false,
+                  releaseReady: false
+                }
+              }
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      init.headers['Content-Type'],
+      Object.keys(JSON.parse(init.body)).sort()
+    ]), [[
+      `/api/goals/${V66_GOAL_ID}/worker-run-confirm`,
+      'POST',
+      'no-store',
+      'application/json',
+      'application/json',
+      ['commandTemplateId', 'goalId', 'planHash', 'providerId', 'taskId', 'timeoutMs', 'workspacePolicyId']
     ]]);
   });
 

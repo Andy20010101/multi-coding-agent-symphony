@@ -17,6 +17,7 @@ const CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME = 'controlled-impleme
 const CONTROLLED_IMPLEMENTATION_RUN_CONFIRMATION_CONTRACT_NAME = 'controlled-implementation-run-confirmation.v1';
 const CONTROLLED_PROVIDER_RUNNER_PLAN_PREVIEW_CONTRACT_NAME = 'controlled-provider-runner-plan-preview.v1';
 const CONTROLLED_PROVIDER_RUNNER_CONFIRMATION_CONTRACT_NAME = 'controlled-provider-runner-confirmation.v1';
+const WORKER_RUN_PREVIEW_CONTRACT_NAME = 'workerRunPreview.v1';
 const CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = 'controlled-adoption-plan-freeze.v1';
 const CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = 'controlled-adoption-confirmation.v1';
 const CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = 'symphony.console-adoption-inspect';
@@ -71,6 +72,7 @@ const EVIDENCE_REF_HELPER_NAME = 'EvidenceRefHelper';
 const PROVIDER_HUB_PANEL_MODEL_NAME = 'ProviderHubPanel';
 const V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = 'v25-controlled-implementation-lane';
 const V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
+const V66_WORKER_RUN_GOAL_ID = 'v66-controlled-codex-worker-execution';
 const V30_VERIFIED_ADOPTION_GOAL_ID = 'v30-verified-adoption-workspace-v2';
 const EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
 const EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
@@ -863,6 +865,15 @@ export const CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
   acceptErrorContract: true
 });
 
+export const WORKER_RUN_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
+  id: 'workerRunPreview',
+  label: 'Worker Run Preview',
+  path: '/api/goals/<goal-id>/worker-run-preview',
+  method: 'GET',
+  contractName: WORKER_RUN_PREVIEW_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
 export const CONTROLLED_ADOPTION_PLAN_FREEZE_ROUTE_TEMPLATE = Object.freeze({
   id: 'controlledAdoptionPlanFreeze',
   label: 'Controlled Adoption Plan Freeze',
@@ -902,6 +913,7 @@ export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   RELEASE_BASELINE_ROUTE_TEMPLATE,
   CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
+  WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
@@ -928,6 +940,7 @@ const OPTIONAL_ROUTE_IDS = new Set([
   'activeGoalOperations',
   'controlledImplementationPlanPreview',
   'controlledProviderRunnerPreview',
+  'workerRunPreview',
   'adoptionInspect'
 ]);
 
@@ -1001,6 +1014,7 @@ export function projectWorkbenchContracts(results) {
   const adoptionInspectData = dataFrom(results.adoptionInspect);
   const controlledImplementationPlanPreviewData = dataFrom(results.controlledImplementationPlanPreview);
   const controlledProviderRunnerPreviewData = dataFrom(results.controlledProviderRunnerPreview);
+  const workerRunPreviewData = dataFrom(results.workerRunPreview);
   const capabilitiesData = dataFrom(results.capabilities);
   const actionManifestData = dataFrom(results.actionManifest);
   const actionAvailabilityData = dataFrom(results.actionAvailability);
@@ -1062,6 +1076,10 @@ export function projectWorkbenchContracts(results) {
     projectRouteState(
       results.controlledProviderRunnerPreview?.routeDescriptor ?? CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
       results.controlledProviderRunnerPreview
+    ),
+    projectRouteState(
+      results.workerRunPreview?.routeDescriptor ?? WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
+      results.workerRunPreview
     ),
     projectRouteState(
       results.adoptionInspect?.routeDescriptor ?? ADOPTION_INSPECT_ROUTE_TEMPLATE,
@@ -1158,6 +1176,12 @@ export function projectWorkbenchContracts(results) {
   activeGoalControl.controlledProviderRunnerPreview = projectControlledProviderRunnerPreview({
     result: results.controlledProviderRunnerPreview,
     preview: controlledProviderRunnerPreviewData,
+    operations: activeGoalOperations,
+    activeGoal: activeGoalControl
+  });
+  activeGoalControl.workerRunPreview = projectWorkerRunPreview({
+    result: results.workerRunPreview,
+    preview: workerRunPreviewData,
     operations: activeGoalOperations,
     activeGoal: activeGoalControl
   });
@@ -5179,6 +5203,30 @@ export function createControlledProviderRunnerPreviewRoute(goalId, nextAction, p
   });
 }
 
+export function createWorkerRunPreviewRoute(goalId, nextAction) {
+  const taskId = nextAction?.next?.taskId;
+  const role = nextAction?.next?.role;
+  const phase = nextAction?.next?.phase;
+
+  if (
+    !isSafeGoalRouteSegment(goalId) ||
+    goalId !== V66_WORKER_RUN_GOAL_ID ||
+    !isSafeGoalRouteSegment(taskId) ||
+    role !== 'worker' ||
+    !['implement', 'implementation', 'revision'].includes(phase) ||
+    nextAction?.next?.blocked === true
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    ...WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
+    path: `${WORKER_RUN_PREVIEW_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}`,
+    goalId,
+    taskId
+  });
+}
+
 export function createAdoptionInspectRoute(operations) {
   const operation = latestAdoptionPlanFreezeOperationForTask(operations, {
     goalId: operations?.goalId,
@@ -6239,6 +6287,220 @@ function projectControlledProviderRunnerPreview({ result, preview, operations, a
     },
     operationStatus: projectControlledProviderRunnerOperation(operation),
     note: 'Controlled provider runner preview is built from backend contracts and plan hash context. Workbench displays status and refs only; it does not accept command text, invoke provider binaries directly, approve review, pass main verification, or declare release readiness.'
+  };
+}
+
+function projectWorkerRunPreview({ result, preview, operations, activeGoal }) {
+  const routeState = routeStateFromResult(result);
+  const operation = latestProviderRunnerOperationForTask(operations, {
+    goalId: preview?.goal?.goalId ?? firstValue(activeGoal?.taskQueue?.goalId),
+    taskId: preview?.task?.taskId ?? firstValue(activeGoal?.nextAction?.taskId)
+  });
+
+  if (result?.ok !== true || preview?.contractName !== WORKER_RUN_PREVIEW_CONTRACT_NAME) {
+    return {
+      state: 'unavailable',
+      modelName: valueState('WorkerRunPreview'),
+      routeState: valueState(routeState),
+      goalId: valueState(firstValue(activeGoal?.taskQueue?.goalId)),
+      taskId: valueState(firstValue(activeGoal?.nextAction?.taskId)),
+      providerId: valueState(null),
+      canConfirm: valueState(false),
+      reason: valueState(result?.message ?? 'worker run preview route is unavailable'),
+      plan: {
+        planHash: valueState(null),
+        commandTemplateId: valueState(null),
+        timeoutMs: valueState(null)
+      },
+      confirm: {
+        available: valueState(false),
+        endpoint: {
+          method: valueState(null),
+          route: valueState(null),
+          requiredFields: arrayTextState([])
+        }
+      },
+      boundaries: {
+        backendOwnedPreviewConfirm: valueState(true),
+        fixedProviderId: valueState('codex-cli'),
+        fixedCommandTemplateId: valueState('codex-worker-controlled-v1'),
+        freeformProviderCommandAvailable: valueState(false),
+        rendererCommandExecutionAvailable: valueState(false),
+        frontendLocalSessionReadAvailable: valueState(false),
+        rawProviderOutputAvailable: valueState(false),
+        directTaskCompletionAvailable: valueState(false),
+        providerOutputApprovesReview: valueState(false),
+        writesMainWorktree: valueState(false),
+        gitMutationAvailable: valueState(false),
+        githubReleaseAutomationAvailable: valueState(false),
+        realCodexRequiresOptIn: valueState(true)
+      },
+      operationStatus: projectWorkerRunOperation(operation),
+      note: 'Worker run preview is unavailable until the backend returns workerRunPreview.v1 for the active v66 worker task.'
+    };
+  }
+
+  const goalId = preview.goal?.goalId;
+  const taskId = preview.task?.taskId;
+  const confirmRoute = isSafeGoalRouteSegment(goalId)
+    ? `/api/goals/${encodeURIComponent(goalId)}/worker-run-confirm`
+    : null;
+  const ready = preview.state === 'ready';
+
+  return {
+    state: ready ? 'preview-ready' : 'blocked',
+    modelName: valueState('WorkerRunPreview'),
+    routeState: valueState(routeState),
+    goalId: valueState(goalId),
+    taskId: valueState(taskId),
+    goal: {
+      title: valueState(preview.goal?.title),
+      state: valueState(preview.goal?.state),
+      sourceContract: valueState(preview.goal?.sourceContract),
+      sourceRef: valueState(preview.goal?.sourceRef)
+    },
+    task: {
+      title: valueState(preview.task?.title),
+      state: valueState(preview.task?.state),
+      sourceContract: valueState(preview.task?.sourceContract),
+      sourceRef: valueState(preview.task?.sourceRef)
+    },
+    provider: {
+      providerId: valueState(preview.provider?.providerId),
+      role: valueState(preview.provider?.role),
+      lane: valueState(preview.provider?.lane),
+      readinessState: valueState(preview.provider?.readinessState),
+      sourceContract: valueState(preview.provider?.sourceContract),
+      sourceRef: valueState(preview.provider?.sourceRef)
+    },
+    plan: {
+      planHash: valueState(preview.planHash),
+      commandTemplateId: valueState(preview.commandTemplate?.templateId),
+      commandProviderId: valueState(preview.commandTemplate?.providerId),
+      commandFamily: valueState(preview.commandTemplate?.commandFamily),
+      commandTemplateFixed: valueState(preview.commandTemplate?.fixed === true),
+      acceptsFreeformCommand: valueState(preview.commandTemplate?.acceptsFreeformCommand === true),
+      rendererSuppliedCommandAvailable: valueState(preview.commandTemplate?.rendererSuppliedCommandAvailable === true),
+      timeoutMs: valueState(preview.timeoutMs)
+    },
+    workspacePolicy: {
+      policyId: valueState(preview.workspacePolicy?.policyId),
+      workspaceKind: valueState(preview.workspacePolicy?.workspaceKind),
+      backendOwned: valueState(preview.workspacePolicy?.backendOwned === true),
+      mainWorktreeWrite: valueState(preview.workspacePolicy?.mainWorktreeWrite === true),
+      rendererSuppliedPathAvailable: valueState(preview.workspacePolicy?.rendererSuppliedPathAvailable === true),
+      allowedWriteScope: valueState(preview.workspacePolicy?.allowedWriteScope)
+    },
+    confirm: {
+      available: valueState(ready && confirmRoute !== null),
+      endpoint: {
+        method: valueState('POST'),
+        route: valueState(confirmRoute),
+        requiredFields: arrayTextState(preview.confirmation?.requiredFields),
+        requiresPlanHash: valueState(preview.confirmation?.requiresPlanHash === true),
+        providerId: valueState(preview.confirmation?.providerId),
+        commandTemplateId: valueState(preview.confirmation?.commandTemplateId),
+        timeoutMs: valueState(preview.confirmation?.timeoutMs),
+        workspacePolicyId: valueState(preview.confirmation?.workspacePolicyId)
+      }
+    },
+    resultPolicy: {
+      successState: valueState(preview.resultPolicy?.successState),
+      reviewRequired: valueState(preview.resultPolicy?.reviewRequired === true),
+      taskCompletionAvailable: valueState(preview.resultPolicy?.taskCompletionAvailable === true),
+      reviewApprovalAvailable: valueState(preview.resultPolicy?.reviewApprovalAvailable === true),
+      mainVerificationAvailable: valueState(preview.resultPolicy?.mainVerificationAvailable === true),
+      releaseReadinessAvailable: valueState(preview.resultPolicy?.releaseReadinessAvailable === true)
+    },
+    blockedReasons: arrayTextState(preview.blockedReasons),
+    sourceContracts: {
+      count: valueState(Array.isArray(preview.sourceContracts) ? preview.sourceContracts.length : 0),
+      items: (Array.isArray(preview.sourceContracts) ? preview.sourceContracts : []).map((source) => ({
+        contractName: valueState(source?.contractName),
+        contractVersion: valueState(source?.contractVersion),
+        readOnly: valueState(source?.readOnly === true),
+        requiredFor: arrayTextState(source?.requiredFor),
+        sourceRef: valueState(source?.sourceRef)
+      }))
+    },
+    boundaries: {
+      backendOwnedPreviewConfirm: valueState(preview.boundaries?.backendOwnedPreviewConfirm === true),
+      fixedProviderId: valueState(preview.boundaries?.fixedProviderId),
+      fixedCommandTemplateId: valueState(preview.boundaries?.fixedCommandTemplateId),
+      rendererSuppliedCommandAvailable: valueState(preview.boundaries?.rendererSuppliedCommandAvailable === true),
+      freeformProviderCommandAvailable: valueState(preview.boundaries?.freeformProviderCommandAvailable === true),
+      genericShellAvailable: valueState(preview.boundaries?.genericShellAvailable === true),
+      genericTerminalAvailable: valueState(preview.boundaries?.genericTerminalAvailable === true),
+      rendererCommandExecutionAvailable: valueState(preview.boundaries?.rendererCommandExecutionAvailable === true),
+      frontendLocalJsonlReadAvailable: valueState(preview.boundaries?.frontendLocalJsonlReadAvailable === true),
+      frontendLocalSessionReadAvailable: valueState(preview.boundaries?.frontendLocalSessionReadAvailable === true),
+      frontendProviderFolderReadAvailable: valueState(preview.boundaries?.frontendProviderFolderReadAvailable === true),
+      rawTranscriptAvailable: valueState(preview.boundaries?.rawTranscriptAvailable === true),
+      rawModelOutputAvailable: valueState(preview.boundaries?.rawModelOutputAvailable === true),
+      rawProviderOutputAvailable: valueState(preview.boundaries?.rawProviderOutputAvailable === true),
+      directGoalEventAppendAvailable: valueState(preview.boundaries?.directGoalEventAppendAvailable === true),
+      directTaskCompletionAvailable: valueState(preview.boundaries?.directTaskCompletionAvailable === true),
+      providerSuccessCompletesTask: valueState(preview.boundaries?.providerSuccessCompletesTask === true),
+      providerOutputApprovesReview: valueState(preview.boundaries?.providerOutputApprovesReview === true),
+      automaticSelfReviewAvailable: valueState(preview.boundaries?.automaticSelfReviewAvailable === true),
+      automaticWorktreeCreationAvailable: valueState(preview.boundaries?.automaticWorktreeCreationAvailable === true),
+      automaticNextVersionGoalAvailable: valueState(preview.boundaries?.automaticNextVersionGoalAvailable === true),
+      writesMainWorktree: valueState(preview.boundaries?.writesMainWorktree === true),
+      gitMutationAvailable: valueState(preview.boundaries?.gitMutationAvailable === true),
+      githubReleaseAutomationAvailable: valueState(preview.boundaries?.githubReleaseAutomationAvailable === true),
+      realCodexRequiresOptIn: valueState(preview.boundaries?.realCodexRequiresOptIn === true)
+    },
+    operationStatus: projectWorkerRunOperation(operation),
+    note: 'Worker run preview is owned by backend contracts and fixed to codex-cli plus codex-worker-controlled-v1. Workbench can submit the matching plan hash only; worker success remains needs-review and cannot complete tasks, approve review, verify main, or publish releases.'
+  };
+}
+
+function projectWorkerRunOperation(operation) {
+  const runResult = operation?.runResult ?? null;
+  const sanitizedResult = runResult?.sanitizedResult ?? {};
+  const verifier = runResult?.verifier ?? {};
+  const failureLayer = runResult?.failureLayer ?? {};
+  const artifactRefs = Array.isArray(operation?.artifactRefs) ? operation.artifactRefs : [];
+
+  return {
+    state: operation === null ? 'waiting-for-confirm' : operation.status ?? 'available',
+    sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+    operationId: valueState(operation?.operationId),
+    commandKind: valueState(operation?.commandKind),
+    commandName: valueState(operation?.commandName),
+    status: valueState(operation?.status),
+    runId: valueState(runResult?.runId),
+    providerId: valueState(runResult?.providerId),
+    commandTemplateId: valueState(runResult?.commandTemplateId),
+    previewPlanHash: valueState(runResult?.previewPlanHash),
+    adapter: valueState(runResult?.adapter),
+    realCodexOptIn: valueState(runResult?.realCodexOptIn === true),
+    workerRunStatus: valueState(runResult?.status),
+    sanitizedSummary: valueState(sanitizedResult?.summary),
+    changedFiles: arrayTextState(sanitizedResult?.changedFiles),
+    validationCommands: arrayTextState(sanitizedResult?.validationCommands),
+    risks: arrayTextState(sanitizedResult?.risks),
+    blockers: arrayTextState(sanitizedResult?.blockers),
+    verifierState: valueState(verifier?.state),
+    verifierSummary: valueState(verifier?.summary),
+    failureLayer: valueState(failureLayer?.kind),
+    failureReason: valueState(failureLayer?.reason),
+    taskState: valueState(runResult?.nextState?.taskState),
+    taskCompleted: valueState(runResult?.nextState?.taskCompleted === true),
+    reviewApproved: valueState(runResult?.nextState?.reviewApproved === true),
+    mainVerified: valueState(runResult?.nextState?.mainVerified === true),
+    releaseReady: valueState(runResult?.nextState?.releaseReady === true),
+    rawProviderOutputAvailable: valueState(operation?.output?.rawProviderOutputAvailable === true || runResult?.boundaries?.rawProviderOutputAvailable === true),
+    artifactRefs: {
+      count: valueState(artifactRefs.length),
+      items: artifactRefs.map((artifact) => ({
+        kind: valueState(artifact?.kind),
+        path: valueState(artifact?.path),
+        ref: valueState(artifact?.ref),
+        uri: valueState(artifact?.uri),
+        status: valueState(artifact?.status)
+      }))
+    }
   };
 }
 
