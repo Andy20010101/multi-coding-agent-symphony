@@ -1,22 +1,13 @@
-# v63 Mac App Local Launch MVP runbook
+# v63 Mac App Local Launch MVP goal runbook
 
-Date: 2026-06-15
+Date: 2026-06-14
 Goal id: `v63-mac-app-local-launch-mvp`
 Branch draft: `codex/v63-mac-app-local-launch-mvp`
 Start condition: v62 closeout is merged and install/upgrade baseline is documented.
 
-## Version-start reconcile
-
-v63 starts from the post-v62 `main` state.
-
-Checked before v63 PR-0:
-
-- `origin/main` resolves to `40d61c78a2905e39d35b71acb223c37a996efdc1`.
-- PR #126 through PR #130 are merged into `main`.
-- `v62` is an annotated tag; `v62^{}` dereferences to `40d61c78a2905e39d35b71acb223c37a996efdc1`.
-- GitHub Release `v62` exists at `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v62`, is not a draft, is not a prerelease, has no assets, was published at `2026-06-14T18:39:28Z`, and targets `main`.
-- Open PR state was `[]`.
-- `v63` tag and GitHub Release were absent before v63 implementation.
+> Scope note: These runbooks are written as repository-ready planning files for `multi-coding-agent-symphony`.
+> They continue the current v60 boundary: browser/renderer surfaces must not become a generic terminal, local-file reader, provider-session reader, release publisher, or unsupported provider launcher.
+> Primary model/tool line after v60: Codex + Claude Code only. Kiro remains historical compatibility. DeepSeek is only a Claude Code provider configuration detail, not a third Workbench provider.
 
 ## Objective
 
@@ -37,39 +28,39 @@ installable / checkout baseline
 
 Allowed work:
 
-- add or document a local Mac app build/smoke command for the Tauri shell;
-- make App Home the native window entry path;
-- show sidecar attached, launchable, launching, failed, wrong-port, stale, and unavailable states;
-- preserve the existing `attach_sidecar` and `launch_sidecar` command boundary;
-- record local build blockers when Tauri or Rust tooling is missing;
-- keep distribution packaging, signing, notarization, and auto-update out of scope.
+- add or document a local Mac app build/smoke command for the Tauri shell
+- make App Home the native window entry path
+- show sidecar attached, launchable, launching, failed, wrong-port, stale, and unavailable states
+- preserve the existing `attach_sidecar` and `launch_sidecar` command boundary
+- record local build blockers when Tauri or Rust tooling is missing
+- keep distribution packaging, signing, notarization, and auto-update out of scope
 
 Forbidden work:
 
-- generic shell or terminal UI;
-- arbitrary renderer-side command execution;
-- frontend reads of local JSONL files, provider session folders, `.symphony` internals, goal ledgers, event logs, raw transcripts, or raw model output;
-- unsupported provider claims;
-- direct goal event append from provider output;
-- direct task completion from provider output;
-- automatic self-review;
-- automatic worktree creation;
-- automatic next-version goal creation;
-- git merge, push, tag, publish, or GitHub Release automation inside product code;
-- public distribution, notarization, or auto-update claims unless the version explicitly proves them;
-- Electron migration;
-- Tauri plugins that enable arbitrary filesystem, shell, updater, or external opener access;
-- public `.dmg` or notarized release claims.
+- generic shell or terminal UI
+- arbitrary renderer-side command execution
+- frontend reads of local JSONL files, provider session folders, `.symphony` internals, goal ledgers, event logs, raw transcripts, or raw model output
+- unsupported provider claims
+- direct goal event append from provider output
+- direct task completion from provider output
+- automatic self-review
+- automatic worktree creation
+- automatic next-version goal creation
+- git merge, push, tag, publish, or GitHub Release automation inside product code
+- public distribution, notarization, or auto-update claims unless the version explicitly proves them
+- Electron migration
+- Tauri plugins that enable arbitrary filesystem, shell, updater, or external opener access
+- public `.dmg` or notarized release claims
 
 ## Expected deliverables
 
-- `desktop/shell/README.md`;
-- `desktop/shell/src-tauri/tauri.conf.json`;
-- `desktop/shell/src-tauri/src/lib.rs`;
-- `scripts/desktop-shell-smoke.js`;
-- `docs/qa/v63-mac-app-local-launch-mvp-acceptance.md`;
-- `docs/plans/v63-mac-app-local-launch-mvp-closeout-snapshot-2026-06-14.md`;
-- `docs/plans/v64-first-run-project-setup-local-settings-runbook-2026-06-14.md`.
+- `desktop/shell/README.md`
+- `desktop/shell/src-tauri/tauri.conf.json`
+- `desktop/shell/src-tauri/src/lib.rs`
+- `scripts/desktop-shell-smoke.js`
+- `docs/qa/v63-mac-app-local-launch-mvp-acceptance.md`
+- `docs/plans/v63-mac-app-local-launch-mvp-closeout-snapshot-2026-06-14.md`
+- `docs/plans/v64-first-run-project-setup-local-settings-runbook-2026-06-14.md`
 
 ## PR breakdown
 
