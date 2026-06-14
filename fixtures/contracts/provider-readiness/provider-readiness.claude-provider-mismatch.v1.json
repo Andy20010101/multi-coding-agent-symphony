@@ -1,0 +1,195 @@
+{
+  "contractName": "providerReadiness.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T03:00:00.000Z",
+  "state": "blocked",
+  "currentProject": {
+    "state": "bound",
+    "projectId": "multi-coding-agent-symphony",
+    "displayName": "multi-coding-agent-symphony",
+    "sourceContract": "current-project-binding.v1",
+    "sourceRef": "fixtures/contracts/personal-workbench-settings/personal-workbench-settings.ready.v1.json"
+  },
+  "activeProviders": [
+    {
+      "providerId": "codex-cli",
+      "label": "Codex CLI",
+      "role": "worker",
+      "lane": "codex-worker-candidate",
+      "status": "ready",
+      "binaryPresence": {
+        "state": "present",
+        "checked": true,
+        "evidenceRef": "help-smoke:codex-cli",
+        "reason": null
+      },
+      "modelProfile": {
+        "state": "present",
+        "checked": true,
+        "evidenceRef": "profile:codex-cli-managed",
+        "reason": null
+      },
+      "helpSmoke": {
+        "state": "passed",
+        "checked": true,
+        "evidenceRef": "help-smoke:codex-cli",
+        "reason": null
+      },
+      "optionalRealSmoke": {
+        "state": "not-run",
+        "checked": false,
+        "evidenceRef": null,
+        "reason": "real provider smoke is opt-in"
+      },
+      "configuration": {
+        "kind": "codex-cli",
+        "state": "present",
+        "deepSeekConfigStatus": "not-required",
+        "deepSeekAsIndependentProvider": false,
+        "storesSecrets": false,
+        "secretValuesExposed": false,
+        "notes": []
+      },
+      "blockedReasons": [],
+      "sourceRefs": [],
+      "readOnly": true,
+      "willMutate": false
+    },
+    {
+      "providerId": "claude-code-cli",
+      "label": "Claude Code CLI",
+      "role": "reviewer",
+      "lane": "claude-code-reviewer-candidate",
+      "status": "blocked",
+      "binaryPresence": {
+        "state": "present",
+        "checked": true,
+        "evidenceRef": "help-smoke:claude-code-cli",
+        "reason": null
+      },
+      "modelProfile": {
+        "state": "present",
+        "checked": true,
+        "evidenceRef": "profile:claude-code-cli-managed",
+        "reason": null
+      },
+      "helpSmoke": {
+        "state": "passed",
+        "checked": true,
+        "evidenceRef": "help-smoke:claude-code-cli",
+        "reason": null
+      },
+      "optionalRealSmoke": {
+        "state": "not-run",
+        "checked": false,
+        "evidenceRef": null,
+        "reason": "real provider smoke is opt-in"
+      },
+      "configuration": {
+        "kind": "claude-code-provider-config",
+        "state": "mismatch",
+        "deepSeekConfigStatus": "mismatch",
+        "deepSeekAsIndependentProvider": false,
+        "storesSecrets": false,
+        "secretValuesExposed": false,
+        "notes": [
+          "Configured provider does not match the Claude Code reviewer profile."
+        ]
+      },
+      "blockedReasons": [],
+      "sourceRefs": [],
+      "readOnly": true,
+      "willMutate": false
+    }
+  ],
+  "historicalProviders": [
+    {
+      "providerId": "kiro-cli",
+      "label": "Kiro CLI",
+      "status": "historical",
+      "activeWorkbenchProvider": false,
+      "reason": "Historical compatibility and smoke script path only.",
+      "sourceRef": "docs/provider-boundary-guide.md"
+    }
+  ],
+  "unsupportedProviders": [],
+  "operatorRole": {
+    "providerId": "operator",
+    "role": "main-verifier",
+    "state": "manual-controller",
+    "responsibilities": [
+      "main-verification",
+      "release-controller"
+    ],
+    "willMutateInProduct": false,
+    "sourceRef": "docs/plans/v65-provider-readiness-codex-claude-only-runbook-2026-06-14.md"
+  },
+  "evidencePolicy": {
+    "sanitizedReadinessOnly": true,
+    "rawStdoutAllowed": false,
+    "rawStderrAllowed": false,
+    "rawProviderOutputAllowed": false,
+    "rawTranscriptAllowed": false,
+    "localSessionPathAllowed": false,
+    "secretValueAllowed": false,
+    "notes": [
+      "Evidence records status and refs only."
+    ]
+  },
+  "safety": {
+    "storesSecrets": false,
+    "storesRawProviderPaths": false,
+    "storesRawTranscripts": false,
+    "storesRawStdout": false,
+    "storesRawStderr": false,
+    "storesRawModelOutput": false,
+    "frontendReadsLocalJsonl": false,
+    "frontendReadsProviderFolders": false,
+    "rendererRunsCommands": false,
+    "providerLaunchAvailable": false,
+    "createsGoalsAutomatically": false,
+    "createsWorktreesAutomatically": false,
+    "mutatesGitOrReleases": false
+  },
+  "blockedReasons": [
+    "claude-code-cli-blocked",
+    "claude-code-cli-configuration-mismatch",
+    "claude-code-cli-deepseek-config-mismatch"
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "willMutate": false,
+    "codexWorkerCandidateOnly": true,
+    "claudeCodeReviewerCandidateOnly": true,
+    "kiroActiveProviderAvailable": false,
+    "deepSeekIndependentProviderAvailable": false,
+    "genericProviderPickerAvailable": false,
+    "rawProviderCliLauncherAvailable": false,
+    "providerExecutionFromReadinessAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptExposureAvailable": false,
+    "rawStdoutExposureAvailable": false,
+    "rawStderrExposureAvailable": false,
+    "rawModelOutputExposureAvailable": false,
+    "secretValueExposureAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "gitMergeAvailable": false,
+    "gitPushAvailable": false,
+    "gitTagAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "publicDistributionClaimAvailable": false,
+    "notarizationClaimAvailable": false,
+    "autoUpdateClaimAvailable": false
+  },
+  "readOnly": true,
+  "willMutate": false
+}
