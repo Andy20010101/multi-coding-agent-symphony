@@ -31,6 +31,25 @@ Record docs-updated evidence in the task or closeout evidence file. Do not run `
 
 For v43 and later, do not assume this scoped gate set automatically continues. The active version plan or runbook must say whether it inherits the v37-v42 scoped gates unchanged or overrides them.
 
+For v60 Stable Personal Workbench Release, use `docs/plans/v60-stable-personal-workbench-release-runbook-2026-06-14.md` as the source of truth. Default local validation is:
+
+```sh
+pnpm workbench:build
+node --test tests/v60-stable-personal-workbench-release.test.js
+node --test tests/v59-release-publication-evidence.test.js tests/v59-release-publication-backend-projection.test.js
+node --test tests/v58-release-closeout-operator-handoff-pack.test.js tests/v58-release-closeout-backend-projection.test.js
+node --test tests/v57-review-gate-workbench-surface.test.js tests/v56-thread-continuation-reviewer-handoff-pack.test.js
+node --test tests/v55-codex-provider-run-recovery-reviewer-handoff.test.js tests/v54-codex-provider-execution-pilot.test.js
+node --test tests/v53-child-dispatch-preview.test.js tests/v52-system-golden-path.test.js
+node --test tests/v51-result-intake-evidence-escrow.test.js tests/v50-supervisor-event-registration-eligibility.test.js
+node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js tests/workbench-route-smoke.test.js
+pnpm check
+git diff --check
+git diff --cached --check
+```
+
+Run `pnpm test` before tagging unless the v60 closeout snapshot records why the focused suite is the accepted validation set for this release. The closeout must name the skipped full-suite reason, the focused commands run, and the remaining risk.
+
 Workbench release closeout records these command results as explicit release gate events. Use the release checklist row for each gate, attach the release evidence ref, preview the `symphony goal gate` dry-run plan, then confirm with the returned plan hash. The docs-updated and tag-evidence gates still require written evidence refs; Workbench does not infer them from changed filenames.
 
 For a scoped closeout, an operator may explicitly approve an incremental Stryker gate. Record the exact mutation ranges, test files, score, and break threshold. Before tagging a release, prefer the full `pnpm test:mutation:gate` unless the release owner accepts the recorded incremental gate as sufficient evidence.
@@ -71,7 +90,7 @@ Expected result:
 
 ## Optional Local CLI Help Smokes
 
-Run these only when validating installed CLI binaries:
+Run these only when validating installed CLI binaries. They are historical repository smokes, not v60 default release gates unless the active runbook asks for them:
 
 ```sh
 pnpm smoke:codex:help
@@ -81,7 +100,7 @@ pnpm smoke:kiro:help
 
 Expected result: help smokes verify local binaries only and must not invoke model APIs.
 
-For v41 controlled provider runner work, only `codex-cli` and `claude-code-cli` are active providers. The Kiro help smoke remains a historical optional repo-level check and is not a v41 active provider, runner target, or release gate.
+For v60 Workbench baseline work, only provider surfaces backed by current contracts, fixtures, and tests may be described as active. Kiro, Gemini, DeepSeek-as-a-provider, raw provider CLIs, and unsupported providers are not v60 active Workbench execution providers. Kiro help smoke remains a historical optional repo-level check, not a v60 release gate.
 
 ## Security Gates
 
@@ -96,7 +115,7 @@ Expected result: redaction, policy enforcement, and adapter permission mapping t
 
 ## Optional Real Model Gates
 
-Real model smokes are opt-in and must stay disabled unless the operator intentionally exports the gate variable:
+Real model smokes are opt-in and must stay disabled unless the operator intentionally exports the gate variable. They do not replace the v60 focused validation suite:
 
 ```sh
 MCAS_RUN_REAL_CODEX=1 MCAS_RUN_REAL_CLAUDE=1 MCAS_RUN_REAL_KIRO=1 \
@@ -112,7 +131,7 @@ Model precedence is `MCAS_*_MODEL` env, then `config/real-cli-release.json`, the
 For Claude real smoke, the proof artifact must show `requestedModelProfile`, `observedModelProfile`, and `modelProfileStatus`; `mismatched` means local Claude settings or provider aliases changed the model actually launched.
 The Harness smoke must execute the standard `implement -> review -> qa` chain and write `diagnosticLayer` on failure so the failing layer is one of `schema`, `prompt`, `workspace`, or `expected-check`.
 
-For v41 scoped closeout, do not use Kiro, Gemini, DeepSeek, or raw provider CLI commands as real CLI evidence. If v41 task evidence requires real provider CLI execution, it must run only through the controlled backend runner for `claude-code-cli` or `codex-cli` and must record sanitized evidence or an explicit blocker.
+For v60 scoped closeout, do not use Kiro, Gemini, DeepSeek-as-a-provider, unsupported providers, or raw provider CLI commands as active Workbench execution evidence. If a later scoped task needs provider evidence, it must run through the explicitly tested controlled contract for that version and record sanitized evidence or an explicit blocker.
 
 ## Optional CI Gate
 
@@ -131,3 +150,18 @@ Record:
 - Real smoke environment variables used.
 - Known risks and skipped gates.
 - Links to changed docs, tests, and artifacts.
+
+## Manual Publication Boundary
+
+Tagging and GitHub Release publication are controller actions outside product code. Workbench may show copy-only tag text, target commit, release note draft, release URL, and publication evidence. It must not run `git tag`, `git push`, `gh release create`, `gh release edit`, or `gh release upload`; it must not infer release readiness from branch names, filenames, tests, or UI state.
+
+For v60, the expected manual publication sequence after merge and validation is:
+
+```sh
+git tag -a v60 <target-commit> -m "v60: Stable Personal Workbench Baseline"
+git push origin v60
+gh release create v60 --title "v60" --notes-file <release-notes-file>
+gh release view v60 --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish
+```
+
+The release notes must not claim public distribution, notarization, auto-update, generic shell execution, unsupported provider support, renderer-side command execution, or release automation unless a later version proves those claims with tests and evidence.

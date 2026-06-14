@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-sym
 symphony doctor
 ```
 
-The installer writes shims to `~/.local/bin` by default. If the curl command returns `404`, confirm the repository is public and the requested tag exists. If `symphony` still is not found, add `~/.local/bin` to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`. The `v8` tag remains the stable installer baseline; use `MCAS_INSTALL_REF=v34` when you intentionally want the latest tagged release.
+The installer writes shims to `~/.local/bin` by default. If the curl command returns `404`, confirm the repository is public and the requested tag exists. If `symphony` still is not found, add `~/.local/bin` to `PATH` or rerun with `MCAS_BIN_DIR=<dir>` pointing at a directory already on `PATH`. The `v8` tag remains the stable installer baseline; use `MCAS_INSTALL_REF=v59` when you intentionally want the current tagged release.
 
 Development fallback:
 
@@ -65,6 +65,8 @@ MCAS_RUN_REAL_KIRO=1 MCAS_REAL_CLI_PROOF_DIR=tmp/real-cli-proofs pnpm smoke:kiro
 MCAS_RUN_REAL_CODEX=1 symphony work --real codex "inspect README"
 MCAS_RUN_REAL_CLAUDE=1 symphony agent claude /review --real
 ```
+
+For v60 release validation, real model smokes and Kiro smoke are optional historical repo checks unless the active runbook explicitly asks for them. Do not treat Kiro, Gemini, DeepSeek-as-a-provider, or raw provider CLI output as v60 active Workbench execution evidence.
 
 For Claude provider/model mismatches, set `MCAS_CLAUDE_MODEL=<provider-model>` or update `config/real-cli-release.json`. If `claude auth status` reports a different provider than the release config, align `MCAS_CLAUDE_PROVIDER`, the release config provider, or the Claude CLI auth provider before running real smoke. `doctor --real-cli` fails fast when Claude would fall back to the adapter default profile or the auth provider is inconsistent.
 

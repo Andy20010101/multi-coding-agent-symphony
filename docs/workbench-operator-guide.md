@@ -2,23 +2,23 @@
 
 ## 当前定位
 
-Workbench v1 是日常操作入口。`symphony console` 启动本地服务器后，操作者打开 `/workbench/desktop/` 或 `/workbench/`，按 v52 System Golden Path 检查 Project Launcher、App Home、Supervisor、Context Advisory、Result Intake、Event Preview / Confirm、Review / Gate 和 Closeout。
+Workbench v1 是日常操作入口。`symphony console` 启动本地服务器后，操作者打开 `/workbench/desktop/` 或 `/workbench/`，按 v52-v59 稳定基线检查 Project Launcher、App Home、Supervisor、Context Advisory、Result Intake、Event Preview / Confirm、Review / Gate、Closeout 和 Release Publication Evidence。
 
-当前仓库 release tag 是 `v51`。v51 已完成 tag 和 GitHub Release；`v52` tag/release 不存在。v52 当前位于 v51 Result Intake Evidence Escrow 之后、provider execution 之前，只做 read-model、Workbench visibility 和 acceptance。
+当前仓库 release tag 是 `v59`。v59 已完成 annotated tag 和 GitHub Release；`v60` tag/release 不存在。v60 是 Stable Personal Workbench Release，当前工作是把 v52-v59 的 Workbench 链路整理成可验收的本地基线，不新增执行面。
 
 当前 daily path：
 
 ```text
-Project Launcher -> App Home -> Supervisor -> Context Advisory -> Result Intake -> Event Preview / Confirm -> Review / Gate -> Closeout
+Project Launcher -> App Home -> Supervisor -> Context Advisory -> Result Intake -> Event Preview / Confirm -> Review / Gate -> Closeout -> Release Publication Evidence
 ```
 
-`v28` 发布 Workbench v1 的 v20-v28 完整链路；`v29` 到 `v32` 扩展 release-manager workspace；`v33` 到 `v40` 增加 runtime、Action Registry、Job Console、Artifact/Evidence、Desktop Shell、Provider Hub、backup/diagnostics/migration 和 workflow router；`v41` 到 `v46` 增加 controlled provider-runner backend evidence、supervisor runtime/stabilization、supervisor app read model、dashboard prototype、backend entrypoint decomposition 和 read-only supervisor dashboard；`v47` 到 `v51` 增加 App Home、Project Launcher、Context Advisory、Event Preview / Confirm 和 Result Intake Evidence Escrow。Workbench 继续把 goal/runbook 操作主线放在浏览器里，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
+`v28` 发布 Workbench v1 的 v20-v28 完整链路；`v29` 到 `v32` 扩展 release-manager workspace；`v33` 到 `v40` 增加 runtime、Action Registry、Job Console、Artifact/Evidence、Desktop Shell、Provider Hub、backup/diagnostics/migration 和 workflow router；`v41` 到 `v46` 增加 controlled provider-runner backend evidence、supervisor runtime/stabilization、supervisor app read model、dashboard prototype、backend entrypoint decomposition 和 read-only supervisor dashboard；`v47` 到 `v59` 增加 App Home、Project Launcher、Context Advisory、Event Preview / Confirm、Result Intake Evidence Escrow、System Golden Path、child dispatch preview、Codex provider execution preview、provider recovery、thread continuation、review gate、release closeout handoff 和 release publication evidence。Workbench 继续把 goal/runbook 操作主线放在浏览器里，同时保留 `symphony` CLI 作为脚本化、JSON 输出、CI 和受控 dry-run/confirm 的入口。
 
-Workbench 消费 console server 暴露的本地 API，用于查看 app runtime snapshot、active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、Job Console、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities、diagnostics、supervisor advisory、pending result 和 `systemGoldenPath.v1`。
+Workbench 消费 console server 暴露的本地 API，用于查看 app runtime snapshot、active goal runbook、task queue、next action、prompt preview、operation registry、review workspace、closeout gaps、release closeout、publication evidence、Job Console、`.symphony` 摘要、latest run、readiness、guided handoff、timeline、artifact refs、safe preview、adoption summary、Stage summary、v17 goal progress、v18 goal events、capabilities、diagnostics、supervisor advisory、pending result、`systemGoldenPath.v1`、review gate、thread continuation、provider recovery、release closeout handoff 和 release publication evidence。
 
 `symphony` CLI 是高级/脚本入口。需要 JSON 输出、CI 命令、dry-run/confirm 事件登记、兼容命令或低层诊断时，在终端运行 CLI；Workbench 只显示受控状态、表单和可复制命令。
 
-Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受控例外：浏览器可以请求 `symphony goal update/review/gate` 的 dry-run plan preview；确认时只能带同一组字段和 dry-run 返回的 `planHash` 调用匹配的 confirm path，向 managed goal event journal append 一个 event。v23 另外记录 Workbench goal operation registry，用于追踪 preview 和 confirm 的 operation id、status 与 timestamps，不把 registry 当成任务完成或审批证据。v29 的 implementation confirm 只接受 preview 返回的 plan context，确认后把 isolated workspace run 的结果、artifact refs、verifier summary 和失败原因写回同一个 operation registry。task-5 的 worker evidence handoff 从同一个 registry 读取已确认的 implementation run，预填 `worker.evidence-recorded` dry-run 表单和 prompt handoff，仍通过 `event-plan-preview` 与 `event-plan-confirm` 登记 worker evidence。v31 的 verification confirm 只接受 active goal/task 的固定 verification suite，运行结果写入 operation registry，显示状态、stdout/stderr 摘要、exit code 和 artifact refs；命令成功只是 operation evidence，不会自动登记 `main-verification` gate。Workbench 同页生成 main verification evidence draft，来源是 verification operation、goal/task/run refs、worker/review evidence refs 和 adoption refs；draft 只供 operator/reviewer 检查，不写文件、不读 evidence 正文、不登记 gate、不宣称 passed。draft ready 后，Workbench 会预填 `main.verification-passed` 的 `goal gate` 表单，仍必须先 dry-run，再用返回的 plan hash confirm。v32 的 release baseline resolver 读取 `/api/readiness` 暴露的 git/GitHub 命令输出，显示 current branch、main HEAD、origin/main、worktree cleanliness 和 PR/CI ref；dirty、非 main 或 main/origin 不一致时只显示 stop/fix guidance，并阻止 `release.ready` 表单。v32 的 release checklist 逐项列出 required release gates、copy-only validation command、latest explicit gate evidence ref，并为每个 gate 提供受控 `goal gate` dry-run / plan-hash confirm 表单。v32 的 release evidence draft 和 tag evidence draft 显示 release evidence ref、tag evidence ref、target commit、release notes summary、逐项 command/result 字段、tag recommendation 和 copy-only `git tag` command；这些字段只来自 closeout、release baseline resolver 和 event log，不写 evidence 文件，不运行 tag/push/publish。v32 的 next-version handoff draft 继续在 release closeout 内显示，从 closeout、release/tag evidence draft、event log、ledger、latest run 和 Workbench capability flags 生成 copy-only v33 起步上下文；它不创建 v33 goal，不进入下一版本，不读取 evidence 正文，不运行命令，不登记 release.ready。v39 的 App Data Inventory 只读取 `/api/app/data-inventory` 返回的 contract 字段，列出 registry、snapshot、job、artifact、settings、provider profile 和 evidence ref 的来源与边界；它不读取 evidence 正文、不打开本地文件、不执行 shell、不写入状态。v40 的 Inbox Capture 只读取 `/api/inbox/capture` 返回的 contract 字段，列出 raw request、project clue、idea、fault 四类入口和后续 router/goal draft handoff；它不持久化 capture item、不强制进入 Workbench goal、不执行 shell、不调用模型、不创建 job、不登记审批或 release gate。v50 的 event preview / confirm 仍走 existing goal event dry-run 和 plan-hash confirm；v51 的 result intake confirm 只写 evidence escrow 和 `pendingResult.v1`；v52 的 `systemGoldenPath.v1` 只汇总 readiness、blocked reason、source contract 和 next safe action，不运行 provider、不 dispatch child、不 compact transcript、不创建新 thread、不写 git、不 tag/publish。
+Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受控例外：浏览器可以请求 `symphony goal update/review/gate` 的 dry-run plan preview；确认时只能带同一组字段和 dry-run 返回的 `planHash` 调用匹配的 confirm path，向 managed goal event journal append 一个 event。v23 另外记录 Workbench goal operation registry，用于追踪 preview 和 confirm 的 operation id、status 与 timestamps，不把 registry 当成任务完成或审批证据。v29 的 implementation confirm 只接受 preview 返回的 plan context，确认后把 isolated workspace run 的结果、artifact refs、verifier summary 和失败原因写回同一个 operation registry。task-5 的 worker evidence handoff 从同一个 registry 读取已确认的 implementation run，预填 `worker.evidence-recorded` dry-run 表单和 prompt handoff，仍通过 `event-plan-preview` 与 `event-plan-confirm` 登记 worker evidence。v31 的 verification confirm 只接受 active goal/task 的固定 verification suite，运行结果写入 operation registry，显示状态、stdout/stderr 摘要、exit code 和 artifact refs；命令成功只是 operation evidence，不会自动登记 `main-verification` gate。Workbench 同页生成 main verification evidence draft，来源是 verification operation、goal/task/run refs、worker/review evidence refs 和 adoption refs；draft 只供 operator/reviewer 检查，不写文件、不读 evidence 正文、不登记 gate、不宣称 passed。draft ready 后，Workbench 会预填 `main.verification-passed` 的 `goal gate` 表单，仍必须先 dry-run，再用返回的 plan hash confirm。v32 的 release baseline resolver 读取 `/api/readiness` 暴露的 git/GitHub 命令输出，显示 current branch、main HEAD、origin/main、worktree cleanliness 和 PR/CI ref；dirty、非 main 或 main/origin 不一致时只显示 stop/fix guidance，并阻止 `release.ready` 表单。v32 的 release checklist 逐项列出 required release gates、copy-only validation command、latest explicit gate evidence ref，并为每个 gate 提供受控 `goal gate` dry-run / plan-hash confirm 表单。v32 的 release evidence draft 和 tag evidence draft 显示 release evidence ref、tag evidence ref、target commit、release notes summary、逐项 command/result 字段、tag recommendation 和 copy-only `git tag` command；这些字段只来自 closeout、release baseline resolver 和 event log，不写 evidence 文件，不运行 tag/push/publish。v32 的 next-version handoff draft 继续在 release closeout 内显示，从 closeout、release/tag evidence draft、event log、ledger、latest run 和 Workbench capability flags 生成 copy-only v33 起步上下文；它不创建 v33 goal，不进入下一版本，不读取 evidence 正文，不运行命令，不登记 release.ready。v39 的 App Data Inventory 只读取 `/api/app/data-inventory` 返回的 contract 字段，列出 registry、snapshot、job、artifact、settings、provider profile 和 evidence ref 的来源与边界；它不读取 evidence 正文、不打开本地文件、不执行 shell、不写入状态。v40 的 Inbox Capture 只读取 `/api/inbox/capture` 返回的 contract 字段，列出 raw request、project clue、idea、fault 四类入口和后续 router/goal draft handoff；它不持久化 capture item、不强制进入 Workbench goal、不执行 shell、不调用模型、不创建 job、不登记审批或 release gate。v50 的 event preview / confirm 仍走 existing goal event dry-run 和 plan-hash confirm；v51 的 result intake confirm 只写 evidence escrow 和 `pendingResult.v1`；v52 的 `systemGoldenPath.v1` 只汇总 readiness、blocked reason、source contract 和 next safe action；v53-v59 在这个基线上增加 child dispatch preview、Codex provider execution preview、provider recovery handoff、thread continuation pack、review gate、release closeout handoff 和 release publication evidence。v60 的稳定基线只整理这些状态和验收证据，不运行 provider、不 dispatch child、不 compact transcript、不创建新 thread、不读本地 session/transcript/provider 文件、不写 git、不 tag/push/publish、不创建 GitHub Release。
 
 - 浏览器只展示状态、contract 字段和可复制的命令文本。
 - 浏览器不执行 shell 命令，不写文件，不触发模型，不触发 agent。
@@ -27,7 +27,27 @@ Workbench 默认是 read-only / display-only / copy-only。v21 增加两个受�
 
 v18 增加 `goal-event-log.v1` 和 `goal-update-plan.v1`。v21 之前，`symphony goal update`、`symphony goal review`、`symphony goal gate` 的 dry-run / confirm 流程只在终端 CLI 中运行；Workbench 只展示后端已经写入的 event log 和 resolver 生成的 ledger。v21 后，Workbench 可以请求 dry-run 预览，并用 plan hash 完成受控 confirm。任何状态变化仍来自后端写入的 explicit event，不能由文件名、分支名、commit message 或前端判断替代。
 
-v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout` 和 `symphony next`。v20 到 v32 把 active goal runbook、task queue、prompt handoff、controlled event registration、review/revision、main verification、release closeout、release baseline、release checklist 和 next-version handoff 放到 Workbench 主路径。v33 到 v40 增加 Runtime、Action Registry、Job Console、Artifact/Evidence、Desktop Shell、Provider Hub、backup/diagnostics/migration 和 workflow router 视图；v41 到 v46 增加 supervisor backend/read-model/dashboard 路径；v47 到 v51 增加 App Home、Project Launcher、Context Advisory、Event Preview / Confirm 和 Result Intake；v52 把这些状态汇入 `systemGoldenPath.v1`。summary、runs、handoff、events、capabilities 和 diagnostics 是支撑信息。release-ready 仍需要显式登记 `symphony goal gate --gate release.ready --status declared`，不能从 Workbench 文案、文件名、分支或测试结果推断。
+v19 增加 Goal Runbook + Next Action Control Center 的实现草稿：`goal-runbook.v1`、`goal-next-action.v1`、`goal-prompt-pack.v1`、`goal-closeout-report.v1`、`symphony goal init`、`symphony goal next`、`symphony goal prompt`、`symphony goal closeout` 和 `symphony next`。v20 到 v32 把 active goal runbook、task queue、prompt handoff、controlled event registration、review/revision、main verification、release closeout、release baseline、release checklist 和 next-version handoff 放到 Workbench 主路径。v33 到 v40 增加 Runtime、Action Registry、Job Console、Artifact/Evidence、Desktop Shell、Provider Hub、backup/diagnostics/migration 和 workflow router 视图；v41 到 v46 增加 supervisor backend/read-model/dashboard 路径；v47 到 v59 增加 App Home、Project Launcher、Context Advisory、Event Preview / Confirm、Result Intake、System Golden Path、child dispatch preview、provider execution preview、provider recovery、thread continuation、review gate、release closeout handoff 和 release publication evidence。summary、runs、handoff、events、capabilities 和 diagnostics 是支撑信息。release-ready 仍需要显式登记 `symphony goal gate --gate release.ready --status declared`，不能从 Workbench 文案、文件名、分支或测试结果推断。
+
+## v60 稳定基线
+
+v60 验收看现有 Workbench 链路是否可解释、可恢复、可发布，不看新增执行能力。
+
+| 区域 | 当前基线 |
+| --- | --- |
+| Project entry | Project Launcher、current project binding 和 route health 只读展示。 |
+| Goal supervision | Active goal、next action、supervisor status 和 route provenance 由后端合同提供。 |
+| Context | Context Advisory 和 handoff pack 在需要复制时保持 copy-only。 |
+| Result intake | Result Intake preview/confirm 只写 evidence escrow 和 pending result。 |
+| Event registration | Event preview 和 planHash confirm 仍由后端 dry-run/confirm 拥有。 |
+| Child task planning | Child dispatch preview 只给 copy-only handoff，不创建 child thread 或 worktree。 |
+| Provider execution | Codex provider execution preview 和 recovery surface 只在已测试合同内有效。 |
+| Review and gates | Review gate、main gate 和 release gate 状态必须来自 explicit event 或合同字段。 |
+| Thread handoff | Thread continuation pack 只保留 bounded handoff，不暴露 raw transcript。 |
+| Release closeout | v58 handoff 和 v59 publication evidence 只读展示 tag/release 事实和边界。 |
+| Release | tag、push、publish、GitHub Release 仍是 controller 手动动作，不进产品代码。 |
+
+禁止项：unsupported provider claims、generic shell/terminal UI、renderer-side command execution、frontend local JSONL/session/provider folder reads、raw transcript/raw model output exposure、direct goal event append、direct task completion、git write/merge/push/tag/publish/GitHub Release automation、public distribution/notarization/auto-update claims、automatic worktree creation、automatic next-version goal creation。
 
 ## 日常操作路径
 
@@ -47,7 +67,7 @@ http://127.0.0.1:8765/workbench/
 Workbench v1 的当前主线：
 
 ```text
-Project Launcher -> App Home -> Supervisor -> Context Advisory -> Result Intake -> Event Preview / Confirm -> Review / Gate -> Closeout
+Project Launcher -> App Home -> Supervisor -> Context Advisory -> Result Intake -> Event Preview / Confirm -> Review / Gate -> Closeout -> Release Publication Evidence
 ```
 
 对应的 CLI spine 是：
@@ -62,13 +82,13 @@ goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal close
 
 ## v52 System Golden Path
 
-`systemGoldenPath.v1` 是 v52 的当前状态合同。它把 Project Launcher、App Home、Supervisor、Context Advisory、Result Intake、Event Preview / Confirm、Review / Gate 和 Closeout 投影成同一条 daily path。它的字段应能显示 step state、source contract、blocked reason、next safe action、route provenance 和 boundary flags。
+`systemGoldenPath.v1` 是 v52 引入的状态合同。它把 Project Launcher、App Home、Supervisor、Context Advisory、Result Intake、Event Preview / Confirm、Review / Gate 和 Closeout 投影成同一条 daily path。它的字段应能显示 step state、source contract、blocked reason、next safe action、route provenance 和 boundary flags。
 
 主要来源包括 `recent-projects.v1`、`current-project-binding.v1`、`app-state-snapshot.v1`、`goal-supervisor-app-read-model.v1`、`contextAdvisory.v1`、`pendingResult.v1`、`supervisorEventRegistrationEligibility.v1`、`goal-event-log.v1` 和 closeout contracts。缺字段时应显示 `missing`、`stale`、`degraded`、`blocked` 或 `manual-required`，不要从 branch、文件名、prompt、task title 或前端状态补推断。
 
 `review-gate` 默认是 `manual-required`，除非后续版本明确提供受控 review/gate surface。v52 不能把 provider health、pending result、event preview 成功、测试通过或 UI 渲染成功解释成 review approved、main verified、release ready 或 provider execution ready。
 
-v52 禁止项保持明确：provider execution、child dispatch、new thread 产品能力、transcript compact、generic terminal、前端读取 session/transcript/provider 文件、git write、merge、push、tag、publish、GitHub Release creation 和 release automation。
+v52 引入时的禁止项保持明确：provider execution、child dispatch、new thread 产品能力、transcript compact、generic terminal、前端读取 session/transcript/provider 文件、git write、merge、push、tag、publish、GitHub Release creation 和 release automation。后续版本只能在已有测试和 fixture 证明的受控合同内展示 provider execution preview、child dispatch preview 或 recovery state，不能扩展成 generic launcher。
 
 ## 构建 Workbench
 
