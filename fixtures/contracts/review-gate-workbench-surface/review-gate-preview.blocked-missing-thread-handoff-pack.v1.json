@@ -1,0 +1,260 @@
+{
+  "contractName": "reviewGatePreview.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-14T02:00:00.000Z",
+  "goal": {
+    "goalId": "v57-review-gate-workbench-surface",
+    "title": "v57 Review Gate Workbench Surface",
+    "state": "active",
+    "sourceContract": "threadHandoffPack.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "threadHandoffPack.v1"
+    }
+  },
+  "task": {
+    "taskId": "pr-1-contracts-fixtures-tests",
+    "title": "Contracts, fixtures, and tests",
+    "state": "active",
+    "sourceContract": "threadHandoffPack.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "threadHandoffPack.v1"
+    }
+  },
+  "sourceThreadHandoffPack": {
+    "contractName": "threadHandoffPack.v1",
+    "contractVersion": 1,
+    "state": "missing",
+    "blockedReasons": [
+      "missing-thread-handoff-pack"
+    ],
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "threadHandoffPack.v1"
+    }
+  },
+  "reviewReadiness": {
+    "state": "missing",
+    "eventFamily": "reviewer-verdict",
+    "eventType": "reviewer.approved",
+    "gateName": null,
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v57-reviewer-evidence-2026-06-14.md",
+        "label": "v57 reviewer evidence"
+      }
+    ],
+    "blockedReasons": [
+      "missing-thread-handoff-pack"
+    ],
+    "planHash": null,
+    "planHashState": "missing",
+    "previewHash": null,
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "reviewGatePreview.v1"
+    }
+  },
+  "mainGateReadiness": {
+    "state": "blocked",
+    "eventFamily": "main-gate",
+    "eventType": "main.verification-passed",
+    "gateName": "main-verification",
+    "evidenceRefs": [],
+    "blockedReasons": [
+      "missing-thread-handoff-pack",
+      "reviewer-verdict-not-ready",
+      "missing-main-gate-evidence"
+    ],
+    "planHash": null,
+    "planHashState": "missing",
+    "previewHash": null,
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "reviewGatePreview.v1"
+    }
+  },
+  "releaseGateReadiness": {
+    "state": "not-requested",
+    "eventFamily": "release-gate",
+    "eventType": "release.gate-passed",
+    "gateName": "release.validation",
+    "evidenceRefs": [],
+    "blockedReasons": [],
+    "planHash": null,
+    "planHashState": "not-required",
+    "previewHash": null,
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "reviewGatePreview.v1"
+    }
+  },
+  "blockedReasons": [
+    "missing-thread-handoff-pack"
+  ],
+  "requiredEvidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v57-reviewer-evidence-2026-06-14.md",
+      "label": "v57 reviewer evidence"
+    }
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "threadHandoffPack.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "source-thread-handoff-pack"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "threadHandoffPack.v1"
+      }
+    },
+    {
+      "contractName": "goal-event-log.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "review-and-gate-evidence"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "goal-event-log.v1"
+      }
+    },
+    {
+      "contractName": "goal-progress-ledger.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "review-and-gate-state"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "goal-progress-ledger.v1"
+      }
+    }
+  ],
+  "sourceEvidence": {
+    "contractName": "reviewGateSourceEvidence.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T02:00:00.000Z",
+    "threadHandoffPackRef": {
+      "kind": "contract",
+      "ref": "threadHandoffPack.v1"
+    },
+    "reviewerEvidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v57-reviewer-evidence-2026-06-14.md",
+        "label": "v57 reviewer evidence"
+      }
+    ],
+    "mainGateEvidenceRefs": [],
+    "releaseGateEvidenceRefs": [],
+    "sourceContracts": [
+      {
+        "contractName": "threadHandoffPack.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "source-thread-handoff-pack"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "threadHandoffPack.v1"
+        }
+      },
+      {
+        "contractName": "goal-event-log.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "review-and-gate-evidence"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "goal-event-log.v1"
+        }
+      },
+      {
+        "contractName": "goal-progress-ledger.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "review-and-gate-state"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "goal-progress-ledger.v1"
+        }
+      }
+    ],
+    "blockedReasons": [
+      "missing-thread-handoff-pack"
+    ],
+    "readOnly": true,
+    "willMutate": false
+  },
+  "confirmationPreviews": [],
+  "nextSafeAction": {
+    "actionId": "resolve-review-gate-preview-blockers",
+    "label": "Resolve review gate preview blockers",
+    "copyOnly": true,
+    "willMutate": false
+  },
+  "boundaryNotice": {
+    "contractName": "reviewGateBoundaryNotice.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T02:00:00.000Z",
+    "disabledCapabilities": [
+      "automaticReviewerVerdictAvailable",
+      "providerSelfApprovalAvailable",
+      "providerLaunchAvailable",
+      "directGoalEventAppendAvailable",
+      "directTaskCompleteAvailable",
+      "genericShellAvailable",
+      "mainVerificationMutationAvailable",
+      "releaseGateMutationAvailable",
+      "gitMutationAvailable",
+      "tagAutomationAvailable",
+      "publishAutomationAvailable"
+    ],
+    "boundaries": {
+      "automaticReviewerVerdictAvailable": false,
+      "providerSelfApprovalAvailable": false,
+      "providerLaunchAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "directTaskCompleteAvailable": false,
+      "genericShellAvailable": false,
+      "mainVerificationMutationAvailable": false,
+      "releaseGateMutationAvailable": false,
+      "gitMutationAvailable": false,
+      "tagAutomationAvailable": false,
+      "publishAutomationAvailable": false,
+      "controlledEventRegistrationAvailable": true
+    },
+    "readOnly": true,
+    "willMutate": false
+  },
+  "boundaries": {
+    "automaticReviewerVerdictAvailable": false,
+    "providerSelfApprovalAvailable": false,
+    "providerLaunchAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "genericShellAvailable": false,
+    "mainVerificationMutationAvailable": false,
+    "releaseGateMutationAvailable": false,
+    "gitMutationAvailable": false,
+    "tagAutomationAvailable": false,
+    "publishAutomationAvailable": false,
+    "controlledEventRegistrationAvailable": true
+  },
+  "readOnly": true,
+  "willMutate": false
+}
