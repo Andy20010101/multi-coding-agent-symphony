@@ -1,0 +1,239 @@
+{
+  "contractName": "releasePublicationEvidence.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-14T04:40:00.000Z",
+  "state": "ready",
+  "goal": {
+    "goalId": "v59-release-publication-evidence-and-next-start-audit",
+    "title": "v59 Release Publication Evidence and Next Start Audit",
+    "state": "active",
+    "sourceContract": "releaseCloseoutHandoffPack.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "releaseCloseoutHandoffPack.v1",
+      "label": "v58 closeout handoff source"
+    }
+  },
+  "sourceCloseoutHandoff": {
+    "contractName": "releaseCloseoutHandoffPack.v1",
+    "state": "ready",
+    "goalId": "v58-release-closeout-operator-handoff-pack",
+    "releaseTag": "v58",
+    "targetCommit": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "releaseCloseoutHandoffPack.v1",
+      "label": "release closeout handoff pack"
+    },
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-release-closeout-operator-handoff-pack-closeout-snapshot-2026-06-14.md",
+        "label": "v58 closeout snapshot"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v59-runbook-2026-06-14.md",
+        "label": "v59 runbook"
+      }
+    ],
+    "blockedReasons": []
+  },
+  "tagEvidence": {
+    "contractName": "tagPublicationEvidence.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T04:40:00.000Z",
+    "state": "ready",
+    "tagName": "v58",
+    "tagObjectSha": "d4046a05f8a5f44e998d2763ea3c11db4487401e",
+    "dereferencedCommit": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "targetCommit": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "annotated": true,
+    "sourceRefs": [
+      {
+        "kind": "git-tag",
+        "ref": "refs/tags/v58",
+        "label": "v58 annotated tag"
+      },
+      {
+        "kind": "git-tag",
+        "ref": "refs/tags/v58^{}",
+        "label": "v58 dereferenced tag commit"
+      },
+      {
+        "kind": "github-release",
+        "ref": "https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v58",
+        "label": "v58 GitHub Release"
+      },
+      {
+        "kind": "branch",
+        "ref": "origin/main",
+        "label": "origin/main"
+      },
+      {
+        "kind": "pr-list",
+        "ref": "open-prs-empty",
+        "label": "open PR list"
+      }
+    ],
+    "rollbackRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-rollback-path-2026-06-14.md",
+        "label": "v58 rollback path"
+      }
+    ],
+    "blockedReasons": [],
+    "readOnly": true,
+    "willMutate": false
+  },
+  "githubReleaseEvidence": {
+    "contractName": "githubReleasePublicationEvidence.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T04:40:00.000Z",
+    "state": "ready",
+    "tagName": "v58",
+    "name": "v58",
+    "url": "https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v58",
+    "isDraft": false,
+    "isPrerelease": false,
+    "publishedAt": "2026-06-14T02:26:15Z",
+    "assets": [],
+    "targetCommitish": "main",
+    "targetCommitMatches": true,
+    "sourceRefs": [
+      {
+        "kind": "git-tag",
+        "ref": "refs/tags/v58",
+        "label": "v58 annotated tag"
+      },
+      {
+        "kind": "git-tag",
+        "ref": "refs/tags/v58^{}",
+        "label": "v58 dereferenced tag commit"
+      },
+      {
+        "kind": "github-release",
+        "ref": "https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v58",
+        "label": "v58 GitHub Release"
+      },
+      {
+        "kind": "branch",
+        "ref": "origin/main",
+        "label": "origin/main"
+      },
+      {
+        "kind": "pr-list",
+        "ref": "open-prs-empty",
+        "label": "open PR list"
+      }
+    ],
+    "blockedReasons": [],
+    "readOnly": true,
+    "willMutate": false
+  },
+  "targetCommit": {
+    "state": "ready",
+    "expectedCommit": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "tagDereferencedCommit": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "releaseTargetCommitish": "main",
+    "matchesTag": true,
+    "matchesReleaseTarget": true,
+    "blockedReasons": []
+  },
+  "knownFacts": [
+    "main and origin/main are 7cedfbd8457f78f3f73fc91201a932d780119052",
+    "v58 annotated tag dereferences to 7cedfbd8457f78f3f73fc91201a932d780119052",
+    "v58 GitHub Release is non-draft, non-prerelease, and asset-free"
+  ],
+  "blockedReasons": [],
+  "nextVersionStartAudit": {
+    "contractName": "nextVersionStartAudit.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T04:40:00.000Z",
+    "state": "ready",
+    "currentVersion": "v58",
+    "nextVersion": "v59",
+    "nextRunbookRef": {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v59-runbook-2026-06-14.md",
+      "label": "v59 runbook"
+    },
+    "releaseEvidenceCommit": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "mainHead": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "originMainHead": "7cedfbd8457f78f3f73fc91201a932d780119052",
+    "openPrCount": 0,
+    "nextVersionGoalCreated": false,
+    "startAllowed": true,
+    "sourceRefs": [
+      {
+        "kind": "git-tag",
+        "ref": "refs/tags/v58",
+        "label": "v58 annotated tag"
+      },
+      {
+        "kind": "git-tag",
+        "ref": "refs/tags/v58^{}",
+        "label": "v58 dereferenced tag commit"
+      },
+      {
+        "kind": "github-release",
+        "ref": "https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v58",
+        "label": "v58 GitHub Release"
+      },
+      {
+        "kind": "branch",
+        "ref": "origin/main",
+        "label": "origin/main"
+      },
+      {
+        "kind": "pr-list",
+        "ref": "open-prs-empty",
+        "label": "open PR list"
+      }
+    ],
+    "blockedReasons": [],
+    "readOnly": true,
+    "willMutate": false
+  },
+  "publicationEvidenceBoundaryNotice": {
+    "contractName": "publicationEvidenceBoundaryNotice.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T04:40:00.000Z",
+    "message": "Publication evidence is read-only controller-supplied state; product code cannot expose tag, push, release publication, release edit, release readiness, goal event, task completion, provider, shell, worktree, or next-version goal controls.",
+    "boundaries": {
+      "readOnly": true,
+      "willMutate": false,
+      "gitTagAvailable": false,
+      "gitPushAvailable": false,
+      "githubReleaseCreateAvailable": false,
+      "githubReleaseEditAvailable": false,
+      "releaseReadyDeclarationAvailable": false,
+      "providerLaunchAvailable": false,
+      "shellAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "directTaskCompleteAvailable": false,
+      "automaticWorktreeCreationAvailable": false,
+      "automaticNextVersionGoalAvailable": false
+    },
+    "readOnly": true,
+    "willMutate": false
+  },
+  "boundaries": {
+    "readOnly": true,
+    "willMutate": false,
+    "gitTagAvailable": false,
+    "gitPushAvailable": false,
+    "githubReleaseCreateAvailable": false,
+    "githubReleaseEditAvailable": false,
+    "releaseReadyDeclarationAvailable": false,
+    "providerLaunchAvailable": false,
+    "shellAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false
+  },
+  "readOnly": true,
+  "willMutate": false
+}
