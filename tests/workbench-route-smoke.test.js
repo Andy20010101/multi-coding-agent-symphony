@@ -44,6 +44,9 @@ import {
   validateAppCoreDiagnosticsBundleContract
 } from '../src/symphony/app-core-diagnostics-bundle.js';
 import {
+  INSTALL_STATUS_CONTRACT_NAME
+} from '../src/symphony/installer-upgrade-baseline.js';
+import {
   DEFAULT_GOAL_PROGRESS_GOAL_ID,
   V18_GOAL_EVENT_JOURNAL_GOAL_ID,
   validateGoalProgressLedgerContract
@@ -541,6 +544,19 @@ describe('v16 Workbench route smoke and server parity', () => {
             assert.equal(payload.boundaries.includesRawLogBodies, false);
             assert.equal(payload.boundaries.shellExecutionAvailable, false);
           }
+        },
+        {
+          path: '/api/install/status',
+          contractName: INSTALL_STATUS_CONTRACT_NAME,
+          assertPayload(payload) {
+            assert.equal(payload.readOnly, true);
+            assert.equal(payload.willMutate, false);
+            assert.equal(payload.target.ref, 'v8');
+            assert.equal(payload.boundaries.networkFetchAvailable, false);
+            assert.equal(payload.boundaries.checkoutAvailable, false);
+            assert.equal(payload.boundaries.dependencyInstallAvailable, false);
+            assert.equal(payload.boundaries.rendererNetworkFetchAvailable, false);
+          }
         }
       ];
 
@@ -656,6 +672,7 @@ describe('v16 Workbench route smoke and server parity', () => {
         '/api/workflow/router-categories',
         '/api/diagnostics',
         '/api/diagnostics/bundle',
+        '/api/install/status',
         `/api/runs/${ROUTE_SMOKE_RUN_ID}/artifacts/summary/preview`
       ];
       const methods = ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'];
@@ -720,6 +737,34 @@ describe('v16 Workbench route smoke and server parity', () => {
           /multi-coding-agent-symphony|lockfileVersion|createSymphonyConsoleServer/u,
           probe.path
         );
+      }
+
+      const after = await collectTextFileSnapshot(context.stateDir);
+
+      assert.deepEqual(after, before);
+    } finally {
+      await cleanupConsoleServer(context);
+    }
+  });
+
+  it('rejects install status query probes without writing state', async () => {
+    const context = await startConsoleServer();
+
+    try {
+      const before = await collectTextFileSnapshot(context.stateDir);
+      const probes = [
+        '/api/install/status?installDir=/tmp/mcas',
+        '/api/install/status?path=package.json',
+        '/api/install/status?target=v61'
+      ];
+
+      for (const path of probes) {
+        const response = await fetch(`${context.baseUrl}${path}`);
+        const envelope = await response.json();
+
+        assert.equal(response.status, 400, path);
+        assert.equal(envelope.contractName, 'error-envelope.v1');
+        assert.equal(envelope.error.code, 'invalid-install-status-request');
       }
 
       const after = await collectTextFileSnapshot(context.stateDir);

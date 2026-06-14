@@ -54,6 +54,18 @@ The installer does not provide public distribution, notarization, auto-update, b
 
 If the install directory is a git checkout with local changes, the installer stops before checkout. Resolve the local changes or use a different `MCAS_INSTALL_DIR`.
 
+## Status check
+
+Use the CLI status contract before deciding whether to install, upgrade, or rollback:
+
+```sh
+symphony install status --json
+```
+
+`installStatus.v1` reports the install directory, git checkout state, dirty flag, current ref, target ref, shim paths, and `symphony doctor` command text. It is read-only: it does not fetch, checkout, install dependencies, overwrite files, run doctor, or publish a GitHub Release.
+
+Workbench reads the same status through `GET /api/install/status`. The route accepts no query parameters and does not let the renderer choose local paths or execute commands.
+
 ## Development checkout
 
 For a development checkout, do not use the global installer path as the working tree. Clone or use the repository directly:
@@ -66,3 +78,5 @@ pnpm symphony console
 ```
 
 Use the installer for a user-level CLI shim. Use the development checkout for code edits, PR work, and release validation.
+
+Upgrade and rollback steps are in [Upgrade Guide](upgrade-guide.md).

@@ -134,7 +134,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/release/app-core-manager', 'app-core-release-manager.v1'],
         ['GET', '/api/bundle', 'evidence-bundle.v1'],
         ['GET', '/api/backup/export', 'app-core-backup-export.v1'],
-        ['GET', '/api/restore/validate', 'app-core-restore-validation.v1']
+        ['GET', '/api/restore/validate', 'app-core-restore-validation.v1'],
+        ['GET', '/api/install/status', 'installStatus.v1']
       ]
     );
     assert.deepEqual(
@@ -184,6 +185,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/bundle', 'evidence-bundle.v1'],
         ['GET', '/api/backup/export', 'app-core-backup-export.v1'],
         ['GET', '/api/restore/validate', 'app-core-restore-validation.v1'],
+        ['GET', '/api/install/status', 'installStatus.v1'],
         ['GET', '/api/adoptions/<adoption-id>/inspect', 'symphony.console-adoption-inspect'],
         ['GET', '/api/goals/<goal-id>/events', 'goal-event-log.v1'],
         ['GET', '/api/goals/<goal-id>/operations', 'goal-operation-runs.v1'],
@@ -1285,7 +1287,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.jobRun.boundaries.arbitraryCommandExecutionAvailable.value, false);
     assert.equal(model.artifactIndex.contractName.text, 'artifact-index.v1');
     assert.equal(model.artifactIndex.entries.count.value, 2);
-    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-restore-validation.v1 + app-core-diagnostics-bundle.v1');
+    assert.equal(model.desktopShell.artifactReadiness.sourcePolicy.text, 'artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-restore-validation.v1 + installStatus.v1 + app-core-diagnostics-bundle.v1');
     assert.equal(model.desktopShell.artifactReadiness.status.text, 'partial');
     assert.equal(model.desktopShell.artifactReadiness.missing.value, 1);
     assert.equal(model.desktopShell.artifactReadiness.safePreviewRoutes.value, 1);
@@ -8249,6 +8251,65 @@ function createV17ReadonlyPayloadEntries({
         restoreMode: 'validate-only'
       },
       status: 'valid'
+    }],
+    ['/api/install/status', {
+      contractName: 'installStatus.v1',
+      contractVersion: 1,
+      generatedAt: '2026-06-14T18:00:00.000Z',
+      state: 'ready',
+      installDir: {
+        path: '/tmp/mcas',
+        exists: true,
+        isGitCheckout: true,
+        dirty: false,
+        topLevel: '/tmp/mcas'
+      },
+      repository: {
+        slug: 'Andy20010101/multi-coding-agent-symphony',
+        url: 'https://github.com/Andy20010101/multi-coding-agent-symphony.git',
+        originUrl: 'https://github.com/Andy20010101/multi-coding-agent-symphony.git'
+      },
+      current: {
+        ref: 'v61',
+        commit: 'd2cfff816b0111140b3e5e11fb819f60cc0c4911'
+      },
+      target: {
+        ref: 'v61',
+        availableLocally: true
+      },
+      binaryDir: {
+        path: '/tmp/bin'
+      },
+      shims: {
+        symphony: {
+          path: '/tmp/bin/symphony',
+          exists: true
+        },
+        mcas: {
+          path: '/tmp/bin/mcas',
+          exists: true
+        }
+      },
+      doctor: {
+        status: 'available-not-run',
+        commandText: '/tmp/bin/symphony doctor',
+        copyOnly: true,
+        willRun: false
+      },
+      blockedReasons: [],
+      boundaries: {
+        readOnly: true,
+        willMutate: false,
+        networkFetchAvailable: false,
+        checkoutAvailable: false,
+        dependencyInstallAvailable: false,
+        overwriteAvailable: false,
+        rendererNetworkFetchAvailable: false,
+        workbenchExecutionAvailable: false,
+        gitReleaseAutomationAvailable: false
+      },
+      readOnly: true,
+      willMutate: false
     }]
   ];
 }
