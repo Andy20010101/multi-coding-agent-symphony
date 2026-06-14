@@ -371,6 +371,13 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, /inert text only/u);
       assert.match(desktopHtml, /backend unavailable/u);
       assert.match(desktopHtml, /sidecar missing/u);
+      assert.match(desktopHtml, /sidecar launchable/u);
+      assert.match(desktopHtml, /sidecar launching/u);
+      assert.match(desktopHtml, /sidecar failed/u);
+      assert.match(desktopHtml, /sidecar wrong port/u);
+      assert.match(desktopHtml, /sidecar port conflict/u);
+      assert.match(desktopHtml, /sidecar stale/u);
+      assert.match(desktopHtml, /sidecar unavailable/u);
       assert.match(desktopHtml, /project missing/u);
       assert.match(desktopHtml, /active goal missing/u);
       assert.match(desktopHtml, /supervisor model unavailable/u);
@@ -387,6 +394,11 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, /project registry/u);
       assert.match(desktopHtml, /Projects/u);
       assert.match(desktopHtml, /sidecar health/u);
+      assert.match(desktopHtml, />launch states</u);
+      assert.match(desktopHtml, />allowed hosts</u);
+      assert.match(desktopHtml, />allowed port min</u);
+      assert.match(desktopHtml, />allowed port max</u);
+      assert.match(desktopHtml, /renderer does not execute shell commands/u);
       assert.match(desktopHtml, /Active Goal/u);
       assert.match(desktopHtml, /Next Action/u);
       assert.match(desktopHtml, /Run health/u);

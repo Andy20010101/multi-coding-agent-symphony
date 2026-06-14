@@ -2549,6 +2549,13 @@ function DesktopAppStateStrip({ appStates }) {
     ['binding missing', appStates?.bindingMissing],
     ['backend unavailable', appStates?.backendUnavailable],
     ['sidecar missing', appStates?.sidecarMissing],
+    ['sidecar launchable', appStates?.sidecarLaunchable],
+    ['sidecar launching', appStates?.sidecarLaunching],
+    ['sidecar failed', appStates?.sidecarFailed],
+    ['sidecar wrong port', appStates?.sidecarWrongPort],
+    ['sidecar port conflict', appStates?.sidecarPortConflict],
+    ['sidecar stale', appStates?.sidecarStale],
+    ['sidecar unavailable', appStates?.sidecarUnavailable],
     ['project missing', appStates?.projectMissing],
     ['active goal missing', appStates?.activeGoalMissing],
     ['supervisor model unavailable', appStates?.supervisorModelUnavailable],
@@ -2712,11 +2719,20 @@ function DesktopSidecarCard({ sidecarHealth }) {
       <FieldList rows={[
         ['status', sidecarHealth?.status],
         ['attach', sidecarHealth?.attachState],
+        ['lifecycle', sidecarHealth?.lifecycle],
+        ['endpoint', sidecarHealth?.endpoint],
+        ['process id', sidecarHealth?.processId],
         ['launcher', sidecarHealth?.launcherState],
         ['launcher command id', sidecarHealth?.launcherCommandId],
+        ['native host required', sidecarHealth?.nativeHostRequired],
+        ['allowed hosts', sidecarHealth?.allowedHosts],
+        ['allowed port min', sidecarHealth?.allowedPortRange?.min],
+        ['allowed port max', sidecarHealth?.allowedPortRange?.max],
+        ['launch states', sidecarHealth?.failureSummary],
         ['fixed launcher contract', sidecarHealth?.fixedLauncherContract],
         ['renderer launch', sidecarHealth?.rendererLaunchAvailable],
-        ['bridge', sidecarHealth?.launcherHandoff]
+        ['bridge', sidecarHealth?.launcherHandoff],
+        ['recovery', sidecarHealth?.recovery]
       ]} />
     </article>
   );
