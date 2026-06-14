@@ -1331,6 +1331,7 @@ h4 {
 .thread-handoff-pack-panel,
 .review-gate-workbench-panel,
 .release-closeout-handoff-panel,
+.release-publication-evidence-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
@@ -1638,7 +1639,8 @@ h4 {
 .reviewer-handoff-preview-panel,
 .thread-handoff-pack-panel,
 .review-gate-workbench-panel,
-.release-closeout-handoff-panel {
+.release-closeout-handoff-panel,
+.release-publication-evidence-panel {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
@@ -1652,6 +1654,7 @@ h4 {
 .thread-handoff-pack-header,
 .review-gate-workbench-header,
 .release-closeout-handoff-header,
+.release-publication-evidence-header,
 .system-golden-path-step-header {
   display: flex;
   flex-wrap: wrap;
@@ -1667,7 +1670,8 @@ h4 {
 .reviewer-handoff-preview-header,
 .thread-handoff-pack-header,
 .review-gate-workbench-header,
-.release-closeout-handoff-header {
+.release-closeout-handoff-header,
+.release-publication-evidence-header {
   border-bottom: 1px solid var(--dsk-line-soft);
   padding-bottom: 8px;
 }
@@ -1680,6 +1684,7 @@ h4 {
 .thread-handoff-pack-header h2,
 .review-gate-workbench-header h2,
 .release-closeout-handoff-header h2,
+.release-publication-evidence-header h2,
 .system-golden-path-step-header h3 {
   margin: 0;
   color: var(--dsk-fg);
@@ -1695,7 +1700,8 @@ h4 {
 .reviewer-handoff-preview-header h2,
 .thread-handoff-pack-header h2,
 .review-gate-workbench-header h2,
-.release-closeout-handoff-header h2 {
+.release-closeout-handoff-header h2,
+.release-publication-evidence-header h2 {
   font-size: 18px;
 }
 
@@ -1721,6 +1727,7 @@ h4 {
 .thread-handoff-pack-summary,
 .review-gate-workbench-summary,
 .release-closeout-handoff-summary,
+.release-publication-evidence-summary,
 .release-closeout-checklist-grid,
 .review-gate-confirmation-grid {
   display: grid;
@@ -3987,6 +3994,7 @@ h4 {
   .system-golden-path-summary,
   .review-gate-workbench-summary,
   .release-closeout-handoff-summary,
+  .release-publication-evidence-summary,
   .release-closeout-checklist-grid,
   .review-gate-confirmation-grid,
   .desktop-app-state-list,
@@ -4005,6 +4013,7 @@ h4 {
   .system-golden-path-panel,
   .review-gate-workbench-panel,
   .release-closeout-handoff-panel,
+  .release-publication-evidence-panel,
   .desktop-topbar {
     padding: 10px;
   }

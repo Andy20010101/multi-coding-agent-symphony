@@ -1446,12 +1446,16 @@ describe('v15 Workbench read-only API client', () => {
     const releaseCloseoutHandoffPack = JSON.parse(
       await readFile('fixtures/contracts/release-closeout-handoff-pack/release-closeout-handoff-pack.ready.v1.json', 'utf8')
     );
+    const releasePublicationEvidence = JSON.parse(
+      await readFile('fixtures/contracts/release-publication-evidence/release-publication-evidence.ready.v1.json', 'utf8')
+    );
     const supervisor = {
       ...createGoalSupervisorAppReadModelPayload(),
       codexProviderRunRecovery,
       reviewerHandoffPreview,
       threadHandoffPack,
-      releaseCloseoutHandoffPack
+      releaseCloseoutHandoffPack,
+      releasePublicationEvidence
     };
     const model = projectWorkbenchContracts({
       goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
@@ -1460,6 +1464,7 @@ describe('v15 Workbench read-only API client', () => {
     const handoff = model.reviewerHandoffPreview;
     const threadPack = model.threadHandoffPack;
     const releaseHandoff = model.releaseCloseoutHandoffPack;
+    const publicationEvidence = model.releasePublicationEvidence;
 
     assert.equal(recovery.contractName.text, 'codexProviderRunRecovery.v1');
     assert.equal(recovery.state, 'ready-for-reviewer-handoff');
@@ -1534,6 +1539,34 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(releaseHandoff.boundaries.directGoalEventAppendAvailable.value, false);
     assert.equal(releaseHandoff.boundaries.automaticNextVersionGoalAvailable.value, false);
     assert.equal(model.desktopShell.releaseCloseoutHandoffPack.contractName.text, 'releaseCloseoutHandoffPack.v1');
+
+    assert.equal(publicationEvidence.contractName.text, 'releasePublicationEvidence.v1');
+    assert.equal(publicationEvidence.state, 'ready');
+    assert.equal(publicationEvidence.readOnly.value, true);
+    assert.equal(publicationEvidence.willMutate.value, false);
+    assert.equal(publicationEvidence.sourceCloseoutHandoff.releaseTag.text, 'v58');
+    assert.equal(publicationEvidence.tagEvidence.tagObjectSha.text, 'd4046a05f8a5f44e998d2763ea3c11db4487401e');
+    assert.equal(publicationEvidence.tagEvidence.dereferencedCommit.text, '7cedfbd8457f78f3f73fc91201a932d780119052');
+    assert.equal(publicationEvidence.githubReleaseEvidence.url.text, 'https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v58');
+    assert.equal(publicationEvidence.githubReleaseEvidence.isDraft.value, false);
+    assert.equal(publicationEvidence.githubReleaseEvidence.isPrerelease.value, false);
+    assert.equal(publicationEvidence.githubReleaseEvidence.assets.count.value, 0);
+    assert.equal(publicationEvidence.targetCommit.matchesTag.value, true);
+    assert.equal(publicationEvidence.targetCommit.matchesReleaseTarget.value, true);
+    assert.equal(publicationEvidence.nextVersionStartAudit.nextVersion.text, 'v59');
+    assert.equal(publicationEvidence.nextVersionStartAudit.nextRunbookRef.ref.text, 'docs/plans/v59-runbook-2026-06-14.md');
+    assert.equal(publicationEvidence.nextVersionStartAudit.startAllowed.value, true);
+    assert.equal(publicationEvidence.boundaries.gitTagAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.gitPushAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.githubReleaseCreateAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.githubReleaseEditAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.providerLaunchAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.shellAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.directGoalEventAppendAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.directTaskCompleteAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.automaticWorktreeCreationAvailable.value, false);
+    assert.equal(publicationEvidence.boundaries.automaticNextVersionGoalAvailable.value, false);
+    assert.equal(model.desktopShell.releasePublicationEvidence.contractName.text, 'releasePublicationEvidence.v1');
   });
 
   it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {
