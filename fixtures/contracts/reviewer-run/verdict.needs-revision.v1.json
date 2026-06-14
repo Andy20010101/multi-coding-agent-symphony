@@ -1,0 +1,95 @@
+{
+  "contractName": "reviewerRunVerdict.v1",
+  "contractVersion": 1,
+  "verdictId": "reviewer-verdict-v67-pr1-needs-revision",
+  "goalId": "v67-claude-code-reviewer-lane",
+  "taskId": "pr-1-reviewer-run-contracts",
+  "providerId": "claude-code-cli",
+  "role": "reviewer",
+  "commandTemplateId": "claude-code-reviewer-controlled-v1",
+  "handoffPlanHash": "sha256:28ba09dd976ca48d9bb783a9c62371a0b63103a07ebc244f9f7c7d0c606b7bef",
+  "handoffPackRef": "artifact-ref:v67:pr-1-reviewer-handoff-pack",
+  "reviewerActorId": "claude-reviewer-v67",
+  "workerActorId": "codex-worker-v66",
+  "startedAt": "2026-06-15T05:13:00.000Z",
+  "finishedAt": "2026-06-15T05:14:00.000Z",
+  "status": "needs-revision",
+  "adapter": "fake-claude-reviewer",
+  "realClaudeSmokeOptIn": false,
+  "sanitizedVerdict": {
+    "summary": "Fake Claude reviewer requested a bounded worker revision.",
+    "findings": [
+      {
+        "severity": "major",
+        "file": "src/symphony/reviewer-run-contracts.js",
+        "line": 42,
+        "statement": "Reviewer handoff must reject self-review before confirmation.",
+        "recommendation": "Keep reviewerActorId different from workerActorId in the handoff pack."
+      }
+    ],
+    "validationCommands": [
+      "node --test tests/v67-claude-code-reviewer-lane.test.js"
+    ],
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/qa/v67-claude-code-reviewer-lane-acceptance.md",
+        "label": "v67 revision evidence"
+      }
+    ],
+    "risks": [],
+    "blockers": [],
+    "revisionSummary": "Copy the finding into the next controlled worker handoff."
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/qa/v67-claude-code-reviewer-lane-acceptance.md",
+      "label": "v67 revision evidence"
+    }
+  ],
+  "nextState": {
+    "reviewVerdict": "needs-revision",
+    "reviewEvidenceRecorded": true,
+    "reviewApproved": false,
+    "revisionRequired": true,
+    "blocked": false,
+    "taskCompleted": false,
+    "adoptionReady": false,
+    "mainVerified": false,
+    "releaseReady": false
+  },
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "fixedProviderId": "claude-code-cli",
+    "fixedRole": "reviewer",
+    "fixedCommandTemplateId": "claude-code-reviewer-controlled-v1",
+    "rendererSuppliedCommandAvailable": false,
+    "freeformProviderCommandAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawWorkerTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "reviewerReadsRawWorkerTranscript": false,
+    "reviewerReadsRawModelOutput": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "reviewerOutputCompletesTask": false,
+    "reviewerOutputApprovesAdoption": false,
+    "reviewerVerdictPassesMainVerification": false,
+    "reviewerVerdictMarksReleaseReady": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "writesMainWorktree": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "realClaudeRequiresOptIn": true
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "contractName": "reviewerRunHandoff.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T05:10:00.000Z",
+  "state": "blocked",
+  "goal": {
+    "goalId": "v67-claude-code-reviewer-lane",
+    "title": "v67 Claude Code Reviewer Lane",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v67"
+  },
+  "task": {
+    "taskId": "pr-1-reviewer-run-contracts",
+    "title": "Reviewer handoff and verdict contracts",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v67:pr-1"
+  },
+  "provider": {
+    "providerId": "claude-code-cli",
+    "role": "reviewer",
+    "lane": "claude-code-reviewer-candidate",
+    "readinessState": "ready",
+    "sourceContract": "providerReadiness.v1",
+    "sourceRef": "fixtures/contracts/provider-readiness/provider-readiness.both-ready.v1.json"
+  },
+  "reviewerIdentity": {
+    "reviewerActorId": "claude-reviewer-v67",
+    "sourceContract": "operator-reviewer-identity.v1",
+    "sourceRef": "operator-reviewer:claude-reviewer-v67"
+  },
+  "commandTemplate": {
+    "templateId": "claude-code-reviewer-controlled-v1",
+    "providerId": "claude-code-cli",
+    "role": "reviewer",
+    "commandFamily": "claude-code-review",
+    "fixed": true,
+    "acceptsFreeformCommand": false,
+    "rendererSuppliedCommandAvailable": false,
+    "sourceRef": "src/symphony/reviewer-run-contracts.js"
+  },
+  "timeoutMs": 900000,
+  "handoffPackRef": "artifact-ref:v67:missing-worker-evidence-handoff-pack",
+  "workerEvidence": {
+    "state": "missing",
+    "sourceContract": "workerRunResult.v1",
+    "sourceRef": "fixtures/contracts/worker-run/result.sanitized-success.v1.json",
+    "workerRunId": "missing-worker-run",
+    "workerProviderId": "codex-cli",
+    "workerRole": "worker",
+    "workerActorId": "codex-worker",
+    "taskState": "missing",
+    "reviewRequired": false,
+    "taskCompleted": false,
+    "reviewApproved": false,
+    "mainVerified": false,
+    "releaseReady": false,
+    "summary": "Worker evidence is available for review.",
+    "changedFiles": [],
+    "validationCommands": [],
+    "artifactRefs": [],
+    "evidenceRefs": []
+  },
+  "reviewPolicy": {
+    "requiresIndependentReviewer": true,
+    "allowedVerdicts": [
+      "approved",
+      "needs-revision",
+      "blocked"
+    ],
+    "verdictCompletesTask": false,
+    "adoptionAvailable": false,
+    "mainVerificationAvailable": false,
+    "releaseReadinessAvailable": false
+  },
+  "confirmation": {
+    "requiresPlanHash": true,
+    "requiredFields": [
+      "planHash",
+      "goalId",
+      "taskId",
+      "providerId",
+      "role",
+      "commandTemplateId",
+      "handoffPackRef",
+      "reviewerActorId"
+    ],
+    "providerId": "claude-code-cli",
+    "role": "reviewer",
+    "commandTemplateId": "claude-code-reviewer-controlled-v1",
+    "timeoutMs": 900000,
+    "handoffPackRef": "artifact-ref:v67:missing-worker-evidence-handoff-pack"
+  },
+  "blockedReasons": [
+    "worker-evidence-missing",
+    "worker-evidence-not-needs-review",
+    "worker-evidence-review-not-required"
+  ],
+  "sourceContracts": [
+    {
+      "contractName": "goal-next-action.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "active-goal",
+        "active-task"
+      ],
+      "sourceRef": "goal-next-action.v1"
+    },
+    {
+      "contractName": "providerReadiness.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "claude-code-cli-readiness"
+      ],
+      "sourceRef": "providerReadiness.v1"
+    },
+    {
+      "contractName": "workerRunResult.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "sanitized-worker-evidence"
+      ],
+      "sourceRef": "workerRunResult.v1"
+    }
+  ],
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "fixedProviderId": "claude-code-cli",
+    "fixedRole": "reviewer",
+    "fixedCommandTemplateId": "claude-code-reviewer-controlled-v1",
+    "rendererSuppliedCommandAvailable": false,
+    "freeformProviderCommandAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawWorkerTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "reviewerReadsRawWorkerTranscript": false,
+    "reviewerReadsRawModelOutput": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "reviewerOutputCompletesTask": false,
+    "reviewerOutputApprovesAdoption": false,
+    "reviewerVerdictPassesMainVerification": false,
+    "reviewerVerdictMarksReleaseReady": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "writesMainWorktree": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "realClaudeRequiresOptIn": true
+  },
+  "planHash": "sha256:c2f9385fb67852c9d2b9acc9a4ee5ee3e23fc6bdcee7385246fd708fe120ac03"
+}
