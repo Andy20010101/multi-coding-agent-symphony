@@ -54,6 +54,10 @@ import {
   validateReviewGatePreviewContract
 } from '../review-gate-workbench-surface-contracts.js';
 import {
+  buildReleaseCloseoutHandoffPack,
+  validateReleaseCloseoutHandoffPackContract
+} from '../release-closeout-handoff-pack-contracts.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -130,6 +134,7 @@ export function buildGoalSupervisorAppReadModel({
   reviewGateTarget = null,
   reviewGateOperatorId = null,
   reviewGatePlanHash = null,
+  releaseCloseout = null,
   goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
@@ -301,6 +306,15 @@ export function buildGoalSupervisorAppReadModel({
     operatorId: reviewGateOperatorId,
     planHash: reviewGatePlanHash
   });
+  const releaseCloseoutHandoffPack = buildGoalSupervisorReleaseCloseoutHandoffPack({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    reviewGatePreview,
+    reviewGateConfirmationState,
+    goalCloseout,
+    releaseCloseout
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -343,7 +357,8 @@ export function buildGoalSupervisorAppReadModel({
     reviewerHandoffPreview,
     threadHandoffPack,
     reviewGatePreview,
-    reviewGateConfirmationState
+    reviewGateConfirmationState,
+    releaseCloseoutHandoffPack
   };
 }
 
@@ -540,6 +555,167 @@ function buildGoalSupervisorReviewGateConfirmationState({
   }
 
   return confirmationState;
+}
+
+function buildGoalSupervisorReleaseCloseoutHandoffPack({
+  generatedAt,
+  goalId,
+  title,
+  reviewGatePreview,
+  reviewGateConfirmationState,
+  goalCloseout,
+  releaseCloseout
+}) {
+  const config = isPlainObject(releaseCloseout) ? releaseCloseout : {};
+  const blockedReasons = [];
+  const pack = buildReleaseCloseoutHandoffPack({
+    generatedAt,
+    goal: releaseCloseoutGoal({
+      goalId,
+      title
+    }),
+    reviewGatePreview,
+    reviewGateConfirmationState,
+    closeoutReport: isPlainObject(goalCloseout) ? goalCloseout : null,
+    releaseBaseline: config.releaseBaseline ?? config.baseline ?? null,
+    targetCommit: config.targetCommit ?? null,
+    expectedTargetCommit: config.expectedTargetCommit ?? null,
+    releaseTag: config.releaseTag ?? config.tag ?? null,
+    releaseTitle: config.releaseTitle ?? config.title ?? null,
+    reviewerEvidenceRefs: releaseCloseoutEvidenceRefs({
+      explicitRefs: config.reviewerEvidenceRefs,
+      fallbackRefs: reviewGatePreview?.sourceEvidence?.reviewerEvidenceRefs ?? reviewGatePreview?.reviewReadiness?.evidenceRefs,
+      blockedReasons,
+      reason: 'unsafe-reviewer-evidence-ref'
+    }),
+    mainGateEvidenceRefs: releaseCloseoutEvidenceRefs({
+      explicitRefs: config.mainGateEvidenceRefs,
+      fallbackRefs: reviewGatePreview?.sourceEvidence?.mainGateEvidenceRefs ?? reviewGatePreview?.mainGateReadiness?.evidenceRefs,
+      blockedReasons,
+      reason: 'unsafe-main-gate-evidence-ref'
+    }),
+    releaseGateEvidenceRefs: releaseCloseoutEvidenceRefs({
+      explicitRefs: config.releaseGateEvidenceRefs,
+      fallbackRefs: reviewGatePreview?.sourceEvidence?.releaseGateEvidenceRefs ?? reviewGatePreview?.releaseGateReadiness?.evidenceRefs,
+      blockedReasons,
+      reason: 'unsafe-release-evidence-ref'
+    }),
+    validationEvidenceRefs: releaseCloseoutEvidenceRefs({
+      explicitRefs: config.validationEvidenceRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-validation-evidence-ref'
+    }),
+    tagEvidenceRefs: releaseCloseoutEvidenceRefs({
+      explicitRefs: config.tagEvidenceRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-tag-evidence-ref'
+    }),
+    releaseNotesRefs: releaseCloseoutEvidenceRefs({
+      explicitRefs: config.releaseNotesRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-release-notes-ref'
+    }),
+    githubReleaseUrl: config.githubReleaseUrl ?? null,
+    nextVersion: config.nextVersion ?? null,
+    nextVersionRunbookRef: releaseCloseoutSingleEvidenceRef({
+      ref: config.nextVersionRunbookRef,
+      blockedReasons,
+      reason: 'unsafe-next-version-runbook-ref'
+    }),
+    knownFacts: safeStringList(config.knownFacts),
+    blockedReasons
+  });
+  const validation = validateReleaseCloseoutHandoffPackContract(pack);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid release closeout handoff pack projection: ${validation.errors.join('; ')}`);
+  }
+
+  return pack;
+}
+
+function releaseCloseoutGoal({
+  goalId,
+  title
+}) {
+  const safeGoalId = firstNonEmptyString(goalId, 'missing-goal');
+
+  return {
+    goalId: safeGoalId,
+    title: firstNonEmptyString(title, safeGoalId),
+    state: 'active',
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: supervisorRouteSourceRef()
+  };
+}
+
+function releaseCloseoutEvidenceRefs({
+  explicitRefs,
+  fallbackRefs,
+  blockedReasons,
+  reason
+}) {
+  if (Array.isArray(explicitRefs)) {
+    return uniqueEvidenceRefs(
+      explicitRefs
+        .map((ref) => releaseCloseoutEvidenceRefFromValue({
+          ref,
+          blockedReasons,
+          reason
+        }))
+        .filter(isPlainObject)
+    );
+  }
+
+  return uniqueEvidenceRefs(fallbackRefs);
+}
+
+function releaseCloseoutSingleEvidenceRef({
+  ref,
+  blockedReasons,
+  reason
+}) {
+  return releaseCloseoutEvidenceRefFromValue({
+    ref,
+    blockedReasons,
+    reason
+  });
+}
+
+function releaseCloseoutEvidenceRefFromValue({
+  ref,
+  blockedReasons,
+  reason
+}) {
+  if (ref === null || ref === undefined) {
+    return null;
+  }
+
+  const candidate = isPlainObject(ref)
+    ? firstNonEmptyString(ref.ref, ref.path, ref.uri)
+    : ref;
+  const safeRef = safeDisplayRef(candidate);
+
+  if (!nonEmptyString(safeRef)) {
+    if (nonEmptyString(candidate)) {
+      blockedReasons.push(reason);
+    }
+
+    return null;
+  }
+
+  return {
+    kind: isPlainObject(ref) && nonEmptyString(ref.kind)
+      ? ref.kind
+      : evidenceKindForRef(safeRef),
+    ref: safeRef,
+    label: isPlainObject(ref)
+      ? firstNonEmptyString(ref.label, ref.title, safeRef)
+      : safeRef
+  };
 }
 
 function reviewGateGoal({
@@ -3687,6 +3863,10 @@ function stripEmptyObject(value) {
 
 function uniqueStrings(values) {
   return [...new Set((Array.isArray(values) ? values : []).filter(nonEmptyString))];
+}
+
+function safeStringList(values) {
+  return (Array.isArray(values) ? values : []).filter(nonEmptyString);
 }
 
 function safeArray(value) {
