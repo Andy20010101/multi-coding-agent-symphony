@@ -6,7 +6,7 @@
   "taskId": "pr-1-worker-run-contracts",
   "providerId": "codex-cli",
   "commandTemplateId": "codex-worker-controlled-v1",
-  "previewPlanHash": "sha256:42e927770a7fc13c4a07d71dbd6746bd94bd7c7d2dfa2cb24b8257233abc9515",
+  "previewPlanHash": "sha256:842d4bb13ad4d11677f13f4ffdefb1e03c497c7fd916dd32bae25dd7c117efd7",
   "startedAt": "2026-06-15T04:11:00.000Z",
   "finishedAt": "2026-06-15T04:12:00.000Z",
   "status": "needs-review",

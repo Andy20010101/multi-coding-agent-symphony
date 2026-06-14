@@ -99,6 +99,12 @@ import {
   buildProviderReadinessProjection
 } from './provider-readiness-contracts.js';
 import {
+  V66_WORKER_RUN_GOAL_ID,
+  WorkerRunBackendError,
+  buildWorkerRunPreviewFromBackend,
+  confirmWorkerRunPreview
+} from './worker-run-backend.js';
+import {
   buildAppSchemaMigrationContract
 } from './app-schema-migration.js';
 import {
@@ -748,6 +754,8 @@ export function createSymphonyConsoleServer({
   env = process.env,
   runner = new NodeProcessRunner(),
   mcasRunner,
+  workerRunProviderReadiness = null,
+  workerRunExecutor = null,
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS,
   runtimeStartedAt = new Date().toISOString()
 } = {}) {
@@ -864,6 +872,23 @@ export function createSymphonyConsoleServer({
             cwd,
             runner,
             request: controlledProviderRunnerConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const workerRunConfirmRequest = parseWorkerRunConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (workerRunConfirmRequest !== null) {
+          await writeWorkerRunConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            env,
+            workerRunProviderReadiness,
+            workerRunExecutor,
+            request: workerRunConfirmRequest,
             route: url.pathname,
             method
           });
@@ -1063,6 +1088,21 @@ export function createSymphonyConsoleServer({
           stateDir,
           cwd,
           request: controlledProviderRunnerPreviewRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const workerRunPreviewRequest = parseWorkerRunPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (workerRunPreviewRequest !== null) {
+        await writeWorkerRunPreviewResponse({
+          response,
+          stateDir,
+          env,
+          workerRunProviderReadiness,
+          request: workerRunPreviewRequest,
           route: url.pathname,
           method
         });
@@ -3431,6 +3471,200 @@ async function writeControlledProviderRunnerConfirmResponse({
   }
 }
 
+async function writeWorkerRunPreviewResponse({
+  response,
+  stateDir,
+  env,
+  workerRunProviderReadiness,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-worker-run-preview-request',
+      message: 'Worker run preview request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveWorkerRunGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, buildWorkerRunPreviewFromBackend({
+      ...buildWorkerRunPreviewRequestFromSearchParams({
+        goalId: resolvedGoalId,
+        searchParams: request.searchParams
+      }),
+      providerReadiness: workerRunProviderReadiness ?? buildProviderReadinessProjection({ env })
+    }));
+  } catch (error) {
+    if (error instanceof WorkerRunBackendError || error instanceof GoalEventPlanPreviewError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-worker-run-preview-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeWorkerRunConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  env,
+  workerRunProviderReadiness,
+  workerRunExecutor,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-worker-run-confirm-request',
+      message: 'Worker run confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveWorkerRunGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    const body = await readWorkerRunConfirmRequestBody(requestMessage);
+    const preview = buildWorkerRunPreviewFromBackend({
+      goalId: resolvedGoalId,
+      taskId: requiredWorkerRunBodyString(body, 'taskId'),
+      providerReadiness: workerRunProviderReadiness ?? buildProviderReadinessProjection({ env })
+    });
+    const confirmation = await confirmWorkerRunPreview({
+      preview,
+      input: body,
+      ...(typeof workerRunExecutor === 'function' ? { executeWorker: workerRunExecutor } : {})
+    });
+    const operationRun = await recordWorkerRunOperationRunFromConfirmation({
+      stateDir,
+      goalId: resolvedGoalId,
+      confirmation
+    });
+
+    writeJsonResponse(response, 200, {
+      ...confirmation,
+      operationRun,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof WorkerRunBackendError ||
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-worker-run-confirm-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function resolveWorkerRunGoalId({
+  stateDir,
+  goalId,
+  route,
+  method,
+  response
+}) {
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return null;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    if (goalId === V66_WORKER_RUN_GOAL_ID) {
+      return V66_WORKER_RUN_GOAL_ID;
+    }
+
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for worker run preview/confirm was not found.',
+      route,
+      method
+    });
+    return null;
+  }
+
+  return resolvedGoalId;
+}
+
 async function writeControlledVerificationRunConfirmResponse({
   requestMessage,
   response,
@@ -4825,6 +5059,77 @@ function parseControlledProviderRunnerConfirmRequestPath(pathname, searchParams 
   };
 }
 
+function parseWorkerRunPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/worker-run-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'worker-run-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/worker-run-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'worker-run-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
+function parseWorkerRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/worker-run-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'worker-run-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/worker-run-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'worker-run-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
 function parseControlledVerificationRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
   const latestPath = '/api/goals/latest/verification-run-confirm';
 
@@ -5562,6 +5867,59 @@ async function readControlledProviderRunnerConfirmRequestBody(request) {
   }
 }
 
+async function readWorkerRunConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new WorkerRunBackendError(
+      'invalid-worker-run-confirm-request',
+      'Worker run confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new WorkerRunBackendError(
+        'invalid-worker-run-confirm-request',
+        'Worker run confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  try {
+    const body = JSON.parse(content);
+
+    if (!isPlainObject(body)) {
+      throw new WorkerRunBackendError(
+        'invalid-worker-run-confirm-request',
+        'Worker run confirm requires a valid JSON object.',
+        { reason: 'invalid-json-body' }
+      );
+    }
+
+    return body;
+  } catch (error) {
+    if (error instanceof WorkerRunBackendError) {
+      throw error;
+    }
+
+    throw new WorkerRunBackendError(
+      'invalid-worker-run-confirm-request',
+      'Worker run confirm requires a valid JSON object.',
+      { reason: 'invalid-json' }
+    );
+  }
+}
+
 function buildControlledProviderRunnerRequestFromSearchParams({ goalId, searchParams }) {
   assertOnlySearchParams(searchParams, [
     'task',
@@ -5583,6 +5941,29 @@ function buildControlledProviderRunnerRequestFromSearchParams({ goalId, searchPa
     evidenceRef: optionalSingleSearchParam(searchParams, 'evidenceRef'),
     handoffRef: optionalSingleSearchParam(searchParams, 'handoffRef')
   };
+}
+
+function buildWorkerRunPreviewRequestFromSearchParams({ goalId, searchParams }) {
+  assertOnlySearchParams(searchParams, ['task']);
+
+  return {
+    goalId,
+    taskId: requiredSingleSearchParam(searchParams, 'task')
+  };
+}
+
+function requiredWorkerRunBodyString(body, field) {
+  const value = body?.[field];
+
+  if (!isNonEmptyString(value)) {
+    throw new WorkerRunBackendError(
+      'invalid-worker-run-confirm-request',
+      `Worker run confirm requires ${field}.`,
+      { field }
+    );
+  }
+
+  return value;
 }
 
 async function confirmControlledImplementationRunPlan({
@@ -7961,6 +8342,65 @@ async function recordGoalOperationRunFromConfirmResult({
     eventIds: [result.event.eventId],
     source: 'workbench.event-plan-confirm'
   });
+}
+
+async function recordWorkerRunOperationRunFromConfirmation({
+  stateDir,
+  goalId,
+  confirmation
+}) {
+  const result = confirmation.result;
+  const status = result.status === 'needs-review' ? 'confirmed' : 'failed';
+
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: confirmation.runId,
+    goalId,
+    taskId: confirmation.taskId,
+    role: 'worker',
+    commandKind: 'provider-runner',
+    commandName: 'worker run preview/confirm',
+    status,
+    planHash: confirmation.planHash,
+    source: 'workbench.worker-run-confirm',
+    output: {
+      stdout: `status=${result.status}\nproviderId=${confirmation.providerId}\ncommandTemplateId=${confirmation.commandTemplateId}`,
+      stderr: '',
+      rawProviderOutputAvailable: false
+    },
+    runResult: result,
+    artifactRefs: workerRunArtifactRefs(result),
+    verifierSummary: {
+      status: result.verifier.state,
+      workerRunStatus: result.status,
+      failureLayer: result.failureLayer.kind,
+      taskState: result.nextState.taskState,
+      taskCompleted: false,
+      reviewerApproved: false,
+      mainVerified: false,
+      releaseReady: false
+    },
+    failureReason: result.failureLayer.reason
+  });
+}
+
+function workerRunArtifactRefs(result) {
+  return [
+    ...result.sanitizedResult.artifactRefs.map((ref) => ({
+      kind: 'worker-run-artifact',
+      ref,
+      title: 'Worker run artifact ref',
+      sourceRunId: result.runId,
+      status: result.status
+    })),
+    ...result.evidenceRefs.map((entry) => ({
+      kind: entry.kind,
+      ref: entry.ref,
+      title: entry.label,
+      sourceRunId: result.runId,
+      status: result.status
+    }))
+  ];
 }
 
 async function buildRefreshedGoalEventLog({ stateDir, goalId }) {

@@ -286,6 +286,7 @@ export function buildWorkerRunResult({
 export function computeWorkerRunPlanHash(preview) {
   const copy = cloneValue(preview);
   delete copy.planHash;
+  delete copy.generatedAt;
   return `sha256:${createHash('sha256').update(stableJson(copy)).digest('hex')}`;
 }
 
