@@ -1,9 +1,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createSymphonyConsoleServer } from '../src/symphony/console.js';
+import { readGoalOperationRuns } from '../src/symphony/goal-operation-run-registry.js';
+import {
+  REVIEWER_RUN_CONFIRMATION_CONTRACT_NAME,
+  V67_REVIEWER_RUN_GOAL_ID,
+  ReviewerRunBackendError,
+  buildReviewerRunPreviewFromBackend,
+  confirmReviewerRunPreview,
+  validateReviewerRunConfirmInput
+} from '../src/symphony/reviewer-run-backend.js';
 import {
   REVIEWER_RUN_BOUNDARIES,
   REVIEWER_RUN_COMMAND_TEMPLATE_ID,
@@ -253,6 +265,188 @@ describe('v67 Claude Code Reviewer Lane contracts', () => {
         error.code === 'invalid-reviewer-run-verdict'
     );
   });
+
+  it('confirms a backend-owned reviewer run preview through the fake adapter', async () => {
+    const preview = buildReviewerRunPreviewFromBackend({
+      goalId: V67_REVIEWER_RUN_GOAL_ID,
+      taskId: 'pr-2-backend-reviewer-preview-confirm',
+      generatedAt: GENERATED_AT,
+      providerReadiness: providerReadiness('provider-readiness.both-ready.v1.json'),
+      workerEvidence: workerResult(),
+      handoffPackRef: 'artifact-ref:v67:pr-2-reviewer-handoff-pack',
+      reviewerActorId: 'claude-reviewer-v67'
+    });
+    const input = reviewerRunConfirmInput(preview);
+    let capturedRequest = null;
+    const confirmation = await confirmReviewerRunPreview({
+      preview,
+      input,
+      startedAt: '2026-06-15T05:30:00.000Z',
+      finishedAt: '2026-06-15T05:31:00.000Z',
+      executeReviewer: async (request) => {
+        capturedRequest = request;
+        return fakeReviewerAdapterResult();
+      }
+    });
+
+    assert.equal(validateReviewerRunConfirmInput({ preview, input }).ok, true);
+    assert.equal(confirmation.contractName, REVIEWER_RUN_CONFIRMATION_CONTRACT_NAME);
+    assert.equal(confirmation.status, 'approved');
+    assert.equal(confirmation.providerId, REVIEWER_RUN_PROVIDER_ID);
+    assert.equal(confirmation.role, REVIEWER_RUN_ROLE);
+    assert.equal(confirmation.commandTemplateId, REVIEWER_RUN_COMMAND_TEMPLATE_ID);
+    assert.equal(confirmation.realClaudeSmokeOptIn, false);
+    assert.equal(confirmation.verdict.nextState.reviewApproved, true);
+    assert.equal(confirmation.verdict.nextState.taskCompleted, false);
+    assert.equal(confirmation.verdict.nextState.adoptionReady, false);
+    assert.equal(confirmation.verdict.nextState.mainVerified, false);
+    assert.equal(confirmation.verdict.nextState.releaseReady, false);
+    assert.equal(confirmation.safety.directGoalEventAppendAvailable, false);
+    assert.equal(confirmation.safety.mainWorktreeWriteAvailable, false);
+    assert.equal(capturedRequest.contractName, 'reviewerRunAdapterRequest.v1');
+    assert.equal(capturedRequest.providerId, REVIEWER_RUN_PROVIDER_ID);
+    assert.equal(capturedRequest.role, REVIEWER_RUN_ROLE);
+    assert.equal(capturedRequest.commandTemplateId, REVIEWER_RUN_COMMAND_TEMPLATE_ID);
+    assert.equal(capturedRequest.sanitizedInputPack.workerRunId, workerResult().runId);
+    assert.equal(Object.hasOwn(capturedRequest, 'command'), false);
+    assert.equal(Object.hasOwn(capturedRequest, 'cwd'), false);
+    assert.equal(Object.hasOwn(capturedRequest, 'env'), false);
+    assertNoUnsafeStringValues(confirmation, 'backend confirmation');
+  });
+
+  it('rejects stale plan hashes and command material before running the fake reviewer adapter', async () => {
+    const preview = buildReviewerRunPreviewFromBackend({
+      goalId: V67_REVIEWER_RUN_GOAL_ID,
+      taskId: 'pr-2-backend-reviewer-preview-confirm',
+      generatedAt: GENERATED_AT,
+      providerReadiness: providerReadiness('provider-readiness.both-ready.v1.json'),
+      workerEvidence: workerResult()
+    });
+    const stale = {
+      ...reviewerRunConfirmInput(preview),
+      planHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222'
+    };
+    const command = {
+      ...reviewerRunConfirmInput(preview),
+      command: 'claude --dangerous'
+    };
+    let calls = 0;
+    const executeReviewer = async () => {
+      calls += 1;
+      return fakeReviewerAdapterResult();
+    };
+
+    await assert.rejects(
+      () => confirmReviewerRunPreview({ preview, input: stale, executeReviewer }),
+      (error) => (
+        error instanceof ReviewerRunBackendError &&
+        error.safeDetails.errors.includes('planHash must match reviewer run preview')
+      )
+    );
+    await assert.rejects(
+      () => confirmReviewerRunPreview({ preview, input: command, executeReviewer }),
+      (error) => (
+        error instanceof ReviewerRunBackendError &&
+        error.safeDetails.errors.includes('command is not an allowed reviewer run confirm field')
+      )
+    );
+    assert.equal(calls, 0);
+  });
+
+  it('serves reviewer run preview and confirm through constrained backend routes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'v67-reviewer-run-route-'));
+    const stateDir = join(root, '.symphony');
+    const invocations = [];
+    const server = createSymphonyConsoleServer({
+      cwd: root,
+      stateDir,
+      env: {},
+      reviewerRunProviderReadiness: providerReadiness('provider-readiness.both-ready.v1.json'),
+      reviewerRunWorkerEvidence: workerResult(),
+      reviewerRunExecutor: async (request) => {
+        invocations.push(request);
+        return fakeReviewerAdapterResult();
+      }
+    });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const params = new URLSearchParams({
+        task: 'pr-2-backend-reviewer-preview-confirm',
+        handoffPackRef: 'artifact-ref:v67:route-reviewer-handoff-pack',
+        reviewerActorId: 'claude-reviewer-route'
+      });
+      const previewResponse = await fetch(`${baseUrl}/api/goals/${V67_REVIEWER_RUN_GOAL_ID}/reviewer-run-preview?${params}`);
+      const preview = await previewResponse.json();
+
+      assert.equal(previewResponse.status, 200);
+      assert.equal(preview.contractName, REVIEWER_RUN_HANDOFF_CONTRACT_NAME);
+      assert.equal(preview.state, 'ready');
+      assert.equal(preview.provider.providerId, REVIEWER_RUN_PROVIDER_ID);
+      assert.equal(preview.commandTemplate.templateId, REVIEWER_RUN_COMMAND_TEMPLATE_ID);
+      assert.equal(preview.workerEvidence.taskState, 'needs-review');
+
+      const invalidPreviewResponse = await fetch(`${baseUrl}/api/goals/${V67_REVIEWER_RUN_GOAL_ID}/reviewer-run-preview?${new URLSearchParams({
+        task: 'pr-2-backend-reviewer-preview-confirm',
+        command: 'claude --dangerous'
+      })}`);
+      const invalidPreview = await invalidPreviewResponse.json();
+
+      assert.equal(invalidPreviewResponse.status, 400);
+      assert.equal(invalidPreview.error.code, 'invalid-reviewer-run-preview-request');
+      assert.equal(invocations.length, 0);
+
+      const confirmResponse = await fetch(`${baseUrl}/api/goals/${V67_REVIEWER_RUN_GOAL_ID}/reviewer-run-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(reviewerRunConfirmInput(preview))
+      });
+      const confirmation = await confirmResponse.json();
+      const registry = await readGoalOperationRuns({
+        stateDir,
+        goalId: V67_REVIEWER_RUN_GOAL_ID
+      });
+
+      assert.equal(confirmResponse.status, 200, JSON.stringify(confirmation));
+      assert.equal(confirmation.contractName, REVIEWER_RUN_CONFIRMATION_CONTRACT_NAME);
+      assert.equal(confirmation.verdict.status, 'approved');
+      assert.equal(confirmation.operationRun.commandKind, 'provider-runner');
+      assert.equal(confirmation.operationRun.commandName, 'reviewer run preview/confirm');
+      assert.equal(confirmation.operationRun.verifierSummary.reviewApproved, true);
+      assert.equal(confirmation.operationRun.verifierSummary.taskCompleted, false);
+      assert.equal(confirmation.operationRun.verifierSummary.mainVerified, false);
+      assert.equal(confirmation.operationRun.verifierSummary.releaseReady, false);
+      assert.equal(confirmation.refreshed.operations.operationCount, 1);
+      assert.equal(registry.operationCount, 1);
+      assert.equal(invocations.length, 1);
+      assert.equal(Object.hasOwn(invocations[0], 'command'), false);
+      assert.equal(Object.hasOwn(invocations[0], 'env'), false);
+      assertNoUnsafeStringValues(confirmation, 'route confirmation');
+
+      const invalidConfirmResponse = await fetch(`${baseUrl}/api/goals/${V67_REVIEWER_RUN_GOAL_ID}/reviewer-run-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...reviewerRunConfirmInput(preview),
+          command: 'claude --dangerous'
+        })
+      });
+      const invalidConfirm = await invalidConfirmResponse.json();
+
+      assert.equal(invalidConfirmResponse.status, 400);
+      assert.equal(invalidConfirm.error.code, 'invalid-reviewer-run-confirm-request');
+      assert.equal(invocations.length, 1);
+    } finally {
+      await closeServer(server);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 function fixture(name) {
@@ -298,6 +492,36 @@ function reviewerIdentity() {
   };
 }
 
+function reviewerRunConfirmInput(preview) {
+  return {
+    planHash: preview.planHash,
+    goalId: preview.goal.goalId,
+    taskId: preview.task.taskId,
+    providerId: REVIEWER_RUN_PROVIDER_ID,
+    role: REVIEWER_RUN_ROLE,
+    commandTemplateId: REVIEWER_RUN_COMMAND_TEMPLATE_ID,
+    handoffPackRef: preview.handoffPackRef,
+    reviewerActorId: preview.reviewerIdentity.reviewerActorId
+  };
+}
+
+function fakeReviewerAdapterResult() {
+  return {
+    status: 'approved',
+    summary: 'Fake Claude reviewer approved the backend route task.',
+    validationCommands: [
+      'node --test tests/v67-claude-code-reviewer-lane.test.js'
+    ],
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/qa/v67-claude-code-reviewer-lane-acceptance.md',
+      label: 'v67 reviewer acceptance evidence'
+    }],
+    rawTranscript: 'raw transcript must not be projected',
+    rawModelOutput: 'raw model output must not be projected'
+  };
+}
+
 function assertValidationIncludes(validation, expectedError) {
   assert.equal(validation.ok, false);
   assert.ok(
@@ -330,4 +554,31 @@ function collectStringValues(value) {
   }
 
   return [];
+}
+
+async function listenOnRandomPort(server) {
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function closeServer(server) {
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }

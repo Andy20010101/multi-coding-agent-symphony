@@ -105,6 +105,12 @@ import {
   confirmWorkerRunPreview
 } from './worker-run-backend.js';
 import {
+  V67_REVIEWER_RUN_GOAL_ID,
+  ReviewerRunBackendError,
+  buildReviewerRunPreviewFromBackend,
+  confirmReviewerRunPreview
+} from './reviewer-run-backend.js';
+import {
   buildAppSchemaMigrationContract
 } from './app-schema-migration.js';
 import {
@@ -756,6 +762,9 @@ export function createSymphonyConsoleServer({
   mcasRunner,
   workerRunProviderReadiness = null,
   workerRunExecutor = null,
+  reviewerRunProviderReadiness = null,
+  reviewerRunWorkerEvidence = null,
+  reviewerRunExecutor = null,
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS,
   runtimeStartedAt = new Date().toISOString()
 } = {}) {
@@ -889,6 +898,24 @@ export function createSymphonyConsoleServer({
             workerRunProviderReadiness,
             workerRunExecutor,
             request: workerRunConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const reviewerRunConfirmRequest = parseReviewerRunConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (reviewerRunConfirmRequest !== null) {
+          await writeReviewerRunConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            env,
+            reviewerRunProviderReadiness,
+            reviewerRunWorkerEvidence,
+            reviewerRunExecutor,
+            request: reviewerRunConfirmRequest,
             route: url.pathname,
             method
           });
@@ -1103,6 +1130,22 @@ export function createSymphonyConsoleServer({
           env,
           workerRunProviderReadiness,
           request: workerRunPreviewRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const reviewerRunPreviewRequest = parseReviewerRunPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (reviewerRunPreviewRequest !== null) {
+        await writeReviewerRunPreviewResponse({
+          response,
+          stateDir,
+          env,
+          reviewerRunProviderReadiness,
+          reviewerRunWorkerEvidence,
+          request: reviewerRunPreviewRequest,
           route: url.pathname,
           method
         });
@@ -3617,6 +3660,158 @@ async function writeWorkerRunConfirmResponse({
   }
 }
 
+async function writeReviewerRunPreviewResponse({
+  response,
+  stateDir,
+  env,
+  reviewerRunProviderReadiness,
+  reviewerRunWorkerEvidence,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-reviewer-run-preview-request',
+      message: 'Reviewer run preview request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveReviewerRunGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, buildReviewerRunPreviewFromBackend({
+      ...buildReviewerRunPreviewRequestFromSearchParams({
+        goalId: resolvedGoalId,
+        searchParams: request.searchParams
+      }),
+      providerReadiness: reviewerRunProviderReadiness ?? buildProviderReadinessProjection({ env }),
+      workerEvidence: reviewerRunWorkerEvidence
+    }));
+  } catch (error) {
+    if (error instanceof ReviewerRunBackendError || error instanceof GoalEventPlanPreviewError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-reviewer-run-preview-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeReviewerRunConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  env,
+  reviewerRunProviderReadiness,
+  reviewerRunWorkerEvidence,
+  reviewerRunExecutor,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-reviewer-run-confirm-request',
+      message: 'Reviewer run confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveReviewerRunGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    const body = await readReviewerRunConfirmRequestBody(requestMessage);
+    const preview = buildReviewerRunPreviewFromBackend({
+      goalId: resolvedGoalId,
+      taskId: requiredReviewerRunBodyString(body, 'taskId'),
+      handoffPackRef: requiredReviewerRunBodyString(body, 'handoffPackRef'),
+      reviewerActorId: requiredReviewerRunBodyString(body, 'reviewerActorId'),
+      providerReadiness: reviewerRunProviderReadiness ?? buildProviderReadinessProjection({ env }),
+      workerEvidence: reviewerRunWorkerEvidence
+    });
+    const confirmation = await confirmReviewerRunPreview({
+      preview,
+      input: body,
+      ...(typeof reviewerRunExecutor === 'function' ? { executeReviewer: reviewerRunExecutor } : {})
+    });
+    const operationRun = await recordReviewerRunOperationRunFromConfirmation({
+      stateDir,
+      goalId: resolvedGoalId,
+      confirmation
+    });
+
+    writeJsonResponse(response, 200, {
+      ...confirmation,
+      operationRun,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof ReviewerRunBackendError ||
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-reviewer-run-confirm-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function resolveWorkerRunGoalId({
   stateDir,
   goalId,
@@ -3656,6 +3851,54 @@ async function resolveWorkerRunGoalId({
       status: 404,
       code: 'goal-not-found',
       message: 'Goal for worker run preview/confirm was not found.',
+      route,
+      method
+    });
+    return null;
+  }
+
+  return resolvedGoalId;
+}
+
+async function resolveReviewerRunGoalId({
+  stateDir,
+  goalId,
+  route,
+  method,
+  response
+}) {
+  let resolvedGoalId;
+
+  try {
+    resolvedGoalId = await resolveGoalEventPlanPreviewGoalId({
+      stateDir,
+      goalId
+    });
+  } catch (error) {
+    if (error instanceof GoalRunbookContextError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: error.code,
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return null;
+    }
+
+    throw error;
+  }
+
+  if (resolvedGoalId === null) {
+    if (goalId === V67_REVIEWER_RUN_GOAL_ID) {
+      return V67_REVIEWER_RUN_GOAL_ID;
+    }
+
+    writeApiErrorResponse(response, {
+      status: 404,
+      code: 'goal-not-found',
+      message: 'Goal for reviewer run preview/confirm was not found.',
       route,
       method
     });
@@ -5130,6 +5373,77 @@ function parseWorkerRunConfirmRequestPath(pathname, searchParams = new URLSearch
   };
 }
 
+function parseReviewerRunPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/reviewer-run-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'reviewer-run-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/reviewer-run-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'reviewer-run-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
+function parseReviewerRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/reviewer-run-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'reviewer-run-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/reviewer-run-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'reviewer-run-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
 function parseControlledVerificationRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
   const latestPath = '/api/goals/latest/verification-run-confirm';
 
@@ -5920,6 +6234,59 @@ async function readWorkerRunConfirmRequestBody(request) {
   }
 }
 
+async function readReviewerRunConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new ReviewerRunBackendError(
+      'invalid-reviewer-run-confirm-request',
+      'Reviewer run confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new ReviewerRunBackendError(
+        'invalid-reviewer-run-confirm-request',
+        'Reviewer run confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  try {
+    const body = JSON.parse(content);
+
+    if (!isPlainObject(body)) {
+      throw new ReviewerRunBackendError(
+        'invalid-reviewer-run-confirm-request',
+        'Reviewer run confirm requires a valid JSON object.',
+        { reason: 'invalid-json-body' }
+      );
+    }
+
+    return body;
+  } catch (error) {
+    if (error instanceof ReviewerRunBackendError) {
+      throw error;
+    }
+
+    throw new ReviewerRunBackendError(
+      'invalid-reviewer-run-confirm-request',
+      'Reviewer run confirm requires a valid JSON object.',
+      { reason: 'invalid-json' }
+    );
+  }
+}
+
 function buildControlledProviderRunnerRequestFromSearchParams({ goalId, searchParams }) {
   assertOnlySearchParams(searchParams, [
     'task',
@@ -5952,6 +6319,17 @@ function buildWorkerRunPreviewRequestFromSearchParams({ goalId, searchParams }) 
   };
 }
 
+function buildReviewerRunPreviewRequestFromSearchParams({ goalId, searchParams }) {
+  assertOnlySearchParams(searchParams, ['task', 'handoffPackRef', 'reviewerActorId']);
+
+  return {
+    goalId,
+    taskId: requiredSingleSearchParam(searchParams, 'task'),
+    handoffPackRef: optionalSingleSearchParam(searchParams, 'handoffPackRef'),
+    reviewerActorId: optionalSingleSearchParam(searchParams, 'reviewerActorId') ?? 'claude-reviewer-v67'
+  };
+}
+
 function requiredWorkerRunBodyString(body, field) {
   const value = body?.[field];
 
@@ -5959,6 +6337,20 @@ function requiredWorkerRunBodyString(body, field) {
     throw new WorkerRunBackendError(
       'invalid-worker-run-confirm-request',
       `Worker run confirm requires ${field}.`,
+      { field }
+    );
+  }
+
+  return value;
+}
+
+function requiredReviewerRunBodyString(body, field) {
+  const value = body?.[field];
+
+  if (!isNonEmptyString(value)) {
+    throw new ReviewerRunBackendError(
+      'invalid-reviewer-run-confirm-request',
+      `Reviewer run confirm requires ${field}.`,
       { field }
     );
   }
@@ -8399,6 +8791,65 @@ function workerRunArtifactRefs(result) {
       title: entry.label,
       sourceRunId: result.runId,
       status: result.status
+    }))
+  ];
+}
+
+async function recordReviewerRunOperationRunFromConfirmation({
+  stateDir,
+  goalId,
+  confirmation
+}) {
+  const verdict = confirmation.verdict;
+  const status = verdict.status === 'blocked' ? 'failed' : 'confirmed';
+
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: confirmation.verdictId,
+    goalId,
+    taskId: confirmation.taskId,
+    role: 'reviewer',
+    commandKind: 'provider-runner',
+    commandName: 'reviewer run preview/confirm',
+    status,
+    planHash: confirmation.planHash,
+    source: 'workbench.reviewer-run-confirm',
+    output: {
+      stdout: `status=${verdict.status}\nproviderId=${confirmation.providerId}\ncommandTemplateId=${confirmation.commandTemplateId}`,
+      stderr: '',
+      rawProviderOutputAvailable: false
+    },
+    runResult: verdict,
+    artifactRefs: reviewerRunArtifactRefs(verdict),
+    verifierSummary: {
+      status: verdict.status,
+      reviewVerdict: verdict.nextState.reviewVerdict,
+      reviewApproved: verdict.nextState.reviewApproved,
+      revisionRequired: verdict.nextState.revisionRequired,
+      taskCompleted: false,
+      adoptionReady: false,
+      mainVerified: false,
+      releaseReady: false
+    },
+    failureReason: verdict.status === 'blocked' ? verdict.sanitizedVerdict.summary : null
+  });
+}
+
+function reviewerRunArtifactRefs(verdict) {
+  return [
+    ...verdict.sanitizedVerdict.evidenceRefs.map((entry) => ({
+      kind: entry.kind,
+      ref: entry.ref,
+      title: entry.label,
+      sourceRunId: verdict.verdictId,
+      status: verdict.status
+    })),
+    ...verdict.evidenceRefs.map((entry) => ({
+      kind: entry.kind,
+      ref: entry.ref,
+      title: entry.label,
+      sourceRunId: verdict.verdictId,
+      status: verdict.status
     }))
   ];
 }
