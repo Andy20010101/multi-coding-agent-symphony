@@ -11179,6 +11179,10 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.releasePublicationEvidence,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedStableWorkbenchRelease = projectStableWorkbenchRelease({
+		contract: goalSupervisorData?.stableWorkbenchRelease,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11206,6 +11210,7 @@ function projectWorkbenchContracts(results) {
 		reviewGateConfirmationState: projectedReviewGateConfirmationState,
 		releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
 		releasePublicationEvidence: projectedReleasePublicationEvidence,
+		stableWorkbenchRelease: projectedStableWorkbenchRelease,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11237,6 +11242,7 @@ function projectWorkbenchContracts(results) {
 			reviewGateConfirmationState: projectedReviewGateConfirmationState,
 			releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
 			releasePublicationEvidence: projectedReleasePublicationEvidence,
+			stableWorkbenchRelease: projectedStableWorkbenchRelease,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11748,7 +11754,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, releasePublicationEvidence, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, releasePublicationEvidence, stableWorkbenchRelease, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -12033,6 +12039,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		reviewGateConfirmationState,
 		releaseCloseoutHandoffPack,
 		releasePublicationEvidence,
+		stableWorkbenchRelease,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12881,6 +12888,139 @@ function projectReleasePublicationNextStartAudit(audit) {
 		blockedReasons: projectSystemGoldenPathTextItems(audit?.blockedReasons),
 		readOnly: valueState(audit?.readOnly),
 		willMutate: valueState(audit?.willMutate)
+	};
+}
+function projectStableWorkbenchRelease({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const surfaces = Array.isArray(contract?.surfaces) ? contract.surfaces : [];
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	return {
+		state: hasContract ? contract.state ?? (blockedReasons.length === 0 ? "ready" : "blocked") : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		release: projectStableWorkbenchReleaseBoundary(contract?.release),
+		surfaces: {
+			state: surfaces.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(surfaces.length),
+			items: surfaces.map(projectStableWorkbenchSurface)
+		},
+		providerBoundary: projectStableWorkbenchProviderBoundary(contract?.providerBoundary),
+		releaseBoundary: projectStableWorkbenchReleaseOperations(contract?.releaseBoundary),
+		safety: projectStableWorkbenchSafety(contract?.safety),
+		evidenceRefs: projectChildDispatchEvidenceRefs(contract?.evidenceRefs),
+		knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(contract?.readOnly),
+		willMutate: valueState(contract?.willMutate),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 stableWorkbenchRelease projection")
+		},
+		note: hasContract ? "Stable Workbench release baseline is backend-owned read-only state. Workbench displays surface readiness, provider limits, release boundaries, safety checks, and evidence refs without command execution or release automation." : "Stable Workbench release baseline is unavailable until goal-supervisor-app-read-model.v1 exposes stableWorkbenchRelease.v1."
+	};
+}
+function projectStableWorkbenchReleaseBoundary(release) {
+	return {
+		state: release !== null && release !== void 0 && typeof release === "object" && !Array.isArray(release) ? "available" : "missing",
+		currentTaggedRelease: valueState(release?.currentTaggedRelease),
+		activeVersion: valueState(release?.activeVersion),
+		currentTagCommit: valueState(release?.currentTagCommit),
+		activeTagExists: valueState(release?.activeTagExists),
+		activeGithubReleaseExists: valueState(release?.activeGithubReleaseExists),
+		sourceRefs: projectChildDispatchEvidenceRefs(release?.sourceRefs)
+	};
+}
+function projectStableWorkbenchSurface(surface) {
+	return {
+		id: valueState(surface?.id),
+		label: valueState(surface?.label),
+		state: valueState(surface?.state),
+		required: valueState(surface?.required),
+		sourceContract: valueState(surface?.sourceContract),
+		sourceRef: projectSystemGoldenPathSourceRef(surface?.sourceRef),
+		evidenceRefs: projectChildDispatchEvidenceRefs(surface?.evidenceRefs),
+		readOnly: valueState(surface?.readOnly),
+		copyOnly: valueState(surface?.copyOnly),
+		willMutate: valueState(surface?.willMutate),
+		blockedReasons: projectSystemGoldenPathTextItems(surface?.blockedReasons)
+	};
+}
+function projectStableWorkbenchProviderBoundary(providerBoundary) {
+	const hasBoundary = providerBoundary !== null && providerBoundary !== void 0 && typeof providerBoundary === "object" && !Array.isArray(providerBoundary);
+	const activeClaims = Array.isArray(providerBoundary?.activeWorkbenchProviderClaims) ? providerBoundary.activeWorkbenchProviderClaims : [];
+	const unsupportedClaims = Array.isArray(providerBoundary?.unsupportedProviderClaims) ? providerBoundary.unsupportedProviderClaims : [];
+	return {
+		state: hasBoundary ? "available" : "missing",
+		activeWorkbenchProviderClaims: {
+			state: activeClaims.length > 0 ? "available" : hasBoundary ? "empty" : "missing",
+			count: valueState(activeClaims.length),
+			items: activeClaims.map(projectStableWorkbenchProviderClaim)
+		},
+		unsupportedProviderClaims: {
+			state: unsupportedClaims.length > 0 ? "available" : hasBoundary ? "empty" : "missing",
+			count: valueState(unsupportedClaims.length),
+			items: unsupportedClaims.map(projectStableWorkbenchProviderClaim)
+		},
+		rawProviderCliEvidenceAllowed: valueState(providerBoundary?.rawProviderCliEvidenceAllowed),
+		notes: projectSystemGoldenPathTextItems(providerBoundary?.notes)
+	};
+}
+function projectStableWorkbenchProviderClaim(claim) {
+	return {
+		provider: valueState(claim?.provider),
+		claim: valueState(claim?.claim),
+		status: valueState(claim?.status),
+		sourceContract: valueState(claim?.sourceContract),
+		sourceRef: projectSystemGoldenPathSourceRef(claim?.sourceRef),
+		blockedReasons: projectSystemGoldenPathTextItems(claim?.blockedReasons)
+	};
+}
+function projectStableWorkbenchReleaseOperations(releaseBoundary) {
+	return {
+		state: releaseBoundary !== null && releaseBoundary !== void 0 && typeof releaseBoundary === "object" && !Array.isArray(releaseBoundary) ? "available" : "missing",
+		tagOperation: projectStableWorkbenchReleaseOperation(releaseBoundary?.tagOperation),
+		pushTagOperation: projectStableWorkbenchReleaseOperation(releaseBoundary?.pushTagOperation),
+		githubReleaseOperation: projectStableWorkbenchReleaseOperation(releaseBoundary?.githubReleaseOperation),
+		releaseReadyDeclaration: projectStableWorkbenchReleaseOperation(releaseBoundary?.releaseReadyDeclaration),
+		manualControllerActionRequired: valueState(releaseBoundary?.manualControllerActionRequired),
+		automationObserved: valueState(releaseBoundary?.automationObserved),
+		blockedReasons: projectSystemGoldenPathTextItems(releaseBoundary?.blockedReasons)
+	};
+}
+function projectStableWorkbenchReleaseOperation(operation) {
+	return {
+		state: valueState(operation !== null && operation !== void 0 && typeof operation === "object" && !Array.isArray(operation) ? operation.state ?? "available" : void 0),
+		commandResult: valueState(operation?.commandResult),
+		copyOnly: valueState(operation?.copyOnly),
+		willMutate: valueState(operation?.willMutate),
+		sourceRef: projectSystemGoldenPathSourceRef(operation?.sourceRef)
+	};
+}
+function projectStableWorkbenchSafety(safety) {
+	return {
+		state: safety !== null && safety !== void 0 && typeof safety === "object" && !Array.isArray(safety) ? "available" : "missing",
+		rawTranscriptObserved: valueState(safety?.rawTranscriptObserved),
+		rawModelOutputObserved: valueState(safety?.rawModelOutputObserved),
+		frontendLocalJsonlReadObserved: valueState(safety?.frontendLocalJsonlReadObserved),
+		frontendLocalSessionReadObserved: valueState(safety?.frontendLocalSessionReadObserved),
+		frontendProviderFolderReadObserved: valueState(safety?.frontendProviderFolderReadObserved),
+		rendererCommandExecutionObserved: valueState(safety?.rendererCommandExecutionObserved),
+		genericShellObserved: valueState(safety?.genericShellObserved),
+		genericTerminalObserved: valueState(safety?.genericTerminalObserved),
+		directGoalEventAppendObserved: valueState(safety?.directGoalEventAppendObserved),
+		directTaskCompletionObserved: valueState(safety?.directTaskCompletionObserved),
+		automaticWorktreeCreationObserved: valueState(safety?.automaticWorktreeCreationObserved),
+		automaticNextVersionGoalObserved: valueState(safety?.automaticNextVersionGoalObserved),
+		blockedReasons: projectSystemGoldenPathTextItems(safety?.blockedReasons)
 	};
 }
 function projectReleaseCloseoutReviewGateSource(source) {
@@ -25997,6 +26137,12 @@ var WORKBENCH_NAV_ITEMS = Object.freeze([
 		targetId: "main-verification-readiness-panel"
 	}),
 	Object.freeze({
+		id: "stable-baseline",
+		label: "Stable Baseline",
+		route: "/workbench/desktop/",
+		targetId: "stable-workbench-release-panel"
+	}),
+	Object.freeze({
 		id: "release",
 		label: "Release",
 		targetId: "closeout-gaps-panel"
@@ -26620,6 +26766,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Publication Evidence"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#stable-workbench-release-panel",
+							children: "Stable Baseline"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -26684,6 +26834,7 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseCloseoutHandoffPanel, { releaseCloseoutHandoffPack: desktopShell?.releaseCloseoutHandoffPack }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleasePublicationEvidencePanel, { releasePublicationEvidence: desktopShell?.releasePublicationEvidence }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StableWorkbenchReleasePanel, { stableWorkbenchRelease: desktopShell?.stableWorkbenchRelease }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -26919,6 +27070,8 @@ function projectLauncherEmptyCopy(recentProjects) {
 }
 function DesktopAppHomePanel({ desktopShell, routeContext }) {
 	const evidenceRefs = routeContext?.evidenceRefs?.items ?? [];
+	const stableRelease = desktopShell?.stableWorkbenchRelease;
+	const activeClaims = stableRelease?.providerBoundary?.activeWorkbenchProviderClaims?.items ?? [];
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "desktop-app-home-panel",
 		"aria-label": "Desktop App Home summary",
@@ -26935,6 +27088,10 @@ function DesktopAppHomePanel({ desktopShell, routeContext }) {
 			["repo path source", desktopShell?.workspace?.repoPathSource],
 			["backend route", desktopShell?.backendHealth?.route],
 			["route source", desktopShell?.appHome?.routeSource],
+			["stable baseline", textValue(stableRelease?.state ?? "missing")],
+			["stable contract", stableRelease?.contractName],
+			["active version", stableRelease?.release?.activeVersion],
+			["provider claim", textValue(activeClaims.length > 0 ? activeClaims.map((claim) => `${claim.provider.text} / ${claim.status.text}`).join("、") : "未暴露")],
 			["evidence refs", textValue(evidenceRefs.length > 0 ? `${evidenceRefs.map((item) => item.ref.text).join("、")} (inert text only)` : "inert text only")],
 			["command preview", desktopShell?.sidecarHealth?.commandPreviewInert]
 		] })]
@@ -28172,6 +28329,174 @@ function ReleasePublicationEvidencePanel({ releasePublicationEvidence }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: evidence?.note ?? "Release publication evidence unavailable."
+			})
+		]
+	});
+}
+function StableWorkbenchReleasePanel({ stableWorkbenchRelease }) {
+	const baseline = stableWorkbenchRelease;
+	const release = baseline?.release;
+	const providerBoundary = baseline?.providerBoundary;
+	const releaseBoundary = baseline?.releaseBoundary;
+	const safety = baseline?.safety;
+	const surfaces = baseline?.surfaces?.items ?? [];
+	const activeClaims = providerBoundary?.activeWorkbenchProviderClaims?.items ?? [];
+	const unsupportedClaims = providerBoundary?.unsupportedProviderClaims?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "stable-workbench-release-panel",
+		className: "stable-workbench-release-panel",
+		"aria-label": "Stable Workbench Release Baseline",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "stable-workbench-release-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v60 stable baseline"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Stable Workbench Release" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(baseline?.state)}`,
+					children: baseline?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "stable-workbench-release-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", baseline?.contractName],
+					["goal", baseline?.goal?.goalId],
+					["active version", release?.activeVersion],
+					["current tagged release", release?.currentTaggedRelease],
+					["current tag commit", release?.currentTagCommit],
+					["active tag exists", release?.activeTagExists],
+					["active GitHub Release exists", release?.activeGithubReleaseExists],
+					["readOnly", baseline?.readOnly],
+					["willMutate", baseline?.willMutate]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["surface count", baseline?.surfaces?.count],
+					["active provider claims", providerBoundary?.activeWorkbenchProviderClaims?.count],
+					["unsupported provider claims", providerBoundary?.unsupportedProviderClaims?.count],
+					["raw provider CLI evidence allowed", providerBoundary?.rawProviderCliEvidenceAllowed],
+					["manual controller action required", releaseBoundary?.manualControllerActionRequired],
+					["release automation observed", releaseBoundary?.automationObserved],
+					["known facts", textValueFromItems(baseline?.knownFacts, "无")],
+					["blocked reasons", textValueFromItems(baseline?.blockedReasons, "无")]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Surface Matrix",
+				children: surfaces.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Stable Workbench surfaces 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "stable-workbench-surface-list",
+					children: surfaces.map((surface) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+						className: "stable-workbench-surface-header",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: surface.label.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("small", { children: surface.id.text })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: `desktop-status ${desktopStatusClass(surface.state.text)}`,
+							children: surface.state.text
+						})]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["required", surface.required],
+						["source contract", surface.sourceContract],
+						["source ref", surface.sourceRef?.ref],
+						["evidence refs", evidenceRefsTextFromCollection(surface.evidenceRefs)],
+						["readOnly", surface.readOnly],
+						["copyOnly", surface.copyOnly],
+						["willMutate", surface.willMutate],
+						["blocked reasons", textValueFromItems(surface.blockedReasons, "无")]
+					] })] }, surface.id.text))
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "Provider Boundary",
+				children: [activeClaims.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Active provider claims 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "stable-workbench-provider-list",
+					children: activeClaims.map((claim, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["provider", claim.provider],
+						["claim", claim.claim],
+						["status", claim.status],
+						["source contract", claim.sourceContract],
+						["source ref", claim.sourceRef?.ref],
+						["blocked reasons", textValueFromItems(claim.blockedReasons, "无")]
+					] }) }, `${claim.provider.text}-${index}`))
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["unsupported claims", textValue(unsupportedClaims.length === 0 ? "无" : unsupportedClaims.map((claim) => claim.provider.text).join("、"))],
+					["raw provider CLI evidence allowed", providerBoundary?.rawProviderCliEvidenceAllowed],
+					["notes", textValueFromItems(providerBoundary?.notes, "无")]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Release Boundary",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["tag operation", releaseBoundary?.tagOperation?.state],
+					["tag command result", releaseBoundary?.tagOperation?.commandResult],
+					["tag copyOnly", releaseBoundary?.tagOperation?.copyOnly],
+					["tag willMutate", releaseBoundary?.tagOperation?.willMutate],
+					["tag source ref", releaseBoundary?.tagOperation?.sourceRef?.ref],
+					["push tag operation", releaseBoundary?.pushTagOperation?.state],
+					["push tag command result", releaseBoundary?.pushTagOperation?.commandResult],
+					["GitHub Release operation", releaseBoundary?.githubReleaseOperation?.state],
+					["GitHub Release command result", releaseBoundary?.githubReleaseOperation?.commandResult],
+					["release-ready declaration", releaseBoundary?.releaseReadyDeclaration?.state],
+					["manual controller action required", releaseBoundary?.manualControllerActionRequired],
+					["automation observed", releaseBoundary?.automationObserved],
+					["blocked reasons", textValueFromItems(releaseBoundary?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Safety",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["raw transcript observed", safety?.rawTranscriptObserved],
+					["raw model output observed", safety?.rawModelOutputObserved],
+					["frontend JSONL read observed", safety?.frontendLocalJsonlReadObserved],
+					["frontend session read observed", safety?.frontendLocalSessionReadObserved],
+					["frontend provider folder read observed", safety?.frontendProviderFolderReadObserved],
+					["renderer command execution observed", safety?.rendererCommandExecutionObserved],
+					["generic shell observed", safety?.genericShellObserved],
+					["generic terminal observed", safety?.genericTerminalObserved],
+					["direct goal event append observed", safety?.directGoalEventAppendObserved],
+					["direct task completion observed", safety?.directTaskCompletionObserved],
+					["automatic worktree creation observed", safety?.automaticWorktreeCreationObserved],
+					["automatic next-version goal observed", safety?.automaticNextVersionGoalObserved],
+					["blocked reasons", textValueFromItems(safety?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Disabled Capabilities",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["provider launch", baseline?.boundaries?.providerLaunchAvailable],
+					["unsupported provider claims", baseline?.boundaries?.unsupportedProviderClaimsAvailable],
+					["generic shell", baseline?.boundaries?.genericShellAvailable],
+					["generic terminal", baseline?.boundaries?.genericTerminalAvailable],
+					["renderer command execution", baseline?.boundaries?.rendererCommandExecutionAvailable],
+					["frontend JSONL read", baseline?.boundaries?.frontendLocalJsonlReadAvailable],
+					["frontend session read", baseline?.boundaries?.frontendLocalSessionReadAvailable],
+					["frontend provider folder read", baseline?.boundaries?.frontendProviderFolderReadAvailable],
+					["raw transcript exposure", baseline?.boundaries?.rawTranscriptExposureAvailable],
+					["raw model output exposure", baseline?.boundaries?.rawModelOutputExposureAvailable],
+					["direct goal event append", baseline?.boundaries?.directGoalEventAppendAvailable],
+					["direct task completion", baseline?.boundaries?.directTaskCompletionAvailable],
+					["git write", baseline?.boundaries?.gitWriteAvailable],
+					["git merge", baseline?.boundaries?.gitMergeAvailable],
+					["tag write", baseline?.boundaries?.gitTagAvailable],
+					["remote tag write", baseline?.boundaries?.gitPushAvailable],
+					["release create flag", baseline?.boundaries?.githubReleaseCreateAvailable],
+					["release update flag", baseline?.boundaries?.githubReleaseEditAvailable],
+					["public distribution claim", baseline?.boundaries?.publicDistributionClaimAvailable],
+					["notarization claim", baseline?.boundaries?.notarizationClaimAvailable],
+					["auto-update claim", baseline?.boundaries?.autoUpdateClaimAvailable],
+					["automatic worktree creation", baseline?.boundaries?.automaticWorktreeCreationAvailable],
+					["automatic next-version goal", baseline?.boundaries?.automaticNextVersionGoalAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Evidence Refs",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["release source refs", evidenceRefsTextFromCollection(release?.sourceRefs)],
+					["baseline evidence refs", evidenceRefsTextFromCollection(baseline?.evidenceRefs)],
+					["generated at", baseline?.generatedAt],
+					["route", baseline?.route?.path],
+					["route state", baseline?.route?.routeState]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: baseline?.note ?? "Stable Workbench release baseline unavailable."
 			})
 		]
 	});
@@ -36389,7 +36714,7 @@ function workbenchNavItemActive(item, currentRoute) {
 }
 function workbenchNavHref(item, routeContext) {
 	const query = workbenchContextQuery(routeContext);
-	if (item.route) return `${item.route}${query}`;
+	if (item.route) return item.targetId ? `${item.route}${query}#${item.targetId}` : `${item.route}${query}`;
 	return `/workbench/${query}#${item.targetId}`;
 }
 function workbenchContextQuery(routeContext) {

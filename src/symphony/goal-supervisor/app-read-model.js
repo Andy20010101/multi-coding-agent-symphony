@@ -62,6 +62,11 @@ import {
   validateReleasePublicationEvidenceContract
 } from '../release-publication-evidence-contracts.js';
 import {
+  STABLE_WORKBENCH_RELEASE_CONTRACT_NAME,
+  buildStableWorkbenchRelease,
+  validateStableWorkbenchReleaseContract
+} from '../stable-workbench-release-contracts.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -140,6 +145,7 @@ export function buildGoalSupervisorAppReadModel({
   reviewGatePlanHash = null,
   releaseCloseout = null,
   releasePublication = null,
+  stableWorkbenchRelease = null,
   goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
@@ -327,6 +333,21 @@ export function buildGoalSupervisorAppReadModel({
     releaseCloseoutHandoffPack,
     releasePublication
   });
+  const stableWorkbenchReleaseBaseline = buildGoalSupervisorStableWorkbenchRelease({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    stableWorkbenchRelease,
+    systemGoldenPath,
+    childDispatchPreview,
+    codexProviderExecutionPreview,
+    codexProviderRunRecovery,
+    reviewerHandoffPreview,
+    threadHandoffPack,
+    reviewGatePreview,
+    releaseCloseoutHandoffPack,
+    releasePublicationEvidence
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -371,7 +392,8 @@ export function buildGoalSupervisorAppReadModel({
     reviewGatePreview,
     reviewGateConfirmationState,
     releaseCloseoutHandoffPack,
-    releasePublicationEvidence
+    releasePublicationEvidence,
+    stableWorkbenchRelease: stableWorkbenchReleaseBaseline
   };
 }
 
@@ -741,6 +763,403 @@ function buildGoalSupervisorReleasePublicationEvidence({
   }
 
   return evidence;
+}
+
+function buildGoalSupervisorStableWorkbenchRelease({
+  generatedAt,
+  goalId,
+  title,
+  stableWorkbenchRelease,
+  systemGoldenPath,
+  childDispatchPreview,
+  codexProviderExecutionPreview,
+  codexProviderRunRecovery,
+  reviewerHandoffPreview,
+  threadHandoffPack,
+  reviewGatePreview,
+  releaseCloseoutHandoffPack,
+  releasePublicationEvidence
+}) {
+  if (isPlainObject(stableWorkbenchRelease)) {
+    const provided = stableWorkbenchRelease.contractName === STABLE_WORKBENCH_RELEASE_CONTRACT_NAME
+      ? stableWorkbenchRelease
+      : buildStableWorkbenchRelease({
+          generatedAt,
+          ...stableWorkbenchRelease
+        });
+    const providedValidation = validateStableWorkbenchReleaseContract(provided);
+
+    if (!providedValidation.ok) {
+      throw new Error(`Invalid stable Workbench release projection: ${providedValidation.errors.join('; ')}`);
+    }
+
+    return provided;
+  }
+
+  const activeVersion = stableWorkbenchActiveVersion({
+    goalId,
+    releasePublicationEvidence
+  });
+  const currentTaggedRelease = stableWorkbenchCurrentTaggedRelease({
+    releasePublicationEvidence,
+    activeVersion
+  });
+  const contract = buildStableWorkbenchRelease({
+    generatedAt,
+    goal: {
+      goalId,
+      title: title ?? goalId,
+      state: 'active',
+      sourceRef: stableWorkbenchRunbookSourceRef(activeVersion)
+    },
+    release: {
+      currentTaggedRelease,
+      activeVersion,
+      currentTagCommit: stableWorkbenchCurrentTagCommit(releasePublicationEvidence),
+      activeTagExists: false,
+      activeGithubReleaseExists: false,
+      sourceRefs: stableWorkbenchReleaseSourceRefs(releasePublicationEvidence)
+    },
+    surfaces: [
+      stableWorkbenchSurface({
+        id: 'project-entry',
+        source: { state: 'ready' },
+        sourceContract: 'current-project-binding.v1',
+        copyOnly: false
+      }),
+      stableWorkbenchSurface({
+        id: 'goal-supervision',
+        source: { state: 'ready' },
+        sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+        copyOnly: false
+      }),
+      stableWorkbenchSurface({
+        id: 'context',
+        source: { state: 'ready' },
+        sourceContract: CONTEXT_ADVISORY_CONTRACT_NAME,
+        copyOnly: true
+      }),
+      stableWorkbenchSurface({
+        id: 'result-intake',
+        source: { state: 'ready' },
+        sourceContract: PENDING_RESULT_CONTRACT_NAME,
+        copyOnly: false
+      }),
+      stableWorkbenchSurface({
+        id: 'event-registration',
+        source: { state: 'ready' },
+        sourceContract: SUPERVISOR_EVENT_REGISTRATION_ELIGIBILITY_CONTRACT_NAME,
+        copyOnly: false
+      }),
+      stableWorkbenchSurface({
+        id: 'child-task-planning',
+        source: childDispatchPreview,
+        sourceContract: 'childDispatchPreview.v1',
+        copyOnly: true
+      }),
+      stableWorkbenchSurface({
+        id: 'provider-execution',
+        source: codexProviderExecutionPreview,
+        sourceContract: 'codexProviderExecutionPilot.v1',
+        copyOnly: false
+      }),
+      stableWorkbenchSurface({
+        id: 'review-and-gates',
+        source: reviewGatePreview,
+        sourceContract: 'reviewGateWorkbenchSurface.v1',
+        copyOnly: false
+      }),
+      stableWorkbenchSurface({
+        id: 'thread-handoff',
+        source: threadHandoffPack,
+        sourceContract: 'threadContinuationReviewerHandoffPack.v1',
+        copyOnly: true
+      }),
+      stableWorkbenchSurface({
+        id: 'release-closeout',
+        source: releaseCloseoutHandoffPack,
+        sourceContract: 'releaseCloseoutHandoffPack.v1',
+        copyOnly: true
+      }),
+      stableWorkbenchSurface({
+        id: 'release-publication',
+        source: releasePublicationEvidence,
+        sourceContract: 'releasePublicationEvidence.v1',
+        copyOnly: true
+      }),
+      stableWorkbenchSurface({
+        id: 'release-boundary',
+        source: releaseCloseoutHandoffPack,
+        sourceContract: 'tagReleaseOperatorChecklist.v1',
+        copyOnly: true
+      })
+    ],
+    providerBoundary: {
+      activeWorkbenchProviderClaims: [{
+        provider: 'codex-cli',
+        claim: 'controlled-provider-execution-preview',
+        status: 'tested-preview',
+        sourceContract: 'codexProviderExecutionPilot.v1',
+        sourceRef: {
+          kind: 'contract',
+          ref: 'codexProviderExecutionPilot.v1',
+          label: 'v54 controlled provider execution preview'
+        },
+        blockedReasons: stableWorkbenchSourceState(codexProviderExecutionPreview) === 'ready' ? [] : ['provider-execution-source-not-ready']
+      }],
+      unsupportedProviderClaims: [],
+      rawProviderCliEvidenceAllowed: false,
+      notes: []
+    },
+    releaseBoundary: stableWorkbenchReleaseBoundary(),
+    safety: stableWorkbenchSafety(),
+    evidenceRefs: [
+      { kind: 'repo-doc', ref: 'docs/daily-workflow-runbook.md', label: 'daily workflow runbook' },
+      { kind: 'repo-doc', ref: 'docs/provider-boundary-guide.md', label: 'provider boundary guide' },
+      { kind: 'repo-doc', ref: 'docs/recovery-guide.md', label: 'recovery guide' }
+    ],
+    knownFacts: stableWorkbenchKnownFacts({
+      currentTaggedRelease,
+      activeVersion
+    })
+  });
+  const validation = validateStableWorkbenchReleaseContract(contract);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid stable Workbench release projection: ${validation.errors.join('; ')}`);
+  }
+
+  return contract;
+}
+
+function stableWorkbenchSurface({
+  id,
+  source,
+  sourceContract,
+  copyOnly
+}) {
+  const state = stableWorkbenchSourceState(source);
+  const blockedReasons = state === 'ready' ? [] : [`${id}-source-${state}`];
+
+  return {
+    id,
+    state,
+    sourceContract,
+    sourceRef: {
+      kind: 'contract',
+      ref: sourceContract,
+      label: `${sourceContract} source`
+    },
+    evidenceRefs: stableWorkbenchSurfaceEvidenceRefs(source),
+    readOnly: true,
+    copyOnly,
+    willMutate: false,
+    blockedReasons
+  };
+}
+
+function stableWorkbenchSourceState(source) {
+  if (!isPlainObject(source)) {
+    return 'missing';
+  }
+
+  const sourceState = firstNonEmptyString(
+    source.state,
+    source.overallState,
+    source.readiness,
+    source.reviewReadiness?.state,
+    source.mainGateReadiness?.state,
+    source.releaseGateReadiness?.state
+  );
+
+  if (Array.isArray(source.blockedReasons) && source.blockedReasons.length > 0) {
+    return 'blocked';
+  }
+
+  if (['blocked', 'missing'].includes(sourceState)) {
+    return sourceState;
+  }
+
+  if (sourceState === null) {
+    return 'ready';
+  }
+
+  if (sourceState.includes('blocked') || sourceState.includes('not-ready')) {
+    return 'blocked';
+  }
+
+  if (sourceState.includes('missing')) {
+    return 'missing';
+  }
+
+  return 'ready';
+}
+
+function stableWorkbenchSurfaceEvidenceRefs(source) {
+  const refs = [
+    ...safeArray(source?.evidenceRefs),
+    ...safeArray(source?.requiredEvidenceRefs),
+    ...safeArray(source?.sourceRefs),
+    source?.sourceRef
+  ];
+
+  return refs
+    .filter(isPlainObject)
+    .map((ref) => ({
+      kind: firstNonEmptyString(ref.kind, 'contract'),
+      ref: firstNonEmptyString(ref.ref),
+      label: firstNonEmptyString(ref.label, 'source ref')
+    }))
+    .filter((ref) => ref.ref !== null && !releasePublicationUnsafeText(ref.ref));
+}
+
+function stableWorkbenchActiveVersion({
+  goalId,
+  releasePublicationEvidence
+}) {
+  return firstNonEmptyString(
+    releasePublicationEvidence?.nextVersionStartAudit?.nextVersion,
+    versionFromGoalId(goalId),
+    'v60'
+  );
+}
+
+function stableWorkbenchCurrentTaggedRelease({
+  releasePublicationEvidence,
+  activeVersion
+}) {
+  return firstNonEmptyString(
+    releasePublicationEvidence?.nextVersionStartAudit?.currentVersion,
+    releasePublicationEvidence?.sourceCloseoutHandoff?.releaseTag,
+    previousVersion(activeVersion),
+    'v59'
+  );
+}
+
+function stableWorkbenchCurrentTagCommit(releasePublicationEvidence) {
+  return firstNonEmptyString(
+    releasePublicationEvidence?.targetCommit?.expectedCommit,
+    releasePublicationEvidence?.targetCommit?.tagDereferencedCommit,
+    releasePublicationEvidence?.tagEvidence?.dereferencedCommit,
+    releasePublicationEvidence?.sourceCloseoutHandoff?.targetCommit
+  );
+}
+
+function stableWorkbenchReleaseSourceRefs(releasePublicationEvidence) {
+  const refs = [{
+    kind: 'contract',
+    ref: 'releasePublicationEvidence.v1',
+    label: 'release publication evidence'
+  }];
+
+  if (isPlainObject(releasePublicationEvidence?.tagEvidence) && releasePublicationEvidence.tagEvidence.tagName !== null) {
+    refs.push({
+      kind: 'tag',
+      ref: releasePublicationEvidence.tagEvidence.tagName,
+      label: 'current annotated tag evidence'
+    });
+  }
+
+  if (isPlainObject(releasePublicationEvidence?.githubReleaseEvidence) && releasePublicationEvidence.githubReleaseEvidence.url !== null) {
+    refs.push({
+      kind: 'github-release',
+      ref: releasePublicationEvidence.githubReleaseEvidence.url,
+      label: 'current GitHub Release evidence'
+    });
+  }
+
+  return refs;
+}
+
+function stableWorkbenchReleaseBoundary() {
+  const manualOperation = {
+    state: 'manual-controller-action',
+    commandResult: 'not-run-by-product-code',
+    copyOnly: true,
+    willMutate: false,
+    sourceRef: {
+      kind: 'repo-doc',
+      ref: 'docs/release-checklist.md',
+      label: 'manual release checklist'
+    }
+  };
+
+  return {
+    tagOperation: manualOperation,
+    pushTagOperation: manualOperation,
+    githubReleaseOperation: manualOperation,
+    releaseReadyDeclaration: manualOperation,
+    manualControllerActionRequired: true,
+    automationObserved: false,
+    blockedReasons: []
+  };
+}
+
+function stableWorkbenchSafety() {
+  return {
+    rawTranscriptObserved: false,
+    rawModelOutputObserved: false,
+    frontendLocalJsonlReadObserved: false,
+    frontendLocalSessionReadObserved: false,
+    frontendProviderFolderReadObserved: false,
+    rendererCommandExecutionObserved: false,
+    genericShellObserved: false,
+    genericTerminalObserved: false,
+    directGoalEventAppendObserved: false,
+    directTaskCompletionObserved: false,
+    automaticWorktreeCreationObserved: false,
+    automaticNextVersionGoalObserved: false,
+    blockedReasons: []
+  };
+}
+
+function stableWorkbenchKnownFacts({
+  currentTaggedRelease,
+  activeVersion
+}) {
+  return [
+    `${currentTaggedRelease} release evidence is displayed through releasePublicationEvidence.v1`,
+    `${activeVersion} tag and GitHub Release do not exist yet`,
+    'tag push and GitHub Release publication remain controller manual actions'
+  ];
+}
+
+function stableWorkbenchRunbookSourceRef(activeVersion) {
+  if (activeVersion === 'v60') {
+    return {
+      kind: 'repo-doc',
+      ref: 'docs/plans/v60-stable-personal-workbench-release-runbook-2026-06-14.md',
+      label: 'v60 runbook'
+    };
+  }
+
+  return {
+    kind: 'repo-doc',
+    ref: 'docs/plans',
+    label: `${activeVersion} runbook`
+  };
+}
+
+function versionFromGoalId(goalId) {
+  const match = String(goalId ?? '').match(/^(v[0-9]+)/u);
+
+  return match?.[1] ?? null;
+}
+
+function previousVersion(version) {
+  const match = String(version ?? '').match(/^v([0-9]+)$/u);
+
+  if (match === null) {
+    return null;
+  }
+
+  const number = Number.parseInt(match[1], 10);
+
+  if (!Number.isInteger(number) || number <= 0) {
+    return null;
+  }
+
+  return `v${number - 1}`;
 }
 
 function releasePublicationSourceCloseoutHandoff({
