@@ -1,0 +1,144 @@
+{
+  "contractName": "personalWorkbenchSettings.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-14T19:20:00.000Z",
+  "state": "ready",
+  "settingsSource": {
+    "kind": "fixture",
+    "state": "ready",
+    "ref": "fixture:personal-workbench-settings",
+    "sourceContract": null,
+    "generatedAt": "2026-06-14T19:20:00.000Z",
+    "readOnly": true,
+    "writePolicy": "manual-controller-or-preview-confirm-only"
+  },
+  "preferences": {
+    "preferredProviders": ["codex-cli", "claude-code-cli"],
+    "defaultPort": 1420,
+    "runtimeDirRef": "managed-state-dir",
+    "uiLanguage": "zh-CN",
+    "displayDensity": "compact"
+  },
+  "currentProjectBinding": {
+    "contractName": "current-project-binding.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T19:20:00.000Z",
+    "state": "bound",
+    "selectedProjectId": "../outside",
+    "selectedProjectName": "multi-coding-agent-symphony",
+    "repoPath": "/workspace/multi-coding-agent-symphony",
+    "defaultBranch": "main",
+    "lastGoalId": "v64-first-run-project-setup-local-settings",
+    "lastRunId": "run-v64-settings-ready",
+    "healthStatus": "ok",
+    "bindingSource": "persisted app state",
+    "persisted": true,
+    "selectionUpdatedAt": "2026-06-14T19:20:00.000Z",
+    "fallbackReason": null,
+    "routeState": "ready",
+    "readOnly": true,
+    "selectionControl": {
+      "state": "available",
+      "endpointId": "/api/projects/current-binding/select",
+      "disabledReason": null
+    },
+    "sourcePolicy": "backend-known project id only; no frontend path input",
+    "boundaries": {
+      "selectionOnly": true,
+      "acceptsProjectIdOnly": true,
+      "arbitraryPathSubmissionAvailable": false,
+      "frontendFilesystemScanAvailable": false,
+      "frontendArbitraryPathReadAvailable": false,
+      "commandExecutionAvailable": false,
+      "providerLaunchAvailable": false,
+      "goalMutationAvailable": false,
+      "childDispatchAvailable": false,
+      "jobExecutionAvailable": false,
+      "gitWriteAvailable": false,
+      "releaseWriteAvailable": false,
+      "rawTranscriptReadAvailable": false
+    }
+  },
+  "recentProjects": {
+    "contractName": "recent-projects.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T19:20:00.000Z",
+    "state": "available",
+    "source": {
+      "kind": "fixture",
+      "scanScope": "known-projects-only",
+      "sourceContract": "project-registry.v1",
+      "generatedAt": "2026-06-14T19:20:00.000Z",
+      "degradedReason": null
+    },
+    "readOnly": true,
+    "items": [
+      {
+        "projectId": "../outside",
+        "displayName": "multi-coding-agent-symphony",
+        "repoPath": {
+          "displayValue": "/workspace/multi-coding-agent-symphony"
+        },
+        "defaultBranch": "main",
+        "remote": {
+          "displayValue": "git@github.com:Andy20010101/multi-coding-agent-symphony.git"
+        },
+        "pinned": false,
+        "lastOpenedAt": "2026-06-14T19:20:00.000Z",
+        "lastGoalId": "v64-first-run-project-setup-local-settings",
+        "lastRunId": "run-v64-settings-ready",
+        "healthSummary": {
+          "state": "ok",
+          "text": "ok"
+        },
+        "degradedReason": null
+      }
+    ],
+    "boundaries": {
+      "readOnly": true,
+      "diskScanAvailable": false,
+      "scanScope": "known-projects-only",
+      "arbitraryPathReadAvailable": false,
+      "commandExecutionAvailable": false,
+      "modelInvocationAvailable": false,
+      "gitWriteAvailable": false,
+      "releaseWriteAvailable": false
+    }
+  },
+  "recoveryActions": [],
+  "safety": {
+    "storesSecrets": false,
+    "storesRawProviderPaths": false,
+    "storesRawTranscripts": false,
+    "storesRawModelOutput": false,
+    "frontendReadsLocalJsonl": false,
+    "frontendReadsProviderFolders": false,
+    "rendererAcceptsArbitraryPath": false,
+    "rendererReadsArbitraryPath": false,
+    "rendererRunsCommands": false,
+    "createsGoalsAutomatically": false,
+    "createsWorktreesAutomatically": false,
+    "mutatesGitOrReleases": false
+  },
+  "blockedReasons": [],
+  "boundaries": {
+    "readOnly": true,
+    "willMutate": false,
+    "settingsWriteAvailable": false,
+    "secretStorageAvailable": false,
+    "rawProviderPathStorageAvailable": false,
+    "rawTranscriptStorageAvailable": false,
+    "frontendFilesystemScanAvailable": false,
+    "rendererArbitraryPathInputAvailable": false,
+    "rendererArbitraryPathReadAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "providerLaunchAvailable": false,
+    "goalCreationAvailable": false,
+    "goalMutationAvailable": false,
+    "worktreeCreationAvailable": false,
+    "gitWriteAvailable": false,
+    "releaseWriteAvailable": false
+  },
+  "readOnly": true,
+  "willMutate": false
+}
