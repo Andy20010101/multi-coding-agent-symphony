@@ -1322,6 +1322,7 @@ h4 {
 .desktop-sidebar,
 .desktop-topbar,
 .desktop-project-launcher,
+.desktop-first-run-setup,
 .desktop-app-home-panel,
 .system-golden-path-panel,
 .child-dispatch-preview-panel,
@@ -1427,14 +1428,24 @@ h4 {
   padding: 12px 14px;
 }
 
+.desktop-first-run-setup {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
 .desktop-project-launcher-header,
+.desktop-first-run-header,
 .desktop-project-launcher-grid,
+.desktop-first-run-grid,
 .desktop-project-health,
-.desktop-project-launcher-footer {
+.desktop-project-launcher-footer,
+.desktop-first-run-footer {
   min-width: 0;
 }
 
-.desktop-project-launcher-header {
+.desktop-project-launcher-header,
+.desktop-first-run-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
@@ -1443,7 +1454,8 @@ h4 {
   border-bottom: 1px solid var(--dsk-line-soft);
 }
 
-.desktop-project-launcher-header h2 {
+.desktop-project-launcher-header h2,
+.desktop-first-run-header h2 {
   margin: 0;
   color: var(--dsk-fg);
   font-family: var(--dsk-display);
@@ -1452,7 +1464,8 @@ h4 {
   line-height: 1.2;
 }
 
-.desktop-project-launcher-header p {
+.desktop-project-launcher-header p,
+.desktop-first-run-header p {
   margin: 5px 0 0;
   color: var(--dsk-muted);
   font-size: 12.5px;
@@ -1460,7 +1473,8 @@ h4 {
   line-height: 1.4;
 }
 
-.desktop-project-launcher-grid {
+.desktop-project-launcher-grid,
+.desktop-first-run-grid {
   display: grid;
   grid-template-columns: minmax(240px, 0.34fr) minmax(0, 0.66fr);
   gap: 10px;
@@ -1469,7 +1483,8 @@ h4 {
 
 .desktop-current-binding,
 .desktop-recent-projects,
-.desktop-project-health {
+.desktop-project-health,
+.desktop-first-run-pane {
   min-width: 0;
   border: 1px solid var(--dsk-line-faint);
   border-radius: 4px;
@@ -1511,6 +1526,49 @@ h4 {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.desktop-first-run-recent-list,
+.desktop-first-run-recovery-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desktop-first-run-recent-list li,
+.desktop-first-run-recovery-list li {
+  min-width: 0;
+  border: 1px solid var(--dsk-line-faint);
+  border-radius: 4px;
+  padding: 8px;
+  background: color-mix(in oklab, var(--dsk-surface-warm), var(--dsk-bg) 52%);
+}
+
+.desktop-first-run-recent-list strong,
+.desktop-first-run-recent-list small,
+.desktop-first-run-recovery-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.desktop-first-run-recent-list strong,
+.desktop-first-run-recovery-list strong {
+  display: block;
+  color: var(--dsk-fg);
+  font-size: 13px;
+  font-weight: 640;
+  line-height: 1.25;
+}
+
+.desktop-first-run-recent-list small {
+  display: block;
+  margin-top: 2px;
+  color: var(--dsk-muted);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  line-height: 1.35;
 }
 
 .desktop-recent-project-list li {
@@ -1562,6 +1620,12 @@ h4 {
 }
 
 .desktop-project-launcher-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.desktop-first-run-footer {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -3978,6 +4042,8 @@ h4 {
 
   .desktop-project-launcher-grid,
   .desktop-project-launcher-footer,
+  .desktop-first-run-grid,
+  .desktop-first-run-footer,
   .review-gate-readiness-grid {
     grid-template-columns: 1fr;
   }
@@ -4028,6 +4094,7 @@ h4 {
 
   .desktop-topbar,
   .desktop-project-launcher-header,
+  .desktop-first-run-header,
   .desktop-app-home-panel,
   .system-golden-path-summary,
   .review-gate-workbench-summary,
@@ -4049,6 +4116,7 @@ h4 {
 
   .desktop-card,
   .desktop-project-launcher,
+  .desktop-first-run-setup,
   .system-golden-path-panel,
   .review-gate-workbench-panel,
   .release-closeout-handoff-panel,

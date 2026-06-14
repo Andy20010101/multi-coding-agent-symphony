@@ -1135,6 +1135,107 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(app.slice(app.indexOf('function DesktopProjectLauncherPanel'), app.indexOf('function DesktopAppHomePanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b/u);
   });
 
+  it('renders the v64 First-run Project Setup panel without execution controls', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
+    const projectRoute = READONLY_API_ROUTES.find((route) => route.id === 'projectRegistry');
+    const recentRoute = READONLY_API_ROUTES.find((route) => route.id === 'recentProjects');
+    const bindingRoute = READONLY_API_ROUTES.find((route) => route.id === 'currentProjectBinding');
+    const settingsRoute = READONLY_API_ROUTES.find((route) => route.id === 'personalWorkbenchSettings');
+    const recentFixture = JSON.parse(await readFile('fixtures/contracts/recent-projects.available.v1.json', 'utf8'));
+    const readySettings = JSON.parse(await readFile('fixtures/contracts/personal-workbench-settings/personal-workbench-settings.ready.v1.json', 'utf8'));
+    const missingSettings = JSON.parse(await readFile('fixtures/contracts/personal-workbench-settings/personal-workbench-settings.missing-settings.v1.json', 'utf8'));
+    const staleSettings = JSON.parse(await readFile('fixtures/contracts/personal-workbench-settings/personal-workbench-settings.stale-project-binding.v1.json', 'utf8'));
+    const server = await createViteServer({
+      configFile: join(process.cwd(), 'frontend', 'workbench', 'vite.config.js'),
+      server: {
+        middlewareMode: true
+      },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+
+    try {
+      const { WorkbenchShell } = await server.ssrLoadModule('/src/App.jsx');
+      const viewState = createWorkbenchRenderViewState();
+
+      viewState.model = projectWorkbenchContracts({
+        projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
+        recentProjects: readonlyRouteResult(recentRoute, recentFixture),
+        currentProjectBinding: readonlyRouteResult(bindingRoute, createProjectLauncherBindingPayload()),
+        personalWorkbenchSettings: readonlyRouteResult(settingsRoute, readySettings)
+      });
+      viewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+      const desktopHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', viewState);
+      const setupIndex = desktopHtml.indexOf('id="desktop-first-run-project-setup"');
+      const launcherIndex = desktopHtml.indexOf('id="desktop-project-launcher"');
+      const appHomeIndex = desktopHtml.indexOf('class="desktop-app-home-panel"');
+      const setupHtml = desktopHtml.slice(setupIndex, appHomeIndex);
+
+      assert.notEqual(setupIndex, -1);
+      assert.equal(launcherIndex < setupIndex, true);
+      assert.equal(setupIndex < appHomeIndex, true);
+      assert.match(desktopHtml, /href="#desktop-first-run-project-setup">First-run/u);
+      assert.match(setupHtml, /First-run Project Setup/u);
+      assert.match(setupHtml, /personalWorkbenchSettings\.v1/u);
+      assert.match(setupHtml, /settings source/u);
+      assert.match(setupHtml, /fixture:personal-workbench-settings/u);
+      assert.match(setupHtml, /current project/u);
+      assert.match(setupHtml, /recent projects/u);
+      assert.match(setupHtml, /preferred providers/u);
+      assert.match(setupHtml, /codex-cli、claude-code-cli/u);
+      assert.match(setupHtml, /default port/u);
+      assert.match(setupHtml, /managed-state-dir/u);
+      assert.match(setupHtml, /next safe action/u);
+      assert.match(setupHtml, /Confirm current project and local settings source/u);
+      assert.match(setupHtml, />settings write<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />secret storage<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />arbitrary path input<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />arbitrary path read<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />renderer command execution<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />provider launch<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />goal creation<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />worktree creation<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />git write<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />release write<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />frontend JSONL read<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />provider folder read<\/dt><dd[^>]*>false/u);
+      assert.match(setupHtml, />mutates git or releases<\/dt><dd[^>]*>false/u);
+      assert.doesNotMatch(setupHtml, /<button\b|<form\b|<input\b|<textarea\b|onClick=|fetch\(|window\.open|navigator\.clipboard/u);
+      assert.doesNotMatch(setupHtml, />Select<|>Open<|>Run<|>Launch<|>Execute<|>Approve<|>Dispatch<|>Push<|>Tag<|>Release</u);
+
+      for (const [fixture, expectedCopy] of [
+        [missingSettings, 'Restore local settings from the managed app state'],
+        [staleSettings, 'Refresh current project binding from backend-known projects']
+      ]) {
+        const stateViewState = createWorkbenchRenderViewState();
+        stateViewState.model = projectWorkbenchContracts({
+          projectRegistry: readonlyRouteResult(projectRoute, createProjectLauncherRegistryPayload()),
+          recentProjects: readonlyRouteResult(recentRoute, recentFixture),
+          currentProjectBinding: readonlyRouteResult(bindingRoute, createProjectLauncherBindingPayload()),
+          personalWorkbenchSettings: readonlyRouteResult(settingsRoute, fixture)
+        });
+        stateViewState.model.routeContext = createWorkbenchRenderRouteContext();
+
+        const stateHtml = renderWorkbenchShellAt(WorkbenchShell, '/workbench/desktop/', stateViewState);
+
+        assert.match(stateHtml, new RegExp(expectedCopy, 'u'));
+        assert.match(stateHtml, /copy only<\/dt><dd[^>]*>true/u);
+        assert.match(stateHtml, /willMutate<\/dt><dd[^>]*>false/u);
+      }
+    } finally {
+      await server.close();
+      restoreSsrLocation();
+    }
+
+    assert.match(app, /DesktopFirstRunProjectSetupPanel/u);
+    assert.match(css, /\.desktop-first-run-setup/u);
+    assert.match(css, /\.desktop-first-run-grid/u);
+    assert.match(css, /@media \(max-width: 640px\)[\s\S]*\.desktop-first-run-header/u);
+    assert.doesNotMatch(app.slice(app.indexOf('function DesktopFirstRunProjectSetupPanel'), app.indexOf('function DesktopAppHomePanel')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<input\b|<textarea\b/u);
+  });
+
   it('renders the v46 fixture Supervisor Workbench without execution controls', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const css = await readFile('frontend/workbench/src/styles/workbench.css', 'utf8');
