@@ -14,6 +14,9 @@ import {
   deriveStableWorkbenchReleaseBlockedReasons,
   validateStableWorkbenchReleaseContract
 } from '../src/symphony/stable-workbench-release-contracts.js';
+import {
+  buildGoalSupervisorAppReadModel
+} from '../src/symphony/goal-supervisor/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..');
@@ -272,6 +275,50 @@ describe('v60 stable personal Workbench release contracts', () => {
         return true;
       }
     );
+  });
+
+  it('exposes the stable baseline through the goal supervisor read model', () => {
+    const model = buildGoalSupervisorAppReadModel({
+      goalId: 'v60-stable-personal-workbench-release',
+      title: 'v60: Stable Personal Workbench Release',
+      stableWorkbenchRelease: readyInput(),
+      nowMs: Date.parse(GENERATED_AT)
+    });
+    const contract = model.stableWorkbenchRelease;
+    const validation = validateStableWorkbenchReleaseContract(contract);
+
+    assert.equal(contract.contractName, STABLE_WORKBENCH_RELEASE_CONTRACT_NAME);
+    assert.equal(validation.ok, true, validation.errors.join('; '));
+    assert.equal(contract.state, 'ready');
+    assert.equal(contract.goal.goalId, 'v60-stable-personal-workbench-release');
+    assert.equal(contract.release.currentTaggedRelease, 'v59');
+    assert.equal(contract.release.activeVersion, 'v60');
+    assert.equal(contract.release.currentTagCommit, TARGET_COMMIT);
+    assert.equal(contract.providerBoundary.activeWorkbenchProviderClaims[0].provider, 'codex-cli');
+    assert.equal(contract.releaseBoundary.githubReleaseOperation.commandResult, 'not-run-by-product-code');
+    assert.equal(contract.safety.rendererCommandExecutionObserved, false);
+    assert.deepEqual(contract.boundaries, STABLE_WORKBENCH_RELEASE_BOUNDARIES);
+    assertNoLocalRefs(contract, 'backend-ready');
+  });
+
+  it('derives a blocked stable baseline when backend source surfaces are not ready', () => {
+    const model = buildGoalSupervisorAppReadModel({
+      goalId: 'v60-stable-personal-workbench-release',
+      title: 'v60: Stable Personal Workbench Release',
+      nowMs: Date.parse(GENERATED_AT)
+    });
+    const contract = model.stableWorkbenchRelease;
+    const validation = validateStableWorkbenchReleaseContract(contract);
+
+    assert.equal(contract.contractName, STABLE_WORKBENCH_RELEASE_CONTRACT_NAME);
+    assert.equal(validation.ok, true, validation.errors.join('; '));
+    assert.equal(contract.state, 'blocked');
+    assert.ok(contract.blockedReasons.includes('blocked-stable-workbench-surface'));
+    assert.equal(surfaceById(contract, 'release-publication').state, 'blocked');
+    assert.equal(contract.releaseBoundary.manualControllerActionRequired, true);
+    assert.equal(contract.releaseBoundary.automationObserved, false);
+    assert.equal(contract.safety.frontendLocalJsonlReadObserved, false);
+    assertNoLocalRefs(contract, 'backend-derived-blocked');
   });
 });
 

@@ -1449,13 +1449,17 @@ describe('v15 Workbench read-only API client', () => {
     const releasePublicationEvidence = JSON.parse(
       await readFile('fixtures/contracts/release-publication-evidence/release-publication-evidence.ready.v1.json', 'utf8')
     );
+    const stableWorkbenchRelease = JSON.parse(
+      await readFile('fixtures/contracts/stable-workbench-release/stable-workbench-release.ready.v1.json', 'utf8')
+    );
     const supervisor = {
       ...createGoalSupervisorAppReadModelPayload(),
       codexProviderRunRecovery,
       reviewerHandoffPreview,
       threadHandoffPack,
       releaseCloseoutHandoffPack,
-      releasePublicationEvidence
+      releasePublicationEvidence,
+      stableWorkbenchRelease
     };
     const model = projectWorkbenchContracts({
       goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
@@ -1465,6 +1469,7 @@ describe('v15 Workbench read-only API client', () => {
     const threadPack = model.threadHandoffPack;
     const releaseHandoff = model.releaseCloseoutHandoffPack;
     const publicationEvidence = model.releasePublicationEvidence;
+    const stableBaseline = model.stableWorkbenchRelease;
 
     assert.equal(recovery.contractName.text, 'codexProviderRunRecovery.v1');
     assert.equal(recovery.state, 'ready-for-reviewer-handoff');
@@ -1567,6 +1572,44 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(publicationEvidence.boundaries.automaticWorktreeCreationAvailable.value, false);
     assert.equal(publicationEvidence.boundaries.automaticNextVersionGoalAvailable.value, false);
     assert.equal(model.desktopShell.releasePublicationEvidence.contractName.text, 'releasePublicationEvidence.v1');
+
+    assert.equal(stableBaseline.contractName.text, 'stableWorkbenchRelease.v1');
+    assert.equal(stableBaseline.state, 'ready');
+    assert.equal(stableBaseline.goal.goalId.text, 'v60-stable-personal-workbench-release');
+    assert.equal(stableBaseline.release.currentTaggedRelease.text, 'v59');
+    assert.equal(stableBaseline.release.activeVersion.text, 'v60');
+    assert.equal(stableBaseline.release.currentTagCommit.text, '6e4ca4e2e7e459629e66b5c89b37abca78eddb19');
+    assert.equal(stableBaseline.release.activeTagExists.value, false);
+    assert.equal(stableBaseline.release.activeGithubReleaseExists.value, false);
+    assert.equal(stableBaseline.surfaces.count.value, 12);
+    assert.equal(stableBaseline.surfaces.items.some((surface) => surface.id.text === 'release-boundary'), true);
+    assert.equal(stableBaseline.providerBoundary.activeWorkbenchProviderClaims.items[0].provider.text, 'codex-cli');
+    assert.equal(stableBaseline.providerBoundary.activeWorkbenchProviderClaims.items[0].status.text, 'tested-preview');
+    assert.equal(stableBaseline.providerBoundary.unsupportedProviderClaims.count.value, 0);
+    assert.equal(stableBaseline.providerBoundary.rawProviderCliEvidenceAllowed.value, false);
+    assert.equal(stableBaseline.releaseBoundary.manualControllerActionRequired.value, true);
+    assert.equal(stableBaseline.releaseBoundary.automationObserved.value, false);
+    assert.equal(stableBaseline.releaseBoundary.githubReleaseOperation.commandResult.text, 'not-run-by-product-code');
+    assert.equal(stableBaseline.safety.rawTranscriptObserved.value, false);
+    assert.equal(stableBaseline.safety.frontendLocalJsonlReadObserved.value, false);
+    assert.equal(stableBaseline.safety.rendererCommandExecutionObserved.value, false);
+    assert.equal(stableBaseline.safety.directGoalEventAppendObserved.value, false);
+    assert.equal(stableBaseline.safety.automaticNextVersionGoalObserved.value, false);
+    assert.equal(stableBaseline.knownFacts.items[0].text, 'v59 tag and GitHub Release are complete');
+    assert.equal(stableBaseline.boundaries.providerLaunchAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.unsupportedProviderClaimsAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.genericShellAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.rendererCommandExecutionAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.frontendLocalJsonlReadAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.rawTranscriptExposureAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.directGoalEventAppendAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.gitWriteAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.githubReleaseCreateAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.publicDistributionClaimAvailable.value, false);
+    assert.equal(stableBaseline.boundaries.automaticWorktreeCreationAvailable.value, false);
+    assert.equal(stableBaseline.readOnly.value, true);
+    assert.equal(stableBaseline.willMutate.value, false);
+    assert.equal(model.desktopShell.stableWorkbenchRelease.contractName.text, 'stableWorkbenchRelease.v1');
   });
 
   it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {

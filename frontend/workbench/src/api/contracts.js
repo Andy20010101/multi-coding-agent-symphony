@@ -1250,6 +1250,10 @@ export function projectWorkbenchContracts(results) {
     contract: goalSupervisorData?.releasePublicationEvidence,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
+  const projectedStableWorkbenchRelease = projectStableWorkbenchRelease({
+    contract: goalSupervisorData?.stableWorkbenchRelease,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1279,6 +1283,7 @@ export function projectWorkbenchContracts(results) {
     reviewGateConfirmationState: projectedReviewGateConfirmationState,
     releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
     releasePublicationEvidence: projectedReleasePublicationEvidence,
+    stableWorkbenchRelease: projectedStableWorkbenchRelease,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
       routeStates
@@ -1310,6 +1315,7 @@ export function projectWorkbenchContracts(results) {
       reviewGateConfirmationState: projectedReviewGateConfirmationState,
       releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
       releasePublicationEvidence: projectedReleasePublicationEvidence,
+      stableWorkbenchRelease: projectedStableWorkbenchRelease,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1896,6 +1902,7 @@ function projectDesktopShell({
   reviewGateConfirmationState,
   releaseCloseoutHandoffPack,
   releasePublicationEvidence,
+  stableWorkbenchRelease,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -2194,6 +2201,7 @@ function projectDesktopShell({
     reviewGateConfirmationState,
     releaseCloseoutHandoffPack,
     releasePublicationEvidence,
+    stableWorkbenchRelease,
     routeProvenance,
     appStates,
     boundaries,
@@ -3175,6 +3183,168 @@ function projectReleasePublicationNextStartAudit(audit) {
     blockedReasons: projectSystemGoldenPathTextItems(audit?.blockedReasons),
     readOnly: valueState(audit?.readOnly),
     willMutate: valueState(audit?.willMutate)
+  };
+}
+
+function projectStableWorkbenchRelease({
+  contract,
+  supervisorRoute
+}) {
+  const hasContract = contract !== null && contract !== undefined && typeof contract === 'object' && !Array.isArray(contract);
+  const surfaces = Array.isArray(contract?.surfaces) ? contract.surfaces : [];
+  const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+
+  return {
+    state: hasContract ? contract.state ?? (blockedReasons.length === 0 ? 'ready' : 'blocked') : 'missing',
+    contractName: valueState(contract?.contractName),
+    contractVersion: valueState(contract?.contractVersion),
+    generatedAt: valueState(contract?.generatedAt),
+    goal: {
+      goalId: valueState(contract?.goal?.goalId),
+      title: valueState(contract?.goal?.title),
+      state: valueState(contract?.goal?.state),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+    },
+    release: projectStableWorkbenchReleaseBoundary(contract?.release),
+    surfaces: {
+      state: surfaces.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+      count: valueState(surfaces.length),
+      items: surfaces.map(projectStableWorkbenchSurface)
+    },
+    providerBoundary: projectStableWorkbenchProviderBoundary(contract?.providerBoundary),
+    releaseBoundary: projectStableWorkbenchReleaseOperations(contract?.releaseBoundary),
+    safety: projectStableWorkbenchSafety(contract?.safety),
+    evidenceRefs: projectChildDispatchEvidenceRefs(contract?.evidenceRefs),
+    knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+    blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+    boundaries: Object.fromEntries(
+      Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    readOnly: valueState(contract?.readOnly),
+    willMutate: valueState(contract?.willMutate),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 stableWorkbenchRelease projection')
+    },
+    note: hasContract
+      ? 'Stable Workbench release baseline is backend-owned read-only state. Workbench displays surface readiness, provider limits, release boundaries, safety checks, and evidence refs without command execution or release automation.'
+      : 'Stable Workbench release baseline is unavailable until goal-supervisor-app-read-model.v1 exposes stableWorkbenchRelease.v1.'
+  };
+}
+
+function projectStableWorkbenchReleaseBoundary(release) {
+  const hasRelease = release !== null && release !== undefined && typeof release === 'object' && !Array.isArray(release);
+
+  return {
+    state: hasRelease ? 'available' : 'missing',
+    currentTaggedRelease: valueState(release?.currentTaggedRelease),
+    activeVersion: valueState(release?.activeVersion),
+    currentTagCommit: valueState(release?.currentTagCommit),
+    activeTagExists: valueState(release?.activeTagExists),
+    activeGithubReleaseExists: valueState(release?.activeGithubReleaseExists),
+    sourceRefs: projectChildDispatchEvidenceRefs(release?.sourceRefs)
+  };
+}
+
+function projectStableWorkbenchSurface(surface) {
+  return {
+    id: valueState(surface?.id),
+    label: valueState(surface?.label),
+    state: valueState(surface?.state),
+    required: valueState(surface?.required),
+    sourceContract: valueState(surface?.sourceContract),
+    sourceRef: projectSystemGoldenPathSourceRef(surface?.sourceRef),
+    evidenceRefs: projectChildDispatchEvidenceRefs(surface?.evidenceRefs),
+    readOnly: valueState(surface?.readOnly),
+    copyOnly: valueState(surface?.copyOnly),
+    willMutate: valueState(surface?.willMutate),
+    blockedReasons: projectSystemGoldenPathTextItems(surface?.blockedReasons)
+  };
+}
+
+function projectStableWorkbenchProviderBoundary(providerBoundary) {
+  const hasBoundary = providerBoundary !== null && providerBoundary !== undefined && typeof providerBoundary === 'object' && !Array.isArray(providerBoundary);
+  const activeClaims = Array.isArray(providerBoundary?.activeWorkbenchProviderClaims)
+    ? providerBoundary.activeWorkbenchProviderClaims
+    : [];
+  const unsupportedClaims = Array.isArray(providerBoundary?.unsupportedProviderClaims)
+    ? providerBoundary.unsupportedProviderClaims
+    : [];
+
+  return {
+    state: hasBoundary ? 'available' : 'missing',
+    activeWorkbenchProviderClaims: {
+      state: activeClaims.length > 0 ? 'available' : hasBoundary ? 'empty' : 'missing',
+      count: valueState(activeClaims.length),
+      items: activeClaims.map(projectStableWorkbenchProviderClaim)
+    },
+    unsupportedProviderClaims: {
+      state: unsupportedClaims.length > 0 ? 'available' : hasBoundary ? 'empty' : 'missing',
+      count: valueState(unsupportedClaims.length),
+      items: unsupportedClaims.map(projectStableWorkbenchProviderClaim)
+    },
+    rawProviderCliEvidenceAllowed: valueState(providerBoundary?.rawProviderCliEvidenceAllowed),
+    notes: projectSystemGoldenPathTextItems(providerBoundary?.notes)
+  };
+}
+
+function projectStableWorkbenchProviderClaim(claim) {
+  return {
+    provider: valueState(claim?.provider),
+    claim: valueState(claim?.claim),
+    status: valueState(claim?.status),
+    sourceContract: valueState(claim?.sourceContract),
+    sourceRef: projectSystemGoldenPathSourceRef(claim?.sourceRef),
+    blockedReasons: projectSystemGoldenPathTextItems(claim?.blockedReasons)
+  };
+}
+
+function projectStableWorkbenchReleaseOperations(releaseBoundary) {
+  const hasBoundary = releaseBoundary !== null && releaseBoundary !== undefined && typeof releaseBoundary === 'object' && !Array.isArray(releaseBoundary);
+
+  return {
+    state: hasBoundary ? 'available' : 'missing',
+    tagOperation: projectStableWorkbenchReleaseOperation(releaseBoundary?.tagOperation),
+    pushTagOperation: projectStableWorkbenchReleaseOperation(releaseBoundary?.pushTagOperation),
+    githubReleaseOperation: projectStableWorkbenchReleaseOperation(releaseBoundary?.githubReleaseOperation),
+    releaseReadyDeclaration: projectStableWorkbenchReleaseOperation(releaseBoundary?.releaseReadyDeclaration),
+    manualControllerActionRequired: valueState(releaseBoundary?.manualControllerActionRequired),
+    automationObserved: valueState(releaseBoundary?.automationObserved),
+    blockedReasons: projectSystemGoldenPathTextItems(releaseBoundary?.blockedReasons)
+  };
+}
+
+function projectStableWorkbenchReleaseOperation(operation) {
+  const hasOperation = operation !== null && operation !== undefined && typeof operation === 'object' && !Array.isArray(operation);
+
+  return {
+    state: valueState(hasOperation ? operation.state ?? 'available' : undefined),
+    commandResult: valueState(operation?.commandResult),
+    copyOnly: valueState(operation?.copyOnly),
+    willMutate: valueState(operation?.willMutate),
+    sourceRef: projectSystemGoldenPathSourceRef(operation?.sourceRef)
+  };
+}
+
+function projectStableWorkbenchSafety(safety) {
+  const hasSafety = safety !== null && safety !== undefined && typeof safety === 'object' && !Array.isArray(safety);
+
+  return {
+    state: hasSafety ? 'available' : 'missing',
+    rawTranscriptObserved: valueState(safety?.rawTranscriptObserved),
+    rawModelOutputObserved: valueState(safety?.rawModelOutputObserved),
+    frontendLocalJsonlReadObserved: valueState(safety?.frontendLocalJsonlReadObserved),
+    frontendLocalSessionReadObserved: valueState(safety?.frontendLocalSessionReadObserved),
+    frontendProviderFolderReadObserved: valueState(safety?.frontendProviderFolderReadObserved),
+    rendererCommandExecutionObserved: valueState(safety?.rendererCommandExecutionObserved),
+    genericShellObserved: valueState(safety?.genericShellObserved),
+    genericTerminalObserved: valueState(safety?.genericTerminalObserved),
+    directGoalEventAppendObserved: valueState(safety?.directGoalEventAppendObserved),
+    directTaskCompletionObserved: valueState(safety?.directTaskCompletionObserved),
+    automaticWorktreeCreationObserved: valueState(safety?.automaticWorktreeCreationObserved),
+    automaticNextVersionGoalObserved: valueState(safety?.automaticNextVersionGoalObserved),
+    blockedReasons: projectSystemGoldenPathTextItems(safety?.blockedReasons)
   };
 }
 

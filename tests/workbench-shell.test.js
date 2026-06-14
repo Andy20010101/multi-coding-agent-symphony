@@ -731,6 +731,9 @@ describe('v15 Workbench React/Vite shell', () => {
     const releasePublicationEvidence = JSON.parse(
       await readFile('fixtures/contracts/release-publication-evidence/release-publication-evidence.ready.v1.json', 'utf8')
     );
+    const stableWorkbenchRelease = JSON.parse(
+      await readFile('fixtures/contracts/stable-workbench-release/stable-workbench-release.ready.v1.json', 'utf8')
+    );
     const reviewGateConfirmationState = buildReviewGateControlledConfirmationState({
       generatedAt: '2026-06-14T02:00:00.000Z',
       reviewGatePreview,
@@ -761,7 +764,8 @@ describe('v15 Workbench React/Vite shell', () => {
           reviewGatePreview,
           reviewGateConfirmationState,
           releaseCloseoutHandoffPack,
-          releasePublicationEvidence
+          releasePublicationEvidence,
+          stableWorkbenchRelease
         })
       });
       viewState.model.routeContext = createWorkbenchRenderRouteContext();
@@ -774,13 +778,15 @@ describe('v15 Workbench React/Vite shell', () => {
       const reviewGatePanelIndex = desktopHtml.indexOf('id="review-gate-workbench-panel"');
       const releaseHandoffPanelIndex = desktopHtml.indexOf('id="release-closeout-handoff-panel"');
       const publicationEvidencePanelIndex = desktopHtml.indexOf('id="release-publication-evidence-panel"');
+      const stablePanelIndex = desktopHtml.indexOf('id="stable-workbench-release-panel"');
       const appStateIndex = desktopHtml.indexOf('class="desktop-app-state-strip"');
       const recoveryHtml = desktopHtml.slice(recoveryPanelIndex, handoffPanelIndex);
       const handoffHtml = desktopHtml.slice(handoffPanelIndex, threadPackPanelIndex);
       const threadPackHtml = desktopHtml.slice(threadPackPanelIndex, reviewGatePanelIndex);
       const reviewGateHtml = desktopHtml.slice(reviewGatePanelIndex, releaseHandoffPanelIndex);
       const releaseHandoffHtml = desktopHtml.slice(releaseHandoffPanelIndex, publicationEvidencePanelIndex);
-      const publicationEvidenceHtml = desktopHtml.slice(publicationEvidencePanelIndex, appStateIndex);
+      const publicationEvidenceHtml = desktopHtml.slice(publicationEvidencePanelIndex, stablePanelIndex);
+      const stableHtml = desktopHtml.slice(stablePanelIndex, appStateIndex);
 
       assert.notEqual(recoveryPanelIndex, -1);
       assert.notEqual(handoffPanelIndex, -1);
@@ -788,19 +794,22 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.notEqual(reviewGatePanelIndex, -1);
       assert.notEqual(releaseHandoffPanelIndex, -1);
       assert.notEqual(publicationEvidencePanelIndex, -1);
+      assert.notEqual(stablePanelIndex, -1);
       assert.equal(codexPanelIndex < recoveryPanelIndex, true);
       assert.equal(recoveryPanelIndex < handoffPanelIndex, true);
       assert.equal(handoffPanelIndex < threadPackPanelIndex, true);
       assert.equal(threadPackPanelIndex < reviewGatePanelIndex, true);
       assert.equal(reviewGatePanelIndex < releaseHandoffPanelIndex, true);
       assert.equal(releaseHandoffPanelIndex < publicationEvidencePanelIndex, true);
-      assert.equal(publicationEvidencePanelIndex < appStateIndex, true);
+      assert.equal(publicationEvidencePanelIndex < stablePanelIndex, true);
+      assert.equal(stablePanelIndex < appStateIndex, true);
       assert.match(desktopHtml, /href="#codex-run-recovery-panel">Recovery/u);
       assert.match(desktopHtml, /href="#reviewer-handoff-preview-panel">Reviewer Handoff/u);
       assert.match(desktopHtml, /href="#thread-handoff-pack-panel">Thread Pack/u);
       assert.match(desktopHtml, /href="#review-gate-workbench-panel">Review Gate/u);
       assert.match(desktopHtml, /href="#release-closeout-handoff-panel">Release Handoff/u);
       assert.match(desktopHtml, /href="#release-publication-evidence-panel">Publication Evidence/u);
+      assert.match(desktopHtml, /href="#stable-workbench-release-panel">Stable Baseline/u);
 
       assert.match(recoveryHtml, /Codex Run Recovery/u);
       assert.match(recoveryHtml, /codexProviderRunRecovery\.v1/u);
@@ -921,6 +930,51 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(publicationEvidenceHtml, />start allowed<\/dt><dd[^>]*>true/u);
       assert.doesNotMatch(publicationEvidenceHtml, /<button\b|<form\b|<textarea\b|fetchGoalEventPlanPreview|confirmGoalEventPlan|window\.open|navigator\.clipboard/u);
       assert.doesNotMatch(publicationEvidenceHtml, /Run Tag|Push Tag|Publish Release|Create GitHub Release|Edit GitHub Release|Declare Release Ready|Launch Provider|Run Shell|Terminal|Read Session File|Open Transcript|Append Event Directly|Mark Complete|Create Next Goal|event-plan-confirm|git push|gh release|tag creation|publish release/u);
+
+      assert.match(stableHtml, /Stable Workbench Release/u);
+      assert.match(stableHtml, /stableWorkbenchRelease\.v1/u);
+      assert.match(stableHtml, /v60-stable-personal-workbench-release/u);
+      assert.match(stableHtml, />active version<\/dt><dd[^>]*>v60/u);
+      assert.match(stableHtml, />current tagged release<\/dt><dd[^>]*>v59/u);
+      assert.match(stableHtml, /6e4ca4e2e7e459629e66b5c89b37abca78eddb19/u);
+      assert.match(stableHtml, /Surface Matrix/u);
+      assert.match(stableHtml, /Project Entry/u);
+      assert.match(stableHtml, /Goal Supervision/u);
+      assert.match(stableHtml, /Provider Execution/u);
+      assert.match(stableHtml, /Review and Gates/u);
+      assert.match(stableHtml, /Release Boundary/u);
+      assert.match(stableHtml, /Provider Boundary/u);
+      assert.match(stableHtml, />provider<\/dt><dd[^>]*>codex-cli/u);
+      assert.match(stableHtml, />claim<\/dt><dd[^>]*>controlled-provider-execution-preview/u);
+      assert.match(stableHtml, />status<\/dt><dd[^>]*>tested-preview/u);
+      assert.match(stableHtml, />unsupported claims<\/dt><dd[^>]*>无/u);
+      assert.match(stableHtml, />raw provider CLI evidence allowed<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, /Release Boundary/u);
+      assert.match(stableHtml, />tag operation<\/dt><dd[^>]*>manual-controller-action/u);
+      assert.match(stableHtml, />GitHub Release command result<\/dt><dd[^>]*>not-run-by-product-code/u);
+      assert.match(stableHtml, />manual controller action required<\/dt><dd[^>]*>true/u);
+      assert.match(stableHtml, />automation observed<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, /Safety/u);
+      assert.match(stableHtml, />raw transcript observed<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />frontend JSONL read observed<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />renderer command execution observed<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />direct goal event append observed<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />automatic next-version goal observed<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, /Disabled Capabilities/u);
+      assert.match(stableHtml, />provider launch<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />unsupported provider claims<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />renderer command execution<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />frontend JSONL read<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />raw transcript exposure<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />direct goal event append<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />tag write<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />release create flag<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />public distribution claim<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, />automatic worktree creation<\/dt><dd[^>]*>false/u);
+      assert.match(stableHtml, /docs\/provider-boundary-guide\.md/u);
+      assert.match(stableHtml, /tag push and GitHub Release publication remain controller manual actions/u);
+      assert.doesNotMatch(stableHtml, /<button\b|<form\b|<textarea\b|fetchGoalEventPlanPreview|confirmGoalEventPlan|window\.open|navigator\.clipboard/u);
+      assert.doesNotMatch(stableHtml, /Run Tag|Push Tag|Publish Release|Create GitHub Release|Edit GitHub Release|Declare Release Ready|Launch Provider|Run Shell|Terminal|Read Session File|Open Transcript|Append Event Directly|Mark Complete|Create Next Goal|event-plan-confirm|git push|gh release|tag creation|publish release/u);
     } finally {
       await server.close();
       restoreSsrLocation();
@@ -932,12 +986,14 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(app, /ReviewGateWorkbenchPanel/u);
     assert.match(app, /ReleaseCloseoutHandoffPanel/u);
     assert.match(app, /ReleasePublicationEvidencePanel/u);
+    assert.match(app, /StableWorkbenchReleasePanel/u);
     assert.match(css, /\.codex-run-recovery-panel/u);
     assert.match(css, /\.reviewer-handoff-preview-panel/u);
     assert.match(css, /\.thread-handoff-pack-panel/u);
     assert.match(css, /\.review-gate-workbench-panel/u);
     assert.match(css, /\.release-closeout-handoff-panel/u);
     assert.match(css, /\.release-publication-evidence-panel/u);
+    assert.match(css, /\.stable-workbench-release-panel/u);
     assert.doesNotMatch(app.slice(app.indexOf('function CodexRunRecoveryPanel'), app.indexOf('function DesktopAppStateStrip')), /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<button\b|<form\b|<textarea\b/u);
   });
 

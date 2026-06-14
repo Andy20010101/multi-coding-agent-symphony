@@ -1332,6 +1332,7 @@ h4 {
 .review-gate-workbench-panel,
 .release-closeout-handoff-panel,
 .release-publication-evidence-panel,
+.stable-workbench-release-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
 .desktop-card {
@@ -1640,7 +1641,8 @@ h4 {
 .thread-handoff-pack-panel,
 .review-gate-workbench-panel,
 .release-closeout-handoff-panel,
-.release-publication-evidence-panel {
+.release-publication-evidence-panel,
+.stable-workbench-release-panel {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
@@ -1655,6 +1657,7 @@ h4 {
 .review-gate-workbench-header,
 .release-closeout-handoff-header,
 .release-publication-evidence-header,
+.stable-workbench-release-header,
 .system-golden-path-step-header {
   display: flex;
   flex-wrap: wrap;
@@ -1671,7 +1674,8 @@ h4 {
 .thread-handoff-pack-header,
 .review-gate-workbench-header,
 .release-closeout-handoff-header,
-.release-publication-evidence-header {
+.release-publication-evidence-header,
+.stable-workbench-release-header {
   border-bottom: 1px solid var(--dsk-line-soft);
   padding-bottom: 8px;
 }
@@ -1685,6 +1689,7 @@ h4 {
 .review-gate-workbench-header h2,
 .release-closeout-handoff-header h2,
 .release-publication-evidence-header h2,
+.stable-workbench-release-header h2,
 .system-golden-path-step-header h3 {
   margin: 0;
   color: var(--dsk-fg);
@@ -1701,7 +1706,8 @@ h4 {
 .thread-handoff-pack-header h2,
 .review-gate-workbench-header h2,
 .release-closeout-handoff-header h2,
-.release-publication-evidence-header h2 {
+.release-publication-evidence-header h2,
+.stable-workbench-release-header h2 {
   font-size: 18px;
 }
 
@@ -1728,6 +1734,7 @@ h4 {
 .review-gate-workbench-summary,
 .release-closeout-handoff-summary,
 .release-publication-evidence-summary,
+.stable-workbench-release-summary,
 .release-closeout-checklist-grid,
 .review-gate-confirmation-grid {
   display: grid;
@@ -1764,7 +1771,9 @@ h4 {
 .system-golden-path-step-list,
 .system-golden-path-source-list,
 .child-dispatch-source-list,
-.codex-provider-source-list {
+.codex-provider-source-list,
+.stable-workbench-surface-list,
+.stable-workbench-provider-list {
   display: grid;
   gap: 8px;
   margin: 0;
@@ -1776,6 +1785,8 @@ h4 {
 .system-golden-path-source-list li,
 .child-dispatch-source-list li,
 .codex-provider-source-list li,
+.stable-workbench-surface-list li,
+.stable-workbench-provider-list li,
 .child-dispatch-copy-card,
 .child-dispatch-provider-targets article {
   display: grid;
@@ -1793,6 +1804,33 @@ h4 {
   color: var(--dsk-fg);
   font-family: var(--dsk-mono);
   font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.stable-workbench-surface-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.stable-workbench-surface-header h3 {
+  margin: 0;
+  color: var(--dsk-fg);
+  font-family: var(--dsk-display);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.18;
+}
+
+.stable-workbench-surface-header small {
+  display: block;
+  margin-top: 3px;
+  color: var(--dsk-meta);
+  font-family: var(--dsk-mono);
+  font-size: 10.5px;
+  line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
@@ -3995,6 +4033,7 @@ h4 {
   .review-gate-workbench-summary,
   .release-closeout-handoff-summary,
   .release-publication-evidence-summary,
+  .stable-workbench-release-summary,
   .release-closeout-checklist-grid,
   .review-gate-confirmation-grid,
   .desktop-app-state-list,
@@ -4014,6 +4053,7 @@ h4 {
   .review-gate-workbench-panel,
   .release-closeout-handoff-panel,
   .release-publication-evidence-panel,
+  .stable-workbench-release-panel,
   .desktop-topbar {
     padding: 10px;
   }

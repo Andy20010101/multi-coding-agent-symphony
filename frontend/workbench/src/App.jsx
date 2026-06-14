@@ -47,6 +47,7 @@ const WORKBENCH_NAV_ITEMS = Object.freeze([
   Object.freeze({ id: 'adoption', label: 'Adoption', targetId: 'adoption-candidate-panel' }),
   Object.freeze({ id: 'review', label: 'Review', targetId: 'review-workspace-panel' }),
   Object.freeze({ id: 'verification', label: 'Verification', targetId: 'main-verification-readiness-panel' }),
+  Object.freeze({ id: 'stable-baseline', label: 'Stable Baseline', route: '/workbench/desktop/', targetId: 'stable-workbench-release-panel' }),
   Object.freeze({ id: 'release', label: 'Release', targetId: 'closeout-gaps-panel' }),
   Object.freeze({ id: 'closeout', label: 'Closeout', targetId: 'closeout-gaps-panel' })
 ]);
@@ -622,6 +623,7 @@ function DesktopShellRoute({
           <a href="#review-gate-workbench-panel">Review Gate</a>
           <a href="#release-closeout-handoff-panel">Release Handoff</a>
           <a href="#release-publication-evidence-panel">Publication Evidence</a>
+          <a href="#stable-workbench-release-panel">Stable Baseline</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
           <a href="#desktop-artifacts">Artifacts</a>
@@ -673,6 +675,7 @@ function DesktopShellRoute({
         />
         <ReleaseCloseoutHandoffPanel releaseCloseoutHandoffPack={desktopShell?.releaseCloseoutHandoffPack} />
         <ReleasePublicationEvidencePanel releasePublicationEvidence={desktopShell?.releasePublicationEvidence} />
+        <StableWorkbenchReleasePanel stableWorkbenchRelease={desktopShell?.stableWorkbenchRelease} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
           activeGoalStatus={desktopShell?.activeGoalStatus}
@@ -901,6 +904,8 @@ function projectLauncherEmptyCopy(recentProjects) {
 
 function DesktopAppHomePanel({ desktopShell, routeContext }) {
   const evidenceRefs = routeContext?.evidenceRefs?.items ?? [];
+  const stableRelease = desktopShell?.stableWorkbenchRelease;
+  const activeClaims = stableRelease?.providerBoundary?.activeWorkbenchProviderClaims?.items ?? [];
 
   return (
     <section className="desktop-app-home-panel" aria-label="Desktop App Home summary">
@@ -915,6 +920,12 @@ function DesktopAppHomePanel({ desktopShell, routeContext }) {
         ['repo path source', desktopShell?.workspace?.repoPathSource],
         ['backend route', desktopShell?.backendHealth?.route],
         ['route source', desktopShell?.appHome?.routeSource],
+        ['stable baseline', textValue(stableRelease?.state ?? 'missing')],
+        ['stable contract', stableRelease?.contractName],
+        ['active version', stableRelease?.release?.activeVersion],
+        ['provider claim', textValue(activeClaims.length > 0
+          ? activeClaims.map((claim) => `${claim.provider.text} / ${claim.status.text}`).join('、')
+          : '未暴露')],
         ['evidence refs', textValue(evidenceRefs.length > 0
           ? `${evidenceRefs.map((item) => item.ref.text).join('、')} (inert text only)`
           : 'inert text only')],
@@ -2340,6 +2351,191 @@ function ReleasePublicationEvidencePanel({ releasePublicationEvidence }) {
       </Subsection>
 
       <p className="panel-note">{evidence?.note ?? 'Release publication evidence unavailable.'}</p>
+    </section>
+  );
+}
+
+function StableWorkbenchReleasePanel({ stableWorkbenchRelease }) {
+  const baseline = stableWorkbenchRelease;
+  const release = baseline?.release;
+  const providerBoundary = baseline?.providerBoundary;
+  const releaseBoundary = baseline?.releaseBoundary;
+  const safety = baseline?.safety;
+  const surfaces = baseline?.surfaces?.items ?? [];
+  const activeClaims = providerBoundary?.activeWorkbenchProviderClaims?.items ?? [];
+  const unsupportedClaims = providerBoundary?.unsupportedProviderClaims?.items ?? [];
+
+  return (
+    <section
+      id="stable-workbench-release-panel"
+      className="stable-workbench-release-panel"
+      aria-label="Stable Workbench Release Baseline"
+    >
+      <header className="stable-workbench-release-header">
+        <div>
+          <p className="section-kicker">v60 stable baseline</p>
+          <h2>Stable Workbench Release</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(baseline?.state)}`}>
+          {baseline?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="stable-workbench-release-summary">
+        <FieldList rows={[
+          ['contract', baseline?.contractName],
+          ['goal', baseline?.goal?.goalId],
+          ['active version', release?.activeVersion],
+          ['current tagged release', release?.currentTaggedRelease],
+          ['current tag commit', release?.currentTagCommit],
+          ['active tag exists', release?.activeTagExists],
+          ['active GitHub Release exists', release?.activeGithubReleaseExists],
+          ['readOnly', baseline?.readOnly],
+          ['willMutate', baseline?.willMutate]
+        ]} />
+        <FieldList rows={[
+          ['surface count', baseline?.surfaces?.count],
+          ['active provider claims', providerBoundary?.activeWorkbenchProviderClaims?.count],
+          ['unsupported provider claims', providerBoundary?.unsupportedProviderClaims?.count],
+          ['raw provider CLI evidence allowed', providerBoundary?.rawProviderCliEvidenceAllowed],
+          ['manual controller action required', releaseBoundary?.manualControllerActionRequired],
+          ['release automation observed', releaseBoundary?.automationObserved],
+          ['known facts', textValueFromItems(baseline?.knownFacts, '无')],
+          ['blocked reasons', textValueFromItems(baseline?.blockedReasons, '无')]
+        ]} />
+      </div>
+
+      <Subsection title="Surface Matrix">
+        {surfaces.length === 0 ? (
+          <EmptyBlock copy="Stable Workbench surfaces 未暴露。" />
+        ) : (
+          <ul className="stable-workbench-surface-list">
+            {surfaces.map((surface) => (
+              <li key={surface.id.text}>
+                <header className="stable-workbench-surface-header">
+                  <div>
+                    <h3>{surface.label.text}</h3>
+                    <small>{surface.id.text}</small>
+                  </div>
+                  <span className={`desktop-status ${desktopStatusClass(surface.state.text)}`}>{surface.state.text}</span>
+                </header>
+                <FieldList rows={[
+                  ['required', surface.required],
+                  ['source contract', surface.sourceContract],
+                  ['source ref', surface.sourceRef?.ref],
+                  ['evidence refs', evidenceRefsTextFromCollection(surface.evidenceRefs)],
+                  ['readOnly', surface.readOnly],
+                  ['copyOnly', surface.copyOnly],
+                  ['willMutate', surface.willMutate],
+                  ['blocked reasons', textValueFromItems(surface.blockedReasons, '无')]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="Provider Boundary">
+        {activeClaims.length === 0 ? (
+          <EmptyBlock copy="Active provider claims 未暴露。" />
+        ) : (
+          <ul className="stable-workbench-provider-list">
+            {activeClaims.map((claim, index) => (
+              <li key={`${claim.provider.text}-${index}`}>
+                <FieldList rows={[
+                  ['provider', claim.provider],
+                  ['claim', claim.claim],
+                  ['status', claim.status],
+                  ['source contract', claim.sourceContract],
+                  ['source ref', claim.sourceRef?.ref],
+                  ['blocked reasons', textValueFromItems(claim.blockedReasons, '无')]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <FieldList rows={[
+          ['unsupported claims', textValue(unsupportedClaims.length === 0 ? '无' : unsupportedClaims.map((claim) => claim.provider.text).join('、'))],
+          ['raw provider CLI evidence allowed', providerBoundary?.rawProviderCliEvidenceAllowed],
+          ['notes', textValueFromItems(providerBoundary?.notes, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Release Boundary">
+        <FieldList rows={[
+          ['tag operation', releaseBoundary?.tagOperation?.state],
+          ['tag command result', releaseBoundary?.tagOperation?.commandResult],
+          ['tag copyOnly', releaseBoundary?.tagOperation?.copyOnly],
+          ['tag willMutate', releaseBoundary?.tagOperation?.willMutate],
+          ['tag source ref', releaseBoundary?.tagOperation?.sourceRef?.ref],
+          ['push tag operation', releaseBoundary?.pushTagOperation?.state],
+          ['push tag command result', releaseBoundary?.pushTagOperation?.commandResult],
+          ['GitHub Release operation', releaseBoundary?.githubReleaseOperation?.state],
+          ['GitHub Release command result', releaseBoundary?.githubReleaseOperation?.commandResult],
+          ['release-ready declaration', releaseBoundary?.releaseReadyDeclaration?.state],
+          ['manual controller action required', releaseBoundary?.manualControllerActionRequired],
+          ['automation observed', releaseBoundary?.automationObserved],
+          ['blocked reasons', textValueFromItems(releaseBoundary?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Safety">
+        <FieldList rows={[
+          ['raw transcript observed', safety?.rawTranscriptObserved],
+          ['raw model output observed', safety?.rawModelOutputObserved],
+          ['frontend JSONL read observed', safety?.frontendLocalJsonlReadObserved],
+          ['frontend session read observed', safety?.frontendLocalSessionReadObserved],
+          ['frontend provider folder read observed', safety?.frontendProviderFolderReadObserved],
+          ['renderer command execution observed', safety?.rendererCommandExecutionObserved],
+          ['generic shell observed', safety?.genericShellObserved],
+          ['generic terminal observed', safety?.genericTerminalObserved],
+          ['direct goal event append observed', safety?.directGoalEventAppendObserved],
+          ['direct task completion observed', safety?.directTaskCompletionObserved],
+          ['automatic worktree creation observed', safety?.automaticWorktreeCreationObserved],
+          ['automatic next-version goal observed', safety?.automaticNextVersionGoalObserved],
+          ['blocked reasons', textValueFromItems(safety?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Disabled Capabilities">
+        <FieldList rows={[
+          ['provider launch', baseline?.boundaries?.providerLaunchAvailable],
+          ['unsupported provider claims', baseline?.boundaries?.unsupportedProviderClaimsAvailable],
+          ['generic shell', baseline?.boundaries?.genericShellAvailable],
+          ['generic terminal', baseline?.boundaries?.genericTerminalAvailable],
+          ['renderer command execution', baseline?.boundaries?.rendererCommandExecutionAvailable],
+          ['frontend JSONL read', baseline?.boundaries?.frontendLocalJsonlReadAvailable],
+          ['frontend session read', baseline?.boundaries?.frontendLocalSessionReadAvailable],
+          ['frontend provider folder read', baseline?.boundaries?.frontendProviderFolderReadAvailable],
+          ['raw transcript exposure', baseline?.boundaries?.rawTranscriptExposureAvailable],
+          ['raw model output exposure', baseline?.boundaries?.rawModelOutputExposureAvailable],
+          ['direct goal event append', baseline?.boundaries?.directGoalEventAppendAvailable],
+          ['direct task completion', baseline?.boundaries?.directTaskCompletionAvailable],
+          ['git write', baseline?.boundaries?.gitWriteAvailable],
+          ['git merge', baseline?.boundaries?.gitMergeAvailable],
+          ['tag write', baseline?.boundaries?.gitTagAvailable],
+          ['remote tag write', baseline?.boundaries?.gitPushAvailable],
+          ['release create flag', baseline?.boundaries?.githubReleaseCreateAvailable],
+          ['release update flag', baseline?.boundaries?.githubReleaseEditAvailable],
+          ['public distribution claim', baseline?.boundaries?.publicDistributionClaimAvailable],
+          ['notarization claim', baseline?.boundaries?.notarizationClaimAvailable],
+          ['auto-update claim', baseline?.boundaries?.autoUpdateClaimAvailable],
+          ['automatic worktree creation', baseline?.boundaries?.automaticWorktreeCreationAvailable],
+          ['automatic next-version goal', baseline?.boundaries?.automaticNextVersionGoalAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Evidence Refs">
+        <FieldList rows={[
+          ['release source refs', evidenceRefsTextFromCollection(release?.sourceRefs)],
+          ['baseline evidence refs', evidenceRefsTextFromCollection(baseline?.evidenceRefs)],
+          ['generated at', baseline?.generatedAt],
+          ['route', baseline?.route?.path],
+          ['route state', baseline?.route?.routeState]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{baseline?.note ?? 'Stable Workbench release baseline unavailable.'}</p>
     </section>
   );
 }
@@ -11695,7 +11891,7 @@ function workbenchNavHref(item, routeContext) {
   const query = workbenchContextQuery(routeContext);
 
   if (item.route) {
-    return `${item.route}${query}`;
+    return item.targetId ? `${item.route}${query}#${item.targetId}` : `${item.route}${query}`;
   }
 
   return `/workbench/${query}#${item.targetId}`;
