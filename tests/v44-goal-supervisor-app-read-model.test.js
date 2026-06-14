@@ -61,6 +61,33 @@ describe('v44.3 goal supervisor app read model contract', () => {
     assert.ok(model.commandBoundary.blockedCommandFamilies.includes('release-closeout'));
   });
 
+  it('keeps unsafe context advisory reasons out of the thread handoff source', () => {
+    const staleSessionSourceReason = 'claude:latest-session-file-exceeded-stale-threshold';
+    const model = buildGoalSupervisorAppReadModel({
+      contextAdvisory: {
+        contractName: 'contextAdvisory.v1',
+        contractVersion: 1,
+        generatedAt: '2026-06-14T00:00:00.000Z',
+        readOnly: true,
+        willMutate: false,
+        transcriptAvailability: 'missing',
+        contextBand: 'unknown',
+        resultBlockEvidence: { status: 'missing', present: false },
+        degradedReasons: [staleSessionSourceReason],
+        blockedFields: ['contextUtilization.ratio']
+      },
+      nowMs: Date.parse('2026-06-14T00:00:00.000Z')
+    });
+
+    assert.equal(model.contextAdvisory.degradedReasons.includes(staleSessionSourceReason), true);
+    assert.equal(model.threadHandoffPack.decision, 'blocked');
+    assert.ok(
+      model.threadHandoffPack.blockedReasons.some((reason) => reason.startsWith('unsafe-context-advisory-ref:')),
+      model.threadHandoffPack.blockedReasons.join('; ')
+    );
+    assert.equal(JSON.stringify(model.threadHandoffPack).includes(staleSessionSourceReason), false);
+  });
+
   it('describes dry-run and confirm-required previews without enabling execution', async () => {
     const fixture = await readFixture();
     const dryRun = fixture.scenarios.find((scenario) => scenario.name === 'dry-run command preview');

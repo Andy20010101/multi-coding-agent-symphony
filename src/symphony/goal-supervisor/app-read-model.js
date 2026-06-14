@@ -490,6 +490,10 @@ function buildGoalSupervisorThreadHandoffPack({
       reviewerHandoffPreview
     })
   });
+  const contextAdvisorySource = threadHandoffContextAdvisorySource({
+    contextAdvisory,
+    contextBlockedReasons
+  });
   const pack = buildThreadHandoffPack({
     generatedAt,
     goal: threadHandoffGoal({
@@ -505,7 +509,7 @@ function buildGoalSupervisorThreadHandoffPack({
     }),
     recovery: codexProviderRunRecovery,
     reviewerHandoff: reviewerHandoffPreview,
-    contextAdvisory,
+    contextAdvisory: contextAdvisorySource,
     decision: decisionContext.decision,
     blockedReasons: decisionContext.blockedReasons,
     openRisks: decisionContext.openRisks
@@ -517,6 +521,39 @@ function buildGoalSupervisorThreadHandoffPack({
   }
 
   return pack;
+}
+
+function threadHandoffContextAdvisorySource({
+  contextAdvisory,
+  contextBlockedReasons
+}) {
+  if (contextBlockedReasons.length === 0) {
+    return contextAdvisory;
+  }
+
+  if (!isPlainObject(contextAdvisory)) {
+    return null;
+  }
+
+  return {
+    contractName: CONTEXT_ADVISORY_CONTRACT_NAME,
+    contractVersion: CONTEXT_ADVISORY_CONTRACT_VERSION,
+    generatedAt: safeTimestamp(contextAdvisory.generatedAt),
+    readOnly: true,
+    willMutate: false,
+    transcriptAvailability: firstNonEmptyString(contextAdvisory.transcriptAvailability, 'missing'),
+    contextBand: firstNonEmptyString(contextAdvisory.contextBand, 'unknown'),
+    resultBlockEvidence: {
+      status: firstNonEmptyString(contextAdvisory.resultBlockEvidence?.status, 'missing'),
+      present: contextAdvisory.resultBlockEvidence?.present === true
+    },
+    degradedReasons: uniqueStrings(contextBlockedReasons),
+    blockedFields: uniqueStrings([
+      ...(Array.isArray(contextAdvisory.blockedFields) ? contextAdvisory.blockedFields : []),
+      ...contextBlockedReasons
+    ]),
+    boundaries: normalizeReadOnlyBoundaries(contextAdvisory.boundaries)
+  };
 }
 
 function buildGoalSupervisorReviewGatePreview({
