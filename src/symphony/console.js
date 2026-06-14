@@ -114,7 +114,9 @@ import {
   V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID,
   AdoptionBackendError,
   buildAdoptionPreviewFromBackend,
-  confirmAdoptionPreview
+  buildMainVerificationPreviewFromBackend,
+  confirmAdoptionPreview,
+  confirmMainVerificationPreview
 } from './adoption-main-verification-loop-backend.js';
 import {
   buildAppSchemaMigrationContract
@@ -778,6 +780,8 @@ export function createSymphonyConsoleServer({
   adoptionPatchPlan = null,
   adoptionArtifactRefs = null,
   adoptionApplicator = null,
+  mainVerificationAdoptionConfirmation = null,
+  mainVerificationSourceFingerprint = null,
   readinessTimeoutMs = DEFAULT_READINESS_TIMEOUT_MS,
   runtimeStartedAt = new Date().toISOString()
 } = {}) {
@@ -950,6 +954,25 @@ export function createSymphonyConsoleServer({
             adoptionArtifactRefs,
             adoptionApplicator,
             request: adoptionReadinessConfirmRequest,
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        const mainVerificationConfirmRequest = parseMainVerificationConfirmRequestPath(url.pathname, url.searchParams);
+
+        if (mainVerificationConfirmRequest !== null) {
+          await writeMainVerificationConfirmResponse({
+            requestMessage: request,
+            response,
+            stateDir,
+            cwd,
+            env,
+            runner,
+            mainVerificationAdoptionConfirmation,
+            mainVerificationSourceFingerprint,
+            request: mainVerificationConfirmRequest,
             route: url.pathname,
             method
           });
@@ -1199,6 +1222,21 @@ export function createSymphonyConsoleServer({
           adoptionPatchPlan,
           adoptionArtifactRefs,
           request: adoptionReadinessPreviewRequest,
+          route: url.pathname,
+          method
+        });
+        return;
+      }
+
+      const mainVerificationPreviewRequest = parseMainVerificationPreviewRequestPath(url.pathname, url.searchParams);
+
+      if (mainVerificationPreviewRequest !== null) {
+        await writeMainVerificationPreviewResponse({
+          response,
+          stateDir,
+          mainVerificationAdoptionConfirmation,
+          mainVerificationSourceFingerprint,
+          request: mainVerificationPreviewRequest,
           route: url.pathname,
           method
         });
@@ -4035,6 +4073,167 @@ async function writeAdoptionReadinessConfirmResponse({
   }
 }
 
+async function writeMainVerificationPreviewResponse({
+  response,
+  stateDir,
+  mainVerificationAdoptionConfirmation,
+  mainVerificationSourceFingerprint,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-main-verification-preview-request',
+      message: 'Main verification preview request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveAdoptionReadinessGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    writeJsonResponse(response, 200, buildMainVerificationPreviewFromBackend({
+      ...buildMainVerificationPreviewRequestFromSearchParams({
+        goalId: resolvedGoalId,
+        searchParams: request.searchParams
+      }),
+      adoptionConfirmation: mainVerificationAdoptionConfirmation,
+      currentSourceFingerprint: mainVerificationSourceFingerprint
+    }));
+  } catch (error) {
+    if (error instanceof AdoptionBackendError || error instanceof GoalEventPlanPreviewError) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-main-verification-preview-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function writeMainVerificationConfirmResponse({
+  requestMessage,
+  response,
+  stateDir,
+  cwd,
+  env,
+  runner,
+  mainVerificationAdoptionConfirmation,
+  mainVerificationSourceFingerprint,
+  request,
+  route,
+  method
+}) {
+  if (request.kind === 'invalid') {
+    writeApiErrorResponse(response, {
+      status: 400,
+      code: 'invalid-main-verification-confirm-request',
+      message: 'Main verification confirm request is invalid.',
+      route,
+      method,
+      safeDetails: {
+        reason: request.reason
+      }
+    });
+    return;
+  }
+
+  const resolvedGoalId = await resolveAdoptionReadinessGoalId({
+    stateDir,
+    goalId: request.goalId,
+    route,
+    method,
+    response
+  });
+
+  if (resolvedGoalId === null) {
+    return;
+  }
+
+  try {
+    const body = await readMainVerificationConfirmRequestBody(requestMessage);
+    const preview = buildMainVerificationPreviewFromBackend({
+      goalId: resolvedGoalId,
+      taskId: requiredMainVerificationBodyString(body, 'taskId'),
+      adoptionConfirmation: mainVerificationAdoptionConfirmation,
+      currentSourceFingerprint: mainVerificationSourceFingerprint
+    });
+    const confirmation = await confirmMainVerificationPreview({
+      preview,
+      input: body,
+      writeOperationStart: async (operationStart) => await recordMainVerificationOperationRunFromStart({
+        stateDir,
+        goalId: resolvedGoalId,
+        operationStart
+      }),
+      runCommand: async (invocation) => await runner.run({
+        executable: invocation.executable,
+        args: invocation.args,
+        cwd,
+        env,
+        timeoutMs: CONTROLLED_VERIFICATION_COMMAND_TIMEOUT_MS
+      })
+    });
+    const operationRun = await recordMainVerificationOperationRunFromConfirmation({
+      stateDir,
+      goalId: resolvedGoalId,
+      confirmation
+    });
+
+    writeJsonResponse(response, 200, {
+      ...confirmation,
+      operationRun,
+      refreshed: {
+        operations: await readGoalOperationRuns({
+          stateDir,
+          goalId: resolvedGoalId
+        })
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof AdoptionBackendError ||
+      error instanceof GoalEventPlanPreviewError ||
+      error instanceof GoalOperationRunRegistryError
+    ) {
+      writeApiErrorResponse(response, {
+        status: 400,
+        code: 'invalid-main-verification-confirm-request',
+        message: error.message,
+        route,
+        method,
+        safeDetails: error.safeDetails
+      });
+      return;
+    }
+
+    throw error;
+  }
+}
+
 async function resolveWorkerRunGoalId({
   stateDir,
   goalId,
@@ -5786,6 +5985,77 @@ function parseAdoptionReadinessConfirmRequestPath(pathname, searchParams = new U
   };
 }
 
+function parseMainVerificationPreviewRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/main-verification-preview';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'main-verification-preview' : 'invalid',
+      goalId: 'latest',
+      searchParams,
+      reason: 'missing-query-parameters'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/main-verification-preview$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      searchParams,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'main-verification-preview' : 'invalid',
+    goalId: decoded.value,
+    searchParams,
+    reason: 'missing-query-parameters'
+  };
+}
+
+function parseMainVerificationConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
+  const latestPath = '/api/goals/latest/main-verification-confirm';
+
+  if (pathname === latestPath) {
+    return {
+      kind: hasSearchParams(searchParams) ? 'invalid' : 'main-verification-confirm',
+      goalId: 'latest',
+      reason: 'query-parameters-not-supported'
+    };
+  }
+
+  const match = /^\/api\/goals\/([^/]+)\/main-verification-confirm$/u.exec(pathname);
+
+  if (match === null) {
+    return null;
+  }
+
+  const decoded = safeDecodePathSegment(match[1]);
+
+  if (decoded.ok === false || isUnsafeGoalRouteSegment(decoded.value)) {
+    return {
+      kind: 'invalid',
+      goalId: null,
+      reason: 'invalid-route-segment'
+    };
+  }
+
+  return {
+    kind: hasSearchParams(searchParams) ? 'invalid' : 'main-verification-confirm',
+    goalId: decoded.value,
+    reason: 'query-parameters-not-supported'
+  };
+}
+
 function parseControlledVerificationRunConfirmRequestPath(pathname, searchParams = new URLSearchParams()) {
   const latestPath = '/api/goals/latest/verification-run-confirm';
 
@@ -6682,6 +6952,59 @@ async function readAdoptionReadinessConfirmRequestBody(request) {
   }
 }
 
+async function readMainVerificationConfirmRequestBody(request) {
+  const contentType = request.headers['content-type'] ?? '';
+
+  if (!String(contentType).toLowerCase().includes('application/json')) {
+    throw new AdoptionBackendError(
+      'invalid-main-verification-confirm-request',
+      'Main verification confirm requires application/json.',
+      { reason: 'invalid-content-type' }
+    );
+  }
+
+  let size = 0;
+  let content = '';
+
+  for await (const chunk of request) {
+    size += chunk.length;
+
+    if (size > GOAL_EVENT_CONFIRM_MAX_BODY_BYTES) {
+      throw new AdoptionBackendError(
+        'invalid-main-verification-confirm-request',
+        'Main verification confirm request body is too large.',
+        { reason: 'body-too-large' }
+      );
+    }
+
+    content += chunk.toString('utf8');
+  }
+
+  try {
+    const body = JSON.parse(content);
+
+    if (!isPlainObject(body)) {
+      throw new AdoptionBackendError(
+        'invalid-main-verification-confirm-request',
+        'Main verification confirm requires a valid JSON object.',
+        { reason: 'invalid-json-body' }
+      );
+    }
+
+    return body;
+  } catch (error) {
+    if (error instanceof AdoptionBackendError) {
+      throw error;
+    }
+
+    throw new AdoptionBackendError(
+      'invalid-main-verification-confirm-request',
+      'Main verification confirm requires a valid JSON object.',
+      { reason: 'invalid-json' }
+    );
+  }
+}
+
 function buildControlledProviderRunnerRequestFromSearchParams({ goalId, searchParams }) {
   assertOnlySearchParams(searchParams, [
     'task',
@@ -6734,6 +7057,15 @@ function buildAdoptionReadinessPreviewRequestFromSearchParams({ goalId, searchPa
   };
 }
 
+function buildMainVerificationPreviewRequestFromSearchParams({ goalId, searchParams }) {
+  assertOnlySearchParams(searchParams, ['task']);
+
+  return {
+    goalId,
+    taskId: requiredSingleSearchParam(searchParams, 'task')
+  };
+}
+
 function requiredWorkerRunBodyString(body, field) {
   const value = body?.[field];
 
@@ -6755,6 +7087,20 @@ function requiredAdoptionReadinessBodyString(body, field) {
     throw new AdoptionBackendError(
       'invalid-adoption-readiness-confirm-request',
       `Adoption readiness confirm requires ${field}.`,
+      { field }
+    );
+  }
+
+  return value;
+}
+
+function requiredMainVerificationBodyString(body, field) {
+  const value = body?.[field];
+
+  if (!isNonEmptyString(value)) {
+    throw new AdoptionBackendError(
+      'invalid-main-verification-confirm-request',
+      `Main verification confirm requires ${field}.`,
       { field }
     );
   }
@@ -9392,6 +9738,91 @@ function adoptionReadinessArtifactRefs(confirmation) {
     sourceRunId: confirmation.adoptionId,
     status: confirmation.status
   }];
+}
+
+async function recordMainVerificationOperationRunFromStart({
+  stateDir,
+  goalId,
+  operationStart
+}) {
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: operationStart.operationId,
+    goalId,
+    taskId: operationStart.taskId,
+    role: 'main-verifier',
+    commandKind: 'verification',
+    commandName: 'v68 fixed main verification suite',
+    status: 'running',
+    planHash: operationStart.planHash,
+    source: 'workbench.main-verification-start',
+    output: {
+      stdout: `status=${operationStart.status}\noperationId=${operationStart.operationId}`,
+      stderr: '',
+      rawProviderOutputAvailable: false
+    },
+    runResult: operationStart,
+    artifactRefs: [{
+      kind: 'operation-registry',
+      ref: `goal-operation-runs:${operationStart.operationId}`,
+      uri: `/api/goals/${goalId}/operations`,
+      title: 'Main verification operation registry entry',
+      status: 'running'
+    }],
+    verifierSummary: {
+      status: operationStart.status,
+      passed: false,
+      gatePassed: false,
+      mainVerified: false,
+      gateDraftReady: false,
+      releaseReady: false
+    },
+    failureReason: null
+  });
+}
+
+async function recordMainVerificationOperationRunFromConfirmation({
+  stateDir,
+  goalId,
+  confirmation
+}) {
+  return await recordGoalOperationRun({
+    stateDir,
+    operationId: confirmation.operationId,
+    goalId,
+    taskId: confirmation.taskId,
+    role: 'main-verifier',
+    commandKind: 'verification',
+    commandName: 'v68 fixed main verification suite',
+    status: confirmation.status === 'passed' ? 'confirmed' : 'failed',
+    planHash: confirmation.planHash,
+    source: 'workbench.main-verification-confirm',
+    output: confirmation.output,
+    runResult: confirmation.runResult,
+    artifactRefs: confirmation.artifactRefs,
+    verifierSummary: {
+      status: confirmation.status,
+      passed: confirmation.status === 'passed',
+      commandCount: confirmation.commandResults.length,
+      failedCommandCount: confirmation.commandResults.filter((result) => result.status !== 'passed').length,
+      verificationEvidenceReady: confirmation.nextState.verificationEvidenceReady,
+      gatePassed: false,
+      mainVerified: false,
+      gateDraftReady: confirmation.nextState.gateDraftReady,
+      releaseReady: false
+    },
+    failureReason: mainVerificationFailureReason(confirmation)
+  });
+}
+
+function mainVerificationFailureReason(confirmation) {
+  const failed = confirmation.commandResults.find((result) => result.status !== 'passed');
+
+  if (failed === undefined) {
+    return null;
+  }
+
+  return `${failed.command} exited ${failed.exitCode ?? 'without exit code'}`;
 }
 
 async function buildRefreshedGoalEventLog({ stateDir, goalId }) {
