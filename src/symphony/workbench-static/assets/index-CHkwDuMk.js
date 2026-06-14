@@ -9916,6 +9916,7 @@ var GOAL_DRAFT_HANDOFF_CONTRACT_NAME = "goal-draft-handoff.v1";
 var AGENT_CLI_PROVIDER_HEALTH_CONTRACT_NAME = "agent-cli-provider-health.v1";
 var AGENT_CLI_CAPABILITY_PROFILE_CONTRACT_NAME = "agent-cli-capability-profile.v1";
 var AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME = "agent-cli-lane-assignment-preview.v1";
+var PROVIDER_READINESS_CONTRACT_NAME = "providerReadiness.v1";
 var APP_SCHEMA_MIGRATION_CONTRACT_NAME = "app-schema-migration.v1";
 var WORKFLOW_ROUTER_CATEGORIES_CONTRACT_NAME = "workflow-router-categories.v1";
 var JOB_MODEL_CONTRACT_NAME = "job-model.v1";
@@ -10614,6 +10615,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		contractName: AGENT_CLI_LANE_ASSIGNMENT_PREVIEW_CONTRACT_NAME
 	}),
 	Object.freeze({
+		id: "providerReadiness",
+		label: "Provider Readiness",
+		path: "/api/providers/readiness",
+		method: "GET",
+		contractName: PROVIDER_READINESS_CONTRACT_NAME
+	}),
+	Object.freeze({
 		id: "appSchemaMigration",
 		label: "App Schema Migration",
 		path: "/api/app-data/migration",
@@ -10974,6 +10982,7 @@ function projectWorkbenchContracts(results) {
 	const providerHealthData = dataFrom(results.providerHealth);
 	const providerCapabilitiesData = dataFrom(results.providerCapabilities);
 	const providerLanePreviewData = dataFrom(results.providerLanePreview);
+	const providerReadinessData = dataFrom(results.providerReadiness);
 	const appSchemaMigrationData = dataFrom(results.appSchemaMigration);
 	const workflowRouterCategoriesData = dataFrom(results.workflowRouterCategories);
 	const diagnosticsData = dataFrom(results.diagnostics);
@@ -11159,6 +11168,8 @@ function projectWorkbenchContracts(results) {
 		capability: providerCapabilitiesData,
 		laneResult: results.providerLanePreview,
 		lanePreview: providerLanePreviewData,
+		readinessResult: results.providerReadiness,
+		readiness: providerReadinessData,
 		activeGoal: activeGoalControl
 	});
 	const projectedSupervisorDashboard = projectSupervisorDashboard({
@@ -20480,35 +20491,40 @@ function projectProviderLanePreview({ result, preview }) {
 		note: "Provider Lane Preview renders agent-cli-lane-assignment-preview.v1 only. It separates worker, reviewer, and main-verifier lanes without assigning agents, executing provider CLIs, registering review, or passing main verification."
 	};
 }
-function projectProviderHubPanel({ healthResult, health, capabilityResult, capability, laneResult, lanePreview, activeGoal }) {
+function projectProviderHubPanel({ healthResult, health, capabilityResult, capability, laneResult, lanePreview, readinessResult, readiness, activeGoal }) {
 	const providers = Array.isArray(health?.providers) ? health.providers : [];
 	const providerGates = new Map((Array.isArray(capability?.providerGates) ? capability.providerGates : []).map((providerGate) => [providerGate?.providerId, providerGate]));
 	const lanePreviews = Array.isArray(lanePreview?.lanePreviews) ? lanePreview.lanePreviews : [];
 	const boundaries = projectProviderHubBoundaries({
 		health,
 		capability,
-		lanePreview
+		lanePreview,
+		readiness
 	});
 	const evidenceAnchors = projectProviderHubEvidenceAnchors(activeGoal);
-	const activeProviderIds = health?.boundaries?.activeProviderIds ?? lanePreview?.activeProviderIds ?? [];
+	const activeProviderIds = readiness?.activeProviders?.map((provider) => provider?.providerId).filter(isNonEmptyString) ?? health?.boundaries?.activeProviderIds ?? lanePreview?.activeProviderIds ?? [];
 	return {
-		state: health === null && capability === null && lanePreview === null ? "missing" : "available",
+		state: health === null && capability === null && lanePreview === null && readiness === null ? "missing" : "available",
 		modelName: valueState(PROVIDER_HUB_PANEL_MODEL_NAME),
-		sourcePolicy: valueState("agent-cli-provider-health.v1 + agent-cli-capability-profile.v1 + agent-cli-lane-assignment-preview.v1 + goal-progress-ledger.v1 + goal-event-log.v1"),
+		sourcePolicy: valueState("providerReadiness.v1 + agent-cli-provider-health.v1 + agent-cli-capability-profile.v1 + agent-cli-lane-assignment-preview.v1 + goal-progress-ledger.v1 + goal-event-log.v1"),
 		goalId: valueState(firstNonEmptyString(health?.context?.goalId, capability?.context?.goalId, lanePreview?.context?.goalId, firstValue(activeGoal?.taskQueue?.goalId))),
 		routeStates: {
 			health: valueState(routeStateFromResult(healthResult)),
 			capabilities: valueState(routeStateFromResult(capabilityResult)),
-			lanePreview: valueState(routeStateFromResult(laneResult))
+			lanePreview: valueState(routeStateFromResult(laneResult)),
+			readiness: valueState(routeStateFromResult(readinessResult))
 		},
 		contracts: {
 			health: valueState(health?.contractName),
 			capabilities: valueState(capability?.contractName),
-			lanePreview: valueState(lanePreview?.contractName)
+			lanePreview: valueState(lanePreview?.contractName),
+			readiness: valueState(readiness?.contractName)
 		},
 		summary: {
 			activeProviderIds: arrayTextState(activeProviderIds),
 			activeProviderCount: valueState(health?.summary?.activeProviderCount ?? capability?.summary?.activeProviderCount ?? lanePreview?.summary?.activeProviderCount),
+			readinessState: valueState(readiness?.state),
+			readinessBlockedReasons: arrayTextState(readiness?.blockedReasons),
 			configuredProviderCount: valueState(health?.summary?.configuredProviderCount),
 			missingProviderCount: valueState(health?.summary?.missingProviderCount),
 			healthState: valueState(health?.summary?.state),
@@ -20519,6 +20535,22 @@ function projectProviderHubPanel({ healthResult, health, capabilityResult, capab
 			laneCount: valueState(lanePreview?.summary?.laneCount),
 			independentReviewRequired: valueState(lanePreview?.summary?.independentReviewRequired),
 			mainVerifierLaneOperatorControlled: valueState(lanePreview?.summary?.mainVerifierLaneOperatorControlled)
+		},
+		readiness: {
+			state: readiness === null ? "missing" : "available",
+			contractName: valueState(readiness?.contractName),
+			activeProviderCount: valueState(Array.isArray(readiness?.activeProviders) ? readiness.activeProviders.length : void 0),
+			historicalProviderCount: valueState(Array.isArray(readiness?.historicalProviders) ? readiness.historicalProviders.length : void 0),
+			unsupportedProviderCount: valueState(Array.isArray(readiness?.unsupportedProviders) ? readiness.unsupportedProviders.length : void 0),
+			activeProviders: projectProviderReadinessProviders(readiness?.activeProviders),
+			historicalProviders: projectProviderReadinessHistoricalProviders(readiness?.historicalProviders),
+			unsupportedProviders: projectProviderReadinessUnsupportedProviders(readiness?.unsupportedProviders),
+			evidencePolicy: {
+				sanitizedReadinessOnly: valueState(readiness?.evidencePolicy?.sanitizedReadinessOnly),
+				rawProviderOutputAllowed: valueState(readiness?.evidencePolicy?.rawProviderOutputAllowed),
+				localSessionPathAllowed: valueState(readiness?.evidencePolicy?.localSessionPathAllowed),
+				secretValueAllowed: valueState(readiness?.evidencePolicy?.secretValueAllowed)
+			}
 		},
 		providers: {
 			state: providers.length === 0 ? "missing" : "available",
@@ -20552,6 +20584,50 @@ function projectProviderHubPanel({ healthResult, health, capabilityResult, capab
 		evidenceAnchors,
 		boundaries,
 		note: "Provider Hub displays provider availability, blockers, capability gates, lane separation, and explicit evidence refs from backend contracts only. It does not expose secret values, execute provider CLIs, dispatch prompts, invoke models, assign agents, approve review, pass main verification, or declare release readiness."
+	};
+}
+function projectProviderReadinessProviders(providers) {
+	return {
+		state: Array.isArray(providers) && providers.length > 0 ? "available" : "missing",
+		items: (Array.isArray(providers) ? providers : []).map((provider) => ({
+			providerId: valueState(provider?.providerId),
+			label: valueState(provider?.label),
+			role: valueState(provider?.role),
+			lane: valueState(provider?.lane),
+			status: valueState(provider?.status),
+			binaryPresence: valueState(provider?.binaryPresence?.state),
+			modelProfile: valueState(provider?.modelProfile?.state),
+			helpSmoke: valueState(provider?.helpSmoke?.state),
+			optionalRealSmoke: valueState(provider?.optionalRealSmoke?.state),
+			configurationKind: valueState(provider?.configuration?.kind),
+			deepSeekConfigStatus: valueState(provider?.configuration?.deepSeekConfigStatus),
+			deepSeekAsIndependentProvider: valueState(provider?.configuration?.deepSeekAsIndependentProvider),
+			blockedReasons: arrayTextState(provider?.blockedReasons)
+		}))
+	};
+}
+function projectProviderReadinessHistoricalProviders(providers) {
+	return {
+		state: Array.isArray(providers) && providers.length > 0 ? "available" : "missing",
+		items: (Array.isArray(providers) ? providers : []).map((provider) => ({
+			providerId: valueState(provider?.providerId),
+			label: valueState(provider?.label),
+			status: valueState(provider?.status),
+			activeWorkbenchProvider: valueState(provider?.activeWorkbenchProvider),
+			reason: valueState(provider?.reason)
+		}))
+	};
+}
+function projectProviderReadinessUnsupportedProviders(providers) {
+	return {
+		state: Array.isArray(providers) && providers.length > 0 ? "available" : "missing",
+		items: (Array.isArray(providers) ? providers : []).map((provider) => ({
+			providerId: valueState(provider?.providerId),
+			claim: valueState(provider?.claim),
+			status: valueState(provider?.status),
+			activeWorkbenchProvider: valueState(provider?.activeWorkbenchProvider),
+			blockedReasons: arrayTextState(provider?.blockedReasons)
+		}))
 	};
 }
 function projectProviderHubProvider({ provider, gateProfile, lanePreviews }) {
@@ -20611,21 +20687,35 @@ function projectProviderHubProvider({ provider, gateProfile, lanePreviews }) {
 		}))
 	};
 }
-function projectProviderHubBoundaries({ health, capability, lanePreview }) {
+function projectProviderHubBoundaries({ health, capability, lanePreview, readiness }) {
 	const boundaryKeys = [
 		"providerCliExecutionAvailable",
+		"providerExecutionFromReadinessAvailable",
 		"rendererProviderInvocationAvailable",
 		"promptDispatchAvailable",
 		"modelInvocationAvailable",
 		"genericShellRunnerAvailable",
+		"genericProviderPickerAvailable",
+		"rawProviderCliLauncherAvailable",
 		"arbitraryCommandExecutionAvailable",
 		"commandProbeAvailable",
 		"capabilityProbeAvailable",
+		"secretValueExposureAvailable",
 		"envValueExposureAvailable",
 		"credentialMaterialAvailable",
 		"rawProviderConfigAvailable",
+		"rawTranscriptExposureAvailable",
+		"rawStdoutExposureAvailable",
+		"rawStderrExposureAvailable",
+		"rawModelOutputExposureAvailable",
+		"frontendLocalJsonlReadAvailable",
+		"frontendLocalSessionReadAvailable",
+		"frontendProviderFolderReadAvailable",
 		"automaticInstallAvailable",
 		"automaticOauthAvailable",
+		"automaticSelfReviewAvailable",
+		"automaticWorktreeCreationAvailable",
+		"automaticNextVersionGoalAvailable",
 		"actionExecutionAvailable",
 		"repoWriteAvailable",
 		"workspaceWritesAvailable",
@@ -20639,6 +20729,7 @@ function projectProviderHubBoundaries({ health, capability, lanePreview }) {
 		"mainVerificationInferenceAvailable"
 	];
 	const sources = [
+		readiness?.boundaries,
 		health?.boundaries,
 		capability?.boundaries,
 		lanePreview?.boundaries
@@ -29773,6 +29864,11 @@ function DesktopProviderHubCard({ providerHub }) {
 				["active providers", providerHub?.summary?.activeProviderIds],
 				["configured", providerHub?.summary?.configuredProviderCount],
 				["missing", providerHub?.summary?.missingProviderCount],
+				["readiness state", providerHub?.summary?.readinessState],
+				["readiness blockers", providerHub?.summary?.readinessBlockedReasons],
+				["readiness active", providerHub?.readiness?.activeProviderCount],
+				["raw provider output", providerHub?.readiness?.evidencePolicy?.rawProviderOutputAllowed],
+				["DeepSeek workbench provider", providerHub?.readiness?.unsupportedProviders?.items?.find((item) => item.providerId.text === "deepseek-cli")?.activeWorkbenchProvider],
 				["mapped requirements", providerHub?.summary?.mappedRequirementCount],
 				["lane count", providerHub?.summary?.laneCount],
 				["evidence refs", providerHub?.evidenceAnchors?.count],
@@ -33338,7 +33434,10 @@ function ProviderHubPanel({ hub, route }) {
 				["health route", hub?.routeStates?.health],
 				["capabilities route", hub?.routeStates?.capabilities],
 				["lane route", hub?.routeStates?.lanePreview],
+				["readiness route", hub?.routeStates?.readiness],
 				["active providers", hub?.summary?.activeProviderIds],
+				["readiness state", hub?.summary?.readinessState],
+				["readiness blockers", hub?.summary?.readinessBlockedReasons],
 				["health state", hub?.summary?.healthState],
 				["configured", hub?.summary?.configuredProviderCount],
 				["missing", hub?.summary?.missingProviderCount],
@@ -33349,6 +33448,7 @@ function ProviderHubPanel({ hub, route }) {
 				["main verifier operator lane", hub?.summary?.mainVerifierLaneOperatorControlled]
 			] }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubAvailabilityList, { providers: hub?.providers }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubReadinessList, { readiness: hub?.readiness }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubRequirementList, { requirements: hub?.requirementGates }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubEvidenceAnchors, { anchors: hub?.evidenceAnchors }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
@@ -33421,6 +33521,77 @@ function ProviderHubLaneList({ lanes }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: lane.assignableInV38.text }),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: lane.unavailableReason.text })
 		] }, `${lane.laneId.text}-${index}`))
+	});
+}
+function ProviderHubReadinessList({ readiness }) {
+	if (readiness?.state !== "available") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "provider readiness 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+		title: "provider readiness",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contract", readiness.contractName],
+				["active provider count", readiness.activeProviderCount],
+				["historical provider count", readiness.historicalProviderCount],
+				["unsupported provider count", readiness.unsupportedProviderCount],
+				["sanitized readiness only", readiness.evidencePolicy?.sanitizedReadinessOnly],
+				["raw provider output allowed", readiness.evidencePolicy?.rawProviderOutputAllowed],
+				["local session path allowed", readiness.evidencePolicy?.localSessionPathAllowed],
+				["secret value allowed", readiness.evidencePolicy?.secretValueAllowed]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubReadinessActiveProviders, { providers: readiness.activeProviders }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubReadinessHistoricalProviders, { providers: readiness.historicalProviders }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProviderHubReadinessUnsupportedProviders, { providers: readiness.unsupportedProviders })
+		]
+	});
+}
+function ProviderHubReadinessActiveProviders({ providers }) {
+	if (providers?.state !== "available" || !Array.isArray(providers.items) || providers.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "active provider readiness 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "provider-readiness-list",
+		"aria-label": "Provider readiness active candidates",
+		children: providers.items.map((provider, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["provider", provider.providerId],
+			["label", provider.label],
+			["role", provider.role],
+			["lane", provider.lane],
+			["status", provider.status],
+			["binary presence", provider.binaryPresence],
+			["model profile", provider.modelProfile],
+			["help smoke", provider.helpSmoke],
+			["optional real smoke", provider.optionalRealSmoke],
+			["configuration", provider.configurationKind],
+			["DeepSeek config", provider.deepSeekConfigStatus],
+			["DeepSeek independent provider", provider.deepSeekAsIndependentProvider],
+			["blocked reasons", provider.blockedReasons]
+		] }) }, `${provider.providerId.text}-${index}`))
+	});
+}
+function ProviderHubReadinessHistoricalProviders({ providers }) {
+	if (providers?.state !== "available" || !Array.isArray(providers.items) || providers.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "historical provider compatibility 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "provider-readiness-list",
+		"aria-label": "Provider readiness historical compatibility",
+		children: providers.items.map((provider, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["provider", provider.providerId],
+			["label", provider.label],
+			["status", provider.status],
+			["active workbench provider", provider.activeWorkbenchProvider],
+			["reason", provider.reason]
+		] }) }, `${provider.providerId.text}-${index}`))
+	});
+}
+function ProviderHubReadinessUnsupportedProviders({ providers }) {
+	if (providers?.state !== "available" || !Array.isArray(providers.items) || providers.items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "unsupported provider claims 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "provider-readiness-list",
+		"aria-label": "Provider readiness unsupported provider claims",
+		children: providers.items.map((provider, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["provider", provider.providerId],
+			["claim", provider.claim],
+			["status", provider.status],
+			["active workbench provider", provider.activeWorkbenchProvider],
+			["blocked reasons", provider.blockedReasons]
+		] }) }, `${provider.providerId.text}-${index}`))
 	});
 }
 function ProviderHubRequirementList({ requirements }) {
