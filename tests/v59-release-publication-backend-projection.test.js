@@ -80,6 +80,24 @@ describe('v59 release publication backend projection', () => {
   });
 
   it('sanitizes unsafe publication refs into blockers instead of projecting local files', () => {
+    const unsafeCloseoutSource = readyReadModel({
+      releasePublication: {
+        ...readyReleasePublication(),
+        sourceCloseoutHandoff: {
+          ...sourceCloseoutHandoff(),
+          sourceRef: {
+            kind: 'repo-doc',
+            ref: '/Users/andy/.codex/sessions/v59.jsonl',
+            label: 'local session file'
+          },
+          evidenceRefs: [{
+            kind: 'repo-doc',
+            ref: '/Users/andy/.codex/sessions/v59.jsonl',
+            label: 'local session file'
+          }]
+        }
+      }
+    }).releasePublicationEvidence;
     const unsafeSource = readyReadModel({
       releasePublication: {
         ...readyReleasePublication(),
@@ -104,8 +122,11 @@ describe('v59 release publication backend projection', () => {
       }
     }).releasePublicationEvidence;
 
+    assertBlocked(unsafeCloseoutSource, 'unsafe-source-closeout-ref');
+    assertBlocked(unsafeCloseoutSource, 'unsafe-source-closeout-evidence-ref');
     assertBlocked(unsafeSource, 'unsafe-publication-source-ref');
     assertBlocked(unsafeTagSource, 'unsafe-tag-publication-source-ref');
+    assertNoUnsafePayload(unsafeCloseoutSource);
     assertNoUnsafePayload(unsafeSource);
     assertNoUnsafePayload(unsafeTagSource);
   });

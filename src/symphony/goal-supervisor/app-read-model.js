@@ -665,20 +665,24 @@ function buildGoalSupervisorReleasePublicationEvidence({
 }) {
   const config = isPlainObject(releasePublication) ? releasePublication : {};
   const blockedReasons = [];
-  const sourceCloseoutHandoff = isPlainObject(config.sourceCloseoutHandoff)
+  const sourceCloseoutConfig = isPlainObject(config.sourceCloseoutHandoff)
     ? config.sourceCloseoutHandoff
     : releaseCloseoutHandoffPack;
-  const closeoutTargetCommit = sourceCloseoutHandoff?.targetCommit?.commit ??
-    sourceCloseoutHandoff?.targetCommit ??
-    sourceCloseoutHandoff?.releaseBaseline?.targetCommit ??
+  const sourceCloseoutHandoff = releasePublicationSourceCloseoutHandoff({
+    source: sourceCloseoutConfig,
+    blockedReasons
+  });
+  const closeoutTargetCommit = sourceCloseoutConfig?.targetCommit?.commit ??
+    sourceCloseoutConfig?.targetCommit ??
+    sourceCloseoutConfig?.releaseBaseline?.targetCommit ??
     null;
-  const closeoutTag = sourceCloseoutHandoff?.tagReleaseChecklist?.targetTag ??
-    sourceCloseoutHandoff?.operatorChecklist?.targetTag ??
-    sourceCloseoutHandoff?.releaseTag ??
+  const closeoutTag = sourceCloseoutConfig?.tagReleaseChecklist?.targetTag ??
+    sourceCloseoutConfig?.operatorChecklist?.targetTag ??
+    sourceCloseoutConfig?.releaseTag ??
     null;
-  const closeoutNextRunbookRef = sourceCloseoutHandoff?.tagReleaseChecklist?.nextVersionRunbookRef ??
-    sourceCloseoutHandoff?.operatorChecklist?.nextVersionRunbookRef ??
-    sourceCloseoutHandoff?.nextVersionContext?.runbookRef;
+  const closeoutNextRunbookRef = sourceCloseoutConfig?.tagReleaseChecklist?.nextVersionRunbookRef ??
+    sourceCloseoutConfig?.operatorChecklist?.nextVersionRunbookRef ??
+    sourceCloseoutConfig?.nextVersionContext?.runbookRef;
   const tagEvidence = releasePublicationTagEvidence({
     evidence: config.tagEvidence ?? config.tag ?? null,
     blockedReasons
@@ -699,23 +703,23 @@ function buildGoalSupervisorReleasePublicationEvidence({
     expectedTargetCommit: config.expectedTargetCommit ?? config.targetCommit ?? closeoutTargetCommit,
     targetCommit: config.targetCommit ?? closeoutTargetCommit,
     currentVersion: config.currentVersion ?? closeoutTag,
-    nextVersion: config.nextVersion ?? sourceCloseoutHandoff?.nextVersionContext?.nextVersion ?? null,
+    nextVersion: config.nextVersion ?? sourceCloseoutConfig?.nextVersionContext?.nextVersion ?? null,
     nextRunbookRef: releasePublicationEvidenceRefFromValue({
       ref: config.nextRunbookRef ?? config.nextVersionRunbookRef ?? closeoutNextRunbookRef,
       blockedReasons,
       reason: 'unsafe-next-version-runbook-ref'
     }),
-    mainHead: config.mainHead ?? sourceCloseoutHandoff?.releaseBaseline?.mainHead ?? null,
-    originMainHead: config.originMainHead ?? sourceCloseoutHandoff?.releaseBaseline?.originMainHead ?? null,
+    mainHead: config.mainHead ?? sourceCloseoutConfig?.releaseBaseline?.mainHead ?? null,
+    originMainHead: config.originMainHead ?? sourceCloseoutConfig?.releaseBaseline?.originMainHead ?? null,
     openPrs: Array.isArray(config.openPrs) ? config.openPrs : [],
     nextVersionGoalCreated: config.nextVersionGoalCreated === true,
     knownFacts: [
-      ...safeStringList(sourceCloseoutHandoff?.knownFacts),
+      ...safeStringList(sourceCloseoutConfig?.knownFacts),
       ...safeStringList(config.knownFacts)
     ],
     rollbackRefs: releasePublicationEvidenceRefs({
       explicitRefs: config.rollbackRefs,
-      fallbackRefs: sourceCloseoutHandoff?.operatorChecklist?.rollbackRefs ?? sourceCloseoutHandoff?.tagReleaseChecklist?.rollbackRefs ?? [],
+      fallbackRefs: sourceCloseoutConfig?.operatorChecklist?.rollbackRefs ?? sourceCloseoutConfig?.tagReleaseChecklist?.rollbackRefs ?? [],
       blockedReasons,
       reason: 'unsafe-rollback-ref'
     }),
@@ -737,6 +741,39 @@ function buildGoalSupervisorReleasePublicationEvidence({
   }
 
   return evidence;
+}
+
+function releasePublicationSourceCloseoutHandoff({
+  source,
+  blockedReasons
+}) {
+  if (!isPlainObject(source)) {
+    return null;
+  }
+
+  return {
+    contractName: firstNonEmptyString(source.contractName, 'releaseCloseoutHandoffPack.v1'),
+    state: firstNonEmptyString(source.state, 'missing'),
+    goalId: firstNonEmptyString(source.goalId, source.goal?.goalId, null),
+    releaseTag: firstNonEmptyString(source.releaseTag, source.tagReleaseChecklist?.targetTag, source.operatorChecklist?.targetTag, null),
+    targetCommit: firstNonEmptyString(source.targetCommit?.commit, source.targetCommit, source.releaseBaseline?.targetCommit, null),
+    sourceRef: releasePublicationSourceRefFromValue({
+      ref: source.sourceRef ?? {
+        kind: 'contract',
+        ref: firstNonEmptyString(source.contractName, 'releaseCloseoutHandoffPack.v1'),
+        label: firstNonEmptyString(source.contractName, 'releaseCloseoutHandoffPack.v1')
+      },
+      blockedReasons,
+      reason: 'unsafe-source-closeout-ref'
+    }),
+    evidenceRefs: releasePublicationEvidenceRefs({
+      explicitRefs: source.evidenceRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-source-closeout-evidence-ref'
+    }),
+    blockedReasons: safeStringList(source.blockedReasons)
+  };
 }
 
 function releasePublicationGoal({
