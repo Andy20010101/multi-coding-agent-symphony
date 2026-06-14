@@ -17,6 +17,7 @@ import {
   confirmControlledAdoptionPlanFreeze,
   confirmControlledImplementationRunPlan,
   confirmGoalEventPlan,
+  confirmReviewerRunPreview,
   confirmWorkerRunPreview,
   confirmResultEscrow,
   fetchAdoptionInspection,
@@ -32,6 +33,7 @@ import {
   CONTRACT_TEXT,
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   READONLY_API_ROUTE_ALLOWLIST,
+  REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
   WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
   createSafeArtifactPreviewRoutes,
   createRunTimelineRoute,
@@ -58,6 +60,13 @@ import {
   buildWorkerRunPreview,
   buildWorkerRunResult
 } from '../src/symphony/worker-run-contracts.js';
+import {
+  REVIEWER_RUN_COMMAND_TEMPLATE_ID,
+  REVIEWER_RUN_PROVIDER_ID,
+  REVIEWER_RUN_ROLE,
+  buildReviewerRunHandoff,
+  buildReviewerRunVerdict
+} from '../src/symphony/reviewer-run-contracts.js';
 import {
   buildAgentCliProviderHealthContract
 } from '../src/symphony/agent-cli-provider-health.js';
@@ -96,6 +105,7 @@ const V29_RUNBOOK_FIXTURE = 'fixtures/contracts/goal-runbook.v29-active-task-con
 const V30_GOAL_ID = 'v30-verified-adoption-workspace-v2';
 const V41_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 const V66_GOAL_ID = 'v66-controlled-codex-worker-execution';
+const V67_GOAL_ID = 'v67-claude-code-reviewer-lane';
 const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
 const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
 const BACKEND_ACTIVE_GOAL_ID = 'v20-workbench-backend-event-test';
@@ -218,6 +228,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/<goal-id>/implementation-plan-preview', 'controlled-implementation-plan-preview.v1'],
         ['GET', '/api/goals/<goal-id>/provider-runner-preview', 'controlled-provider-runner-plan-preview.v1'],
         ['GET', '/api/goals/<goal-id>/worker-run-preview', 'workerRunPreview.v1'],
+        ['GET', '/api/goals/<goal-id>/reviewer-run-preview', 'reviewerRunHandoff.v1'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
         ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
@@ -1148,6 +1159,161 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(preview.operationStatus.mainVerified.value, false);
     assert.equal(preview.operationStatus.releaseReady.value, false);
     assert.equal(preview.operationStatus.rawProviderOutputAvailable.value, false);
+  });
+
+  it('projects the v67 Claude reviewer lane without main or release inference', () => {
+    const previewPayload = buildReviewerRunHandoff({
+      generatedAt: '2026-06-15T05:40:00.000Z',
+      goal: {
+        goalId: V67_GOAL_ID,
+        title: 'v67 Claude Code Reviewer Lane',
+        state: 'active',
+        sourceContract: 'goal-next-action.v1',
+        sourceRef: `goal-next-action:${V67_GOAL_ID}`
+      },
+      task: {
+        taskId: 'task-2',
+        title: 'Backend reviewer preview confirm fake adapter',
+        state: 'active',
+        sourceContract: 'goal-next-action.v1',
+        sourceRef: `goal-next-action:${V67_GOAL_ID}:task-2`
+      },
+      providerReadiness: {
+        sourceRef: 'fixtures/contracts/provider-readiness/provider-readiness.both-ready.v1.json',
+        activeProviders: [{
+          providerId: REVIEWER_RUN_PROVIDER_ID,
+          status: 'ready'
+        }]
+      },
+      reviewerIdentity: {
+        reviewerActorId: 'claude-reviewer-v67',
+        sourceContract: 'operator-reviewer-identity.v1',
+        sourceRef: 'operator-reviewer:claude-reviewer-v67'
+      },
+      handoffPackRef: 'artifact-ref:v67:task-2-reviewer-handoff-pack',
+      workerEvidence: reviewerWorkerEvidence()
+    });
+    const verdict = buildReviewerRunVerdict({
+      handoff: previewPayload,
+      verdictId: 'reviewer-verdict-v67-task-2-fake',
+      startedAt: '2026-06-15T05:41:00.000Z',
+      finishedAt: '2026-06-15T05:41:05.000Z',
+      status: 'approved',
+      reviewerOutput: {
+        summary: 'Fake reviewer approved sanitized worker evidence.',
+        validationCommands: ['node --test tests/v67-claude-code-reviewer-lane.test.js'],
+        evidenceRefs: [{
+          kind: 'repo-doc',
+          ref: 'docs/qa/v67-claude-code-reviewer-lane-acceptance.md',
+          label: 'v67 fake reviewer evidence'
+        }]
+      }
+    });
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchRouteResult({
+        id: 'goalRunbook',
+        label: 'Goal Runbook',
+        path: `/api/goals/${V67_GOAL_ID}/runbook`,
+        method: 'GET',
+        contractName: 'goal-runbook.v1'
+      }, {
+        contractName: 'goal-runbook.v1',
+        contractVersion: 1,
+        goalId: V67_GOAL_ID,
+        goalTitle: 'v67 Claude Code Reviewer Lane',
+        baseline: {},
+        tasks: [{
+          taskId: 'task-2',
+          title: 'Backend reviewer preview confirm fake adapter',
+          roleOrder: ['worker', 'reviewer', 'main-verifier'],
+          acceptance: [],
+          expectedEvidence: {}
+        }],
+        releaseGates: []
+      }),
+      reviewerRunPreview: createWorkbenchRouteResult(REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE, previewPayload),
+      activeGoalOperations: createWorkbenchRouteResult({
+        id: 'activeGoalOperations',
+        label: 'Active Goal Operations',
+        path: `/api/goals/${V67_GOAL_ID}/operations`,
+        method: 'GET',
+        contractName: 'goal-operation-runs.v1'
+      }, {
+        contractName: 'goal-operation-runs.v1',
+        contractVersion: 1,
+        goalId: V67_GOAL_ID,
+        operationCount: 1,
+        latestOperationId: verdict.verdictId,
+        runs: [{
+          operationId: verdict.verdictId,
+          goalId: V67_GOAL_ID,
+          taskId: 'task-2',
+          role: 'reviewer',
+          commandKind: 'provider-runner',
+          commandName: 'reviewer run preview/confirm',
+          status: 'confirmed',
+          planHash: previewPayload.planHash,
+          source: 'workbench.reviewer-run-confirm',
+          output: {
+            rawProviderOutputAvailable: false
+          },
+          artifactRefs: [{
+            kind: 'repo-doc',
+            ref: 'docs/qa/v67-claude-code-reviewer-lane-acceptance.md',
+            title: 'v67 fake reviewer evidence',
+            status: verdict.status
+          }],
+          runResult: verdict,
+          verifierSummary: {
+            status: verdict.status,
+            reviewVerdict: verdict.status,
+            reviewApproved: true,
+            taskCompleted: false,
+            adoptionReady: false,
+            mainVerified: false,
+            releaseReady: false
+          }
+        }]
+      })
+    });
+    const preview = model.activeGoal.reviewerRunPreview;
+
+    assert.equal(preview.state, 'preview-ready');
+    assert.equal(preview.goalId.value, V67_GOAL_ID);
+    assert.equal(preview.taskId.value, 'task-2');
+    assert.equal(preview.provider.providerId.value, REVIEWER_RUN_PROVIDER_ID);
+    assert.equal(preview.provider.role.value, REVIEWER_RUN_ROLE);
+    assert.equal(preview.plan.commandTemplateId.value, REVIEWER_RUN_COMMAND_TEMPLATE_ID);
+    assert.equal(preview.plan.handoffPackRef.value, 'artifact-ref:v67:task-2-reviewer-handoff-pack');
+    assert.equal(preview.confirm.endpoint.route.value, `/api/goals/${V67_GOAL_ID}/reviewer-run-confirm`);
+    assert.equal(preview.confirm.endpoint.requiresPlanHash.value, true);
+    assert.equal(preview.workerEvidence.taskState.value, 'needs-review');
+    assert.equal(preview.workerEvidence.reviewRequired.value, true);
+    assert.equal(preview.workerEvidence.taskCompleted.value, false);
+    assert.equal(preview.workerEvidence.mainVerified.value, false);
+    assert.equal(preview.workerEvidence.releaseReady.value, false);
+    assert.equal(preview.reviewPolicy.verdictCompletesTask.value, false);
+    assert.equal(preview.reviewPolicy.adoptionAvailable.value, false);
+    assert.equal(preview.reviewPolicy.mainVerificationAvailable.value, false);
+    assert.equal(preview.reviewPolicy.releaseReadinessAvailable.value, false);
+    assert.equal(preview.operationStatus.verdictStatus.value, 'approved');
+    assert.equal(preview.operationStatus.reviewApproved.value, true);
+    assert.equal(preview.operationStatus.taskCompleted.value, false);
+    assert.equal(preview.operationStatus.adoptionReady.value, false);
+    assert.equal(preview.operationStatus.mainVerified.value, false);
+    assert.equal(preview.operationStatus.releaseReady.value, false);
+    assert.equal(preview.operationStatus.rawProviderOutputAvailable.value, false);
+    assert.equal(preview.operationStatus.rawWorkerTranscriptAvailable.value, false);
+    assert.equal(preview.nextSafeAction.state, 'handoff-to-v68');
+    assert.equal(preview.nextSafeAction.copyOnly.value, true);
+    assert.equal(preview.boundaries.freeformProviderCommandAvailable.value, false);
+    assert.equal(preview.boundaries.rawWorkerTranscriptAvailable.value, false);
+    assert.equal(preview.boundaries.reviewerOutputApprovesAdoption.value, false);
+    assert.equal(preview.boundaries.reviewerVerdictPassesMainVerification.value, false);
+    assert.equal(preview.boundaries.reviewerVerdictMarksReleaseReady.value, false);
+    assert.equal(preview.boundaries.gitMutationAvailable.value, false);
+    assert.equal(preview.boundaries.githubReleaseAutomationAvailable.value, false);
+    assert.equal(preview.boundaries.realClaudeRequiresOptIn.value, true);
   });
 
   it('projects the v39 Schema Migration Preview panel as dry-run only', () => {
@@ -2653,6 +2819,69 @@ describe('v15 Workbench read-only API client', () => {
       'application/json',
       'application/json',
       ['commandTemplateId', 'goalId', 'planHash', 'providerId', 'taskId', 'timeoutMs', 'workspacePolicyId']
+    ]]);
+  });
+
+  it('posts reviewer run confirms with only handoff-bound fields', async () => {
+    const calls = [];
+    const body = {
+      planHash: 'sha256:6767676767676767676767676767676767676767676767676767676767676767',
+      goalId: V67_GOAL_ID,
+      taskId: 'task-2',
+      providerId: REVIEWER_RUN_PROVIDER_ID,
+      role: REVIEWER_RUN_ROLE,
+      commandTemplateId: REVIEWER_RUN_COMMAND_TEMPLATE_ID,
+      handoffPackRef: 'artifact-ref:v67:task-2-reviewer-handoff-pack',
+      reviewerActorId: 'claude-reviewer-v67'
+    };
+    const result = await confirmReviewerRunPreview(`/api/goals/${V67_GOAL_ID}/reviewer-run-confirm`, body, {
+      fetchImpl: async (path, init) => {
+        calls.push([path, init]);
+
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              contractName: 'reviewerRunConfirmation.v1',
+              contractVersion: 1,
+              status: 'approved',
+              providerId: REVIEWER_RUN_PROVIDER_ID,
+              role: REVIEWER_RUN_ROLE,
+              commandTemplateId: REVIEWER_RUN_COMMAND_TEMPLATE_ID,
+              planHash: body.planHash,
+              verdict: {
+                status: 'approved',
+                nextState: {
+                  reviewApproved: true,
+                  revisionRequired: false,
+                  taskCompleted: false,
+                  adoptionReady: false,
+                  mainVerified: false,
+                  releaseReady: false
+                }
+              }
+            };
+          }
+        };
+      }
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls.map(([path, init]) => [
+      path,
+      init.method,
+      init.cache,
+      init.headers.Accept,
+      init.headers['Content-Type'],
+      Object.keys(JSON.parse(init.body)).sort()
+    ]), [[
+      `/api/goals/${V67_GOAL_ID}/reviewer-run-confirm`,
+      'POST',
+      'no-store',
+      'application/json',
+      'application/json',
+      ['commandTemplateId', 'goalId', 'handoffPackRef', 'planHash', 'providerId', 'reviewerActorId', 'role', 'taskId']
     ]]);
   });
 
@@ -9730,5 +9959,31 @@ function createErrorEnvelope({ code, message, status, route, method }) {
       route,
       method
     }
+  };
+}
+
+function reviewerWorkerEvidence() {
+  return {
+    sourceContract: 'workerRunResult.v1',
+    sourceRef: 'fixtures/contracts/worker-run/result.sanitized-success.v1.json',
+    workerRunId: 'worker-run-v66-task-2-fake',
+    workerProviderId: 'codex-cli',
+    workerRole: 'worker',
+    workerActorId: 'codex-worker-v66',
+    taskState: 'needs-review',
+    reviewRequired: true,
+    taskCompleted: false,
+    reviewApproved: false,
+    mainVerified: false,
+    releaseReady: false,
+    summary: 'Sanitized worker evidence is ready for reviewer lane.',
+    changedFiles: ['src/symphony/reviewer-run-backend.js'],
+    validationCommands: ['node --test tests/v66-controlled-codex-worker-execution.test.js'],
+    artifactRefs: ['artifact-ref:v66:task-2:fake-worker-run'],
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/qa/v66-controlled-codex-worker-execution-acceptance.md',
+      label: 'v66 worker evidence'
+    }]
   };
 }

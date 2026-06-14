@@ -2435,6 +2435,41 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(confirmBodySource, /commandText|providerCommand|workspacePath|rawTranscript|rawModelOutput|rawProviderOutput/u);
   });
 
+  it('renders the v67 Claude reviewer lane as a backend-owned preview confirm lane', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const client = await readFile('frontend/workbench/src/api/client.js', 'utf8');
+    const panelSource = app.slice(
+      app.indexOf('function ReviewerRunPreviewPanel'),
+      app.indexOf('function buildWorkerRunConfirmBody')
+    );
+    const confirmBodySource = app.slice(
+      app.indexOf('function buildReviewerRunConfirmBody'),
+      app.indexOf('function buildControlledProviderRunnerConfirmBody')
+    );
+
+    assert.match(app, /<ReviewerRunPreviewPanel/u);
+    assert.match(app, /confirmReviewerRunPreview/u);
+    assert.match(app, /Confirm reviewer run/u);
+    assert.match(contracts, /reviewerRunHandoff\.v1/u);
+    assert.match(contracts, /\/api\/goals\/<goal-id>\/reviewer-run-preview/u);
+    assert.match(client, /reviewerRunConfirmation\.v1/u);
+    assert.match(confirmBodySource, /planHash/u);
+    assert.match(confirmBodySource, /providerId/u);
+    assert.match(confirmBodySource, /role/u);
+    assert.match(confirmBodySource, /commandTemplateId/u);
+    assert.match(confirmBodySource, /handoffPackRef/u);
+    assert.match(confirmBodySource, /reviewerActorId/u);
+    assert.match(panelSource, /worker evidence/u);
+    assert.match(panelSource, /review policy/u);
+    assert.match(panelSource, /next safe action/u);
+    assert.match(panelSource, /reviewerOutputApprovesAdoption/u);
+    assert.match(panelSource, /reviewerVerdictPassesMainVerification/u);
+    assert.match(panelSource, /reviewerVerdictMarksReleaseReady/u);
+    assert.doesNotMatch(panelSource, /<form\b|<textarea\b|<input\b|window\.open|navigator\.clipboard|document\.execCommand|fetch\(|exec\(|spawn\(|commandText|providerCommand|sessionPath|jsonl|rawTranscript(?!Available)|rawWorkerTranscript(?!Available)|rawModelOutput(?!Available)|rawProviderOutput(?!Available)/u);
+    assert.doesNotMatch(confirmBodySource, /commandText|providerCommand|workspacePath|timeoutMs|workspacePolicyId|rawTranscript|rawModelOutput|rawProviderOutput/u);
+  });
+
   it('keeps the next action card and prompt drawer display-only', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
@@ -2920,6 +2955,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/diagnostics/bundle',
       '/api/evidence/timeline',
       '/api/goals',
+      '/api/goals/${encodeURIComponent(goalId)}/reviewer-run-confirm',
       '/api/goals/${encodeURIComponent(goalId)}/worker-run-confirm',
       '/api/goals/${goalId}/verification-run-confirm',
       '/api/goals/<goal-id>/adoption-confirm',
@@ -2935,6 +2971,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/goals/<goal-id>/prompt',
       '/api/goals/<goal-id>/provider-runner-preview',
       '/api/goals/<goal-id>/release-baseline',
+      '/api/goals/<goal-id>/reviewer-run-preview',
       '/api/goals/<goal-id>/runbook',
       '/api/goals/<goal-id>/supervisor',
       '/api/goals/<goal-id>/worker-run-preview',

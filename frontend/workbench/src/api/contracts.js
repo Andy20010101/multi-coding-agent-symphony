@@ -18,6 +18,7 @@ const CONTROLLED_IMPLEMENTATION_RUN_CONFIRMATION_CONTRACT_NAME = 'controlled-imp
 const CONTROLLED_PROVIDER_RUNNER_PLAN_PREVIEW_CONTRACT_NAME = 'controlled-provider-runner-plan-preview.v1';
 const CONTROLLED_PROVIDER_RUNNER_CONFIRMATION_CONTRACT_NAME = 'controlled-provider-runner-confirmation.v1';
 const WORKER_RUN_PREVIEW_CONTRACT_NAME = 'workerRunPreview.v1';
+const REVIEWER_RUN_HANDOFF_CONTRACT_NAME = 'reviewerRunHandoff.v1';
 const CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = 'controlled-adoption-plan-freeze.v1';
 const CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = 'controlled-adoption-confirmation.v1';
 const CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = 'symphony.console-adoption-inspect';
@@ -73,6 +74,7 @@ const PROVIDER_HUB_PANEL_MODEL_NAME = 'ProviderHubPanel';
 const V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = 'v25-controlled-implementation-lane';
 const V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 const V66_WORKER_RUN_GOAL_ID = 'v66-controlled-codex-worker-execution';
+const V67_REVIEWER_RUN_GOAL_ID = 'v67-claude-code-reviewer-lane';
 const V30_VERIFIED_ADOPTION_GOAL_ID = 'v30-verified-adoption-workspace-v2';
 const EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
 const EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
@@ -874,6 +876,15 @@ export const WORKER_RUN_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
   acceptErrorContract: true
 });
 
+export const REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
+  id: 'reviewerRunPreview',
+  label: 'Reviewer Run Preview',
+  path: '/api/goals/<goal-id>/reviewer-run-preview',
+  method: 'GET',
+  contractName: REVIEWER_RUN_HANDOFF_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
 export const CONTROLLED_ADOPTION_PLAN_FREEZE_ROUTE_TEMPLATE = Object.freeze({
   id: 'controlledAdoptionPlanFreeze',
   label: 'Controlled Adoption Plan Freeze',
@@ -914,6 +925,7 @@ export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
+  REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
@@ -941,6 +953,7 @@ const OPTIONAL_ROUTE_IDS = new Set([
   'controlledImplementationPlanPreview',
   'controlledProviderRunnerPreview',
   'workerRunPreview',
+  'reviewerRunPreview',
   'adoptionInspect'
 ]);
 
@@ -1015,6 +1028,7 @@ export function projectWorkbenchContracts(results) {
   const controlledImplementationPlanPreviewData = dataFrom(results.controlledImplementationPlanPreview);
   const controlledProviderRunnerPreviewData = dataFrom(results.controlledProviderRunnerPreview);
   const workerRunPreviewData = dataFrom(results.workerRunPreview);
+  const reviewerRunPreviewData = dataFrom(results.reviewerRunPreview);
   const capabilitiesData = dataFrom(results.capabilities);
   const actionManifestData = dataFrom(results.actionManifest);
   const actionAvailabilityData = dataFrom(results.actionAvailability);
@@ -1080,6 +1094,10 @@ export function projectWorkbenchContracts(results) {
     projectRouteState(
       results.workerRunPreview?.routeDescriptor ?? WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
       results.workerRunPreview
+    ),
+    projectRouteState(
+      results.reviewerRunPreview?.routeDescriptor ?? REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+      results.reviewerRunPreview
     ),
     projectRouteState(
       results.adoptionInspect?.routeDescriptor ?? ADOPTION_INSPECT_ROUTE_TEMPLATE,
@@ -1182,6 +1200,12 @@ export function projectWorkbenchContracts(results) {
   activeGoalControl.workerRunPreview = projectWorkerRunPreview({
     result: results.workerRunPreview,
     preview: workerRunPreviewData,
+    operations: activeGoalOperations,
+    activeGoal: activeGoalControl
+  });
+  activeGoalControl.reviewerRunPreview = projectReviewerRunPreview({
+    result: results.reviewerRunPreview,
+    preview: reviewerRunPreviewData,
     operations: activeGoalOperations,
     activeGoal: activeGoalControl
   });
@@ -5227,6 +5251,30 @@ export function createWorkerRunPreviewRoute(goalId, nextAction) {
   });
 }
 
+export function createReviewerRunPreviewRoute(goalId, nextAction) {
+  const taskId = nextAction?.next?.taskId;
+  const role = nextAction?.next?.role;
+  const phase = nextAction?.next?.phase;
+
+  if (
+    !isSafeGoalRouteSegment(goalId) ||
+    goalId !== V67_REVIEWER_RUN_GOAL_ID ||
+    !isSafeGoalRouteSegment(taskId) ||
+    role !== 'reviewer' ||
+    !['review', 'verification'].includes(phase) ||
+    nextAction?.next?.blocked === true
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    ...REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+    path: `${REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}`,
+    goalId,
+    taskId
+  });
+}
+
 export function createAdoptionInspectRoute(operations) {
   const operation = latestAdoptionPlanFreezeOperationForTask(operations, {
     goalId: operations?.goalId,
@@ -6504,6 +6552,290 @@ function projectWorkerRunOperation(operation) {
   };
 }
 
+function projectReviewerRunPreview({ result, preview, operations, activeGoal }) {
+  const routeState = routeStateFromResult(result);
+  const operation = latestReviewerRunOperationForTask(operations, {
+    goalId: preview?.goal?.goalId ?? firstValue(activeGoal?.taskQueue?.goalId),
+    taskId: preview?.task?.taskId ?? firstValue(activeGoal?.nextAction?.taskId)
+  });
+
+  if (result?.ok !== true || preview?.contractName !== REVIEWER_RUN_HANDOFF_CONTRACT_NAME) {
+    return {
+      state: 'unavailable',
+      modelName: valueState('ReviewerRunPreview'),
+      routeState: valueState(routeState),
+      goalId: valueState(firstValue(activeGoal?.taskQueue?.goalId)),
+      taskId: valueState(firstValue(activeGoal?.nextAction?.taskId)),
+      providerId: valueState(null),
+      canConfirm: valueState(false),
+      reason: valueState(result?.message ?? 'reviewer run preview route is unavailable'),
+      plan: {
+        planHash: valueState(null),
+        commandTemplateId: valueState(null),
+        handoffPackRef: valueState(null)
+      },
+      confirm: {
+        available: valueState(false),
+        endpoint: {
+          method: valueState(null),
+          route: valueState(null),
+          requiredFields: arrayTextState([])
+        }
+      },
+      workerEvidence: projectReviewerWorkerEvidence(null),
+      operationStatus: projectReviewerRunOperation(operation),
+      nextSafeAction: projectReviewerRunNextSafeAction(operation),
+      boundaries: projectReviewerRunBoundaries(null),
+      note: 'Reviewer run preview is unavailable until the backend returns reviewerRunHandoff.v1 for the active v67 reviewer task.'
+    };
+  }
+
+  const goalId = preview.goal?.goalId;
+  const taskId = preview.task?.taskId;
+  const confirmRoute = isSafeGoalRouteSegment(goalId)
+    ? `/api/goals/${encodeURIComponent(goalId)}/reviewer-run-confirm`
+    : null;
+  const ready = preview.state === 'ready';
+
+  return {
+    state: ready ? 'preview-ready' : 'blocked',
+    modelName: valueState('ReviewerRunPreview'),
+    routeState: valueState(routeState),
+    goalId: valueState(goalId),
+    taskId: valueState(taskId),
+    goal: {
+      title: valueState(preview.goal?.title),
+      state: valueState(preview.goal?.state),
+      sourceContract: valueState(preview.goal?.sourceContract),
+      sourceRef: valueState(preview.goal?.sourceRef)
+    },
+    task: {
+      title: valueState(preview.task?.title),
+      state: valueState(preview.task?.state),
+      sourceContract: valueState(preview.task?.sourceContract),
+      sourceRef: valueState(preview.task?.sourceRef)
+    },
+    provider: {
+      providerId: valueState(preview.provider?.providerId),
+      role: valueState(preview.provider?.role),
+      lane: valueState(preview.provider?.lane),
+      readinessState: valueState(preview.provider?.readinessState),
+      sourceContract: valueState(preview.provider?.sourceContract),
+      sourceRef: valueState(preview.provider?.sourceRef)
+    },
+    reviewerIdentity: {
+      reviewerActorId: valueState(preview.reviewerIdentity?.reviewerActorId),
+      sourceContract: valueState(preview.reviewerIdentity?.sourceContract),
+      sourceRef: valueState(preview.reviewerIdentity?.sourceRef)
+    },
+    plan: {
+      planHash: valueState(preview.planHash),
+      handoffPackRef: valueState(preview.handoffPackRef),
+      commandTemplateId: valueState(preview.commandTemplate?.templateId),
+      commandProviderId: valueState(preview.commandTemplate?.providerId),
+      commandRole: valueState(preview.commandTemplate?.role),
+      commandFamily: valueState(preview.commandTemplate?.commandFamily),
+      commandTemplateFixed: valueState(preview.commandTemplate?.fixed === true),
+      acceptsFreeformCommand: valueState(preview.commandTemplate?.acceptsFreeformCommand === true),
+      rendererSuppliedCommandAvailable: valueState(preview.commandTemplate?.rendererSuppliedCommandAvailable === true)
+    },
+    workerEvidence: projectReviewerWorkerEvidence(preview.workerEvidence),
+    confirm: {
+      available: valueState(ready && confirmRoute !== null),
+      endpoint: {
+        method: valueState('POST'),
+        route: valueState(confirmRoute),
+        requiredFields: arrayTextState(preview.confirmation?.requiredFields),
+        requiresPlanHash: valueState(preview.confirmation?.requiresPlanHash === true),
+        providerId: valueState(preview.confirmation?.providerId),
+        role: valueState(preview.confirmation?.role),
+        commandTemplateId: valueState(preview.confirmation?.commandTemplateId),
+        handoffPackRef: valueState(preview.confirmation?.handoffPackRef)
+      }
+    },
+    reviewPolicy: {
+      requiresIndependentReviewer: valueState(preview.reviewPolicy?.requiresIndependentReviewer === true),
+      allowedVerdicts: arrayTextState(preview.reviewPolicy?.allowedVerdicts),
+      verdictCompletesTask: valueState(preview.reviewPolicy?.verdictCompletesTask === true),
+      adoptionAvailable: valueState(preview.reviewPolicy?.adoptionAvailable === true),
+      mainVerificationAvailable: valueState(preview.reviewPolicy?.mainVerificationAvailable === true),
+      releaseReadinessAvailable: valueState(preview.reviewPolicy?.releaseReadinessAvailable === true)
+    },
+    blockedReasons: arrayTextState(preview.blockedReasons),
+    operationStatus: projectReviewerRunOperation(operation),
+    nextSafeAction: projectReviewerRunNextSafeAction(operation),
+    boundaries: projectReviewerRunBoundaries(preview.boundaries),
+    note: 'Reviewer run preview is owned by backend contracts and fixed to claude-code-cli plus claude-code-reviewer-controlled-v1. Workbench can submit the matching plan hash only; reviewer verdicts do not complete tasks, approve adoption, pass main verification, or mark releases ready.'
+  };
+}
+
+function projectReviewerWorkerEvidence(workerEvidence) {
+  const evidenceRefs = Array.isArray(workerEvidence?.evidenceRefs) ? workerEvidence.evidenceRefs : [];
+
+  return {
+    state: valueState(workerEvidence?.state),
+    sourceContract: valueState(workerEvidence?.sourceContract),
+    sourceRef: valueState(workerEvidence?.sourceRef),
+    workerRunId: valueState(workerEvidence?.workerRunId),
+    workerProviderId: valueState(workerEvidence?.workerProviderId),
+    workerRole: valueState(workerEvidence?.workerRole),
+    workerActorId: valueState(workerEvidence?.workerActorId),
+    taskState: valueState(workerEvidence?.taskState),
+    reviewRequired: valueState(workerEvidence?.reviewRequired === true),
+    taskCompleted: valueState(workerEvidence?.taskCompleted === true),
+    reviewApproved: valueState(workerEvidence?.reviewApproved === true),
+    mainVerified: valueState(workerEvidence?.mainVerified === true),
+    releaseReady: valueState(workerEvidence?.releaseReady === true),
+    summary: valueState(workerEvidence?.summary),
+    changedFiles: arrayTextState(workerEvidence?.changedFiles),
+    validationCommands: arrayTextState(workerEvidence?.validationCommands),
+    artifactRefs: arrayTextState(workerEvidence?.artifactRefs),
+    evidenceRefs: {
+      count: valueState(evidenceRefs.length),
+      items: evidenceRefs.map((entry) => ({
+        kind: valueState(entry?.kind),
+        ref: valueState(entry?.ref),
+        label: valueState(entry?.label)
+      }))
+    }
+  };
+}
+
+function projectReviewerRunOperation(operation) {
+  const verdict = operation?.runResult ?? null;
+  const sanitizedVerdict = verdict?.sanitizedVerdict ?? {};
+  const artifactRefs = Array.isArray(operation?.artifactRefs) ? operation.artifactRefs : [];
+
+  return {
+    state: operation === null ? 'waiting-for-confirm' : operation.status ?? 'available',
+    sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+    operationId: valueState(operation?.operationId),
+    commandKind: valueState(operation?.commandKind),
+    commandName: valueState(operation?.commandName),
+    status: valueState(operation?.status),
+    verdictId: valueState(verdict?.verdictId),
+    verdictStatus: valueState(verdict?.status),
+    providerId: valueState(verdict?.providerId),
+    role: valueState(verdict?.role),
+    commandTemplateId: valueState(verdict?.commandTemplateId),
+    handoffPlanHash: valueState(verdict?.handoffPlanHash),
+    handoffPackRef: valueState(verdict?.handoffPackRef),
+    reviewerActorId: valueState(verdict?.reviewerActorId),
+    workerActorId: valueState(verdict?.workerActorId),
+    adapter: valueState(verdict?.adapter),
+    realClaudeSmokeOptIn: valueState(verdict?.realClaudeSmokeOptIn === true),
+    summary: valueState(sanitizedVerdict?.summary),
+    findings: {
+      count: valueState(Array.isArray(sanitizedVerdict?.findings) ? sanitizedVerdict.findings.length : 0),
+      items: (Array.isArray(sanitizedVerdict?.findings) ? sanitizedVerdict.findings : []).map((finding) => ({
+        severity: valueState(finding?.severity),
+        file: valueState(finding?.file),
+        line: valueState(finding?.line),
+        statement: valueState(finding?.statement),
+        recommendation: valueState(finding?.recommendation)
+      }))
+    },
+    validationCommands: arrayTextState(sanitizedVerdict?.validationCommands),
+    risks: arrayTextState(sanitizedVerdict?.risks),
+    blockers: arrayTextState(sanitizedVerdict?.blockers),
+    revisionSummary: valueState(sanitizedVerdict?.revisionSummary),
+    reviewApproved: valueState(verdict?.nextState?.reviewApproved === true),
+    revisionRequired: valueState(verdict?.nextState?.revisionRequired === true),
+    blocked: valueState(verdict?.nextState?.blocked === true),
+    taskCompleted: valueState(verdict?.nextState?.taskCompleted === true),
+    adoptionReady: valueState(verdict?.nextState?.adoptionReady === true),
+    mainVerified: valueState(verdict?.nextState?.mainVerified === true),
+    releaseReady: valueState(verdict?.nextState?.releaseReady === true),
+    rawProviderOutputAvailable: valueState(operation?.output?.rawProviderOutputAvailable === true || verdict?.boundaries?.rawProviderOutputAvailable === true),
+    rawWorkerTranscriptAvailable: valueState(verdict?.boundaries?.rawWorkerTranscriptAvailable === true),
+    artifactRefs: {
+      count: valueState(artifactRefs.length),
+      items: artifactRefs.map((artifact) => ({
+        kind: valueState(artifact?.kind),
+        path: valueState(artifact?.path),
+        ref: valueState(artifact?.ref),
+        uri: valueState(artifact?.uri),
+        status: valueState(artifact?.status)
+      }))
+    }
+  };
+}
+
+function projectReviewerRunNextSafeAction(operation) {
+  const verdict = operation?.runResult ?? null;
+  const status = verdict?.status;
+
+  if (status === 'approved') {
+    return {
+      state: 'handoff-to-v68',
+      label: valueState('Approved reviewer evidence recorded'),
+      copyOnly: valueState(true),
+      action: valueState('Use v68 adoption and main verification preview/confirm. Do not mark main verified or release ready from reviewer output.')
+    };
+  }
+
+  if (status === 'needs-revision') {
+    return {
+      state: 'worker-revision',
+      label: valueState('Worker revision required'),
+      copyOnly: valueState(true),
+      action: valueState(verdict?.sanitizedVerdict?.revisionSummary ?? 'Copy reviewer findings into the next controlled worker handoff.')
+    };
+  }
+
+  if (status === 'blocked') {
+    return {
+      state: 'resolve-blocker',
+      label: valueState('Reviewer blocked'),
+      copyOnly: valueState(true),
+      action: valueState(verdict?.sanitizedVerdict?.summary ?? 'Resolve the reviewer blocker before adoption or main verification.')
+    };
+  }
+
+  return {
+    state: 'confirm-reviewer-run',
+    label: valueState('Reviewer run not confirmed'),
+    copyOnly: valueState(false),
+    action: valueState('Confirm the backend-owned reviewer run preview when the handoff is ready.')
+  };
+}
+
+function projectReviewerRunBoundaries(boundaries) {
+  return {
+    backendOwnedPreviewConfirm: valueState(boundaries?.backendOwnedPreviewConfirm === true),
+    fixedProviderId: valueState(boundaries?.fixedProviderId ?? 'claude-code-cli'),
+    fixedRole: valueState(boundaries?.fixedRole ?? 'reviewer'),
+    fixedCommandTemplateId: valueState(boundaries?.fixedCommandTemplateId ?? 'claude-code-reviewer-controlled-v1'),
+    rendererSuppliedCommandAvailable: valueState(boundaries?.rendererSuppliedCommandAvailable === true),
+    freeformProviderCommandAvailable: valueState(boundaries?.freeformProviderCommandAvailable === true),
+    genericShellAvailable: valueState(boundaries?.genericShellAvailable === true),
+    genericTerminalAvailable: valueState(boundaries?.genericTerminalAvailable === true),
+    rendererCommandExecutionAvailable: valueState(boundaries?.rendererCommandExecutionAvailable === true),
+    frontendLocalJsonlReadAvailable: valueState(boundaries?.frontendLocalJsonlReadAvailable === true),
+    frontendLocalSessionReadAvailable: valueState(boundaries?.frontendLocalSessionReadAvailable === true),
+    frontendProviderFolderReadAvailable: valueState(boundaries?.frontendProviderFolderReadAvailable === true),
+    rawTranscriptAvailable: valueState(boundaries?.rawTranscriptAvailable === true),
+    rawWorkerTranscriptAvailable: valueState(boundaries?.rawWorkerTranscriptAvailable === true),
+    rawModelOutputAvailable: valueState(boundaries?.rawModelOutputAvailable === true),
+    rawProviderOutputAvailable: valueState(boundaries?.rawProviderOutputAvailable === true),
+    reviewerReadsRawWorkerTranscript: valueState(boundaries?.reviewerReadsRawWorkerTranscript === true),
+    reviewerReadsRawModelOutput: valueState(boundaries?.reviewerReadsRawModelOutput === true),
+    directGoalEventAppendAvailable: valueState(boundaries?.directGoalEventAppendAvailable === true),
+    directTaskCompletionAvailable: valueState(boundaries?.directTaskCompletionAvailable === true),
+    reviewerOutputCompletesTask: valueState(boundaries?.reviewerOutputCompletesTask === true),
+    reviewerOutputApprovesAdoption: valueState(boundaries?.reviewerOutputApprovesAdoption === true),
+    reviewerVerdictPassesMainVerification: valueState(boundaries?.reviewerVerdictPassesMainVerification === true),
+    reviewerVerdictMarksReleaseReady: valueState(boundaries?.reviewerVerdictMarksReleaseReady === true),
+    automaticSelfReviewAvailable: valueState(boundaries?.automaticSelfReviewAvailable === true),
+    automaticWorktreeCreationAvailable: valueState(boundaries?.automaticWorktreeCreationAvailable === true),
+    automaticNextVersionGoalAvailable: valueState(boundaries?.automaticNextVersionGoalAvailable === true),
+    writesMainWorktree: valueState(boundaries?.writesMainWorktree === true),
+    gitMutationAvailable: valueState(boundaries?.gitMutationAvailable === true),
+    githubReleaseAutomationAvailable: valueState(boundaries?.githubReleaseAutomationAvailable === true),
+    realClaudeRequiresOptIn: valueState(boundaries?.realClaudeRequiresOptIn === true)
+  };
+}
+
 function projectControlledProviderRunnerOperation(operation) {
   const runResult = operation?.runResult ?? {};
   const verifierSummary = operation?.verifierSummary ?? {};
@@ -6611,6 +6943,27 @@ function latestProviderRunnerOperationForTask(operations, { goalId, taskId }) {
     const operation = operations.runs[index];
 
     if (operation?.goalId === goalId && operation?.taskId === taskId && operation?.commandKind === 'provider-runner') {
+      return operation;
+    }
+  }
+
+  return null;
+}
+
+function latestReviewerRunOperationForTask(operations, { goalId, taskId }) {
+  if (!Array.isArray(operations?.runs) || !isNonEmptyString(goalId) || !isNonEmptyString(taskId)) {
+    return null;
+  }
+
+  for (let index = operations.runs.length - 1; index >= 0; index -= 1) {
+    const operation = operations.runs[index];
+
+    if (
+      operation?.goalId === goalId &&
+      operation?.taskId === taskId &&
+      operation?.commandKind === 'provider-runner' &&
+      (operation?.role === 'reviewer' || operation?.commandName === 'reviewer run preview/confirm')
+    ) {
       return operation;
     }
   }

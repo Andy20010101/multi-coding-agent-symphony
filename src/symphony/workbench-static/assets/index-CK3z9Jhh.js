@@ -9902,6 +9902,7 @@ var GOAL_CLOSEOUT_REPORT_CONTRACT_NAME = "goal-closeout-report.v1";
 var CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_CONTRACT_NAME = "controlled-implementation-plan-preview.v1";
 var CONTROLLED_PROVIDER_RUNNER_PLAN_PREVIEW_CONTRACT_NAME = "controlled-provider-runner-plan-preview.v1";
 var WORKER_RUN_PREVIEW_CONTRACT_NAME = "workerRunPreview.v1";
+var REVIEWER_RUN_HANDOFF_CONTRACT_NAME = "reviewerRunHandoff.v1";
 var CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = "controlled-adoption-plan-freeze.v1";
 var CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = "controlled-adoption-confirmation.v1";
 var CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = "symphony.console-adoption-inspect";
@@ -9957,6 +9958,7 @@ var PROVIDER_HUB_PANEL_MODEL_NAME = "ProviderHubPanel";
 var V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = "v25-controlled-implementation-lane";
 var V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID = "v41-controlled-cli-provider-runner-backend-completion";
 var V66_WORKER_RUN_GOAL_ID = "v66-controlled-codex-worker-execution";
+var V67_REVIEWER_RUN_GOAL_ID = "v67-claude-code-reviewer-lane";
 var EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
 var EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
 	"docs/plans/<file>",
@@ -10854,6 +10856,14 @@ var WORKER_RUN_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
 	contractName: WORKER_RUN_PREVIEW_CONTRACT_NAME,
 	acceptErrorContract: true
 });
+var REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
+	id: "reviewerRunPreview",
+	label: "Reviewer Run Preview",
+	path: "/api/goals/<goal-id>/reviewer-run-preview",
+	method: "GET",
+	contractName: REVIEWER_RUN_HANDOFF_CONTRACT_NAME,
+	acceptErrorContract: true
+});
 var CONTROLLED_ADOPTION_PLAN_FREEZE_ROUTE_TEMPLATE = Object.freeze({
 	id: "controlledAdoptionPlanFreeze",
 	label: "Controlled Adoption Plan Freeze",
@@ -10891,6 +10901,7 @@ var READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
 	CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
 	CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
 	WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
+	REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
 	GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
 	RUN_TIMELINE_ROUTE_TEMPLATE,
 	SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
@@ -10918,6 +10929,7 @@ var OPTIONAL_ROUTE_IDS = new Set([
 	"controlledImplementationPlanPreview",
 	"controlledProviderRunnerPreview",
 	"workerRunPreview",
+	"reviewerRunPreview",
 	"adoptionInspect"
 ]);
 var DEFERRED_CONTRACT_GAPS = Object.freeze(["dirty adoption 当前仍由 pending adoption 与 Git readiness 分别暴露"]);
@@ -10987,6 +10999,7 @@ function projectWorkbenchContracts(results) {
 	const controlledImplementationPlanPreviewData = dataFrom(results.controlledImplementationPlanPreview);
 	const controlledProviderRunnerPreviewData = dataFrom(results.controlledProviderRunnerPreview);
 	const workerRunPreviewData = dataFrom(results.workerRunPreview);
+	const reviewerRunPreviewData = dataFrom(results.reviewerRunPreview);
 	const capabilitiesData = dataFrom(results.capabilities);
 	const actionManifestData = dataFrom(results.actionManifest);
 	const actionAvailabilityData = dataFrom(results.actionAvailability);
@@ -11024,6 +11037,7 @@ function projectWorkbenchContracts(results) {
 		projectRouteState(results.controlledImplementationPlanPreview?.routeDescriptor ?? CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE, results.controlledImplementationPlanPreview),
 		projectRouteState(results.controlledProviderRunnerPreview?.routeDescriptor ?? CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE, results.controlledProviderRunnerPreview),
 		projectRouteState(results.workerRunPreview?.routeDescriptor ?? WORKER_RUN_PREVIEW_ROUTE_TEMPLATE, results.workerRunPreview),
+		projectRouteState(results.reviewerRunPreview?.routeDescriptor ?? REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE, results.reviewerRunPreview),
 		projectRouteState(results.adoptionInspect?.routeDescriptor ?? ADOPTION_INSPECT_ROUTE_TEMPLATE, results.adoptionInspect),
 		projectRouteState(results.goalReviewerPromptPack?.routeDescriptor ?? GOAL_PROMPT_PACK_ROUTE_TEMPLATE, results.goalReviewerPromptPack),
 		...safeArtifactPreviewResults.map((result) => projectRouteState(result?.routeDescriptor ?? SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE, result))
@@ -11111,6 +11125,12 @@ function projectWorkbenchContracts(results) {
 	activeGoalControl.workerRunPreview = projectWorkerRunPreview({
 		result: results.workerRunPreview,
 		preview: workerRunPreviewData,
+		operations: activeGoalOperations,
+		activeGoal: activeGoalControl
+	});
+	activeGoalControl.reviewerRunPreview = projectReviewerRunPreview({
+		result: results.reviewerRunPreview,
+		preview: reviewerRunPreviewData,
 		operations: activeGoalOperations,
 		activeGoal: activeGoalControl
 	});
@@ -14551,6 +14571,18 @@ function createWorkerRunPreviewRoute(goalId, nextAction) {
 		taskId
 	});
 }
+function createReviewerRunPreviewRoute(goalId, nextAction) {
+	const taskId = nextAction?.next?.taskId;
+	const role = nextAction?.next?.role;
+	const phase = nextAction?.next?.phase;
+	if (!isSafeGoalRouteSegment(goalId) || goalId !== V67_REVIEWER_RUN_GOAL_ID || !isSafeGoalRouteSegment(taskId) || role !== "reviewer" || !["review", "verification"].includes(phase) || nextAction?.next?.blocked === true) return null;
+	return Object.freeze({
+		...REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+		path: `${REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE.path.replace("<goal-id>", encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}`,
+		goalId,
+		taskId
+	});
+}
 function createAdoptionInspectRoute(operations) {
 	const operation = latestAdoptionPlanFreezeOperationForTask(operations, {
 		goalId: operations?.goalId,
@@ -15638,6 +15670,266 @@ function projectWorkerRunOperation(operation) {
 		}
 	};
 }
+function projectReviewerRunPreview({ result, preview, operations, activeGoal }) {
+	const routeState = routeStateFromResult(result);
+	const operation = latestReviewerRunOperationForTask(operations, {
+		goalId: preview?.goal?.goalId ?? firstValue(activeGoal?.taskQueue?.goalId),
+		taskId: preview?.task?.taskId ?? firstValue(activeGoal?.nextAction?.taskId)
+	});
+	if (result?.ok !== true || preview?.contractName !== REVIEWER_RUN_HANDOFF_CONTRACT_NAME) return {
+		state: "unavailable",
+		modelName: valueState("ReviewerRunPreview"),
+		routeState: valueState(routeState),
+		goalId: valueState(firstValue(activeGoal?.taskQueue?.goalId)),
+		taskId: valueState(firstValue(activeGoal?.nextAction?.taskId)),
+		providerId: valueState(null),
+		canConfirm: valueState(false),
+		reason: valueState(result?.message ?? "reviewer run preview route is unavailable"),
+		plan: {
+			planHash: valueState(null),
+			commandTemplateId: valueState(null),
+			handoffPackRef: valueState(null)
+		},
+		confirm: {
+			available: valueState(false),
+			endpoint: {
+				method: valueState(null),
+				route: valueState(null),
+				requiredFields: arrayTextState([])
+			}
+		},
+		workerEvidence: projectReviewerWorkerEvidence(null),
+		operationStatus: projectReviewerRunOperation(operation),
+		nextSafeAction: projectReviewerRunNextSafeAction(operation),
+		boundaries: projectReviewerRunBoundaries(null),
+		note: "Reviewer run preview is unavailable until the backend returns reviewerRunHandoff.v1 for the active v67 reviewer task."
+	};
+	const goalId = preview.goal?.goalId;
+	const taskId = preview.task?.taskId;
+	const confirmRoute = isSafeGoalRouteSegment(goalId) ? `/api/goals/${encodeURIComponent(goalId)}/reviewer-run-confirm` : null;
+	const ready = preview.state === "ready";
+	return {
+		state: ready ? "preview-ready" : "blocked",
+		modelName: valueState("ReviewerRunPreview"),
+		routeState: valueState(routeState),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		goal: {
+			title: valueState(preview.goal?.title),
+			state: valueState(preview.goal?.state),
+			sourceContract: valueState(preview.goal?.sourceContract),
+			sourceRef: valueState(preview.goal?.sourceRef)
+		},
+		task: {
+			title: valueState(preview.task?.title),
+			state: valueState(preview.task?.state),
+			sourceContract: valueState(preview.task?.sourceContract),
+			sourceRef: valueState(preview.task?.sourceRef)
+		},
+		provider: {
+			providerId: valueState(preview.provider?.providerId),
+			role: valueState(preview.provider?.role),
+			lane: valueState(preview.provider?.lane),
+			readinessState: valueState(preview.provider?.readinessState),
+			sourceContract: valueState(preview.provider?.sourceContract),
+			sourceRef: valueState(preview.provider?.sourceRef)
+		},
+		reviewerIdentity: {
+			reviewerActorId: valueState(preview.reviewerIdentity?.reviewerActorId),
+			sourceContract: valueState(preview.reviewerIdentity?.sourceContract),
+			sourceRef: valueState(preview.reviewerIdentity?.sourceRef)
+		},
+		plan: {
+			planHash: valueState(preview.planHash),
+			handoffPackRef: valueState(preview.handoffPackRef),
+			commandTemplateId: valueState(preview.commandTemplate?.templateId),
+			commandProviderId: valueState(preview.commandTemplate?.providerId),
+			commandRole: valueState(preview.commandTemplate?.role),
+			commandFamily: valueState(preview.commandTemplate?.commandFamily),
+			commandTemplateFixed: valueState(preview.commandTemplate?.fixed === true),
+			acceptsFreeformCommand: valueState(preview.commandTemplate?.acceptsFreeformCommand === true),
+			rendererSuppliedCommandAvailable: valueState(preview.commandTemplate?.rendererSuppliedCommandAvailable === true)
+		},
+		workerEvidence: projectReviewerWorkerEvidence(preview.workerEvidence),
+		confirm: {
+			available: valueState(ready && confirmRoute !== null),
+			endpoint: {
+				method: valueState("POST"),
+				route: valueState(confirmRoute),
+				requiredFields: arrayTextState(preview.confirmation?.requiredFields),
+				requiresPlanHash: valueState(preview.confirmation?.requiresPlanHash === true),
+				providerId: valueState(preview.confirmation?.providerId),
+				role: valueState(preview.confirmation?.role),
+				commandTemplateId: valueState(preview.confirmation?.commandTemplateId),
+				handoffPackRef: valueState(preview.confirmation?.handoffPackRef)
+			}
+		},
+		reviewPolicy: {
+			requiresIndependentReviewer: valueState(preview.reviewPolicy?.requiresIndependentReviewer === true),
+			allowedVerdicts: arrayTextState(preview.reviewPolicy?.allowedVerdicts),
+			verdictCompletesTask: valueState(preview.reviewPolicy?.verdictCompletesTask === true),
+			adoptionAvailable: valueState(preview.reviewPolicy?.adoptionAvailable === true),
+			mainVerificationAvailable: valueState(preview.reviewPolicy?.mainVerificationAvailable === true),
+			releaseReadinessAvailable: valueState(preview.reviewPolicy?.releaseReadinessAvailable === true)
+		},
+		blockedReasons: arrayTextState(preview.blockedReasons),
+		operationStatus: projectReviewerRunOperation(operation),
+		nextSafeAction: projectReviewerRunNextSafeAction(operation),
+		boundaries: projectReviewerRunBoundaries(preview.boundaries),
+		note: "Reviewer run preview is owned by backend contracts and fixed to claude-code-cli plus claude-code-reviewer-controlled-v1. Workbench can submit the matching plan hash only; reviewer verdicts do not complete tasks, approve adoption, pass main verification, or mark releases ready."
+	};
+}
+function projectReviewerWorkerEvidence(workerEvidence) {
+	const evidenceRefs = Array.isArray(workerEvidence?.evidenceRefs) ? workerEvidence.evidenceRefs : [];
+	return {
+		state: valueState(workerEvidence?.state),
+		sourceContract: valueState(workerEvidence?.sourceContract),
+		sourceRef: valueState(workerEvidence?.sourceRef),
+		workerRunId: valueState(workerEvidence?.workerRunId),
+		workerProviderId: valueState(workerEvidence?.workerProviderId),
+		workerRole: valueState(workerEvidence?.workerRole),
+		workerActorId: valueState(workerEvidence?.workerActorId),
+		taskState: valueState(workerEvidence?.taskState),
+		reviewRequired: valueState(workerEvidence?.reviewRequired === true),
+		taskCompleted: valueState(workerEvidence?.taskCompleted === true),
+		reviewApproved: valueState(workerEvidence?.reviewApproved === true),
+		mainVerified: valueState(workerEvidence?.mainVerified === true),
+		releaseReady: valueState(workerEvidence?.releaseReady === true),
+		summary: valueState(workerEvidence?.summary),
+		changedFiles: arrayTextState(workerEvidence?.changedFiles),
+		validationCommands: arrayTextState(workerEvidence?.validationCommands),
+		artifactRefs: arrayTextState(workerEvidence?.artifactRefs),
+		evidenceRefs: {
+			count: valueState(evidenceRefs.length),
+			items: evidenceRefs.map((entry) => ({
+				kind: valueState(entry?.kind),
+				ref: valueState(entry?.ref),
+				label: valueState(entry?.label)
+			}))
+		}
+	};
+}
+function projectReviewerRunOperation(operation) {
+	const verdict = operation?.runResult ?? null;
+	const sanitizedVerdict = verdict?.sanitizedVerdict ?? {};
+	const artifactRefs = Array.isArray(operation?.artifactRefs) ? operation.artifactRefs : [];
+	return {
+		state: operation === null ? "waiting-for-confirm" : operation.status ?? "available",
+		sourceContract: valueState(GOAL_OPERATION_RUNS_CONTRACT_NAME),
+		operationId: valueState(operation?.operationId),
+		commandKind: valueState(operation?.commandKind),
+		commandName: valueState(operation?.commandName),
+		status: valueState(operation?.status),
+		verdictId: valueState(verdict?.verdictId),
+		verdictStatus: valueState(verdict?.status),
+		providerId: valueState(verdict?.providerId),
+		role: valueState(verdict?.role),
+		commandTemplateId: valueState(verdict?.commandTemplateId),
+		handoffPlanHash: valueState(verdict?.handoffPlanHash),
+		handoffPackRef: valueState(verdict?.handoffPackRef),
+		reviewerActorId: valueState(verdict?.reviewerActorId),
+		workerActorId: valueState(verdict?.workerActorId),
+		adapter: valueState(verdict?.adapter),
+		realClaudeSmokeOptIn: valueState(verdict?.realClaudeSmokeOptIn === true),
+		summary: valueState(sanitizedVerdict?.summary),
+		findings: {
+			count: valueState(Array.isArray(sanitizedVerdict?.findings) ? sanitizedVerdict.findings.length : 0),
+			items: (Array.isArray(sanitizedVerdict?.findings) ? sanitizedVerdict.findings : []).map((finding) => ({
+				severity: valueState(finding?.severity),
+				file: valueState(finding?.file),
+				line: valueState(finding?.line),
+				statement: valueState(finding?.statement),
+				recommendation: valueState(finding?.recommendation)
+			}))
+		},
+		validationCommands: arrayTextState(sanitizedVerdict?.validationCommands),
+		risks: arrayTextState(sanitizedVerdict?.risks),
+		blockers: arrayTextState(sanitizedVerdict?.blockers),
+		revisionSummary: valueState(sanitizedVerdict?.revisionSummary),
+		reviewApproved: valueState(verdict?.nextState?.reviewApproved === true),
+		revisionRequired: valueState(verdict?.nextState?.revisionRequired === true),
+		blocked: valueState(verdict?.nextState?.blocked === true),
+		taskCompleted: valueState(verdict?.nextState?.taskCompleted === true),
+		adoptionReady: valueState(verdict?.nextState?.adoptionReady === true),
+		mainVerified: valueState(verdict?.nextState?.mainVerified === true),
+		releaseReady: valueState(verdict?.nextState?.releaseReady === true),
+		rawProviderOutputAvailable: valueState(operation?.output?.rawProviderOutputAvailable === true || verdict?.boundaries?.rawProviderOutputAvailable === true),
+		rawWorkerTranscriptAvailable: valueState(verdict?.boundaries?.rawWorkerTranscriptAvailable === true),
+		artifactRefs: {
+			count: valueState(artifactRefs.length),
+			items: artifactRefs.map((artifact) => ({
+				kind: valueState(artifact?.kind),
+				path: valueState(artifact?.path),
+				ref: valueState(artifact?.ref),
+				uri: valueState(artifact?.uri),
+				status: valueState(artifact?.status)
+			}))
+		}
+	};
+}
+function projectReviewerRunNextSafeAction(operation) {
+	const verdict = operation?.runResult ?? null;
+	const status = verdict?.status;
+	if (status === "approved") return {
+		state: "handoff-to-v68",
+		label: valueState("Approved reviewer evidence recorded"),
+		copyOnly: valueState(true),
+		action: valueState("Use v68 adoption and main verification preview/confirm. Do not mark main verified or release ready from reviewer output.")
+	};
+	if (status === "needs-revision") return {
+		state: "worker-revision",
+		label: valueState("Worker revision required"),
+		copyOnly: valueState(true),
+		action: valueState(verdict?.sanitizedVerdict?.revisionSummary ?? "Copy reviewer findings into the next controlled worker handoff.")
+	};
+	if (status === "blocked") return {
+		state: "resolve-blocker",
+		label: valueState("Reviewer blocked"),
+		copyOnly: valueState(true),
+		action: valueState(verdict?.sanitizedVerdict?.summary ?? "Resolve the reviewer blocker before adoption or main verification.")
+	};
+	return {
+		state: "confirm-reviewer-run",
+		label: valueState("Reviewer run not confirmed"),
+		copyOnly: valueState(false),
+		action: valueState("Confirm the backend-owned reviewer run preview when the handoff is ready.")
+	};
+}
+function projectReviewerRunBoundaries(boundaries) {
+	return {
+		backendOwnedPreviewConfirm: valueState(boundaries?.backendOwnedPreviewConfirm === true),
+		fixedProviderId: valueState(boundaries?.fixedProviderId ?? "claude-code-cli"),
+		fixedRole: valueState(boundaries?.fixedRole ?? "reviewer"),
+		fixedCommandTemplateId: valueState(boundaries?.fixedCommandTemplateId ?? "claude-code-reviewer-controlled-v1"),
+		rendererSuppliedCommandAvailable: valueState(boundaries?.rendererSuppliedCommandAvailable === true),
+		freeformProviderCommandAvailable: valueState(boundaries?.freeformProviderCommandAvailable === true),
+		genericShellAvailable: valueState(boundaries?.genericShellAvailable === true),
+		genericTerminalAvailable: valueState(boundaries?.genericTerminalAvailable === true),
+		rendererCommandExecutionAvailable: valueState(boundaries?.rendererCommandExecutionAvailable === true),
+		frontendLocalJsonlReadAvailable: valueState(boundaries?.frontendLocalJsonlReadAvailable === true),
+		frontendLocalSessionReadAvailable: valueState(boundaries?.frontendLocalSessionReadAvailable === true),
+		frontendProviderFolderReadAvailable: valueState(boundaries?.frontendProviderFolderReadAvailable === true),
+		rawTranscriptAvailable: valueState(boundaries?.rawTranscriptAvailable === true),
+		rawWorkerTranscriptAvailable: valueState(boundaries?.rawWorkerTranscriptAvailable === true),
+		rawModelOutputAvailable: valueState(boundaries?.rawModelOutputAvailable === true),
+		rawProviderOutputAvailable: valueState(boundaries?.rawProviderOutputAvailable === true),
+		reviewerReadsRawWorkerTranscript: valueState(boundaries?.reviewerReadsRawWorkerTranscript === true),
+		reviewerReadsRawModelOutput: valueState(boundaries?.reviewerReadsRawModelOutput === true),
+		directGoalEventAppendAvailable: valueState(boundaries?.directGoalEventAppendAvailable === true),
+		directTaskCompletionAvailable: valueState(boundaries?.directTaskCompletionAvailable === true),
+		reviewerOutputCompletesTask: valueState(boundaries?.reviewerOutputCompletesTask === true),
+		reviewerOutputApprovesAdoption: valueState(boundaries?.reviewerOutputApprovesAdoption === true),
+		reviewerVerdictPassesMainVerification: valueState(boundaries?.reviewerVerdictPassesMainVerification === true),
+		reviewerVerdictMarksReleaseReady: valueState(boundaries?.reviewerVerdictMarksReleaseReady === true),
+		automaticSelfReviewAvailable: valueState(boundaries?.automaticSelfReviewAvailable === true),
+		automaticWorktreeCreationAvailable: valueState(boundaries?.automaticWorktreeCreationAvailable === true),
+		automaticNextVersionGoalAvailable: valueState(boundaries?.automaticNextVersionGoalAvailable === true),
+		writesMainWorktree: valueState(boundaries?.writesMainWorktree === true),
+		gitMutationAvailable: valueState(boundaries?.gitMutationAvailable === true),
+		githubReleaseAutomationAvailable: valueState(boundaries?.githubReleaseAutomationAvailable === true),
+		realClaudeRequiresOptIn: valueState(boundaries?.realClaudeRequiresOptIn === true)
+	};
+}
 function projectControlledProviderRunnerOperation(operation) {
 	const runResult = operation?.runResult ?? {};
 	const verifierSummary = operation?.verifierSummary ?? {};
@@ -15730,6 +16022,14 @@ function latestProviderRunnerOperationForTask(operations, { goalId, taskId }) {
 	for (let index = operations.runs.length - 1; index >= 0; index -= 1) {
 		const operation = operations.runs[index];
 		if (operation?.goalId === goalId && operation?.taskId === taskId && operation?.commandKind === "provider-runner") return operation;
+	}
+	return null;
+}
+function latestReviewerRunOperationForTask(operations, { goalId, taskId }) {
+	if (!Array.isArray(operations?.runs) || !isNonEmptyString(goalId) || !isNonEmptyString(taskId)) return null;
+	for (let index = operations.runs.length - 1; index >= 0; index -= 1) {
+		const operation = operations.runs[index];
+		if (operation?.goalId === goalId && operation?.taskId === taskId && operation?.commandKind === "provider-runner" && (operation?.role === "reviewer" || operation?.commandName === "reviewer run preview/confirm")) return operation;
 	}
 	return null;
 }
@@ -22878,6 +23178,7 @@ var RESULT_ESCROW_CONFIRM_ERROR_MESSAGE = "result escrow confirm 未返回可用
 var CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE = "implementation confirm 未返回可用 contract";
 var CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE = "provider runner confirm 未返回可用 contract";
 var WORKER_RUN_CONFIRM_ERROR_MESSAGE = "worker run confirm 未返回可用 contract";
+var REVIEWER_RUN_CONFIRM_ERROR_MESSAGE = "reviewer run confirm 未返回可用 contract";
 var CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE = "verification confirm 未返回可用 contract";
 var CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE = "adoption plan freeze 未返回可用 contract";
 var CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE = "adoption confirm 未返回可用 contract";
@@ -22956,6 +23257,7 @@ async function fetchWorkbenchContracts(options = {}) {
 	const controlledImplementationPlanPreviewRoute = createControlledImplementationPlanPreviewRoute(activeGoalId, results.goalNextAction?.data);
 	const controlledProviderRunnerPreviewRoute = createControlledProviderRunnerPreviewRoute(activeGoalId, results.goalNextAction?.data);
 	const workerRunPreviewRoute = createWorkerRunPreviewRoute(activeGoalId, results.goalNextAction?.data);
+	const reviewerRunPreviewRoute = createReviewerRunPreviewRoute(activeGoalId, results.goalNextAction?.data);
 	const timelineRoute = createRunTimelineRoute(latestRunIdFromResults(results));
 	results.guidedGoalHandoff = guidedGoalHandoffRoute === null ? readonlySkipped({
 		route: GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
@@ -23030,6 +23332,14 @@ async function fetchWorkbenchContracts(options = {}) {
 		},
 		message: "worker run preview 未暴露 / 不适用"
 	}) : await fetchReadonlyRoute(workerRunPreviewRoute, options);
+	results.reviewerRunPreview = reviewerRunPreviewRoute === null ? readonlySkipped({
+		route: {
+			...REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+			id: "reviewerRunPreview",
+			label: "Reviewer Run Preview"
+		},
+		message: "reviewer run preview 未暴露 / 不适用"
+	}) : await fetchReadonlyRoute(reviewerRunPreviewRoute, options);
 	results.latestRunTimeline = timelineRoute === null ? readonlySkipped({
 		route: RUN_TIMELINE_ROUTE_TEMPLATE,
 		message: "暂无 timeline / 未暴露 / 不可用"
@@ -23315,6 +23625,61 @@ async function confirmWorkerRunPreview(path, body, { fetchImpl = globalThis.fetc
 		ok: false,
 		httpStatus: response.status,
 		message: WORKER_RUN_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	return {
+		ok: true,
+		httpStatus: response.status,
+		data
+	};
+}
+async function confirmReviewerRunPreview(path, body, { fetchImpl = globalThis.fetch } = {}) {
+	if (typeof fetchImpl !== "function") return {
+		ok: false,
+		httpStatus: null,
+		message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
+		errorEnvelope: null
+	};
+	let response;
+	try {
+		response = await fetchImpl(path, {
+			method: "POST",
+			cache: "no-store",
+			headers: {
+				Accept: "application/json",
+				"Content-Type": "application/json"
+			},
+			body: JSON.stringify(body)
+		});
+	} catch {
+		return {
+			ok: false,
+			httpStatus: null,
+			message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	let data;
+	try {
+		data = await response.json();
+	} catch {
+		return {
+			ok: false,
+			httpStatus: response.status,
+			message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
+			errorEnvelope: null
+		};
+	}
+	if (!response.ok) return {
+		ok: false,
+		httpStatus: response.status,
+		message: errorMessageFromEnvelope(data),
+		errorEnvelope: isErrorEnvelope(data) ? data : null
+	};
+	if (data?.contractName !== "reviewerRunConfirmation.v1") return {
+		ok: false,
+		httpStatus: response.status,
+		message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
 		errorEnvelope: null
 	};
 	return {
@@ -27252,6 +27617,14 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WorkerRunPreviewPanel, {
 						preview: model.activeGoal.workerRunPreview,
 						onWorkerRunConfirmed: onRefreshWorkbenchContracts
+					})
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "provider-runner-preview-grid",
+					"aria-label": "v67 Claude Code reviewer lane",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewerRunPreviewPanel, {
+						preview: model.activeGoal.reviewerRunPreview,
+						onReviewerRunConfirmed: onRefreshWorkbenchContracts
 					})
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
@@ -33499,6 +33872,234 @@ function WorkerRunPreviewPanel({ preview, onWorkerRunConfirmed }) {
 		]
 	});
 }
+function ReviewerRunPreviewPanel({ preview, onReviewerRunConfirmed }) {
+	const [confirmState, setConfirmState] = (0, import_react.useState)({
+		phase: "idle",
+		result: null,
+		error: null
+	});
+	const confirmRoute = preview?.confirm?.endpoint?.route?.value;
+	const confirmBody = buildReviewerRunConfirmBody(preview);
+	const confirmAvailable = preview?.state === "preview-ready" && preview?.confirm?.available?.value === true && typeof confirmRoute === "string" && confirmRoute.trim() !== "" && confirmBody !== null;
+	async function handleConfirm() {
+		if (!confirmAvailable) {
+			setConfirmState({
+				phase: "failed",
+				result: null,
+				error: "reviewer run confirm route unavailable"
+			});
+			return;
+		}
+		setConfirmState({
+			phase: "loading",
+			result: null,
+			error: null
+		});
+		const result = await confirmReviewerRunPreview(confirmRoute, confirmBody);
+		if (result.ok) {
+			setConfirmState({
+				phase: "ready",
+				result: result.data,
+				error: null
+			});
+			if (typeof onReviewerRunConfirmed === "function") await onReviewerRunConfirmed();
+			return;
+		}
+		setConfirmState({
+			phase: "failed",
+			result: null,
+			error: result.errorEnvelope === null ? result.message : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+		});
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "reviewer-run-preview-panel",
+		kicker: "v67 reviewer lane",
+		title: "Controlled Claude Reviewer Run",
+		state: preview?.state ?? "unavailable",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["modelName", preview?.modelName],
+				["routeState", preview?.routeState],
+				["goalId", preview?.goalId],
+				["taskId", preview?.taskId],
+				["providerId", preview?.provider?.providerId],
+				["providerReadiness", preview?.provider?.readinessState],
+				["reviewerActorId", preview?.reviewerIdentity?.reviewerActorId],
+				["commandTemplateId", preview?.plan?.commandTemplateId],
+				["handoffPackRef", preview?.plan?.handoffPackRef],
+				["planHash", preview?.plan?.planHash],
+				["blockedReasons", preview?.blockedReasons]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "worker evidence",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["state", preview?.workerEvidence?.state],
+					["sourceContract", preview?.workerEvidence?.sourceContract],
+					["sourceRef", preview?.workerEvidence?.sourceRef],
+					["workerRunId", preview?.workerEvidence?.workerRunId],
+					["workerProviderId", preview?.workerEvidence?.workerProviderId],
+					["workerActorId", preview?.workerEvidence?.workerActorId],
+					["taskState", preview?.workerEvidence?.taskState],
+					["reviewRequired", preview?.workerEvidence?.reviewRequired],
+					["taskCompleted", preview?.workerEvidence?.taskCompleted],
+					["reviewApproved", preview?.workerEvidence?.reviewApproved],
+					["mainVerified", preview?.workerEvidence?.mainVerified],
+					["releaseReady", preview?.workerEvidence?.releaseReady],
+					["changedFiles", preview?.workerEvidence?.changedFiles],
+					["validationCommands", preview?.workerEvidence?.validationCommands],
+					["artifactRefs", preview?.workerEvidence?.artifactRefs],
+					["evidenceRefCount", preview?.workerEvidence?.evidenceRefs?.count]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EvidenceRefList, { evidenceRefs: preview?.workerEvidence?.evidenceRefs ?? { items: [] } })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "confirm handoff",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["available", preview?.confirm?.available],
+						["endpoint.method", preview?.confirm?.endpoint?.method],
+						["endpoint.route", preview?.confirm?.endpoint?.route],
+						["requiredFields", preview?.confirm?.endpoint?.requiredFields],
+						["requiresPlanHash", preview?.confirm?.endpoint?.requiresPlanHash],
+						["providerId", preview?.confirm?.endpoint?.providerId],
+						["role", preview?.confirm?.endpoint?.role],
+						["commandTemplateId", preview?.confirm?.endpoint?.commandTemplateId],
+						["handoffPackRef", preview?.confirm?.endpoint?.handoffPackRef]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "goal-event-confirm-actions",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							onClick: handleConfirm,
+							disabled: !confirmAvailable || confirmState.phase === "loading",
+							children: "Confirm reviewer run"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: confirmRoute ?? "confirm route unavailable" })]
+					}),
+					confirmState.phase === "failed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+						className: "error-copy",
+						children: ["confirm 错误摘要：", confirmState.error]
+					}) : null,
+					confirmState.phase === "loading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "empty-copy",
+						children: "正在按 reviewerRunHandoff.v1 的 plan hash 确认 reviewer run。"
+					}) : null,
+					confirmState.phase === "ready" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["contractName", textValue(confirmState.result.contractName)],
+						["status", textValue(confirmState.result.status)],
+						["verdictId", textValue(confirmState.result.verdictId)],
+						["providerId", textValue(confirmState.result.providerId)],
+						["role", textValue(confirmState.result.role)],
+						["commandTemplateId", textValue(confirmState.result.commandTemplateId)],
+						["handoffPackRef", textValue(confirmState.result.handoffPackRef)],
+						["adapter", textValue(confirmState.result.adapter)],
+						["realClaudeSmokeOptIn", textValue(confirmState.result.realClaudeSmokeOptIn)],
+						["verdict.status", textValue(confirmState.result.verdict?.status)],
+						["nextState.reviewApproved", textValue(confirmState.result.verdict?.nextState?.reviewApproved)],
+						["nextState.revisionRequired", textValue(confirmState.result.verdict?.nextState?.revisionRequired)],
+						["nextState.taskCompleted", textValue(confirmState.result.verdict?.nextState?.taskCompleted)],
+						["nextState.adoptionReady", textValue(confirmState.result.verdict?.nextState?.adoptionReady)],
+						["nextState.mainVerified", textValue(confirmState.result.verdict?.nextState?.mainVerified)],
+						["nextState.releaseReady", textValue(confirmState.result.verdict?.nextState?.releaseReady)],
+						["safety.rawWorkerTranscriptAvailable", textValue(confirmState.result.safety?.rawWorkerTranscriptAvailable)],
+						["safety.rawProviderOutputAvailable", textValue(confirmState.result.safety?.rawProviderOutputAvailable)],
+						["safety.gitMutationAvailable", textValue(confirmState.result.safety?.gitMutationAvailable)],
+						["safety.githubReleaseAutomationAvailable", textValue(confirmState.result.safety?.githubReleaseAutomationAvailable)]
+					] }) : null
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "review policy",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["requiresIndependentReviewer", preview?.reviewPolicy?.requiresIndependentReviewer],
+					["allowedVerdicts", preview?.reviewPolicy?.allowedVerdicts],
+					["verdictCompletesTask", preview?.reviewPolicy?.verdictCompletesTask],
+					["adoptionAvailable", preview?.reviewPolicy?.adoptionAvailable],
+					["mainVerificationAvailable", preview?.reviewPolicy?.mainVerificationAvailable],
+					["releaseReadinessAvailable", preview?.reviewPolicy?.releaseReadinessAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "operation status",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["state", textValue(preview?.operationStatus?.state)],
+						["sourceContract", preview?.operationStatus?.sourceContract],
+						["operationId", preview?.operationStatus?.operationId],
+						["commandKind", preview?.operationStatus?.commandKind],
+						["commandName", preview?.operationStatus?.commandName],
+						["status", preview?.operationStatus?.status],
+						["verdictId", preview?.operationStatus?.verdictId],
+						["verdictStatus", preview?.operationStatus?.verdictStatus],
+						["providerId", preview?.operationStatus?.providerId],
+						["role", preview?.operationStatus?.role],
+						["commandTemplateId", preview?.operationStatus?.commandTemplateId],
+						["handoffPackRef", preview?.operationStatus?.handoffPackRef],
+						["reviewerActorId", preview?.operationStatus?.reviewerActorId],
+						["workerActorId", preview?.operationStatus?.workerActorId],
+						["adapter", preview?.operationStatus?.adapter],
+						["realClaudeSmokeOptIn", preview?.operationStatus?.realClaudeSmokeOptIn],
+						["summary", preview?.operationStatus?.summary],
+						["validationCommands", preview?.operationStatus?.validationCommands],
+						["revisionSummary", preview?.operationStatus?.revisionSummary],
+						["reviewApproved", preview?.operationStatus?.reviewApproved],
+						["revisionRequired", preview?.operationStatus?.revisionRequired],
+						["blocked", preview?.operationStatus?.blocked],
+						["taskCompleted", preview?.operationStatus?.taskCompleted],
+						["adoptionReady", preview?.operationStatus?.adoptionReady],
+						["mainVerified", preview?.operationStatus?.mainVerified],
+						["releaseReady", preview?.operationStatus?.releaseReady],
+						["rawProviderOutputAvailable", preview?.operationStatus?.rawProviderOutputAvailable],
+						["rawWorkerTranscriptAvailable", preview?.operationStatus?.rawWorkerTranscriptAvailable]
+					] }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReviewerFindingList, { findings: preview?.operationStatus?.findings }),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OperationArtifactRefList, { artifactRefs: preview?.operationStatus?.artifactRefs })
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "next safe action",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["state", textValue(preview?.nextSafeAction?.state)],
+					["label", preview?.nextSafeAction?.label],
+					["copyOnly", preview?.nextSafeAction?.copyOnly],
+					["action", preview?.nextSafeAction?.action]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "boundaries",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["backendOwnedPreviewConfirm", preview?.boundaries?.backendOwnedPreviewConfirm],
+					["fixedProviderId", preview?.boundaries?.fixedProviderId],
+					["fixedRole", preview?.boundaries?.fixedRole],
+					["fixedCommandTemplateId", preview?.boundaries?.fixedCommandTemplateId],
+					["rendererSuppliedCommandAvailable", preview?.boundaries?.rendererSuppliedCommandAvailable],
+					["freeformProviderCommandAvailable", preview?.boundaries?.freeformProviderCommandAvailable],
+					["genericShellAvailable", preview?.boundaries?.genericShellAvailable],
+					["genericTerminalAvailable", preview?.boundaries?.genericTerminalAvailable],
+					["frontendLocalJsonlReadAvailable", preview?.boundaries?.frontendLocalJsonlReadAvailable],
+					["frontendLocalSessionReadAvailable", preview?.boundaries?.frontendLocalSessionReadAvailable],
+					["frontendProviderFolderReadAvailable", preview?.boundaries?.frontendProviderFolderReadAvailable],
+					["rawTranscriptAvailable", preview?.boundaries?.rawTranscriptAvailable],
+					["rawWorkerTranscriptAvailable", preview?.boundaries?.rawWorkerTranscriptAvailable],
+					["rawModelOutputAvailable", preview?.boundaries?.rawModelOutputAvailable],
+					["rawProviderOutputAvailable", preview?.boundaries?.rawProviderOutputAvailable],
+					["reviewerReadsRawWorkerTranscript", preview?.boundaries?.reviewerReadsRawWorkerTranscript],
+					["reviewerOutputCompletesTask", preview?.boundaries?.reviewerOutputCompletesTask],
+					["reviewerOutputApprovesAdoption", preview?.boundaries?.reviewerOutputApprovesAdoption],
+					["reviewerVerdictPassesMainVerification", preview?.boundaries?.reviewerVerdictPassesMainVerification],
+					["reviewerVerdictMarksReleaseReady", preview?.boundaries?.reviewerVerdictMarksReleaseReady],
+					["automaticSelfReviewAvailable", preview?.boundaries?.automaticSelfReviewAvailable],
+					["writesMainWorktree", preview?.boundaries?.writesMainWorktree],
+					["gitMutationAvailable", preview?.boundaries?.gitMutationAvailable],
+					["githubReleaseAutomationAvailable", preview?.boundaries?.githubReleaseAutomationAvailable],
+					["realClaudeRequiresOptIn", preview?.boundaries?.realClaudeRequiresOptIn]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: preview?.note
+			})
+		]
+	});
+}
 function buildWorkerRunConfirmBody(preview) {
 	const goalId = preview?.goalId?.value;
 	const taskId = preview?.taskId?.value;
@@ -33524,6 +34125,36 @@ function buildWorkerRunConfirmBody(preview) {
 		commandTemplateId,
 		timeoutMs,
 		workspacePolicyId
+	};
+}
+function buildReviewerRunConfirmBody(preview) {
+	const goalId = preview?.goalId?.value;
+	const taskId = preview?.taskId?.value;
+	const providerId = preview?.provider?.providerId?.value;
+	const role = preview?.provider?.role?.value;
+	const commandTemplateId = preview?.plan?.commandTemplateId?.value;
+	const planHash = preview?.plan?.planHash?.value;
+	const handoffPackRef = preview?.plan?.handoffPackRef?.value;
+	const reviewerActorId = preview?.reviewerIdentity?.reviewerActorId?.value;
+	if (![
+		goalId,
+		taskId,
+		providerId,
+		role,
+		commandTemplateId,
+		planHash,
+		handoffPackRef,
+		reviewerActorId
+	].every((value) => typeof value === "string" && value.trim() !== "")) return null;
+	return {
+		planHash,
+		goalId,
+		taskId,
+		providerId,
+		role,
+		commandTemplateId,
+		handoffPackRef,
+		reviewerActorId
 	};
 }
 function buildControlledProviderRunnerConfirmBody(preview) {
@@ -35582,6 +36213,20 @@ function OperationArtifactRefList({ artifactRefs }) {
 			["uri", artifact.uri],
 			["status", artifact.status]
 		] }) }, `${artifact.kind.text}-${artifact.path.text}-${index}`))
+	});
+}
+function ReviewerFindingList({ findings }) {
+	const items = Array.isArray(findings?.items) ? findings.items : [];
+	if (items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "review findings empty。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "operation-artifact-ref-list",
+		children: items.map((finding, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["severity", finding.severity],
+			["file", finding.file],
+			["line", finding.line],
+			["statement", finding.statement],
+			["recommendation", finding.recommendation]
+		] }) }, `${finding.file.text}-${finding.line.text}-${index}`))
 	});
 }
 function OperationConsoleRunList({ runs }) {
