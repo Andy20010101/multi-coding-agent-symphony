@@ -17,6 +17,18 @@ v67 starts only after the v66 release boundary is verified:
 - open PR list is empty or only contains explicitly unrelated work;
 - v66 worker result state remains `needs-review`, not `approved`, `main-verified`, or `release-ready`.
 
+## Start Evidence Snapshot
+
+Checked on 2026-06-15 before opening PR-0:
+
+- `origin/main` was `44d00803921b61820a45ae42026f7e7684dc740a`, the v66 closeout merge commit.
+- `git rev-list --left-right --count main...origin/main` returned `0 55`; local `main` was stale, but the v67 branch starts from `origin/main`.
+- Open GitHub PR list for `Andy20010101/multi-coding-agent-symphony` returned `[]`.
+- Annotated tag `v66` existed: tag object `afe1420983ff1c2b19337b61cab164a220ae72a9`; `v66^{}` resolved to `44d00803921b61820a45ae42026f7e7684dc740a`.
+- GitHub Release `v66` existed at `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v66`, with name `v66: Controlled Codex Worker Execution`, `isDraft=false`, `isPrerelease=false`, assets `[]`, `publishedAt=2026-06-14T22:00:26Z`, and `targetCommitish=main`.
+- `v67` tag was absent and `gh release view v67` returned `release not found`.
+- v66 worker output remains review-bound. `fixtures/contracts/worker-run/result.sanitized-success.v1.json`, `tests/v66-controlled-codex-worker-execution.test.js`, and `docs/qa/v66-controlled-codex-worker-execution-acceptance.md` record `status: needs-review`, `reviewRequired: true`, `taskCompleted: false`, `reviewApproved: false`, `mainVerified: false`, and `releaseReady: false`.
+
 ## Objective
 
 v67 should make Claude Code the controlled reviewer lane. It consumes bounded Codex worker evidence, produces reviewer evidence, and records explicit reviewer verdicts without self-approval or main verification.
