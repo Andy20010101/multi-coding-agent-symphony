@@ -49,6 +49,12 @@ describe('v59 release publication backend projection', () => {
   });
 
   it('blocks missing release evidence and target mismatches without exposing release automation routes', () => {
+    const missingTag = readyReadModel({
+      releasePublication: {
+        ...readyReleasePublication(),
+        tagEvidence: null
+      }
+    }).releasePublicationEvidence;
     const missingRelease = readyReadModel({
       releasePublication: {
         ...readyReleasePublication(),
@@ -73,10 +79,38 @@ describe('v59 release publication backend projection', () => {
         }
       }
     }).releasePublicationEvidence;
+    const draftRelease = readyReadModel({
+      releasePublication: {
+        ...readyReleasePublication(),
+        githubReleaseEvidence: {
+          ...readyGithubReleaseEvidence(),
+          isDraft: true
+        }
+      }
+    }).releasePublicationEvidence;
+    const prerelease = readyReadModel({
+      releasePublication: {
+        ...readyReleasePublication(),
+        githubReleaseEvidence: {
+          ...readyGithubReleaseEvidence(),
+          isPrerelease: true
+        }
+      }
+    }).releasePublicationEvidence;
+    const openPrs = readyReadModel({
+      releasePublication: {
+        ...readyReleasePublication(),
+        openPrs: [{ number: 109, title: 'open v59 follow-up' }]
+      }
+    }).releasePublicationEvidence;
 
+    assertBlocked(missingTag, 'missing-tag-evidence');
     assertBlocked(missingRelease, 'missing-github-release-evidence');
     assertBlocked(staleTag, 'tag-target-mismatch');
     assertBlocked(staleReleaseTarget, 'github-release-target-mismatch');
+    assertBlocked(draftRelease, 'github-release-is-draft');
+    assertBlocked(prerelease, 'github-release-is-prerelease');
+    assertBlocked(openPrs, 'open-prs-present');
   });
 
   it('sanitizes unsafe publication refs into blockers instead of projecting local files', () => {
@@ -121,14 +155,29 @@ describe('v59 release publication backend projection', () => {
         }
       }
     }).releasePublicationEvidence;
+    const unsafeGithubReleaseSource = readyReadModel({
+      releasePublication: {
+        ...readyReleasePublication(),
+        githubReleaseEvidence: {
+          ...readyGithubReleaseEvidence(),
+          sourceRefs: [{
+            kind: 'github-release',
+            ref: 'gh release create v59',
+            label: 'release mutation route'
+          }]
+        }
+      }
+    }).releasePublicationEvidence;
 
     assertBlocked(unsafeCloseoutSource, 'unsafe-source-closeout-ref');
     assertBlocked(unsafeCloseoutSource, 'unsafe-source-closeout-evidence-ref');
     assertBlocked(unsafeSource, 'unsafe-publication-source-ref');
     assertBlocked(unsafeTagSource, 'unsafe-tag-publication-source-ref');
+    assertBlocked(unsafeGithubReleaseSource, 'unsafe-github-release-source-ref');
     assertNoUnsafePayload(unsafeCloseoutSource);
     assertNoUnsafePayload(unsafeSource);
     assertNoUnsafePayload(unsafeTagSource);
+    assertNoUnsafePayload(unsafeGithubReleaseSource);
   });
 });
 
