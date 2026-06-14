@@ -2,9 +2,9 @@
 
 Multi Coding Agent Symphony is a local Workbench for goal/runbook-driven coding-agent operations, with CLI commands for scripted flows, compatibility paths, and low-level diagnostics.
 
-Current tagged release: `v60`, the Stable Personal Workbench Baseline. The annotated `v60` tag and GitHub Release are complete. Current `origin/main` is ahead of the `v60` tag because it includes the post-release supervisor status JSON fix and the v61 runbook carry-forward.
+Current tagged release: `v61`, Workbench Operator Dry-run Evidence. The annotated `v61` tag and GitHub Release are complete. Current `origin/main` is ahead of the `v61` tag because v62 has started the installer and upgrade baseline work.
 
-Current main starts v61 Workbench Operator Dry-run Evidence. v61 is a verification and evidence pass on the released v60 baseline: release-state reconcile, local Workbench route smoke, operator checklist, recovery drill notes, closeout, and v62 handoff. It does not add a generic terminal, renderer-side command execution, unsupported provider support, raw transcript exposure, frontend local session reads, git/tag/publish automation inside product code, GitHub Release automation inside product code, public distribution, notarization, auto-update, automatic worktree creation, or automatic next-version goal creation.
+Current main starts v62 Installer and Upgrade Baseline. v62 makes installation, upgrade dry-run, rollback notes, and stable ref selection explicit. It does not silently change a user's installed checkout, fetch from the renderer, add a generic terminal, add renderer-side command execution, automate git/tag/publish/GitHub Release work inside product code, claim public distribution, claim notarization, or add auto-update.
 
 Start with Workbench v1 for daily operator work:
 
@@ -13,7 +13,7 @@ pnpm workbench:build
 symphony console
 ```
 
-Open `http://127.0.0.1:8765/workbench/desktop/` for the Project Launcher and App Home path, or `http://127.0.0.1:8765/workbench/` for the existing Workbench panels. The daily path now uses the v52-v60 Workbench baseline:
+Open `http://127.0.0.1:8765/workbench/desktop/` for the Project Launcher and App Home path, or `http://127.0.0.1:8765/workbench/` for the existing Workbench panels. The daily path uses the v52-v60 Workbench baseline verified by v61:
 
 ```text
 Project Launcher -> App Home -> Supervisor -> Context Advisory -> Result Intake -> Event Preview / Confirm -> Review / Gate -> Closeout -> Release Publication Evidence -> Stable Baseline
@@ -33,7 +33,7 @@ Implemented adapter families include:
 - Claude Code connected to the DeepSeek API in the user's environment.
 - Kiro CLI adapter and smoke paths for historical compatibility.
 
-The system preserves each CLI's native harness instead of replacing it. The orchestrator owns task queueing, workspace isolation, routing, policy, verification, traces, and artifacts. Runtime adapters translate shared task contracts into the concrete CLI invocation, configuration, hooks, and output collection for each tool. Active Workbench provider execution remains limited to explicitly tested contracts and fixtures for that version; Kiro, Gemini, DeepSeek-as-a-provider, and unsupported providers are not v61 active Workbench execution targets.
+The system preserves each CLI's native harness instead of replacing it. The orchestrator owns task queueing, workspace isolation, routing, policy, verification, traces, and artifacts. Runtime adapters translate shared task contracts into the concrete CLI invocation, configuration, hooks, and output collection for each tool. Active Workbench provider execution remains limited to explicitly tested contracts and fixtures for the active version; Kiro, Gemini, DeepSeek-as-a-provider, and unsupported providers are not active Workbench execution targets.
 
 ## Current Documents
 
@@ -50,6 +50,7 @@ The system preserves each CLI's native harness instead of replacing it. The orch
 - [Daily Workflow Runbook](docs/daily-workflow-runbook.md)
 - [Provider Boundary Guide](docs/provider-boundary-guide.md)
 - [Recovery Guide](docs/recovery-guide.md)
+- [Install Guide](docs/install-guide.md)
 - [Action Registry Migration Guide](docs/action-registry-migration-guide.md)
 - [Operational Execution Order](docs/operational-execution-order.md)
 - [Security Checklist](docs/security-checklist.md)
@@ -168,6 +169,8 @@ The system preserves each CLI's native harness instead of replacing it. The orch
 - [v59 Release Publication Evidence Acceptance](docs/qa/v59-release-publication-evidence-and-next-start-audit-acceptance.md)
 - [v59 Release Publication Evidence Closeout Snapshot](docs/plans/v59-release-publication-evidence-and-next-start-audit-closeout-snapshot-2026-06-14.md)
 - [v60 Stable Personal Workbench Release Runbook](docs/plans/v60-stable-personal-workbench-release-runbook-2026-06-14.md)
+- [v61 Workbench Operator Dry-run Evidence Closeout Snapshot](docs/plans/v61-workbench-operator-dry-run-evidence-closeout-snapshot-2026-06-14.md)
+- [v62 Installer and Upgrade Baseline Runbook](docs/plans/workbench-v61-v72-real-use-runbooks/v62_installer-upgrade-baseline_goal_runbook_latest.md)
 - [v16 Goal Execution Plan](tmp/codex-prompts/v16_goal_execution_plan.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
@@ -252,11 +255,11 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Latest completed mainline release: `v60`. Current released repository tag: `v60`. The `v8` tag remains the stable installer baseline, and `v7` remains available for historical installs. v20-v28 complete the Workbench v1 goal operation chain through release closeout; v29-v32 extend that chain with controlled implementation, adoption, main verification, release baseline/checklist, evidence drafts, and next-version handoff; v33-v40 add local runtime, app core, provider hub, backup/diagnostics/migration, workflow router, and read-only app surfaces; v41-v46 cover controlled provider-runner backend evidence, supervisor runtime/stabilization, supervisor app read model, dashboard prototype, backend entrypoint decomposition, and the read-only Workbench Supervisor Dashboard baseline; v47-v60 move the daily app path through Mac App Home, Project Launcher, Context Advisory, Event Preview / Confirm, Result Intake Evidence Escrow, System Golden Path, child dispatch preview, Codex provider execution preview, provider recovery, thread continuation, review gate, release closeout handoff, release publication evidence, and stable baseline evidence. Current main is v61 operator dry-run evidence work; `v61` is not tagged or released.
+Latest completed mainline release: `v61`. Current released repository tag: `v61`. The installer default still points at `v8`; use `MCAS_INSTALL_REF=v61` when intentionally installing the current verified release. `v7` remains available for historical installs. v20-v28 complete the Workbench v1 goal operation chain through release closeout; v29-v32 extend that chain with controlled implementation, adoption, main verification, release baseline/checklist, evidence drafts, and next-version handoff; v33-v40 add local runtime, app core, provider hub, backup/diagnostics/migration, workflow router, and read-only app surfaces; v41-v46 cover controlled provider-runner backend evidence, supervisor runtime/stabilization, supervisor app read model, dashboard prototype, backend entrypoint decomposition, and the read-only Workbench Supervisor Dashboard baseline; v47-v60 move the daily app path through Mac App Home, Project Launcher, Context Advisory, Event Preview / Confirm, Result Intake Evidence Escrow, System Golden Path, child dispatch preview, Codex provider execution preview, provider recovery, thread continuation, review gate, release closeout handoff, release publication evidence, and stable baseline evidence. v61 verifies that baseline through operator evidence. Current main is v62 installer and upgrade baseline work.
 
-Current v60 release and v61 mainline work do not include Autopilot, generic Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation outside explicitly controlled provider contracts, live job runner, persistent job execution, Workbench command execution, daemon start/stop/restart, unsupported provider launch, real CLI invocation outside existing controlled preview/confirm paths, raw transcript exposure, raw model output exposure, frontend local JSONL/session/provider folder reads, automatic merge, automatic tag, push, publish, GitHub Release creation, release closeout automation, public distribution, notarization, auto-update, or release-ready inference. Browser views do not execute CLI commands shown as text. The Project Launcher, App Home, Supervisor Dashboard, Desktop Shell, Action Registry preview, Job Console, Provider Hub, Result Intake, Event Preview / Confirm, Review Gate, Release Closeout, Release Publication Evidence, and Stable Baseline views are contract/display or controlled preview/confirm surfaces, not generic execution surfaces.
+Current v61 release and v62 mainline work do not include Autopilot, generic Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation outside explicitly controlled provider contracts, live job runner, persistent job execution, Workbench command execution, daemon start/stop/restart, unsupported provider launch, real CLI invocation outside existing controlled preview/confirm paths, raw transcript exposure, raw model output exposure, frontend local JSONL/session/provider folder reads, automatic merge, automatic tag, push, publish, GitHub Release creation, release closeout automation, public distribution, notarization, auto-update, silent checkout changes, renderer network fetches for installer state, or release-ready inference. Browser views do not execute CLI commands shown as text. The Project Launcher, App Home, Supervisor Dashboard, Desktop Shell, Action Registry preview, Job Console, Provider Hub, Result Intake, Event Preview / Confirm, Review Gate, Release Closeout, Release Publication Evidence, Stable Baseline, and installer baseline surfaces are contract/display, dry-run, or controlled preview/confirm surfaces, not generic execution surfaces.
 
-Current v61 mainline: Workbench Operator Dry-run Evidence. The verification path is Project Launcher, App Home, Supervisor, Context Advisory, Result Intake, Event Preview / Confirm, Review / Gate, Closeout, Release Publication Evidence, and Stable Baseline. The operator records route, source contract, release boundary, disabled capability, recovery, validation, and handoff evidence without adding a provider launcher or release automation.
+Current v62 mainline: Installer and Upgrade Baseline. The target path is explicit install ref selection, install status reporting, upgrade dry-run, rollback notes, and v63 handoff. Actual checkout changes remain terminal-owned or manual unless a later version proves a safe confirm path.
 
 ## Design Center
 
@@ -333,7 +336,13 @@ curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-sym
 symphony doctor
 ```
 
-The installer clones or updates the `v8` release under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The `v8` tag remains the stable installer baseline; set `MCAS_INSTALL_REF=v59` when you intentionally want the current tagged release. Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI; `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults.
+The installer clones or updates the selected ref under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The default installer ref remains `v8` until a release records a specific default-ref change. To install the current verified release, put the ref on the `sh` side of the pipe:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh | MCAS_INSTALL_REF=v61 sh
+```
+
+Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI. `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults. See [Install Guide](docs/install-guide.md) for the v62 installer-ref policy and the evidence required before changing the default.
 
 Development fallback from a checkout:
 
