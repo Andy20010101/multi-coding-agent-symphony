@@ -967,6 +967,7 @@ export function projectWorkbenchContracts(results) {
   const projectRegistryData = dataFrom(results.projectRegistry);
   const recentProjectsData = dataFrom(results.recentProjects);
   const currentProjectBindingData = dataFrom(results.currentProjectBinding);
+  const personalWorkbenchSettingsData = dataFrom(results.personalWorkbenchSettings);
   const runtimeSnapshotData = dataFrom(results.runtimeSnapshot);
   const appDataInventoryData = dataFrom(results.appDataInventory);
   const inboxCaptureData = dataFrom(results.inboxCapture);
@@ -1167,6 +1168,10 @@ export function projectWorkbenchContracts(results) {
     result: results.currentProjectBinding,
     binding: currentProjectBindingData
   });
+  const projectedPersonalWorkbenchSettings = projectPersonalWorkbenchSettings({
+    result: results.personalWorkbenchSettings,
+    settings: personalWorkbenchSettingsData
+  });
   const projectedArtifactRefs = projectArtifactRefs(
     latestRun?.artifactRefs,
     latestRun?.artifactStatus,
@@ -1313,6 +1318,7 @@ export function projectWorkbenchContracts(results) {
       projectRegistry: projectedProjectRegistry,
       recentProjects: projectedRecentProjects,
       currentProjectBinding: projectedCurrentProjectBinding,
+      personalWorkbenchSettings: projectedPersonalWorkbenchSettings,
       runtimeSnapshot: projectedRuntimeSnapshot,
       activeGoal: activeGoalControl,
       jobConsole: projectedJobConsole,
@@ -1343,6 +1349,7 @@ export function projectWorkbenchContracts(results) {
     projectRegistry: projectedProjectRegistry,
     recentProjects: projectedRecentProjects,
     currentProjectBinding: projectedCurrentProjectBinding,
+    personalWorkbenchSettings: projectedPersonalWorkbenchSettings,
     runtimeSnapshot: projectedRuntimeSnapshot,
     appDataInventory: projectAppDataInventory({
       result: results.appDataInventory,
@@ -1666,6 +1673,161 @@ function projectCurrentProjectBinding({ result, binding }) {
   };
 }
 
+function projectPersonalWorkbenchSettings({ result, settings }) {
+  const route = result?.routeDescriptor ?? READONLY_API_ROUTES.find((candidate) => candidate.id === 'personalWorkbenchSettings');
+  const bindingRoute = READONLY_API_ROUTES.find((candidate) => candidate.id === 'currentProjectBinding');
+  const recentRoute = READONLY_API_ROUTES.find((candidate) => candidate.id === 'recentProjects');
+  const state = result?.ok === true ? settings?.state ?? 'missing' : 'missing';
+  const recoveryActions = Array.isArray(settings?.recoveryActions) ? settings.recoveryActions : [];
+  const blockedReasons = Array.isArray(settings?.blockedReasons) ? settings.blockedReasons : [];
+  const preferredProviders = Array.isArray(settings?.preferences?.preferredProviders)
+    ? settings.preferences.preferredProviders
+    : [];
+  const projectedBinding = projectCurrentProjectBinding({
+    result: settings?.currentProjectBinding ? {
+      ok: true,
+      routeDescriptor: bindingRoute
+    } : null,
+    binding: settings?.currentProjectBinding
+  });
+  const projectedRecentProjects = projectRecentProjects({
+    result: settings?.recentProjects ? {
+      ok: true,
+      routeDescriptor: recentRoute
+    } : null,
+    recentProjects: settings?.recentProjects
+  });
+  const nextSafeAction = projectPersonalWorkbenchSettingsNextAction({
+    state,
+    recoveryAction: recoveryActions[0],
+    blockedReasons
+  });
+
+  return {
+    state,
+    contractName: valueState(settings?.contractName),
+    contractVersion: valueState(settings?.contractVersion),
+    generatedAt: valueState(settings?.generatedAt),
+    route: valueState(route?.path),
+    routeState: valueState(result?.ok === true ? settings?.routeState ?? 'ready' : routeStateFromResult(result)),
+    settingsSource: {
+      kind: valueState(settings?.settingsSource?.kind),
+      state: valueState(settings?.settingsSource?.state),
+      ref: valueState(settings?.settingsSource?.ref),
+      sourceContract: valueState(settings?.settingsSource?.sourceContract),
+      generatedAt: valueState(settings?.settingsSource?.generatedAt),
+      readOnly: valueState(settings?.settingsSource?.readOnly),
+      writePolicy: valueState(settings?.settingsSource?.writePolicy)
+    },
+    preferences: {
+      preferredProviders: arrayTextState(preferredProviders),
+      preferredProviderItems: textItemCollection(preferredProviders),
+      defaultPort: valueState(settings?.preferences?.defaultPort),
+      runtimeDirRef: valueState(settings?.preferences?.runtimeDirRef),
+      uiLanguage: valueState(settings?.preferences?.uiLanguage),
+      displayDensity: valueState(settings?.preferences?.displayDensity)
+    },
+    currentProjectBinding: projectedBinding,
+    recentProjects: projectedRecentProjects,
+    recoveryActions: {
+      state: recoveryActions.length === 0 ? 'empty' : 'available',
+      count: valueState(recoveryActions.length),
+      items: recoveryActions.map(projectPersonalWorkbenchRecoveryAction)
+    },
+    nextSafeAction,
+    blockedReasons: textItemCollection(blockedReasons),
+    safety: {
+      storesSecrets: valueState(settings?.safety?.storesSecrets),
+      storesRawProviderPaths: valueState(settings?.safety?.storesRawProviderPaths),
+      storesRawTranscripts: valueState(settings?.safety?.storesRawTranscripts),
+      storesRawModelOutput: valueState(settings?.safety?.storesRawModelOutput),
+      frontendReadsLocalJsonl: valueState(settings?.safety?.frontendReadsLocalJsonl),
+      frontendReadsProviderFolders: valueState(settings?.safety?.frontendReadsProviderFolders),
+      rendererAcceptsArbitraryPath: valueState(settings?.safety?.rendererAcceptsArbitraryPath),
+      rendererReadsArbitraryPath: valueState(settings?.safety?.rendererReadsArbitraryPath),
+      rendererRunsCommands: valueState(settings?.safety?.rendererRunsCommands),
+      createsGoalsAutomatically: valueState(settings?.safety?.createsGoalsAutomatically),
+      createsWorktreesAutomatically: valueState(settings?.safety?.createsWorktreesAutomatically),
+      mutatesGitOrReleases: valueState(settings?.safety?.mutatesGitOrReleases)
+    },
+    boundaries: {
+      readOnly: valueState(settings?.boundaries?.readOnly),
+      willMutate: valueState(settings?.boundaries?.willMutate),
+      settingsWriteAvailable: valueState(settings?.boundaries?.settingsWriteAvailable),
+      secretStorageAvailable: valueState(settings?.boundaries?.secretStorageAvailable),
+      rawProviderPathStorageAvailable: valueState(settings?.boundaries?.rawProviderPathStorageAvailable),
+      rawTranscriptStorageAvailable: valueState(settings?.boundaries?.rawTranscriptStorageAvailable),
+      frontendFilesystemScanAvailable: valueState(settings?.boundaries?.frontendFilesystemScanAvailable),
+      rendererArbitraryPathInputAvailable: valueState(settings?.boundaries?.rendererArbitraryPathInputAvailable),
+      rendererArbitraryPathReadAvailable: valueState(settings?.boundaries?.rendererArbitraryPathReadAvailable),
+      rendererCommandExecutionAvailable: valueState(settings?.boundaries?.rendererCommandExecutionAvailable),
+      providerLaunchAvailable: valueState(settings?.boundaries?.providerLaunchAvailable),
+      goalCreationAvailable: valueState(settings?.boundaries?.goalCreationAvailable),
+      goalMutationAvailable: valueState(settings?.boundaries?.goalMutationAvailable),
+      worktreeCreationAvailable: valueState(settings?.boundaries?.worktreeCreationAvailable),
+      gitWriteAvailable: valueState(settings?.boundaries?.gitWriteAvailable),
+      releaseWriteAvailable: valueState(settings?.boundaries?.releaseWriteAvailable)
+    },
+    readOnly: valueState(settings?.readOnly),
+    willMutate: valueState(settings?.willMutate),
+    sourcePolicy: valueState('personalWorkbenchSettings.v1 wraps local settings, current-project-binding.v1, and recent-projects.v1; backend-known projects only'),
+    note: 'First-run settings are exposed as inert read-only state. Workbench does not scan disk, accept arbitrary paths, read local JSONL or provider folders, launch providers, create goals, create worktrees, run commands, or write git/release state.'
+  };
+}
+
+function projectPersonalWorkbenchRecoveryAction(action) {
+  return {
+    id: valueState(action?.id),
+    label: valueState(action?.label),
+    state: valueState(action?.state),
+    mode: valueState(action?.mode),
+    endpointId: valueState(action?.endpointId),
+    copyOnly: valueState(action?.copyOnly),
+    willMutate: valueState(action?.willMutate),
+    reason: valueState(action?.reason)
+  };
+}
+
+function projectPersonalWorkbenchSettingsNextAction({
+  state,
+  recoveryAction,
+  blockedReasons
+}) {
+  if (recoveryAction) {
+    return {
+      state: valueState(recoveryAction.state ?? 'manual-required'),
+      label: valueState(recoveryAction.label),
+      mode: valueState(recoveryAction.mode),
+      endpointId: valueState(recoveryAction.endpointId),
+      copyOnly: valueState(recoveryAction.copyOnly),
+      willMutate: valueState(recoveryAction.willMutate),
+      reason: valueState(recoveryAction.reason)
+    };
+  }
+
+  if (state === 'ready') {
+    return {
+      state: valueState('ready'),
+      label: valueState('Confirm current project and local settings source'),
+      mode: valueState('read-only-review'),
+      endpointId: valueState(undefined),
+      copyOnly: valueState(true),
+      willMutate: valueState(false),
+      reason: valueState('local settings, current project, and recent projects are available')
+    };
+  }
+
+  return {
+    state: valueState(state === 'missing' ? 'manual-required' : state),
+    label: valueState('Review first-run project setup in controller-managed state'),
+    mode: valueState('manual-controller'),
+    endpointId: valueState(undefined),
+    copyOnly: valueState(true),
+    willMutate: valueState(false),
+    reason: valueState(blockedReasons[0] ?? 'first-run settings are not ready')
+  };
+}
+
 function projectRecentProjectItem(item) {
   return {
     projectId: valueState(item?.projectId),
@@ -1910,6 +2072,7 @@ function projectDesktopShell({
   projectRegistry,
   recentProjects,
   currentProjectBinding,
+  personalWorkbenchSettings,
   runtimeSnapshot,
   activeGoal,
   jobConsole,
@@ -1939,6 +2102,7 @@ function projectDesktopShell({
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
   const recentProjectsRoute = findProjectedRoute(routeStates, 'recentProjects');
   const currentProjectBindingRoute = findProjectedRoute(routeStates, 'currentProjectBinding');
+  const personalWorkbenchSettingsRoute = findProjectedRoute(routeStates, 'personalWorkbenchSettings');
   const runtimeRoute = findProjectedRoute(routeStates, 'runtimeSnapshot');
   const goalRoute = findProjectedRoute(routeStates, 'goalRunbook');
   const nextRoute = findProjectedRoute(routeStates, 'goalNextAction');
@@ -2094,6 +2258,13 @@ function projectDesktopShell({
     routeProvenance,
     currentProjectBinding
   });
+  const firstRunProjectSetup = projectDesktopFirstRunProjectSetup({
+    personalWorkbenchSettings,
+    personalWorkbenchSettingsRoute,
+    workspace,
+    selectedProject,
+    recentProjects
+  });
 
   return {
     state: runtimeSnapshot?.state === 'healthy' ? 'ready' : runtimeSnapshot?.state ?? 'missing',
@@ -2165,6 +2336,8 @@ function projectDesktopShell({
       }
     },
     currentProjectBinding,
+    personalWorkbenchSettings,
+    firstRunProjectSetup,
     selectedProject,
     projectHealth,
     recentProjects: {
@@ -2265,6 +2438,95 @@ function projectDesktopShell({
     },
     boundaries,
     note: 'App Home is a first-screen desktop surface over existing read-only local API contracts. It does not execute shell commands, start jobs, open files, call models, self-approve, mutate goals, push git state, or declare release completion.'
+  };
+}
+
+function projectDesktopFirstRunProjectSetup({
+  personalWorkbenchSettings,
+  personalWorkbenchSettingsRoute,
+  workspace,
+  selectedProject,
+  recentProjects
+}) {
+  const settingsState = personalWorkbenchSettings?.state ?? 'missing';
+  const recentCount = personalWorkbenchSettings?.recentProjects?.items?.count ?? recentProjects?.items?.count;
+
+  return {
+    state: valueState(settingsState),
+    contractName: personalWorkbenchSettings?.contractName ?? valueState(undefined),
+    route: personalWorkbenchSettings?.route ?? valueState(personalWorkbenchSettingsRoute?.path),
+    routeState: personalWorkbenchSettings?.routeState ?? valueState(routeStateFromRoute(personalWorkbenchSettingsRoute)),
+    settingsSource: personalWorkbenchSettings?.settingsSource ?? {
+      kind: valueState(undefined),
+      state: valueState(undefined),
+      ref: valueState(undefined),
+      sourceContract: valueState(undefined),
+      generatedAt: valueState(undefined),
+      readOnly: valueState(undefined),
+      writePolicy: valueState(undefined)
+    },
+    currentProject: {
+      state: selectedProject?.state ?? valueState(workspace?.state?.text),
+      name: workspace?.project ?? selectedProject?.name ?? valueState(undefined),
+      projectId: selectedProject?.projectId ?? workspace?.projectId ?? valueState(undefined),
+      repoPath: selectedProject?.repoPath ?? workspace?.repoPath ?? valueState(undefined),
+      defaultBranch: workspace?.defaultBranch ?? valueState(undefined),
+      sourcePolicy: selectedProject?.sourcePolicy ?? workspace?.sourcePolicy ?? valueState(undefined)
+    },
+    recentProjects: {
+      state: personalWorkbenchSettings?.recentProjects?.state ?? recentProjects?.state ?? 'missing',
+      count: recentCount ?? valueState(undefined),
+      source: personalWorkbenchSettings?.recentProjects?.source ?? recentProjects?.source,
+      sourcePolicy: personalWorkbenchSettings?.recentProjects?.sourcePolicy ?? recentProjects?.sourcePolicy,
+      items: personalWorkbenchSettings?.recentProjects?.items ?? recentProjects?.items ?? {
+        state: 'missing',
+        count: valueState(undefined),
+        items: []
+      }
+    },
+    preferences: personalWorkbenchSettings?.preferences ?? {
+      preferredProviders: valueState(undefined),
+      preferredProviderItems: textItemCollection([]),
+      defaultPort: valueState(undefined),
+      runtimeDirRef: valueState(undefined),
+      uiLanguage: valueState(undefined),
+      displayDensity: valueState(undefined)
+    },
+    nextSafeAction: personalWorkbenchSettings?.nextSafeAction ?? projectPersonalWorkbenchSettingsNextAction({
+      state: settingsState,
+      recoveryAction: null,
+      blockedReasons: []
+    }),
+    recoveryActions: personalWorkbenchSettings?.recoveryActions ?? {
+      state: 'empty',
+      count: valueState(0),
+      items: []
+    },
+    blockedReasons: personalWorkbenchSettings?.blockedReasons ?? textItemCollection([]),
+    boundaries: personalWorkbenchSettings?.boundaries ?? {
+      readOnly: valueState(undefined),
+      willMutate: valueState(undefined),
+      settingsWriteAvailable: valueState(undefined),
+      rendererArbitraryPathInputAvailable: valueState(undefined),
+      rendererArbitraryPathReadAvailable: valueState(undefined),
+      rendererCommandExecutionAvailable: valueState(undefined),
+      providerLaunchAvailable: valueState(undefined),
+      goalCreationAvailable: valueState(undefined),
+      worktreeCreationAvailable: valueState(undefined),
+      gitWriteAvailable: valueState(undefined),
+      releaseWriteAvailable: valueState(undefined)
+    },
+    safety: personalWorkbenchSettings?.safety ?? {
+      storesSecrets: valueState(undefined),
+      frontendReadsLocalJsonl: valueState(undefined),
+      frontendReadsProviderFolders: valueState(undefined),
+      rendererRunsCommands: valueState(undefined),
+      createsGoalsAutomatically: valueState(undefined),
+      createsWorktreesAutomatically: valueState(undefined),
+      mutatesGitOrReleases: valueState(undefined)
+    },
+    sourcePolicy: valueState('personalWorkbenchSettings.v1 + current-project-binding.v1 + recent-projects.v1'),
+    note: valueState('First-run Project Setup shows existing local settings and project binding only; recovery actions are inert text and require controller-managed follow-up outside the renderer.')
   };
 }
 
@@ -3989,6 +4251,7 @@ function projectDesktopRouteProvenance({
     ['projectRegistry', 'current project', 'project-registry.v1'],
     ['recentProjects', 'recent projects', RECENT_PROJECTS_CONTRACT_NAME],
     ['currentProjectBinding', 'selected project binding', CURRENT_PROJECT_BINDING_CONTRACT_NAME],
+    ['personalWorkbenchSettings', 'first-run local settings', PERSONAL_WORKBENCH_SETTINGS_CONTRACT_NAME],
     ['goalRunbook', 'active goal', GOAL_RUNBOOK_CONTRACT_NAME],
     ['goalNextAction', 'next action', GOAL_NEXT_ACTION_CONTRACT_NAME],
     ['goalSupervisor', 'supervisor summary', GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME],

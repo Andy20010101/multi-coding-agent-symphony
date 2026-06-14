@@ -618,6 +618,7 @@ function DesktopShellRoute({
         <nav aria-label="Desktop shell sections">
           <a href="#desktop-project-launcher">Projects</a>
           <a href="#desktop-overview" aria-current="page">Home</a>
+          <a href="#desktop-first-run-project-setup">First-run</a>
           <a href="#system-golden-path-panel">System Path</a>
           <a href="#child-dispatch-preview-panel">Child Task</a>
           <a href="#codex-provider-execution-preview-panel">Codex Run</a>
@@ -661,6 +662,10 @@ function DesktopShellRoute({
         </section>
 
         <DesktopProjectLauncherPanel desktopShell={desktopShell} />
+        <DesktopFirstRunProjectSetupPanel
+          firstRunProjectSetup={desktopShell?.firstRunProjectSetup}
+          personalWorkbenchSettings={desktopShell?.personalWorkbenchSettings}
+        />
         <DesktopAppHomePanel desktopShell={desktopShell} routeContext={routeContext} />
         <SystemGoldenPathPanel
           systemGoldenPath={desktopShell?.systemGoldenPath}
@@ -904,6 +909,171 @@ function projectLauncherEmptyCopy(recentProjects) {
   }
 
   return reason || 'Recent Projects route or contract is missing.';
+}
+
+function DesktopFirstRunProjectSetupPanel({
+  firstRunProjectSetup,
+  personalWorkbenchSettings
+}) {
+  const setup = firstRunProjectSetup;
+  const state = setup?.state?.text ?? 'missing';
+  const recentItems = setup?.recentProjects?.items?.items ?? [];
+  const recoveryItems = setup?.recoveryActions?.items ?? [];
+  const note = setup?.note?.text ?? personalWorkbenchSettings?.note ?? 'First-run settings route is unavailable.';
+
+  return (
+    <section
+      id="desktop-first-run-project-setup"
+      className="desktop-first-run-setup"
+      aria-label="First-run Project Setup"
+    >
+      <header className="desktop-first-run-header">
+        <div>
+          <p className="section-kicker">first-run project setup</p>
+          <h2>First-run Project Setup</h2>
+          <p>Local settings are read from personalWorkbenchSettings.v1 and bound to backend-known projects.</p>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(state)}`}>{state}</span>
+      </header>
+
+      <div className="desktop-first-run-grid">
+        <article className="desktop-first-run-pane" aria-labelledby="desktop-first-run-current-title">
+          <header className="desktop-mini-header">
+            <p className="section-kicker">current project</p>
+            <h3 id="desktop-first-run-current-title">{setup?.currentProject?.name?.text ?? 'Current Project'}</h3>
+          </header>
+          <FieldList rows={[
+            ['project state', setup?.currentProject?.state],
+            ['project id', setup?.currentProject?.projectId],
+            ['repo path', setup?.currentProject?.repoPath],
+            ['default branch', setup?.currentProject?.defaultBranch],
+            ['source policy', setup?.currentProject?.sourcePolicy],
+            ['contract', setup?.contractName],
+            ['route', setup?.route],
+            ['routeState', setup?.routeState]
+          ]} />
+        </article>
+
+        <article className="desktop-first-run-pane" aria-labelledby="desktop-first-run-settings-title">
+          <header className="desktop-mini-header">
+            <p className="section-kicker">settings source</p>
+            <h3 id="desktop-first-run-settings-title">Local Settings</h3>
+          </header>
+          <FieldList rows={[
+            ['settings source', setup?.settingsSource?.ref],
+            ['source kind', setup?.settingsSource?.kind],
+            ['source state', setup?.settingsSource?.state],
+            ['source contract', setup?.settingsSource?.sourceContract],
+            ['source generated', setup?.settingsSource?.generatedAt],
+            ['source readOnly', setup?.settingsSource?.readOnly],
+            ['write policy', setup?.settingsSource?.writePolicy],
+            ['preferred providers', setup?.preferences?.preferredProviders],
+            ['default port', setup?.preferences?.defaultPort],
+            ['runtime dir', setup?.preferences?.runtimeDirRef],
+            ['language', setup?.preferences?.uiLanguage],
+            ['display density', setup?.preferences?.displayDensity]
+          ]} />
+        </article>
+      </div>
+
+      <div className="desktop-first-run-grid">
+        <article className="desktop-first-run-pane" aria-labelledby="desktop-first-run-recent-title">
+          <header className="desktop-mini-header desktop-recent-projects-title-row">
+            <div>
+              <p className="section-kicker">recent projects</p>
+              <h3 id="desktop-first-run-recent-title">Recent Projects</h3>
+            </div>
+            <span className={`desktop-status ${desktopStatusClass(setup?.recentProjects?.state)}`}>{setup?.recentProjects?.state ?? 'missing'}</span>
+          </header>
+          <FieldList rows={[
+            ['recent count', setup?.recentProjects?.count],
+            ['source kind', setup?.recentProjects?.source?.kind],
+            ['scan scope', setup?.recentProjects?.source?.scanScope],
+            ['source contract', setup?.recentProjects?.source?.sourceContract],
+            ['source policy', setup?.recentProjects?.sourcePolicy]
+          ]} />
+          {recentItems.length === 0 ? (
+            <EmptyBlock copy="Recent Projects has no backend-known project rows." />
+          ) : (
+            <ul className="desktop-first-run-recent-list">
+              {recentItems.slice(0, 3).map((project, index) => (
+                <li key={`${project.projectId?.text ?? 'project'}-${index}`}>
+                  <strong>{project.displayName?.text ?? 'project'}</strong>
+                  <small>{project.repoPath?.text ?? 'repo path 未暴露'}</small>
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+
+        <article className="desktop-first-run-pane" aria-labelledby="desktop-first-run-action-title">
+          <header className="desktop-mini-header">
+            <p className="section-kicker">next safe action</p>
+            <h3 id="desktop-first-run-action-title">{setup?.nextSafeAction?.label?.text ?? 'Review setup state'}</h3>
+          </header>
+          <FieldList rows={[
+            ['action state', setup?.nextSafeAction?.state],
+            ['mode', setup?.nextSafeAction?.mode],
+            ['endpoint', setup?.nextSafeAction?.endpointId],
+            ['copy only', setup?.nextSafeAction?.copyOnly],
+            ['willMutate', setup?.nextSafeAction?.willMutate],
+            ['reason', setup?.nextSafeAction?.reason],
+            ['blocked reasons', textValueFromItems(setup?.blockedReasons, '无')]
+          ]} />
+          {recoveryItems.length === 0 ? (
+            <EmptyBlock copy="No recovery action is required." />
+          ) : (
+            <ul className="desktop-first-run-recovery-list">
+              {recoveryItems.map((action, index) => (
+                <li key={`${action.id?.text ?? 'recovery'}-${index}`}>
+                  <strong>{action.label?.text ?? 'Recovery action'}</strong>
+                  <FieldList rows={[
+                    ['state', action.state],
+                    ['mode', action.mode],
+                    ['endpoint', action.endpointId],
+                    ['copy only', action.copyOnly],
+                    ['willMutate', action.willMutate],
+                    ['reason', action.reason]
+                  ]} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </article>
+      </div>
+
+      <div className="desktop-first-run-footer">
+        <FieldList rows={[
+          ['readOnly', setup?.boundaries?.readOnly],
+          ['settings write', setup?.boundaries?.settingsWriteAvailable],
+          ['secret storage', setup?.boundaries?.secretStorageAvailable],
+          ['frontend disk scan', setup?.boundaries?.frontendFilesystemScanAvailable],
+          ['arbitrary path input', setup?.boundaries?.rendererArbitraryPathInputAvailable],
+          ['arbitrary path read', setup?.boundaries?.rendererArbitraryPathReadAvailable],
+          ['renderer command execution', setup?.boundaries?.rendererCommandExecutionAvailable],
+          ['provider launch', setup?.boundaries?.providerLaunchAvailable],
+          ['goal creation', setup?.boundaries?.goalCreationAvailable],
+          ['worktree creation', setup?.boundaries?.worktreeCreationAvailable],
+          ['git write', setup?.boundaries?.gitWriteAvailable],
+          ['release write', setup?.boundaries?.releaseWriteAvailable]
+        ]} />
+        <FieldList rows={[
+          ['stores secrets', setup?.safety?.storesSecrets],
+          ['stores raw provider paths', setup?.safety?.storesRawProviderPaths],
+          ['stores raw transcripts', setup?.safety?.storesRawTranscripts],
+          ['stores raw model output', setup?.safety?.storesRawModelOutput],
+          ['frontend JSONL read', setup?.safety?.frontendReadsLocalJsonl],
+          ['provider folder read', setup?.safety?.frontendReadsProviderFolders],
+          ['renderer runs commands', setup?.safety?.rendererRunsCommands],
+          ['creates goals automatically', setup?.safety?.createsGoalsAutomatically],
+          ['creates worktrees automatically', setup?.safety?.createsWorktreesAutomatically],
+          ['mutates git or releases', setup?.safety?.mutatesGitOrReleases]
+        ]} />
+      </div>
+
+      <p className="panel-note">{note}</p>
+    </section>
+  );
 }
 
 function DesktopAppHomePanel({ desktopShell, routeContext }) {

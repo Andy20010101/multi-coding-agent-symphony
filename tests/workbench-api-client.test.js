@@ -1208,10 +1208,14 @@ describe('v15 Workbench read-only API client', () => {
     const systemGoldenPathContract = JSON.parse(
       await readFile('fixtures/contracts/system-golden-path.result-intake-blocked.v1.json', 'utf8')
     );
+    const personalWorkbenchSettingsContract = JSON.parse(
+      await readFile('fixtures/contracts/personal-workbench-settings/personal-workbench-settings.ready.v1.json', 'utf8')
+    );
     const model = projectWorkbenchContracts({
       projectRegistry: createWorkbenchResult('projectRegistry', projectRegistryContract),
       recentProjects: createWorkbenchResult('recentProjects', recentProjectsContract),
       currentProjectBinding: createWorkbenchResult('currentProjectBinding', currentProjectBindingContract),
+      personalWorkbenchSettings: createWorkbenchResult('personalWorkbenchSettings', personalWorkbenchSettingsContract),
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', runtimeSnapshotContract),
       goalRunbook: createWorkbenchResult('goalRunbook', {
         contractName: 'goal-runbook.v1',
@@ -1291,6 +1295,30 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.workspace.repoPathSource.text, 'current-project-binding.v1 selected project');
     assert.equal(model.desktopShell.workspace.sourcePolicy.text, 'current-project-binding.v1 + app-state-snapshot.v1 current_project + project-registry.v1');
     assert.equal(model.desktopShell.currentProjectBinding.contractName.text, 'current-project-binding.v1');
+    assert.equal(model.personalWorkbenchSettings.contractName.text, 'personalWorkbenchSettings.v1');
+    assert.equal(model.personalWorkbenchSettings.state, 'ready');
+    assert.equal(model.personalWorkbenchSettings.settingsSource.ref.text, 'fixture:personal-workbench-settings');
+    assert.equal(model.personalWorkbenchSettings.preferences.preferredProviders.text, 'codex-cli、claude-code-cli');
+    assert.equal(model.personalWorkbenchSettings.preferences.defaultPort.value, 1420);
+    assert.equal(model.personalWorkbenchSettings.currentProjectBinding.selectedProjectName.text, 'multi-coding-agent-symphony');
+    assert.equal(model.personalWorkbenchSettings.recentProjects.items.count.value, 1);
+    assert.equal(model.personalWorkbenchSettings.boundaries.rendererCommandExecutionAvailable.value, false);
+    assert.equal(model.personalWorkbenchSettings.boundaries.providerLaunchAvailable.value, false);
+    assert.equal(model.personalWorkbenchSettings.boundaries.goalCreationAvailable.value, false);
+    assert.equal(model.personalWorkbenchSettings.boundaries.gitWriteAvailable.value, false);
+    assert.equal(model.personalWorkbenchSettings.boundaries.releaseWriteAvailable.value, false);
+    assert.equal(model.desktopShell.personalWorkbenchSettings.contractName.text, 'personalWorkbenchSettings.v1');
+    assert.equal(model.desktopShell.firstRunProjectSetup.state.text, 'ready');
+    assert.equal(model.desktopShell.firstRunProjectSetup.currentProject.name.text, 'Multi Coding Agent Symphony');
+    assert.equal(model.desktopShell.firstRunProjectSetup.settingsSource.ref.text, 'fixture:personal-workbench-settings');
+    assert.equal(model.desktopShell.firstRunProjectSetup.preferences.preferredProviders.text, 'codex-cli、claude-code-cli');
+    assert.equal(model.desktopShell.firstRunProjectSetup.recentProjects.count.value, 1);
+    assert.equal(model.desktopShell.firstRunProjectSetup.nextSafeAction.label.text, 'Confirm current project and local settings source');
+    assert.equal(model.desktopShell.firstRunProjectSetup.nextSafeAction.willMutate.value, false);
+    assert.equal(model.desktopShell.firstRunProjectSetup.boundaries.settingsWriteAvailable.value, false);
+    assert.equal(model.desktopShell.firstRunProjectSetup.boundaries.rendererArbitraryPathInputAvailable.value, false);
+    assert.equal(model.desktopShell.firstRunProjectSetup.boundaries.rendererCommandExecutionAvailable.value, false);
+    assert.equal(model.desktopShell.firstRunProjectSetup.boundaries.worktreeCreationAvailable.value, false);
     assert.equal(model.desktopShell.selectedProject.state.text, 'selected');
     assert.equal(model.desktopShell.projectHealth.contractName.text, 'project-health-snapshot.v1');
     assert.equal(model.projectRegistry.contractName.text, 'project-registry.v1');
@@ -1375,6 +1403,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.routeProvenance.state.text, 'available');
     assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'runtimeSnapshot').source.text, 'live contract');
     assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'recentProjects').routeState.text, 'ready');
+    assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'personalWorkbenchSettings').routeState.text, 'ready');
     assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'goalSupervisor').routeState.text, 'ready');
     assert.equal(model.desktopShell.appStates.backendUnavailable.value, false);
     assert.equal(model.desktopShell.appStates.sidecarMissing.value, false);
@@ -1693,6 +1722,9 @@ describe('v15 Workbench read-only API client', () => {
     const missingProjectSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.missing-project.v1.json', 'utf8'));
     const missingGoalSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.missing-goal.v1.json', 'utf8'));
     const staleSnapshot = JSON.parse(await readFile('fixtures/contracts/app-state-snapshot.stale.v1.json', 'utf8'));
+    const personalWorkbenchSettingsContract = JSON.parse(
+      await readFile('fixtures/contracts/personal-workbench-settings/personal-workbench-settings.ready.v1.json', 'utf8')
+    );
     const goalRunbook = {
       contractName: 'goal-runbook.v1',
       contractVersion: 1,
@@ -1731,6 +1763,7 @@ describe('v15 Workbench read-only API client', () => {
         'currentProjectBinding',
         createV48CurrentProjectBindingPayload(startupProjectRegistry.projects[0])
       ),
+      personalWorkbenchSettings: createWorkbenchResult('personalWorkbenchSettings', personalWorkbenchSettingsContract),
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', healthySnapshot),
       goalRunbook: createWorkbenchResult('goalRunbook', goalRunbook),
       goalNextAction: createWorkbenchResult('goalNextAction', goalNextAction),
