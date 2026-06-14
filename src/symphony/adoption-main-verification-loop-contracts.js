@@ -205,6 +205,8 @@ export function buildAdoptionReadiness({
       requiresPlanHash: true,
       requiredFields: [
         'planHash',
+        'goalId',
+        'taskId',
         'adoptionId',
         'workerRunId',
         'reviewerVerdictId',
