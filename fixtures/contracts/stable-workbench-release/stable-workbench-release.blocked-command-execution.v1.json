@@ -1,0 +1,380 @@
+{
+  "contractName": "stableWorkbenchRelease.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-14T05:00:00.000Z",
+  "state": "blocked",
+  "goal": {
+    "goalId": "v60-stable-personal-workbench-release",
+    "title": "v60: Stable Personal Workbench Release",
+    "state": "active",
+    "sourceRef": {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v60-stable-personal-workbench-release-runbook-2026-06-14.md",
+      "label": "v60 runbook"
+    }
+  },
+  "release": {
+    "currentTaggedRelease": "v59",
+    "activeVersion": "v60",
+    "currentTagCommit": "6e4ca4e2e7e459629e66b5c89b37abca78eddb19",
+    "activeTagExists": false,
+    "activeGithubReleaseExists": false,
+    "sourceRefs": [
+      {
+        "kind": "tag",
+        "ref": "v59",
+        "label": "v59 annotated tag"
+      },
+      {
+        "kind": "github-release",
+        "ref": "https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v59",
+        "label": "v59 GitHub Release"
+      }
+    ]
+  },
+  "surfaces": [
+    {
+      "id": "project-entry",
+      "label": "Project Entry",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "current-project-binding.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "current-project-binding.v1",
+        "label": "Project Entry source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": false,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "goal-supervision",
+      "label": "Goal Supervision",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "goal-supervisor-app-read-model.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "goal-supervisor-app-read-model.v1",
+        "label": "Goal Supervision source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": false,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "context",
+      "label": "Context",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "contextAdvisory.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "contextAdvisory.v1",
+        "label": "Context source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": true,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "result-intake",
+      "label": "Result Intake",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "pendingResult.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "pendingResult.v1",
+        "label": "Result Intake source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": false,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "event-registration",
+      "label": "Event Registration",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "supervisorEventRegistrationEligibility.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "supervisorEventRegistrationEligibility.v1",
+        "label": "Event Registration source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": false,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "child-task-planning",
+      "label": "Child Task Planning",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "childDispatchPreview.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "childDispatchPreview.v1",
+        "label": "Child Task Planning source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": true,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "provider-execution",
+      "label": "Provider Execution",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "codexProviderExecutionPilot.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "codexProviderExecutionPilot.v1",
+        "label": "Provider Execution source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": false,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "review-and-gates",
+      "label": "Review and Gates",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "reviewGateWorkbenchSurface.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "reviewGateWorkbenchSurface.v1",
+        "label": "Review and Gates source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": false,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "thread-handoff",
+      "label": "Thread Handoff",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "threadContinuationReviewerHandoffPack.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "threadContinuationReviewerHandoffPack.v1",
+        "label": "Thread Handoff source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": true,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "release-closeout",
+      "label": "Release Closeout",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "releaseCloseoutHandoffPack.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "releaseCloseoutHandoffPack.v1",
+        "label": "Release Closeout source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": true,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "release-publication",
+      "label": "Release Publication Evidence",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "releasePublicationEvidence.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "releasePublicationEvidence.v1",
+        "label": "Release Publication Evidence source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": true,
+      "willMutate": false,
+      "blockedReasons": []
+    },
+    {
+      "id": "release-boundary",
+      "label": "Release Boundary",
+      "state": "ready",
+      "required": true,
+      "sourceContract": "tagReleaseOperatorChecklist.v1",
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "tagReleaseOperatorChecklist.v1",
+        "label": "Release Boundary source contract"
+      },
+      "evidenceRefs": [],
+      "readOnly": true,
+      "copyOnly": true,
+      "willMutate": false,
+      "blockedReasons": []
+    }
+  ],
+  "providerBoundary": {
+    "activeWorkbenchProviderClaims": [
+      {
+        "provider": "codex-cli",
+        "claim": "controlled-provider-execution-preview",
+        "status": "tested-preview",
+        "sourceContract": "codexProviderExecutionPilot.v1",
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "codexProviderExecutionPilot.v1",
+          "label": "v54 controlled provider execution preview"
+        },
+        "blockedReasons": []
+      }
+    ],
+    "unsupportedProviderClaims": [],
+    "rawProviderCliEvidenceAllowed": false,
+    "notes": []
+  },
+  "releaseBoundary": {
+    "tagOperation": {
+      "state": "manual-controller-action",
+      "commandResult": "not-run-by-product-code",
+      "copyOnly": true,
+      "willMutate": false,
+      "sourceRef": {
+        "kind": "repo-doc",
+        "ref": "docs/release-checklist.md",
+        "label": "manual release checklist"
+      }
+    },
+    "pushTagOperation": {
+      "state": "manual-controller-action",
+      "commandResult": "not-run-by-product-code",
+      "copyOnly": true,
+      "willMutate": false,
+      "sourceRef": {
+        "kind": "repo-doc",
+        "ref": "docs/release-checklist.md",
+        "label": "manual release checklist"
+      }
+    },
+    "githubReleaseOperation": {
+      "state": "manual-controller-action",
+      "commandResult": "not-run-by-product-code",
+      "copyOnly": true,
+      "willMutate": false,
+      "sourceRef": {
+        "kind": "repo-doc",
+        "ref": "docs/release-checklist.md",
+        "label": "manual release checklist"
+      }
+    },
+    "releaseReadyDeclaration": {
+      "state": "manual-controller-action",
+      "commandResult": "not-run-by-product-code",
+      "copyOnly": true,
+      "willMutate": false,
+      "sourceRef": {
+        "kind": "repo-doc",
+        "ref": "docs/release-checklist.md",
+        "label": "manual release checklist"
+      }
+    },
+    "manualControllerActionRequired": true,
+    "automationObserved": false,
+    "blockedReasons": []
+  },
+  "safety": {
+    "rawTranscriptObserved": false,
+    "rawModelOutputObserved": false,
+    "frontendLocalJsonlReadObserved": false,
+    "frontendLocalSessionReadObserved": false,
+    "frontendProviderFolderReadObserved": false,
+    "rendererCommandExecutionObserved": true,
+    "genericShellObserved": true,
+    "genericTerminalObserved": true,
+    "directGoalEventAppendObserved": false,
+    "directTaskCompletionObserved": false,
+    "automaticWorktreeCreationObserved": false,
+    "automaticNextVersionGoalObserved": false,
+    "blockedReasons": [
+      "renderer-or-generic-command-execution-observed"
+    ]
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/daily-workflow-runbook.md",
+      "label": "daily workflow runbook"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/provider-boundary-guide.md",
+      "label": "provider boundary guide"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/recovery-guide.md",
+      "label": "recovery guide"
+    }
+  ],
+  "knownFacts": [
+    "v59 tag and GitHub Release are complete",
+    "v60 tag and GitHub Release do not exist yet",
+    "tag push and GitHub Release publication remain controller manual actions"
+  ],
+  "blockedReasons": [
+    "command-execution-boundary-drift"
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "workbenchBaselineOnly": true,
+    "providerLaunchAvailable": false,
+    "unsupportedProviderClaimsAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptExposureAvailable": false,
+    "rawModelOutputExposureAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "gitWriteAvailable": false,
+    "gitMergeAvailable": false,
+    "gitTagAvailable": false,
+    "gitPushAvailable": false,
+    "githubReleaseCreateAvailable": false,
+    "githubReleaseEditAvailable": false,
+    "publicDistributionClaimAvailable": false,
+    "notarizationClaimAvailable": false,
+    "autoUpdateClaimAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false
+  },
+  "readOnly": true,
+  "willMutate": false
+}
