@@ -125,6 +125,9 @@ import {
   selectCurrentProjectBinding
 } from './project-registry.js';
 import {
+  buildPersonalWorkbenchSettingsProjection
+} from './personal-workbench-settings-contracts.js';
+import {
   readGoalEventJournal
 } from './goal-event-journal.js';
 import {
@@ -1128,6 +1131,25 @@ export function createSymphonyConsoleServer({
         }
 
         writeJsonResponse(response, 200, await buildCurrentProjectBinding({
+          cwd,
+          stateDir
+        }));
+        return;
+      }
+
+      if (url.pathname === '/api/settings/personal-workbench') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-personal-workbench-settings-request',
+            message: 'Personal Workbench settings does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, await buildPersonalWorkbenchSettingsProjection({
           cwd,
           stateDir
         }));

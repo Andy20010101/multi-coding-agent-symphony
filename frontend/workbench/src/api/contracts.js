@@ -51,6 +51,7 @@ const APP_CORE_RELEASE_MANAGER_CONTRACT_NAME = 'app-core-release-manager.v1';
 const PROJECT_REGISTRY_CONTRACT_NAME = 'project-registry.v1';
 const RECENT_PROJECTS_CONTRACT_NAME = 'recent-projects.v1';
 const CURRENT_PROJECT_BINDING_CONTRACT_NAME = 'current-project-binding.v1';
+const PERSONAL_WORKBENCH_SETTINGS_CONTRACT_NAME = 'personalWorkbenchSettings.v1';
 const ERROR_ENVELOPE_CONTRACT_NAME = 'error-envelope.v1';
 const MATRIX_MISSING_TEXT = 'missing';
 const MATRIX_UNKNOWN_TEXT = 'unknown';
@@ -428,6 +429,13 @@ export const READONLY_API_ROUTES = Object.freeze([
     path: '/api/projects/current-binding',
     method: 'GET',
     contractName: CURRENT_PROJECT_BINDING_CONTRACT_NAME
+  }),
+  Object.freeze({
+    id: 'personalWorkbenchSettings',
+    label: 'Personal Workbench Settings',
+    path: '/api/settings/personal-workbench',
+    method: 'GET',
+    contractName: PERSONAL_WORKBENCH_SETTINGS_CONTRACT_NAME
   }),
   Object.freeze({
     id: 'runtimeSnapshot',

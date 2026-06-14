@@ -1,4 +1,7 @@
 import {
+  buildCurrentProjectBinding,
+  buildProjectRegistry,
+  buildRecentProjects,
   validateCurrentProjectBindingContract,
   validateRecentProjectsContract
 } from './project-registry.js';
@@ -166,6 +169,60 @@ export function buildPersonalWorkbenchSettings({
   });
 }
 
+export async function buildPersonalWorkbenchSettingsProjection({
+  cwd = process.cwd(),
+  repoPath,
+  stateDir,
+  generatedAt = new Date().toISOString(),
+  preferences,
+  settingsSource
+} = {}) {
+  const registry = await buildProjectRegistry({
+    cwd,
+    repoPath,
+    stateDir,
+    generatedAt
+  });
+  const [currentProjectBinding, recentProjects] = await Promise.all([
+    buildCurrentProjectBinding({
+      cwd,
+      repoPath,
+      stateDir,
+      generatedAt,
+      registry
+    }),
+    buildRecentProjects({
+      cwd,
+      repoPath,
+      stateDir,
+      generatedAt,
+      registry
+    })
+  ]);
+  const source = settingsSource ?? {
+    kind: 'defaults',
+    state: 'ready',
+    ref: 'built-in:first-run-local-settings',
+    sourceContract: null,
+    generatedAt,
+    readOnly: true,
+    writePolicy: 'manual-controller-or-preview-confirm-only'
+  };
+
+  return buildPersonalWorkbenchSettings({
+    generatedAt,
+    settingsSource: source,
+    preferences,
+    currentProjectBinding,
+    recentProjects,
+    recoveryActions: recoveryActionsForPersonalSettings({
+      settingsSource: source,
+      currentProjectBinding,
+      recentProjects
+    })
+  });
+}
+
 export function derivePersonalWorkbenchSettingsBlockedReasons({
   settingsSource,
   currentProjectBinding,
@@ -201,6 +258,55 @@ export function derivePersonalWorkbenchSettingsBlockedReasons({
   }
 
   return uniqueStrings(reasons);
+}
+
+function recoveryActionsForPersonalSettings({
+  settingsSource,
+  currentProjectBinding,
+  recentProjects
+}) {
+  const actions = [];
+
+  if (settingsSource?.state !== 'ready') {
+    actions.push({
+      id: 'restore-local-settings',
+      label: 'Restore local settings from managed app state',
+      state: 'manual-required',
+      mode: 'manual-controller',
+      endpointId: null,
+      copyOnly: true,
+      willMutate: false,
+      reason: 'local settings source is unavailable'
+    });
+  }
+
+  if (currentProjectBinding?.state !== 'bound') {
+    actions.push({
+      id: 'refresh-current-project-binding',
+      label: 'Refresh current project binding from backend-known projects',
+      state: 'available',
+      mode: 'refresh',
+      endpointId: '/api/projects/current-binding',
+      copyOnly: true,
+      willMutate: false,
+      reason: currentProjectBinding?.fallbackReason ?? 'current project binding is not bound'
+    });
+  }
+
+  if (recentProjects?.state === 'missing' || recentProjects?.state === 'failed') {
+    actions.push({
+      id: 'recover-recent-projects',
+      label: 'Recover recent projects from the current checkout',
+      state: 'manual-required',
+      mode: 'manual-controller',
+      endpointId: null,
+      copyOnly: true,
+      willMutate: false,
+      reason: recentProjects?.source?.degradedReason ?? 'recent projects are unavailable'
+    });
+  }
+
+  return actions;
 }
 
 export function validatePersonalWorkbenchSettingsContract(contract) {

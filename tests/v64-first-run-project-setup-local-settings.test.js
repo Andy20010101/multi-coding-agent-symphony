@@ -1,15 +1,19 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { runSymphonyCli } from '../scripts/symphony.js';
 import {
   PERSONAL_WORKBENCH_SETTINGS_BOUNDARIES,
   PERSONAL_WORKBENCH_SETTINGS_CONTRACT_NAME,
   PersonalWorkbenchSettingsContractError,
   assertPersonalWorkbenchSettingsContract,
   buildPersonalWorkbenchSettings,
+  buildPersonalWorkbenchSettingsProjection,
   derivePersonalWorkbenchSettingsBlockedReasons,
   validatePersonalWorkbenchSettingsContract
 } from '../src/symphony/personal-workbench-settings-contracts.js';
@@ -151,6 +155,61 @@ describe('v64 first-run project setup and local settings contracts', () => {
     assert.ok(builtStale.blockedReasons.includes('current-project-binding-stale'));
   });
 
+  it('projects first-run settings from the current checkout and exposes CLI JSON without writing repo files', async () => {
+    const root = await createProjectFixture('symphony-v64-settings-projection');
+
+    try {
+      const settings = await buildPersonalWorkbenchSettingsProjection({
+        cwd: root,
+        stateDir: join(root, '.symphony'),
+        generatedAt: '2026-06-14T19:30:00.000Z'
+      });
+
+      assertPersonalWorkbenchSettingsContract(settings);
+      assert.equal(settings.state, 'ready');
+      assert.equal(settings.settingsSource.ref, 'built-in:first-run-local-settings');
+      assert.equal(settings.currentProjectBinding.state, 'bound');
+      assert.equal(settings.currentProjectBinding.selectedProjectName, 'v64-settings-projection-fixture');
+      assert.equal(settings.recentProjects.state, 'available');
+      assert.deepEqual(settings.preferences.preferredProviders, ['codex-cli', 'claude-code-cli']);
+      assert.equal(settings.boundaries.settingsWriteAvailable, false);
+      assert.equal(settings.boundaries.rendererArbitraryPathInputAvailable, false);
+      assert.equal(settings.boundaries.providerLaunchAvailable, false);
+      assert.equal(settings.boundaries.goalCreationAvailable, false);
+
+      const before = await snapshotManagedFiles(root);
+      const output = createOutput();
+      const originalCwd = process.cwd();
+
+      try {
+        process.chdir(root);
+        const exitCode = await runSymphonyCli({
+          argv: ['runtime', 'settings', '--state-dir', join(root, '.symphony'), '--json'],
+          stdout: output.stdout,
+          stderr: output.stderr
+        });
+
+        assert.equal(exitCode, 0);
+      } finally {
+        process.chdir(originalCwd);
+      }
+
+      assert.equal(output.stderrText(), '');
+
+      const cliSettings = JSON.parse(output.stdoutText());
+
+      assert.deepEqual(validatePersonalWorkbenchSettingsContract(cliSettings), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(cliSettings.contractName, PERSONAL_WORKBENCH_SETTINGS_CONTRACT_NAME);
+      assert.equal(cliSettings.currentProjectBinding.selectedProjectName, 'v64-settings-projection-fixture');
+      assert.deepEqual(await snapshotManagedFiles(root), before);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('throws before building from secrets, raw provider refs, local sessions, or arbitrary paths', () => {
     const readyFixture = fixture('personal-workbench-settings.ready.v1.json');
 
@@ -180,6 +239,60 @@ describe('v64 first-run project setup and local settings contracts', () => {
 
 function fixture(name) {
   return JSON.parse(readFileSync(join(FIXTURE_DIR, name), 'utf8'));
+}
+
+async function createProjectFixture(prefix) {
+  const root = await mkdtemp(join(tmpdir(), `${prefix}-`));
+
+  await mkdir(join(root, '.git'));
+  await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
+  await writeFile(join(root, '.git', 'config'), [
+    '[remote "origin"]',
+    '\turl = git@example.com:fixture/v64-settings-projection.git',
+    ''
+  ].join('\n'), 'utf8');
+  await writeFile(join(root, 'package.json'), `${JSON.stringify({
+    name: 'v64-settings-projection-fixture'
+  }, null, 2)}\n`, 'utf8');
+  await mkdir(join(root, '.symphony', 'runs'), { recursive: true });
+  await writeFile(join(root, '.symphony', 'runs', 'latest.json'), `${JSON.stringify({
+    runId: 'run-v64-settings-projection',
+    status: 'passed',
+    updatedAt: '2026-06-14T19:30:00.000Z'
+  }, null, 2)}\n`, 'utf8');
+
+  return root;
+}
+
+async function snapshotManagedFiles(root) {
+  return JSON.stringify({
+    packageJson: readFileSync(join(root, 'package.json'), 'utf8'),
+    latestRun: readFileSync(join(root, '.symphony', 'runs', 'latest.json'), 'utf8')
+  });
+}
+
+function createOutput() {
+  const stdoutChunks = [];
+  const stderrChunks = [];
+
+  return {
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      }
+    },
+    stderr: {
+      write(chunk) {
+        stderrChunks.push(String(chunk));
+      }
+    },
+    stdoutText() {
+      return stdoutChunks.join('');
+    },
+    stderrText() {
+      return stderrChunks.join('');
+    }
+  };
 }
 
 function assertNoRawLocalOrSecretRefs(value, label) {
