@@ -41,6 +41,9 @@ import {
   buildAppStateSnapshot
 } from '../src/symphony/app-state-snapshot.js';
 import {
+  buildPersonalWorkbenchSettingsProjection
+} from '../src/symphony/personal-workbench-settings-contracts.js';
+import {
   buildInboxCaptureContract,
   isUnsafeInboxContextRef,
   renderInboxCaptureText
@@ -1409,6 +1412,22 @@ async function runSymphonyRuntime({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
+  if (options.subcommand === 'settings') {
+    const settings = await buildPersonalWorkbenchSettingsProjection({
+      cwd: process.cwd(),
+      repoPath: options.repoPath,
+      stateDir: options.stateDir
+    });
+
+    if (options.json) {
+      writeJson(stdout, settings);
+      return EXIT_CODES.ok;
+    }
+
+    stdout.write(renderPersonalWorkbenchSettingsText(settings));
+    return EXIT_CODES.ok;
+  }
+
   if (options.subcommand === 'snapshot') {
     const snapshot = await buildAppStateSnapshot({
       cwd: process.cwd(),
@@ -1426,7 +1445,7 @@ async function runSymphonyRuntime({ args, stdout }) {
     return EXIT_CODES.ok;
   }
 
-  throw new UsageError('runtime subcommand must be health, projects, current, or snapshot');
+  throw new UsageError('runtime subcommand must be health, projects, current, settings, or snapshot');
 }
 
 async function runSymphonyActions({ args, stdout }) {
@@ -1682,6 +1701,20 @@ function renderCurrentProjectText(currentProject) {
     `Project id: ${project?.project_id ?? 'unresolved'}`,
     `Repo: ${project?.repo_path ?? currentProject.resolution.repoPath ?? 'unresolved'}`,
     `Known blockers: ${currentProject.resolution.blockers.length}`,
+    ''
+  ].join('\n');
+}
+
+function renderPersonalWorkbenchSettingsText(settings) {
+  return [
+    `Settings: ${settings.state}`,
+    `Contract: ${settings.contractName}`,
+    `Project: ${settings.currentProjectBinding.selectedProjectName ?? 'unbound'}`,
+    `Project id: ${settings.currentProjectBinding.selectedProjectId ?? 'unbound'}`,
+    `Settings source: ${settings.settingsSource.kind} ${settings.settingsSource.state}`,
+    `Preferred providers: ${settings.preferences.preferredProviders.join(', ')}`,
+    `Default port: ${settings.preferences.defaultPort}`,
+    `Recovery actions: ${settings.recoveryActions.length}`,
     ''
   ].join('\n');
 }
@@ -3689,9 +3722,10 @@ function runtimeHelpText() {
     'Usage: symphony runtime health [--json]',
     '       symphony runtime projects [--repo-path <path>] [--json]',
     '       symphony runtime current [--repo-path <path>] [--json]',
+    '       symphony runtime settings [--repo-path <path>] [--state-dir <path>] [--json]',
     '       symphony runtime snapshot [--repo-path <path>] [--goal <goal-id>] [--state-dir <path>] [--json]',
     '',
-    'Prints read-only v33 runtime contracts.',
+    'Prints read-only runtime and first-run settings contracts.',
     'The commands read process, repository, and repo-local Symphony metadata only; they do not write files, run actions, call models, or change git state.',
     ''
   ].join('\n');

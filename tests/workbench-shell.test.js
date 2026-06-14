@@ -2833,6 +2833,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/runs/<run-id>/timeline',
       '/api/runs/latest',
       '/api/runtime/snapshot',
+      '/api/settings/personal-workbench',
       '/api/summary',
       '/api/workflow/router-categories',
       '/api/workflows/goal-draft-handoff'

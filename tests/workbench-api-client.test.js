@@ -70,6 +70,9 @@ import {
   projectRecentProjectsFromRegistry,
   validateRecentProjectsContract
 } from '../src/symphony/project-registry.js';
+import {
+  validatePersonalWorkbenchSettingsContract
+} from '../src/symphony/personal-workbench-settings-contracts.js';
 
 const GUIDED_HANDOFF_PATH = '/api/handoff/guided-goal-handoff.v1';
 const V19_GOAL_ID = 'v19-goal-runbook-next-action';
@@ -95,6 +98,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/projects/recent', 'recent-projects.v1'],
         ['GET', '/api/projects/current-binding', 'current-project-binding.v1'],
+        ['GET', '/api/settings/personal-workbench', 'personalWorkbenchSettings.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
         ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
@@ -145,6 +149,7 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/projects', 'project-registry.v1'],
         ['GET', '/api/projects/recent', 'recent-projects.v1'],
         ['GET', '/api/projects/current-binding', 'current-project-binding.v1'],
+        ['GET', '/api/settings/personal-workbench', 'personalWorkbenchSettings.v1'],
         ['GET', '/api/runtime/snapshot', 'app-state-snapshot.v1'],
         ['GET', '/api/app/data-inventory', 'app-data-inventory.v1'],
         ['GET', '/api/inbox/capture', 'inbox-capture.v1'],
@@ -497,6 +502,62 @@ describe('v15 Workbench read-only API client', () => {
         assert.equal(error.contractName, 'error-envelope.v1');
         assert.equal(error.error.code, 'invalid-project-selection-request');
       }
+    } finally {
+      await cleanupManagedActiveGoalWorkbenchServer({ root, server });
+    }
+  });
+
+  it('serves personal Workbench settings as a read-only first-run projection', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'symphony-personal-settings-route-'));
+
+    await mkdir(join(root, '.git'));
+    await writeFile(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n', 'utf8');
+    await writeFile(join(root, '.git', 'config'), [
+      '[remote "origin"]',
+      '\turl = git@example.com:fixture/personal-settings-route.git',
+      ''
+    ].join('\n'), 'utf8');
+    await writeFile(join(root, 'package.json'), `${JSON.stringify({ name: 'personal-settings-route-fixture' }, null, 2)}\n`, 'utf8');
+
+    const server = createSymphonyConsoleServer({
+      stateDir: join(root, '.symphony'),
+      cwd: root,
+      env: { HOME: root }
+    });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const response = await fetch(`${baseUrl}/api/settings/personal-workbench`);
+      const model = await response.json();
+      const queryRejected = await fetch(`${baseUrl}/api/settings/personal-workbench?repoPath=${encodeURIComponent(root)}`);
+      const postRejected = await fetch(`${baseUrl}/api/settings/personal-workbench`, { method: 'POST' });
+
+      assert.equal(response.status, 200);
+      assert.deepEqual(validatePersonalWorkbenchSettingsContract(model), {
+        ok: true,
+        errors: []
+      });
+      assert.equal(model.contractName, 'personalWorkbenchSettings.v1');
+      assert.equal(model.state, 'ready');
+      assert.equal(model.settingsSource.kind, 'defaults');
+      assert.equal(model.settingsSource.ref, 'built-in:first-run-local-settings');
+      assert.equal(model.currentProjectBinding.state, 'bound');
+      assert.equal(model.currentProjectBinding.selectedProjectName, 'personal-settings-route-fixture');
+      assert.equal(model.recentProjects.state, 'available');
+      assert.deepEqual(model.preferences.preferredProviders, ['codex-cli', 'claude-code-cli']);
+      assert.equal(model.boundaries.settingsWriteAvailable, false);
+      assert.equal(model.boundaries.secretStorageAvailable, false);
+      assert.equal(model.boundaries.rendererArbitraryPathInputAvailable, false);
+      assert.equal(model.boundaries.rendererCommandExecutionAvailable, false);
+      assert.equal(model.boundaries.providerLaunchAvailable, false);
+      assert.equal(model.boundaries.goalCreationAvailable, false);
+      assert.equal(model.boundaries.gitWriteAvailable, false);
+      assert.equal(model.boundaries.releaseWriteAvailable, false);
+
+      assert.equal(queryRejected.status, 400);
+      assert.equal((await queryRejected.json()).error.code, 'invalid-personal-workbench-settings-request');
+      assert.equal(postRejected.status, 405);
+      assert.equal((await postRejected.json()).contractName, 'error-envelope.v1');
     } finally {
       await cleanupManagedActiveGoalWorkbenchServer({ root, server });
     }
