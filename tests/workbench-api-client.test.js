@@ -1101,6 +1101,14 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(hub.summary.readinessState.value, 'missing');
     assert.equal(hub.readiness.activeProviderCount.value, 2);
     assert.equal(hub.readiness.evidencePolicy.rawProviderOutputAllowed.value, false);
+    assert.equal(hub.readiness.activeProviders.items[0].providerId.value, 'codex-cli');
+    assert.equal(hub.readiness.activeProviders.items[0].role.value, 'worker');
+    assert.equal(hub.readiness.activeProviders.items[0].lane.value, 'codex-worker-candidate');
+    assert.equal(hub.readiness.activeProviders.items[1].providerId.value, 'claude-code-cli');
+    assert.equal(hub.readiness.activeProviders.items[1].role.value, 'reviewer');
+    assert.equal(hub.readiness.activeProviders.items[1].lane.value, 'claude-code-reviewer-candidate');
+    assert.equal(hub.readiness.activeProviders.items[1].deepSeekConfigStatus.value, 'present');
+    assert.equal(hub.readiness.historicalProviders.items.find((provider) => provider.providerId.value === 'kiro-cli').activeWorkbenchProvider.value, false);
     assert.equal(hub.readiness.unsupportedProviders.items.find((provider) => provider.providerId.value === 'deepseek-cli').activeWorkbenchProvider.value, false);
     assert.equal(hub.providers.count.value, 2);
     assert.equal(claude.healthState.value, 'configured');

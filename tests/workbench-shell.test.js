@@ -2392,8 +2392,13 @@ describe('v15 Workbench React/Vite shell', () => {
 
     assert.match(app, /<ProviderHubPanel/u);
     assert.match(app, /ProviderHubAvailabilityList/u);
+    assert.match(app, /ProviderHubReadinessList/u);
+    assert.match(app, /ProviderHubReadinessActiveProviders/u);
+    assert.match(app, /ProviderHubReadinessHistoricalProviders/u);
+    assert.match(app, /ProviderHubReadinessUnsupportedProviders/u);
     assert.match(app, /ProviderHubEvidenceAnchors/u);
     assert.match(contracts, /ProviderHubPanel/u);
+    assert.match(contracts, /providerReadiness\.v1/u);
     assert.match(contracts, /agent-cli-provider-health\.v1 \+ agent-cli-capability-profile\.v1 \+ agent-cli-lane-assignment-preview\.v1/u);
     assert.match(contracts, /goal-progress-ledger\.v1 task evidence refs; evidence bodies are not read by Workbench/u);
     assert.doesNotMatch(providerHubSource, /fetch\(|confirmGoalEventPlan|window\.open|navigator\.clipboard|<form\b|<textarea\b|exec|spawn|shell/u);

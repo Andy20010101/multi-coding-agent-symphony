@@ -3303,6 +3303,11 @@ function DesktopProviderHubCard({ providerHub }) {
         ['active providers', providerHub?.summary?.activeProviderIds],
         ['configured', providerHub?.summary?.configuredProviderCount],
         ['missing', providerHub?.summary?.missingProviderCount],
+        ['readiness state', providerHub?.summary?.readinessState],
+        ['readiness blockers', providerHub?.summary?.readinessBlockedReasons],
+        ['readiness active', providerHub?.readiness?.activeProviderCount],
+        ['raw provider output', providerHub?.readiness?.evidencePolicy?.rawProviderOutputAllowed],
+        ['DeepSeek workbench provider', providerHub?.readiness?.unsupportedProviders?.items?.find((item) => item.providerId.text === 'deepseek-cli')?.activeWorkbenchProvider],
         ['mapped requirements', providerHub?.summary?.mappedRequirementCount],
         ['lane count', providerHub?.summary?.laneCount],
         ['evidence refs', providerHub?.evidenceAnchors?.count],
@@ -7167,7 +7172,10 @@ function ProviderHubPanel({ hub, route }) {
         ['health route', hub?.routeStates?.health],
         ['capabilities route', hub?.routeStates?.capabilities],
         ['lane route', hub?.routeStates?.lanePreview],
+        ['readiness route', hub?.routeStates?.readiness],
         ['active providers', hub?.summary?.activeProviderIds],
+        ['readiness state', hub?.summary?.readinessState],
+        ['readiness blockers', hub?.summary?.readinessBlockedReasons],
         ['health state', hub?.summary?.healthState],
         ['configured', hub?.summary?.configuredProviderCount],
         ['missing', hub?.summary?.missingProviderCount],
@@ -7179,6 +7187,7 @@ function ProviderHubPanel({ hub, route }) {
       ]} />
 
       <ProviderHubAvailabilityList providers={hub?.providers} />
+      <ProviderHubReadinessList readiness={hub?.readiness} />
       <ProviderHubRequirementList requirements={hub?.requirementGates} />
       <ProviderHubEvidenceAnchors anchors={hub?.evidenceAnchors} />
 
@@ -7255,6 +7264,104 @@ function ProviderHubLaneList({ lanes }) {
           <span>{lane.laneId.text}</span>
           <span>{lane.assignableInV38.text}</span>
           <span>{lane.unavailableReason.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProviderHubReadinessList({ readiness }) {
+  if (readiness?.state !== 'available') {
+    return <EmptyBlock copy="provider readiness 未暴露。" />;
+  }
+
+  return (
+    <Subsection title="provider readiness">
+      <FieldList rows={[
+        ['contract', readiness.contractName],
+        ['active provider count', readiness.activeProviderCount],
+        ['historical provider count', readiness.historicalProviderCount],
+        ['unsupported provider count', readiness.unsupportedProviderCount],
+        ['sanitized readiness only', readiness.evidencePolicy?.sanitizedReadinessOnly],
+        ['raw provider output allowed', readiness.evidencePolicy?.rawProviderOutputAllowed],
+        ['local session path allowed', readiness.evidencePolicy?.localSessionPathAllowed],
+        ['secret value allowed', readiness.evidencePolicy?.secretValueAllowed]
+      ]} />
+      <ProviderHubReadinessActiveProviders providers={readiness.activeProviders} />
+      <ProviderHubReadinessHistoricalProviders providers={readiness.historicalProviders} />
+      <ProviderHubReadinessUnsupportedProviders providers={readiness.unsupportedProviders} />
+    </Subsection>
+  );
+}
+
+function ProviderHubReadinessActiveProviders({ providers }) {
+  if (providers?.state !== 'available' || !Array.isArray(providers.items) || providers.items.length === 0) {
+    return <EmptyBlock copy="active provider readiness 未暴露。" />;
+  }
+
+  return (
+    <ul className="provider-readiness-list" aria-label="Provider readiness active candidates">
+      {providers.items.map((provider, index) => (
+        <li key={`${provider.providerId.text}-${index}`}>
+          <FieldList rows={[
+            ['provider', provider.providerId],
+            ['label', provider.label],
+            ['role', provider.role],
+            ['lane', provider.lane],
+            ['status', provider.status],
+            ['binary presence', provider.binaryPresence],
+            ['model profile', provider.modelProfile],
+            ['help smoke', provider.helpSmoke],
+            ['optional real smoke', provider.optionalRealSmoke],
+            ['configuration', provider.configurationKind],
+            ['DeepSeek config', provider.deepSeekConfigStatus],
+            ['DeepSeek independent provider', provider.deepSeekAsIndependentProvider],
+            ['blocked reasons', provider.blockedReasons]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProviderHubReadinessHistoricalProviders({ providers }) {
+  if (providers?.state !== 'available' || !Array.isArray(providers.items) || providers.items.length === 0) {
+    return <EmptyBlock copy="historical provider compatibility 未暴露。" />;
+  }
+
+  return (
+    <ul className="provider-readiness-list" aria-label="Provider readiness historical compatibility">
+      {providers.items.map((provider, index) => (
+        <li key={`${provider.providerId.text}-${index}`}>
+          <FieldList rows={[
+            ['provider', provider.providerId],
+            ['label', provider.label],
+            ['status', provider.status],
+            ['active workbench provider', provider.activeWorkbenchProvider],
+            ['reason', provider.reason]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProviderHubReadinessUnsupportedProviders({ providers }) {
+  if (providers?.state !== 'available' || !Array.isArray(providers.items) || providers.items.length === 0) {
+    return <EmptyBlock copy="unsupported provider claims 未暴露。" />;
+  }
+
+  return (
+    <ul className="provider-readiness-list" aria-label="Provider readiness unsupported provider claims">
+      {providers.items.map((provider, index) => (
+        <li key={`${provider.providerId.text}-${index}`}>
+          <FieldList rows={[
+            ['provider', provider.providerId],
+            ['claim', provider.claim],
+            ['status', provider.status],
+            ['active workbench provider', provider.activeWorkbenchProvider],
+            ['blocked reasons', provider.blockedReasons]
+          ]} />
         </li>
       ))}
     </ul>
