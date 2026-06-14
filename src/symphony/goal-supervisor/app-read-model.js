@@ -58,6 +58,10 @@ import {
   validateReleaseCloseoutHandoffPackContract
 } from '../release-closeout-handoff-pack-contracts.js';
 import {
+  buildReleasePublicationEvidence,
+  validateReleasePublicationEvidenceContract
+} from '../release-publication-evidence-contracts.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -135,6 +139,7 @@ export function buildGoalSupervisorAppReadModel({
   reviewGateOperatorId = null,
   reviewGatePlanHash = null,
   releaseCloseout = null,
+  releasePublication = null,
   goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
@@ -315,6 +320,13 @@ export function buildGoalSupervisorAppReadModel({
     goalCloseout,
     releaseCloseout
   });
+  const releasePublicationEvidence = buildGoalSupervisorReleasePublicationEvidence({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    releaseCloseoutHandoffPack,
+    releasePublication
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -358,7 +370,8 @@ export function buildGoalSupervisorAppReadModel({
     threadHandoffPack,
     reviewGatePreview,
     reviewGateConfirmationState,
-    releaseCloseoutHandoffPack
+    releaseCloseoutHandoffPack,
+    releasePublicationEvidence
   };
 }
 
@@ -641,6 +654,427 @@ function buildGoalSupervisorReleaseCloseoutHandoffPack({
   }
 
   return pack;
+}
+
+function buildGoalSupervisorReleasePublicationEvidence({
+  generatedAt,
+  goalId,
+  title,
+  releaseCloseoutHandoffPack,
+  releasePublication
+}) {
+  const config = isPlainObject(releasePublication) ? releasePublication : {};
+  const blockedReasons = [];
+  const sourceCloseoutHandoff = isPlainObject(config.sourceCloseoutHandoff)
+    ? config.sourceCloseoutHandoff
+    : releaseCloseoutHandoffPack;
+  const closeoutTargetCommit = sourceCloseoutHandoff?.targetCommit?.commit ??
+    sourceCloseoutHandoff?.targetCommit ??
+    sourceCloseoutHandoff?.releaseBaseline?.targetCommit ??
+    null;
+  const closeoutTag = sourceCloseoutHandoff?.tagReleaseChecklist?.targetTag ??
+    sourceCloseoutHandoff?.operatorChecklist?.targetTag ??
+    sourceCloseoutHandoff?.releaseTag ??
+    null;
+  const closeoutNextRunbookRef = sourceCloseoutHandoff?.tagReleaseChecklist?.nextVersionRunbookRef ??
+    sourceCloseoutHandoff?.operatorChecklist?.nextVersionRunbookRef ??
+    sourceCloseoutHandoff?.nextVersionContext?.runbookRef;
+  const tagEvidence = releasePublicationTagEvidence({
+    evidence: config.tagEvidence ?? config.tag ?? null,
+    blockedReasons
+  });
+  const githubReleaseEvidence = releasePublicationGithubReleaseEvidence({
+    evidence: config.githubReleaseEvidence ?? config.githubRelease ?? null,
+    blockedReasons
+  });
+  const evidence = buildReleasePublicationEvidence({
+    generatedAt,
+    goal: releasePublicationGoal({
+      goalId,
+      title
+    }),
+    sourceCloseoutHandoff,
+    tagEvidence,
+    githubReleaseEvidence,
+    expectedTargetCommit: config.expectedTargetCommit ?? config.targetCommit ?? closeoutTargetCommit,
+    targetCommit: config.targetCommit ?? closeoutTargetCommit,
+    currentVersion: config.currentVersion ?? closeoutTag,
+    nextVersion: config.nextVersion ?? sourceCloseoutHandoff?.nextVersionContext?.nextVersion ?? null,
+    nextRunbookRef: releasePublicationEvidenceRefFromValue({
+      ref: config.nextRunbookRef ?? config.nextVersionRunbookRef ?? closeoutNextRunbookRef,
+      blockedReasons,
+      reason: 'unsafe-next-version-runbook-ref'
+    }),
+    mainHead: config.mainHead ?? sourceCloseoutHandoff?.releaseBaseline?.mainHead ?? null,
+    originMainHead: config.originMainHead ?? sourceCloseoutHandoff?.releaseBaseline?.originMainHead ?? null,
+    openPrs: Array.isArray(config.openPrs) ? config.openPrs : [],
+    nextVersionGoalCreated: config.nextVersionGoalCreated === true,
+    knownFacts: [
+      ...safeStringList(sourceCloseoutHandoff?.knownFacts),
+      ...safeStringList(config.knownFacts)
+    ],
+    rollbackRefs: releasePublicationEvidenceRefs({
+      explicitRefs: config.rollbackRefs,
+      fallbackRefs: sourceCloseoutHandoff?.operatorChecklist?.rollbackRefs ?? sourceCloseoutHandoff?.tagReleaseChecklist?.rollbackRefs ?? [],
+      blockedReasons,
+      reason: 'unsafe-rollback-ref'
+    }),
+    sourceRefs: releasePublicationSourceRefs({
+      explicitRefs: config.sourceRefs,
+      fallbackRefs: [
+        sourceCloseoutHandoff?.sourceRef,
+        ...safeArray(sourceCloseoutHandoff?.evidenceRefs)
+      ],
+      blockedReasons,
+      reason: 'unsafe-publication-source-ref'
+    }),
+    blockedReasons
+  });
+  const validation = validateReleasePublicationEvidenceContract(evidence);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid release publication evidence projection: ${validation.errors.join('; ')}`);
+  }
+
+  return evidence;
+}
+
+function releasePublicationGoal({
+  goalId,
+  title
+}) {
+  const safeGoalId = firstNonEmptyString(goalId, 'missing-goal');
+
+  return {
+    goalId: safeGoalId,
+    title: firstNonEmptyString(title, safeGoalId),
+    state: 'active',
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: {
+      kind: 'contract',
+      ref: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+      label: 'goal supervisor app read model'
+    }
+  };
+}
+
+function releasePublicationTagEvidence({
+  evidence,
+  blockedReasons
+}) {
+  if (!isPlainObject(evidence)) {
+    return null;
+  }
+
+  return {
+    tagName: firstNonEmptyString(evidence.tagName, evidence.name),
+    tagObjectSha: safeCommitish(evidence.tagObjectSha ?? evidence.objectSha ?? evidence.tagSha),
+    dereferencedCommit: safeCommitish(evidence.dereferencedCommit ?? evidence.targetCommit ?? evidence.commit),
+    targetCommit: safeCommitish(evidence.targetCommit ?? evidence.dereferencedCommit ?? evidence.commit),
+    annotated: evidence.annotated === true,
+    sourceRefs: releasePublicationSourceRefs({
+      explicitRefs: evidence.sourceRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-tag-publication-source-ref'
+    }),
+    rollbackRefs: releasePublicationEvidenceRefs({
+      explicitRefs: evidence.rollbackRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-tag-rollback-ref'
+    }),
+    blockedReasons: safeStringList(evidence.blockedReasons)
+  };
+}
+
+function releasePublicationGithubReleaseEvidence({
+  evidence,
+  blockedReasons
+}) {
+  if (!isPlainObject(evidence)) {
+    return null;
+  }
+
+  const url = safeDisplayRef(firstNonEmptyString(evidence.url, evidence.releaseUrl));
+  const targetCommitish = safeDisplayRef(firstNonEmptyString(evidence.targetCommitish, evidence.targetCommit));
+
+  if (firstNonEmptyString(evidence.url, evidence.releaseUrl) !== null && (url === null || releasePublicationUnsafeText(url))) {
+    blockedReasons.push('unsafe-github-release-url');
+  }
+
+  if (firstNonEmptyString(evidence.targetCommitish, evidence.targetCommit) !== null && (targetCommitish === null || releasePublicationUnsafeText(targetCommitish))) {
+    blockedReasons.push('unsafe-github-release-target');
+  }
+
+  return {
+    tagName: firstNonEmptyString(evidence.tagName),
+    name: firstNonEmptyString(evidence.name),
+    url: releasePublicationUnsafeText(url) ? null : url,
+    isDraft: evidence.isDraft === true,
+    isPrerelease: evidence.isPrerelease === true,
+    publishedAt: firstNonEmptyString(evidence.publishedAt),
+    assets: Array.isArray(evidence.assets) ? evidence.assets.map(releasePublicationAssetFromValue).filter(isPlainObject) : [],
+    targetCommitish: releasePublicationUnsafeText(targetCommitish) ? null : targetCommitish,
+    sourceRefs: releasePublicationSourceRefs({
+      explicitRefs: evidence.sourceRefs,
+      fallbackRefs: [],
+      blockedReasons,
+      reason: 'unsafe-github-release-source-ref'
+    }),
+    blockedReasons: safeStringList(evidence.blockedReasons)
+  };
+}
+
+function releasePublicationAssetFromValue(asset) {
+  if (typeof asset === 'string') {
+    const safeName = safeDisplayRef(asset);
+    return safeName === null || releasePublicationUnsafeText(safeName) ? null : {
+      name: safeName,
+      label: null,
+      url: null,
+      size: 0
+    };
+  }
+
+  if (!isPlainObject(asset)) {
+    return null;
+  }
+
+  const safeName = safeDisplayRef(firstNonEmptyString(asset.name, asset.label, asset.url));
+
+  if (safeName === null || releasePublicationUnsafeText(safeName)) {
+    return null;
+  }
+
+  return {
+    name: safeName,
+    label: releasePublicationSafeDisplayText(firstNonEmptyString(asset.label)),
+    url: releasePublicationSafeDisplayText(firstNonEmptyString(asset.url, asset.browserDownloadUrl)),
+    size: Number.isInteger(asset.size) && asset.size >= 0 ? asset.size : 0
+  };
+}
+
+function releasePublicationSourceRefs({
+  explicitRefs,
+  fallbackRefs,
+  blockedReasons,
+  reason
+}) {
+  const refs = Array.isArray(explicitRefs) ? explicitRefs : fallbackRefs;
+
+  return uniquePublicationRefs(
+    (Array.isArray(refs) ? refs : [])
+      .map((ref) => releasePublicationSourceRefFromValue({
+        ref,
+        blockedReasons,
+        reason
+      }))
+      .filter(isPlainObject)
+  );
+}
+
+function releasePublicationEvidenceRefs({
+  explicitRefs,
+  fallbackRefs,
+  blockedReasons,
+  reason
+}) {
+  const refs = Array.isArray(explicitRefs) ? explicitRefs : fallbackRefs;
+
+  return uniqueEvidenceRefs(
+    (Array.isArray(refs) ? refs : [])
+      .map((ref) => releasePublicationEvidenceRefFromValue({
+        ref,
+        blockedReasons,
+        reason
+      }))
+      .filter(isPlainObject)
+  );
+}
+
+function releasePublicationSourceRefFromValue({
+  ref,
+  blockedReasons,
+  reason
+}) {
+  if (ref === null || ref === undefined) {
+    return null;
+  }
+
+  const candidate = isPlainObject(ref)
+    ? firstNonEmptyString(ref.ref, ref.path, ref.uri)
+    : ref;
+  const safeRef = safeDisplayRef(candidate);
+
+  if (!nonEmptyString(safeRef) || releasePublicationUnsafeText(safeRef)) {
+    if (nonEmptyString(candidate)) {
+      blockedReasons.push(reason);
+    }
+
+    return null;
+  }
+
+  return {
+    kind: isPlainObject(ref) && nonEmptyString(ref.kind)
+      ? ref.kind
+      : publicationSourceKindForRef(safeRef),
+    ref: safeRef,
+    label: isPlainObject(ref)
+      ? firstNonEmptyString(ref.label, ref.title, safeRef)
+      : safeRef
+  };
+}
+
+function releasePublicationEvidenceRefFromValue({
+  ref,
+  blockedReasons,
+  reason
+}) {
+  if (ref === null || ref === undefined) {
+    return null;
+  }
+
+  const candidate = isPlainObject(ref)
+    ? firstNonEmptyString(ref.ref, ref.path, ref.uri)
+    : ref;
+  const safeRef = safeDisplayRef(candidate);
+
+  if (!nonEmptyString(safeRef) || releasePublicationUnsafeText(safeRef)) {
+    if (nonEmptyString(candidate)) {
+      blockedReasons.push(reason);
+    }
+
+    return null;
+  }
+
+  return {
+    kind: isPlainObject(ref) && nonEmptyString(ref.kind)
+      ? ref.kind
+      : publicationEvidenceKindForRef(safeRef),
+    ref: safeRef,
+    label: isPlainObject(ref)
+      ? firstNonEmptyString(ref.label, ref.title, safeRef)
+      : safeRef
+  };
+}
+
+function publicationSourceKindForRef(ref) {
+  if (/^[a-f0-9]{7,64}$/u.test(ref)) {
+    return 'commit';
+  }
+
+  if (ref.startsWith('refs/tags/')) {
+    return 'git-tag';
+  }
+
+  if (/^https:\/\/github\.com\/.+\/releases\/tag\//u.test(ref)) {
+    return 'github-release';
+  }
+
+  if (ref === 'main' || ref === 'origin/main' || ref.startsWith('refs/heads/') || ref.startsWith('refs/remotes/')) {
+    return 'branch';
+  }
+
+  if (ref.startsWith('open-prs')) {
+    return 'pr-list';
+  }
+
+  if (ref.startsWith('artifact:') || ref.startsWith('checkpoint:')) {
+    return 'artifact-ref';
+  }
+
+  return 'repo-doc';
+}
+
+function publicationEvidenceKindForRef(ref) {
+  if (/^[a-f0-9]{7,64}$/u.test(ref)) {
+    return 'commit';
+  }
+
+  if (ref.startsWith('refs/tags/')) {
+    return 'git-tag';
+  }
+
+  if (/^https:\/\/github\.com\/.+\/releases\/tag\//u.test(ref)) {
+    return 'github-release';
+  }
+
+  if (ref.startsWith('artifact:') || ref.startsWith('checkpoint:')) {
+    return 'artifact-ref';
+  }
+
+  return 'repo-doc';
+}
+
+function uniquePublicationRefs(refs) {
+  const seen = new Set();
+  const result = [];
+
+  for (const ref of safeArray(refs).filter(isPlainObject)) {
+    const safeRef = safeDisplayRef(ref.ref);
+    const kind = [
+      'contract',
+      'repo-doc',
+      'artifact-ref',
+      'git-tag',
+      'github-release',
+      'release-url',
+      'commit',
+      'branch',
+      'pr-list',
+      'goal'
+    ].includes(ref.kind)
+      ? ref.kind
+      : publicationSourceKindForRef(safeRef ?? '');
+
+    if (!nonEmptyString(safeRef)) {
+      continue;
+    }
+
+    const key = `${kind}:${safeRef}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push({
+      kind,
+      ref: safeRef,
+      label: firstNonEmptyString(ref.label, safeRef)
+    });
+  }
+
+  return result;
+}
+
+function safeCommitish(value) {
+  const safeValue = safeDisplayRef(firstNonEmptyString(value));
+
+  if (safeValue === null || !/^[a-f0-9]{7,64}$/u.test(safeValue)) {
+    return null;
+  }
+
+  return safeValue;
+}
+
+function releasePublicationSafeDisplayText(value) {
+  const safeValue = safeDisplayRef(value);
+
+  if (safeValue === null || releasePublicationUnsafeText(safeValue)) {
+    return null;
+  }
+
+  return safeValue;
+}
+
+function releasePublicationUnsafeText(value) {
+  if (!nonEmptyString(value)) {
+    return false;
+  }
+
+  return /\b(?:raw[\s_-]*(?:transcript|model[\s_-]*output)|provider[\s_-]*(?:output|session|payload)|session[\s_-]*(?:log|file|path)|local[\s_-]*(?:jsonl|session)|goal[\s_-]*ledger(?:[\s_-]*internals?)?)\b|\/(?:event-append|append-event|record-result|mark-complete|complete-task|git\/tag|git\/push|tag\/create|release\/create|release\/edit|publish|shell|terminal|provider-launch|create-next-goal)(?:$|[/\s])|\b(?:append\s+event\s+directly|mark\s+complete|declare\s+release\s+ready|release-ready\s+declaration|run\s+tag|push\s+tag|git\s+(?:push|tag)|gh\s+release\s+(?:create|edit|upload|delete)|create\s+github\s+release|edit\s+github\s+release|publish\s+release|run\s+shell|terminal|launch\s+provider|create\s+next\s+goal)\b/iu.test(value);
 }
 
 function releaseCloseoutGoal({
