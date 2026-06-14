@@ -60,11 +60,11 @@ v60 does not add a generic shell, terminal UI, renderer-side command execution, 
 
 The Workbench stable baseline lane renders:
 
-- `Stable Workbench Baseline`;
+- `Stable Workbench Release`;
 - `Surface Matrix`;
 - `Provider Boundary`;
 - `Release Boundary`;
-- `Safety Checks`;
+- `Safety`;
 - `Evidence Refs`;
 - `stableWorkbenchRelease.v1`;
 - current tagged release `v59`;
