@@ -1,0 +1,486 @@
+{
+  "contractName": "releaseCloseoutHandoffPack.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-14T03:00:00.000Z",
+  "state": "ready",
+  "goal": {
+    "goalId": "v58-release-closeout-operator-handoff-pack",
+    "title": "v58 Release Closeout Operator Handoff Pack",
+    "state": "active",
+    "sourceContract": "threadHandoffPack.v1",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "threadHandoffPack.v1",
+      "label": "v58 goal source"
+    }
+  },
+  "reviewGateSource": {
+    "contractName": "reviewGatePreview.v1",
+    "state": "ready",
+    "reviewReadiness": {
+      "state": "ready",
+      "eventFamily": "reviewer-verdict",
+      "eventType": "reviewer.approved",
+      "gateName": null,
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v58-reviewer-evidence-2026-06-14.md",
+          "label": "v58 reviewer evidence"
+        }
+      ],
+      "blockedReasons": []
+    },
+    "mainGateReadiness": {
+      "state": "ready",
+      "eventFamily": "main-gate",
+      "eventType": "main.verification-passed",
+      "gateName": "main-verification",
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v58-main-gate-evidence-2026-06-14.md",
+          "label": "v58 main gate evidence"
+        }
+      ],
+      "blockedReasons": []
+    },
+    "releaseGateReadiness": {
+      "state": "ready",
+      "eventFamily": "release-gate",
+      "eventType": "release.gate-passed",
+      "gateName": "release.validation",
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v58-release-gate-evidence-2026-06-14.md",
+          "label": "v58 release gate evidence"
+        }
+      ],
+      "blockedReasons": []
+    },
+    "previewHash": "sha256:94387652709f696569b02ec072f8b4b87196b4d29e6c4cb16b0a446f7e3ed7ef",
+    "planHash": "sha256:a3654ae45fc8405dfdd2237354790a53fe4cb5575ca5ceb4c22479f1f5535906",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "threadHandoffPack.v1",
+      "label": "threadHandoffPack.v1"
+    },
+    "blockedReasons": []
+  },
+  "closeoutSource": {
+    "contractName": "goal-closeout-report.v1",
+    "state": "ready",
+    "summary": {
+      "workerEvidenceComplete": true,
+      "reviewEvidenceComplete": true,
+      "mainVerificationComplete": true,
+      "releaseReady": false,
+      "releaseReadySource": "not-declared-by-product-code"
+    },
+    "missingCount": 0,
+    "releaseReady": false,
+    "releaseReadySource": "not-declared-by-product-code",
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "goal-closeout-report.v1",
+      "label": "goal closeout report"
+    },
+    "blockedReasons": []
+  },
+  "releaseBaseline": {
+    "contractName": "release-baseline-resolver.v1",
+    "state": "ready",
+    "currentBranch": "main",
+    "currentHead": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "mainHead": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "originMainHead": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "targetCommit": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "clean": true,
+    "sourceRef": {
+      "kind": "contract",
+      "ref": "release-baseline-resolver.v1",
+      "label": "release baseline"
+    },
+    "blockedReasons": []
+  },
+  "targetCommit": {
+    "state": "ready",
+    "commit": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "source": "release-baseline-resolver.v1",
+    "expectedCommit": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "stale": false,
+    "blockedReasons": []
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v58-reviewer-evidence-2026-06-14.md",
+      "label": "v58 reviewer evidence"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v58-main-gate-evidence-2026-06-14.md",
+      "label": "v58 main gate evidence"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v58-release-gate-evidence-2026-06-14.md",
+      "label": "v58 release gate evidence"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v58-validation-evidence-2026-06-14.md",
+      "label": "v58 validation evidence"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v58-tag-release-evidence-2026-06-14.md",
+      "label": "v58 tag and release evidence"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v58-release-notes-2026-06-14.md",
+      "label": "v58 release notes"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v59-runbook-2026-06-14.md",
+      "label": "v59 runbook"
+    }
+  ],
+  "knownFacts": [
+    "main and origin/main match target commit 71745688de473013dd9a9878bfb609bc24e2a68f",
+    "v58 tag and GitHub Release are not published by product code"
+  ],
+  "blockedReasons": [],
+  "operatorChecklist": {
+    "contractName": "tagReleaseOperatorChecklist.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T03:00:00.000Z",
+    "state": "ready",
+    "targetTag": "v58",
+    "releaseTitle": "v58 release",
+    "targetCommit": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "releaseNotesRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-release-notes-2026-06-14.md",
+        "label": "v58 release notes"
+      }
+    ],
+    "steps": [
+      {
+        "stepId": "inspect-target-commit",
+        "label": "run git tag v58 from product code",
+        "status": "ready",
+        "copyOnly": true,
+        "willMutate": false
+      },
+      {
+        "stepId": "record-tag-result",
+        "label": "Record external annotated tag result after operator action",
+        "status": "pending-external-action",
+        "copyOnly": true,
+        "willMutate": false
+      },
+      {
+        "stepId": "record-release-result",
+        "label": "Record external release publication result after operator action",
+        "status": "pending-external-action",
+        "copyOnly": true,
+        "willMutate": false
+      }
+    ],
+    "commandResults": {
+      "tag": "not-run-by-product-code",
+      "pushTag": "not-run-by-product-code",
+      "githubRelease": "not-run-by-product-code",
+      "releaseReadyDeclaration": "not-run-by-product-code"
+    },
+    "boundaries": {
+      "releaseReadyDeclarationAvailable": false,
+      "gitTagAvailable": true,
+      "gitPushAvailable": false,
+      "githubReleaseCreateAvailable": false,
+      "providerLaunchAvailable": false,
+      "shellAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "directTaskCompleteAvailable": false,
+      "automaticNextVersionGoalAvailable": false
+    },
+    "copyOnly": true,
+    "readOnly": true,
+    "willMutate": false
+  },
+  "tagReleaseChecklist": {
+    "contractName": "tagReleaseOperatorChecklist.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T03:00:00.000Z",
+    "state": "ready",
+    "targetTag": "v58",
+    "releaseTitle": "v58 release",
+    "targetCommit": "71745688de473013dd9a9878bfb609bc24e2a68f",
+    "releaseNotesRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-release-notes-2026-06-14.md",
+        "label": "v58 release notes"
+      }
+    ],
+    "steps": [
+      {
+        "stepId": "inspect-target-commit",
+        "label": "run git tag v58 from product code",
+        "status": "ready",
+        "copyOnly": true,
+        "willMutate": false
+      },
+      {
+        "stepId": "record-tag-result",
+        "label": "Record external annotated tag result after operator action",
+        "status": "pending-external-action",
+        "copyOnly": true,
+        "willMutate": false
+      },
+      {
+        "stepId": "record-release-result",
+        "label": "Record external release publication result after operator action",
+        "status": "pending-external-action",
+        "copyOnly": true,
+        "willMutate": false
+      }
+    ],
+    "commandResults": {
+      "tag": "not-run-by-product-code",
+      "pushTag": "not-run-by-product-code",
+      "githubRelease": "not-run-by-product-code",
+      "releaseReadyDeclaration": "not-run-by-product-code"
+    },
+    "boundaries": {
+      "releaseReadyDeclarationAvailable": false,
+      "gitTagAvailable": true,
+      "gitPushAvailable": false,
+      "githubReleaseCreateAvailable": false,
+      "providerLaunchAvailable": false,
+      "shellAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "directTaskCompleteAvailable": false,
+      "automaticNextVersionGoalAvailable": false
+    },
+    "copyOnly": true,
+    "readOnly": true,
+    "willMutate": false
+  },
+  "releaseEvidenceCarryoverRefs": {
+    "contractName": "releaseEvidenceCarryoverRefs.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T03:00:00.000Z",
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-reviewer-evidence-2026-06-14.md",
+        "label": "v58 reviewer evidence"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-main-gate-evidence-2026-06-14.md",
+        "label": "v58 main gate evidence"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-release-gate-evidence-2026-06-14.md",
+        "label": "v58 release gate evidence"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-validation-evidence-2026-06-14.md",
+        "label": "v58 validation evidence"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-tag-release-evidence-2026-06-14.md",
+        "label": "v58 tag and release evidence"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-release-notes-2026-06-14.md",
+        "label": "v58 release notes"
+      },
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v59-runbook-2026-06-14.md",
+        "label": "v59 runbook"
+      }
+    ],
+    "sourceContracts": [
+      {
+        "contractName": "reviewGatePreview.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "review-gate-source"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "reviewGatePreview.v1",
+          "label": "review gate preview"
+        }
+      },
+      {
+        "contractName": "reviewGateControlledConfirmationState.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "review-gate-confirmation-state"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "reviewGateControlledConfirmationState.v1",
+          "label": "review gate confirmation state"
+        }
+      },
+      {
+        "contractName": "goal-closeout-report.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "closeout-source"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "goal-closeout-report.v1",
+          "label": "goal closeout report"
+        }
+      },
+      {
+        "contractName": "release-baseline-resolver.v1",
+        "contractVersion": 1,
+        "readOnly": true,
+        "requiredFor": [
+          "release-baseline"
+        ],
+        "sourceRef": {
+          "kind": "contract",
+          "ref": "release-baseline-resolver.v1",
+          "label": "release baseline"
+        }
+      }
+    ],
+    "readOnly": true,
+    "willMutate": false
+  },
+  "githubReleaseDraftNotice": {
+    "contractName": "githubReleaseDraftNotice.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T03:00:00.000Z",
+    "state": "ready",
+    "releaseUrl": null,
+    "releaseUrlState": "not-published-by-product-code",
+    "notesSourceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v58-release-notes-2026-06-14.md",
+        "label": "v58 release notes"
+      }
+    ],
+    "assetsExpected": [],
+    "boundaries": {
+      "releaseReadyDeclarationAvailable": false,
+      "gitTagAvailable": true,
+      "gitPushAvailable": false,
+      "githubReleaseCreateAvailable": false,
+      "providerLaunchAvailable": false,
+      "shellAvailable": false,
+      "directGoalEventAppendAvailable": false,
+      "directTaskCompleteAvailable": false,
+      "automaticNextVersionGoalAvailable": false
+    },
+    "readOnly": true,
+    "willMutate": false
+  },
+  "nextVersionContext": {
+    "contractName": "nextVersionStartContext.v1",
+    "contractVersion": 1,
+    "generatedAt": "2026-06-14T03:00:00.000Z",
+    "state": "ready",
+    "nextVersion": "v59",
+    "runbookRef": {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v59-runbook-2026-06-14.md",
+      "label": "v59 runbook"
+    },
+    "startAfterRelease": true,
+    "createsGoal": false,
+    "entersNextVersion": false,
+    "readOnly": true,
+    "willMutate": false
+  },
+  "sourceContracts": [
+    {
+      "contractName": "reviewGatePreview.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "review-gate-source"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "reviewGatePreview.v1",
+        "label": "review gate preview"
+      }
+    },
+    {
+      "contractName": "reviewGateControlledConfirmationState.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "review-gate-confirmation-state"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "reviewGateControlledConfirmationState.v1",
+        "label": "review gate confirmation state"
+      }
+    },
+    {
+      "contractName": "goal-closeout-report.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "closeout-source"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "goal-closeout-report.v1",
+        "label": "goal closeout report"
+      }
+    },
+    {
+      "contractName": "release-baseline-resolver.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "release-baseline"
+      ],
+      "sourceRef": {
+        "kind": "contract",
+        "ref": "release-baseline-resolver.v1",
+        "label": "release baseline"
+      }
+    }
+  ],
+  "boundaries": {
+    "releaseReadyDeclarationAvailable": false,
+    "gitTagAvailable": true,
+    "gitPushAvailable": false,
+    "githubReleaseCreateAvailable": false,
+    "providerLaunchAvailable": false,
+    "shellAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompleteAvailable": false,
+    "automaticNextVersionGoalAvailable": false
+  },
+  "readOnly": true,
+  "willMutate": false
+}
