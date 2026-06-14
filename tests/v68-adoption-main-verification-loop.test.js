@@ -17,10 +17,16 @@ import {
 } from '../src/symphony/adoption-main-verification-loop-contracts.js';
 import {
   ADOPTION_CONFIRMATION_CONTRACT_NAME,
+  MAIN_VERIFICATION_CONFIRMATION_CONTRACT_NAME,
+  MAIN_VERIFICATION_GATE_DRAFT_CONTRACT_NAME,
+  MAIN_VERIFICATION_PREVIEW_CONTRACT_NAME,
+  MAIN_VERIFICATION_SUITE_ID,
   V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID,
   AdoptionBackendError,
   buildAdoptionPreviewFromBackend,
-  confirmAdoptionPreview
+  buildMainVerificationPreviewFromBackend,
+  confirmAdoptionPreview,
+  confirmMainVerificationPreview
 } from '../src/symphony/adoption-main-verification-loop-backend.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -415,6 +421,238 @@ describe('v68 Adoption and Main Verification Workbench Loop contracts', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('confirms fixed main verification and generates only a separate gate draft', async () => {
+    const adoptionConfirmation = await readyAdoptionConfirmation();
+    const preview = buildMainVerificationPreviewFromBackend({
+      generatedAt: GENERATED_AT,
+      goalId: V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID,
+      taskId: 'pr-3-main-verification-preview-confirm',
+      adoptionConfirmation
+    });
+    const invocations = [];
+    const confirmation = await confirmMainVerificationPreview({
+      preview,
+      input: mainVerificationConfirmInput(preview),
+      startedAt: '2026-06-15T06:30:00.000Z',
+      finishedAt: '2026-06-15T06:30:01.000Z',
+      runCommand: async (invocation) => {
+        invocations.push(invocation);
+        assert.equal(Object.hasOwn(invocation, 'command'), false);
+        assert.equal(Object.hasOwn(invocation, 'cwd'), false);
+        assert.equal(Object.hasOwn(invocation, 'env'), false);
+
+        return {
+          exitCode: 0,
+          signal: null,
+          stdout: `${invocation.executable} ${invocation.args.join(' ')} ok`,
+          stderr: '',
+          durationMs: 4,
+          timedOut: false,
+          stalled: false
+        };
+      }
+    });
+
+    assert.equal(preview.contractName, MAIN_VERIFICATION_PREVIEW_CONTRACT_NAME);
+    assert.equal(preview.state, 'ready');
+    assert.equal(preview.verificationSuite.suiteId, MAIN_VERIFICATION_SUITE_ID);
+    assert.equal(preview.verificationSuite.fixed, true);
+    assert.equal(preview.gateDraft.available, false);
+    assert.equal(confirmation.contractName, MAIN_VERIFICATION_CONFIRMATION_CONTRACT_NAME);
+    assert.equal(confirmation.status, 'passed');
+    assert.equal(confirmation.commandResults.length, preview.verificationSuite.commands.length);
+    assert.equal(confirmation.gateDraft.contractName, MAIN_VERIFICATION_GATE_DRAFT_CONTRACT_NAME);
+    assert.equal(confirmation.gateDraft.status, 'ready');
+    assert.equal(confirmation.gateDraft.eventType, 'main.verification-passed');
+    assert.equal(confirmation.gateDraft.gate, 'main-verification');
+    assert.equal(confirmation.gateDraft.confirm.requiresSeparatePlanHash, true);
+    assert.equal(confirmation.gateDraft.mutationPerformed, false);
+    assert.equal(confirmation.nextState.verificationEvidenceReady, true);
+    assert.equal(confirmation.nextState.mainVerified, false);
+    assert.equal(confirmation.nextState.gateDraftReady, true);
+    assert.equal(confirmation.nextState.releaseReady, false);
+    assert.equal(confirmation.safety.registersGate, false);
+    assert.equal(confirmation.safety.successImpliesGatePassed, false);
+    assert.equal(invocations.length, preview.verificationSuite.commands.length);
+    assertNoUnsafeStringValues(confirmation, 'main verification confirmation');
+  });
+
+  it('rejects stale main verification hashes and command fields before running the suite', async () => {
+    const adoptionConfirmation = await readyAdoptionConfirmation();
+    const preview = buildMainVerificationPreviewFromBackend({
+      generatedAt: GENERATED_AT,
+      goalId: V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID,
+      taskId: 'pr-3-main-verification-preview-confirm',
+      adoptionConfirmation
+    });
+    const stale = {
+      ...mainVerificationConfirmInput(preview),
+      planHash: 'sha256:4444444444444444444444444444444444444444444444444444444444444444'
+    };
+    const command = {
+      ...mainVerificationConfirmInput(preview),
+      command: 'pnpm test'
+    };
+    let calls = 0;
+    const runCommand = async () => {
+      calls += 1;
+      return { exitCode: 0 };
+    };
+
+    await assert.rejects(
+      () => confirmMainVerificationPreview({ preview, input: stale, runCommand }),
+      (error) => (
+        error instanceof AdoptionBackendError &&
+        error.safeDetails.errors.includes('planHash must match main verification preview')
+      )
+    );
+    await assert.rejects(
+      () => confirmMainVerificationPreview({ preview, input: command, runCommand }),
+      (error) => (
+        error instanceof AdoptionBackendError &&
+        error.safeDetails.errors.includes('command is not an allowed main verification confirm field')
+      )
+    );
+    assert.equal(calls, 0);
+  });
+
+  it('blocks main verification gate drafts when the fixed suite fails', async () => {
+    const adoptionConfirmation = await readyAdoptionConfirmation();
+    const preview = buildMainVerificationPreviewFromBackend({
+      generatedAt: GENERATED_AT,
+      goalId: V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID,
+      taskId: 'pr-3-main-verification-preview-confirm',
+      adoptionConfirmation
+    });
+    const confirmation = await confirmMainVerificationPreview({
+      preview,
+      input: mainVerificationConfirmInput(preview),
+      runCommand: async (invocation) => ({
+        exitCode: invocation.commandId === 'main-verification-command-2' ? 1 : 0,
+        signal: null,
+        stdout: '',
+        stderr: invocation.commandId === 'main-verification-command-2' ? 'fixed suite failure' : '',
+        durationMs: 4,
+        timedOut: false,
+        stalled: false
+      })
+    });
+
+    assert.equal(confirmation.status, 'failed');
+    assert.equal(confirmation.nextState.verificationEvidenceReady, false);
+    assert.equal(confirmation.nextState.mainVerified, false);
+    assert.equal(confirmation.nextState.gateDraftReady, false);
+    assert.equal(confirmation.gateDraft.status, 'blocked');
+    assert.equal(confirmation.gateDraft.mutationPerformed, false);
+    assert.equal(confirmation.runResult.gatePassed, false);
+  });
+
+  it('serves main verification preview and confirm through constrained backend routes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'v68-main-verification-route-'));
+    const stateDir = join(root, '.symphony');
+    const invocations = [];
+    const server = createSymphonyConsoleServer({
+      cwd: root,
+      stateDir,
+      env: {},
+      mainVerificationAdoptionConfirmation: await readyAdoptionConfirmation(),
+      runner: {
+        async run(invocation) {
+          invocations.push(invocation);
+
+          return {
+            exitCode: 0,
+            signal: null,
+            stdout: `${invocation.executable} ${invocation.args.join(' ')} ok`,
+            stderr: '',
+            durationMs: 6,
+            timedOut: false,
+            stalled: false
+          };
+        }
+      }
+    });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const params = new URLSearchParams({
+        task: 'pr-3-main-verification-preview-confirm'
+      });
+      const previewResponse = await fetch(`${baseUrl}/api/goals/${V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID}/main-verification-preview?${params}`);
+      const preview = await previewResponse.json();
+
+      assert.equal(previewResponse.status, 200, JSON.stringify(preview));
+      assert.equal(preview.contractName, MAIN_VERIFICATION_PREVIEW_CONTRACT_NAME);
+      assert.equal(preview.state, 'ready');
+      assert.equal(preview.verificationSuite.suiteId, MAIN_VERIFICATION_SUITE_ID);
+      assert.equal(preview.confirmation.acceptsCommandInput, false);
+
+      const invalidPreviewResponse = await fetch(`${baseUrl}/api/goals/${V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID}/main-verification-preview?${new URLSearchParams({
+        task: 'pr-3-main-verification-preview-confirm',
+        command: 'pnpm test'
+      })}`);
+      const invalidPreview = await invalidPreviewResponse.json();
+
+      assert.equal(invalidPreviewResponse.status, 400);
+      assert.equal(invalidPreview.error.code, 'invalid-main-verification-preview-request');
+      assert.equal(invocations.length, 0);
+
+      const confirmResponse = await fetch(`${baseUrl}/api/goals/${V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID}/main-verification-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(mainVerificationConfirmInput(preview))
+      });
+      const confirmation = await confirmResponse.json();
+      const registry = await readGoalOperationRuns({
+        stateDir,
+        goalId: V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID
+      });
+
+      assert.equal(confirmResponse.status, 200, JSON.stringify(confirmation));
+      assert.equal(confirmation.contractName, MAIN_VERIFICATION_CONFIRMATION_CONTRACT_NAME);
+      assert.equal(confirmation.status, 'passed');
+      assert.equal(confirmation.operationRun.status, 'confirmed');
+      assert.equal(confirmation.operationRun.commandKind, 'verification');
+      assert.equal(confirmation.operationRun.verifierSummary.verificationEvidenceReady, true);
+      assert.equal(confirmation.operationRun.verifierSummary.mainVerified, false);
+      assert.equal(confirmation.operationRun.verifierSummary.gateDraftReady, true);
+      assert.equal(confirmation.operationRun.verifierSummary.releaseReady, false);
+      assert.equal(confirmation.refreshed.operations.operationCount, 1);
+      assert.equal(registry.operationCount, 1);
+      assert.equal(invocations.length, preview.verificationSuite.commands.length);
+      assert.equal(invocations.some((call) => call.executable === 'sh'), false);
+      assert.equal(invocations.some((call) => call.args.join(' ').includes('&&')), false);
+      assert.equal(confirmation.gateDraft.status, 'ready');
+      assert.equal(confirmation.gateDraft.previewParams.command, 'gate');
+      assert.equal(confirmation.gateDraft.previewParams.gate, 'main-verification');
+      assert.equal(confirmation.gateDraft.mutationPerformed, false);
+      assertNoUnsafeStringValues(confirmation, 'main verification route confirmation');
+
+      const invalidConfirmResponse = await fetch(`${baseUrl}/api/goals/${V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID}/main-verification-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...mainVerificationConfirmInput(preview),
+          command: 'pnpm test'
+        })
+      });
+      const invalidConfirm = await invalidConfirmResponse.json();
+
+      assert.equal(invalidConfirmResponse.status, 400);
+      assert.equal(invalidConfirm.error.code, 'invalid-main-verification-confirm-request');
+      assert.equal(invocations.length, preview.verificationSuite.commands.length);
+    } finally {
+      await closeServer(server);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 function fixture(name) {
@@ -545,6 +783,29 @@ function adoptionConfirmInput(preview) {
     workerRunId: preview.workerEvidence.workerRunId,
     reviewerVerdictId: preview.reviewerEvidence.verdictId,
     patchFingerprint: preview.patchPlan.patchFingerprint,
+    sourceFingerprint: preview.sourceFingerprint.current
+  };
+}
+
+async function readyAdoptionConfirmation() {
+  const preview = backendReadyPreview();
+
+  return await confirmAdoptionPreview({
+    preview,
+    input: adoptionConfirmInput(preview),
+    startedAt: '2026-06-15T06:26:00.000Z',
+    finishedAt: '2026-06-15T06:26:01.000Z'
+  });
+}
+
+function mainVerificationConfirmInput(preview) {
+  return {
+    planHash: preview.planHash,
+    goalId: preview.goal.goalId,
+    taskId: preview.task.taskId,
+    suiteId: preview.verificationSuite.suiteId,
+    adoptionId: preview.adoption.adoptionId,
+    adoptionPlanHash: preview.adoption.planHash,
     sourceFingerprint: preview.sourceFingerprint.current
   };
 }
