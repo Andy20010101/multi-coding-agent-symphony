@@ -1,0 +1,93 @@
+{
+  "contractName": "workerRunResult.v1",
+  "contractVersion": 1,
+  "runId": "worker-run-v66-pr1-success",
+  "goalId": "v66-controlled-codex-worker-execution",
+  "taskId": "pr-1-worker-run-contracts",
+  "providerId": "codex-cli",
+  "commandTemplateId": "codex-worker-controlled-v1",
+  "previewPlanHash": "sha256:42e927770a7fc13c4a07d71dbd6746bd94bd7c7d2dfa2cb24b8257233abc9515",
+  "startedAt": "2026-06-15T04:11:00.000Z",
+  "finishedAt": "2026-06-15T04:12:00.000Z",
+  "status": "needs-review",
+  "adapter": "fake-codex-worker",
+  "realCodexOptIn": false,
+  "sanitizedResult": {
+    "summary": "Fake Codex worker completed the bounded contract task.",
+    "changedFiles": [
+      "src/symphony/worker-run-contracts.js",
+      "tests/v66-controlled-codex-worker-execution.test.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v66-controlled-codex-worker-execution.test.js"
+    ],
+    "artifactRefs": [
+      "artifact-ref:v66:fake-worker-run"
+    ],
+    "verifierSummary": "Focused worker-run contract checks passed.",
+    "risks": [],
+    "blockers": [],
+    "rawModelOutput": "raw model output must not be projected"
+  },
+  "verifier": {
+    "state": "passed",
+    "summary": "Focused worker-run contract checks passed.",
+    "commands": [
+      "node --test tests/v66-controlled-codex-worker-execution.test.js"
+    ],
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/qa/v66-controlled-codex-worker-execution-acceptance.md",
+        "label": "v66 acceptance evidence"
+      }
+    ]
+  },
+  "evidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/qa/v66-controlled-codex-worker-execution-acceptance.md",
+      "label": "v66 acceptance evidence"
+    }
+  ],
+  "nextState": {
+    "taskState": "needs-review",
+    "reviewRequired": true,
+    "taskCompleted": false,
+    "reviewApproved": false,
+    "mainVerified": false,
+    "releaseReady": false
+  },
+  "failureLayer": {
+    "kind": "none",
+    "reason": null,
+    "retryable": false
+  },
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "fixedProviderId": "codex-cli",
+    "fixedCommandTemplateId": "codex-worker-controlled-v1",
+    "rendererSuppliedCommandAvailable": false,
+    "freeformProviderCommandAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "providerSuccessCompletesTask": false,
+    "providerOutputApprovesReview": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "writesMainWorktree": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "realCodexRequiresOptIn": true
+  }
+}
