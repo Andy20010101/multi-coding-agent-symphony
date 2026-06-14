@@ -1,0 +1,173 @@
+{
+  "contractName": "reviewerRunHandoff.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T05:10:00.000Z",
+  "state": "ready",
+  "goal": {
+    "goalId": "v67-claude-code-reviewer-lane",
+    "title": "v67 Claude Code Reviewer Lane",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v67"
+  },
+  "task": {
+    "taskId": "pr-1-reviewer-run-contracts",
+    "title": "Reviewer handoff and verdict contracts",
+    "state": "active",
+    "sourceContract": "goal-next-action.v1",
+    "sourceRef": "goal-next-action:v67:pr-1"
+  },
+  "provider": {
+    "providerId": "claude-code-cli",
+    "role": "reviewer",
+    "lane": "claude-code-reviewer-candidate",
+    "readinessState": "ready",
+    "sourceContract": "providerReadiness.v1",
+    "sourceRef": "fixtures/contracts/provider-readiness/provider-readiness.both-ready.v1.json"
+  },
+  "reviewerIdentity": {
+    "reviewerActorId": "claude-reviewer-v67",
+    "sourceContract": "operator-reviewer-identity.v1",
+    "sourceRef": "operator-reviewer:claude-reviewer-v67"
+  },
+  "commandTemplate": {
+    "templateId": "claude-code-reviewer-controlled-v1",
+    "providerId": "claude-code-cli",
+    "role": "reviewer",
+    "commandFamily": "claude-code-review",
+    "fixed": true,
+    "acceptsFreeformCommand": false,
+    "rendererSuppliedCommandAvailable": false,
+    "sourceRef": "src/symphony/reviewer-run-contracts.js"
+  },
+  "timeoutMs": 900000,
+  "handoffPackRef": "artifact-ref:v67:pr-1-reviewer-handoff-pack",
+  "workerEvidence": {
+    "state": "ready",
+    "sourceContract": "workerRunResult.v1",
+    "sourceRef": "fixtures/contracts/worker-run/result.sanitized-success.v1.json",
+    "workerRunId": "worker-run-v66-pr1-success",
+    "workerProviderId": "codex-cli",
+    "workerRole": "worker",
+    "workerActorId": "codex-worker-v66",
+    "taskState": "needs-review",
+    "reviewRequired": true,
+    "taskCompleted": false,
+    "reviewApproved": false,
+    "mainVerified": false,
+    "releaseReady": false,
+    "summary": "Fake Codex worker completed the bounded contract task.",
+    "changedFiles": [
+      "src/symphony/worker-run-contracts.js",
+      "tests/v66-controlled-codex-worker-execution.test.js"
+    ],
+    "validationCommands": [
+      "node --test tests/v66-controlled-codex-worker-execution.test.js"
+    ],
+    "artifactRefs": [
+      "artifact-ref:v66:fake-worker-run"
+    ],
+    "evidenceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": ".codex/sessions/raw-output.jsonl",
+        "label": "unsafe raw output ref"
+      }
+    ]
+  },
+  "reviewPolicy": {
+    "requiresIndependentReviewer": true,
+    "allowedVerdicts": [
+      "approved",
+      "needs-revision",
+      "blocked"
+    ],
+    "verdictCompletesTask": false,
+    "adoptionAvailable": false,
+    "mainVerificationAvailable": false,
+    "releaseReadinessAvailable": false
+  },
+  "confirmation": {
+    "requiresPlanHash": true,
+    "requiredFields": [
+      "planHash",
+      "goalId",
+      "taskId",
+      "providerId",
+      "role",
+      "commandTemplateId",
+      "handoffPackRef",
+      "reviewerActorId"
+    ],
+    "providerId": "claude-code-cli",
+    "role": "reviewer",
+    "commandTemplateId": "claude-code-reviewer-controlled-v1",
+    "timeoutMs": 900000,
+    "handoffPackRef": "artifact-ref:v67:pr-1-reviewer-handoff-pack"
+  },
+  "blockedReasons": [],
+  "sourceContracts": [
+    {
+      "contractName": "goal-next-action.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "active-goal",
+        "active-task"
+      ],
+      "sourceRef": "goal-next-action.v1"
+    },
+    {
+      "contractName": "providerReadiness.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "claude-code-cli-readiness"
+      ],
+      "sourceRef": "providerReadiness.v1"
+    },
+    {
+      "contractName": "workerRunResult.v1",
+      "contractVersion": 1,
+      "readOnly": true,
+      "requiredFor": [
+        "sanitized-worker-evidence"
+      ],
+      "sourceRef": "workerRunResult.v1"
+    }
+  ],
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "fixedProviderId": "claude-code-cli",
+    "fixedRole": "reviewer",
+    "fixedCommandTemplateId": "claude-code-reviewer-controlled-v1",
+    "rendererSuppliedCommandAvailable": false,
+    "freeformProviderCommandAvailable": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawWorkerTranscriptAvailable": false,
+    "rawModelOutputAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "reviewerReadsRawWorkerTranscript": false,
+    "reviewerReadsRawModelOutput": false,
+    "directGoalEventAppendAvailable": false,
+    "directTaskCompletionAvailable": false,
+    "reviewerOutputCompletesTask": false,
+    "reviewerOutputApprovesAdoption": false,
+    "reviewerVerdictPassesMainVerification": false,
+    "reviewerVerdictMarksReleaseReady": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "writesMainWorktree": false,
+    "gitMutationAvailable": false,
+    "githubReleaseAutomationAvailable": false,
+    "realClaudeRequiresOptIn": true
+  },
+  "planHash": "sha256:9aaa931ef3ea1e6529bd00110d4481d2bded09f6a28b3f97b46943950e03e25c"
+}
