@@ -168,6 +168,17 @@ Record:
 
 Tagging and GitHub Release publication are controller actions outside product code. Workbench may show copy-only tag text, target commit, release note draft, release URL, and publication evidence. It must not run `git tag`, `git push`, `gh release create`, `gh release edit`, or `gh release upload`; it must not infer release readiness from branch names, filenames, tests, or UI state.
 
+## Installer Ref Changes
+
+Changing the installer default ref, introducing or advancing `latest-stable`, or changing README install commands to point at a new default target requires release-state evidence in the same version closeout:
+
+- annotated tag object and dereferenced commit for the target tag;
+- GitHub Release URL, draft flag, prerelease flag, asset list, publish time, and target commitish;
+- open PR state at the time of the installer decision;
+- rollback ref and the exact operator command to return to it.
+
+The release notes must name the previous default ref and the new target ref. Do not claim public distribution, notarization, auto-update, background upgrade, or Workbench-triggered install/upgrade unless a later version proves that capability with contracts, tests, and release evidence.
+
 For v60, the expected manual publication sequence after merge and validation is:
 
 ```sh
