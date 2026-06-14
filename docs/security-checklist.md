@@ -27,10 +27,18 @@ Run this checklist before enabling real CLI execution, after changing policy cod
 
 ## Release Gates
 
+Use the active version runbook for scoped release gates. For v60 Stable Personal Workbench Release, `docs/plans/v60-stable-personal-workbench-release-runbook-2026-06-14.md` owns the focused test list and the `pnpm test` decision before tagging.
+
 - Static syntax check: `pnpm check`.
 - Full test suite: `pnpm test`.
 - Whitespace check: `git diff --check`.
-- Codex help smoke: `pnpm smoke:codex:help`.
-- Claude Code help smoke: `pnpm smoke:claude:help`.
-- Kiro CLI help smoke: `pnpm smoke:kiro:help`.
-- Real model smokes are opt-in and must stay gated by their environment variables: `pnpm smoke:codex:real`, `pnpm smoke:claude:real`, and `pnpm smoke:kiro:real`.
+- Codex help smoke: `pnpm smoke:codex:help`, when the runbook asks for installed CLI validation.
+- Claude Code help smoke: `pnpm smoke:claude:help`, when the runbook asks for installed CLI validation.
+- Kiro CLI help smoke: `pnpm smoke:kiro:help`, as a historical optional repo-level check, not a v60 active Workbench provider gate.
+- Real model smokes are opt-in and must stay gated by their environment variables: `pnpm smoke:codex:real`, `pnpm smoke:claude:real`, and `pnpm smoke:kiro:real`. They are not v60 default release gates.
+
+## v60 Workbench Boundary
+
+- Workbench must not expose raw transcripts, raw model output, provider payloads, local JSONL session files, provider session folders, `.symphony` internals, or goal ledgers to the frontend.
+- Workbench must not add generic shell or terminal UI, renderer-side command execution, provider launch outside existing controlled contracts, direct goal event append, direct task completion, worktree creation, tag/push/publish automation, or GitHub Release creation/edit/upload controls.
+- Release readiness must come from explicit contracts and recorded evidence, not branch names, filenames, prompt text, test success, or UI state.
