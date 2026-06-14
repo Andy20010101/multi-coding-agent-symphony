@@ -1242,6 +1242,10 @@ export function projectWorkbenchContracts(results) {
     contract: goalSupervisorData?.reviewGateConfirmationState,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
+  const projectedReleaseCloseoutHandoffPack = projectReleaseCloseoutHandoffPack({
+    contract: goalSupervisorData?.releaseCloseoutHandoffPack,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
 
   const adoptionCandidates = projectAdoptionCandidates({
     runsResult: results.runs,
@@ -1269,6 +1273,7 @@ export function projectWorkbenchContracts(results) {
     threadHandoffPack: projectedThreadHandoffPack,
     reviewGatePreview: projectedReviewGatePreview,
     reviewGateConfirmationState: projectedReviewGateConfirmationState,
+    releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
       routeStates
@@ -1298,6 +1303,7 @@ export function projectWorkbenchContracts(results) {
       threadHandoffPack: projectedThreadHandoffPack,
       reviewGatePreview: projectedReviewGatePreview,
       reviewGateConfirmationState: projectedReviewGateConfirmationState,
+      releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
       routeStates
     }),
     projectRegistry: projectedProjectRegistry,
@@ -1882,6 +1888,7 @@ function projectDesktopShell({
   threadHandoffPack,
   reviewGatePreview,
   reviewGateConfirmationState,
+  releaseCloseoutHandoffPack,
   routeStates
 }) {
   const projectRoute = findProjectedRoute(routeStates, 'projectRegistry');
@@ -2178,6 +2185,7 @@ function projectDesktopShell({
     threadHandoffPack,
     reviewGatePreview,
     reviewGateConfirmationState,
+    releaseCloseoutHandoffPack,
     routeProvenance,
     appStates,
     boundaries,
@@ -2923,6 +2931,187 @@ function projectReviewGateConfirmationState({
     note: hasContract
       ? 'Controlled confirmation state is read-only. A ready state only describes the existing controlled event registration request shape and required plan hash; it does not submit confirmation.'
       : 'Controlled confirmation state is unavailable until goal-supervisor-app-read-model.v1 exposes reviewGateControlledConfirmationState.v1.'
+  };
+}
+
+function projectReleaseCloseoutHandoffPack({
+  contract,
+  supervisorRoute
+}) {
+  const hasContract = contract !== null && contract !== undefined && typeof contract === 'object' && !Array.isArray(contract);
+  const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+
+  return {
+    state: hasContract ? contract.state ?? (blockedReasons.length === 0 ? 'ready' : 'blocked') : 'missing',
+    contractName: valueState(contract?.contractName),
+    contractVersion: valueState(contract?.contractVersion),
+    generatedAt: valueState(contract?.generatedAt),
+    goal: {
+      goalId: valueState(contract?.goal?.goalId),
+      title: valueState(contract?.goal?.title),
+      state: valueState(contract?.goal?.state),
+      sourceContract: valueState(contract?.goal?.sourceContract),
+      sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+    },
+    reviewGateSource: projectReleaseCloseoutReviewGateSource(contract?.reviewGateSource),
+    closeoutSource: projectReleaseCloseoutCloseoutSource(contract?.closeoutSource),
+    releaseBaseline: projectReleaseCloseoutBaseline(contract?.releaseBaseline),
+    targetCommit: projectReleaseCloseoutTargetCommit(contract?.targetCommit),
+    evidenceRefs: projectChildDispatchEvidenceRefs(contract?.evidenceRefs),
+    knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+    blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+    operatorChecklist: projectReleaseCloseoutChecklist(contract?.operatorChecklist),
+    tagReleaseChecklist: projectReleaseCloseoutChecklist(contract?.tagReleaseChecklist),
+    releaseEvidenceCarryoverRefs: {
+      contractName: valueState(contract?.releaseEvidenceCarryoverRefs?.contractName),
+      evidenceRefs: projectChildDispatchEvidenceRefs(contract?.releaseEvidenceCarryoverRefs?.evidenceRefs),
+      sourceContracts: {
+        state: Array.isArray(contract?.releaseEvidenceCarryoverRefs?.sourceContracts) && contract.releaseEvidenceCarryoverRefs.sourceContracts.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+        count: valueState(Array.isArray(contract?.releaseEvidenceCarryoverRefs?.sourceContracts) ? contract.releaseEvidenceCarryoverRefs.sourceContracts.length : undefined),
+        items: (Array.isArray(contract?.releaseEvidenceCarryoverRefs?.sourceContracts) ? contract.releaseEvidenceCarryoverRefs.sourceContracts : []).map(projectThreadHandoffSourceContract)
+      },
+      readOnly: valueState(contract?.releaseEvidenceCarryoverRefs?.readOnly),
+      willMutate: valueState(contract?.releaseEvidenceCarryoverRefs?.willMutate)
+    },
+    githubReleaseDraftNotice: {
+      contractName: valueState(contract?.githubReleaseDraftNotice?.contractName),
+      state: valueState(contract?.githubReleaseDraftNotice?.state),
+      releaseUrl: valueState(contract?.githubReleaseDraftNotice?.releaseUrl),
+      releaseUrlState: valueState(contract?.githubReleaseDraftNotice?.releaseUrlState),
+      notesSourceRefs: projectChildDispatchEvidenceRefs(contract?.githubReleaseDraftNotice?.notesSourceRefs),
+      assetsExpected: projectSystemGoldenPathTextItems(contract?.githubReleaseDraftNotice?.assetsExpected),
+      readOnly: valueState(contract?.githubReleaseDraftNotice?.readOnly),
+      willMutate: valueState(contract?.githubReleaseDraftNotice?.willMutate)
+    },
+    nextVersionContext: {
+      contractName: valueState(contract?.nextVersionContext?.contractName),
+      state: valueState(contract?.nextVersionContext?.state),
+      nextVersion: valueState(contract?.nextVersionContext?.nextVersion),
+      runbookRef: projectSystemGoldenPathSourceRef(contract?.nextVersionContext?.runbookRef),
+      startAfterRelease: valueState(contract?.nextVersionContext?.startAfterRelease),
+      createsGoal: valueState(contract?.nextVersionContext?.createsGoal),
+      entersNextVersion: valueState(contract?.nextVersionContext?.entersNextVersion),
+      readOnly: valueState(contract?.nextVersionContext?.readOnly),
+      willMutate: valueState(contract?.nextVersionContext?.willMutate)
+    },
+    sourceContracts: {
+      state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? 'available' : hasContract ? 'empty' : 'missing',
+      count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : undefined),
+      items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectThreadHandoffSourceContract)
+    },
+    boundaries: Object.fromEntries(
+      Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    readOnly: valueState(contract?.readOnly),
+    willMutate: valueState(contract?.willMutate),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 releaseCloseoutHandoffPack projection')
+    },
+    note: hasContract
+      ? 'Release closeout handoff is backend-owned read-only state. Workbench displays evidence refs, target metadata, blockers, rollback refs, and next-version context without running tag or publication commands.'
+      : 'Release closeout handoff is unavailable until goal-supervisor-app-read-model.v1 exposes releaseCloseoutHandoffPack.v1.'
+  };
+}
+
+function projectReleaseCloseoutReviewGateSource(source) {
+  const hasSource = source !== null && source !== undefined && typeof source === 'object' && !Array.isArray(source);
+
+  return {
+    state: hasSource ? source.state ?? 'available' : 'missing',
+    contractName: valueState(source?.contractName),
+    reviewReadiness: projectReviewGateReadiness(source?.reviewReadiness),
+    mainGateReadiness: projectReviewGateReadiness(source?.mainGateReadiness),
+    releaseGateReadiness: projectReviewGateReadiness(source?.releaseGateReadiness),
+    previewHash: valueState(source?.previewHash),
+    planHash: valueState(source?.planHash),
+    sourceRef: projectSystemGoldenPathSourceRef(source?.sourceRef),
+    blockedReasons: projectSystemGoldenPathTextItems(source?.blockedReasons)
+  };
+}
+
+function projectReleaseCloseoutCloseoutSource(source) {
+  const hasSource = source !== null && source !== undefined && typeof source === 'object' && !Array.isArray(source);
+
+  return {
+    state: hasSource ? source.state ?? 'available' : 'missing',
+    contractName: valueState(source?.contractName),
+    missingCount: valueState(source?.missingCount),
+    releaseReady: valueState(source?.releaseReady),
+    releaseReadySource: valueState(source?.releaseReadySource),
+    sourceRef: projectSystemGoldenPathSourceRef(source?.sourceRef),
+    blockedReasons: projectSystemGoldenPathTextItems(source?.blockedReasons)
+  };
+}
+
+function projectReleaseCloseoutBaseline(baseline) {
+  const hasBaseline = baseline !== null && baseline !== undefined && typeof baseline === 'object' && !Array.isArray(baseline);
+
+  return {
+    state: hasBaseline ? baseline.state ?? 'available' : 'missing',
+    contractName: valueState(baseline?.contractName),
+    currentBranch: valueState(baseline?.currentBranch),
+    currentHead: valueState(baseline?.currentHead),
+    mainHead: valueState(baseline?.mainHead),
+    originMainHead: valueState(baseline?.originMainHead),
+    targetCommit: valueState(baseline?.targetCommit),
+    clean: valueState(baseline?.clean),
+    sourceRef: projectSystemGoldenPathSourceRef(baseline?.sourceRef),
+    blockedReasons: projectSystemGoldenPathTextItems(baseline?.blockedReasons)
+  };
+}
+
+function projectReleaseCloseoutTargetCommit(targetCommit) {
+  const hasTarget = targetCommit !== null && targetCommit !== undefined && typeof targetCommit === 'object' && !Array.isArray(targetCommit);
+
+  return {
+    state: hasTarget ? targetCommit.state ?? 'available' : 'missing',
+    commit: valueState(targetCommit?.commit),
+    source: valueState(targetCommit?.source),
+    expectedCommit: valueState(targetCommit?.expectedCommit),
+    stale: valueState(targetCommit?.stale),
+    blockedReasons: projectSystemGoldenPathTextItems(targetCommit?.blockedReasons)
+  };
+}
+
+function projectReleaseCloseoutChecklist(checklist) {
+  const hasChecklist = checklist !== null && checklist !== undefined && typeof checklist === 'object' && !Array.isArray(checklist);
+  const steps = Array.isArray(checklist?.steps) ? checklist.steps : [];
+
+  return {
+    state: hasChecklist ? checklist.state ?? 'available' : 'missing',
+    contractName: valueState(checklist?.contractName),
+    targetTag: valueState(checklist?.targetTag),
+    releaseTitle: valueState(checklist?.releaseTitle),
+    targetCommit: valueState(checklist?.targetCommit),
+    releaseNotesRefs: projectChildDispatchEvidenceRefs(checklist?.releaseNotesRefs),
+    validationEvidenceRefs: projectChildDispatchEvidenceRefs(checklist?.validationEvidenceRefs),
+    rollbackRefs: projectChildDispatchEvidenceRefs(checklist?.rollbackRefs),
+    nextVersionRunbookRef: projectSystemGoldenPathSourceRef(checklist?.nextVersionRunbookRef),
+    steps: {
+      state: steps.length > 0 ? 'available' : hasChecklist ? 'empty' : 'missing',
+      count: valueState(steps.length),
+      items: steps.map((step) => ({
+        stepId: valueState(step?.stepId),
+        label: valueState(step?.label),
+        status: valueState(step?.status),
+        copyOnly: valueState(step?.copyOnly),
+        willMutate: valueState(step?.willMutate)
+      }))
+    },
+    commandResults: {
+      tag: valueState(checklist?.commandResults?.tag),
+      pushTag: valueState(checklist?.commandResults?.pushTag),
+      githubRelease: valueState(checklist?.commandResults?.githubRelease),
+      releaseReadyDeclaration: valueState(checklist?.commandResults?.releaseReadyDeclaration)
+    },
+    boundaries: Object.fromEntries(
+      Object.entries(checklist?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    copyOnly: valueState(checklist?.copyOnly),
+    readOnly: valueState(checklist?.readOnly),
+    willMutate: valueState(checklist?.willMutate)
   };
 }
 

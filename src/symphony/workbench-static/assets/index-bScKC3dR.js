@@ -11171,6 +11171,10 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.reviewGateConfirmationState,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedReleaseCloseoutHandoffPack = projectReleaseCloseoutHandoffPack({
+		contract: goalSupervisorData?.releaseCloseoutHandoffPack,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const adoptionCandidates = projectAdoptionCandidates({
 		runsResult: results.runs,
 		runs: runsData,
@@ -11196,6 +11200,7 @@ function projectWorkbenchContracts(results) {
 		threadHandoffPack: projectedThreadHandoffPack,
 		reviewGatePreview: projectedReviewGatePreview,
 		reviewGateConfirmationState: projectedReviewGateConfirmationState,
+		releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
 			routeStates
@@ -11225,6 +11230,7 @@ function projectWorkbenchContracts(results) {
 			threadHandoffPack: projectedThreadHandoffPack,
 			reviewGatePreview: projectedReviewGatePreview,
 			reviewGateConfirmationState: projectedReviewGateConfirmationState,
+			releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
 			routeStates
 		}),
 		projectRegistry: projectedProjectRegistry,
@@ -11736,7 +11742,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -12019,6 +12025,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		threadHandoffPack,
 		reviewGatePreview,
 		reviewGateConfirmationState,
+		releaseCloseoutHandoffPack,
 		routeProvenance,
 		appStates,
 		boundaries,
@@ -12666,6 +12673,162 @@ function projectReviewGateConfirmationState({ contract, supervisorRoute }) {
 			source: valueState("goal-supervisor-app-read-model.v1 reviewGateConfirmationState projection")
 		},
 		note: hasContract ? "Controlled confirmation state is read-only. A ready state only describes the existing controlled event registration request shape and required plan hash; it does not submit confirmation." : "Controlled confirmation state is unavailable until goal-supervisor-app-read-model.v1 exposes reviewGateControlledConfirmationState.v1."
+	};
+}
+function projectReleaseCloseoutHandoffPack({ contract, supervisorRoute }) {
+	const hasContract = contract !== null && contract !== void 0 && typeof contract === "object" && !Array.isArray(contract);
+	const blockedReasons = Array.isArray(contract?.blockedReasons) ? contract.blockedReasons : [];
+	return {
+		state: hasContract ? contract.state ?? (blockedReasons.length === 0 ? "ready" : "blocked") : "missing",
+		contractName: valueState(contract?.contractName),
+		contractVersion: valueState(contract?.contractVersion),
+		generatedAt: valueState(contract?.generatedAt),
+		goal: {
+			goalId: valueState(contract?.goal?.goalId),
+			title: valueState(contract?.goal?.title),
+			state: valueState(contract?.goal?.state),
+			sourceContract: valueState(contract?.goal?.sourceContract),
+			sourceRef: projectSystemGoldenPathSourceRef(contract?.goal?.sourceRef)
+		},
+		reviewGateSource: projectReleaseCloseoutReviewGateSource(contract?.reviewGateSource),
+		closeoutSource: projectReleaseCloseoutCloseoutSource(contract?.closeoutSource),
+		releaseBaseline: projectReleaseCloseoutBaseline(contract?.releaseBaseline),
+		targetCommit: projectReleaseCloseoutTargetCommit(contract?.targetCommit),
+		evidenceRefs: projectChildDispatchEvidenceRefs(contract?.evidenceRefs),
+		knownFacts: projectSystemGoldenPathTextItems(contract?.knownFacts),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		operatorChecklist: projectReleaseCloseoutChecklist(contract?.operatorChecklist),
+		tagReleaseChecklist: projectReleaseCloseoutChecklist(contract?.tagReleaseChecklist),
+		releaseEvidenceCarryoverRefs: {
+			contractName: valueState(contract?.releaseEvidenceCarryoverRefs?.contractName),
+			evidenceRefs: projectChildDispatchEvidenceRefs(contract?.releaseEvidenceCarryoverRefs?.evidenceRefs),
+			sourceContracts: {
+				state: Array.isArray(contract?.releaseEvidenceCarryoverRefs?.sourceContracts) && contract.releaseEvidenceCarryoverRefs.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+				count: valueState(Array.isArray(contract?.releaseEvidenceCarryoverRefs?.sourceContracts) ? contract.releaseEvidenceCarryoverRefs.sourceContracts.length : void 0),
+				items: (Array.isArray(contract?.releaseEvidenceCarryoverRefs?.sourceContracts) ? contract.releaseEvidenceCarryoverRefs.sourceContracts : []).map(projectThreadHandoffSourceContract)
+			},
+			readOnly: valueState(contract?.releaseEvidenceCarryoverRefs?.readOnly),
+			willMutate: valueState(contract?.releaseEvidenceCarryoverRefs?.willMutate)
+		},
+		githubReleaseDraftNotice: {
+			contractName: valueState(contract?.githubReleaseDraftNotice?.contractName),
+			state: valueState(contract?.githubReleaseDraftNotice?.state),
+			releaseUrl: valueState(contract?.githubReleaseDraftNotice?.releaseUrl),
+			releaseUrlState: valueState(contract?.githubReleaseDraftNotice?.releaseUrlState),
+			notesSourceRefs: projectChildDispatchEvidenceRefs(contract?.githubReleaseDraftNotice?.notesSourceRefs),
+			assetsExpected: projectSystemGoldenPathTextItems(contract?.githubReleaseDraftNotice?.assetsExpected),
+			readOnly: valueState(contract?.githubReleaseDraftNotice?.readOnly),
+			willMutate: valueState(contract?.githubReleaseDraftNotice?.willMutate)
+		},
+		nextVersionContext: {
+			contractName: valueState(contract?.nextVersionContext?.contractName),
+			state: valueState(contract?.nextVersionContext?.state),
+			nextVersion: valueState(contract?.nextVersionContext?.nextVersion),
+			runbookRef: projectSystemGoldenPathSourceRef(contract?.nextVersionContext?.runbookRef),
+			startAfterRelease: valueState(contract?.nextVersionContext?.startAfterRelease),
+			createsGoal: valueState(contract?.nextVersionContext?.createsGoal),
+			entersNextVersion: valueState(contract?.nextVersionContext?.entersNextVersion),
+			readOnly: valueState(contract?.nextVersionContext?.readOnly),
+			willMutate: valueState(contract?.nextVersionContext?.willMutate)
+		},
+		sourceContracts: {
+			state: Array.isArray(contract?.sourceContracts) && contract.sourceContracts.length > 0 ? "available" : hasContract ? "empty" : "missing",
+			count: valueState(Array.isArray(contract?.sourceContracts) ? contract.sourceContracts.length : void 0),
+			items: (Array.isArray(contract?.sourceContracts) ? contract.sourceContracts : []).map(projectThreadHandoffSourceContract)
+		},
+		boundaries: Object.fromEntries(Object.entries(contract?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(contract?.readOnly),
+		willMutate: valueState(contract?.willMutate),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 releaseCloseoutHandoffPack projection")
+		},
+		note: hasContract ? "Release closeout handoff is backend-owned read-only state. Workbench displays evidence refs, target metadata, blockers, rollback refs, and next-version context without running tag or publication commands." : "Release closeout handoff is unavailable until goal-supervisor-app-read-model.v1 exposes releaseCloseoutHandoffPack.v1."
+	};
+}
+function projectReleaseCloseoutReviewGateSource(source) {
+	return {
+		state: source !== null && source !== void 0 && typeof source === "object" && !Array.isArray(source) ? source.state ?? "available" : "missing",
+		contractName: valueState(source?.contractName),
+		reviewReadiness: projectReviewGateReadiness(source?.reviewReadiness),
+		mainGateReadiness: projectReviewGateReadiness(source?.mainGateReadiness),
+		releaseGateReadiness: projectReviewGateReadiness(source?.releaseGateReadiness),
+		previewHash: valueState(source?.previewHash),
+		planHash: valueState(source?.planHash),
+		sourceRef: projectSystemGoldenPathSourceRef(source?.sourceRef),
+		blockedReasons: projectSystemGoldenPathTextItems(source?.blockedReasons)
+	};
+}
+function projectReleaseCloseoutCloseoutSource(source) {
+	return {
+		state: source !== null && source !== void 0 && typeof source === "object" && !Array.isArray(source) ? source.state ?? "available" : "missing",
+		contractName: valueState(source?.contractName),
+		missingCount: valueState(source?.missingCount),
+		releaseReady: valueState(source?.releaseReady),
+		releaseReadySource: valueState(source?.releaseReadySource),
+		sourceRef: projectSystemGoldenPathSourceRef(source?.sourceRef),
+		blockedReasons: projectSystemGoldenPathTextItems(source?.blockedReasons)
+	};
+}
+function projectReleaseCloseoutBaseline(baseline) {
+	return {
+		state: baseline !== null && baseline !== void 0 && typeof baseline === "object" && !Array.isArray(baseline) ? baseline.state ?? "available" : "missing",
+		contractName: valueState(baseline?.contractName),
+		currentBranch: valueState(baseline?.currentBranch),
+		currentHead: valueState(baseline?.currentHead),
+		mainHead: valueState(baseline?.mainHead),
+		originMainHead: valueState(baseline?.originMainHead),
+		targetCommit: valueState(baseline?.targetCommit),
+		clean: valueState(baseline?.clean),
+		sourceRef: projectSystemGoldenPathSourceRef(baseline?.sourceRef),
+		blockedReasons: projectSystemGoldenPathTextItems(baseline?.blockedReasons)
+	};
+}
+function projectReleaseCloseoutTargetCommit(targetCommit) {
+	return {
+		state: targetCommit !== null && targetCommit !== void 0 && typeof targetCommit === "object" && !Array.isArray(targetCommit) ? targetCommit.state ?? "available" : "missing",
+		commit: valueState(targetCommit?.commit),
+		source: valueState(targetCommit?.source),
+		expectedCommit: valueState(targetCommit?.expectedCommit),
+		stale: valueState(targetCommit?.stale),
+		blockedReasons: projectSystemGoldenPathTextItems(targetCommit?.blockedReasons)
+	};
+}
+function projectReleaseCloseoutChecklist(checklist) {
+	const hasChecklist = checklist !== null && checklist !== void 0 && typeof checklist === "object" && !Array.isArray(checklist);
+	const steps = Array.isArray(checklist?.steps) ? checklist.steps : [];
+	return {
+		state: hasChecklist ? checklist.state ?? "available" : "missing",
+		contractName: valueState(checklist?.contractName),
+		targetTag: valueState(checklist?.targetTag),
+		releaseTitle: valueState(checklist?.releaseTitle),
+		targetCommit: valueState(checklist?.targetCommit),
+		releaseNotesRefs: projectChildDispatchEvidenceRefs(checklist?.releaseNotesRefs),
+		validationEvidenceRefs: projectChildDispatchEvidenceRefs(checklist?.validationEvidenceRefs),
+		rollbackRefs: projectChildDispatchEvidenceRefs(checklist?.rollbackRefs),
+		nextVersionRunbookRef: projectSystemGoldenPathSourceRef(checklist?.nextVersionRunbookRef),
+		steps: {
+			state: steps.length > 0 ? "available" : hasChecklist ? "empty" : "missing",
+			count: valueState(steps.length),
+			items: steps.map((step) => ({
+				stepId: valueState(step?.stepId),
+				label: valueState(step?.label),
+				status: valueState(step?.status),
+				copyOnly: valueState(step?.copyOnly),
+				willMutate: valueState(step?.willMutate)
+			}))
+		},
+		commandResults: {
+			tag: valueState(checklist?.commandResults?.tag),
+			pushTag: valueState(checklist?.commandResults?.pushTag),
+			githubRelease: valueState(checklist?.commandResults?.githubRelease),
+			releaseReadyDeclaration: valueState(checklist?.commandResults?.releaseReadyDeclaration)
+		},
+		boundaries: Object.fromEntries(Object.entries(checklist?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		copyOnly: valueState(checklist?.copyOnly),
+		readOnly: valueState(checklist?.readOnly),
+		willMutate: valueState(checklist?.willMutate)
 	};
 }
 function projectReviewGateControlledRequest(request) {
@@ -26313,6 +26476,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Review Gate"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#release-closeout-handoff-panel",
+							children: "Release Handoff"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#desktop-lifecycle",
 							children: "Lifecycle"
 						}),
@@ -26375,6 +26542,7 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 					reviewGatePreview: desktopShell?.reviewGatePreview,
 					reviewGateConfirmationState: desktopShell?.reviewGateConfirmationState
 				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseCloseoutHandoffPanel, { releaseCloseoutHandoffPack: desktopShell?.releaseCloseoutHandoffPack }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
 					activeGoalStatus: desktopShell?.activeGoalStatus,
@@ -27595,6 +27763,150 @@ function ReviewGateRequestQueryList({ request }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 		className: "review-gate-query-list",
 		children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: item.key.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: item.value.text })] }, item.key.text))
+	});
+}
+function ReleaseCloseoutHandoffPanel({ releaseCloseoutHandoffPack }) {
+	const pack = releaseCloseoutHandoffPack;
+	const checklist = pack?.tagReleaseChecklist;
+	const checklistSteps = checklist?.steps?.items ?? [];
+	const sourceContracts = pack?.sourceContracts?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "release-closeout-handoff-panel",
+		className: "release-closeout-handoff-panel",
+		"aria-label": "Release Closeout Handoff",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "release-closeout-handoff-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v58 release closeout"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Release Closeout Handoff" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(pack?.state)}`,
+					children: pack?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "release-closeout-handoff-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", pack?.contractName],
+					["goal", pack?.goal?.goalId],
+					["review gate state", pack?.reviewGateSource?.state],
+					["closeout state", pack?.closeoutSource?.state],
+					["baseline state", pack?.releaseBaseline?.state],
+					["readOnly", pack?.readOnly],
+					["willMutate", pack?.willMutate]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["target tag", checklist?.targetTag],
+					["release title", checklist?.releaseTitle],
+					["checklist state", checklist?.state],
+					["copy only", checklist?.copyOnly],
+					["known facts", textValueFromItems(pack?.knownFacts, "无")],
+					["blocked reasons", textValueFromItems(pack?.blockedReasons, "无")],
+					["generated at", pack?.generatedAt]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "Release Evidence Refs",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["all evidence refs", evidenceRefsTextFromCollection(pack?.evidenceRefs)],
+					["reviewer evidence refs", evidenceRefsTextFromCollection(pack?.reviewGateSource?.reviewReadiness?.evidenceRefs)],
+					["main gate evidence refs", evidenceRefsTextFromCollection(pack?.reviewGateSource?.mainGateReadiness?.evidenceRefs)],
+					["release gate evidence refs", evidenceRefsTextFromCollection(pack?.reviewGateSource?.releaseGateReadiness?.evidenceRefs)],
+					["validation evidence refs", evidenceRefsTextFromCollection(checklist?.validationEvidenceRefs)],
+					["release notes refs", evidenceRefsTextFromCollection(checklist?.releaseNotesRefs)],
+					["source contract count", pack?.sourceContracts?.count]
+				] }), sourceContracts.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: sourceContracts.map((source, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: source.contractName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["readOnly", source.readOnly],
+						["required for", textValueFromItems(source.requiredFor, "无")],
+						["source ref", source.sourceRef?.ref]
+					] })] }, `${source.contractName.text}-${index}`))
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Target Commit",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["target commit", pack?.targetCommit?.commit],
+					["expected commit", pack?.targetCommit?.expectedCommit],
+					["commit state", pack?.targetCommit?.state],
+					["stale", pack?.targetCommit?.stale],
+					["baseline branch", pack?.releaseBaseline?.currentBranch],
+					["main head", pack?.releaseBaseline?.mainHead],
+					["origin main head", pack?.releaseBaseline?.originMainHead],
+					["worktree clean", pack?.releaseBaseline?.clean]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Tag and Release Checklist",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "release-closeout-checklist-grid",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["checklist contract", checklist?.contractName],
+						["target tag", checklist?.targetTag],
+						["release title", checklist?.releaseTitle],
+						["target commit", checklist?.targetCommit],
+						["external tag result", checklist?.commandResults?.tag],
+						["external remote tag result", checklist?.commandResults?.pushTag],
+						["external release page result", checklist?.commandResults?.githubRelease],
+						["release-ready result", checklist?.commandResults?.releaseReadyDeclaration]
+					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: checklistSteps.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "tagReleaseOperatorChecklist steps 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+						className: "codex-provider-source-list",
+						children: checklistSteps.map((step, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: step.label.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+							["step id", step.stepId],
+							["status", step.status],
+							["copy only", step.copyOnly],
+							["willMutate", step.willMutate]
+						] })] }, `${step.stepId.text}-${index}`))
+					}) })]
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Known Blockers",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["pack blocked reasons", textValueFromItems(pack?.blockedReasons, "无")],
+					["review gate blocked reasons", textValueFromItems(pack?.reviewGateSource?.blockedReasons, "无")],
+					["closeout blocked reasons", textValueFromItems(pack?.closeoutSource?.blockedReasons, "无")],
+					["baseline blocked reasons", textValueFromItems(pack?.releaseBaseline?.blockedReasons, "无")],
+					["target blocked reasons", textValueFromItems(pack?.targetCommit?.blockedReasons, "无")],
+					["release-ready declaration", pack?.boundaries?.releaseReadyDeclarationAvailable],
+					["tag capability", pack?.boundaries?.gitTagAvailable],
+					["remote tag capability", pack?.boundaries?.gitPushAvailable],
+					["release page creation", pack?.boundaries?.githubReleaseCreateAvailable],
+					["provider launch", pack?.boundaries?.providerLaunchAvailable],
+					["shell", pack?.boundaries?.shellAvailable],
+					["goal event write", pack?.boundaries?.directGoalEventAppendAvailable],
+					["task completion write", pack?.boundaries?.directTaskCompleteAvailable],
+					["automatic next version goal", pack?.boundaries?.automaticNextVersionGoalAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Rollback Path",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["rollback refs", evidenceRefsTextFromCollection(checklist?.rollbackRefs)],
+					["carryover evidence refs", evidenceRefsTextFromCollection(pack?.releaseEvidenceCarryoverRefs?.evidenceRefs)],
+					["carryover contract", pack?.releaseEvidenceCarryoverRefs?.contractName],
+					["carryover readOnly", pack?.releaseEvidenceCarryoverRefs?.readOnly],
+					["carryover willMutate", pack?.releaseEvidenceCarryoverRefs?.willMutate]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Next Version Context",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["contract", pack?.nextVersionContext?.contractName],
+					["state", pack?.nextVersionContext?.state],
+					["next version", pack?.nextVersionContext?.nextVersion],
+					["runbook ref", pack?.nextVersionContext?.runbookRef?.ref],
+					["start after release", pack?.nextVersionContext?.startAfterRelease],
+					["creates goal", pack?.nextVersionContext?.createsGoal],
+					["enters next version", pack?.nextVersionContext?.entersNextVersion]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: pack?.note ?? "Release closeout handoff unavailable."
+			})
+		]
 	});
 }
 function DesktopAppStateStrip({ appStates }) {

@@ -1433,7 +1433,7 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.codexProviderExecutionPreview.contractName.text, 'codexProviderExecutionPreview.v1');
   });
 
-  it('projects v55 recovery and v56 thread handoff pack state into the Workbench desktop shell', async () => {
+  it('projects v55-v58 handoff state into the Workbench desktop shell', async () => {
     const codexProviderRunRecovery = JSON.parse(
       await readFile('fixtures/contracts/codex-provider-run-recovery/recovery.completed-accepted.v1.json', 'utf8')
     );
@@ -1443,11 +1443,15 @@ describe('v15 Workbench read-only API client', () => {
     const threadHandoffPack = JSON.parse(
       await readFile('fixtures/contracts/thread-handoff-pack/thread-handoff-pack.ready-reviewer-handoff.v1.json', 'utf8')
     );
+    const releaseCloseoutHandoffPack = JSON.parse(
+      await readFile('fixtures/contracts/release-closeout-handoff-pack/release-closeout-handoff-pack.ready.v1.json', 'utf8')
+    );
     const supervisor = {
       ...createGoalSupervisorAppReadModelPayload(),
       codexProviderRunRecovery,
       reviewerHandoffPreview,
-      threadHandoffPack
+      threadHandoffPack,
+      releaseCloseoutHandoffPack
     };
     const model = projectWorkbenchContracts({
       goalSupervisor: createWorkbenchResult('goalSupervisor', supervisor)
@@ -1455,6 +1459,7 @@ describe('v15 Workbench read-only API client', () => {
     const recovery = model.codexProviderRunRecovery;
     const handoff = model.reviewerHandoffPreview;
     const threadPack = model.threadHandoffPack;
+    const releaseHandoff = model.releaseCloseoutHandoffPack;
 
     assert.equal(recovery.contractName.text, 'codexProviderRunRecovery.v1');
     assert.equal(recovery.state, 'ready-for-reviewer-handoff');
@@ -1507,6 +1512,28 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(threadPack.boundaries.tagAutomationAvailable.value, false);
     assert.equal(threadPack.boundaries.publishAutomationAvailable.value, false);
     assert.equal(model.desktopShell.threadHandoffPack.contractName.text, 'threadHandoffPack.v1');
+
+    assert.equal(releaseHandoff.contractName.text, 'releaseCloseoutHandoffPack.v1');
+    assert.equal(releaseHandoff.state, 'ready');
+    assert.equal(releaseHandoff.readOnly.value, true);
+    assert.equal(releaseHandoff.willMutate.value, false);
+    assert.equal(releaseHandoff.targetCommit.commit.text, '71745688de473013dd9a9878bfb609bc24e2a68f');
+    assert.equal(releaseHandoff.tagReleaseChecklist.contractName.text, 'tagReleaseOperatorChecklist.v1');
+    assert.equal(releaseHandoff.tagReleaseChecklist.targetTag.text, 'v58');
+    assert.equal(releaseHandoff.tagReleaseChecklist.commandResults.tag.text, 'not-run-by-product-code');
+    assert.equal(releaseHandoff.tagReleaseChecklist.commandResults.githubRelease.text, 'not-run-by-product-code');
+    assert.equal(releaseHandoff.tagReleaseChecklist.validationEvidenceRefs.items[0].ref.text, 'docs/plans/v58-validation-evidence-2026-06-14.md');
+    assert.equal(releaseHandoff.tagReleaseChecklist.rollbackRefs.items[0].ref.text, 'docs/plans/v58-rollback-path-2026-06-14.md');
+    assert.equal(releaseHandoff.nextVersionContext.nextVersion.text, 'v59');
+    assert.equal(releaseHandoff.nextVersionContext.createsGoal.value, false);
+    assert.equal(releaseHandoff.nextVersionContext.entersNextVersion.value, false);
+    assert.equal(releaseHandoff.boundaries.gitTagAvailable.value, false);
+    assert.equal(releaseHandoff.boundaries.gitPushAvailable.value, false);
+    assert.equal(releaseHandoff.boundaries.githubReleaseCreateAvailable.value, false);
+    assert.equal(releaseHandoff.boundaries.shellAvailable.value, false);
+    assert.equal(releaseHandoff.boundaries.directGoalEventAppendAvailable.value, false);
+    assert.equal(releaseHandoff.boundaries.automaticNextVersionGoalAvailable.value, false);
+    assert.equal(model.desktopShell.releaseCloseoutHandoffPack.contractName.text, 'releaseCloseoutHandoffPack.v1');
   });
 
   it('projects v47 Desktop startup unavailable state flags from route and model states', async () => {
