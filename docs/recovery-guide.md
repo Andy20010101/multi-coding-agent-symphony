@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Use this guide when the v60 Stable Personal Workbench Release path drifts from the expected local baseline. It covers repository, Workbench, provider-boundary, evidence, and release-boundary recovery.
+Use this guide when the released v60 Stable Personal Workbench baseline or the v61 operator dry-run path drifts from the expected local state. It covers repository, Workbench, provider-boundary, evidence, and release-boundary recovery.
 
 ## Repository Baseline Drift
 
@@ -14,18 +14,19 @@ git rev-list --left-right --count main...origin/main
 gh pr list --state open --json number,title,headRefName,baseRefName,url,isDraft
 ```
 
-Expected v60 start state after v59:
+Expected v61 start state after v60 publication:
 
 - `main` and `origin/main` are aligned;
 - open PR list is empty before starting a new PR branch;
-- `v59` exists and dereferences to the v59 release commit;
-- `v60` tag and GitHub Release do not exist before v60 closeout.
+- `v60` exists and dereferences to the v60 release commit;
+- the v60 GitHub Release exists, is non-draft, is non-prerelease, and has the expected asset policy;
+- `v61` tag and GitHub Release do not exist before v61 closeout.
 
 Recovery:
 
 - stop version work when `main` and `origin/main` diverge;
 - identify any overlapping open PR before editing;
-- do not create a next-version goal while v60 release validation is still open;
+- do not create a next-version goal while v61 release validation is still open;
 - do not tag or publish until closeout evidence records the target commit and validation.
 
 ## Workbench Build Drift
@@ -58,8 +59,8 @@ Symptoms:
 Recovery:
 
 - remove the unsupported claim or change it to a blocked state with source refs;
-- keep Kiro, Gemini, DeepSeek-as-a-provider, and raw provider CLIs out of v60 active Workbench execution claims;
-- rerun the focused provider and Workbench tests named in the v60 runbook when product code changes;
+- keep Kiro, Gemini, DeepSeek-as-a-provider, and raw provider CLIs out of v61 active Workbench execution claims;
+- rerun the focused provider and Workbench tests named in the active version runbook when product code changes;
 - reject any fixture that includes raw transcript, raw model output, provider payload, local JSONL, or `/Users/...` session paths.
 
 ## Evidence Drift
@@ -74,12 +75,12 @@ Symptoms:
 Recovery:
 
 ```sh
-git show-ref --tags -d | rg 'refs/tags/v59|refs/tags/v60'
-gh release view v59 --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish
+git show-ref --tags -d | rg 'refs/tags/v60|refs/tags/v61'
 gh release view v60 --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish
+gh release view v61 --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish
 ```
 
-For `v60`, a missing release is expected until manual publication. A draft, prerelease, target mismatch, or unexpected asset is a blocker before closeout is marked complete.
+For `v60`, a missing release is a blocker during v61. For `v61`, a missing release is expected until v61 closeout publication. A draft, prerelease, target mismatch, or unexpected asset is a blocker before closeout is marked complete.
 
 ## Release Boundary Drift
 
@@ -102,7 +103,7 @@ Recovery:
 
 ## Closeout Recovery
 
-Before v60 closeout, record:
+Before v61 closeout, record:
 
 - target commit;
 - commands run and exit codes;
