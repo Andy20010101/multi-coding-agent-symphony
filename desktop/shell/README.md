@@ -106,4 +106,22 @@ pnpm desktop:shell:smoke
 cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/tauri-target
 ```
 
+## v63 Local Launch MVP
+
+v63 keeps this workspace as a local launch MVP. The Tauri window opens `/workbench/desktop/`, dev mode starts the existing Workbench Vite server, and the native bridge remains limited to `attach_sidecar` plus `launch_sidecar`.
+
+The source-level smoke check is:
+
+```text
+pnpm desktop:shell:smoke
+```
+
+The native host compile check is:
+
+```text
+cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/tauri-target
+```
+
+These checks are enough for v63 host boundary validation. A full native bundle is not required for the v63 smoke path and is not evidence of public distribution.
+
 Distribution packaging remains off. The smoke check and `cargo check` validate source-level host boundaries and compileability only; they do not produce or validate a signed app, notarized app, auto-update channel, publish endpoint, or release automation. This workspace does not enable auto-update, publish, signing, notarization, tag, push, release gates, release readiness, a generic shell runner, or arbitrary local file access. Release/distribution work belongs to a later release-manager or native distribution task after independent review and main verification.

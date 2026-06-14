@@ -35,10 +35,16 @@ async function main() {
   assertEqual(config.app.withGlobalTauri, false, 'global Tauri exposure');
   assertEqual(config.app.windows.length, 1, 'Tauri window count');
   assertEqual(config.app.windows[0].label, 'main', 'Tauri window label');
+  assertEqual(config.app.windows[0].title, 'Symphony Desktop Shell', 'Tauri window title');
   assertEqual(config.app.windows[0].url, '/workbench/desktop/', 'Tauri window route');
+  assertEqual(config.app.windows[0].resizable, true, 'Tauri window resizable boundary');
+  assertEqual(config.app.windows[0].minWidth, 960, 'Tauri window minimum width');
+  assertEqual(config.app.windows[0].minHeight, 640, 'Tauri window minimum height');
   assertEqual(config.app.security.csp, "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'", 'Tauri CSP boundary');
   assertEqual(config.bundle.active, false, 'bundle publishing boundary');
   assertEqual(Object.hasOwn(config, 'plugins'), false, 'Tauri plugin boundary');
+  assertEqual(Object.hasOwn(config.bundle, 'externalBin'), false, 'Tauri external binary boundary');
+  assertEqual(Object.hasOwn(config.bundle, 'resources'), false, 'Tauri bundled resources boundary');
   assertDeepEqual(config.bundle.targets, 'all', 'bundle target placeholder');
   assertDeepEqual(capabilityFiles, ['default.json'], 'capability file boundary');
   assertEqual(capability.identifier, 'desktop-shell', 'capability identifier');
@@ -112,6 +118,7 @@ async function main() {
   assertMatch(mainRs, /symphony_desktop_shell_lib::run\(\);/u, 'minimal Tauri binary entry');
   assertDoesNotMatch(mainRs, /Command::new|std::env::args|tauri::command/u, 'binary entry boundary');
   assertDoesNotMatch(lib, /std::env::args|std::fs|File::open|fs::read_to_string|write_all\([^f]|open_file|open_path|open_url|plugin_shell|plugin_fs|plugin_opener|git\s+push|git\s+tag|release\.ready/u, 'forbidden native bridge surface');
+  assertDoesNotMatch(cargo, /tauri-plugin-(shell|fs|opener|updater|process)/iu, 'forbidden Tauri plugin dependency boundary');
   assertDoesNotMatch(`${JSON.stringify(config)}\n${cargo}\n${lib}\n${build}\n${mainRs}`, /auto[-_]?update|tauri-plugin-updater|publishUrl|notariz|signing|codesign|provider\s*=|api[_-]?key|token|release[_-]?automation/iu, 'packaging and updater boundary');
   assertDoesNotMatch(Object.values(files).join('\n'), /electron/iu, 'Electron not introduced');
 
@@ -122,6 +129,23 @@ async function main() {
     checkedFiles,
     rendererRoute: '/workbench/desktop/',
     nativeHost: 'desktop/shell/src-tauri',
+    localLaunch: {
+      appHomeRoute: '/workbench/desktop/',
+      devUrl: 'http://127.0.0.1:5173/workbench/desktop/',
+      beforeDevCommand: 'pnpm --dir ../../.. workbench:dev',
+      beforeBuildCommand: 'pnpm --dir ../../.. workbench:build',
+      hostBuildCheckCommand: 'cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/tauri-target',
+      fullNativeBundleRequiredForSmoke: false,
+      expectedSidecarStates: [
+        'attached',
+        'launchable',
+        'launching',
+        'failed',
+        'wrong-port',
+        'stale',
+        'unavailable'
+      ]
+    },
     bridge: {
       attachCommand: 'attach_sidecar',
       launchCommand: 'launch_sidecar',
