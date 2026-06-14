@@ -2,9 +2,9 @@
 
 Multi Coding Agent Symphony is a local Workbench for goal/runbook-driven coding-agent operations, with CLI commands for scripted flows, compatibility paths, and low-level diagnostics.
 
-Current tagged release: `v61`, Workbench Operator Dry-run Evidence. The annotated `v61` tag and GitHub Release are complete. Current `origin/main` is ahead of the `v61` tag because v62 has started the installer and upgrade baseline work.
+Current tagged release: `v64`, First-run Project Setup and Local Settings. The annotated `v64` tag and GitHub Release are complete. Current `origin/main` has started v65 Provider Readiness.
 
-Current main starts v62 Installer and Upgrade Baseline. v62 makes installation, upgrade dry-run, rollback notes, and stable ref selection explicit. It does not silently change a user's installed checkout, fetch from the renderer, add a generic terminal, add renderer-side command execution, automate git/tag/publish/GitHub Release work inside product code, claim public distribution, claim notarization, or add auto-update.
+Current main starts v65 Provider Readiness. v65 narrows the active Workbench provider line to Codex as the worker candidate and Claude Code as the reviewer candidate. Kiro stays historical compatibility, and DeepSeek is only a Claude Code provider configuration detail. v65 does not add a generic provider picker, provider launch cards, renderer command execution, frontend provider folder reads, raw transcript output, raw provider stdout/stderr, automatic review, automatic worktree creation, or product-side git/tag/publish/GitHub Release automation.
 
 Start with Workbench v1 for daily operator work:
 
@@ -27,11 +27,13 @@ goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal close
 
 Use the `symphony` CLI as the advanced/script entry point when you need repeatable terminal output, JSON contracts, dry-run/confirm event registration, CI checks, or compatibility commands such as `scan`, `do`, `verify`, `status`, `continue`, and `artifacts`. Workbench displays controlled state and copy-only commands; release tag, push, publish, and GitHub Release work stay outside product code.
 
-Implemented adapter families include:
+Provider readiness now uses these product roles:
 
-- Codex with GPT models.
-- Claude Code connected to the DeepSeek API in the user's environment.
-- Kiro CLI adapter and smoke paths for historical compatibility.
+- Codex CLI is the worker candidate.
+- Claude Code CLI is the reviewer candidate.
+- The operator remains the main verifier and release controller.
+- Kiro CLI remains historical compatibility and smoke-script path only.
+- DeepSeek is a Claude Code provider configuration detail, not a separate Workbench provider.
 
 The system preserves each CLI's native harness instead of replacing it. The orchestrator owns task queueing, workspace isolation, routing, policy, verification, traces, and artifacts. Runtime adapters translate shared task contracts into the concrete CLI invocation, configuration, hooks, and output collection for each tool. Active Workbench provider execution remains limited to explicitly tested contracts and fixtures for the active version; Kiro, Gemini, DeepSeek-as-a-provider, and unsupported providers are not active Workbench execution targets.
 

@@ -1,3 +1,7 @@
+import {
+  buildAgentCliProviderHealthContract
+} from './agent-cli-provider-health.js';
+
 export const PROVIDER_READINESS_CONTRACT_NAME = 'providerReadiness.v1';
 export const PROVIDER_READINESS_CONTRACT_VERSION = 1;
 
@@ -136,7 +140,7 @@ const PROJECT_STATE_SET = new Set(['bound', 'missing', 'stale', 'unknown']);
 const PROVIDER_STATUS_SET = new Set(['ready', 'missing', 'blocked', 'degraded']);
 const PROVIDER_ROLE_SET = new Set(['worker', 'reviewer']);
 const PROVIDER_LANE_SET = new Set(['codex-worker-candidate', 'claude-code-reviewer-candidate']);
-const CHECK_STATE_SET = new Set(['present', 'missing', 'passed', 'failed', 'not-run', 'configured', 'not-configured', 'mismatch']);
+const CHECK_STATE_SET = new Set(['present', 'missing', 'unknown', 'passed', 'failed', 'not-run', 'configured', 'not-configured', 'mismatch']);
 const CONFIGURATION_KIND_SET = new Set(['codex-cli', 'claude-code-provider-config']);
 const CONFIGURATION_STATE_SET = new Set(['present', 'missing', 'mismatch', 'not-required']);
 const DEEPSEEK_CONFIG_STATE_SET = new Set(['present', 'missing', 'mismatch', 'not-required']);
@@ -220,6 +224,71 @@ export function buildProviderReadiness({
     boundaries: cloneObject(PROVIDER_READINESS_BOUNDARIES),
     readOnly: true,
     willMutate: false
+  });
+}
+
+export function buildProviderReadinessProjection({
+  generatedAt = new Date().toISOString(),
+  env = process.env,
+  providerHealth = null,
+  currentProject = null
+} = {}) {
+  const health = providerHealth ?? buildAgentCliProviderHealthContract({
+    goalId: 'v65-provider-readiness-codex-claude-only',
+    taskId: 'task-2',
+    generatedAt,
+    env
+  });
+  const providersById = new Map(
+    (Array.isArray(health.providers) ? health.providers : [])
+      .map((provider) => [provider?.providerId, provider])
+  );
+
+  return buildProviderReadiness({
+    generatedAt,
+    currentProject,
+    activeProviders: ACTIVE_PROVIDER_IDS.map((providerId) => providerReadinessFromHealth({
+      providerId,
+      provider: providersById.get(providerId),
+      env
+    })),
+    historicalProviders: [{
+      providerId: 'kiro-cli',
+      label: 'Kiro CLI',
+      status: 'historical',
+      activeWorkbenchProvider: false,
+      reason: 'Historical compatibility and smoke script path only.',
+      sourceRef: 'docs/provider-boundary-guide.md'
+    }],
+    unsupportedProviders: [{
+      providerId: 'deepseek-cli',
+      claim: 'independent-workbench-provider',
+      status: 'blocked',
+      activeWorkbenchProvider: false,
+      blockedReasons: ['deepseek-is-claude-code-provider-config-only']
+    }, {
+      providerId: 'gemini-cli',
+      claim: 'active-workbench-provider',
+      status: 'blocked',
+      activeWorkbenchProvider: false,
+      blockedReasons: ['unsupported-provider-active-claim-gemini-cli']
+    }],
+    operatorRole: {
+      state: 'manual-controller',
+      responsibilities: ['main-verification', 'release-controller'],
+      willMutateInProduct: false,
+      sourceRef: 'docs/plans/v65-provider-readiness-codex-claude-only-runbook-2026-06-14.md'
+    },
+    evidencePolicy: {
+      sanitizedReadinessOnly: true,
+      rawStdoutAllowed: false,
+      rawStderrAllowed: false,
+      rawProviderOutputAllowed: false,
+      rawTranscriptAllowed: false,
+      localSessionPathAllowed: false,
+      secretValueAllowed: false,
+      notes: ['Readiness projects sanitized status and evidence refs only.']
+    }
   });
 }
 
@@ -398,6 +467,91 @@ function normalizeCurrentProject(project) {
     sourceContract: nonEmptyString(source.sourceContract) ?? null,
     sourceRef: nonEmptyString(source.sourceRef) ?? null
   };
+}
+
+function providerReadinessFromHealth({
+  providerId,
+  provider,
+  env
+}) {
+  const configured = provider?.health?.state === 'configured';
+  const providerPresent = provider !== null && provider !== undefined;
+  const status = !providerPresent || provider?.health?.state === 'missing'
+    ? 'missing'
+    : 'degraded';
+  const missingReason = provider?.health?.blocker ?? 'provider-health-missing';
+  const deepSeekConfigStatus = providerId === 'claude-code-cli'
+    ? deepSeekConfigStatusFromEnv(env)
+    : 'not-required';
+
+  return {
+    providerId,
+    label: provider?.displayName ?? (providerId === 'codex-cli' ? 'Codex CLI' : 'Claude Code CLI'),
+    role: providerId === 'codex-cli' ? 'worker' : 'reviewer',
+    lane: providerId === 'codex-cli' ? 'codex-worker-candidate' : 'claude-code-reviewer-candidate',
+    status: configured && (providerId !== 'claude-code-cli' || deepSeekConfigStatus === 'present')
+      ? 'degraded'
+      : status,
+    binaryPresence: {
+      state: providerPresent ? 'unknown' : 'missing',
+      checked: false,
+      evidenceRef: providerPresent ? `agent-cli-provider-health.v1:${providerId}` : null,
+      reason: providerPresent
+        ? 'provider binary was not executed by readiness projection'
+        : missingReason
+    },
+    modelProfile: {
+      state: configured ? 'present' : 'missing',
+      checked: true,
+      evidenceRef: providerPresent ? `agent-cli-provider-health.v1:${providerId}` : null,
+      reason: configured ? null : missingReason
+    },
+    helpSmoke: {
+      state: 'not-run',
+      checked: false,
+      evidenceRef: null,
+      reason: 'help smoke is recorded only when operator provides sanitized evidence'
+    },
+    optionalRealSmoke: {
+      state: 'not-run',
+      checked: false,
+      evidenceRef: null,
+      reason: 'real provider smoke is opt-in'
+    },
+    configuration: providerId === 'claude-code-cli'
+      ? {
+          kind: 'claude-code-provider-config',
+          state: deepSeekConfigStatus === 'present' ? 'present' : deepSeekConfigStatus,
+          deepSeekConfigStatus,
+          deepSeekAsIndependentProvider: false,
+          storesSecrets: false,
+          secretValuesExposed: false,
+          notes: ['DeepSeek is a Claude Code provider configuration detail only.']
+        }
+      : {
+          kind: 'codex-cli',
+          state: configured ? 'present' : 'missing',
+          deepSeekConfigStatus: 'not-required',
+          deepSeekAsIndependentProvider: false,
+          storesSecrets: false,
+          secretValuesExposed: false,
+          notes: []
+        },
+    blockedReasons: [],
+    sourceRefs: providerPresent ? ['agent-cli-provider-health.v1'] : [],
+    readOnly: true,
+    willMutate: false
+  };
+}
+
+function deepSeekConfigStatusFromEnv(env) {
+  return isPresentEnvValue(env?.DEEPSEEK_API_KEY) || isPresentEnvValue(env?.ANTHROPIC_API_KEY)
+    ? 'present'
+    : 'missing';
+}
+
+function isPresentEnvValue(value) {
+  return typeof value === 'string' && value.trim() !== '';
 }
 
 function normalizeActiveProviders(providers) {

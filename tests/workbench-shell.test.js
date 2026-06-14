@@ -2925,6 +2925,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/providers/capabilities',
       '/api/providers/health',
       '/api/providers/lane-preview',
+      '/api/providers/readiness',
       '/api/readiness',
       '/api/release/app-core-manager',
       '/api/release/bundle',
