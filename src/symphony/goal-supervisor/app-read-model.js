@@ -48,7 +48,9 @@ import {
   validateThreadHandoffPackContract
 } from '../thread-handoff-pack-contracts.js';
 import {
+  buildReviewGateControlledConfirmationState,
   buildReviewGatePreview,
+  validateReviewGateControlledConfirmationStateContract,
   validateReviewGatePreviewContract
 } from '../review-gate-workbench-surface-contracts.js';
 import {
@@ -126,6 +128,8 @@ export function buildGoalSupervisorAppReadModel({
   childDispatchProviderPolicy = null,
   codexProviderRunRecord = null,
   reviewGateTarget = null,
+  reviewGateOperatorId = null,
+  reviewGatePlanHash = null,
   goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
@@ -291,6 +295,12 @@ export function buildGoalSupervisorAppReadModel({
     goalNext,
     target: reviewGateTarget
   });
+  const reviewGateConfirmationState = buildGoalSupervisorReviewGateConfirmationState({
+    generatedAt,
+    reviewGatePreview,
+    operatorId: reviewGateOperatorId,
+    planHash: reviewGatePlanHash
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -332,7 +342,8 @@ export function buildGoalSupervisorAppReadModel({
     codexProviderRunRecovery,
     reviewerHandoffPreview,
     threadHandoffPack,
-    reviewGatePreview
+    reviewGatePreview,
+    reviewGateConfirmationState
   };
 }
 
@@ -508,6 +519,27 @@ function buildGoalSupervisorReviewGatePreview({
   }
 
   return preview;
+}
+
+function buildGoalSupervisorReviewGateConfirmationState({
+  generatedAt,
+  reviewGatePreview,
+  operatorId,
+  planHash
+}) {
+  const confirmationState = buildReviewGateControlledConfirmationState({
+    generatedAt,
+    reviewGatePreview,
+    operatorId,
+    planHash
+  });
+  const validation = validateReviewGateControlledConfirmationStateContract(confirmationState);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid review gate confirmation state projection: ${validation.errors.join('; ')}`);
+  }
+
+  return confirmationState;
 }
 
 function reviewGateGoal({
