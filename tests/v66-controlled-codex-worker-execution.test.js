@@ -1,9 +1,21 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createSymphonyConsoleServer } from '../src/symphony/console.js';
+import { readGoalOperationRuns } from '../src/symphony/goal-operation-run-registry.js';
+import {
+  V66_WORKER_RUN_GOAL_ID,
+  WORKER_RUN_CONFIRMATION_CONTRACT_NAME,
+  WorkerRunBackendError,
+  buildWorkerRunPreviewFromBackend,
+  confirmWorkerRunPreview,
+  validateWorkerRunConfirmInput
+} from '../src/symphony/worker-run-backend.js';
 import {
   WORKER_RUN_BOUNDARIES,
   WORKER_RUN_COMMAND_TEMPLATE_ID,
@@ -239,6 +251,173 @@ describe('v66 Controlled Codex Worker Execution contracts', () => {
       )
     );
   });
+
+  it('confirms a backend-owned worker run preview through the fake adapter', async () => {
+    const preview = buildWorkerRunPreviewFromBackend({
+      goalId: V66_WORKER_RUN_GOAL_ID,
+      taskId: 'pr-2-backend-preview-confirm',
+      generatedAt: GENERATED_AT,
+      providerReadiness: providerReadiness('provider-readiness.both-ready.v1.json')
+    });
+    const input = workerRunConfirmInput(preview);
+    let capturedRequest = null;
+    const confirmation = await confirmWorkerRunPreview({
+      preview,
+      input,
+      startedAt: '2026-06-15T04:20:00.000Z',
+      finishedAt: '2026-06-15T04:21:00.000Z',
+      executeWorker: async (request) => {
+        capturedRequest = request;
+        return fakeWorkerAdapterResult();
+      }
+    });
+
+    assert.equal(validateWorkerRunConfirmInput({ preview, input }).ok, true);
+    assert.equal(confirmation.contractName, WORKER_RUN_CONFIRMATION_CONTRACT_NAME);
+    assert.equal(confirmation.status, 'needs-review');
+    assert.equal(confirmation.providerId, WORKER_RUN_PROVIDER_ID);
+    assert.equal(confirmation.commandTemplateId, WORKER_RUN_COMMAND_TEMPLATE_ID);
+    assert.equal(confirmation.realCodexOptIn, false);
+    assert.equal(confirmation.result.nextState.taskState, 'needs-review');
+    assert.equal(confirmation.result.nextState.taskCompleted, false);
+    assert.equal(confirmation.result.nextState.reviewApproved, false);
+    assert.equal(confirmation.safety.directGoalEventAppendAvailable, false);
+    assert.equal(confirmation.safety.mainWorktreeWriteAvailable, false);
+    assert.equal(capturedRequest.contractName, 'workerRunAdapterRequest.v1');
+    assert.equal(capturedRequest.providerId, WORKER_RUN_PROVIDER_ID);
+    assert.equal(capturedRequest.commandTemplateId, WORKER_RUN_COMMAND_TEMPLATE_ID);
+    assert.equal(capturedRequest.workspacePolicy.mainWorktreeWrite, false);
+    assert.equal(Object.hasOwn(capturedRequest, 'command'), false);
+    assert.equal(Object.hasOwn(capturedRequest, 'cwd'), false);
+    assert.equal(Object.hasOwn(capturedRequest, 'env'), false);
+    assertNoUnsafeStrings(confirmation, 'backend confirmation');
+  });
+
+  it('rejects stale plan hashes and command material before running the fake adapter', async () => {
+    const preview = buildWorkerRunPreviewFromBackend({
+      goalId: V66_WORKER_RUN_GOAL_ID,
+      taskId: 'pr-2-backend-preview-confirm',
+      generatedAt: GENERATED_AT,
+      providerReadiness: providerReadiness('provider-readiness.both-ready.v1.json')
+    });
+    const stale = {
+      ...workerRunConfirmInput(preview),
+      planHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222'
+    };
+    const command = {
+      ...workerRunConfirmInput(preview),
+      command: 'codex exec --dangerous'
+    };
+    let calls = 0;
+    const executeWorker = async () => {
+      calls += 1;
+      return fakeWorkerAdapterResult();
+    };
+
+    await assert.rejects(
+      () => confirmWorkerRunPreview({ preview, input: stale, executeWorker }),
+      (error) => (
+        error instanceof WorkerRunBackendError &&
+        error.safeDetails.errors.includes('planHash must match worker run preview')
+      )
+    );
+    await assert.rejects(
+      () => confirmWorkerRunPreview({ preview, input: command, executeWorker }),
+      (error) => (
+        error instanceof WorkerRunBackendError &&
+        error.safeDetails.errors.includes('command is not an allowed worker run confirm field')
+      )
+    );
+    assert.equal(calls, 0);
+  });
+
+  it('serves worker run preview and confirm through constrained backend routes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'v66-worker-run-route-'));
+    const stateDir = join(root, '.symphony');
+    const invocations = [];
+    const server = createSymphonyConsoleServer({
+      cwd: root,
+      stateDir,
+      env: {},
+      workerRunProviderReadiness: providerReadiness('provider-readiness.both-ready.v1.json'),
+      workerRunExecutor: async (request) => {
+        invocations.push(request);
+        return fakeWorkerAdapterResult();
+      }
+    });
+    const baseUrl = await listenOnRandomPort(server);
+
+    try {
+      const params = new URLSearchParams({
+        task: 'pr-2-backend-preview-confirm'
+      });
+      const previewResponse = await fetch(`${baseUrl}/api/goals/${V66_WORKER_RUN_GOAL_ID}/worker-run-preview?${params}`);
+      const preview = await previewResponse.json();
+
+      assert.equal(previewResponse.status, 200);
+      assert.equal(preview.contractName, WORKER_RUN_PREVIEW_CONTRACT_NAME);
+      assert.equal(preview.state, 'ready');
+      assert.equal(preview.provider.providerId, WORKER_RUN_PROVIDER_ID);
+      assert.equal(preview.commandTemplate.templateId, WORKER_RUN_COMMAND_TEMPLATE_ID);
+
+      const invalidPreviewResponse = await fetch(`${baseUrl}/api/goals/${V66_WORKER_RUN_GOAL_ID}/worker-run-preview?${new URLSearchParams({
+        task: 'pr-2-backend-preview-confirm',
+        command: 'codex exec --dangerous'
+      })}`);
+      const invalidPreview = await invalidPreviewResponse.json();
+
+      assert.equal(invalidPreviewResponse.status, 400);
+      assert.equal(invalidPreview.error.code, 'invalid-worker-run-preview-request');
+      assert.equal(invocations.length, 0);
+
+      const confirmResponse = await fetch(`${baseUrl}/api/goals/${V66_WORKER_RUN_GOAL_ID}/worker-run-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(workerRunConfirmInput(preview))
+      });
+      const confirmation = await confirmResponse.json();
+      const registry = await readGoalOperationRuns({
+        stateDir,
+        goalId: V66_WORKER_RUN_GOAL_ID
+      });
+
+      assert.equal(confirmResponse.status, 200, JSON.stringify(confirmation));
+      assert.equal(confirmation.contractName, WORKER_RUN_CONFIRMATION_CONTRACT_NAME);
+      assert.equal(confirmation.result.status, 'needs-review');
+      assert.equal(confirmation.operationRun.commandKind, 'provider-runner');
+      assert.equal(confirmation.operationRun.commandName, 'worker run preview/confirm');
+      assert.equal(confirmation.operationRun.verifierSummary.taskCompleted, false);
+      assert.equal(confirmation.operationRun.verifierSummary.reviewerApproved, false);
+      assert.equal(confirmation.refreshed.operations.operationCount, 1);
+      assert.equal(registry.operationCount, 1);
+      assert.equal(invocations.length, 1);
+      assert.equal(Object.hasOwn(invocations[0], 'command'), false);
+      assert.equal(Object.hasOwn(invocations[0], 'env'), false);
+
+      const invalidConfirmResponse = await fetch(`${baseUrl}/api/goals/${V66_WORKER_RUN_GOAL_ID}/worker-run-confirm`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          ...workerRunConfirmInput(preview),
+          command: 'codex exec --dangerous'
+        })
+      });
+      const invalidConfirm = await invalidConfirmResponse.json();
+
+      assert.equal(invalidConfirmResponse.status, 400);
+      assert.equal(invalidConfirm.error.code, 'invalid-worker-run-confirm-request');
+      assert.equal(invocations.length, 1);
+    } finally {
+      await closeServer(server);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 function fixture(name) {
@@ -269,6 +448,42 @@ function activeTask() {
   };
 }
 
+function workerRunConfirmInput(preview) {
+  return {
+    planHash: preview.planHash,
+    goalId: preview.goal.goalId,
+    taskId: preview.task.taskId,
+    providerId: WORKER_RUN_PROVIDER_ID,
+    commandTemplateId: WORKER_RUN_COMMAND_TEMPLATE_ID,
+    timeoutMs: preview.timeoutMs,
+    workspacePolicyId: preview.workspacePolicy.policyId
+  };
+}
+
+function fakeWorkerAdapterResult() {
+  return {
+    status: 'needs-review',
+    summary: 'Fake Codex worker completed the backend route task.',
+    changedFiles: [
+      'src/symphony/worker-run-backend.js',
+      'src/symphony/console.js'
+    ],
+    validationCommands: [
+      'node --test tests/v66-controlled-codex-worker-execution.test.js'
+    ],
+    artifactRefs: ['artifact-ref:v66:backend-fake-worker-run'],
+    verifierState: 'passed',
+    verifierSummary: 'Backend fake worker route checks passed.',
+    evidenceRefs: [{
+      kind: 'repo-doc',
+      ref: 'docs/qa/v66-controlled-codex-worker-execution-acceptance.md',
+      label: 'v66 acceptance evidence'
+    }],
+    rawTranscript: 'raw transcript must not be projected',
+    rawModelOutput: 'raw model output must not be projected'
+  };
+}
+
 function assertValidationIncludes(validation, expectedError) {
   assert.equal(validation.ok, false);
   assert.ok(
@@ -283,4 +498,31 @@ function assertNoUnsafeStrings(value, label) {
     /\/Users\/|\.jsonl|raw transcript|raw model output|provider session|freeform command|generic terminal|arbitrary command|task complete|review approval|github release/iu,
     label
   );
+}
+
+async function listenOnRandomPort(server) {
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function closeServer(server) {
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
