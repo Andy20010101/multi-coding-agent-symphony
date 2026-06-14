@@ -110,6 +110,31 @@ describe('v62 installer and upgrade baseline', () => {
     }
   });
 
+  it('documents manual upgrade and exposes only copy-only Workbench install status', async () => {
+    const installGuide = await readFile('docs/install-guide.md', 'utf8');
+    const upgradeGuide = await readFile('docs/upgrade-guide.md', 'utf8');
+    const readme = await readFile('README.md', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const consoleServer = await readFile('src/symphony/console.js', 'utf8');
+
+    assert.match(installGuide, /symphony install status --json/u);
+    assert.match(installGuide, /GET \/api\/install\/status/u);
+    assert.match(upgradeGuide, /symphony install upgrade --target-ref <verified-ref> --dry-run --json/u);
+    assert.match(upgradeGuide, /git -C "\$MCAS_INSTALL_DIR" checkout <rollback-ref>/u);
+    assert.match(upgradeGuide, /Workbench does not run checkout, fetch, dependency install, doctor, overwrite, merge, push, tag, publish, or GitHub Release commands/u);
+    assert.match(readme, /\[Upgrade Guide\]\(docs\/upgrade-guide\.md\)/u);
+    assert.match(contracts, /id: 'installStatus'/u);
+    assert.match(contracts, /path: '\/api\/install\/status'/u);
+    assert.match(contracts, /copyOnlyCommands/u);
+    assert.match(app, /InstallStatusPanel/u);
+    assert.match(app, /copy-only commands/u);
+    assert.match(consoleServer, /url\.pathname === '\/api\/install\/status'/u);
+    assert.match(consoleServer, /Install status route does not accept query parameters/u);
+    assert.doesNotMatch(app, /\bhandle(Install|Rollback|Apply|Execute)\b/u);
+    assert.doesNotMatch(app, /navigator\.clipboard|window\.open|fetch\('\/api\/install\/status'|fetch\(`\/api\/install\/status/u);
+  });
+
   it('exposes install status and upgrade dry-run through the symphony CLI as JSON contracts', async () => {
     const root = await mkdtemp(join(tmpdir(), 'mcas-v62-cli-'));
 

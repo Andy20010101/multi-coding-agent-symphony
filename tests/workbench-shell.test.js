@@ -422,6 +422,9 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(desktopHtml, />safe inline</u);
       assert.match(desktopHtml, />artifact index</u);
       assert.match(desktopHtml, />evidence timeline</u);
+      assert.match(desktopHtml, />install status</u);
+      assert.match(desktopHtml, />install target</u);
+      assert.match(desktopHtml, />install doctor</u);
       assert.match(desktopHtml, />local file open</u);
       assert.match(desktopHtml, /Safe artifact preview routes 未暴露/u);
       assert.match(desktopHtml, /Provider Availability/u);
@@ -2796,6 +2799,7 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/handoff',
       '/api/handoff/<ref>',
       '/api/inbox/capture',
+      '/api/install/status',
       '/api/jobs',
       '/api/jobs/control',
       '/api/jobs/create',

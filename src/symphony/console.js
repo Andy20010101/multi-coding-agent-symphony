@@ -71,6 +71,9 @@ import {
   buildAppCoreRestoreValidation
 } from './app-core-restore-validation.js';
 import {
+  buildInstallStatus
+} from './installer-upgrade-baseline.js';
+import {
   buildGoalDraftHandoffContract
 } from './goal-draft-handoff.js';
 import {
@@ -2160,6 +2163,22 @@ export function createSymphonyConsoleServer({
           goalId: restoreGoalId,
           taskId: restoreTaskId
         }));
+        return;
+      }
+
+      if (url.pathname === '/api/install/status') {
+        if (hasSearchParams(url.searchParams)) {
+          writeApiErrorResponse(response, {
+            status: 400,
+            code: 'invalid-install-status-request',
+            message: 'Install status route does not accept query parameters.',
+            route: url.pathname,
+            method
+          });
+          return;
+        }
+
+        writeJsonResponse(response, 200, buildInstallStatus({ env }));
         return;
       }
 

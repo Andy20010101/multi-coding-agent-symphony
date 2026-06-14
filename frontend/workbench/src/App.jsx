@@ -439,6 +439,10 @@ export function WorkbenchShell({
               restoreValidation={model.restoreValidation}
               route={findRoute(model.routeStates, 'restoreValidation')}
             />
+            <InstallStatusPanel
+              installStatus={model.installStatus}
+              route={findRoute(model.routeStates, 'installStatus')}
+            />
             <DiagnosticsBundlePanel
               diagnosticsBundle={model.diagnosticsBundle}
               route={findRoute(model.routeStates, 'diagnosticsBundle')}
@@ -3044,6 +3048,11 @@ function DesktopArtifactReadinessCard({ artifactReadiness }) {
         ['restore integrity', artifactReadiness?.restoreIntegrityStatus],
         ['restore compatibility', artifactReadiness?.restoreCompatibilityStatus],
         ['overwrite default', artifactReadiness?.restoreOverwriteDefault],
+        ['install status', artifactReadiness?.installStatusState],
+        ['install target', artifactReadiness?.installTargetRef],
+        ['install current ref', artifactReadiness?.installCurrentRef],
+        ['install dirty', artifactReadiness?.installDirty],
+        ['install doctor', artifactReadiness?.installDoctorStatus],
         ['diagnostics bundle', artifactReadiness?.diagnosticsBundleState],
         ['diagnostics health', artifactReadiness?.diagnosticsHealth],
         ['recent failures', artifactReadiness?.diagnosticsRecentFailures],
@@ -5192,6 +5201,58 @@ function RestoreCompatibilityList({ blockers, warnings }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function InstallStatusPanel({ installStatus, route }) {
+  return (
+    <DataPanel
+      id="install-status-panel"
+      kicker="v62 installer baseline"
+      title="Install Status"
+      state={routeStateText(route)}
+      route={route}
+    >
+      <FieldList rows={[
+        ['contractName', installStatus?.contractName],
+        ['contractVersion', installStatus?.contractVersion],
+        ['generatedAt', installStatus?.generatedAt],
+        ['readOnly', installStatus?.readOnly],
+        ['willMutate', installStatus?.willMutate],
+        ['installDir.path', installStatus?.installDir?.path],
+        ['installDir.exists', installStatus?.installDir?.exists],
+        ['installDir.isGitCheckout', installStatus?.installDir?.isGitCheckout],
+        ['installDir.dirty', installStatus?.installDir?.dirty],
+        ['repository.slug', installStatus?.repository?.slug],
+        ['repository.originUrl', installStatus?.repository?.originUrl],
+        ['current.ref', installStatus?.current?.ref],
+        ['current.commit', installStatus?.current?.commit],
+        ['target.ref', installStatus?.target?.ref],
+        ['target.availableLocally', installStatus?.target?.availableLocally],
+        ['binaryDir.path', installStatus?.binaryDir?.path],
+        ['shim.symphony', installStatus?.shims?.symphonyExists],
+        ['shim.mcas', installStatus?.shims?.mcasExists],
+        ['doctor.status', installStatus?.doctor?.status],
+        ['doctor.willRun', installStatus?.doctor?.willRun],
+        ['boundaries.networkFetchAvailable', installStatus?.boundaries?.networkFetchAvailable],
+        ['boundaries.checkoutAvailable', installStatus?.boundaries?.checkoutAvailable],
+        ['boundaries.dependencyInstallAvailable', installStatus?.boundaries?.dependencyInstallAvailable],
+        ['boundaries.overwriteAvailable', installStatus?.boundaries?.overwriteAvailable],
+        ['boundaries.rendererNetworkFetchAvailable', installStatus?.boundaries?.rendererNetworkFetchAvailable],
+        ['boundaries.workbenchExecutionAvailable', installStatus?.boundaries?.workbenchExecutionAvailable],
+        ['boundaries.gitReleaseAutomationAvailable', installStatus?.boundaries?.gitReleaseAutomationAvailable]
+      ]} />
+
+      <Subsection title="blocked reasons">
+        <TextItemList items={installStatus?.blockedReasons} emptyCopy="blocked reasons 为空或未暴露。" />
+      </Subsection>
+
+      <Subsection title="copy-only commands">
+        <TextItemList items={installStatus?.copyOnlyCommands} emptyCopy="copy-only commands 未暴露。" />
+      </Subsection>
+
+      <p className="panel-note">{installStatus?.note ?? 'Install Status 只展示 installer checkout、shim、target ref 和 doctor 命令文本。'}</p>
+    </DataPanel>
   );
 }
 

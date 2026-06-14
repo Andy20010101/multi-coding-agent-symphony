@@ -9925,6 +9925,7 @@ var JOB_RUN_CONTROL_CONTRACT_NAME = "job-run-control.v1";
 var DIAGNOSTICS_CONTRACT_NAME = "diagnostics.v1";
 var APP_CORE_DIAGNOSTICS_BUNDLE_CONTRACT_NAME = "app-core-diagnostics-bundle.v1";
 var APP_CORE_RESTORE_VALIDATION_CONTRACT_NAME = "app-core-restore-validation.v1";
+var INSTALL_STATUS_CONTRACT_NAME = "installStatus.v1";
 var ARTIFACT_INDEX_CONTRACT_NAME = "artifact-index.v1";
 var EVIDENCE_TIMELINE_CONTRACT_NAME = "evidence-timeline.v1";
 var RELEASE_BUNDLE_CONTRACT_NAME = "release-bundle.v1";
@@ -10708,6 +10709,13 @@ var READONLY_API_ROUTES = Object.freeze([
 		path: "/api/restore/validate",
 		method: "GET",
 		contractName: APP_CORE_RESTORE_VALIDATION_CONTRACT_NAME
+	}),
+	Object.freeze({
+		id: "installStatus",
+		label: "Install Status",
+		path: "/api/install/status",
+		method: "GET",
+		contractName: INSTALL_STATUS_CONTRACT_NAME
 	})
 ]);
 var GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE = Object.freeze({
@@ -10971,6 +10979,7 @@ function projectWorkbenchContracts(results) {
 	const appCoreReleaseManagerData = dataFrom(results.appCoreReleaseManager);
 	const backupExportData = dataFrom(results.backupExport);
 	const restoreValidationData = dataFrom(results.restoreValidation);
+	const installStatusData = dataFrom(results.installStatus);
 	const latestRun = latestRunData?.run ?? null;
 	const safeArtifactPreviewResults = Array.isArray(results.safeArtifactPreviews) ? results.safeArtifactPreviews : [];
 	const routeStates = [
@@ -11118,6 +11127,10 @@ function projectWorkbenchContracts(results) {
 		result: results.restoreValidation,
 		restoreValidation: restoreValidationData
 	});
+	const projectedInstallStatus = projectInstallStatus({
+		result: results.installStatus,
+		installStatus: installStatusData
+	});
 	const projectedDiagnosticsBundle = projectDiagnosticsBundle({
 		result: results.diagnosticsBundle,
 		diagnosticsBundle: diagnosticsBundleData
@@ -11229,6 +11242,7 @@ function projectWorkbenchContracts(results) {
 			appCoreReleaseManager: projectedAppCoreReleaseManager,
 			backupExport: projectedBackupExport,
 			restoreValidation: projectedRestoreValidation,
+			installStatus: projectedInstallStatus,
 			diagnosticsBundle: projectedDiagnosticsBundle,
 			providerHub: projectedProviderHub,
 			supervisorDashboard: projectedSupervisorDashboard,
@@ -11323,6 +11337,7 @@ function projectWorkbenchContracts(results) {
 		appCoreReleaseManager: projectedAppCoreReleaseManager,
 		backupExport: projectedBackupExport,
 		restoreValidation: projectedRestoreValidation,
+		installStatus: projectedInstallStatus,
 		deferredGaps: DEFERRED_CONTRACT_GAPS.map((gap) => ({
 			label: gap,
 			status: MISSING_TEXT
@@ -11754,7 +11769,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, releasePublicationEvidence, stableWorkbenchRelease, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, installStatus, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, releasePublicationEvidence, stableWorkbenchRelease, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -11771,6 +11786,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 	const releaseBundleRoute = findProjectedRoute(routeStates, "releaseBundle");
 	const backupExportRoute = findProjectedRoute(routeStates, "backupExport");
 	const restoreValidationRoute = findProjectedRoute(routeStates, "restoreValidation");
+	const installStatusRoute = findProjectedRoute(routeStates, "installStatus");
 	const diagnosticsBundleRoute = findProjectedRoute(routeStates, "diagnosticsBundle");
 	const sidecarHost = runtimeSnapshot?.runtime?.sidecarHost;
 	const currentProject = currentProjectFromRegistry(projectRegistry);
@@ -12020,14 +12036,17 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 			releaseBundle,
 			backupExport,
 			restoreValidation,
+			installStatus,
 			diagnosticsBundle,
 			artifactRoute,
 			evidenceRoute,
 			releaseBundleRoute,
 			backupExportRoute,
 			restoreValidationRoute,
+			installStatusRoute,
 			diagnosticsBundleRoute
 		}),
+		installStatus,
 		providerHub,
 		systemGoldenPath,
 		childDispatchPreview,
@@ -13766,7 +13785,7 @@ function projectDesktopJobRun({ jobConsole, jobRoute, jobCreationRoute, jobTimel
 		}
 	};
 }
-function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, diagnosticsBundle, artifactRoute, evidenceRoute, releaseBundleRoute, backupExportRoute, restoreValidationRoute, diagnosticsBundleRoute }) {
+function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, installStatus, diagnosticsBundle, artifactRoute, evidenceRoute, releaseBundleRoute, backupExportRoute, restoreValidationRoute, installStatusRoute, diagnosticsBundleRoute }) {
 	const previewItems = (artifactRefs?.items ?? []).map((artifact) => ({
 		kind: artifact.kind,
 		status: artifact.status,
@@ -13790,7 +13809,7 @@ function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidence
 			evidenceTimeline,
 			releaseBundle
 		})),
-		sourcePolicy: valueState("artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-restore-validation.v1 + app-core-diagnostics-bundle.v1"),
+		sourcePolicy: valueState("artifact-index.v1 + safe-artifact-preview.v1 + evidence-timeline.v1 + release-bundle.v1 + app-core-backup-export.v1 + app-core-restore-validation.v1 + installStatus.v1 + app-core-diagnostics-bundle.v1"),
 		registeredRefs: valueState(artifactRefs?.count),
 		status: artifactRefs?.status?.status,
 		missing: artifactRefs?.status?.missing,
@@ -13825,6 +13844,11 @@ function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidence
 		restoreIntegrityStatus: restoreValidation?.integrity?.status,
 		restoreCompatibilityStatus: restoreValidation?.compatibility?.status,
 		restoreOverwriteDefault: restoreValidation?.compatibility?.overwriteDefault,
+		installStatusState: valueState(installStatus?.state),
+		installTargetRef: installStatus?.target?.ref,
+		installCurrentRef: installStatus?.current?.ref,
+		installDirty: installStatus?.installDir?.dirty,
+		installDoctorStatus: installStatus?.doctor?.status,
 		diagnosticsBundleState: valueState(diagnosticsBundle?.state),
 		diagnosticsHealth: diagnosticsBundle?.health?.status,
 		diagnosticsRecentFailures: diagnosticsBundle?.recentFailureCount,
@@ -13835,6 +13859,7 @@ function projectDesktopArtifactReadiness({ artifactRefs, artifactIndex, evidence
 		releaseBundleRouteState: valueState(routeStateFromRoute(releaseBundleRoute)),
 		backupExportRouteState: valueState(routeStateFromRoute(backupExportRoute)),
 		restoreValidationRouteState: valueState(routeStateFromRoute(restoreValidationRoute)),
+		installStatusRouteState: valueState(routeStateFromRoute(installStatusRoute)),
 		diagnosticsBundleRouteState: valueState(routeStateFromRoute(diagnosticsBundleRoute)),
 		boundaries: {
 			readOnly: artifactIndex?.boundaries?.readOnly ?? valueState(true),
@@ -21707,6 +21732,14 @@ function arrayTextState(values, emptyText = "无") {
 	if (!Array.isArray(values)) return textState(MISSING_TEXT);
 	return textState(values.length > 0 ? values.join("、") : emptyText);
 }
+function textItemCollection(values) {
+	const items = Array.isArray(values) ? values.filter(isNonEmptyString).map((text) => ({ text })) : [];
+	return {
+		state: items.length === 0 ? "empty" : "available",
+		count: valueState(items.length),
+		items
+	};
+}
 function isNonEmptyString(value) {
 	return typeof value === "string" && value.trim().length > 0;
 }
@@ -21971,6 +22004,91 @@ function projectBackupExport({ result, backupExport }) {
 			exportPayloadPolicy: valueState(backupExport.boundaries?.exportPayloadPolicy)
 		},
 		note: "Backup Export 只展示 app core state manifest、hash 和 refs。它不复制 repo source、docs、tests、.git 或 artifact 内容。"
+	};
+}
+function projectInstallStatus({ result, installStatus }) {
+	if (installStatus === null || installStatus === void 0) return {
+		state: result?.ok === true ? "empty" : "unavailable",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(void 0),
+		contractVersion: valueState(void 0),
+		generatedAt: valueState(void 0),
+		readOnly: valueState(void 0),
+		willMutate: valueState(void 0),
+		installDir: {},
+		repository: {},
+		current: {},
+		target: {},
+		binaryDir: {},
+		shims: {},
+		doctor: {},
+		boundaries: {},
+		blockedReasons: textItemCollection([]),
+		copyOnlyCommands: textItemCollection([]),
+		note: "Install Status 未暴露 / 不可用。"
+	};
+	const blockedReasons = Array.isArray(installStatus.blockedReasons) ? installStatus.blockedReasons : [];
+	const targetRef = installStatus.target?.ref;
+	const commandTexts = [
+		"symphony install status --json",
+		isNonEmptyString(targetRef) ? `symphony install upgrade --target-ref ${targetRef} --dry-run --json` : null,
+		installStatus.doctor?.commandText
+	].filter(isNonEmptyString);
+	return {
+		state: installStatus.state ?? "available",
+		errorEnvelope: result?.errorEnvelope ?? null,
+		contractName: valueState(installStatus.contractName),
+		contractVersion: valueState(installStatus.contractVersion),
+		generatedAt: valueState(installStatus.generatedAt),
+		readOnly: valueState(installStatus.readOnly),
+		willMutate: valueState(installStatus.willMutate),
+		installDir: {
+			path: valueState(installStatus.installDir?.path),
+			exists: valueState(installStatus.installDir?.exists),
+			isGitCheckout: valueState(installStatus.installDir?.isGitCheckout),
+			dirty: valueState(installStatus.installDir?.dirty),
+			topLevel: valueState(installStatus.installDir?.topLevel)
+		},
+		repository: {
+			slug: valueState(installStatus.repository?.slug),
+			url: valueState(installStatus.repository?.url),
+			originUrl: valueState(installStatus.repository?.originUrl)
+		},
+		current: {
+			ref: valueState(installStatus.current?.ref),
+			commit: valueState(installStatus.current?.commit)
+		},
+		target: {
+			ref: valueState(installStatus.target?.ref),
+			availableLocally: valueState(installStatus.target?.availableLocally)
+		},
+		binaryDir: { path: valueState(installStatus.binaryDir?.path) },
+		shims: {
+			symphonyPath: valueState(installStatus.shims?.symphony?.path),
+			symphonyExists: valueState(installStatus.shims?.symphony?.exists),
+			mcasPath: valueState(installStatus.shims?.mcas?.path),
+			mcasExists: valueState(installStatus.shims?.mcas?.exists)
+		},
+		doctor: {
+			status: valueState(installStatus.doctor?.status),
+			commandText: valueState(installStatus.doctor?.commandText),
+			copyOnly: valueState(installStatus.doctor?.copyOnly),
+			willRun: valueState(installStatus.doctor?.willRun)
+		},
+		blockedReasons: textItemCollection(blockedReasons),
+		copyOnlyCommands: textItemCollection(commandTexts),
+		boundaries: {
+			readOnly: valueState(installStatus.boundaries?.readOnly),
+			willMutate: valueState(installStatus.boundaries?.willMutate),
+			networkFetchAvailable: valueState(installStatus.boundaries?.networkFetchAvailable),
+			checkoutAvailable: valueState(installStatus.boundaries?.checkoutAvailable),
+			dependencyInstallAvailable: valueState(installStatus.boundaries?.dependencyInstallAvailable),
+			overwriteAvailable: valueState(installStatus.boundaries?.overwriteAvailable),
+			rendererNetworkFetchAvailable: valueState(installStatus.boundaries?.rendererNetworkFetchAvailable),
+			workbenchExecutionAvailable: valueState(installStatus.boundaries?.workbenchExecutionAvailable),
+			gitReleaseAutomationAvailable: valueState(installStatus.boundaries?.gitReleaseAutomationAvailable)
+		},
+		note: "Install Status 只展示 installer checkout、shim、target ref 和 doctor 命令文本。Workbench 不 fetch、不 checkout、不安装依赖、不回滚、不改 GitHub Release。"
 	};
 }
 function projectRestoreValidation({ result, restoreValidation }) {
@@ -26571,6 +26689,10 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 							restoreValidation: model.restoreValidation,
 							route: findRoute(model.routeStates, "restoreValidation")
 						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(InstallStatusPanel, {
+							installStatus: model.installStatus,
+							route: findRoute(model.routeStates, "installStatus")
+						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnosticsBundlePanel, {
 							diagnosticsBundle: model.diagnosticsBundle,
 							route: findRoute(model.routeStates, "diagnosticsBundle")
@@ -29015,6 +29137,11 @@ function DesktopArtifactReadinessCard({ artifactReadiness }) {
 				["restore integrity", artifactReadiness?.restoreIntegrityStatus],
 				["restore compatibility", artifactReadiness?.restoreCompatibilityStatus],
 				["overwrite default", artifactReadiness?.restoreOverwriteDefault],
+				["install status", artifactReadiness?.installStatusState],
+				["install target", artifactReadiness?.installTargetRef],
+				["install current ref", artifactReadiness?.installCurrentRef],
+				["install dirty", artifactReadiness?.installDirty],
+				["install doctor", artifactReadiness?.installDoctorStatus],
 				["diagnostics bundle", artifactReadiness?.diagnosticsBundleState],
 				["diagnostics health", artifactReadiness?.diagnosticsHealth],
 				["recent failures", artifactReadiness?.diagnosticsRecentFailures],
@@ -30804,6 +30931,64 @@ function RestoreCompatibilityList({ blockers, warnings }) {
 				})
 			]
 		}, index))
+	});
+}
+function InstallStatusPanel({ installStatus, route }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "install-status-panel",
+		kicker: "v62 installer baseline",
+		title: "Install Status",
+		state: routeStateText(route),
+		route,
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["contractName", installStatus?.contractName],
+				["contractVersion", installStatus?.contractVersion],
+				["generatedAt", installStatus?.generatedAt],
+				["readOnly", installStatus?.readOnly],
+				["willMutate", installStatus?.willMutate],
+				["installDir.path", installStatus?.installDir?.path],
+				["installDir.exists", installStatus?.installDir?.exists],
+				["installDir.isGitCheckout", installStatus?.installDir?.isGitCheckout],
+				["installDir.dirty", installStatus?.installDir?.dirty],
+				["repository.slug", installStatus?.repository?.slug],
+				["repository.originUrl", installStatus?.repository?.originUrl],
+				["current.ref", installStatus?.current?.ref],
+				["current.commit", installStatus?.current?.commit],
+				["target.ref", installStatus?.target?.ref],
+				["target.availableLocally", installStatus?.target?.availableLocally],
+				["binaryDir.path", installStatus?.binaryDir?.path],
+				["shim.symphony", installStatus?.shims?.symphonyExists],
+				["shim.mcas", installStatus?.shims?.mcasExists],
+				["doctor.status", installStatus?.doctor?.status],
+				["doctor.willRun", installStatus?.doctor?.willRun],
+				["boundaries.networkFetchAvailable", installStatus?.boundaries?.networkFetchAvailable],
+				["boundaries.checkoutAvailable", installStatus?.boundaries?.checkoutAvailable],
+				["boundaries.dependencyInstallAvailable", installStatus?.boundaries?.dependencyInstallAvailable],
+				["boundaries.overwriteAvailable", installStatus?.boundaries?.overwriteAvailable],
+				["boundaries.rendererNetworkFetchAvailable", installStatus?.boundaries?.rendererNetworkFetchAvailable],
+				["boundaries.workbenchExecutionAvailable", installStatus?.boundaries?.workbenchExecutionAvailable],
+				["boundaries.gitReleaseAutomationAvailable", installStatus?.boundaries?.gitReleaseAutomationAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "blocked reasons",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: installStatus?.blockedReasons,
+					emptyCopy: "blocked reasons 为空或未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "copy-only commands",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextItemList, {
+					items: installStatus?.copyOnlyCommands,
+					emptyCopy: "copy-only commands 未暴露。"
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: installStatus?.note ?? "Install Status 只展示 installer checkout、shim、target ref 和 doctor 命令文本。"
+			})
+		]
 	});
 }
 function DiagnosticsBundlePanel({ diagnosticsBundle, route }) {
