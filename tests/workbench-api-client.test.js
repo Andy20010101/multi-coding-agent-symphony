@@ -1212,6 +1212,12 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.sidecarHealth.launcherState.text, 'defined');
     assert.equal(model.desktopShell.sidecarHealth.launcherAvailable.value, true);
     assert.equal(model.desktopShell.sidecarHealth.rendererLaunchAvailable.value, false);
+    assert.equal(model.desktopShell.sidecarHealth.nativeHostRequired.value, true);
+    assert.equal(model.desktopShell.sidecarHealth.allowedHosts.text, '127.0.0.1、localhost');
+    assert.equal(model.desktopShell.sidecarHealth.allowedPortRange.min.value, 1024);
+    assert.equal(model.desktopShell.sidecarHealth.allowedPortRange.max.value, 65535);
+    assert.match(model.desktopShell.sidecarHealth.failureSummary.text, /attached:attached/u);
+    assert.match(model.desktopShell.sidecarHealth.recovery.text, /renderer does not execute shell commands/u);
     assert.equal(model.desktopShell.sidecarHealth.fixedLauncherContract.text, 'attach_sidecar + launch_sidecar + symphony.console.sidecar.launch');
     assert.equal(model.desktopShell.sidecarHealth.commandPreviewInert.text, 'pnpm symphony console --host <loopback> --port <allowed-port>');
     assert.equal(model.desktopShell.sidecarHealth.launcherHandoff.text, 'symphony.console.sidecar.launch');
@@ -1311,6 +1317,13 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(model.desktopShell.routeProvenance.items.find((item) => item.id.value === 'goalSupervisor').routeState.text, 'ready');
     assert.equal(model.desktopShell.appStates.backendUnavailable.value, false);
     assert.equal(model.desktopShell.appStates.sidecarMissing.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarLaunchable.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarLaunching.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarFailed.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarWrongPort.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarPortConflict.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarStale.value, false);
+    assert.equal(model.desktopShell.appStates.sidecarUnavailable.value, false);
     assert.equal(model.desktopShell.appStates.projectMissing.value, false);
     assert.equal(model.desktopShell.appStates.activeGoalMissing.value, false);
     assert.equal(model.desktopShell.appStates.supervisorModelUnavailable.value, false);
@@ -1718,6 +1731,74 @@ describe('v15 Workbench read-only API client', () => {
       routeState: 'ready'
     });
 
+    const sidecarLaunchableSnapshot = structuredClone(healthySnapshot);
+    sidecarLaunchableSnapshot.runtime_health.sidecarHost.lifecycle = 'needs-attach';
+    sidecarLaunchableSnapshot.runtime_health.sidecarHost.attach.state = 'detached';
+    sidecarLaunchableSnapshot.runtime_health.sidecarHost.attach.processId = null;
+    const sidecarLaunchableModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', sidecarLaunchableSnapshot)
+    });
+    assertStartupFlag(sidecarLaunchableModel.desktopShell.appStates.sidecarLaunchable, {
+      label: 'sidecar launchable',
+      value: true,
+      status: 'launchable',
+      routeState: 'ready'
+    });
+    assert.match(sidecarLaunchableModel.desktopShell.sidecarHealth.failureSummary.text, /launchable:launchable/u);
+
+    const sidecarLaunchingSnapshot = structuredClone(sidecarLaunchableSnapshot);
+    sidecarLaunchingSnapshot.runtime_health.sidecarHost.lifecycle = 'launch-requested';
+    sidecarLaunchingSnapshot.runtime_health.sidecarHost.launcher.state = 'launch-requested';
+    const sidecarLaunchingModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', sidecarLaunchingSnapshot)
+    });
+    assertStartupFlag(sidecarLaunchingModel.desktopShell.appStates.sidecarLaunching, {
+      label: 'sidecar launching',
+      value: true,
+      status: 'launching',
+      routeState: 'ready'
+    });
+
+    const sidecarFailedSnapshot = structuredClone(sidecarLaunchableSnapshot);
+    sidecarFailedSnapshot.runtime_health.sidecarHost.lifecycle = 'failed';
+    sidecarFailedSnapshot.runtime_health.sidecarHost.attach.state = 'failed';
+    const sidecarFailedModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', sidecarFailedSnapshot)
+    });
+    assertStartupFlag(sidecarFailedModel.desktopShell.appStates.sidecarFailed, {
+      label: 'sidecar failed',
+      value: true,
+      status: 'failed',
+      routeState: 'ready'
+    });
+
+    const sidecarWrongPortSnapshot = structuredClone(sidecarLaunchableSnapshot);
+    sidecarWrongPortSnapshot.runtime_health.sidecarHost.lifecycle = 'wrong-port';
+    sidecarWrongPortSnapshot.runtime_health.sidecarHost.attach.state = 'wrong-port';
+    sidecarWrongPortSnapshot.runtime_health.sidecarHost.attach.endpoint = 'http://127.0.0.1:80/api/health';
+    const sidecarWrongPortModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', sidecarWrongPortSnapshot)
+    });
+    assertStartupFlag(sidecarWrongPortModel.desktopShell.appStates.sidecarWrongPort, {
+      label: 'sidecar wrong port',
+      value: true,
+      status: 'wrong-port',
+      routeState: 'ready'
+    });
+
+    const sidecarPortConflictSnapshot = structuredClone(sidecarLaunchableSnapshot);
+    sidecarPortConflictSnapshot.runtime_health.sidecarHost.lifecycle = 'port-conflict';
+    sidecarPortConflictSnapshot.runtime_health.sidecarHost.launcher.state = 'port-conflict';
+    const sidecarPortConflictModel = projectModel({
+      runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', sidecarPortConflictSnapshot)
+    });
+    assertStartupFlag(sidecarPortConflictModel.desktopShell.appStates.sidecarPortConflict, {
+      label: 'sidecar port conflict',
+      value: true,
+      status: 'port-conflict',
+      routeState: 'ready'
+    });
+
     const projectMissingModel = projectModel({
       runtimeSnapshot: createWorkbenchResult('runtimeSnapshot', missingProjectSnapshot),
       currentProjectBinding: createFailedWorkbenchResult('currentProjectBinding', {
@@ -1773,6 +1854,12 @@ describe('v15 Workbench read-only API client', () => {
     });
     assertStartupFlag(staleSnapshotModel.desktopShell.appStates.staleSnapshot, {
       label: 'stale snapshot',
+      value: true,
+      status: 'stale',
+      routeState: 'ready'
+    });
+    assertStartupFlag(staleSnapshotModel.desktopShell.appStates.sidecarStale, {
+      label: 'sidecar stale',
       value: true,
       status: 'stale',
       routeState: 'ready'

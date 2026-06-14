@@ -1699,6 +1699,7 @@ function projectSidecarHostLifecycle(sidecarHost) {
   const attach = sidecarHost?.attach ?? {};
   const launcher = sidecarHost?.launcher ?? {};
   const boundaries = sidecarHost?.boundaries ?? {};
+  const allowedPortRange = launcher.allowedPortRange ?? {};
 
   return {
     contractName: valueState(sidecarHost?.contractName),
@@ -1710,11 +1711,17 @@ function projectSidecarHostLifecycle(sidecarHost) {
     attachStrategy: valueState(attach.strategy),
     healthRoute: valueState(attach.healthRoute),
     endpoint: valueState(attach.endpoint),
+    processId: valueState(attach.processId),
     attachSourceContract: valueState(attach.sourceContract),
     launcherState: valueState(launcher.state),
     launcherCommandId: valueState(launcher.commandId),
     nativeHostRequired: valueState(launcher.nativeHostRequired),
     rendererLaunchAvailable: valueState(launcher.rendererLaunchAvailable),
+    allowedHosts: arrayTextState(launcher.allowedHosts),
+    allowedPortRange: {
+      min: valueState(allowedPortRange.min),
+      max: valueState(allowedPortRange.max)
+    },
     stateDirScope: valueState(launcher.stateDirScope),
     launcherSource: valueState(launcher.source),
     boundaries: {
@@ -1961,6 +1968,12 @@ function projectDesktopShell({
     : sidecarAttachState === undefined
       ? 'missing'
       : runtimeSnapshot?.state === 'stale' ? 'stale' : 'needs-attention';
+  const sidecarFailureStates = projectDesktopSidecarFailureStates({
+    sidecarHost,
+    sidecarState,
+    backendHealth,
+    runtimeSnapshot
+  });
   const currentTaskText = [
     firstValue(activeGoal?.nextAction?.next?.taskId, runtimeSnapshot?.currentTask?.taskId),
     firstValue(activeGoal?.nextAction?.next?.role, runtimeSnapshot?.currentTask?.role),
@@ -2109,14 +2122,23 @@ function projectDesktopShell({
       routeState: valueState(routeStateFromRoute(runtimeRoute)),
       attachState: sidecarHost?.attachState,
       attachStrategy: sidecarHost?.attachStrategy,
+      processId: sidecarHost?.processId,
       lifecycleContract: sidecarHost?.contractName,
+      lifecycle: sidecarHost?.lifecycle,
+      endpoint: sidecarHost?.endpoint,
       launcherState: sidecarHost?.launcherState,
       launcherCommandId: sidecarHost?.launcherCommandId,
       launcherAvailable: valueState(firstValue(sidecarHost?.launcherState) === 'defined'),
       rendererLaunchAvailable: sidecarHost?.rendererLaunchAvailable,
+      nativeHostRequired: sidecarHost?.nativeHostRequired,
+      allowedHosts: sidecarHost?.allowedHosts,
+      allowedPortRange: sidecarHost?.allowedPortRange,
       fixedLauncherContract: valueState('attach_sidecar + launch_sidecar + symphony.console.sidecar.launch'),
       commandPreviewInert: valueState('pnpm symphony console --host <loopback> --port <allowed-port>'),
-      launcherHandoff: valueState(firstValue(sidecarHost?.launcherCommandId) || 'native host bridge unavailable')
+      launcherHandoff: valueState(firstValue(sidecarHost?.launcherCommandId) || 'native host bridge unavailable'),
+      failureStates: sidecarFailureStates,
+      failureSummary: valueState(sidecarFailureStateSummary(sidecarFailureStates)),
+      recovery: valueState('Use copy-only checkout commands or restart the local console sidecar; the renderer does not execute shell commands.')
     },
     backendHealth,
     workspace,
@@ -2223,10 +2245,115 @@ function projectDesktopShell({
     releasePublicationEvidence,
     stableWorkbenchRelease,
     routeProvenance,
-    appStates,
+    appStates: {
+      ...appStates,
+      sidecarLaunchable: sidecarFailureStates.launchable,
+      sidecarLaunching: sidecarFailureStates.launching,
+      sidecarFailed: sidecarFailureStates.failed,
+      sidecarWrongPort: sidecarFailureStates.wrongPort,
+      sidecarPortConflict: sidecarFailureStates.portConflict,
+      sidecarStale: sidecarFailureStates.stale,
+      sidecarUnavailable: sidecarFailureStates.unavailable
+    },
     boundaries,
     note: 'App Home is a first-screen desktop surface over existing read-only local API contracts. It does not execute shell commands, start jobs, open files, call models, self-approve, mutate goals, push git state, or declare release completion.'
   };
+}
+
+function projectDesktopSidecarFailureStates({
+  sidecarHost,
+  sidecarState,
+  backendHealth,
+  runtimeSnapshot
+}) {
+  const attachState = firstValue(sidecarHost?.attachState);
+  const launcherState = firstValue(sidecarHost?.launcherState);
+  const lifecycle = firstValue(sidecarHost?.lifecycle);
+  const endpoint = firstValue(sidecarHost?.endpoint);
+  const backendRouteState = backendHealth?.routeState?.value ?? 'missing';
+  const backendUnavailable = backendRouteState !== 'ready';
+  const missingHost = sidecarState === 'missing';
+  const stale = runtimeSnapshot?.state === 'stale' || backendHealth?.freshness?.value === 'stale' || attachState === 'stale' || lifecycle === 'stale';
+  const launchable = attachState !== 'attached' && launcherState === 'defined' && backendUnavailable === false && stale === false;
+  const launching = launcherState === 'launch-requested' || lifecycle === 'launch-requested';
+  const failed = ['failed', 'error'].includes(attachState) || ['failed', 'error'].includes(launcherState) || ['failed', 'error'].includes(lifecycle);
+  const wrongPort = attachState === 'wrong-port' || launcherState === 'wrong-port' || lifecycle === 'wrong-port';
+  const portConflict = attachState === 'port-conflict' || launcherState === 'port-conflict' || lifecycle === 'port-conflict';
+  const unavailable = missingHost || backendUnavailable || attachState === 'unavailable' || launcherState === 'unavailable' || lifecycle === 'unavailable';
+
+  return {
+    attached: desktopAppStateFlag({
+      value: attachState === 'attached',
+      state: 'attached',
+      reason: attachState === 'attached' ? `attached at ${endpoint ?? 'loopback endpoint'}` : `attach state ${attachState ?? 'missing'}`,
+      source: 'sidecar-host-lifecycle.v1 attach.state',
+      routeState: backendRouteState
+    }),
+    launchable: desktopAppStateFlag({
+      value: launchable,
+      state: 'launchable',
+      reason: launchable ? 'native launcher is defined and sidecar is not attached' : `attach ${attachState ?? 'missing'}; launcher ${launcherState ?? 'missing'}`,
+      source: 'sidecar-host-lifecycle.v1 launcher.state',
+      routeState: backendRouteState
+    }),
+    launching: desktopAppStateFlag({
+      value: launching,
+      state: 'launching',
+      reason: launching ? 'native host requested controlled sidecar launch' : `launcher ${launcherState ?? 'missing'}`,
+      source: 'sidecar-host-lifecycle.v1 launcher.state',
+      routeState: backendRouteState
+    }),
+    failed: desktopAppStateFlag({
+      value: failed,
+      state: 'failed',
+      reason: failed ? `attach ${attachState ?? 'missing'}; launcher ${launcherState ?? 'missing'}; lifecycle ${lifecycle ?? 'missing'}` : 'sidecar failure state not reported',
+      source: 'sidecar-host-lifecycle.v1 attach/launcher/lifecycle',
+      routeState: backendRouteState
+    }),
+    wrongPort: desktopAppStateFlag({
+      value: wrongPort,
+      state: 'wrong-port',
+      reason: wrongPort ? `sidecar endpoint ${endpoint ?? 'missing endpoint'} is outside the expected loopback port` : `endpoint ${endpoint ?? 'missing endpoint'}`,
+      source: 'sidecar-host-lifecycle.v1 attach.state',
+      routeState: backendRouteState
+    }),
+    portConflict: desktopAppStateFlag({
+      value: portConflict,
+      state: 'port-conflict',
+      reason: portConflict ? `configured endpoint ${endpoint ?? 'missing endpoint'} is already occupied or mismatched` : `attach ${attachState ?? 'missing'}; launcher ${launcherState ?? 'missing'}`,
+      source: 'sidecar-host-lifecycle.v1 attach/launcher state',
+      routeState: backendRouteState
+    }),
+    stale: desktopAppStateFlag({
+      value: stale,
+      state: 'stale',
+      reason: stale ? `runtime freshness ${backendHealth?.freshness?.value ?? runtimeSnapshot?.state ?? attachState}` : 'sidecar snapshot current',
+      source: 'app-state-snapshot.v1 freshness + sidecar-host-lifecycle.v1',
+      routeState: backendRouteState
+    }),
+    unavailable: desktopAppStateFlag({
+      value: unavailable,
+      state: 'unavailable',
+      reason: unavailable ? `backend route ${backendRouteState}; attach ${attachState ?? 'missing'}` : 'sidecar route available',
+      source: 'app-state-snapshot.v1 route + sidecar-host-lifecycle.v1',
+      routeState: backendRouteState
+    })
+  };
+}
+
+function sidecarFailureStateSummary(failureStates) {
+  return [
+    ['attached', failureStates.attached],
+    ['launchable', failureStates.launchable],
+    ['launching', failureStates.launching],
+    ['failed', failureStates.failed],
+    ['wrong-port', failureStates.wrongPort],
+    ['port-conflict', failureStates.portConflict],
+    ['stale', failureStates.stale],
+    ['unavailable', failureStates.unavailable]
+  ]
+    .map(([label, state]) => `${label}:${state.status.value}`)
+    .join(' / ');
 }
 
 function projectSystemGoldenPath({
