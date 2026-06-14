@@ -14,6 +14,7 @@ import {
   CONTROLLED_IMPLEMENTATION_PLAN_PREVIEW_ROUTE_TEMPLATE,
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
+  REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
   ADOPTION_INSPECT_ROUTE_TEMPLATE,
   CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
@@ -21,6 +22,7 @@ import {
   createControlledImplementationPlanPreviewRoute,
   createControlledProviderRunnerPreviewRoute,
   createWorkerRunPreviewRoute,
+  createReviewerRunPreviewRoute,
   createGoalEventsRoute,
   createGoalOperationsRoute,
   createGoalProgressRoute,
@@ -40,6 +42,7 @@ const RESULT_ESCROW_CONFIRM_ERROR_MESSAGE = 'result escrow confirm 未返回可�
 const CONTROLLED_IMPLEMENTATION_CONFIRM_ERROR_MESSAGE = 'implementation confirm 未返回可用 contract';
 const CONTROLLED_PROVIDER_RUNNER_CONFIRM_ERROR_MESSAGE = 'provider runner confirm 未返回可用 contract';
 const WORKER_RUN_CONFIRM_ERROR_MESSAGE = 'worker run confirm 未返回可用 contract';
+const REVIEWER_RUN_CONFIRM_ERROR_MESSAGE = 'reviewer run confirm 未返回可用 contract';
 const CONTROLLED_VERIFICATION_CONFIRM_ERROR_MESSAGE = 'verification confirm 未返回可用 contract';
 const CONTROLLED_ADOPTION_FREEZE_ERROR_MESSAGE = 'adoption plan freeze 未返回可用 contract';
 const CONTROLLED_ADOPTION_CONFIRM_ERROR_MESSAGE = 'adoption confirm 未返回可用 contract';
@@ -155,6 +158,7 @@ export async function fetchWorkbenchContracts(options = {}) {
   const controlledImplementationPlanPreviewRoute = createControlledImplementationPlanPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const controlledProviderRunnerPreviewRoute = createControlledProviderRunnerPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const workerRunPreviewRoute = createWorkerRunPreviewRoute(activeGoalId, results.goalNextAction?.data);
+  const reviewerRunPreviewRoute = createReviewerRunPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
 
@@ -261,6 +265,17 @@ export async function fetchWorkbenchContracts(options = {}) {
         message: 'worker run preview 未暴露 / 不适用'
       })
     : await fetchReadonlyRoute(workerRunPreviewRoute, options);
+
+  results.reviewerRunPreview = reviewerRunPreviewRoute === null
+    ? readonlySkipped({
+        route: {
+          ...REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+          id: 'reviewerRunPreview',
+          label: 'Reviewer Run Preview'
+        },
+        message: 'reviewer run preview 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(reviewerRunPreviewRoute, options);
 
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({
@@ -640,6 +655,77 @@ export async function confirmWorkerRunPreview(path, body, {
       ok: false,
       httpStatus: response.status,
       message: WORKER_RUN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  return {
+    ok: true,
+    httpStatus: response.status,
+    data
+  };
+}
+
+export async function confirmReviewerRunPreview(path, body, {
+  fetchImpl = globalThis.fetch
+} = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let response;
+
+  try {
+    response = await fetchImpl(path, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    return {
+      ok: false,
+      httpStatus: null,
+      message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
+      errorEnvelope: null
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: errorMessageFromEnvelope(data),
+      errorEnvelope: isErrorEnvelope(data) ? data : null
+    };
+  }
+
+  if (data?.contractName !== 'reviewerRunConfirmation.v1') {
+    return {
+      ok: false,
+      httpStatus: response.status,
+      message: REVIEWER_RUN_CONFIRM_ERROR_MESSAGE,
       errorEnvelope: null
     };
   }

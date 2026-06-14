@@ -6,6 +6,7 @@ import {
   confirmControlledImplementationRunPlan,
   confirmControlledProviderRunnerPlan,
   confirmControlledVerificationRun,
+  confirmReviewerRunPreview,
   confirmWorkerRunPreview,
   confirmGoalEventPlan,
   fetchAdoptionInspection,
@@ -294,6 +295,13 @@ export function WorkbenchShell({
             <WorkerRunPreviewPanel
               preview={model.activeGoal.workerRunPreview}
               onWorkerRunConfirmed={onRefreshWorkbenchContracts}
+            />
+          </section>
+
+          <section className="provider-runner-preview-grid" aria-label="v67 Claude Code reviewer lane">
+            <ReviewerRunPreviewPanel
+              preview={model.activeGoal.reviewerRunPreview}
+              onReviewerRunConfirmed={onRefreshWorkbenchContracts}
             />
           </section>
 
@@ -6951,6 +6959,242 @@ function WorkerRunPreviewPanel({ preview, onWorkerRunConfirmed }) {
   );
 }
 
+function ReviewerRunPreviewPanel({ preview, onReviewerRunConfirmed }) {
+  const [confirmState, setConfirmState] = useState({
+    phase: 'idle',
+    result: null,
+    error: null
+  });
+  const confirmRoute = preview?.confirm?.endpoint?.route?.value;
+  const confirmBody = buildReviewerRunConfirmBody(preview);
+  const confirmAvailable = preview?.state === 'preview-ready'
+    && preview?.confirm?.available?.value === true
+    && typeof confirmRoute === 'string'
+    && confirmRoute.trim() !== ''
+    && confirmBody !== null;
+
+  async function handleConfirm() {
+    if (!confirmAvailable) {
+      setConfirmState({
+        phase: 'failed',
+        result: null,
+        error: 'reviewer run confirm route unavailable'
+      });
+      return;
+    }
+
+    setConfirmState({
+      phase: 'loading',
+      result: null,
+      error: null
+    });
+
+    const result = await confirmReviewerRunPreview(confirmRoute, confirmBody);
+
+    if (result.ok) {
+      setConfirmState({
+        phase: 'ready',
+        result: result.data,
+        error: null
+      });
+      if (typeof onReviewerRunConfirmed === 'function') {
+        await onReviewerRunConfirmed();
+      }
+      return;
+    }
+
+    setConfirmState({
+      phase: 'failed',
+      result: null,
+      error: result.errorEnvelope === null
+        ? result.message
+        : `${result.errorEnvelope.error.code} / ${result.errorEnvelope.error.message}`
+    });
+  }
+
+  return (
+    <DataPanel
+      id="reviewer-run-preview-panel"
+      kicker="v67 reviewer lane"
+      title="Controlled Claude Reviewer Run"
+      state={preview?.state ?? 'unavailable'}
+    >
+      <FieldList rows={[
+        ['modelName', preview?.modelName],
+        ['routeState', preview?.routeState],
+        ['goalId', preview?.goalId],
+        ['taskId', preview?.taskId],
+        ['providerId', preview?.provider?.providerId],
+        ['providerReadiness', preview?.provider?.readinessState],
+        ['reviewerActorId', preview?.reviewerIdentity?.reviewerActorId],
+        ['commandTemplateId', preview?.plan?.commandTemplateId],
+        ['handoffPackRef', preview?.plan?.handoffPackRef],
+        ['planHash', preview?.plan?.planHash],
+        ['blockedReasons', preview?.blockedReasons]
+      ]} />
+
+      <Subsection title="worker evidence">
+        <FieldList rows={[
+          ['state', preview?.workerEvidence?.state],
+          ['sourceContract', preview?.workerEvidence?.sourceContract],
+          ['sourceRef', preview?.workerEvidence?.sourceRef],
+          ['workerRunId', preview?.workerEvidence?.workerRunId],
+          ['workerProviderId', preview?.workerEvidence?.workerProviderId],
+          ['workerActorId', preview?.workerEvidence?.workerActorId],
+          ['taskState', preview?.workerEvidence?.taskState],
+          ['reviewRequired', preview?.workerEvidence?.reviewRequired],
+          ['taskCompleted', preview?.workerEvidence?.taskCompleted],
+          ['reviewApproved', preview?.workerEvidence?.reviewApproved],
+          ['mainVerified', preview?.workerEvidence?.mainVerified],
+          ['releaseReady', preview?.workerEvidence?.releaseReady],
+          ['changedFiles', preview?.workerEvidence?.changedFiles],
+          ['validationCommands', preview?.workerEvidence?.validationCommands],
+          ['artifactRefs', preview?.workerEvidence?.artifactRefs],
+          ['evidenceRefCount', preview?.workerEvidence?.evidenceRefs?.count]
+        ]} />
+        <EvidenceRefList evidenceRefs={preview?.workerEvidence?.evidenceRefs ?? { items: [] }} />
+      </Subsection>
+
+      <Subsection title="confirm handoff">
+        <FieldList rows={[
+          ['available', preview?.confirm?.available],
+          ['endpoint.method', preview?.confirm?.endpoint?.method],
+          ['endpoint.route', preview?.confirm?.endpoint?.route],
+          ['requiredFields', preview?.confirm?.endpoint?.requiredFields],
+          ['requiresPlanHash', preview?.confirm?.endpoint?.requiresPlanHash],
+          ['providerId', preview?.confirm?.endpoint?.providerId],
+          ['role', preview?.confirm?.endpoint?.role],
+          ['commandTemplateId', preview?.confirm?.endpoint?.commandTemplateId],
+          ['handoffPackRef', preview?.confirm?.endpoint?.handoffPackRef]
+        ]} />
+        <div className="goal-event-confirm-actions">
+          <button type="button" onClick={handleConfirm} disabled={!confirmAvailable || confirmState.phase === 'loading'}>
+            Confirm reviewer run
+          </button>
+          <code>{confirmRoute ?? 'confirm route unavailable'}</code>
+        </div>
+        {confirmState.phase === 'failed' ? (
+          <p className="error-copy">confirm 错误摘要：{confirmState.error}</p>
+        ) : null}
+        {confirmState.phase === 'loading' ? (
+          <p className="empty-copy">正在按 reviewerRunHandoff.v1 的 plan hash 确认 reviewer run。</p>
+        ) : null}
+        {confirmState.phase === 'ready' ? (
+          <FieldList rows={[
+            ['contractName', textValue(confirmState.result.contractName)],
+            ['status', textValue(confirmState.result.status)],
+            ['verdictId', textValue(confirmState.result.verdictId)],
+            ['providerId', textValue(confirmState.result.providerId)],
+            ['role', textValue(confirmState.result.role)],
+            ['commandTemplateId', textValue(confirmState.result.commandTemplateId)],
+            ['handoffPackRef', textValue(confirmState.result.handoffPackRef)],
+            ['adapter', textValue(confirmState.result.adapter)],
+            ['realClaudeSmokeOptIn', textValue(confirmState.result.realClaudeSmokeOptIn)],
+            ['verdict.status', textValue(confirmState.result.verdict?.status)],
+            ['nextState.reviewApproved', textValue(confirmState.result.verdict?.nextState?.reviewApproved)],
+            ['nextState.revisionRequired', textValue(confirmState.result.verdict?.nextState?.revisionRequired)],
+            ['nextState.taskCompleted', textValue(confirmState.result.verdict?.nextState?.taskCompleted)],
+            ['nextState.adoptionReady', textValue(confirmState.result.verdict?.nextState?.adoptionReady)],
+            ['nextState.mainVerified', textValue(confirmState.result.verdict?.nextState?.mainVerified)],
+            ['nextState.releaseReady', textValue(confirmState.result.verdict?.nextState?.releaseReady)],
+            ['safety.rawWorkerTranscriptAvailable', textValue(confirmState.result.safety?.rawWorkerTranscriptAvailable)],
+            ['safety.rawProviderOutputAvailable', textValue(confirmState.result.safety?.rawProviderOutputAvailable)],
+            ['safety.gitMutationAvailable', textValue(confirmState.result.safety?.gitMutationAvailable)],
+            ['safety.githubReleaseAutomationAvailable', textValue(confirmState.result.safety?.githubReleaseAutomationAvailable)]
+          ]} />
+        ) : null}
+      </Subsection>
+
+      <Subsection title="review policy">
+        <FieldList rows={[
+          ['requiresIndependentReviewer', preview?.reviewPolicy?.requiresIndependentReviewer],
+          ['allowedVerdicts', preview?.reviewPolicy?.allowedVerdicts],
+          ['verdictCompletesTask', preview?.reviewPolicy?.verdictCompletesTask],
+          ['adoptionAvailable', preview?.reviewPolicy?.adoptionAvailable],
+          ['mainVerificationAvailable', preview?.reviewPolicy?.mainVerificationAvailable],
+          ['releaseReadinessAvailable', preview?.reviewPolicy?.releaseReadinessAvailable]
+        ]} />
+      </Subsection>
+
+      <Subsection title="operation status">
+        <FieldList rows={[
+          ['state', textValue(preview?.operationStatus?.state)],
+          ['sourceContract', preview?.operationStatus?.sourceContract],
+          ['operationId', preview?.operationStatus?.operationId],
+          ['commandKind', preview?.operationStatus?.commandKind],
+          ['commandName', preview?.operationStatus?.commandName],
+          ['status', preview?.operationStatus?.status],
+          ['verdictId', preview?.operationStatus?.verdictId],
+          ['verdictStatus', preview?.operationStatus?.verdictStatus],
+          ['providerId', preview?.operationStatus?.providerId],
+          ['role', preview?.operationStatus?.role],
+          ['commandTemplateId', preview?.operationStatus?.commandTemplateId],
+          ['handoffPackRef', preview?.operationStatus?.handoffPackRef],
+          ['reviewerActorId', preview?.operationStatus?.reviewerActorId],
+          ['workerActorId', preview?.operationStatus?.workerActorId],
+          ['adapter', preview?.operationStatus?.adapter],
+          ['realClaudeSmokeOptIn', preview?.operationStatus?.realClaudeSmokeOptIn],
+          ['summary', preview?.operationStatus?.summary],
+          ['validationCommands', preview?.operationStatus?.validationCommands],
+          ['revisionSummary', preview?.operationStatus?.revisionSummary],
+          ['reviewApproved', preview?.operationStatus?.reviewApproved],
+          ['revisionRequired', preview?.operationStatus?.revisionRequired],
+          ['blocked', preview?.operationStatus?.blocked],
+          ['taskCompleted', preview?.operationStatus?.taskCompleted],
+          ['adoptionReady', preview?.operationStatus?.adoptionReady],
+          ['mainVerified', preview?.operationStatus?.mainVerified],
+          ['releaseReady', preview?.operationStatus?.releaseReady],
+          ['rawProviderOutputAvailable', preview?.operationStatus?.rawProviderOutputAvailable],
+          ['rawWorkerTranscriptAvailable', preview?.operationStatus?.rawWorkerTranscriptAvailable]
+        ]} />
+        <ReviewerFindingList findings={preview?.operationStatus?.findings} />
+        <OperationArtifactRefList artifactRefs={preview?.operationStatus?.artifactRefs} />
+      </Subsection>
+
+      <Subsection title="next safe action">
+        <FieldList rows={[
+          ['state', textValue(preview?.nextSafeAction?.state)],
+          ['label', preview?.nextSafeAction?.label],
+          ['copyOnly', preview?.nextSafeAction?.copyOnly],
+          ['action', preview?.nextSafeAction?.action]
+        ]} />
+      </Subsection>
+
+      <Subsection title="boundaries">
+        <FieldList rows={[
+          ['backendOwnedPreviewConfirm', preview?.boundaries?.backendOwnedPreviewConfirm],
+          ['fixedProviderId', preview?.boundaries?.fixedProviderId],
+          ['fixedRole', preview?.boundaries?.fixedRole],
+          ['fixedCommandTemplateId', preview?.boundaries?.fixedCommandTemplateId],
+          ['rendererSuppliedCommandAvailable', preview?.boundaries?.rendererSuppliedCommandAvailable],
+          ['freeformProviderCommandAvailable', preview?.boundaries?.freeformProviderCommandAvailable],
+          ['genericShellAvailable', preview?.boundaries?.genericShellAvailable],
+          ['genericTerminalAvailable', preview?.boundaries?.genericTerminalAvailable],
+          ['frontendLocalJsonlReadAvailable', preview?.boundaries?.frontendLocalJsonlReadAvailable],
+          ['frontendLocalSessionReadAvailable', preview?.boundaries?.frontendLocalSessionReadAvailable],
+          ['frontendProviderFolderReadAvailable', preview?.boundaries?.frontendProviderFolderReadAvailable],
+          ['rawTranscriptAvailable', preview?.boundaries?.rawTranscriptAvailable],
+          ['rawWorkerTranscriptAvailable', preview?.boundaries?.rawWorkerTranscriptAvailable],
+          ['rawModelOutputAvailable', preview?.boundaries?.rawModelOutputAvailable],
+          ['rawProviderOutputAvailable', preview?.boundaries?.rawProviderOutputAvailable],
+          ['reviewerReadsRawWorkerTranscript', preview?.boundaries?.reviewerReadsRawWorkerTranscript],
+          ['reviewerOutputCompletesTask', preview?.boundaries?.reviewerOutputCompletesTask],
+          ['reviewerOutputApprovesAdoption', preview?.boundaries?.reviewerOutputApprovesAdoption],
+          ['reviewerVerdictPassesMainVerification', preview?.boundaries?.reviewerVerdictPassesMainVerification],
+          ['reviewerVerdictMarksReleaseReady', preview?.boundaries?.reviewerVerdictMarksReleaseReady],
+          ['automaticSelfReviewAvailable', preview?.boundaries?.automaticSelfReviewAvailable],
+          ['writesMainWorktree', preview?.boundaries?.writesMainWorktree],
+          ['gitMutationAvailable', preview?.boundaries?.gitMutationAvailable],
+          ['githubReleaseAutomationAvailable', preview?.boundaries?.githubReleaseAutomationAvailable],
+          ['realClaudeRequiresOptIn', preview?.boundaries?.realClaudeRequiresOptIn]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{preview?.note}</p>
+    </DataPanel>
+  );
+}
+
 function buildWorkerRunConfirmBody(preview) {
   const goalId = preview?.goalId?.value;
   const taskId = preview?.taskId?.value;
@@ -6976,6 +7220,32 @@ function buildWorkerRunConfirmBody(preview) {
     commandTemplateId,
     timeoutMs,
     workspacePolicyId
+  };
+}
+
+function buildReviewerRunConfirmBody(preview) {
+  const goalId = preview?.goalId?.value;
+  const taskId = preview?.taskId?.value;
+  const providerId = preview?.provider?.providerId?.value;
+  const role = preview?.provider?.role?.value;
+  const commandTemplateId = preview?.plan?.commandTemplateId?.value;
+  const planHash = preview?.plan?.planHash?.value;
+  const handoffPackRef = preview?.plan?.handoffPackRef?.value;
+  const reviewerActorId = preview?.reviewerIdentity?.reviewerActorId?.value;
+
+  if (![goalId, taskId, providerId, role, commandTemplateId, planHash, handoffPackRef, reviewerActorId].every((value) => typeof value === 'string' && value.trim() !== '')) {
+    return null;
+  }
+
+  return {
+    planHash,
+    goalId,
+    taskId,
+    providerId,
+    role,
+    commandTemplateId,
+    handoffPackRef,
+    reviewerActorId
   };
 }
 
@@ -9093,6 +9363,30 @@ function OperationArtifactRefList({ artifactRefs }) {
             ['ref', artifact.ref],
             ['uri', artifact.uri],
             ['status', artifact.status]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ReviewerFindingList({ findings }) {
+  const items = Array.isArray(findings?.items) ? findings.items : [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="review findings empty。" />;
+  }
+
+  return (
+    <ul className="operation-artifact-ref-list">
+      {items.map((finding, index) => (
+        <li key={`${finding.file.text}-${finding.line.text}-${index}`}>
+          <FieldList rows={[
+            ['severity', finding.severity],
+            ['file', finding.file],
+            ['line', finding.line],
+            ['statement', finding.statement],
+            ['recommendation', finding.recommendation]
           ]} />
         </li>
       ))}
