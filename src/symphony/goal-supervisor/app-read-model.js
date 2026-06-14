@@ -48,6 +48,10 @@ import {
   validateThreadHandoffPackContract
 } from '../thread-handoff-pack-contracts.js';
 import {
+  buildReviewGatePreview,
+  validateReviewGatePreviewContract
+} from '../review-gate-workbench-surface-contracts.js';
+import {
   chooseGoalSupervisorPolicyDecision,
   projectGoalSupervisorCommandBoundary
 } from './policy.js';
@@ -121,6 +125,7 @@ export function buildGoalSupervisorAppReadModel({
   appStateSnapshot = null,
   childDispatchProviderPolicy = null,
   codexProviderRunRecord = null,
+  reviewGateTarget = null,
   goalCloseout
 } = {}) {
   const projection = coreProjection ?? buildGoalSupervisorCoreProjection({
@@ -274,6 +279,18 @@ export function buildGoalSupervisorAppReadModel({
     threadContinuationDecision: normalizedThreadContinuationDecision,
     contextBlockedReasons: threadHandoffContextBlockedReasons
   });
+  const reviewGatePreview = buildGoalSupervisorReviewGatePreview({
+    generatedAt,
+    goalId: normalizedGoalId,
+    title,
+    tasks,
+    projection,
+    threadHandoffPack,
+    timelineEvents,
+    currentGate: normalizedGate,
+    goalNext,
+    target: reviewGateTarget
+  });
 
   return {
     contractName: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
@@ -314,7 +331,8 @@ export function buildGoalSupervisorAppReadModel({
     codexProviderExecutionPreview,
     codexProviderRunRecovery,
     reviewerHandoffPreview,
-    threadHandoffPack
+    threadHandoffPack,
+    reviewGatePreview
   };
 }
 
@@ -438,6 +456,285 @@ function buildGoalSupervisorThreadHandoffPack({
   }
 
   return pack;
+}
+
+function buildGoalSupervisorReviewGatePreview({
+  generatedAt,
+  goalId,
+  title,
+  tasks,
+  projection,
+  threadHandoffPack,
+  timelineEvents = [],
+  currentGate = null,
+  goalNext = null,
+  target = null
+}) {
+  const preview = buildReviewGatePreview({
+    generatedAt,
+    goal: reviewGateGoal({
+      goalId,
+      title
+    }),
+    task: reviewGateTask({
+      tasks,
+      projection,
+      threadHandoffPack
+    }),
+    threadHandoffPack,
+    target: reviewGateTargetFrom({
+      target,
+      currentGate,
+      goalNext,
+      projection
+    }),
+    reviewerEvidenceRefs: reviewGateReviewerEvidenceRefs({
+      threadHandoffPack,
+      timelineEvents
+    }),
+    mainGateEvidenceRefs: reviewGateMainGateEvidenceRefs({
+      timelineEvents,
+      tasks
+    }),
+    releaseGateEvidenceRefs: reviewGateReleaseGateEvidenceRefs({
+      timelineEvents,
+      currentGate
+    })
+  });
+  const validation = validateReviewGatePreviewContract(preview);
+
+  if (!validation.ok) {
+    throw new Error(`Invalid review gate preview projection: ${validation.errors.join('; ')}`);
+  }
+
+  return preview;
+}
+
+function reviewGateGoal({
+  goalId,
+  title
+}) {
+  const safeGoalId = firstNonEmptyString(goalId, 'missing-goal');
+
+  return {
+    goalId: safeGoalId,
+    title: firstNonEmptyString(title, safeGoalId),
+    state: 'active',
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: supervisorRouteSourceRef()
+  };
+}
+
+function reviewGateTask({
+  tasks,
+  projection,
+  threadHandoffPack
+}) {
+  const taskId = firstNonEmptyString(
+    threadHandoffPack?.task?.taskId,
+    projection?.current?.taskId,
+    projection?.route?.current?.taskId,
+    Array.isArray(tasks) ? tasks.find((entry) => isPlainObject(entry))?.taskId : null,
+    'missing-task'
+  );
+  const task = Array.isArray(tasks)
+    ? tasks.find((entry) => isPlainObject(entry) && entry.taskId === taskId)
+    : null;
+
+  return {
+    taskId,
+    title: firstNonEmptyString(
+      task?.title,
+      threadHandoffPack?.task?.title,
+      taskId
+    ),
+    state: task?.status === 'blocked' || threadHandoffPack?.task?.state === 'blocked' ? 'blocked' : 'active',
+    sourceContract: GOAL_SUPERVISOR_APP_READ_MODEL_CONTRACT_NAME,
+    sourceRef: supervisorRouteSourceRef()
+  };
+}
+
+function reviewGateTargetFrom({
+  target,
+  currentGate,
+  goalNext,
+  projection
+}) {
+  if (['reviewer-verdict', 'main-gate', 'release-gate'].includes(target)) {
+    return target;
+  }
+
+  const gateName = firstNonEmptyString(
+    currentGate?.gateName,
+    currentGate?.name,
+    currentGate?.id,
+    goalNext?.next?.gateName,
+    goalNext?.next?.gate,
+    projection?.current?.gateName,
+    projection?.route?.current?.gateName
+  );
+  const phase = firstNonEmptyString(
+    goalNext?.next?.phase,
+    projection?.current?.phase,
+    projection?.route?.current?.phase
+  );
+
+  if (gateName?.startsWith('release.') || phase === 'release-gate') {
+    return 'release-gate';
+  }
+
+  if (gateName === 'main-verification' || phase === 'main-verification' || phase === 'main-gate') {
+    return 'main-gate';
+  }
+
+  return 'reviewer-verdict';
+}
+
+function reviewGateReviewerEvidenceRefs({
+  threadHandoffPack,
+  timelineEvents
+}) {
+  return uniqueEvidenceRefs([
+    ...evidenceRefsFromThreadHandoffPack(threadHandoffPack),
+    ...evidenceRefsFromTimelineEvents({
+      timelineEvents,
+      eventTypes: ['reviewer.approved', 'reviewer.needs-revision'],
+      fallbackLabel: 'reviewer evidence'
+    })
+  ]);
+}
+
+function reviewGateMainGateEvidenceRefs({
+  timelineEvents,
+  tasks
+}) {
+  return uniqueEvidenceRefs([
+    ...evidenceRefsFromTimelineEvents({
+      timelineEvents,
+      eventTypes: ['main.verification-passed', 'main.verification-failed'],
+      fallbackLabel: 'main gate evidence'
+    }),
+    ...evidenceRefsFromTasks({
+      tasks,
+      fallbackLabel: 'task evidence'
+    })
+  ]);
+}
+
+function reviewGateReleaseGateEvidenceRefs({
+  timelineEvents,
+  currentGate
+}) {
+  const gateName = firstNonEmptyString(currentGate?.gateName, currentGate?.name, currentGate?.id, 'release gate');
+
+  return uniqueEvidenceRefs(evidenceRefsFromTimelineEvents({
+    timelineEvents,
+    eventTypes: ['release.gate-passed', 'release.gate-failed', 'release.ready-declared'],
+    fallbackLabel: `${gateName} evidence`
+  }));
+}
+
+function evidenceRefsFromThreadHandoffPack(threadHandoffPack) {
+  if (!isPlainObject(threadHandoffPack)) {
+    return [];
+  }
+
+  return uniqueEvidenceRefs([
+    ...safeArray(threadHandoffPack.requiredEvidenceRefs),
+    ...safeArray(threadHandoffPack.checkpointRef?.requiredEvidenceRefs)
+  ]);
+}
+
+function evidenceRefsFromTimelineEvents({
+  timelineEvents,
+  eventTypes,
+  fallbackLabel
+}) {
+  return safeArray(timelineEvents)
+    .filter(isPlainObject)
+    .filter((event) => eventTypes.includes(event.status ?? event.eventType))
+    .map((event) => evidenceRefFromValue({
+      ref: event.evidenceRef,
+      label: firstNonEmptyString(event.eventId, event.taskId, fallbackLabel)
+    }))
+    .filter(isPlainObject);
+}
+
+function evidenceRefsFromTasks({
+  tasks,
+  fallbackLabel
+}) {
+  return safeArray(tasks)
+    .filter(isPlainObject)
+    .map((task) => evidenceRefFromValue({
+      ref: task.evidenceRef,
+      label: firstNonEmptyString(task.taskId, fallbackLabel)
+    }))
+    .filter(isPlainObject);
+}
+
+function evidenceRefFromValue({
+  ref,
+  label
+}) {
+  const safeRef = safeDisplayRef(ref);
+
+  if (!nonEmptyString(safeRef)) {
+    return null;
+  }
+
+  return {
+    kind: evidenceKindForRef(safeRef),
+    ref: safeRef,
+    label: firstNonEmptyString(label, safeRef)
+  };
+}
+
+function evidenceKindForRef(ref) {
+  if (/^[a-f0-9]{7,64}$/u.test(ref)) {
+    return 'commit';
+  }
+
+  if (ref.startsWith('artifact:') || ref.startsWith('checkpoint:')) {
+    return 'artifact-ref';
+  }
+
+  if (ref.startsWith('command:')) {
+    return 'command-evidence';
+  }
+
+  return 'repo-doc';
+}
+
+function uniqueEvidenceRefs(refs) {
+  const seen = new Set();
+  const result = [];
+
+  for (const ref of safeArray(refs).filter(isPlainObject)) {
+    const safeRef = safeDisplayRef(ref.ref);
+    const kind = ['repo-doc', 'artifact-ref', 'commit', 'command-evidence', 'external-note'].includes(ref.kind)
+      ? ref.kind
+      : evidenceKindForRef(safeRef ?? '');
+
+    if (!nonEmptyString(safeRef)) {
+      continue;
+    }
+
+    const key = `${kind}:${safeRef}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push({
+      kind,
+      ref: safeRef,
+      label: firstNonEmptyString(ref.label, safeRef)
+    });
+  }
+
+  return result;
 }
 
 function threadHandoffGoal({
@@ -3358,6 +3655,10 @@ function stripEmptyObject(value) {
 
 function uniqueStrings(values) {
   return [...new Set((Array.isArray(values) ? values : []).filter(nonEmptyString))];
+}
+
+function safeArray(value) {
+  return Array.isArray(value) ? value : [];
 }
 
 function firstNonEmptyString(...values) {
