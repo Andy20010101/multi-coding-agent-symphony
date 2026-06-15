@@ -2470,6 +2470,49 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.doesNotMatch(confirmBodySource, /commandText|providerCommand|workspacePath|timeoutMs|workspacePolicyId|rawTranscript|rawModelOutput|rawProviderOutput/u);
   });
 
+  it('renders the v68 adoption and main verification loop as read-only evidence status', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const client = await readFile('frontend/workbench/src/api/client.js', 'utf8');
+    const panelSource = app.slice(
+      app.indexOf('function AdoptionMainVerificationLoopPanel'),
+      app.indexOf('function stripEmptyValues')
+    );
+    const projectionBody = contracts.slice(
+      contracts.indexOf('function projectAdoptionMainVerificationLoop'),
+      contracts.indexOf('function projectControlledProviderRunnerOperation')
+    );
+
+    assert.match(app, /<AdoptionMainVerificationLoopPanel loop=\{model\.activeGoal\.adoptionMainVerificationLoop\}/u);
+    assert.match(panelSource, /Adoption -> Main Verification/u);
+    assert.match(panelSource, /Worker -> Reviewer -> Adoption -> Main Verification -> Gate Draft/u);
+    assert.match(panelSource, /next safe action/u);
+    assert.match(panelSource, /backend mutations only/u);
+    assert.match(panelSource, /preview\/confirm required/u);
+    assert.match(panelSource, /renderer command execution/u);
+    assert.match(panelSource, /generic shell runner/u);
+    assert.match(panelSource, /raw provider output/u);
+    assert.match(panelSource, /direct main verification/u);
+    assert.match(panelSource, /release ready declaration/u);
+    assert.match(panelSource, /GitHub Release automation/u);
+    assert.match(contracts, /ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE/u);
+    assert.match(contracts, /MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE/u);
+    assert.match(contracts, /function projectAdoptionMainVerificationLoop/u);
+    assert.match(projectionBody, /V68AdoptionMainVerificationLoop/u);
+    assert.match(projectionBody, /adoptionReadiness\.v1 \+ goal-operation-runs\.v1/u);
+    assert.match(projectionBody, /mainVerificationPreview\.v1 \+ goal-operation-runs\.v1/u);
+    assert.match(projectionBody, /backendOwnedMutationsOnly:\s*valueState\(true\)/u);
+    assert.match(projectionBody, /rendererCommandExecutionAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /genericShellRunnerAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /rawProviderOutputAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /releaseReadyDeclarationAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /gitMutationAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /githubReleaseAutomationAvailable:\s*valueState\(false\)/u);
+    assert.match(client, /createAdoptionReadinessPreviewRoute/u);
+    assert.match(client, /createMainVerificationPreviewRoute/u);
+    assert.doesNotMatch(panelSource, /<button\b|<form\b|<textarea\b|<input\b|fetch\(|window\.open|navigator\.clipboard|child_process|exec\(|spawn\(|rawTranscript|rawModelOutput|sessionPath|jsonl|git merge|git tag|git push/u);
+  });
+
   it('keeps the next action card and prompt drawer display-only', async () => {
     const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
     const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
@@ -2960,11 +3003,14 @@ describe('v15 Workbench React/Vite shell', () => {
       '/api/goals/${goalId}/verification-run-confirm',
       '/api/goals/<goal-id>/adoption-confirm',
       '/api/goals/<goal-id>/adoption-plan-freeze',
+      '/api/goals/<goal-id>/adoption-readiness-preview',
       '/api/goals/<goal-id>/closeout',
       '/api/goals/<goal-id>/event-plan-confirm',
       '/api/goals/<goal-id>/event-plan-preview',
+      '/api/goals/<goal-id>/event-plan-preview',
       '/api/goals/<goal-id>/events',
       '/api/goals/<goal-id>/implementation-plan-preview',
+      '/api/goals/<goal-id>/main-verification-preview',
       '/api/goals/<goal-id>/next',
       '/api/goals/<goal-id>/operations',
       '/api/goals/<goal-id>/progress',

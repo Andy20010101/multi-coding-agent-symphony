@@ -34,8 +34,12 @@ import {
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   READONLY_API_ROUTE_ALLOWLIST,
   REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+  ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE,
+  MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE,
   WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
   createSafeArtifactPreviewRoutes,
+  createAdoptionReadinessPreviewRoute,
+  createMainVerificationPreviewRoute,
   createRunTimelineRoute,
   projectArtifactRefs,
   projectSubagentHandoffBoard,
@@ -106,6 +110,7 @@ const V30_GOAL_ID = 'v30-verified-adoption-workspace-v2';
 const V41_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 const V66_GOAL_ID = 'v66-controlled-codex-worker-execution';
 const V67_GOAL_ID = 'v67-claude-code-reviewer-lane';
+const V68_GOAL_ID = 'v68-adoption-main-verification-loop';
 const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
 const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
 const BACKEND_ACTIVE_GOAL_ID = 'v20-workbench-backend-event-test';
@@ -229,6 +234,8 @@ describe('v15 Workbench read-only API client', () => {
         ['GET', '/api/goals/<goal-id>/provider-runner-preview', 'controlled-provider-runner-plan-preview.v1'],
         ['GET', '/api/goals/<goal-id>/worker-run-preview', 'workerRunPreview.v1'],
         ['GET', '/api/goals/<goal-id>/reviewer-run-preview', 'reviewerRunHandoff.v1'],
+        ['GET', '/api/goals/<goal-id>/adoption-readiness-preview', 'adoptionReadiness.v1'],
+        ['GET', '/api/goals/<goal-id>/main-verification-preview', 'mainVerificationPreview.v1'],
         ['GET', '/api/handoff/<ref>', 'guided-goal-handoff.v1'],
         ['GET', '/api/runs/<run-id>/timeline', 'symphony.console-run-timeline'],
         ['GET', '/api/runs/<run-id>/artifacts/<artifact-kind>/preview', 'safe-artifact-preview.v1']
@@ -1314,6 +1321,179 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(preview.boundaries.gitMutationAvailable.value, false);
     assert.equal(preview.boundaries.githubReleaseAutomationAvailable.value, false);
     assert.equal(preview.boundaries.realClaudeRequiresOptIn.value, true);
+  });
+
+  it('projects the v68 adoption and main verification loop from backend preview contracts only', () => {
+    const nextAction = {
+      contractName: 'goal-next-action.v1',
+      contractVersion: 1,
+      goalId: V68_GOAL_ID,
+      status: 'action-required',
+      next: {
+        taskId: 'pr-4',
+        role: 'main-verifier',
+        phase: 'verify',
+        blocked: false
+      }
+    };
+    const adoptionRoute = createAdoptionReadinessPreviewRoute(V68_GOAL_ID, nextAction);
+    const mainVerificationRoute = createMainVerificationPreviewRoute(V68_GOAL_ID, nextAction);
+
+    assert.equal(adoptionRoute.path, `/api/goals/${V68_GOAL_ID}/adoption-readiness-preview?task=pr-4`);
+    assert.equal(mainVerificationRoute.path, `/api/goals/${V68_GOAL_ID}/main-verification-preview?task=pr-4`);
+    assert.equal(createAdoptionReadinessPreviewRoute(V67_GOAL_ID, nextAction), null);
+    assert.equal(createMainVerificationPreviewRoute(V67_GOAL_ID, nextAction), null);
+
+    const operations = {
+      contractName: 'goal-operation-runs.v1',
+      contractVersion: 1,
+      goalId: V68_GOAL_ID,
+      operationCount: 4,
+      latestOperationId: 'op_v68_main_verification',
+      runs: [{
+        operationId: 'op_v68_worker',
+        goalId: V68_GOAL_ID,
+        taskId: 'pr-4',
+        role: 'worker',
+        commandKind: 'provider-runner',
+        commandName: 'worker run preview/confirm',
+        status: 'confirmed'
+      }, {
+        operationId: 'op_v68_reviewer',
+        goalId: V68_GOAL_ID,
+        taskId: 'pr-4',
+        role: 'reviewer',
+        commandKind: 'provider-runner',
+        commandName: 'reviewer run preview/confirm',
+        status: 'confirmed'
+      }, {
+        operationId: 'op_v68_adoption',
+        goalId: V68_GOAL_ID,
+        taskId: 'pr-4',
+        role: 'worker',
+        commandKind: 'adoption-confirm',
+        commandName: 'adoption readiness confirm',
+        status: 'confirmed',
+        planHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      }, {
+        operationId: 'op_v68_main_verification',
+        goalId: V68_GOAL_ID,
+        taskId: 'pr-4',
+        role: 'main-verifier',
+        commandKind: 'verification',
+        commandName: 'fixed main verification suite',
+        status: 'confirmed',
+        planHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        artifactRefs: [{
+          kind: 'main-verification-gate-draft',
+          ref: 'goal-operation-runs:op_v68_main_verification:gate-draft'
+        }],
+        verifierSummary: {
+          status: 'passed',
+          passed: true,
+          gateDraftReady: true,
+          releaseReady: false
+        }
+      }]
+    };
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchRouteResult({
+        id: 'goalRunbook',
+        label: 'Goal Runbook',
+        path: `/api/goals/${V68_GOAL_ID}/runbook`,
+        method: 'GET',
+        contractName: 'goal-runbook.v1'
+      }, {
+        contractName: 'goal-runbook.v1',
+        contractVersion: 1,
+        goalId: V68_GOAL_ID,
+        goalTitle: 'v68 Adoption and Main Verification Workbench Loop',
+        tasks: [{
+          taskId: 'pr-4',
+          title: 'Workbench loop surface',
+          roleOrder: ['worker', 'reviewer', 'main-verifier'],
+          acceptance: [],
+          expectedEvidence: {}
+        }],
+        releaseGates: []
+      }),
+      goalNextAction: createWorkbenchRouteResult({
+        id: 'goalNextAction',
+        label: 'Goal Next Action',
+        path: `/api/goals/${V68_GOAL_ID}/next`,
+        method: 'GET',
+        contractName: 'goal-next-action.v1'
+      }, nextAction),
+      activeGoalOperations: createWorkbenchRouteResult({
+        id: 'activeGoalOperations',
+        label: 'Active Goal Operations',
+        path: `/api/goals/${V68_GOAL_ID}/operations`,
+        method: 'GET',
+        contractName: 'goal-operation-runs.v1'
+      }, operations),
+      adoptionReadinessPreview: createWorkbenchRouteResult(adoptionRoute, {
+        contractName: 'adoptionReadiness.v1',
+        contractVersion: 1,
+        state: 'ready',
+        goal: {
+          goalId: V68_GOAL_ID,
+          title: 'v68 Adoption and Main Verification Workbench Loop',
+          state: 'active'
+        },
+        task: {
+          taskId: 'pr-4',
+          title: 'Workbench loop surface',
+          state: 'active'
+        },
+        planHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        fingerprint: 'v68-adoption-readiness:pr-4',
+        blockedReasons: []
+      }),
+      mainVerificationPreview: createWorkbenchRouteResult(mainVerificationRoute, {
+        contractName: 'mainVerificationPreview.v1',
+        contractVersion: 1,
+        state: 'ready',
+        goal: {
+          goalId: V68_GOAL_ID,
+          title: 'v68 Adoption and Main Verification Workbench Loop',
+          state: 'active'
+        },
+        task: {
+          taskId: 'pr-4',
+          title: 'Workbench loop surface',
+          state: 'active'
+        },
+        planHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        fingerprint: 'v68-main-verification:pr-4',
+        blockedReasons: []
+      })
+    });
+    const loop = model.activeGoal.adoptionMainVerificationLoop;
+
+    assert.equal(loop.state, 'available');
+    assert.equal(loop.modelName.value, 'V68AdoptionMainVerificationLoop');
+    assert.equal(loop.goalId.value, V68_GOAL_ID);
+    assert.equal(loop.taskId.value, 'pr-4');
+    assert.deepEqual(loop.steps.items.map((step) => step.status.value), [
+      'confirmed',
+      'confirmed',
+      'applied',
+      'evidence-ready',
+      'draft-ready'
+    ]);
+    assert.equal(loop.nextSafeAction.step.value, 'complete');
+    assert.equal(loop.routes.adoptionReadinessPreview.value, `/api/goals/${V68_GOAL_ID}/adoption-readiness-preview?task=pr-4`);
+    assert.equal(loop.routes.mainVerificationPreview.value, `/api/goals/${V68_GOAL_ID}/main-verification-preview?task=pr-4`);
+    assert.equal(loop.safety.readOnlySurface.value, true);
+    assert.equal(loop.safety.backendOwnedMutationsOnly.value, true);
+    assert.equal(loop.safety.previewConfirmRequired.value, true);
+    assert.equal(loop.safety.rendererCommandExecutionAvailable.value, false);
+    assert.equal(loop.safety.genericShellRunnerAvailable.value, false);
+    assert.equal(loop.safety.rawProviderOutputAvailable.value, false);
+    assert.equal(loop.safety.directMainVerificationAvailable.value, false);
+    assert.equal(loop.safety.releaseReadyDeclarationAvailable.value, false);
+    assert.equal(loop.safety.gitMutationAvailable.value, false);
+    assert.equal(loop.safety.githubReleaseAutomationAvailable.value, false);
   });
 
   it('projects the v39 Schema Migration Preview panel as dry-run only', () => {
