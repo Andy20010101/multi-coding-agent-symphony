@@ -49,6 +49,7 @@ const WORKBENCH_NAV_ITEMS = Object.freeze([
   Object.freeze({ id: 'adoption', label: 'Adoption', targetId: 'adoption-candidate-panel' }),
   Object.freeze({ id: 'review', label: 'Review', targetId: 'review-workspace-panel' }),
   Object.freeze({ id: 'verification', label: 'Verification', targetId: 'main-verification-readiness-panel' }),
+  Object.freeze({ id: 'recovery', label: 'Recovery', targetId: 'recovery-timeline-panel' }),
   Object.freeze({ id: 'stable-baseline', label: 'Stable Baseline', route: '/workbench/desktop/', targetId: 'stable-workbench-release-panel' }),
   Object.freeze({ id: 'release', label: 'Release', targetId: 'closeout-gaps-panel' }),
   Object.freeze({ id: 'closeout', label: 'Closeout', targetId: 'closeout-gaps-panel' })
@@ -307,6 +308,10 @@ export function WorkbenchShell({
 
           <section className="main-verification-readiness-grid" aria-label="v68 adoption and main verification loop">
             <AdoptionMainVerificationLoopPanel loop={model.activeGoal.adoptionMainVerificationLoop} />
+          </section>
+
+          <section className="main-verification-readiness-grid" aria-label="v69 recovery timeline and diagnostics">
+            <RecoveryTimelinePanel recovery={model.activeGoal.recoveryTimeline} />
           </section>
 
           <section className="main-verification-readiness-grid" aria-label="v24 main verification readiness">
@@ -7278,6 +7283,145 @@ function buildControlledProviderRunnerConfirmBody(preview) {
     planId,
     planHash
   });
+}
+
+function RecoveryTimelinePanel({ recovery }) {
+  return (
+    <DataPanel
+      id="recovery-timeline-panel"
+      kicker="v69 recovery"
+      title="Recovery / Timeline"
+      state={recovery?.state ?? 'missing'}
+    >
+      <FieldList rows={[
+        ['model', recovery?.modelName],
+        ['goal', recovery?.goalId],
+        ['task', recovery?.taskId],
+        ['operation', recovery?.timeline?.operationId],
+        ['timeline status', recovery?.timeline?.status],
+        ['failure layer', recovery?.failure?.layer],
+        ['failure code', recovery?.failure?.code],
+        ['affected step', recovery?.failure?.stepId],
+        ['provider', recovery?.failure?.providerId],
+        ['retryable', recovery?.failure?.retryable],
+        ['resume eligible', recovery?.failure?.resumeEligible],
+        ['next safe action', recovery?.failure?.nextSafeAction],
+        ['blockers', recovery?.failure?.blockedReasons?.count],
+        ['operations route', recovery?.routes?.operations],
+        ['read only', recovery?.safety?.readOnlySurface],
+        ['backend preview/confirm', recovery?.safety?.backendOwnedPreviewConfirm],
+        ['planHash bound', recovery?.safety?.planHashBound],
+        ['fingerprint bound', recovery?.safety?.fingerprintBound],
+        ['copy-only diagnostics', recovery?.safety?.copyOnlyDiagnostics],
+        ['renderer command execution', recovery?.safety?.rendererCommandExecutionAvailable],
+        ['generic shell runner', recovery?.safety?.genericShellRunnerAvailable],
+        ['frontend local session read', recovery?.safety?.frontendLocalSessionReadAvailable],
+        ['raw provider output', recovery?.safety?.rawProviderOutputAvailable],
+        ['raw transcript', recovery?.safety?.rawTranscriptAvailable],
+        ['hidden retry', recovery?.safety?.hiddenRetryAvailable],
+        ['provider invoked from Workbench', recovery?.safety?.providerInvokedFromWorkbench],
+        ['git mutation', recovery?.safety?.gitMutationAvailable],
+        ['GitHub Release automation', recovery?.safety?.githubReleaseAutomationAvailable]
+      ]} />
+
+      <Subsection title="operation timeline">
+        <RecoveryStepList steps={recovery?.timeline?.steps} />
+      </Subsection>
+
+      <Subsection title="recovery preview">
+        <FieldList rows={[
+          ['state', recovery?.recoveryPreview?.state],
+          ['preview id', recovery?.recoveryPreview?.previewId],
+          ['action', recovery?.recoveryPreview?.actionId],
+          ['planHash bound', recovery?.recoveryPreview?.planHashBound],
+          ['fingerprint bound', recovery?.recoveryPreview?.fingerprintBound],
+          ['provider invoked on confirm', recovery?.recoveryPreview?.providerInvokedOnConfirm],
+          ['hidden retry allowed', recovery?.recoveryPreview?.hiddenRetryAllowed],
+          ['confirmation status', recovery?.recoveryConfirmation?.status],
+          ['confirmation action', recovery?.recoveryConfirmation?.actionId],
+          ['recovery state', recovery?.recoveryConfirmation?.recoveryState],
+          ['provider invoked', recovery?.recoveryConfirmation?.providerInvoked],
+          ['git mutation', recovery?.recoveryConfirmation?.gitMutationPerformed],
+          ['raw payload captured', recovery?.recoveryConfirmation?.rawPayloadCaptured],
+          ['diagnostics only', recovery?.recoveryConfirmation?.diagnosticsOnly]
+        ]} />
+      </Subsection>
+
+      <Subsection title="usage and diagnostics">
+        <FieldList rows={[
+          ['usage status', recovery?.usage?.status],
+          ['elapsed ms', recovery?.usage?.elapsedMs],
+          ['provider calls', recovery?.usage?.providerCallCount],
+          ['input tokens status', recovery?.usage?.tokenInputStatus],
+          ['input tokens', recovery?.usage?.tokenInput],
+          ['output tokens status', recovery?.usage?.tokenOutputStatus],
+          ['output tokens', recovery?.usage?.tokenOutput],
+          ['cost status', recovery?.usage?.costStatus],
+          ['cost amount', recovery?.usage?.costAmount],
+          ['cost currency', recovery?.usage?.costCurrency],
+          ['diagnostics status', recovery?.diagnostics?.status],
+          ['redacted count', recovery?.diagnostics?.redactedCount],
+          ['copy only', recovery?.diagnostics?.copyOnly],
+          ['raw logs included', recovery?.diagnostics?.rawLogsIncluded],
+          ['raw provider output included', recovery?.diagnostics?.rawProviderOutputIncluded],
+          ['raw transcript included', recovery?.diagnostics?.rawTranscriptIncluded],
+          ['local session paths included', recovery?.diagnostics?.localSessionPathsIncluded]
+        ]} />
+        <DiagnosticSummaryList diagnostics={recovery?.diagnostics?.items} />
+      </Subsection>
+
+      <p className="panel-note">{recovery?.note ?? 'v69 recovery surface 未暴露。'}</p>
+    </DataPanel>
+  );
+}
+
+function RecoveryStepList({ steps }) {
+  const items = steps?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="recovery timeline 未暴露。" />;
+  }
+
+  return (
+    <ul className="operation-list">
+      {items.map((step) => (
+        <li key={step.id?.text ?? step.label?.text}>
+          <strong>{step.label?.text}</strong>
+          <FieldList rows={[
+            ['status', step.status],
+            ['source', step.source],
+            ['failure layer', step.failureLayer],
+            ['next safe action', step.nextSafeAction],
+            ['recovery state', step.recoveryState],
+            ['evidence refs', step.evidenceRefs?.count]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function DiagnosticSummaryList({ diagnostics }) {
+  const items = diagnostics?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="diagnostics summary 未暴露。" />;
+  }
+
+  return (
+    <ul className="operation-list">
+      {items.map((item) => (
+        <li key={item.ref?.text ?? item.label?.text}>
+          <strong>{item.label?.text}</strong>
+          <FieldList rows={[
+            ['kind', item.kind],
+            ['summary', item.summary],
+            ['ref', item.ref]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function AdoptionMainVerificationLoopPanel({ loop }) {

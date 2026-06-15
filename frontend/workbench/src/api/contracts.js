@@ -78,6 +78,13 @@ const V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID = 'v41-controlled-cli-provider-runn
 const V66_WORKER_RUN_GOAL_ID = 'v66-controlled-codex-worker-execution';
 const V67_REVIEWER_RUN_GOAL_ID = 'v67-claude-code-reviewer-lane';
 const V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID = 'v68-adoption-main-verification-loop';
+const V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID = 'v69-recovery-resume-diagnostics-observability';
+const OPERATION_TIMELINE_CONTRACT_NAME = 'operationTimeline.v1';
+const OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME = 'operationFailureClassification.v1';
+const OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME = 'operationRecoveryPreview.v1';
+const OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME = 'operationRecoveryConfirmation.v1';
+const OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME = 'operationUsageTimeObservability.v1';
+const OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME = 'operationDiagnosticsSummary.v1';
 const V30_VERIFIED_ADOPTION_GOAL_ID = 'v30-verified-adoption-workspace-v2';
 const GOAL_EVENT_PLAN_PREVIEW_PATH = '/api/goals/<goal-id>/event-plan-preview';
 const EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
@@ -1252,6 +1259,10 @@ export function projectWorkbenchContracts(results) {
     adoptionPreview: adoptionReadinessPreviewData,
     mainVerificationPreviewResult: results.mainVerificationPreview,
     mainVerificationPreview: mainVerificationPreviewData,
+    operations: activeGoalOperations,
+    activeGoal: activeGoalControl
+  });
+  activeGoalControl.recoveryTimeline = projectRecoveryTimelineSurface({
     operations: activeGoalOperations,
     activeGoal: activeGoalControl
   });
@@ -7074,6 +7085,227 @@ function projectLoopStep({
     blocker: valueState(blocker),
     operationId: valueState(operationId),
     nextSafeAction: valueState(nextSafeAction)
+  };
+}
+
+function projectRecoveryTimelineSurface({ operations, activeGoal }) {
+  const runs = Array.isArray(operations?.runs) ? operations.runs : [];
+  const records = runs.map((operation) => ({
+    operation,
+    contract: v69RecoveryContractFromOperation(operation)
+  })).filter((entry) => entry.contract !== null);
+  const timeline = latestRecoveryContract(records, OPERATION_TIMELINE_CONTRACT_NAME);
+  const classification = latestRecoveryContract(records, OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME);
+  const preview = latestRecoveryContract(records, OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME);
+  const confirmation = latestRecoveryContract(records, OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME);
+  const diagnostics = latestRecoveryContract(records, OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME);
+  const usage = diagnostics?.usage?.contractName === OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME
+    ? diagnostics.usage
+    : latestRecoveryContract(records, OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME);
+  const goalId = firstValue(
+    operations?.goalId,
+    timeline?.goal?.goalId,
+    classification?.operationId?.startsWith('op-v69') ? V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID : undefined,
+    activeGoal?.runbook?.goalId,
+    activeGoal?.nextAction?.goalId
+  );
+  const taskId = firstValue(
+    timeline?.task?.taskId,
+    activeGoal?.nextAction?.next?.taskId,
+    activeGoal?.taskQueue?.nextTaskId,
+    classification?.stepId
+  );
+  const timelineSteps = projectRecoveryTimelineSteps({ timeline, classification, preview, confirmation });
+  const blockers = [
+    ...(Array.isArray(classification?.resumeEligibility?.blockedReasons)
+      ? classification.resumeEligibility.blockedReasons
+      : []),
+    ...(Array.isArray(preview?.blockedReasons) ? preview.blockedReasons : [])
+  ];
+
+  return {
+    state: goalId === V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID || records.length > 0
+      ? 'available'
+      : 'inactive',
+    modelName: valueState('V69RecoveryTimelineSurface'),
+    goalId: valueState(goalId),
+    taskId: valueState(taskId),
+    timeline: {
+      status: valueState(timeline?.status),
+      operationId: valueState(timeline?.operationId ?? classification?.operationId),
+      generatedAt: valueState(timeline?.generatedAt),
+      steps: {
+        count: valueState(timelineSteps.length),
+        items: timelineSteps
+      }
+    },
+    failure: {
+      layer: valueState(classification?.failureLayer),
+      code: valueState(classification?.failureCode),
+      status: valueState(classification?.status),
+      stepId: valueState(classification?.stepId),
+      providerId: valueState(classification?.providerId),
+      retryable: valueState(classification?.retryable === true),
+      resumeEligible: valueState(classification?.resumeEligibility?.eligible === true),
+      nextSafeAction: valueState(classification?.nextSafeAction?.actionId),
+      blockedReasons: textItemCollection(blockers)
+    },
+    recoveryPreview: {
+      state: valueState(preview?.state),
+      previewId: valueState(preview?.previewId),
+      actionId: valueState(preview?.requestedAction?.actionId),
+      planHashBound: valueState(preview?.confirmation?.requiresPlanHash === true),
+      fingerprintBound: valueState(preview?.resumeBinding?.sourceFingerprint?.matches === true),
+      providerInvokedOnConfirm: valueState(preview?.confirmation?.providerInvokedOnConfirm === true),
+      hiddenRetryAllowed: valueState(preview?.confirmation?.hiddenRetryAllowed === true)
+    },
+    recoveryConfirmation: {
+      status: valueState(confirmation?.status),
+      actionId: valueState(confirmation?.actionId),
+      recoveryState: valueState(confirmation?.recoveryState),
+      providerInvoked: valueState(confirmation?.providerInvoked === true),
+      gitMutationPerformed: valueState(confirmation?.gitMutationPerformed === true),
+      rawPayloadCaptured: valueState(confirmation?.rawPayloadCaptured === true),
+      diagnosticsOnly: valueState(confirmation?.diagnosticsOnly === true)
+    },
+    usage: {
+      status: valueState(usage?.status),
+      elapsedMs: valueState(usage?.elapsedMs?.value),
+      providerCallCount: valueState(usage?.providerCallCount?.value),
+      tokenInputStatus: valueState(usage?.tokenInput?.status),
+      tokenInput: valueState(usage?.tokenInput?.value),
+      tokenOutputStatus: valueState(usage?.tokenOutput?.status),
+      tokenOutput: valueState(usage?.tokenOutput?.value),
+      costStatus: valueState(usage?.cost?.status),
+      costAmount: valueState(usage?.cost?.amount),
+      costCurrency: valueState(usage?.cost?.currency)
+    },
+    diagnostics: {
+      status: valueState(diagnostics?.status),
+      redactedCount: valueState(diagnostics?.redaction?.redactedCount),
+      copyOnly: valueState(true),
+      rawLogsIncluded: valueState(diagnostics?.redaction?.rawLogsIncluded === true),
+      rawProviderOutputIncluded: valueState(diagnostics?.redaction?.rawProviderOutputIncluded === true),
+      rawTranscriptIncluded: valueState(diagnostics?.redaction?.rawTranscriptIncluded === true),
+      localSessionPathsIncluded: valueState(diagnostics?.redaction?.localSessionPathsIncluded === true),
+      items: {
+        count: valueState(Array.isArray(diagnostics?.diagnostics) ? diagnostics.diagnostics.length : 0),
+        items: (Array.isArray(diagnostics?.diagnostics) ? diagnostics.diagnostics : []).map((item) => ({
+          kind: valueState(item?.kind),
+          label: valueState(item?.label),
+          summary: valueState(item?.summary),
+          ref: valueState(item?.ref)
+        }))
+      }
+    },
+    routes: {
+      operations: valueState(operations?.goalId && isSafeGoalRouteSegment(operations.goalId)
+        ? GOAL_OPERATIONS_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(operations.goalId))
+        : null)
+    },
+    safety: {
+      readOnlySurface: valueState(true),
+      backendOwnedPreviewConfirm: valueState(true),
+      planHashBound: valueState(true),
+      fingerprintBound: valueState(true),
+      copyOnlyDiagnostics: valueState(true),
+      rendererCommandExecutionAvailable: valueState(false),
+      genericShellRunnerAvailable: valueState(false),
+      frontendLocalSessionReadAvailable: valueState(false),
+      frontendProviderFolderReadAvailable: valueState(false),
+      rawProviderOutputAvailable: valueState(false),
+      rawTranscriptAvailable: valueState(false),
+      hiddenRetryAvailable: valueState(false),
+      providerInvokedFromWorkbench: valueState(false),
+      gitMutationAvailable: valueState(false),
+      githubReleaseAutomationAvailable: valueState(false)
+    },
+    note: 'V69 recovery surface reads operationTimeline.v1, operationFailureClassification.v1, operationRecoveryPreview.v1, operationRecoveryConfirmation.v1, and operationDiagnosticsSummary.v1 from backend operation records only. It shows failure layer, resume eligibility, bounded recovery actions, usage/time status, and copy-only diagnostics; it does not execute commands, read local sessions, retry providers, mutate git state, or publish releases.'
+  };
+}
+
+function v69RecoveryContractFromOperation(operation) {
+  for (const key of ['runResult', 'result', 'timeline', 'failureClassification', 'recoveryPreview', 'recoveryConfirmation', 'diagnosticsSummary', 'usage']) {
+    const candidate = operation?.[key];
+
+    if (isV69RecoveryContract(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function isV69RecoveryContract(candidate) {
+  return [
+    OPERATION_TIMELINE_CONTRACT_NAME,
+    OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME,
+    OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME,
+    OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME,
+    OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME,
+    OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME
+  ].includes(candidate?.contractName);
+}
+
+function latestRecoveryContract(records, contractName) {
+  for (const entry of [...records].reverse()) {
+    if (entry.contract?.contractName === contractName) {
+      return entry.contract;
+    }
+  }
+
+  return null;
+}
+
+function projectRecoveryTimelineSteps({ timeline, classification, preview, confirmation }) {
+  if (Array.isArray(timeline?.steps) && timeline.steps.length > 0) {
+    return timeline.steps.map((step) => projectRecoveryStep({
+      id: step?.stepId,
+      label: step?.label,
+      status: step?.status,
+      source: 'operationTimeline.v1',
+      failureLayer: step?.failure?.failureLayer,
+      nextSafeAction: classification?.nextSafeAction?.actionId,
+      evidenceRefs: step?.evidenceRefs
+    }));
+  }
+
+  return [{
+    id: valueState(classification?.stepId ?? 'recovery'),
+    label: valueState(classification?.stepId ?? 'Recovery'),
+    status: valueState(classification?.status ?? 'missing'),
+    source: valueState('operationFailureClassification.v1'),
+    failureLayer: valueState(classification?.failureLayer),
+    nextSafeAction: valueState(preview?.requestedAction?.actionId ?? classification?.nextSafeAction?.actionId),
+    recoveryState: valueState(confirmation?.recoveryState),
+    evidenceRefs: {
+      count: valueState(Array.isArray(classification?.evidenceRefs) ? classification.evidenceRefs.length : 0),
+      items: (Array.isArray(classification?.evidenceRefs) ? classification.evidenceRefs : []).map(projectRecoveryEvidenceRef)
+    }
+  }];
+}
+
+function projectRecoveryStep({ id, label, status, source, failureLayer, nextSafeAction, evidenceRefs }) {
+  return {
+    id: valueState(id),
+    label: valueState(label),
+    status: valueState(status),
+    source: valueState(source),
+    failureLayer: valueState(failureLayer),
+    nextSafeAction: valueState(nextSafeAction),
+    recoveryState: valueState(null),
+    evidenceRefs: {
+      count: valueState(Array.isArray(evidenceRefs) ? evidenceRefs.length : 0),
+      items: (Array.isArray(evidenceRefs) ? evidenceRefs : []).map(projectRecoveryEvidenceRef)
+    }
+  };
+}
+
+function projectRecoveryEvidenceRef(ref) {
+  return {
+    kind: valueState(ref?.kind),
+    ref: valueState(ref?.ref),
+    label: valueState(ref?.label)
   };
 }
 

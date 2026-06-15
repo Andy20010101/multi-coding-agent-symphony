@@ -97,6 +97,9 @@ describe('v15 Workbench React/Vite shell', () => {
       'GoalOperationInlineConsole',
       'OperationArtifactRefList',
       'PromptRoleGuidance',
+      'RecoveryTimelinePanel',
+      'RecoveryStepList',
+      'DiagnosticSummaryList',
       'CloseoutGapsPanel',
       'GoalEventsTimelinePanel',
       'EvidenceMatrixPanel',
@@ -2511,6 +2514,45 @@ describe('v15 Workbench React/Vite shell', () => {
     assert.match(client, /createAdoptionReadinessPreviewRoute/u);
     assert.match(client, /createMainVerificationPreviewRoute/u);
     assert.doesNotMatch(panelSource, /<button\b|<form\b|<textarea\b|<input\b|fetch\(|window\.open|navigator\.clipboard|child_process|exec\(|spawn\(|rawTranscript|rawModelOutput|sessionPath|jsonl|git merge|git tag|git push/u);
+  });
+
+  it('renders the v69 recovery timeline and diagnostics surface as read-only evidence status', async () => {
+    const app = await readFile('frontend/workbench/src/App.jsx', 'utf8');
+    const contracts = await readFile('frontend/workbench/src/api/contracts.js', 'utf8');
+    const panelSource = app.slice(
+      app.indexOf('function RecoveryTimelinePanel'),
+      app.indexOf('function AdoptionMainVerificationLoopPanel')
+    );
+    const projectionBody = contracts.slice(
+      contracts.indexOf('function projectRecoveryTimelineSurface'),
+      contracts.indexOf('function latestWorkerProviderRunnerOperationForTask')
+    );
+
+    assert.match(app, /<RecoveryTimelinePanel recovery=\{model\.activeGoal\.recoveryTimeline\}/u);
+    assert.match(app, /Recovery \/ Timeline/u);
+    assert.match(panelSource, /operation timeline/u);
+    assert.match(panelSource, /recovery preview/u);
+    assert.match(panelSource, /usage and diagnostics/u);
+    assert.match(panelSource, /copy-only diagnostics/u);
+    assert.match(panelSource, /planHash bound/u);
+    assert.match(panelSource, /fingerprint bound/u);
+    assert.match(panelSource, /hidden retry/u);
+    assert.match(panelSource, /provider invoked from Workbench/u);
+    assert.match(panelSource, /GitHub Release automation/u);
+    assert.match(contracts, /V69RecoveryTimelineSurface/u);
+    assert.match(projectionBody, /operationTimeline\.v1/u);
+    assert.match(projectionBody, /operationFailureClassification\.v1/u);
+    assert.match(projectionBody, /operationRecoveryPreview\.v1/u);
+    assert.match(projectionBody, /operationRecoveryConfirmation\.v1/u);
+    assert.match(projectionBody, /operationDiagnosticsSummary\.v1/u);
+    assert.match(projectionBody, /copyOnlyDiagnostics:\s*valueState\(true\)/u);
+    assert.match(projectionBody, /rendererCommandExecutionAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /genericShellRunnerAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /rawProviderOutputAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /hiddenRetryAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /gitMutationAvailable:\s*valueState\(false\)/u);
+    assert.match(projectionBody, /githubReleaseAutomationAvailable:\s*valueState\(false\)/u);
+    assert.doesNotMatch(panelSource, /<button\b|<form\b|<textarea\b|<input\b|fetch\(|window\.open|navigator\.clipboard|child_process|exec\(|spawn\(|sessionPath|jsonl|git merge|git tag|git push/u);
   });
 
   it('keeps the next action card and prompt drawer display-only', async () => {
