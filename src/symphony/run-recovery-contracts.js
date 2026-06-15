@@ -4,6 +4,8 @@ export const OPERATION_TIMELINE_CONTRACT_NAME = 'operationTimeline.v1';
 export const OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME = 'operationFailureClassification.v1';
 export const OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME = 'operationRecoveryPreview.v1';
 export const OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME = 'operationRecoveryConfirmation.v1';
+export const OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME = 'operationUsageTimeObservability.v1';
+export const OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME = 'operationDiagnosticsSummary.v1';
 export const RUN_RECOVERY_CONTRACT_VERSION = 1;
 export const V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID =
   'v69-recovery-resume-diagnostics-observability';
@@ -128,6 +130,37 @@ const RECOVERY_CONFIRMATION_ALLOWED_FIELDS = new Set([
   'evidenceRefs',
   'boundaries'
 ]);
+const USAGE_TIME_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'generatedAt',
+  'status',
+  'elapsedMs',
+  'providerCallCount',
+  'tokenInput',
+  'tokenOutput',
+  'cost',
+  'source',
+  'boundaries'
+]);
+const DIAGNOSTICS_SUMMARY_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'generatedAt',
+  'operationId',
+  'status',
+  'failureLayers',
+  'recoveryStates',
+  'timelineRef',
+  'classifications',
+  'recoveryPreviews',
+  'recoveryConfirmations',
+  'usage',
+  'diagnostics',
+  'redaction',
+  'evidenceRefs',
+  'boundaries'
+]);
 const GOAL_ALLOWED_FIELDS = new Set(['goalId', 'title', 'state', 'sourceContract', 'sourceRef']);
 const TASK_ALLOWED_FIELDS = new Set(['taskId', 'title', 'state', 'sourceContract', 'sourceRef']);
 const STEP_ALLOWED_FIELDS = new Set([
@@ -208,6 +241,18 @@ const STATE_TRANSITION_ALLOWED_FIELDS = new Set([
   'markBlockedRecorded',
   'verificationRerunAllowed'
 ]);
+const OBSERVABILITY_METRIC_ALLOWED_FIELDS = new Set(['status', 'value', 'unit']);
+const COST_METRIC_ALLOWED_FIELDS = new Set(['status', 'amount', 'currency']);
+const DIAGNOSTIC_ENTRY_ALLOWED_FIELDS = new Set(['kind', 'label', 'summary', 'ref']);
+const REDACTION_ALLOWED_FIELDS = new Set([
+  'secretsRedacted',
+  'rawLogsIncluded',
+  'rawProviderOutputIncluded',
+  'rawTranscriptIncluded',
+  'localSessionPathsIncluded',
+  'providerPayloadsIncluded',
+  'redactedCount'
+]);
 const EVIDENCE_REF_ALLOWED_FIELDS = new Set(['kind', 'ref', 'label']);
 
 const TIMELINE_STATUS_SET = new Set(['pending', 'running', 'succeeded', 'failed', 'blocked', 'timeout', 'interrupted']);
@@ -245,11 +290,13 @@ const RECOVERY_STATE_SET = new Set([
   'preview-refresh-required',
   'operator-decision-required'
 ]);
+const OBSERVABILITY_STATUS_SET = new Set(['observed', 'unavailable', 'unknown']);
+const DIAGNOSTICS_STATUS_SET = new Set(['ok', 'warning', 'blocked']);
 const HASH_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const SAFE_TOKEN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/u;
 const SAFE_CONTRACT_PATTERN = /^[a-z][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)*\.v[0-9]+$/u;
 const UNSAFE_TEXT_PATTERN =
-  /(?:^|[/.])(?:\.codex|\.claude|\.git|\.symphony)(?:[/]|$)|\/Users\/|\.jsonl(?:$|[/\s])|\b(?:raw[\s_-]*(?:worker[\s_-]*)?(?:transcript|model[\s_-]*output|provider[\s_-]*output|output)|provider[\s_-]*(?:session|folder|payload)|session[\s_-]*(?:path|file|log)|generic[\s_-]*(?:shell|terminal)|arbitrary[\s_-]*command|freeform[\s_-]*(?:command|provider[\s_-]*command)|renderer[\s_-]*command|append[\s_-]*event|task[\s_-]*(?:complete|completion)|release[\s_-]*(?:ready|readiness)|git[\s_-]*(?:merge|push|tag)|github[\s_-]*release|hidden[\s_-]*retry)\b/iu;
+  /(?:^|[/.])(?:\.codex|\.claude|\.git|\.symphony)(?:[/]|$)|\/Users\/|\.jsonl(?:$|[/\s])|\b(?:raw[\s_-]*(?:worker[\s_-]*)?(?:transcript|model[\s_-]*output|provider[\s_-]*output|output)|provider[\s_-]*(?:session|folder|payload)|session[\s_-]*(?:path|file|log)|generic[\s_-]*(?:shell|terminal)|arbitrary[\s_-]*command|freeform[\s_-]*(?:command|provider[\s_-]*command)|renderer[\s_-]*command|append[\s_-]*event|task[\s_-]*(?:complete|completion)|release[\s_-]*(?:ready|readiness)|git[\s_-]*(?:merge|push|tag)|github[\s_-]*release|hidden[\s_-]*retry|api[\s_-]*key|auth[\s_-]*token|access[\s_-]*token|refresh[\s_-]*token|password|credential|secret|sk-[a-zA-Z0-9_-]{8,})\b/iu;
 
 const DEFAULT_HASH = 'sha256:1111111111111111111111111111111111111111111111111111111111111111';
 
@@ -531,6 +578,96 @@ export function confirmOperationRecoveryPreview({
   return confirmation;
 }
 
+export function buildUsageTimeObservability({
+  generatedAt = new Date().toISOString(),
+  elapsedMs = null,
+  providerCallCount = null,
+  tokenInput = null,
+  tokenOutput = null,
+  cost = null,
+  source = 'backend-operation-record'
+} = {}) {
+  const normalizedElapsedMs = normalizeObservedMetric(elapsedMs, 'ms');
+  const normalizedProviderCallCount = normalizeObservedMetric(providerCallCount, 'count', { integer: true });
+  const normalizedTokenInput = normalizeObservedMetric(tokenInput, 'tokens', { nullableWhenMissing: true });
+  const normalizedTokenOutput = normalizeObservedMetric(tokenOutput, 'tokens', { nullableWhenMissing: true });
+  const normalizedCost = normalizeCostMetric(cost);
+  const usage = {
+    contractName: OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME,
+    contractVersion: RUN_RECOVERY_CONTRACT_VERSION,
+    generatedAt: new Date(millisOrNow(generatedAt)).toISOString(),
+    status: usageStatus([
+      normalizedElapsedMs,
+      normalizedProviderCallCount,
+      normalizedTokenInput,
+      normalizedTokenOutput,
+      normalizedCost
+    ]),
+    elapsedMs: normalizedElapsedMs,
+    providerCallCount: normalizedProviderCallCount,
+    tokenInput: normalizedTokenInput,
+    tokenOutput: normalizedTokenOutput,
+    cost: normalizedCost,
+    source: safeRef(source) ?? 'backend-operation-record',
+    boundaries: { ...RUN_RECOVERY_BOUNDARIES }
+  };
+
+  assertUsageTimeObservabilityContract(usage);
+
+  return usage;
+}
+
+export function buildOperationDiagnosticsSummary({
+  generatedAt = new Date().toISOString(),
+  operationId = 'operation-v69-recovery',
+  status = 'warning',
+  timeline = null,
+  classifications = [],
+  recoveryPreviews = [],
+  recoveryConfirmations = [],
+  usage = null,
+  diagnostics = [],
+  evidenceRefs = null
+} = {}) {
+  const safeDiagnostics = diagnostics.map((entry) => sanitizeDiagnosticEntry(entry));
+  const redactedCount = safeDiagnostics.reduce((count, entry) => count + entry.redactedCount, 0);
+  const normalizedClassifications = classifications.map(classificationDiagnosticSummary);
+  const normalizedPreviews = recoveryPreviews.map(recoveryPreviewDiagnosticSummary);
+  const normalizedConfirmations = recoveryConfirmations.map(recoveryConfirmationDiagnosticSummary);
+  const failureLayers = uniqueStrings(classifications.map((classification) => classification.failureLayer));
+  const recoveryStates = uniqueStrings(recoveryConfirmations.map((confirmation) => confirmation.recoveryState));
+  const summary = {
+    contractName: OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME,
+    contractVersion: RUN_RECOVERY_CONTRACT_VERSION,
+    generatedAt: new Date(millisOrNow(generatedAt)).toISOString(),
+    operationId: safeToken(operationId) ?? 'operation-v69-recovery',
+    status: DIAGNOSTICS_STATUS_SET.has(status) ? status : 'warning',
+    failureLayers,
+    recoveryStates,
+    timelineRef: timelineDiagnosticRef(timeline),
+    classifications: normalizedClassifications,
+    recoveryPreviews: normalizedPreviews,
+    recoveryConfirmations: normalizedConfirmations,
+    usage: usage ?? buildUsageTimeObservability({ generatedAt }),
+    diagnostics: safeDiagnostics.map(({ redactedCount: _redactedCount, ...entry }) => entry),
+    redaction: {
+      secretsRedacted: redactedCount > 0,
+      rawLogsIncluded: false,
+      rawProviderOutputIncluded: false,
+      rawTranscriptIncluded: false,
+      localSessionPathsIncluded: false,
+      providerPayloadsIncluded: false,
+      redactedCount
+    },
+    evidenceRefs: normalizeEvidenceRefs(evidenceRefs),
+    boundaries: { ...RUN_RECOVERY_BOUNDARIES }
+  };
+
+  assertOperationDiagnosticsSummaryContract(summary);
+
+  return summary;
+}
+
 export function validateOperationFailureClassificationContract(classification) {
   const errors = [];
 
@@ -569,6 +706,74 @@ export function validateOperationFailureClassificationContract(classification) {
   validateBoundaries(errors, classification.boundaries, 'boundaries');
   validateClassificationConsistency(errors, classification);
   rejectUnsafeValues(errors, classification, 'classification');
+
+  return errors.length === 0 ? { ok: true, errors: [] } : { ok: false, errors };
+}
+
+export function validateUsageTimeObservabilityContract(usage) {
+  const errors = [];
+
+  if (!isPlainObject(usage)) {
+    return invalidResult('usage must be a plain object');
+  }
+
+  for (const field of USAGE_TIME_ALLOWED_FIELDS) {
+    if (!Object.hasOwn(usage, field)) {
+      errors.push(`${field} is required`);
+    }
+  }
+
+  validateAllowedFields(errors, usage, 'usage', USAGE_TIME_ALLOWED_FIELDS);
+  requireExact(errors, usage.contractName, 'contractName', OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME);
+  requireExact(errors, usage.contractVersion, 'contractVersion', RUN_RECOVERY_CONTRACT_VERSION);
+  requireIsoTimestamp(errors, usage.generatedAt, 'generatedAt');
+  requireSetValue(errors, usage.status, 'status', OBSERVABILITY_STATUS_SET);
+  validateObservedMetric(errors, usage.elapsedMs, 'elapsedMs');
+  validateObservedMetric(errors, usage.providerCallCount, 'providerCallCount');
+  validateObservedMetric(errors, usage.tokenInput, 'tokenInput');
+  validateObservedMetric(errors, usage.tokenOutput, 'tokenOutput');
+  validateCostMetric(errors, usage.cost, 'cost');
+  requireSafeRef(errors, usage.source, 'source');
+  validateBoundaries(errors, usage.boundaries, 'boundaries');
+  validateUsageConsistency(errors, usage);
+  rejectUnsafeValues(errors, usage, 'usage');
+
+  return errors.length === 0 ? { ok: true, errors: [] } : { ok: false, errors };
+}
+
+export function validateOperationDiagnosticsSummaryContract(summary) {
+  const errors = [];
+
+  if (!isPlainObject(summary)) {
+    return invalidResult('summary must be a plain object');
+  }
+
+  for (const field of DIAGNOSTICS_SUMMARY_ALLOWED_FIELDS) {
+    if (!Object.hasOwn(summary, field)) {
+      errors.push(`${field} is required`);
+    }
+  }
+
+  validateAllowedFields(errors, summary, 'summary', DIAGNOSTICS_SUMMARY_ALLOWED_FIELDS);
+  requireExact(errors, summary.contractName, 'contractName', OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME);
+  requireExact(errors, summary.contractVersion, 'contractVersion', RUN_RECOVERY_CONTRACT_VERSION);
+  requireIsoTimestamp(errors, summary.generatedAt, 'generatedAt');
+  requireSafeToken(errors, summary.operationId, 'operationId');
+  requireSetValue(errors, summary.status, 'status', DIAGNOSTICS_STATUS_SET);
+  validateStringArray(errors, summary.failureLayers, 'failureLayers');
+  validateStringArray(errors, summary.recoveryStates, 'recoveryStates');
+  validateTimelineDiagnosticRef(errors, summary.timelineRef);
+  validateDiagnosticRows(errors, summary.classifications, 'classifications');
+  validateDiagnosticRows(errors, summary.recoveryPreviews, 'recoveryPreviews');
+  validateDiagnosticRows(errors, summary.recoveryConfirmations, 'recoveryConfirmations');
+  validateUsageTimeObservabilityContract(summary.usage).errors.forEach((error) => {
+    errors.push(`usage.${error}`);
+  });
+  validateDiagnosticEntries(errors, summary.diagnostics);
+  validateRedaction(errors, summary.redaction);
+  validateEvidenceRefs(errors, summary.evidenceRefs, 'evidenceRefs');
+  validateBoundaries(errors, summary.boundaries, 'boundaries');
+  rejectUnsafeValues(errors, summary, 'summary');
 
   return errors.length === 0 ? { ok: true, errors: [] } : { ok: false, errors };
 }
@@ -730,6 +935,30 @@ export function assertOperationRecoveryConfirmationContract(confirmation) {
   }
 }
 
+export function assertUsageTimeObservabilityContract(usage) {
+  const validation = validateUsageTimeObservabilityContract(usage);
+
+  if (!validation.ok) {
+    throw new RunRecoveryContractError(
+      'invalid-operation-usage-time-observability',
+      'Operation usage/time observability contract is invalid.',
+      { reason: validation.errors[0], errors: validation.errors }
+    );
+  }
+}
+
+export function assertOperationDiagnosticsSummaryContract(summary) {
+  const validation = validateOperationDiagnosticsSummaryContract(summary);
+
+  if (!validation.ok) {
+    throw new RunRecoveryContractError(
+      'invalid-operation-diagnostics-summary',
+      'Operation diagnostics summary contract is invalid.',
+      { reason: validation.errors[0], errors: validation.errors }
+    );
+  }
+}
+
 function normalizeGoal(goal) {
   const source = isPlainObject(goal) ? goal : {};
 
@@ -739,6 +968,166 @@ function normalizeGoal(goal) {
     state: ['active', 'ready', 'blocked', 'pending', 'missing'].includes(source.state) ? source.state : 'active',
     sourceContract: safeContract(source.sourceContract) ?? 'goalRunbook.v1',
     sourceRef: safeRef(source.sourceRef) ?? 'docs/plans/v69-recovery-resume-diagnostics-observability-runbook-2026-06-14.md'
+  };
+}
+
+function usageStatus(metrics) {
+  if (metrics.some((metric) => metric.status === 'observed')) {
+    return 'observed';
+  }
+
+  if (metrics.some((metric) => metric.status === 'unavailable')) {
+    return 'unavailable';
+  }
+
+  return 'unknown';
+}
+
+function normalizeObservedMetric(input, unit, { integer = false, nullableWhenMissing = false } = {}) {
+  if (isPlainObject(input)) {
+    const status = OBSERVABILITY_STATUS_SET.has(input.status) ? input.status : 'unknown';
+    const value = typeof input.value === 'number' && Number.isFinite(input.value) && input.value >= 0
+      ? (integer ? Math.trunc(input.value) : input.value)
+      : null;
+
+    return {
+      status: status === 'observed' && value !== null ? 'observed' : status === 'unavailable' ? 'unavailable' : 'unknown',
+      value: status === 'observed' ? value : null,
+      unit
+    };
+  }
+
+  if (typeof input === 'number' && Number.isFinite(input) && input >= 0) {
+    return {
+      status: 'observed',
+      value: integer ? Math.trunc(input) : input,
+      unit
+    };
+  }
+
+  return {
+    status: nullableWhenMissing ? 'unknown' : 'unavailable',
+    value: null,
+    unit
+  };
+}
+
+function normalizeCostMetric(input) {
+  if (isPlainObject(input)) {
+    const status = OBSERVABILITY_STATUS_SET.has(input.status) ? input.status : 'unknown';
+    const amount = typeof input.amount === 'number' && Number.isFinite(input.amount) && input.amount >= 0
+      ? input.amount
+      : null;
+
+    return {
+      status: status === 'observed' && amount !== null ? 'observed' : status === 'unavailable' ? 'unavailable' : 'unknown',
+      amount: status === 'observed' ? amount : null,
+      currency: safeToken(input.currency) ?? null
+    };
+  }
+
+  if (typeof input === 'number' && Number.isFinite(input) && input >= 0) {
+    return {
+      status: 'observed',
+      amount: input,
+      currency: 'USD'
+    };
+  }
+
+  return {
+    status: 'unknown',
+    amount: null,
+    currency: null
+  };
+}
+
+function sanitizeDiagnosticEntry(entry) {
+  const source = isPlainObject(entry) ? entry : {};
+  const summary = sanitizeDiagnosticText(source.summary ?? 'No diagnostic summary supplied');
+  const label = sanitizeDiagnosticText(source.label ?? 'Diagnostic entry');
+  const ref = sanitizeDiagnosticRef(source.ref);
+
+  return {
+    kind: safeToken(source.kind) ?? 'summary',
+    label: label.text,
+    summary: summary.text,
+    ref: ref.text,
+    redactedCount: summary.redacted + label.redacted + ref.redacted
+  };
+}
+
+function sanitizeDiagnosticText(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+
+  if (text.length === 0) {
+    return { text: '[redacted]', redacted: 1 };
+  }
+
+  if (UNSAFE_TEXT_PATTERN.test(text)) {
+    return { text: '[redacted]', redacted: 1 };
+  }
+
+  return { text, redacted: 0 };
+}
+
+function sanitizeDiagnosticRef(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+
+  if (text.length === 0 || UNSAFE_TEXT_PATTERN.test(text)) {
+    return { text: 'diagnostic-ref:redacted', redacted: 1 };
+  }
+
+  return { text, redacted: 0 };
+}
+
+function classificationDiagnosticSummary(classification) {
+  assertOperationFailureClassificationContract(classification);
+
+  return {
+    kind: 'failure-classification',
+    label: classification.failureCode,
+    summary: `${classification.failureLayer}:${classification.failureCode}`,
+    ref: `classification:${classification.classificationId}`
+  };
+}
+
+function recoveryPreviewDiagnosticSummary(preview) {
+  assertOperationRecoveryPreviewContract(preview);
+
+  return {
+    kind: 'recovery-preview',
+    label: preview.requestedAction.actionId,
+    summary: `${preview.state}:${preview.requestedAction.actionId}`,
+    ref: `preview:${preview.previewId}`
+  };
+}
+
+function recoveryConfirmationDiagnosticSummary(confirmation) {
+  assertOperationRecoveryConfirmationContract(confirmation);
+
+  return {
+    kind: 'recovery-confirmation',
+    label: confirmation.actionId,
+    summary: `${confirmation.status}:${confirmation.recoveryState}`,
+    ref: `confirmation:${confirmation.confirmationId}`
+  };
+}
+
+function timelineDiagnosticRef(timeline) {
+  if (timeline === null) {
+    return {
+      kind: 'operation-timeline',
+      ref: 'timeline:missing',
+      label: 'Timeline not supplied'
+    };
+  }
+
+  assertOperationTimelineContract(timeline);
+
+  return {
+    kind: 'operation-timeline',
+    ref: `timeline:${timeline.operationId}`,
+    label: timeline.status
   };
 }
 
@@ -1426,6 +1815,128 @@ function validateRecoveryConfirmationConsistency(errors, confirmation) {
 
   if (confirmation.status === 'confirmed' && confirmation.stateTransition.state !== confirmation.recoveryState) {
     errors.push('stateTransition.state must match recoveryState');
+  }
+}
+
+function validateObservedMetric(errors, metric, path) {
+  if (!isPlainObject(metric)) {
+    errors.push(`${path} must be a plain object`);
+    return;
+  }
+
+  validateAllowedFields(errors, metric, path, OBSERVABILITY_METRIC_ALLOWED_FIELDS);
+  requireSetValue(errors, metric.status, `${path}.status`, OBSERVABILITY_STATUS_SET);
+
+  if (metric.status === 'observed') {
+    if (typeof metric.value !== 'number' || !Number.isFinite(metric.value) || metric.value < 0) {
+      errors.push(`${path}.value must be a non-negative number when observed`);
+    }
+  } else if (metric.value !== null) {
+    errors.push(`${path}.value must be null unless status is observed`);
+  }
+
+  requireSetValue(errors, metric.unit, `${path}.unit`, new Set(['ms', 'count', 'tokens']));
+}
+
+function validateCostMetric(errors, metric, path) {
+  if (!isPlainObject(metric)) {
+    errors.push(`${path} must be a plain object`);
+    return;
+  }
+
+  validateAllowedFields(errors, metric, path, COST_METRIC_ALLOWED_FIELDS);
+  requireSetValue(errors, metric.status, `${path}.status`, OBSERVABILITY_STATUS_SET);
+
+  if (metric.status === 'observed') {
+    if (typeof metric.amount !== 'number' || !Number.isFinite(metric.amount) || metric.amount < 0) {
+      errors.push(`${path}.amount must be a non-negative number when observed`);
+    }
+
+    requireSafeToken(errors, metric.currency, `${path}.currency`);
+  } else {
+    if (metric.amount !== null) {
+      errors.push(`${path}.amount must be null unless status is observed`);
+    }
+
+    if (metric.currency !== null) {
+      errors.push(`${path}.currency must be null unless status is observed`);
+    }
+  }
+}
+
+function validateUsageConsistency(errors, usage) {
+  const metrics = [usage.elapsedMs, usage.providerCallCount, usage.tokenInput, usage.tokenOutput, usage.cost];
+  const observedCount = metrics.filter((metric) => metric?.status === 'observed').length;
+  const unavailableCount = metrics.filter((metric) => metric?.status === 'unavailable').length;
+
+  if (usage.status === 'observed' && observedCount === 0) {
+    errors.push('status observed requires at least one observed usage/time metric');
+  }
+
+  if (usage.status === 'unknown' && (observedCount > 0 || unavailableCount > 0)) {
+    errors.push('status unknown requires all usage/time metrics to be unknown');
+  }
+}
+
+function validateTimelineDiagnosticRef(errors, value) {
+  if (!isPlainObject(value)) {
+    errors.push('timelineRef must be a plain object');
+    return;
+  }
+
+  validateAllowedFields(errors, value, 'timelineRef', EVIDENCE_REF_ALLOWED_FIELDS);
+  requireSetValue(errors, value.kind, 'timelineRef.kind', new Set(['operation-timeline']));
+  requireSafeRef(errors, value.ref, 'timelineRef.ref');
+  requireNonEmptyString(errors, value.label, 'timelineRef.label');
+}
+
+function validateDiagnosticRows(errors, rows, path) {
+  if (!Array.isArray(rows)) {
+    errors.push(`${path} must be an array`);
+    return;
+  }
+
+  rows.forEach((row, index) => validateDiagnosticRow(errors, row, `${path}[${index}]`));
+}
+
+function validateDiagnosticEntries(errors, entries) {
+  if (!Array.isArray(entries)) {
+    errors.push('diagnostics must be an array');
+    return;
+  }
+
+  entries.forEach((entry, index) => validateDiagnosticRow(errors, entry, `diagnostics[${index}]`));
+}
+
+function validateDiagnosticRow(errors, row, path) {
+  if (!isPlainObject(row)) {
+    errors.push(`${path} must be a plain object`);
+    return;
+  }
+
+  validateAllowedFields(errors, row, path, DIAGNOSTIC_ENTRY_ALLOWED_FIELDS);
+  requireSafeToken(errors, row.kind, `${path}.kind`);
+  requireNonEmptyString(errors, row.label, `${path}.label`);
+  requireNonEmptyString(errors, row.summary, `${path}.summary`);
+  requireSafeRef(errors, row.ref, `${path}.ref`);
+}
+
+function validateRedaction(errors, redaction) {
+  if (!isPlainObject(redaction)) {
+    errors.push('redaction must be a plain object');
+    return;
+  }
+
+  validateAllowedFields(errors, redaction, 'redaction', REDACTION_ALLOWED_FIELDS);
+  requireBoolean(errors, redaction.secretsRedacted, 'redaction.secretsRedacted');
+  requireExact(errors, redaction.rawLogsIncluded, 'redaction.rawLogsIncluded', false);
+  requireExact(errors, redaction.rawProviderOutputIncluded, 'redaction.rawProviderOutputIncluded', false);
+  requireExact(errors, redaction.rawTranscriptIncluded, 'redaction.rawTranscriptIncluded', false);
+  requireExact(errors, redaction.localSessionPathsIncluded, 'redaction.localSessionPathsIncluded', false);
+  requireExact(errors, redaction.providerPayloadsIncluded, 'redaction.providerPayloadsIncluded', false);
+
+  if (!Number.isInteger(redaction.redactedCount) || redaction.redactedCount < 0) {
+    errors.push('redaction.redactedCount must be a non-negative integer');
   }
 }
 

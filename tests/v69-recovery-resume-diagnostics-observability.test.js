@@ -5,21 +5,27 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME,
   OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME,
   OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME,
   OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME,
   OPERATION_TIMELINE_CONTRACT_NAME,
+  OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME,
   RUN_RECOVERY_BOUNDARIES,
   RunRecoveryContractError,
   buildOperationFailureClassification,
+  buildOperationDiagnosticsSummary,
   buildOperationRecoveryPreview,
   buildOperationTimeline,
+  buildUsageTimeObservability,
   computeOperationRecoveryPreviewPlanHash,
   confirmOperationRecoveryPreview,
   validateOperationFailureClassificationContract,
+  validateOperationDiagnosticsSummaryContract,
   validateOperationRecoveryConfirmationContract,
   validateOperationRecoveryPreviewContract,
-  validateOperationTimelineContract
+  validateOperationTimelineContract,
+  validateUsageTimeObservabilityContract
 } from '../src/symphony/run-recovery-contracts.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -355,6 +361,126 @@ describe('v69 Recovery, Resume, Diagnostics, and Observability contracts', () =>
     assertValidationIncludes(
       validation,
       'confirmation.evidenceRefs[0].ref must not contain raw provider output'
+    );
+  });
+
+  it('records usage and time only as observed, unavailable, or unknown values', () => {
+    const observed = buildUsageTimeObservability({
+      generatedAt: GENERATED_AT,
+      elapsedMs: 1200,
+      providerCallCount: 1,
+      tokenInput: { status: 'observed', value: 321 },
+      tokenOutput: { status: 'unavailable', value: null },
+      cost: { status: 'observed', amount: 0.42, currency: 'USD' },
+      source: 'operation-record:v69:usage-observed'
+    });
+
+    assert.equal(observed.contractName, OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME);
+    assert.equal(observed.status, 'observed');
+    assert.equal(observed.elapsedMs.value, 1200);
+    assert.equal(observed.providerCallCount.value, 1);
+    assert.equal(observed.tokenInput.value, 321);
+    assert.equal(observed.tokenOutput.status, 'unavailable');
+    assert.equal(observed.cost.amount, 0.42);
+    assert.equal(validateUsageTimeObservabilityContract(observed).ok, true);
+
+    const unknown = buildUsageTimeObservability({
+      generatedAt: GENERATED_AT,
+      elapsedMs: { status: 'unknown', value: null },
+      providerCallCount: { status: 'unknown', value: null },
+      tokenInput: { status: 'unknown', value: null },
+      tokenOutput: { status: 'unknown', value: null },
+      cost: { status: 'unknown', amount: null, currency: null }
+    });
+
+    assert.equal(unknown.status, 'unknown');
+    assert.equal(unknown.cost.amount, null);
+
+    observed.cost.status = 'unknown';
+    assertValidationIncludes(
+      validateUsageTimeObservabilityContract(observed),
+      'cost.amount must be null unless status is observed'
+    );
+  });
+
+  it('builds diagnostics summaries that redact unsafe text and keep only bounded refs', () => {
+    const classification = fixture('failure-classification.worker-timeout.v1.json');
+    const preview = buildOperationRecoveryPreview({ generatedAt: GENERATED_AT, classification });
+    const confirmation = confirmOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      preview,
+      input: confirmInput(preview)
+    });
+    const usage = buildUsageTimeObservability({
+      generatedAt: GENERATED_AT,
+      elapsedMs: 1200,
+      providerCallCount: 1,
+      tokenInput: { status: 'unknown', value: null },
+      tokenOutput: { status: 'unknown', value: null },
+      cost: { status: 'unknown', amount: null, currency: null }
+    });
+    const summary = buildOperationDiagnosticsSummary({
+      generatedAt: GENERATED_AT,
+      operationId: classification.operationId,
+      status: 'warning',
+      timeline: fixture('operation-timeline.worker-timeout.v1.json'),
+      classifications: [classification],
+      recoveryPreviews: [preview],
+      recoveryConfirmations: [confirmation],
+      usage,
+      diagnostics: [{
+        kind: 'summary',
+        label: 'worker timeout',
+        summary: 'Retry preview confirmed from bounded operation evidence.',
+        ref: 'diagnostic-ref:v69:worker-timeout'
+      }, {
+        kind: 'summary',
+        label: 'raw provider output from /Users/andy/.codex/session.jsonl',
+        summary: 'sk-secret should be removed before projection',
+        ref: '/Users/andy/.codex/session.jsonl'
+      }],
+      evidenceRefs: [{
+        kind: 'operation-record',
+        ref: 'operation-record:v69:diagnostics-summary',
+        label: 'diagnostics summary evidence'
+      }]
+    });
+
+    assert.equal(summary.contractName, OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME);
+    assert.deepEqual(summary.failureLayers, ['provider']);
+    assert.deepEqual(summary.recoveryStates, ['retry-preview-confirmed']);
+    assert.equal(summary.redaction.secretsRedacted, true);
+    assert.equal(summary.redaction.redactedCount, 3);
+    assert.equal(summary.diagnostics[1].label, '[redacted]');
+    assert.equal(summary.diagnostics[1].summary, '[redacted]');
+    assert.equal(summary.diagnostics[1].ref, 'diagnostic-ref:redacted');
+    assert.equal(summary.redaction.rawProviderOutputIncluded, false);
+    assert.equal(summary.redaction.localSessionPathsIncluded, false);
+    assert.equal(validateOperationDiagnosticsSummaryContract(summary).ok, true);
+    assertNoUnsafePayload(summary);
+  });
+
+  it('rejects diagnostics summaries that leak raw refs after construction', () => {
+    const summary = buildOperationDiagnosticsSummary({
+      generatedAt: GENERATED_AT,
+      diagnostics: [{
+        kind: 'summary',
+        label: 'bounded diagnostic',
+        summary: 'No unsafe payload included.',
+        ref: 'diagnostic-ref:v69:safe'
+      }]
+    });
+
+    summary.diagnostics[0].summary = 'raw transcript from provider session';
+    summary.redaction.rawTranscriptIncluded = true;
+
+    const validation = validateOperationDiagnosticsSummaryContract(summary);
+
+    assert.equal(validation.ok, false);
+    assertValidationIncludes(validation, 'redaction.rawTranscriptIncluded must be false');
+    assertValidationIncludes(
+      validation,
+      'summary.diagnostics[0].summary must not contain raw provider output'
     );
   });
 });
