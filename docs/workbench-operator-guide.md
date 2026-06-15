@@ -10,7 +10,7 @@ v72 已证明：2026-06-15 同一天 5 个 counted dogfood session、`pnpm deskt
 
 v72 未证明：multi-day stability、provider real-use success、public distribution、notarization、auto-update、DMG release、GitHub Release assets、generic shell、renderer command execution、local session/raw transcript/raw model output reads、provider expansion、automatic worktree/goal creation、product-owned release automation。
 
-v73 日常循环以 `docs/plans/v73-multi-day-real-use-stabilization-runbook-2026-06-15.md` 为准。缺少 multi-day、provider opt-in smoke、local app repeatability、browser fallback、docs/install/release consistency 或 repeated blocker 处理证据时，只能写 `v73 stabilization-in-progress`，不能声明 personal real-use MVP。
+v73 日常循环以 `docs/plans/v73-multi-day-real-use-stabilization-runbook-2026-06-15.md` 为准。v73 的真实任务必须有 gated real CLI worker/reviewer lane，或记录尝试该 lane 时遇到的确切 CLI、auth、model、provider、gate 或 network blocker；本地测试、browser fallback 和 app open 只能算稳定性证据。缺少 multi-day、provider opt-in smoke、local app repeatability、browser fallback、docs/install/release consistency 或 repeated blocker 处理证据时，只能写 `v73 stabilization-in-progress`，不能声明 personal real-use MVP。
 
 当前 daily path：
 

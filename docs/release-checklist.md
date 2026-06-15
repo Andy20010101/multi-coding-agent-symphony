@@ -85,7 +85,7 @@ v73 closeout must resolve these gates before it can claim personal real-use MVP:
 | Gate | Required closeout evidence |
 | --- | --- |
 | Multi-day use | Counted sessions cover at least 3 consecutive Asia/Shanghai calendar days. |
-| Real work count | 3-5 counted tasks are real development or release-operations tasks. |
+| Real work count | 3-5 counted tasks are real CLI-backed development or release-operations tasks, or exact real CLI blockers found while attempting those lanes. Local-only checks do not count. |
 | Codex worker opt-in smoke | Real Codex worker smoke is intentionally enabled and recorded as passed, or blocked with the exact operator-accepted blocker. |
 | Claude Code reviewer opt-in smoke | Real Claude Code reviewer smoke is intentionally enabled and recorded as passed, or blocked with the exact operator-accepted blocker. |
 | Local app path | Local packaged app build/open is recorded on more than one counted day, or the exact blocker and fallback are recorded. |

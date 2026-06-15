@@ -9,7 +9,7 @@ Baseline: `v72^{}` at `cdde20c20931a4e002b184246ad7fd3585fa0979`
 
 v73 is a practical stabilization version for personal use.
 
-It should prove whether the local Workbench path is repeatable across multiple days, real development tasks, and opt-in provider checks. It should not add a new architecture, provider surface, release automation, terminal UI, generic shell, public distribution, notarization, auto-update, or product-owned git/GitHub release actions.
+It should prove whether the local Workbench path is repeatable across multiple days, real CLI-backed development tasks, and opt-in provider checks. It should not add a new architecture, provider surface, release automation, terminal UI, generic shell, public distribution, notarization, auto-update, or product-owned git/GitHub release actions.
 
 v73 may make small documentation or UI copy fixes only when a real session shows repeated friction. It should prefer evidence collection over feature expansion.
 
@@ -20,7 +20,7 @@ v73 can claim personal real-use MVP only when all rows below are true.
 | Gate | Required evidence |
 | --- | --- |
 | Multi-day use | Counted sessions cover at least 3 consecutive calendar days in Asia/Shanghai. |
-| Real development tasks | At least 3 and at most 5 counted tasks are real development or release-operations tasks, not synthetic checks. |
+| Real CLI-backed tasks | At least 3 and at most 5 counted tasks are real development or release-operations tasks that invoke a gated real CLI worker/reviewer lane, or record the exact real CLI blocker found while attempting that lane. Synthetic checks and local-only automation do not count. |
 | Codex worker opt-in smoke | At least one real Codex worker smoke is intentionally enabled and recorded as passed or blocked with the exact blocker. |
 | Claude Code reviewer opt-in smoke | At least one real Claude Code reviewer smoke is intentionally enabled and recorded as passed or blocked with the exact blocker. |
 | Local app path | The local packaged app path is built/opened on more than one counted day, or the runbook records the exact blocker and fallback used. |
@@ -39,9 +39,9 @@ If any gate is missing, v73 remains stabilization-in-progress and must not claim
 | --- | --- | --- | --- |
 | PR-0 | Runbook and protocol | This file plus optional v73 session template | The v73 controller can run daily without reinterpreting scope. |
 | PR-1 | Current-state docs sync | `README.md`, `docs/workbench-operator-guide.md`, `docs/install-guide.md`, `docs/release-checklist.md` | Docs state `v72` as latest release, `v73` as current stabilization, and the installer policy decision. |
-| PR-2 | Multi-day evidence batch 1 | `docs/qa/v73-...-sessions-batch-1-YYYY-MM-DD.md` | First counted day or two are recorded with local app and fallback evidence. |
+| PR-2 | Multi-day evidence batch 1 | `docs/qa/v73-...-sessions-batch-1-YYYY-MM-DD.md` | First day or two are recorded with local app, fallback, and real CLI task evidence or exact real CLI blockers. |
 | PR-3 | Provider opt-in smoke evidence | `docs/qa/v73-...-provider-smoke-YYYY-MM-DD.md` | Real Codex worker and Claude Code reviewer smokes are recorded as passed or blocked with sanitized evidence. |
-| PR-4 | Multi-day evidence batch 2 | `docs/qa/v73-...-sessions-batch-2-YYYY-MM-DD.md` | Total counted sessions reach 3-5 real tasks across at least 3 consecutive days. |
+| PR-4 | Multi-day evidence batch 2 | `docs/qa/v73-...-sessions-batch-2-YYYY-MM-DD.md` | Total counted sessions reach 3-5 real CLI-backed tasks across at least 3 consecutive days. |
 | PR-5 | Acceptance, closeout, and next decision | `docs/qa/v73-...-acceptance.md`, `docs/plans/v73-...-closeout-snapshot-YYYY-MM-DD.md`, optional v74 direction | All completion gates are resolved; release notes state exactly what is and is not proven. |
 
 Do not start v74 until v73 has merged, tagged, GitHub Release state has been verified, and the final v73 closeout says whether personal real-use MVP was reached.
@@ -53,12 +53,12 @@ Minimum calendar time is 3 consecutive Asia/Shanghai days because the completion
 | Day | Target | Task package | Expected PR |
 | --- | --- | --- | --- |
 | Day 1 | Start state and docs alignment | Publish PR-0 if needed. Repair README, operator guide, install guide, and release checklist so they agree on `v72` as the latest release and `v73` as current stabilization. Choose installer policy. Record session `v73-s01`. | PR-0, PR-1 |
-| Day 2 | First real-use batch | Run one real development or release-operations task through the local app or browser fallback. Record failure, recovery, terminal escape, and evidence. If the operator approves, run Codex worker opt-in smoke. Record session `v73-s02`. | PR-2 |
-| Day 3 | Provider and repeatability check | Run another real task. Re-check local app path and browser fallback. If the operator approves, run Claude Code reviewer opt-in smoke. Record session `v73-s03`. | PR-3 or PR-4 |
-| Day 4 | Fill missing gate | Use this day only for gaps: extra real task, provider blocker recovery, repeated product blocker fix, or app open/fallback repeatability. Record `v73-s04` only if it is real work. | PR-4 |
+| Day 2 | First real-use batch | Run one real CLI-backed development or release-operations task. Record the gated Codex worker lane result or its exact blocker, plus failure, recovery, terminal escape, and evidence. Record session `v73-s02`. | PR-2 |
+| Day 3 | Provider and repeatability check | Run another real CLI-backed task. Re-check local app path and browser fallback. Record the gated Claude Code reviewer lane result or its exact blocker. Record session `v73-s03`. | PR-3 or PR-4 |
+| Day 4 | Fill missing gate | Use this day only for gaps: extra real CLI-backed task, provider blocker recovery, repeated product blocker fix, or app open/fallback repeatability. Record `v73-s04` only if it includes real work or a concrete blocker recovery. | PR-4 |
 | Day 5 | Closeout decision | Finish acceptance and closeout only if all gates are resolved. If gates are missing, keep v73 stabilization-in-progress and name the missing evidence. | PR-5 |
 
-Fast path: 3 days if docs sync, app/fallback, Codex smoke, Claude smoke, and 3 real tasks all pass without repeated blockers.
+Fast path: 3 days if docs sync, app/fallback, Codex smoke, Claude smoke, and 3 real CLI-backed tasks all pass without repeated blockers.
 
 Expected path: 4-5 days because provider smokes usually need operator approval and may need environment repair.
 
@@ -115,7 +115,10 @@ curl -fsS http://127.0.0.1:8765/workbench/desktop/
 Provider smoke automation remains gated:
 
 ```sh
+pnpm mcas doctor --real-cli --adapter codex --require-gates --proof-dir tmp/v73-real-cli-proofs
 MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/v73-real-cli-proofs pnpm smoke:codex:real
+MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/v73-real-cli-proofs pnpm smoke:harness:codex:real
+pnpm mcas doctor --real-cli --adapter claude-code --require-gates --proof-dir tmp/v73-real-cli-proofs
 MCAS_RUN_REAL_CLAUDE=1 MCAS_REAL_CLI_PROOF_DIR=tmp/v73-real-cli-proofs pnpm smoke:claude:real
 ```
 
@@ -144,9 +147,9 @@ Expected v73 start state:
 - v72 GitHub Release exists, non-draft, non-prerelease, no assets, targetCommitish `main`;
 - v73 tag and GitHub Release are absent until v73 publication.
 
-2. Choose one real task for the session.
+2. Choose one real CLI-backed task for the session.
 
-Count real work only: docs state repair, install policy decision, local app verification, provider smoke setup, release-state reconcile, failure recovery, or a small UX/docs cleanup discovered during use.
+Count real work only when the session attempts a gated real CLI lane or records the exact real CLI blocker found while preparing that lane. Docs state repair, install policy decisions, local app verification, release-state reconcile, failure recovery, and small UX/docs cleanup can be session context, but they do not count toward the real task gate unless they are exercised through a real CLI worker/reviewer lane.
 
 Do not count a command-only run as a session unless it was the actual operator task and the record includes the operator goal, result, friction, recovery, and next action.
 
@@ -189,6 +192,8 @@ Evidence refs must not point to local provider session files, raw transcript pat
 ## Provider Smoke Rules
 
 Provider smokes are opt-in. Do not run them unless the operator intentionally enables the matching environment variable and accepts that a real CLI may call a model provider.
+
+For v73, real CLI-backed tasks are the only tasks that count toward the real task gate. A local-only smoke, browser fallback, or package open check can prove stability, but it cannot replace a gated real CLI attempt.
 
 Codex worker smoke candidates:
 
@@ -315,7 +320,7 @@ Scope:
 Completion claim:
 Only say personal real-use MVP is reached if all gates in the v73 runbook pass:
 - multi-day use;
-- real provider smoke for Codex worker and Claude Code reviewer, or explicit blockers accepted by the operator;
+- real CLI-backed task evidence for Codex worker and Claude Code reviewer, or explicit blockers accepted by the operator;
 - repeatable local app open path;
 - browser fallback works;
 - README/install/release state agree;
