@@ -106,6 +106,35 @@ pnpm desktop:shell:smoke
 cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/tauri-target
 ```
 
+## v71 Local Personal-Use Package
+
+The local package command is:
+
+```text
+pnpm desktop:shell:build:local
+```
+
+It runs the fixed Tauri build command from `desktop/shell/src-tauri`:
+
+```text
+pnpm --dir ../../.. exec tauri build --bundles app --ci --no-sign
+```
+
+The expected local artifact path is:
+
+```text
+desktop/shell/src-tauri/target/release/bundle/macos/Symphony Desktop Shell.app
+```
+
+Prerequisites:
+
+- macOS host;
+- Node.js and `pnpm`;
+- Rust toolchain with `cargo`;
+- repo devDependencies installed, including `@tauri-apps/cli`.
+
+This package path is for local personal use. It does not create a DMG, notarize the app, configure auto-update, upload GitHub Release assets, or prepare a colleague or customer rollout.
+
 ## v63 Local Launch MVP
 
 v63 keeps this workspace as a local launch MVP. The Tauri window opens `/workbench/desktop/`, dev mode starts the existing Workbench Vite server, and the native bridge remains limited to `attach_sidecar` plus `launch_sidecar`.
