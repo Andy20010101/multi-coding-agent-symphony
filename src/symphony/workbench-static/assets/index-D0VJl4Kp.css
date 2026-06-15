@@ -1333,6 +1333,7 @@ h4 {
 .review-gate-workbench-panel,
 .release-closeout-handoff-panel,
 .release-publication-evidence-panel,
+.release-manager-practical-panel,
 .stable-workbench-release-panel,
 .desktop-app-state-strip,
 .desktop-development-strip,
@@ -1706,6 +1707,7 @@ h4 {
 .review-gate-workbench-panel,
 .release-closeout-handoff-panel,
 .release-publication-evidence-panel,
+.release-manager-practical-panel,
 .stable-workbench-release-panel {
   display: grid;
   gap: 10px;
@@ -1721,6 +1723,7 @@ h4 {
 .review-gate-workbench-header,
 .release-closeout-handoff-header,
 .release-publication-evidence-header,
+.release-manager-practical-header,
 .stable-workbench-release-header,
 .system-golden-path-step-header {
   display: flex;
@@ -1739,6 +1742,7 @@ h4 {
 .review-gate-workbench-header,
 .release-closeout-handoff-header,
 .release-publication-evidence-header,
+.release-manager-practical-header,
 .stable-workbench-release-header {
   border-bottom: 1px solid var(--dsk-line-soft);
   padding-bottom: 8px;
@@ -1753,6 +1757,7 @@ h4 {
 .review-gate-workbench-header h2,
 .release-closeout-handoff-header h2,
 .release-publication-evidence-header h2,
+.release-manager-practical-header h2,
 .stable-workbench-release-header h2,
 .system-golden-path-step-header h3 {
   margin: 0;
@@ -1771,6 +1776,7 @@ h4 {
 .review-gate-workbench-header h2,
 .release-closeout-handoff-header h2,
 .release-publication-evidence-header h2,
+.release-manager-practical-header h2,
 .stable-workbench-release-header h2 {
   font-size: 18px;
 }
@@ -1798,6 +1804,7 @@ h4 {
 .review-gate-workbench-summary,
 .release-closeout-handoff-summary,
 .release-publication-evidence-summary,
+.release-manager-practical-summary,
 .stable-workbench-release-summary,
 .release-closeout-checklist-grid,
 .review-gate-confirmation-grid {
@@ -1836,6 +1843,7 @@ h4 {
 .system-golden-path-source-list,
 .child-dispatch-source-list,
 .codex-provider-source-list,
+.release-manager-command-list,
 .stable-workbench-surface-list,
 .stable-workbench-provider-list {
   display: grid;
@@ -1849,6 +1857,7 @@ h4 {
 .system-golden-path-source-list li,
 .child-dispatch-source-list li,
 .codex-provider-source-list li,
+.release-manager-command-list li,
 .stable-workbench-surface-list li,
 .stable-workbench-provider-list li,
 .child-dispatch-copy-card,
@@ -1868,6 +1877,21 @@ h4 {
   color: var(--dsk-fg);
   font-family: var(--dsk-mono);
   font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.release-manager-command-list pre {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--dsk-line-faint);
+  border-radius: 4px;
+  padding: 9px;
+  background: color-mix(in oklab, var(--dsk-bg), var(--dsk-surface) 55%);
+  color: var(--dsk-fg-2);
+  font-family: var(--dsk-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
@@ -4102,6 +4126,7 @@ h4 {
   .review-gate-workbench-summary,
   .release-closeout-handoff-summary,
   .release-publication-evidence-summary,
+  .release-manager-practical-summary,
   .stable-workbench-release-summary,
   .release-closeout-checklist-grid,
   .review-gate-confirmation-grid,

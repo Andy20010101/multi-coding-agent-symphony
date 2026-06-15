@@ -653,6 +653,7 @@ function DesktopShellRoute({
           <a href="#review-gate-workbench-panel">Review Gate</a>
           <a href="#release-closeout-handoff-panel">Release Handoff</a>
           <a href="#release-publication-evidence-panel">Publication Evidence</a>
+          <a href="#release-manager-practical-panel">Release Manager</a>
           <a href="#stable-workbench-release-panel">Stable Baseline</a>
           <a href="#desktop-lifecycle">Lifecycle</a>
           <a href="#desktop-run-state">Run State</a>
@@ -709,6 +710,7 @@ function DesktopShellRoute({
         />
         <ReleaseCloseoutHandoffPanel releaseCloseoutHandoffPack={desktopShell?.releaseCloseoutHandoffPack} />
         <ReleasePublicationEvidencePanel releasePublicationEvidence={desktopShell?.releasePublicationEvidence} />
+        <ReleaseManagerPracticalPanel releaseManagerPractical={desktopShell?.releaseManagerPractical} />
         <StableWorkbenchReleasePanel stableWorkbenchRelease={desktopShell?.stableWorkbenchRelease} />
         <DesktopAppStateStrip appStates={desktopShell?.appStates} />
         <DesktopDevelopmentStatusStrip
@@ -2550,6 +2552,178 @@ function ReleasePublicationEvidencePanel({ releasePublicationEvidence }) {
       </Subsection>
 
       <p className="panel-note">{evidence?.note ?? 'Release publication evidence unavailable.'}</p>
+    </section>
+  );
+}
+
+function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
+  const manager = releaseManagerPractical;
+  const readiness = manager?.readiness;
+  const evidenceDraft = manager?.evidenceDraft;
+  const manualPack = manager?.manualPublicationPack;
+  const baseline = readiness?.releaseBaseline;
+  const tagState = readiness?.tagState;
+  const githubReleaseState = readiness?.githubReleaseState;
+  const gateItems = readiness?.requiredGates?.items ?? [];
+  const gateEventItems = evidenceDraft?.gateEvents?.items ?? [];
+  const commandItems = manualPack?.commands?.items ?? [];
+
+  return (
+    <section
+      id="release-manager-practical-panel"
+      className="release-manager-practical-panel"
+      aria-label="Release Manager Practical Loop"
+    >
+      <header className="release-manager-practical-header">
+        <div>
+          <p className="section-kicker">v70 release manager</p>
+          <h2>Release Manager Practical Loop</h2>
+        </div>
+        <span className={`desktop-status ${desktopStatusClass(manager?.state)}`}>
+          {manager?.state ?? 'missing'}
+        </span>
+      </header>
+
+      <div className="release-manager-practical-summary">
+        <FieldList rows={[
+          ['readiness contract', readiness?.contractName],
+          ['readiness state', readiness?.state],
+          ['evidence draft', evidenceDraft?.contractName],
+          ['manual pack', manualPack?.contractName],
+          ['target tag', readiness?.targetTag],
+          ['target commit', readiness?.targetCommit],
+          ['readOnly', manager?.readOnly],
+          ['willMutate', manager?.willMutate]
+        ]} />
+        <FieldList rows={[
+          ['publication mode', manualPack?.publicationMode],
+          ['external action required', manualPack?.externalActionRequired],
+          ['copy only', manualPack?.copyOnly],
+          ['source evidence refs', evidenceRefsTextFromCollection(manualPack?.sourceEvidenceRefs)],
+          ['blocked reasons', textValueFromItems(manager?.blockedReasons, '无')],
+          ['generated at', readiness?.generatedAt]
+        ]} />
+      </div>
+
+      <Subsection title="Readiness Checks">
+        <FieldList rows={[
+          ['baseline state', baseline?.state],
+          ['current branch', baseline?.currentBranch],
+          ['main head', baseline?.mainHead],
+          ['origin main head', baseline?.originMainHead],
+          ['worktree clean', baseline?.clean],
+          ['open PR count', baseline?.openPrs?.count],
+          ['tag state', tagState?.state],
+          ['tag exists', tagState?.exists],
+          ['tag target matches', tagState?.matchesTarget],
+          ['GitHub Release state', githubReleaseState?.state],
+          ['GitHub Release exists', githubReleaseState?.exists],
+          ['release draft', githubReleaseState?.isDraft],
+          ['release prerelease', githubReleaseState?.isPrerelease],
+          ['release assets', releaseAssetsTextFromCollection(githubReleaseState?.assets)],
+          ['asset policy', readiness?.assetPolicy?.state]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Gate Evidence">
+        {gateItems.length === 0 ? (
+          <EmptyBlock copy="Required gates 未暴露。" />
+        ) : (
+          <ul className="codex-provider-source-list">
+            {gateItems.map((gate, index) => (
+              <li key={`${gate.gateName.text}-${index}`}>
+                <strong>{gate.gateName.text}</strong>
+                <FieldList rows={[
+                  ['state', gate.state],
+                  ['required', gate.required],
+                  ['evidence refs', evidenceRefsTextFromCollection(gate.evidenceRefs)],
+                  ['blocked reasons', textValueFromItems(gate.blockedReasons, '无')]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+        {gateEventItems.length === 0 ? null : (
+          <ul className="codex-provider-source-list">
+            {gateEventItems.map((event, index) => (
+              <li key={`${event.eventType.text}-${index}`}>
+                <strong>{event.eventType.text}</strong>
+                <FieldList rows={[
+                  ['gate', event.gateName],
+                  ['state', event.state],
+                  ['evidence refs', evidenceRefsTextFromCollection(event.evidenceRefs)]
+                ]} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="Manual Publication Pack">
+        <FieldList rows={[
+          ['pack state', manualPack?.state],
+          ['release title', manualPack?.releaseTitle],
+          ['repository', manualPack?.repository],
+          ['external action required', manualPack?.externalActionRequired],
+          ['copy only', manualPack?.copyOnly],
+          ['pack readOnly', manualPack?.readOnly],
+          ['pack willMutate', manualPack?.willMutate],
+          ['rollback refs', evidenceRefsTextFromCollection(manualPack?.rollbackRefs)]
+        ]} />
+        {commandItems.length === 0 ? (
+          <EmptyBlock copy="Manual publication commands 未暴露。" />
+        ) : (
+          <ul className="release-manager-command-list">
+            {commandItems.map((command) => (
+              <li key={command.commandId.text}>
+                <FieldList rows={[
+                  ['command id', command.commandId],
+                  ['label', command.label],
+                  ['copy only', command.copyOnly],
+                  ['willMutate', command.willMutate],
+                  ['allowed actor', command.allowedActor],
+                  ['requires clean reconcile', command.requiresCleanReconcile]
+                ]} />
+                <pre><code>{command.command.text}</code></pre>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Subsection>
+
+      <Subsection title="Post-release Reconcile">
+        <FieldList rows={[
+          ['tag object SHA', tagState?.tagObjectSha],
+          ['tag dereferenced commit', tagState?.dereferencedCommit],
+          ['GitHub Release URL', githubReleaseState?.url],
+          ['release target commitish', githubReleaseState?.targetCommitish],
+          ['release target matches', githubReleaseState?.targetCommitMatches],
+          ['asset policy expected', readiness?.assetPolicy?.expected],
+          ['asset policy blocked reasons', textValueFromItems(readiness?.assetPolicy?.blockedReasons, '无')]
+        ]} />
+      </Subsection>
+
+      <Subsection title="Disabled Product Actions">
+        <FieldList rows={[
+          ['merge automation', manager?.boundaries?.gitMergeAvailable],
+          ['tag automation', manager?.boundaries?.gitTagAvailable],
+          ['remote tag automation', manager?.boundaries?.gitPushAvailable],
+          ['release create automation', manager?.boundaries?.githubReleaseCreateAvailable],
+          ['release edit automation', manager?.boundaries?.githubReleaseEditAvailable],
+          ['release upload automation', manager?.boundaries?.githubReleaseUploadAvailable],
+          ['local command surface', manager?.boundaries?.shellAvailable],
+          ['arbitrary command execution', manager?.boundaries?.arbitraryCommandExecutionAvailable],
+          ['renderer local file read', manager?.boundaries?.rendererLocalFileReadAvailable],
+          ['provider session read', manager?.boundaries?.providerSessionReadAvailable],
+          ['raw transcript exposure', manager?.boundaries?.rawTranscriptAvailable],
+          ['test-only release-ready inference', manager?.boundaries?.releaseReadyInferenceFromTestsAvailable],
+          ['automatic self-review', manager?.boundaries?.automaticSelfReviewAvailable],
+          ['automatic worktree creation', manager?.boundaries?.automaticWorktreeCreationAvailable],
+          ['automatic next-version goal', manager?.boundaries?.automaticNextVersionGoalAvailable]
+        ]} />
+      </Subsection>
+
+      <p className="panel-note">{manager?.note ?? 'Release manager practical loop unavailable.'}</p>
     </section>
   );
 }

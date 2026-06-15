@@ -1392,6 +1392,12 @@ export function projectWorkbenchContracts(results) {
     contract: goalSupervisorData?.releasePublicationEvidence,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
+  const projectedReleaseManagerPractical = projectReleaseManagerPractical({
+    readiness: goalSupervisorData?.releaseManagerReadiness,
+    evidenceDraft: goalSupervisorData?.releaseEvidenceDraft,
+    manualPack: goalSupervisorData?.manualPublicationPack,
+    supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
+  });
   const projectedStableWorkbenchRelease = projectStableWorkbenchRelease({
     contract: goalSupervisorData?.stableWorkbenchRelease,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
@@ -1425,6 +1431,7 @@ export function projectWorkbenchContracts(results) {
     reviewGateConfirmationState: projectedReviewGateConfirmationState,
     releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
     releasePublicationEvidence: projectedReleasePublicationEvidence,
+    releaseManagerPractical: projectedReleaseManagerPractical,
     stableWorkbenchRelease: projectedStableWorkbenchRelease,
     goldenPath: projectWorkbenchGoldenPath({
       activeGoal: activeGoalControl,
@@ -1459,6 +1466,7 @@ export function projectWorkbenchContracts(results) {
       reviewGateConfirmationState: projectedReviewGateConfirmationState,
       releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
       releasePublicationEvidence: projectedReleasePublicationEvidence,
+      releaseManagerPractical: projectedReleaseManagerPractical,
       stableWorkbenchRelease: projectedStableWorkbenchRelease,
       routeStates
     }),
@@ -2212,6 +2220,7 @@ function projectDesktopShell({
   reviewGateConfirmationState,
   releaseCloseoutHandoffPack,
   releasePublicationEvidence,
+  releaseManagerPractical,
   stableWorkbenchRelease,
   routeStates
 }) {
@@ -2540,6 +2549,7 @@ function projectDesktopShell({
     reviewGateConfirmationState,
     releaseCloseoutHandoffPack,
     releasePublicationEvidence,
+    releaseManagerPractical,
     stableWorkbenchRelease,
     routeProvenance,
     appStates: {
@@ -3716,6 +3726,252 @@ function projectReleasePublicationNextStartAudit(audit) {
     blockedReasons: projectSystemGoldenPathTextItems(audit?.blockedReasons),
     readOnly: valueState(audit?.readOnly),
     willMutate: valueState(audit?.willMutate)
+  };
+}
+
+function projectReleaseManagerPractical({
+  readiness,
+  evidenceDraft,
+  manualPack,
+  supervisorRoute
+}) {
+  const hasReadiness = isPlainObject(readiness);
+  const hasDraft = isPlainObject(evidenceDraft);
+  const hasManualPack = isPlainObject(manualPack);
+  const hasAnyContract = hasReadiness || hasDraft || hasManualPack;
+  const blockedReasons = [
+    ...(Array.isArray(readiness?.blockedReasons) ? readiness.blockedReasons : []),
+    ...(Array.isArray(evidenceDraft?.blockedReasons) ? evidenceDraft.blockedReasons : []),
+    ...(Array.isArray(manualPack?.blockedReasons) ? manualPack.blockedReasons : [])
+  ];
+  const state = hasAnyContract
+    ? [readiness?.state, evidenceDraft?.state, manualPack?.state].every((item) => item === 'ready')
+      ? 'ready'
+      : 'blocked'
+    : 'missing';
+
+  return {
+    state,
+    readiness: projectReleaseManagerReadiness(readiness),
+    evidenceDraft: projectReleaseManagerEvidenceDraft(evidenceDraft),
+    manualPublicationPack: projectManualPublicationPack(manualPack),
+    blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+    boundaries: Object.fromEntries(
+      Object.entries(readiness?.boundaries ?? manualPack?.boundaries ?? evidenceDraft?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    readOnly: valueState(readiness?.readOnly ?? evidenceDraft?.readOnly ?? manualPack?.readOnly),
+    willMutate: valueState(readiness?.willMutate ?? evidenceDraft?.willMutate ?? manualPack?.willMutate),
+    route: {
+      path: valueState(supervisorRoute?.path),
+      routeState: valueState(routeStateFromRoute(supervisorRoute)),
+      source: valueState('goal-supervisor-app-read-model.v1 release manager practical projection')
+    },
+    note: hasAnyContract
+      ? 'Release Manager Practical Loop is read-only Workbench state. It shows readiness, gate evidence, copy-only manual publication commands, and post-release reconcile fields without executing merge, tag, push, or GitHub Release actions.'
+      : 'Release Manager Practical Loop is unavailable until goal-supervisor-app-read-model.v1 exposes releaseManagerReadiness.v1, releaseEvidenceDraft.v1, and manualReleasePublicationPack.v1.'
+  };
+}
+
+function projectReleaseManagerReadiness(readiness) {
+  const hasReadiness = isPlainObject(readiness);
+
+  return {
+    state: hasReadiness ? readiness.state ?? 'available' : 'missing',
+    contractName: valueState(readiness?.contractName),
+    contractVersion: valueState(readiness?.contractVersion),
+    generatedAt: valueState(readiness?.generatedAt),
+    version: valueState(readiness?.version),
+    targetTag: valueState(readiness?.targetTag),
+    releaseTitle: valueState(readiness?.releaseTitle),
+    targetCommit: valueState(readiness?.targetCommit),
+    releaseBaseline: projectReleaseManagerBaseline(readiness?.releaseBaseline),
+    requiredGates: projectReleaseManagerGates(readiness?.requiredGates),
+    releaseEvidenceRefs: projectChildDispatchEvidenceRefs(readiness?.releaseEvidenceRefs),
+    releaseNotesDraft: projectReleaseManagerNotes(readiness?.releaseNotesDraft),
+    tagState: projectReleaseManagerTagState(readiness?.tagState),
+    githubReleaseState: projectReleaseManagerGithubReleaseState(readiness?.githubReleaseState),
+    assetPolicy: projectReleaseManagerAssetPolicy(readiness?.assetPolicy),
+    blockedReasons: projectSystemGoldenPathTextItems(readiness?.blockedReasons),
+    boundaries: Object.fromEntries(
+      Object.entries(readiness?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    readOnly: valueState(readiness?.readOnly),
+    willMutate: valueState(readiness?.willMutate)
+  };
+}
+
+function projectReleaseManagerBaseline(baseline) {
+  const openPrs = Array.isArray(baseline?.openPrs) ? baseline.openPrs : [];
+
+  return {
+    state: valueState(baseline?.state),
+    currentBranch: valueState(baseline?.currentBranch),
+    currentHead: valueState(baseline?.currentHead),
+    mainHead: valueState(baseline?.mainHead),
+    originMainHead: valueState(baseline?.originMainHead),
+    clean: valueState(baseline?.clean),
+    openPrs: {
+      state: openPrs.length > 0 ? 'available' : Array.isArray(baseline?.openPrs) ? 'empty' : 'missing',
+      count: valueState(openPrs.length),
+      items: openPrs.map((pr) => ({
+        number: valueState(pr?.number),
+        title: valueState(pr?.title),
+        headRefName: valueState(pr?.headRefName),
+        baseRefName: valueState(pr?.baseRefName),
+        url: valueState(pr?.url),
+        isDraft: valueState(pr?.isDraft)
+      }))
+    },
+    sourceRef: projectSystemGoldenPathSourceRef(baseline?.sourceRef),
+    blockedReasons: projectSystemGoldenPathTextItems(baseline?.blockedReasons)
+  };
+}
+
+function projectReleaseManagerGates(gates) {
+  const items = (Array.isArray(gates) ? gates : []).map((gate) => ({
+    gateName: valueState(gate?.gateName),
+    state: valueState(gate?.state),
+    required: valueState(gate?.required),
+    evidenceRefs: projectChildDispatchEvidenceRefs(gate?.evidenceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(gate?.blockedReasons)
+  }));
+
+  return {
+    state: items.length > 0 ? 'available' : Array.isArray(gates) ? 'empty' : 'missing',
+    count: valueState(items.length),
+    items
+  };
+}
+
+function projectReleaseManagerNotes(notes) {
+  return {
+    state: valueState(notes?.state),
+    title: valueState(notes?.title),
+    notesText: valueState(notes?.body),
+    sourceRefs: projectChildDispatchEvidenceRefs(notes?.sourceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(notes?.blockedReasons)
+  };
+}
+
+function projectReleaseManagerTagState(tagState) {
+  return {
+    state: valueState(tagState?.state),
+    tagName: valueState(tagState?.tagName),
+    exists: valueState(tagState?.exists),
+    tagObjectSha: valueState(tagState?.tagObjectSha),
+    dereferencedCommit: valueState(tagState?.dereferencedCommit),
+    annotated: valueState(tagState?.annotated),
+    matchesTarget: valueState(tagState?.matchesTarget),
+    sourceRefs: projectChildDispatchEvidenceRefs(tagState?.sourceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(tagState?.blockedReasons)
+  };
+}
+
+function projectReleaseManagerGithubReleaseState(releaseState) {
+  return {
+    state: valueState(releaseState?.state),
+    tagName: valueState(releaseState?.tagName),
+    exists: valueState(releaseState?.exists),
+    name: valueState(releaseState?.name),
+    url: valueState(releaseState?.url),
+    isDraft: valueState(releaseState?.isDraft),
+    isPrerelease: valueState(releaseState?.isPrerelease),
+    publishedAt: valueState(releaseState?.publishedAt),
+    targetCommitish: valueState(releaseState?.targetCommitish),
+    targetCommitMatches: valueState(releaseState?.targetCommitMatches),
+    assets: projectReleasePublicationAssets(releaseState?.assets),
+    sourceRefs: projectChildDispatchEvidenceRefs(releaseState?.sourceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(releaseState?.blockedReasons)
+  };
+}
+
+function projectReleaseManagerAssetPolicy(assetPolicy) {
+  return {
+    state: valueState(assetPolicy?.state),
+    expected: valueState(assetPolicy?.expected),
+    actualAssets: projectReleasePublicationAssets(assetPolicy?.actualAssets),
+    blockedReasons: projectSystemGoldenPathTextItems(assetPolicy?.blockedReasons)
+  };
+}
+
+function projectReleaseManagerEvidenceDraft(draft) {
+  const hasDraft = isPlainObject(draft);
+
+  return {
+    state: hasDraft ? draft.state ?? 'available' : 'missing',
+    contractName: valueState(draft?.contractName),
+    contractVersion: valueState(draft?.contractVersion),
+    generatedAt: valueState(draft?.generatedAt),
+    version: valueState(draft?.version),
+    targetTag: valueState(draft?.targetTag),
+    targetCommit: valueState(draft?.targetCommit),
+    readinessState: valueState(draft?.readinessState),
+    gateEvents: projectReleaseManagerGateEvents(draft?.gateEvents),
+    validationCommandEvidenceRefs: projectChildDispatchEvidenceRefs(draft?.validationCommandEvidenceRefs),
+    releaseNotesDraft: projectReleaseManagerNotes(draft?.releaseNotesDraft),
+    knownFacts: projectSystemGoldenPathTextItems(draft?.knownFacts),
+    rollbackRefs: projectChildDispatchEvidenceRefs(draft?.rollbackRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(draft?.blockedReasons),
+    readOnly: valueState(draft?.readOnly),
+    willMutate: valueState(draft?.willMutate)
+  };
+}
+
+function projectReleaseManagerGateEvents(events) {
+  const items = (Array.isArray(events) ? events : []).map((event) => ({
+    gateName: valueState(event?.gateName),
+    eventType: valueState(event?.eventType),
+    state: valueState(event?.state),
+    evidenceRefs: projectChildDispatchEvidenceRefs(event?.evidenceRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(event?.blockedReasons)
+  }));
+
+  return {
+    state: items.length > 0 ? 'available' : Array.isArray(events) ? 'empty' : 'missing',
+    count: valueState(items.length),
+    items
+  };
+}
+
+function projectManualPublicationPack(pack) {
+  const hasPack = isPlainObject(pack);
+  const commands = Array.isArray(pack?.commands) ? pack.commands : [];
+
+  return {
+    state: hasPack ? pack.state ?? 'available' : 'missing',
+    contractName: valueState(pack?.contractName),
+    contractVersion: valueState(pack?.contractVersion),
+    generatedAt: valueState(pack?.generatedAt),
+    version: valueState(pack?.version),
+    targetTag: valueState(pack?.targetTag),
+    targetCommit: valueState(pack?.targetCommit),
+    releaseTitle: valueState(pack?.releaseTitle),
+    repository: valueState(pack?.repository),
+    publicationMode: valueState(pack?.publicationMode),
+    externalActionRequired: valueState(pack?.externalActionRequired),
+    commands: {
+      state: commands.length > 0 ? 'available' : Array.isArray(pack?.commands) ? 'empty' : 'missing',
+      count: valueState(commands.length),
+      items: commands.map((command) => ({
+        commandId: valueState(command?.commandId),
+        label: valueState(command?.label),
+        command: valueState(command?.command),
+        copyOnly: valueState(command?.copyOnly),
+        willMutate: valueState(command?.willMutate),
+        allowedActor: valueState(command?.allowedActor),
+        requiresCleanReconcile: valueState(command?.requiresCleanReconcile)
+      }))
+    },
+    sourceEvidenceRefs: projectChildDispatchEvidenceRefs(pack?.sourceEvidenceRefs),
+    releaseNotesDraft: projectReleaseManagerNotes(pack?.releaseNotesDraft),
+    rollbackRefs: projectChildDispatchEvidenceRefs(pack?.rollbackRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(pack?.blockedReasons),
+    boundaries: Object.fromEntries(
+      Object.entries(pack?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    copyOnly: valueState(pack?.copyOnly),
+    readOnly: valueState(pack?.readOnly),
+    willMutate: valueState(pack?.willMutate)
   };
 }
 
@@ -16890,6 +17146,10 @@ function projectRestoreValidation({ result, restoreValidation }) {
     },
     note: 'Restore Validation 只校验 backup manifest integrity 和兼容恢复路径。默认不覆盖现有数据，不读取任意 bundle path，不执行 restore apply。'
   };
+}
+
+function isPlainObject(value) {
+  return value !== null && value !== undefined && typeof value === 'object' && !Array.isArray(value);
 }
 
 export const CONTRACT_TEXT = Object.freeze({
