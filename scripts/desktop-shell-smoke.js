@@ -41,11 +41,10 @@ async function main() {
   assertEqual(config.app.windows[0].minWidth, 960, 'Tauri window minimum width');
   assertEqual(config.app.windows[0].minHeight, 640, 'Tauri window minimum height');
   assertEqual(config.app.security.csp, "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'", 'Tauri CSP boundary');
-  assertEqual(config.bundle.active, false, 'bundle publishing boundary');
   assertEqual(Object.hasOwn(config, 'plugins'), false, 'Tauri plugin boundary');
   assertEqual(Object.hasOwn(config.bundle, 'externalBin'), false, 'Tauri external binary boundary');
   assertEqual(Object.hasOwn(config.bundle, 'resources'), false, 'Tauri bundled resources boundary');
-  assertDeepEqual(config.bundle.targets, 'all', 'bundle target placeholder');
+  assertLocalPersonalUseBundleBoundary(config.bundle);
   assertDeepEqual(capabilityFiles, ['default.json'], 'capability file boundary');
   assertEqual(capability.identifier, 'desktop-shell', 'capability identifier');
   assertDeepEqual(capability.windows, ['main'], 'main window capability');
@@ -167,7 +166,9 @@ async function main() {
       permissions: capability.permissions
     },
     packaging: {
-      bundleActive: false,
+      bundleActive: config.bundle.active,
+      bundleTargets: config.bundle.targets,
+      localPersonalUseOnly: true,
       cargoPublish: false,
       autoUpdateAvailable: false,
       publishAvailable: false,
@@ -218,6 +219,18 @@ function assertDoesNotHaveForbiddenKeys(value, forbiddenKeys, allowedPaths, path
     }
     assertDoesNotHaveForbiddenKeys(child, forbiddenKeys, allowedPaths, childPath);
   }
+}
+
+function assertLocalPersonalUseBundleBoundary(bundle) {
+  if (bundle.active === false) {
+    assertDeepEqual(bundle.targets, 'all', 'inactive bundle target placeholder');
+    return;
+  }
+  assertEqual(bundle.active, true, 'local bundle active flag');
+  assertDeepEqual(bundle.targets, ['app'], 'local personal-use bundle target');
+  assertEqual(Object.hasOwn(bundle, 'macOS'), false, 'macOS distribution options boundary');
+  assertEqual(Object.hasOwn(bundle, 'publisher'), false, 'publisher boundary');
+  assertEqual(Object.hasOwn(bundle, 'copyright'), false, 'public distribution metadata boundary');
 }
 
 function readCargoDependencyNames(cargo, sectionName) {
