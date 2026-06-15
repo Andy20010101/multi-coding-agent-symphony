@@ -19,6 +19,8 @@ const CONTROLLED_PROVIDER_RUNNER_PLAN_PREVIEW_CONTRACT_NAME = 'controlled-provid
 const CONTROLLED_PROVIDER_RUNNER_CONFIRMATION_CONTRACT_NAME = 'controlled-provider-runner-confirmation.v1';
 const WORKER_RUN_PREVIEW_CONTRACT_NAME = 'workerRunPreview.v1';
 const REVIEWER_RUN_HANDOFF_CONTRACT_NAME = 'reviewerRunHandoff.v1';
+const ADOPTION_READINESS_CONTRACT_NAME = 'adoptionReadiness.v1';
+const MAIN_VERIFICATION_PREVIEW_CONTRACT_NAME = 'mainVerificationPreview.v1';
 const CONTROLLED_ADOPTION_PLAN_FREEZE_CONTRACT_NAME = 'controlled-adoption-plan-freeze.v1';
 const CONTROLLED_ADOPTION_CONFIRM_CONTRACT_NAME = 'controlled-adoption-confirmation.v1';
 const CONSOLE_ADOPTION_INSPECT_CONTRACT_NAME = 'symphony.console-adoption-inspect';
@@ -75,7 +77,9 @@ const V25_CONTROLLED_IMPLEMENTATION_GOAL_ID = 'v25-controlled-implementation-lan
 const V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 const V66_WORKER_RUN_GOAL_ID = 'v66-controlled-codex-worker-execution';
 const V67_REVIEWER_RUN_GOAL_ID = 'v67-claude-code-reviewer-lane';
+const V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID = 'v68-adoption-main-verification-loop';
 const V30_VERIFIED_ADOPTION_GOAL_ID = 'v30-verified-adoption-workspace-v2';
+const GOAL_EVENT_PLAN_PREVIEW_PATH = '/api/goals/<goal-id>/event-plan-preview';
 const EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
 const EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
   'docs/plans/<file>',
@@ -885,6 +889,24 @@ export const REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
   acceptErrorContract: true
 });
 
+export const ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
+  id: 'adoptionReadinessPreview',
+  label: 'Adoption Readiness Preview',
+  path: '/api/goals/<goal-id>/adoption-readiness-preview',
+  method: 'GET',
+  contractName: ADOPTION_READINESS_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
+export const MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE = Object.freeze({
+  id: 'mainVerificationPreview',
+  label: 'Main Verification Preview',
+  path: '/api/goals/<goal-id>/main-verification-preview',
+  method: 'GET',
+  contractName: MAIN_VERIFICATION_PREVIEW_CONTRACT_NAME,
+  acceptErrorContract: true
+});
+
 export const CONTROLLED_ADOPTION_PLAN_FREEZE_ROUTE_TEMPLATE = Object.freeze({
   id: 'controlledAdoptionPlanFreeze',
   label: 'Controlled Adoption Plan Freeze',
@@ -926,6 +948,8 @@ export const READONLY_API_ROUTE_ALLOWLIST = Object.freeze([
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
   REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+  ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE,
+  MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE,
   GUIDED_GOAL_HANDOFF_ROUTE_TEMPLATE,
   RUN_TIMELINE_ROUTE_TEMPLATE,
   SAFE_ARTIFACT_PREVIEW_ROUTE_TEMPLATE
@@ -954,6 +978,8 @@ const OPTIONAL_ROUTE_IDS = new Set([
   'controlledProviderRunnerPreview',
   'workerRunPreview',
   'reviewerRunPreview',
+  'adoptionReadinessPreview',
+  'mainVerificationPreview',
   'adoptionInspect'
 ]);
 
@@ -1029,6 +1055,8 @@ export function projectWorkbenchContracts(results) {
   const controlledProviderRunnerPreviewData = dataFrom(results.controlledProviderRunnerPreview);
   const workerRunPreviewData = dataFrom(results.workerRunPreview);
   const reviewerRunPreviewData = dataFrom(results.reviewerRunPreview);
+  const adoptionReadinessPreviewData = dataFrom(results.adoptionReadinessPreview);
+  const mainVerificationPreviewData = dataFrom(results.mainVerificationPreview);
   const capabilitiesData = dataFrom(results.capabilities);
   const actionManifestData = dataFrom(results.actionManifest);
   const actionAvailabilityData = dataFrom(results.actionAvailability);
@@ -1098,6 +1126,14 @@ export function projectWorkbenchContracts(results) {
     projectRouteState(
       results.reviewerRunPreview?.routeDescriptor ?? REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
       results.reviewerRunPreview
+    ),
+    projectRouteState(
+      results.adoptionReadinessPreview?.routeDescriptor ?? ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE,
+      results.adoptionReadinessPreview
+    ),
+    projectRouteState(
+      results.mainVerificationPreview?.routeDescriptor ?? MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE,
+      results.mainVerificationPreview
     ),
     projectRouteState(
       results.adoptionInspect?.routeDescriptor ?? ADOPTION_INSPECT_ROUTE_TEMPLATE,
@@ -1206,6 +1242,16 @@ export function projectWorkbenchContracts(results) {
   activeGoalControl.reviewerRunPreview = projectReviewerRunPreview({
     result: results.reviewerRunPreview,
     preview: reviewerRunPreviewData,
+    operations: activeGoalOperations,
+    activeGoal: activeGoalControl
+  });
+  activeGoalControl.adoptionMainVerificationLoop = projectAdoptionMainVerificationLoop({
+    workerRunPreview: activeGoalControl.workerRunPreview,
+    reviewerRunPreview: activeGoalControl.reviewerRunPreview,
+    adoptionPreviewResult: results.adoptionReadinessPreview,
+    adoptionPreview: adoptionReadinessPreviewData,
+    mainVerificationPreviewResult: results.mainVerificationPreview,
+    mainVerificationPreview: mainVerificationPreviewData,
     operations: activeGoalOperations,
     activeGoal: activeGoalControl
   });
@@ -5275,6 +5321,46 @@ export function createReviewerRunPreviewRoute(goalId, nextAction) {
   });
 }
 
+export function createAdoptionReadinessPreviewRoute(goalId, nextAction) {
+  const taskId = nextAction?.next?.taskId;
+
+  if (
+    !isSafeGoalRouteSegment(goalId) ||
+    goalId !== V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID ||
+    !isSafeGoalRouteSegment(taskId) ||
+    nextAction?.next?.blocked === true
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    ...ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE,
+    path: `${ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}`,
+    goalId,
+    taskId
+  });
+}
+
+export function createMainVerificationPreviewRoute(goalId, nextAction) {
+  const taskId = nextAction?.next?.taskId;
+
+  if (
+    !isSafeGoalRouteSegment(goalId) ||
+    goalId !== V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID ||
+    !isSafeGoalRouteSegment(taskId) ||
+    nextAction?.next?.blocked === true
+  ) {
+    return null;
+  }
+
+  return Object.freeze({
+    ...MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE,
+    path: `${MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(goalId))}?task=${encodeURIComponent(taskId)}`,
+    goalId,
+    taskId
+  });
+}
+
 export function createAdoptionInspectRoute(operations) {
   const operation = latestAdoptionPlanFreezeOperationForTask(operations, {
     goalId: operations?.goalId,
@@ -6834,6 +6920,203 @@ function projectReviewerRunBoundaries(boundaries) {
     githubReleaseAutomationAvailable: valueState(boundaries?.githubReleaseAutomationAvailable === true),
     realClaudeRequiresOptIn: valueState(boundaries?.realClaudeRequiresOptIn === true)
   };
+}
+
+function projectAdoptionMainVerificationLoop({
+  workerRunPreview,
+  reviewerRunPreview,
+  adoptionPreviewResult,
+  adoptionPreview,
+  mainVerificationPreviewResult,
+  mainVerificationPreview,
+  operations,
+  activeGoal
+}) {
+  const goalId = firstValue(
+    activeGoal?.runbook?.goalId,
+    activeGoal?.nextAction?.goalId,
+    adoptionPreview?.goal?.goalId,
+    mainVerificationPreview?.goal?.goalId,
+    operations?.goalId
+  );
+  const taskId = firstValue(
+    activeGoal?.nextAction?.next?.taskId,
+    activeGoal?.taskQueue?.nextTaskId,
+    adoptionPreview?.task?.taskId,
+    mainVerificationPreview?.task?.taskId
+  );
+  const workerOperation = latestWorkerProviderRunnerOperationForTask(operations, { goalId, taskId });
+  const reviewerOperation = latestReviewerRunOperationForTask(operations, { goalId, taskId });
+  const adoptionOperation = latestV68AdoptionConfirmOperationForTask(operations, { goalId, taskId });
+  const verificationOperation = latestVerificationOperationForTask(operations, { goalId, taskId });
+  const steps = [
+    projectLoopStep({
+      id: 'worker',
+      label: 'Worker',
+      source: 'workerRunPreview.v1 + goal-operation-runs.v1',
+      route: workerRunPreview?.confirm?.endpoint?.route?.value ?? workerRunPreview?.routeState?.value,
+      status: workerOperation?.status === 'confirmed'
+        ? 'confirmed'
+        : workerRunPreview?.state === 'preview-ready' ? 'preview-ready' : 'waiting',
+      blocker: workerRunPreview?.blockedReasons?.text,
+      operationId: workerOperation?.operationId,
+      nextSafeAction: 'Confirm backend-owned worker preview; worker output remains needs-review.'
+    }),
+    projectLoopStep({
+      id: 'reviewer',
+      label: 'Reviewer',
+      source: 'reviewerRunHandoff.v1 + goal-operation-runs.v1',
+      route: reviewerRunPreview?.confirm?.endpoint?.route?.value ?? reviewerRunPreview?.routeState?.value,
+      status: reviewerOperation?.status === 'confirmed'
+        ? 'confirmed'
+        : reviewerRunPreview?.state === 'preview-ready' ? 'preview-ready' : 'waiting',
+      blocker: reviewerRunPreview?.blockedReasons?.text,
+      operationId: reviewerOperation?.operationId,
+      nextSafeAction: 'Confirm independent reviewer preview; reviewer output cannot approve adoption or main verification.'
+    }),
+    projectLoopStep({
+      id: 'adoption',
+      label: 'Adoption',
+      source: 'adoptionReadiness.v1 + goal-operation-runs.v1',
+      route: adoptionPreviewResult?.route ?? adoptionPreviewResult?.routeDescriptor?.path,
+      status: adoptionOperation?.status === 'confirmed'
+        ? 'applied'
+        : adoptionPreview?.state === 'ready' ? 'preview-ready' : adoptionPreview?.state === 'blocked' ? 'blocked' : 'waiting',
+      blocker: arrayText(adoptionPreview?.blockedReasons),
+      operationId: adoptionOperation?.operationId,
+      nextSafeAction: 'Review adoption readiness preview, then confirm with planHash; rollback stays backend-owned.'
+    }),
+    projectLoopStep({
+      id: 'main-verification',
+      label: 'Main Verification',
+      source: 'mainVerificationPreview.v1 + goal-operation-runs.v1',
+      route: mainVerificationPreviewResult?.route ?? mainVerificationPreviewResult?.routeDescriptor?.path,
+      status: verificationOperation?.status === 'confirmed'
+        ? 'evidence-ready'
+        : mainVerificationPreview?.state === 'ready' ? 'preview-ready' : mainVerificationPreview?.state === 'blocked' ? 'blocked' : 'waiting',
+      blocker: arrayText(mainVerificationPreview?.blockedReasons),
+      operationId: verificationOperation?.operationId,
+      nextSafeAction: 'Confirm the fixed main verification suite; success only prepares evidence and a gate draft.'
+    }),
+    projectLoopStep({
+      id: 'gate-draft',
+      label: 'Gate Draft',
+      source: 'mainVerificationConfirmation.v1 gateDraft',
+      route: GOAL_EVENT_PLAN_PREVIEW_PATH,
+      status: verificationOperation?.verifierSummary?.gateDraftReady === true ||
+        (Array.isArray(verificationOperation?.artifactRefs) && verificationOperation.artifactRefs.some((artifact) => artifact?.kind === 'main-verification-gate-draft'))
+        ? 'draft-ready'
+        : 'waiting',
+      blocker: null,
+      operationId: verificationOperation?.operationId,
+      nextSafeAction: 'Use separate event-plan preview/confirm for main.verification-passed; this panel does not register it.'
+    })
+  ];
+  const nextStep = steps.find((step) => !['confirmed', 'applied', 'evidence-ready', 'draft-ready'].includes(step.status.value));
+
+  return {
+    state: goalId === V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID ? 'available' : 'inactive',
+    modelName: valueState('V68AdoptionMainVerificationLoop'),
+    goalId: valueState(goalId),
+    taskId: valueState(taskId),
+    steps: {
+      count: valueState(steps.length),
+      items: steps
+    },
+    blockers: textItemCollection(steps
+      .map((step) => step.blocker.value)
+      .filter((blocker) => isNonEmptyString(blocker) && blocker !== MISSING_TEXT && blocker !== '无')),
+    nextSafeAction: {
+      step: valueState(nextStep?.label.value ?? 'complete'),
+      label: valueState(nextStep?.nextSafeAction.value ?? 'All loop evidence is ready for the next explicit gate check.'),
+      source: valueState(nextStep?.source.value ?? 'goal-operation-runs.v1')
+    },
+    routes: {
+      adoptionReadinessPreview: valueState(adoptionPreviewResult?.route ?? adoptionPreviewResult?.routeDescriptor?.path),
+      mainVerificationPreview: valueState(mainVerificationPreviewResult?.route ?? mainVerificationPreviewResult?.routeDescriptor?.path),
+      operations: valueState(operations?.goalId && isSafeGoalRouteSegment(operations.goalId)
+        ? GOAL_OPERATIONS_ROUTE_TEMPLATE.path.replace('<goal-id>', encodeURIComponent(operations.goalId))
+        : null)
+    },
+    safety: {
+      readOnlySurface: valueState(true),
+      backendOwnedMutationsOnly: valueState(true),
+      previewConfirmRequired: valueState(true),
+      rendererCommandExecutionAvailable: valueState(false),
+      genericShellRunnerAvailable: valueState(false),
+      rawProviderOutputAvailable: valueState(false),
+      directTaskCompletionAvailable: valueState(false),
+      directMainVerificationAvailable: valueState(false),
+      releaseReadyDeclarationAvailable: valueState(false),
+      gitMutationAvailable: valueState(false),
+      githubReleaseAutomationAvailable: valueState(false)
+    },
+    note: 'V68 loop surface reads preview contracts and goal-operation-runs only. It shows Worker -> Reviewer -> Adoption -> Main Verification -> Gate Draft with blockers and next safe action; it does not execute commands, register gates, merge, tag, publish, or infer release readiness.'
+  };
+}
+
+function projectLoopStep({
+  id,
+  label,
+  source,
+  route,
+  status,
+  blocker,
+  operationId,
+  nextSafeAction
+}) {
+  return {
+    id: valueState(id),
+    label: valueState(label),
+    source: valueState(source),
+    route: valueState(route),
+    status: valueState(status),
+    blocker: valueState(blocker),
+    operationId: valueState(operationId),
+    nextSafeAction: valueState(nextSafeAction)
+  };
+}
+
+function latestWorkerProviderRunnerOperationForTask(operations, { goalId, taskId }) {
+  if (!Array.isArray(operations?.runs) || !isNonEmptyString(goalId) || !isNonEmptyString(taskId)) {
+    return null;
+  }
+
+  for (const operation of [...operations.runs].reverse()) {
+    if (
+      operation?.goalId === goalId &&
+      operation?.taskId === taskId &&
+      operation?.commandKind === 'provider-runner' &&
+      (operation?.role === 'worker' || operation?.commandName === 'worker run preview/confirm')
+    ) {
+      return operation;
+    }
+  }
+
+  return null;
+}
+
+function latestV68AdoptionConfirmOperationForTask(operations, { goalId, taskId }) {
+  if (!Array.isArray(operations?.runs) || !isNonEmptyString(goalId) || !isNonEmptyString(taskId)) {
+    return null;
+  }
+
+  for (const operation of [...operations.runs].reverse()) {
+    if (
+      operation?.goalId === goalId &&
+      operation?.taskId === taskId &&
+      operation?.commandKind === 'adoption-confirm' &&
+      operation?.status === 'confirmed'
+    ) {
+      return operation;
+    }
+  }
+
+  return null;
+}
+
+function arrayText(values) {
+  return Array.isArray(values) && values.length > 0 ? values.join('、') : null;
 }
 
 function projectControlledProviderRunnerOperation(operation) {

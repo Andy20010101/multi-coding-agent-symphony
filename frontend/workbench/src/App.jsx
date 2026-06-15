@@ -305,6 +305,10 @@ export function WorkbenchShell({
             />
           </section>
 
+          <section className="main-verification-readiness-grid" aria-label="v68 adoption and main verification loop">
+            <AdoptionMainVerificationLoopPanel loop={model.activeGoal.adoptionMainVerificationLoop} />
+          </section>
+
           <section className="main-verification-readiness-grid" aria-label="v24 main verification readiness">
             <MainVerificationReadinessPanel
               readiness={model.activeGoal.mainVerificationReadiness}
@@ -7274,6 +7278,71 @@ function buildControlledProviderRunnerConfirmBody(preview) {
     planId,
     planHash
   });
+}
+
+function AdoptionMainVerificationLoopPanel({ loop }) {
+  return (
+    <DataPanel
+      id="adoption-main-verification-loop-panel"
+      kicker="v68 loop"
+      title="Adoption -> Main Verification"
+      state={loop?.state ?? 'missing'}
+    >
+      <FieldList rows={[
+        ['model', loop?.modelName],
+        ['goal', loop?.goalId],
+        ['task', loop?.taskId],
+        ['next safe action', loop?.nextSafeAction?.label],
+        ['next safe step', loop?.nextSafeAction?.step],
+        ['blockers', loop?.blockers?.count],
+        ['adoption preview route', loop?.routes?.adoptionReadinessPreview],
+        ['main verification preview route', loop?.routes?.mainVerificationPreview],
+        ['operations route', loop?.routes?.operations],
+        ['read only', loop?.safety?.readOnlySurface],
+        ['backend mutations only', loop?.safety?.backendOwnedMutationsOnly],
+        ['preview/confirm required', loop?.safety?.previewConfirmRequired],
+        ['renderer command execution', loop?.safety?.rendererCommandExecutionAvailable],
+        ['generic shell runner', loop?.safety?.genericShellRunnerAvailable],
+        ['raw provider output', loop?.safety?.rawProviderOutputAvailable],
+        ['direct main verification', loop?.safety?.directMainVerificationAvailable],
+        ['release ready declaration', loop?.safety?.releaseReadyDeclarationAvailable],
+        ['git mutation', loop?.safety?.gitMutationAvailable],
+        ['GitHub Release automation', loop?.safety?.githubReleaseAutomationAvailable]
+      ]} />
+
+      <Subsection title="Worker -> Reviewer -> Adoption -> Main Verification -> Gate Draft">
+        <LoopStepList steps={loop?.steps} />
+      </Subsection>
+
+      <p className="panel-note">{loop?.note ?? 'v68 loop surface 未暴露。'}</p>
+    </DataPanel>
+  );
+}
+
+function LoopStepList({ steps }) {
+  const items = steps?.items ?? [];
+
+  if (items.length === 0) {
+    return <EmptyBlock copy="loop steps 未暴露。" />;
+  }
+
+  return (
+    <ul className="operation-list">
+      {items.map((step) => (
+        <li key={step.id?.text ?? step.label?.text}>
+          <strong>{step.label?.text}</strong>
+          <FieldList rows={[
+            ['status', step.status],
+            ['source', step.source],
+            ['route', step.route],
+            ['operation', step.operationId],
+            ['blocker', step.blocker],
+            ['next safe action', step.nextSafeAction]
+          ]} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function stripEmptyValues(value) {

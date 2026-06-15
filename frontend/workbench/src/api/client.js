@@ -15,6 +15,8 @@ import {
   CONTROLLED_PROVIDER_RUNNER_PREVIEW_ROUTE_TEMPLATE,
   WORKER_RUN_PREVIEW_ROUTE_TEMPLATE,
   REVIEWER_RUN_PREVIEW_ROUTE_TEMPLATE,
+  ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE,
+  MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE,
   ADOPTION_INSPECT_ROUTE_TEMPLATE,
   CONTROLLED_ADOPTION_CONFIRM_ROUTE_TEMPLATE,
   createGuidedGoalHandoffRoute,
@@ -23,6 +25,8 @@ import {
   createControlledProviderRunnerPreviewRoute,
   createWorkerRunPreviewRoute,
   createReviewerRunPreviewRoute,
+  createAdoptionReadinessPreviewRoute,
+  createMainVerificationPreviewRoute,
   createGoalEventsRoute,
   createGoalOperationsRoute,
   createGoalProgressRoute,
@@ -159,6 +163,8 @@ export async function fetchWorkbenchContracts(options = {}) {
   const controlledProviderRunnerPreviewRoute = createControlledProviderRunnerPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const workerRunPreviewRoute = createWorkerRunPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const reviewerRunPreviewRoute = createReviewerRunPreviewRoute(activeGoalId, results.goalNextAction?.data);
+  const adoptionReadinessPreviewRoute = createAdoptionReadinessPreviewRoute(activeGoalId, results.goalNextAction?.data);
+  const mainVerificationPreviewRoute = createMainVerificationPreviewRoute(activeGoalId, results.goalNextAction?.data);
   const latestRunId = latestRunIdFromResults(results);
   const timelineRoute = createRunTimelineRoute(latestRunId);
 
@@ -276,6 +282,28 @@ export async function fetchWorkbenchContracts(options = {}) {
         message: 'reviewer run preview 未暴露 / 不适用'
       })
     : await fetchReadonlyRoute(reviewerRunPreviewRoute, options);
+
+  results.adoptionReadinessPreview = adoptionReadinessPreviewRoute === null
+    ? readonlySkipped({
+        route: {
+          ...ADOPTION_READINESS_PREVIEW_ROUTE_TEMPLATE,
+          id: 'adoptionReadinessPreview',
+          label: 'Adoption Readiness Preview'
+        },
+        message: 'adoption readiness preview 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(adoptionReadinessPreviewRoute, options);
+
+  results.mainVerificationPreview = mainVerificationPreviewRoute === null
+    ? readonlySkipped({
+        route: {
+          ...MAIN_VERIFICATION_PREVIEW_ROUTE_TEMPLATE,
+          id: 'mainVerificationPreview',
+          label: 'Main Verification Preview'
+        },
+        message: 'main verification preview 未暴露 / 不适用'
+      })
+    : await fetchReadonlyRoute(mainVerificationPreviewRoute, options);
 
   results.latestRunTimeline = timelineRoute === null
     ? readonlySkipped({
