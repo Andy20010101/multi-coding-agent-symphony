@@ -94,7 +94,7 @@ v47 PR-3 extends the same smoke check to assert:
 - the Tauri config does not add plugins, updater settings, publish URLs, signing/notarization fields, or extra windows
 - Cargo runtime dependencies remain limited to `serde` and `tauri`, with `tauri-build` as the only build dependency
 - renderer shell execution, arbitrary command access, and arbitrary path access remain unavailable
-- `bundle.active` remains `false`
+- `bundle.active` is allowed only for the local macOS `.app` target
 - `Cargo.toml` keeps `publish = false`
 - no updater, publish URL, signing, codesigning, or notarization entry is present
 
@@ -135,6 +135,89 @@ Prerequisites:
 
 This package path is for local personal use. It does not create a DMG, notarize the app, configure auto-update, upload GitHub Release assets, or prepare a colleague or customer rollout.
 
+### Open Without Installing
+
+After `pnpm desktop:shell:build:local` succeeds, open the local app bundle:
+
+```text
+open -n "desktop/shell/src-tauri/target/release/bundle/macos/Symphony Desktop Shell.app"
+```
+
+Check that macOS started the app process:
+
+```text
+pgrep -fl "Symphony Desktop Shell|symphony-desktop-shell"
+```
+
+Quit the app after smoke testing:
+
+```text
+osascript -e 'tell application "Symphony Desktop Shell" to quit'
+```
+
+This launch smoke checks that macOS can open the unsigned local `.app`. It is not notarization, signing, a DMG install, or a public release test.
+
+### Sidecar State
+
+The app shell opens `/workbench/desktop/`. It can attach to an already-running local console sidecar at the loopback host and allowed port:
+
+```text
+pnpm symphony console --host 127.0.0.1 --port 8765
+```
+
+If the sidecar is not running, the shell should show the existing unavailable or stale backend state from the Workbench contracts. The renderer still does not get a terminal, arbitrary shell command, local session folder reader, git writer, or release publisher.
+
+### Install
+
+For a user-local install, copy the app bundle into `~/Applications`:
+
+```text
+mkdir -p "$HOME/Applications"
+cp -R "desktop/shell/src-tauri/target/release/bundle/macos/Symphony Desktop Shell.app" "$HOME/Applications/"
+open -n "$HOME/Applications/Symphony Desktop Shell.app"
+```
+
+Use `/Applications` only when the operator intentionally wants a machine-level copy and has the required macOS permissions.
+
+### Uninstall
+
+Quit the app, then remove the copied bundle:
+
+```text
+osascript -e 'tell application "Symphony Desktop Shell" to quit'
+rm -rf "$HOME/Applications/Symphony Desktop Shell.app"
+```
+
+The current shell does not write operator settings through a product feature. If macOS creates app support or cache folders during local testing, remove them only after checking they belong to this identifier:
+
+```text
+rm -rf "$HOME/Library/Application Support/dev.symphony.desktop-shell"
+rm -rf "$HOME/Library/Caches/dev.symphony.desktop-shell"
+```
+
+### Reinstall
+
+Rebuild and replace the local copy:
+
+```text
+pnpm desktop:shell:build:local
+osascript -e 'tell application "Symphony Desktop Shell" to quit'
+rm -rf "$HOME/Applications/Symphony Desktop Shell.app"
+cp -R "desktop/shell/src-tauri/target/release/bundle/macos/Symphony Desktop Shell.app" "$HOME/Applications/"
+open -n "$HOME/Applications/Symphony Desktop Shell.app"
+```
+
+### Rollback
+
+Rollback uses a known-good repo commit or a previously saved app bundle. From the repo, rebuild the previous commit outside the app, then replace the user-local copy with that bundle. If the native package cannot be opened, return to the browser Workbench path and keep the failed app bundle for inspection until the failure is recorded.
+
+Browser Workbench fallback:
+
+```text
+pnpm symphony console --host 127.0.0.1 --port 8765
+open "http://127.0.0.1:8765/workbench/desktop/"
+```
+
 ## v63 Local Launch MVP
 
 v63 keeps this workspace as a local launch MVP. The Tauri window opens `/workbench/desktop/`, dev mode starts the existing Workbench Vite server, and the native bridge remains limited to `attach_sidecar` plus `launch_sidecar`.
@@ -151,8 +234,8 @@ The native host compile check is:
 cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/tauri-target
 ```
 
-These checks are enough for v63 host boundary validation. A full native bundle is not required for the v63 smoke path and is not evidence of public distribution.
+These checks are enough for v63 host boundary validation. v71 adds a local `.app` bundle path for personal use. That package is not evidence of public distribution.
 
 Operator-facing launch and recovery commands are documented in `docs/desktop-local-launch-guide.md`.
 
-Distribution packaging remains off. The smoke check and `cargo check` validate source-level host boundaries and compileability only; they do not produce or validate a signed app, notarized app, auto-update channel, publish endpoint, or release automation. This workspace does not enable auto-update, publish, signing, notarization, tag, push, release gates, release readiness, a generic shell runner, or arbitrary local file access. Release/distribution work belongs to a later release-manager or native distribution task after independent review and main verification.
+Public distribution packaging remains off. The smoke check, `cargo check`, and local `.app` build do not validate a signed app, notarized app, auto-update channel, publish endpoint, DMG, release asset, or release automation. This workspace does not enable auto-update, publish, signing, notarization, tag, push, release gates, release readiness, a generic shell runner, or arbitrary local file access.
