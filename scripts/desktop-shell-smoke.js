@@ -2,6 +2,7 @@
 
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { inflateSync } from 'node:zlib';
 
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
 const repoRootUrl = pathToFileURL(repoRoot);
@@ -13,11 +14,15 @@ const checkedFiles = Object.freeze([
   'desktop/shell/src-tauri/src/main.rs',
   'desktop/shell/src-tauri/capabilities/default.json'
 ]);
+const checkedBinaryFiles = Object.freeze([
+  'desktop/shell/src-tauri/icons/icon.png'
+]);
 
 async function main() {
-  const [files, capabilityFiles] = await Promise.all([
+  const [files, capabilityFiles, icon] = await Promise.all([
     readCheckedFiles(),
-    readdir(new URL('desktop/shell/src-tauri/capabilities/', repoRootUrl))
+    readdir(new URL('desktop/shell/src-tauri/capabilities/', repoRootUrl)),
+    readFile(new URL(checkedBinaryFiles[0], repoRootUrl))
   ]);
   const config = JSON.parse(files['desktop/shell/src-tauri/tauri.conf.json']);
   const cargo = files['desktop/shell/src-tauri/Cargo.toml'];
@@ -25,6 +30,7 @@ async function main() {
   const capability = JSON.parse(files['desktop/shell/src-tauri/capabilities/default.json']);
   const build = files['desktop/shell/src-tauri/build.rs'];
   const mainRs = files['desktop/shell/src-tauri/src/main.rs'];
+  const iconMetadata = assertRgbaPngIcon(icon, 32, 32, checkedBinaryFiles[0]);
 
   assertEqual(config.productName, 'Symphony Desktop Shell', 'Tauri productName');
   assertEqual(config.identifier, 'dev.symphony.desktop-shell', 'Tauri identifier');
@@ -126,6 +132,7 @@ async function main() {
     contractVersion: 1,
     status: 'ok',
     checkedFiles,
+    checkedBinaryFiles,
     rendererRoute: '/workbench/desktop/',
     nativeHost: 'desktop/shell/src-tauri',
     localLaunch: {
@@ -169,6 +176,7 @@ async function main() {
       bundleActive: config.bundle.active,
       bundleTargets: config.bundle.targets,
       localPersonalUseOnly: true,
+      icon: iconMetadata,
       cargoPublish: false,
       autoUpdateAvailable: false,
       publishAvailable: false,
@@ -231,6 +239,59 @@ function assertLocalPersonalUseBundleBoundary(bundle) {
   assertEqual(Object.hasOwn(bundle, 'macOS'), false, 'macOS distribution options boundary');
   assertEqual(Object.hasOwn(bundle, 'publisher'), false, 'publisher boundary');
   assertEqual(Object.hasOwn(bundle, 'copyright'), false, 'public distribution metadata boundary');
+}
+
+function assertRgbaPngIcon(buffer, expectedWidth, expectedHeight, label) {
+  const pngSignature = Buffer.from('89504e470d0a1a0a', 'hex');
+  if (!buffer.subarray(0, pngSignature.length).equals(pngSignature)) {
+    throw new Error(`${label} is not a PNG`);
+  }
+
+  let offset = pngSignature.length;
+  let width = null;
+  let height = null;
+  let bitDepth = null;
+  let colorType = null;
+  const idatChunks = [];
+
+  while (offset < buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.subarray(offset + 4, offset + 8).toString('ascii');
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    const data = buffer.subarray(dataStart, dataEnd);
+
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
+    }
+    if (type === 'IDAT') {
+      idatChunks.push(data);
+    }
+    if (type === 'IEND') {
+      break;
+    }
+    offset = dataEnd + 4;
+  }
+
+  assertEqual(width, expectedWidth, `${label} width`);
+  assertEqual(height, expectedHeight, `${label} height`);
+  assertEqual(bitDepth, 8, `${label} bit depth`);
+  assertEqual(colorType, 6, `${label} color type`);
+
+  const inflated = inflateSync(Buffer.concat(idatChunks));
+  const expectedBytes = expectedHeight * (1 + expectedWidth * 4);
+  assertEqual(inflated.length, expectedBytes, `${label} RGBA payload length`);
+
+  return {
+    path: label,
+    width,
+    height,
+    colorType: 'rgba',
+    inflatedBytes: inflated.length
+  };
 }
 
 function readCargoDependencyNames(cargo, sectionName) {
