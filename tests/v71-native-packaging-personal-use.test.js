@@ -162,6 +162,12 @@ describe('v71 native packaging for personal use', () => {
     ]);
 
     assert.match(readme, /v71 Local Personal-Use Package/u);
+    assert.match(readme, /Open Without Installing/u);
+    assert.match(readme, /### Install/u);
+    assert.match(readme, /### Uninstall/u);
+    assert.match(readme, /### Reinstall/u);
+    assert.match(readme, /### Rollback/u);
+    assert.match(readme, /Browser Workbench fallback/u);
     assert.match(readme, /desktop\/shell\/src-tauri\/target\/release\/bundle\/macos\/Symphony Desktop Shell\.app/u);
     assert.match(readme, /does not create a DMG, notarize the app, configure auto-update, upload GitHub Release assets, or prepare a colleague or customer rollout/u);
     assert.match(localBuildScript, /noReleaseAssets:\s*true/u);
