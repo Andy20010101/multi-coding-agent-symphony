@@ -11,7 +11,9 @@ const FILES = Object.freeze({
   cargo: 'desktop/shell/src-tauri/Cargo.toml',
   capability: 'desktop/shell/src-tauri/capabilities/default.json',
   lib: 'desktop/shell/src-tauri/src/lib.rs',
+  packageJson: 'package.json',
   readme: 'desktop/shell/README.md',
+  localBuildScript: 'scripts/desktop-shell-build-local.js',
   smoke: 'scripts/desktop-shell-smoke.js'
 });
 
@@ -23,7 +25,7 @@ describe('v71 native packaging for personal use', () => {
     assert.equal(config.productName, 'Symphony Desktop Shell');
     assert.equal(config.version, '0.1.0');
     assert.equal(config.identifier, 'dev.symphony.desktop-shell');
-    assert.equal(config.build.beforeBuildCommand, 'pnpm --dir ../../.. workbench:build');
+    assert.equal(config.build.beforeBuildCommand, 'pnpm workbench:build');
     assert.equal(config.build.frontendDist, '../../../src/symphony/workbench-static');
     assert.equal(config.app.windows.length, 1);
     assert.equal(config.app.windows[0].url, '/workbench/desktop/');
@@ -109,14 +111,60 @@ describe('v71 native packaging for personal use', () => {
     assert.equal(report.bridge.releaseWriteAvailable, false);
   });
 
+  it('defines a fixed local package build command and artifact path', async () => {
+    const [pkgText, scriptText] = await Promise.all([
+      readFile(FILES.packageJson, 'utf8'),
+      readFile(FILES.localBuildScript, 'utf8')
+    ]);
+    const pkg = JSON.parse(pkgText);
+    const { stdout } = await execFileAsync('node', [FILES.localBuildScript, '--dry-run']);
+    const report = JSON.parse(stdout);
+
+    assert.equal(pkg.scripts['desktop:shell:build:local'], 'node scripts/desktop-shell-build-local.js');
+    assert.equal(pkg.devDependencies['@tauri-apps/cli'], '2.11.2');
+    assert.equal(report.contractName, 'desktop-shell-local-package-build.v1');
+    assert.equal(report.mode, 'dry-run');
+    assert.equal(report.status, 'ready');
+    assert.deepEqual(report.command, {
+      cwd: 'desktop/shell/src-tauri',
+      argv: [
+        'pnpm',
+        '--dir',
+        '../../..',
+        'exec',
+        'tauri',
+        'build',
+        '--bundles',
+        'app',
+        '--ci',
+        '--no-sign'
+      ]
+    });
+    assert.deepEqual(report.artifact, {
+      type: 'macos-app-bundle',
+      path: 'desktop/shell/src-tauri/target/release/bundle/macos/Symphony Desktop Shell.app',
+      exists: false
+    });
+    assert.equal(report.boundaries.localPersonalUseOnly, true);
+    assert.equal(report.boundaries.noDmg, true);
+    assert.equal(report.boundaries.noNotarization, true);
+    assert.equal(report.boundaries.noAutoUpdate, true);
+    assert.equal(report.boundaries.noReleaseAssets, true);
+    assert.match(scriptText, /desktop-shell local build accepts only --dry-run/u);
+    assert.doesNotMatch(scriptText, /process\.argv\.slice\(2\)[\s\S]*Command::new|git\s+push|gh\s+release|--bundles['"`],\s*['"`]dmg/iu);
+  });
+
   it('keeps operator docs explicit about non-distribution scope', async () => {
-    const [readme, smoke] = await Promise.all([
+    const [readme, localBuildScript, smoke] = await Promise.all([
       readFile(FILES.readme, 'utf8'),
+      readFile(FILES.localBuildScript, 'utf8'),
       readFile(FILES.smoke, 'utf8')
     ]);
 
-    assert.match(readme, /Distribution packaging remains off/u);
-    assert.match(readme, /not produce or validate a signed app, notarized app, auto-update channel, publish endpoint, or release automation/u);
+    assert.match(readme, /v71 Local Personal-Use Package/u);
+    assert.match(readme, /desktop\/shell\/src-tauri\/target\/release\/bundle\/macos\/Symphony Desktop Shell\.app/u);
+    assert.match(readme, /does not create a DMG, notarize the app, configure auto-update, upload GitHub Release assets, or prepare a colleague or customer rollout/u);
+    assert.match(localBuildScript, /noReleaseAssets:\s*true/u);
     assert.match(smoke, /localPersonalUseOnly/u);
     assert.doesNotMatch(readme, /GitHub Release asset upload is enabled|public DMG is supported|notarized distribution is ready|auto-update channel is ready/iu);
   });

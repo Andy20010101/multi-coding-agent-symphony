@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "dev.symphony.desktop-shell",
   "build": {
-    "beforeDevCommand": "pnpm --dir ../../.. workbench:dev",
+    "beforeDevCommand": "pnpm workbench:dev",
     "devUrl": "http://127.0.0.1:5173/workbench/desktop/",
-    "beforeBuildCommand": "pnpm --dir ../../.. workbench:build",
+    "beforeBuildCommand": "pnpm workbench:build",
     "frontendDist": "../../../src/symphony/workbench-static"
   },
   "app": {
@@ -28,7 +28,7 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": "all"
+    "active": true,
+    "targets": ["app"]
   }
 }

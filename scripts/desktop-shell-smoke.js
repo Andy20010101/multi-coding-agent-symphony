@@ -29,8 +29,8 @@ async function main() {
   assertEqual(config.productName, 'Symphony Desktop Shell', 'Tauri productName');
   assertEqual(config.identifier, 'dev.symphony.desktop-shell', 'Tauri identifier');
   assertEqual(config.build.devUrl, 'http://127.0.0.1:5173/workbench/desktop/', 'Tauri devUrl');
-  assertEqual(config.build.beforeDevCommand, 'pnpm --dir ../../.. workbench:dev', 'Tauri beforeDevCommand');
-  assertEqual(config.build.beforeBuildCommand, 'pnpm --dir ../../.. workbench:build', 'Tauri beforeBuildCommand');
+  assertEqual(config.build.beforeDevCommand, 'pnpm workbench:dev', 'Tauri beforeDevCommand');
+  assertEqual(config.build.beforeBuildCommand, 'pnpm workbench:build', 'Tauri beforeBuildCommand');
   assertEqual(config.build.frontendDist, '../../../src/symphony/workbench-static', 'Tauri frontendDist');
   assertEqual(config.app.withGlobalTauri, false, 'global Tauri exposure');
   assertEqual(config.app.windows.length, 1, 'Tauri window count');
@@ -131,8 +131,8 @@ async function main() {
     localLaunch: {
       appHomeRoute: '/workbench/desktop/',
       devUrl: 'http://127.0.0.1:5173/workbench/desktop/',
-      beforeDevCommand: 'pnpm --dir ../../.. workbench:dev',
-      beforeBuildCommand: 'pnpm --dir ../../.. workbench:build',
+      beforeDevCommand: 'pnpm workbench:dev',
+      beforeBuildCommand: 'pnpm workbench:build',
       hostBuildCheckCommand: 'cargo check --manifest-path desktop/shell/src-tauri/Cargo.toml --target-dir tmp/tauri-target',
       fullNativeBundleRequiredForSmoke: false,
       expectedSidecarStates: [
