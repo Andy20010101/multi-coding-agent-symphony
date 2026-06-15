@@ -63,6 +63,39 @@ git diff --cached --check
 
 Run `pnpm test` before tagging unless the v61 closeout snapshot records why the focused suite is the accepted validation set for this release. The closeout must name the skipped full-suite reason, the focused commands run, and the remaining risk.
 
+For v73 Multi-day Real-use Stabilization, use `docs/plans/v73-multi-day-real-use-stabilization-runbook-2026-06-15.md` as the source of truth. Default docs/protocol and closeout validation is:
+
+```sh
+pnpm workbench:build
+node --test tests/v72-one-week-dogfood-stabilization.test.js
+node --test tests/v71-native-packaging-personal-use.test.js
+node --test tests/v70-release-manager-practical-loop.test.js
+node --test tests/v69-recovery-resume-diagnostics-observability.test.js
+node --test tests/v68-adoption-main-verification-loop.test.js
+node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js tests/workbench-route-smoke.test.js
+pnpm check
+git diff --check
+git diff --cached --check
+```
+
+Run `pnpm test` before publishing a v73 tag unless the v73 closeout snapshot records a scoped validation exception accepted by the operator. This v73 focused suite does not weaken the repository tag/full release gates at the top of this checklist.
+
+v73 closeout must resolve these gates before it can claim personal real-use MVP:
+
+| Gate | Required closeout evidence |
+| --- | --- |
+| Multi-day use | Counted sessions cover at least 3 consecutive Asia/Shanghai calendar days. |
+| Real work count | 3-5 counted tasks are real development or release-operations tasks. |
+| Codex worker opt-in smoke | Real Codex worker smoke is intentionally enabled and recorded as passed, or blocked with the exact operator-accepted blocker. |
+| Claude Code reviewer opt-in smoke | Real Claude Code reviewer smoke is intentionally enabled and recorded as passed, or blocked with the exact operator-accepted blocker. |
+| Local app path | Local packaged app build/open is recorded on more than one counted day, or the exact blocker and fallback are recorded. |
+| Browser fallback | `pnpm symphony console --host 127.0.0.1 --port 8765` and `GET /workbench/desktop/` are verified at least once. |
+| Failures and recovery | Each counted session records failure or `none observed after check`, recovery step, and terminal escape count. |
+| Docs state | `README.md`, `docs/workbench-operator-guide.md`, `docs/install-guide.md`, and this checklist agree on latest release `v72`, current version `v73`, v72 completed/not completed evidence, and installer policy. |
+| Installer policy | The closeout keeps `v8` default with explicit `MCAS_INSTALL_REF=v72`, or records a different explicit policy with release-state evidence and rollback. |
+| Repeated product blocker | No unresolved repeated product blocker remains, or the closeout records why it is not product work. |
+| Completion language | If any gate is missing, the closeout says `v73 stabilization-in-progress` and does not claim personal real-use MVP. |
+
 Workbench release closeout records these command results as explicit release gate events. Use the release checklist row for each gate, attach the release evidence ref, preview the `symphony goal gate` dry-run plan, then confirm with the returned plan hash. The docs-updated and tag-evidence gates still require written evidence refs; Workbench does not infer them from changed filenames.
 
 For a scoped closeout, an operator may explicitly approve an incremental Stryker gate. Record the exact mutation ranges, test files, score, and break threshold. Before tagging a release, prefer the full `pnpm test:mutation:gate` unless the release owner accepts the recorded incremental gate as sufficient evidence.

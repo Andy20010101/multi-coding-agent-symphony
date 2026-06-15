@@ -7,7 +7,7 @@ The default installer ref remains `v8`.
 Use an explicit `MCAS_INSTALL_REF` when you want a newer verified release:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh | MCAS_INSTALL_REF=v61 sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh | MCAS_INSTALL_REF=v72 sh
 ```
 
 Put `MCAS_INSTALL_REF` on the `sh` side of the pipe. Setting it only before `curl` does not pass it to the installer process.
@@ -16,11 +16,17 @@ Current verified release for intentional installs:
 
 | Field | Value |
 | --- | --- |
-| Release tag | `v61` |
-| Tag target | `d2cfff816b0111140b3e5e11fb819f60cc0c4911` |
-| GitHub Release | `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v61` |
+| Release tag | `v72` |
+| Annotated tag object | `67f24ec20f8dee496c7a51ad1b6575ed2e5963a6` |
+| Tag target | `cdde20c20931a4e002b184246ad7fd3585fa0979` |
+| GitHub Release | `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v72` |
+| Release state | Non-draft, non-prerelease, published 2026-06-15T03:16:24Z, targetCommitish `main` |
 | Asset policy | No attached assets |
 | Installer default | `v8` |
+| Open PR state at v73 PR-1 reconcile | Empty |
+| Rollback command | `curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh \| sh` |
+
+This policy keeps the installer default on `v8`. Intentional newer installs must set `MCAS_INSTALL_REF=v72` on the `sh` side of the pipe. v73 may revisit this policy only with release-state evidence and a rollback command; it does not introduce `latest-stable` in PR-1.
 
 The installer default should not move to a new tag until the release records:
 
