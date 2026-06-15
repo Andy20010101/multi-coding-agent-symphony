@@ -2,9 +2,11 @@
 
 Multi Coding Agent Symphony is a local Workbench for goal/runbook-driven coding-agent operations, with CLI commands for scripted flows, compatibility paths, and low-level diagnostics.
 
-Current tagged release: `v64`, First-run Project Setup and Local Settings. The annotated `v64` tag and GitHub Release are complete. Current `origin/main` has started v65 Provider Readiness.
+Current tagged release: `v72`, One-week Dogfood Stabilization. The annotated `v72` tag dereferences to `cdde20c20931a4e002b184246ad7fd3585fa0979`, and the GitHub Release is published as non-draft, non-prerelease, with no assets.
 
-Current main starts v65 Provider Readiness. v65 narrows the active Workbench provider line to Codex as the worker candidate and Claude Code as the reviewer candidate. Kiro stays historical compatibility, and DeepSeek is only a Claude Code provider configuration detail. v65 does not add a generic provider picker, provider launch cards, renderer command execution, frontend provider folder reads, raw transcript output, raw provider stdout/stderr, automatic review, automatic worktree creation, or product-side git/tag/publish/GitHub Release automation.
+Current version: `v73` Multi-day Real-use Stabilization. v73 is collecting personal-use evidence across at least 3 consecutive Asia/Shanghai calendar days. It keeps the local Workbench boundary and does not add public distribution, provider expansion, release automation, generic shell, renderer command execution, local session reads, raw transcript/model output handling, automatic worktree/goal creation, or product-owned git/tag/publish/GitHub Release automation.
+
+v72 proved same-day dogfood on 2026-06-15 with five counted sessions, local package build/open smoke, browser fallback through `GET /workbench/desktop/`, and dependency recovery with `pnpm install`. v72 did not prove multi-day stability, provider real-use success, public distribution, notarization, auto-update, DMG release, GitHub Release assets, generic shell, renderer command execution, local session/raw transcript/raw model output reads, provider expansion, automatic worktree/goal creation, or product-owned release automation.
 
 Start with Workbench v1 for daily operator work:
 
@@ -13,7 +15,7 @@ pnpm workbench:build
 symphony console
 ```
 
-Open `http://127.0.0.1:8765/workbench/desktop/` for the Project Launcher and App Home path, or `http://127.0.0.1:8765/workbench/` for the existing Workbench panels. The daily path uses the v52-v60 Workbench baseline verified by v61:
+Open `http://127.0.0.1:8765/workbench/desktop/` for the Project Launcher and App Home path, or `http://127.0.0.1:8765/workbench/` for the existing Workbench panels. The daily path uses the v52-v60 Workbench baseline, later installer/local package evidence, and the v72 same-day dogfood record:
 
 ```text
 Project Launcher -> App Home -> Supervisor -> Context Advisory -> Result Intake -> Event Preview / Confirm -> Review / Gate -> Closeout -> Release Publication Evidence -> Stable Baseline
@@ -27,7 +29,7 @@ goal-status -> goal next -> goal prompt -> goal update/review/gate -> goal close
 
 Use the `symphony` CLI as the advanced/script entry point when you need repeatable terminal output, JSON contracts, dry-run/confirm event registration, CI checks, or compatibility commands such as `scan`, `do`, `verify`, `status`, `continue`, and `artifacts`. Workbench displays controlled state and copy-only commands; release tag, push, publish, and GitHub Release work stay outside product code.
 
-Provider readiness now uses these product roles:
+Provider readiness uses these product roles:
 
 - Codex CLI is the worker candidate.
 - Claude Code CLI is the reviewer candidate.
@@ -174,6 +176,9 @@ The system preserves each CLI's native harness instead of replacing it. The orch
 - [v60 Stable Personal Workbench Release Runbook](docs/plans/v60-stable-personal-workbench-release-runbook-2026-06-14.md)
 - [v61 Workbench Operator Dry-run Evidence Closeout Snapshot](docs/plans/v61-workbench-operator-dry-run-evidence-closeout-snapshot-2026-06-14.md)
 - [v62 Installer and Upgrade Baseline Runbook](docs/plans/workbench-v61-v72-real-use-runbooks/v62_installer-upgrade-baseline_goal_runbook_latest.md)
+- [v72 One-week Dogfood Stabilization Closeout Snapshot](docs/plans/v72-one-week-dogfood-stabilization-closeout-snapshot-2026-06-14.md)
+- [v73 Direction Decision](docs/plans/v73-direction-decision-2026-06-14.md)
+- [v73 Multi-day Real-use Stabilization Runbook](docs/plans/v73-multi-day-real-use-stabilization-runbook-2026-06-15.md)
 - [v16 Goal Execution Plan](tmp/codex-prompts/v16_goal_execution_plan.md)
 - [Post v4 Next Steps](docs/post-v2-alpha-next-steps.md)
 - [Project Completion Plan](docs/plans/project-completion-plan-2026-05-13.md)
@@ -245,6 +250,9 @@ Implemented:
 - v59 Release Publication Evidence and Next Start Audit records v59 tag and GitHub Release publication facts, including empty assets and open-PR state, as read-only evidence. It does not create or edit tags, releases, PRs, or goals.
 - v60 Stable Personal Workbench Release consolidates the v52-v59 Workbench chain into a documented local baseline with acceptance contracts, feature matrix, release boundary checklist, recovery guidance, and manual release prep. It does not add public distribution, notarization, auto-update, generic shell execution, renderer-side command execution, frontend local JSONL/session reads, raw transcript exposure, or release automation.
 - v61 Workbench Operator Dry-run Evidence verifies the released v60 baseline from an operator session. It records release-state reconcile, route smoke evidence, operator checklist, recovery drill notes, closeout, and v62 handoff without adding product execution or release automation.
+- v62-v71 add installer status, local app launch, provider role readiness, controlled worker/reviewer/adoption/main-verification/recovery/release-manager paths, and local package build evidence inside the same personal Workbench boundary.
+- v72 One-week Dogfood Stabilization records five same-day operator sessions, local package build/open smoke, browser fallback, and dependency recovery. It does not prove multi-day stability or provider real-use success.
+- v73 Multi-day Real-use Stabilization is the current version. It is collecting multi-day personal-use evidence, provider opt-in smoke evidence or exact blockers, local app repeatability, browser fallback evidence, and docs/install/release consistency before any personal real-use MVP claim.
 - v11 controlled kernel execution plans: `symphony do --write` creates an auditable isolated-workspace plan with the exact confirm command, and `symphony do --confirm-plan <plan-id>` executes only the frozen plan.
 - v12 verified adoption: `symphony adopt --run <run-id>` freezes verifier-passing isolated workspace changes as a text-only patch plan, and `symphony adopt --confirm <adoption-id>` applies only that frozen patch after fingerprint and `git apply --check` validation.
 - v12 adoption recovery visibility: confirmation writes a registered journal before `git apply`, and `symphony adopt --inspect <adoption-id> --json` reports plan refs, journal refs, latest confirmation state, and current worktree hash matches without writing files.
@@ -258,11 +266,11 @@ Implemented:
 - Security gates for redaction, path/shell/network policy, and adapter-local permission mapping.
 - External eval replay plugin flow for stored artifacts, including workflow-mode comparison reports for linear, proposal-only, writer-reviewer, parallel-lanes, qa-swarm, and competitive-patch evidence.
 
-Latest completed mainline release: `v61`. Current released repository tag: `v61`. The installer default still points at `v8`; use `MCAS_INSTALL_REF=v61` when intentionally installing the current verified release. `v7` remains available for historical installs. v20-v28 complete the Workbench v1 goal operation chain through release closeout; v29-v32 extend that chain with controlled implementation, adoption, main verification, release baseline/checklist, evidence drafts, and next-version handoff; v33-v40 add local runtime, app core, provider hub, backup/diagnostics/migration, workflow router, and read-only app surfaces; v41-v46 cover controlled provider-runner backend evidence, supervisor runtime/stabilization, supervisor app read model, dashboard prototype, backend entrypoint decomposition, and the read-only Workbench Supervisor Dashboard baseline; v47-v60 move the daily app path through Mac App Home, Project Launcher, Context Advisory, Event Preview / Confirm, Result Intake Evidence Escrow, System Golden Path, child dispatch preview, Codex provider execution preview, provider recovery, thread continuation, review gate, release closeout handoff, release publication evidence, and stable baseline evidence. v61 verifies that baseline through operator evidence. Current main is v62 installer and upgrade baseline work.
+Latest completed mainline release: `v72`. Current released repository tag: `v72`. The installer default still points at `v8`; use `MCAS_INSTALL_REF=v72` when intentionally installing the current verified release. `v7` remains available for historical installs. v20-v28 complete the Workbench v1 goal operation chain through release closeout; v29-v32 extend that chain with controlled implementation, adoption, main verification, release baseline/checklist, evidence drafts, and next-version handoff; v33-v40 add local runtime, app core, provider hub, backup/diagnostics/migration, workflow router, and read-only app surfaces; v41-v46 cover controlled provider-runner backend evidence, supervisor runtime/stabilization, supervisor app read model, dashboard prototype, backend entrypoint decomposition, and the read-only Workbench Supervisor Dashboard baseline; v47-v60 move the daily app path through Mac App Home, Project Launcher, Context Advisory, Event Preview / Confirm, Result Intake Evidence Escrow, System Golden Path, child dispatch preview, Codex provider execution preview, provider recovery, thread continuation, review gate, release closeout handoff, release publication evidence, and stable baseline evidence; v61-v72 add operator dry-run evidence, installer/upgrade baseline, local app launch, provider role readiness, controlled worker/reviewer/adoption/main-verification/recovery/release-manager paths, native package build/open smoke, and same-day dogfood evidence. Current main is v73 Multi-day Real-use Stabilization.
 
-Current v61 release and v62 mainline work do not include Autopilot, generic Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation outside explicitly controlled provider contracts, live job runner, persistent job execution, Workbench command execution, daemon start/stop/restart, unsupported provider launch, real CLI invocation outside existing controlled preview/confirm paths, raw transcript exposure, raw model output exposure, frontend local JSONL/session/provider folder reads, automatic merge, automatic tag, push, publish, GitHub Release creation, release closeout automation, public distribution, notarization, auto-update, silent checkout changes, renderer network fetches for installer state, or release-ready inference. Browser views do not execute CLI commands shown as text. The Project Launcher, App Home, Supervisor Dashboard, Desktop Shell, Action Registry preview, Job Console, Provider Hub, Result Intake, Event Preview / Confirm, Review Gate, Release Closeout, Release Publication Evidence, Stable Baseline, and installer baseline surfaces are contract/display, dry-run, or controlled preview/confirm surfaces, not generic execution surfaces.
+Current v72 release and v73 stabilization work do not include Autopilot, generic Workbench execution, browser terminal, artifact download, open local file, arbitrary path preview, model invocation outside explicitly controlled provider contracts, live job runner, persistent job execution, Workbench command execution, daemon start/stop/restart, unsupported provider launch, real CLI invocation outside existing opt-in gates, raw transcript exposure, raw model output exposure, frontend local JSONL/session/provider folder reads, automatic worktree or goal creation, automatic merge, automatic tag, push, publish, GitHub Release creation, release closeout automation, public distribution, notarization, auto-update, DMG release, GitHub Release assets, silent checkout changes, renderer network fetches for installer state, or release-ready inference. Browser views do not execute CLI commands shown as text. The Project Launcher, App Home, Supervisor Dashboard, Desktop Shell, Action Registry preview, Job Console, Provider Hub, Result Intake, Event Preview / Confirm, Review Gate, Release Closeout, Release Publication Evidence, Stable Baseline, installer baseline, local package, and dogfood surfaces are contract/display, dry-run, controlled preview/confirm, or operator-recorded evidence surfaces, not generic execution surfaces.
 
-Current v62 mainline: Installer and Upgrade Baseline. The target path is explicit install ref selection, install status reporting, upgrade dry-run, rollback notes, and v63 handoff. Actual checkout changes remain terminal-owned or manual unless a later version proves a safe confirm path.
+Current v73 mainline: Multi-day Real-use Stabilization. Counted evidence must span at least 3 consecutive Asia/Shanghai calendar days, include 3-5 real development or release-operations tasks, record real failures and recovery steps, verify local app and browser fallback paths, and record Codex worker plus Claude Code reviewer opt-in smokes as passed or blocked with exact blockers. Until every gate is resolved, the status is v73 stabilization-in-progress.
 
 ## Design Center
 
@@ -342,10 +350,10 @@ symphony doctor
 The installer clones or updates the selected ref under `~/.local/share/mcas`, writes `~/.local/bin/symphony` and `~/.local/bin/mcas` shims, installs dependencies with `pnpm install --frozen-lockfile`, and verifies the install with `symphony doctor`. The default installer ref remains `v8` until a release records a specific default-ref change. To install the current verified release, put the ref on the `sh` side of the pipe:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh | MCAS_INSTALL_REF=v61 sh
+curl -fsSL https://raw.githubusercontent.com/Andy20010101/multi-coding-agent-symphony/v8/install.sh | MCAS_INSTALL_REF=v72 sh
 ```
 
-Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI. `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults. See [Install Guide](docs/install-guide.md) for the v62 installer-ref policy and [Upgrade Guide](docs/upgrade-guide.md) for the status, dry-run, and rollback contract.
+Set `MCAS_INSTALL_REF=v7` only when you need the historical v7 CLI. `MCAS_INSTALL_DIR`, `MCAS_BIN_DIR`, `MCAS_REPO_SLUG`, and `MCAS_REPO_URL` override the other defaults. See [Install Guide](docs/install-guide.md) for the v73 installer-ref policy and [Upgrade Guide](docs/upgrade-guide.md) for the status, dry-run, and rollback contract.
 
 Development fallback from a checkout:
 
