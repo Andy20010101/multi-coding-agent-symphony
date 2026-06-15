@@ -1,0 +1,149 @@
+{
+  "contractName": "releaseManagerReadiness.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T01:30:00.000Z",
+  "state": "blocked",
+  "version": "v70",
+  "targetTag": "v70",
+  "releaseTitle": "v70: Release Manager Practical Loop",
+  "targetCommit": "0da5b6fd31a987aa9ac9c54c3496e8c2517c60af",
+  "releaseBaseline": {
+    "state": "blocked",
+    "currentBranch": "codex/v70-release-manager",
+    "currentHead": "0da5b6fd31a987aa9ac9c54c3496e8c2517c60af",
+    "mainHead": "0da5b6fd31a987aa9ac9c54c3496e8c2517c60af",
+    "originMainHead": "0da5b6fd31a987aa9ac9c54c3496e8c2517c60af",
+    "clean": true,
+    "openPrs": [],
+    "sourceRef": {
+      "kind": "branch",
+      "ref": "origin/main",
+      "label": "origin/main"
+    },
+    "blockedReasons": [
+      "release-baseline-not-main"
+    ]
+  },
+  "requiredGates": [
+    {
+      "gateName": "reviewer.accepted",
+      "state": "ready",
+      "required": true,
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/qa/v70-release-manager-practical-loop-acceptance.md",
+          "label": "acceptance record"
+        }
+      ],
+      "blockedReasons": []
+    },
+    {
+      "gateName": "main.verification-passed",
+      "state": "ready",
+      "required": true,
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v70-release-manager-practical-loop-closeout-snapshot-2026-06-14.md",
+          "label": "closeout validation"
+        }
+      ],
+      "blockedReasons": []
+    },
+    {
+      "gateName": "release.validation-passed",
+      "state": "ready",
+      "required": true,
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "tests/v70-release-manager-practical-loop.test.js",
+          "label": "v70 focused tests"
+        }
+      ],
+      "blockedReasons": []
+    }
+  ],
+  "releaseEvidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v69-recovery-resume-diagnostics-observability-closeout-snapshot-2026-06-14.md",
+      "label": "v69 closeout snapshot"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v70-release-manager-practical-loop-runbook-2026-06-14.md",
+      "label": "v70 runbook"
+    }
+  ],
+  "releaseNotesDraft": {
+    "state": "ready",
+    "title": "v70: Release Manager Practical Loop",
+    "body": "Prepare release readiness, manual publication commands, and post-release reconcile without product-level publication automation.",
+    "sourceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v70-release-manager-practical-loop-runbook-2026-06-14.md",
+        "label": "v70 runbook"
+      }
+    ],
+    "blockedReasons": []
+  },
+  "tagState": {
+    "state": "ready",
+    "tagName": "v70",
+    "exists": false,
+    "tagObjectSha": null,
+    "dereferencedCommit": null,
+    "annotated": false,
+    "matchesTarget": true,
+    "sourceRefs": [],
+    "blockedReasons": []
+  },
+  "githubReleaseState": {
+    "state": "ready",
+    "tagName": "v70",
+    "exists": false,
+    "name": null,
+    "url": null,
+    "isDraft": false,
+    "isPrerelease": false,
+    "publishedAt": null,
+    "targetCommitish": null,
+    "targetCommitMatches": true,
+    "assets": [],
+    "sourceRefs": [],
+    "blockedReasons": []
+  },
+  "assetPolicy": {
+    "state": "ready",
+    "expected": "none",
+    "actualAssets": [],
+    "blockedReasons": []
+  },
+  "blockedReasons": [
+    "release-baseline-not-main"
+  ],
+  "boundaries": {
+    "readOnly": true,
+    "willMutate": false,
+    "shellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "rendererLocalFileReadAvailable": false,
+    "providerSessionReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "releaseReadyInferenceFromTestsAvailable": false,
+    "gitMergeAvailable": false,
+    "gitTagAvailable": false,
+    "gitPushAvailable": false,
+    "githubReleaseCreateAvailable": false,
+    "githubReleaseEditAvailable": false,
+    "githubReleaseUploadAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false
+  },
+  "readOnly": true,
+  "willMutate": false
+}
