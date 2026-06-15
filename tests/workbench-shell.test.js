@@ -758,6 +758,9 @@ describe('v15 Workbench React/Vite shell', () => {
     const manualPublicationPack = JSON.parse(
       await readFile('fixtures/contracts/release-manager-practical/manual-publication-pack.ready.v1.json', 'utf8')
     );
+    const postReleaseReconcileEvidence = JSON.parse(
+      await readFile('fixtures/contracts/release-manager-practical/post-release-reconcile.ready.v1.json', 'utf8')
+    );
     const stableWorkbenchRelease = JSON.parse(
       await readFile('fixtures/contracts/stable-workbench-release/stable-workbench-release.ready.v1.json', 'utf8')
     );
@@ -795,6 +798,7 @@ describe('v15 Workbench React/Vite shell', () => {
           releaseManagerReadiness,
           releaseEvidenceDraft,
           manualPublicationPack,
+          postReleaseReconcileEvidence,
           stableWorkbenchRelease
         })
       });
@@ -970,6 +974,7 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(releaseManagerHtml, /releaseManagerReadiness\.v1/u);
       assert.match(releaseManagerHtml, /releaseEvidenceDraft\.v1/u);
       assert.match(releaseManagerHtml, /manualReleasePublicationPack\.v1/u);
+      assert.match(releaseManagerHtml, /postReleaseReconcileEvidence\.v1/u);
       assert.match(releaseManagerHtml, />target tag<\/dt><dd[^>]*>v70/u);
       assert.match(releaseManagerHtml, />target commit<\/dt><dd[^>]*>0da5b6fd31a987aa9ac9c54c3496e8c2517c60af/u);
       assert.match(releaseManagerHtml, /Readiness Checks/u);
@@ -991,6 +996,16 @@ describe('v15 Workbench React/Vite shell', () => {
       assert.match(releaseManagerHtml, /gh release create v70 --repo Andy20010101\/multi-coding-agent-symphony/u);
       assert.match(releaseManagerHtml, /gh release view v70 --repo Andy20010101\/multi-coding-agent-symphony/u);
       assert.match(releaseManagerHtml, /Post-release Reconcile/u);
+      assert.match(releaseManagerHtml, />reconcile state<\/dt><dd[^>]*>ready/u);
+      assert.match(releaseManagerHtml, />reconciled open PR count<\/dt><dd[^>]*>0/u);
+      assert.match(releaseManagerHtml, />tag annotated<\/dt><dd[^>]*>true/u);
+      assert.match(releaseManagerHtml, />tag target matches<\/dt><dd[^>]*>true/u);
+      assert.match(releaseManagerHtml, /4d4a1f8fe7d519c2d109cc9f6ad2eec652be0fd5/u);
+      assert.match(releaseManagerHtml, /https:\/\/github\.com\/Andy20010101\/multi-coding-agent-symphony\/releases\/tag\/v70/u);
+      assert.match(releaseManagerHtml, />release draft<\/dt><dd[^>]*>false/u);
+      assert.match(releaseManagerHtml, />release prerelease<\/dt><dd[^>]*>false/u);
+      assert.match(releaseManagerHtml, />release assets<\/dt><dd[^>]*>0 assets/u);
+      assert.match(releaseManagerHtml, /gh-release-view-v70/u);
       assert.match(releaseManagerHtml, />merge automation<\/dt><dd[^>]*>false/u);
       assert.match(releaseManagerHtml, />tag automation<\/dt><dd[^>]*>false/u);
       assert.match(releaseManagerHtml, />release create automation<\/dt><dd[^>]*>false/u);

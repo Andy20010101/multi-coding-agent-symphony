@@ -11309,6 +11309,7 @@ function projectWorkbenchContracts(results) {
 		readiness: goalSupervisorData?.releaseManagerReadiness,
 		evidenceDraft: goalSupervisorData?.releaseEvidenceDraft,
 		manualPack: goalSupervisorData?.manualPublicationPack,
+		postReleaseReconcile: goalSupervisorData?.postReleaseReconcileEvidence,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
 	const projectedStableWorkbenchRelease = projectStableWorkbenchRelease({
@@ -13380,35 +13381,40 @@ function projectReleasePublicationNextStartAudit(audit) {
 		willMutate: valueState(audit?.willMutate)
 	};
 }
-function projectReleaseManagerPractical({ readiness, evidenceDraft, manualPack, supervisorRoute }) {
+function projectReleaseManagerPractical({ readiness, evidenceDraft, manualPack, postReleaseReconcile, supervisorRoute }) {
 	const hasReadiness = isPlainObject(readiness);
 	const hasDraft = isPlainObject(evidenceDraft);
 	const hasManualPack = isPlainObject(manualPack);
-	const hasAnyContract = hasReadiness || hasDraft || hasManualPack;
+	const hasPostReleaseReconcile = isPlainObject(postReleaseReconcile);
+	const hasAnyContract = hasReadiness || hasDraft || hasManualPack || hasPostReleaseReconcile;
+	const availableStates = [
+		hasReadiness ? readiness?.state : null,
+		hasDraft ? evidenceDraft?.state : null,
+		hasManualPack ? manualPack?.state : null,
+		hasPostReleaseReconcile ? postReleaseReconcile?.state : null
+	].filter((state) => state !== null);
 	const blockedReasons = [
 		...Array.isArray(readiness?.blockedReasons) ? readiness.blockedReasons : [],
 		...Array.isArray(evidenceDraft?.blockedReasons) ? evidenceDraft.blockedReasons : [],
-		...Array.isArray(manualPack?.blockedReasons) ? manualPack.blockedReasons : []
+		...Array.isArray(manualPack?.blockedReasons) ? manualPack.blockedReasons : [],
+		...Array.isArray(postReleaseReconcile?.blockedReasons) ? postReleaseReconcile.blockedReasons : []
 	];
 	return {
-		state: hasAnyContract ? [
-			readiness?.state,
-			evidenceDraft?.state,
-			manualPack?.state
-		].every((item) => item === "ready") ? "ready" : "blocked" : "missing",
+		state: hasAnyContract ? availableStates.every((item) => item === "ready") ? "ready" : "blocked" : "missing",
 		readiness: projectReleaseManagerReadiness(readiness),
 		evidenceDraft: projectReleaseManagerEvidenceDraft(evidenceDraft),
 		manualPublicationPack: projectManualPublicationPack(manualPack),
+		postReleaseReconcileEvidence: projectPostReleaseReconcileEvidence(postReleaseReconcile),
 		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
-		boundaries: Object.fromEntries(Object.entries(readiness?.boundaries ?? manualPack?.boundaries ?? evidenceDraft?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
-		readOnly: valueState(readiness?.readOnly ?? evidenceDraft?.readOnly ?? manualPack?.readOnly),
-		willMutate: valueState(readiness?.willMutate ?? evidenceDraft?.willMutate ?? manualPack?.willMutate),
+		boundaries: Object.fromEntries(Object.entries(readiness?.boundaries ?? manualPack?.boundaries ?? evidenceDraft?.boundaries ?? postReleaseReconcile?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(readiness?.readOnly ?? evidenceDraft?.readOnly ?? manualPack?.readOnly ?? postReleaseReconcile?.readOnly),
+		willMutate: valueState(readiness?.willMutate ?? evidenceDraft?.willMutate ?? manualPack?.willMutate ?? postReleaseReconcile?.willMutate),
 		route: {
 			path: valueState(supervisorRoute?.path),
 			routeState: valueState(routeStateFromRoute(supervisorRoute)),
 			source: valueState("goal-supervisor-app-read-model.v1 release manager practical projection")
 		},
-		note: hasAnyContract ? "Release Manager Practical Loop is read-only Workbench state. It shows readiness, gate evidence, copy-only manual publication commands, and post-release reconcile fields without executing merge, tag, push, or GitHub Release actions." : "Release Manager Practical Loop is unavailable until goal-supervisor-app-read-model.v1 exposes releaseManagerReadiness.v1, releaseEvidenceDraft.v1, and manualReleasePublicationPack.v1."
+		note: hasAnyContract ? "Release Manager Practical Loop is read-only Workbench state. It shows readiness, gate evidence, copy-only manual publication commands, and post-release reconcile fields without executing merge, tag, push, or GitHub Release actions." : "Release Manager Practical Loop is unavailable until goal-supervisor-app-read-model.v1 exposes releaseManagerReadiness.v1, releaseEvidenceDraft.v1, manualReleasePublicationPack.v1, and postReleaseReconcileEvidence.v1."
 	};
 }
 function projectReleaseManagerReadiness(readiness) {
@@ -13590,6 +13596,27 @@ function projectManualPublicationPack(pack) {
 		copyOnly: valueState(pack?.copyOnly),
 		readOnly: valueState(pack?.readOnly),
 		willMutate: valueState(pack?.willMutate)
+	};
+}
+function projectPostReleaseReconcileEvidence(evidence) {
+	return {
+		state: isPlainObject(evidence) ? evidence.state ?? "available" : "missing",
+		contractName: valueState(evidence?.contractName),
+		contractVersion: valueState(evidence?.contractVersion),
+		generatedAt: valueState(evidence?.generatedAt),
+		version: valueState(evidence?.version),
+		targetTag: valueState(evidence?.targetTag),
+		targetCommit: valueState(evidence?.targetCommit),
+		releaseBaseline: projectReleaseManagerBaseline(evidence?.releaseBaseline),
+		tagState: projectReleaseManagerTagState(evidence?.tagState),
+		githubReleaseState: projectReleaseManagerGithubReleaseState(evidence?.githubReleaseState),
+		assetPolicy: projectReleaseManagerAssetPolicy(evidence?.assetPolicy),
+		sourceEvidenceRefs: projectChildDispatchEvidenceRefs(evidence?.sourceEvidenceRefs),
+		rollbackRefs: projectChildDispatchEvidenceRefs(evidence?.rollbackRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(evidence?.blockedReasons),
+		boundaries: Object.fromEntries(Object.entries(evidence?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(evidence?.readOnly),
+		willMutate: valueState(evidence?.willMutate)
 	};
 }
 function projectStableWorkbenchRelease({ contract, supervisorRoute }) {
@@ -30451,9 +30478,14 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
 	const readiness = manager?.readiness;
 	const evidenceDraft = manager?.evidenceDraft;
 	const manualPack = manager?.manualPublicationPack;
+	const postReleaseReconcile = manager?.postReleaseReconcileEvidence;
 	const baseline = readiness?.releaseBaseline;
 	const tagState = readiness?.tagState;
 	const githubReleaseState = readiness?.githubReleaseState;
+	const reconciledBaseline = postReleaseReconcile?.releaseBaseline;
+	const reconciledTagState = postReleaseReconcile?.tagState ?? tagState;
+	const reconciledGithubReleaseState = postReleaseReconcile?.githubReleaseState ?? githubReleaseState;
+	const reconciledAssetPolicy = postReleaseReconcile?.assetPolicy ?? readiness?.assetPolicy;
 	const gateItems = readiness?.requiredGates?.items ?? [];
 	const gateEventItems = evidenceDraft?.gateEvents?.items ?? [];
 	const commandItems = manualPack?.commands?.items ?? [];
@@ -30476,9 +30508,10 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
 				className: "release-manager-practical-summary",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
 					["readiness contract", readiness?.contractName],
-					["readiness state", readiness?.state],
+					["readiness state", textValue(readiness?.state ?? "未暴露")],
 					["evidence draft", evidenceDraft?.contractName],
 					["manual pack", manualPack?.contractName],
+					["post-release reconcile", postReleaseReconcile?.contractName],
 					["target tag", readiness?.targetTag],
 					["target commit", readiness?.targetCommit],
 					["readOnly", manager?.readOnly],
@@ -30488,6 +30521,7 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
 					["external action required", manualPack?.externalActionRequired],
 					["copy only", manualPack?.copyOnly],
 					["source evidence refs", evidenceRefsTextFromCollection(manualPack?.sourceEvidenceRefs)],
+					["reconcile source refs", evidenceRefsTextFromCollection(postReleaseReconcile?.sourceEvidenceRefs)],
 					["blocked reasons", textValueFromItems(manager?.blockedReasons, "无")],
 					["generated at", readiness?.generatedAt]
 				] })]
@@ -30534,7 +30568,7 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
 				title: "Manual Publication Pack",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-					["pack state", manualPack?.state],
+					["pack state", textValue(manualPack?.state ?? "未暴露")],
 					["release title", manualPack?.releaseTitle],
 					["repository", manualPack?.repository],
 					["external action required", manualPack?.externalActionRequired],
@@ -30557,13 +30591,25 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
 				title: "Post-release Reconcile",
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
-					["tag object SHA", tagState?.tagObjectSha],
-					["tag dereferenced commit", tagState?.dereferencedCommit],
-					["GitHub Release URL", githubReleaseState?.url],
-					["release target commitish", githubReleaseState?.targetCommitish],
-					["release target matches", githubReleaseState?.targetCommitMatches],
-					["asset policy expected", readiness?.assetPolicy?.expected],
-					["asset policy blocked reasons", textValueFromItems(readiness?.assetPolicy?.blockedReasons, "无")]
+					["reconcile contract", postReleaseReconcile?.contractName],
+					["reconcile state", textValue(postReleaseReconcile?.state ?? "未暴露")],
+					["reconcile target commit", postReleaseReconcile?.targetCommit],
+					["reconciled main head", reconciledBaseline?.mainHead],
+					["reconciled origin main head", reconciledBaseline?.originMainHead],
+					["reconciled open PR count", reconciledBaseline?.openPrs?.count],
+					["tag object SHA", reconciledTagState?.tagObjectSha],
+					["tag dereferenced commit", reconciledTagState?.dereferencedCommit],
+					["tag annotated", reconciledTagState?.annotated],
+					["tag target matches", reconciledTagState?.matchesTarget],
+					["GitHub Release URL", reconciledGithubReleaseState?.url],
+					["release target commitish", reconciledGithubReleaseState?.targetCommitish],
+					["release target matches", reconciledGithubReleaseState?.targetCommitMatches],
+					["release draft", reconciledGithubReleaseState?.isDraft],
+					["release prerelease", reconciledGithubReleaseState?.isPrerelease],
+					["release assets", releaseAssetsTextFromCollection(reconciledGithubReleaseState?.assets)],
+					["asset policy expected", reconciledAssetPolicy?.expected],
+					["asset policy blocked reasons", textValueFromItems(reconciledAssetPolicy?.blockedReasons, "无")],
+					["rollback refs", evidenceRefsTextFromCollection(postReleaseReconcile?.rollbackRefs)]
 				] })
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {

@@ -6,17 +6,21 @@ import { fileURLToPath } from 'node:url';
 
 import {
   MANUAL_PUBLICATION_PACK_CONTRACT_NAME,
+  POST_RELEASE_RECONCILE_EVIDENCE_CONTRACT_NAME,
   RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME,
   RELEASE_MANAGER_PRACTICAL_BOUNDARIES,
   RELEASE_MANAGER_READINESS_CONTRACT_NAME,
   ReleaseManagerPracticalContractError,
   assertManualPublicationPackContract,
+  assertPostReleaseReconcileEvidenceContract,
   assertReleaseEvidenceDraftContract,
   assertReleaseManagerReadinessContract,
   buildManualPublicationPack,
+  buildPostReleaseReconcileEvidence,
   buildReleaseEvidenceDraft,
   buildReleaseManagerReadiness,
   validateManualPublicationPackContract,
+  validatePostReleaseReconcileEvidenceContract,
   validateReleaseEvidenceDraftContract,
   validateReleaseManagerReadinessContract
 } from '../src/symphony/release-manager-practical-contracts.js';
@@ -43,6 +47,10 @@ const VALID_FIXTURES = Object.freeze([
 const PR2_FIXTURES = Object.freeze([
   'release-evidence-draft.ready.v1.json',
   'manual-publication-pack.ready.v1.json'
+]);
+const PR4_FIXTURES = Object.freeze([
+  'post-release-reconcile.ready.v1.json',
+  'post-release-reconcile.blocked-missing-release.v1.json'
 ]);
 
 describe('v70 release manager practical loop contracts', () => {
@@ -101,20 +109,32 @@ describe('v70 release manager practical loop contracts', () => {
   it('validates release evidence draft and manual publication pack fixtures', () => {
     const draft = fixture('release-evidence-draft.ready.v1.json');
     const pack = fixture('manual-publication-pack.ready.v1.json');
+    const readyReconcile = fixture('post-release-reconcile.ready.v1.json');
+    const missingReleaseReconcile = fixture('post-release-reconcile.blocked-missing-release.v1.json');
 
     assert.deepEqual(PR2_FIXTURES.map((name) => fixture(name).contractName), [
       RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME,
       MANUAL_PUBLICATION_PACK_CONTRACT_NAME
     ]);
+    assert.deepEqual(PR4_FIXTURES.map((name) => fixture(name).contractName), [
+      POST_RELEASE_RECONCILE_EVIDENCE_CONTRACT_NAME,
+      POST_RELEASE_RECONCILE_EVIDENCE_CONTRACT_NAME
+    ]);
     assert.equal(validateReleaseEvidenceDraftContract(draft).ok, true);
     assert.equal(validateManualPublicationPackContract(pack).ok, true);
+    assert.equal(validatePostReleaseReconcileEvidenceContract(readyReconcile).ok, true);
+    assert.equal(validatePostReleaseReconcileEvidenceContract(missingReleaseReconcile).ok, true);
     assert.equal(draft.state, 'ready');
     assert.equal(pack.state, 'ready');
+    assert.equal(readyReconcile.state, 'ready');
+    assert.equal(missingReleaseReconcile.state, 'blocked');
+    assertBlocked(missingReleaseReconcile, 'github-release-missing', validatePostReleaseReconcileEvidenceContract);
     assert.equal(pack.publicationMode, 'manual-controller-action');
     assert.equal(pack.externalActionRequired, true);
     assert.equal(pack.copyOnly, true);
     assert.equal(pack.commands.length, 4);
     assertManualCommandsAreCopyOnly(pack);
+    assertNoUnsafePayload(readyReconcile);
   });
 
   it('builds ready release readiness from explicit main, gate, notes, and absent publication facts', () => {
@@ -159,6 +179,29 @@ describe('v70 release manager practical loop contracts', () => {
     assert.ok(pack.commands[2].command.includes('gh release create v70 --repo Andy20010101/multi-coding-agent-symphony'));
     assert.ok(pack.commands[3].command.includes('gh release view v70 --repo Andy20010101/multi-coding-agent-symphony'));
     assertManualCommandsAreCopyOnly(pack);
+  });
+
+  it('builds post-release reconcile evidence from explicit tag and GitHub Release query results', () => {
+    const reconcile = buildPostReleaseReconcileEvidence(readyPostReleaseReconcileInput());
+
+    assertPostReleaseReconcileEvidenceContract(reconcile);
+    assert.equal(reconcile.contractName, POST_RELEASE_RECONCILE_EVIDENCE_CONTRACT_NAME);
+    assert.equal(reconcile.state, 'ready');
+    assert.equal(reconcile.targetTag, 'v70');
+    assert.equal(reconcile.targetCommit, TARGET_COMMIT);
+    assert.equal(reconcile.releaseBaseline.state, 'ready');
+    assert.equal(reconcile.tagState.exists, true);
+    assert.equal(reconcile.tagState.annotated, true);
+    assert.equal(reconcile.tagState.matchesTarget, true);
+    assert.equal(reconcile.githubReleaseState.exists, true);
+    assert.equal(reconcile.githubReleaseState.isDraft, false);
+    assert.equal(reconcile.githubReleaseState.isPrerelease, false);
+    assert.equal(reconcile.githubReleaseState.targetCommitMatches, true);
+    assert.equal(reconcile.assetPolicy.state, 'ready');
+    assert.equal(reconcile.sourceEvidenceRefs.length, 2);
+    assert.equal(reconcile.rollbackRefs.length, 2);
+    assert.deepEqual(reconcile.boundaries, RELEASE_MANAGER_PRACTICAL_BOUNDARIES);
+    assertNoUnsafePayload(reconcile);
   });
 
   it('blocks dirty or drifted release baselines, open PRs, missing gates, unsafe release state, and asset drift', () => {
@@ -268,6 +311,69 @@ describe('v70 release manager practical loop contracts', () => {
 
     assertBlocked(blockedDraft, 'missing-validation-command-evidence', validateReleaseEvidenceDraftContract);
     assertBlocked(blockedPack, 'release-evidence-draft-not-ready', validateManualPublicationPackContract);
+  });
+
+  it('blocks post-release reconcile when tag, release, target, assets, or source evidence are not verified', () => {
+    assertBlocked(
+      buildPostReleaseReconcileEvidence({
+        ...readyPostReleaseReconcileInput(),
+        tagEvidence: {
+          tagName: 'v70',
+          exists: false
+        }
+      }),
+      'post-release-tag-missing',
+      validatePostReleaseReconcileEvidenceContract
+    );
+    assertBlocked(
+      buildPostReleaseReconcileEvidence({
+        ...readyPostReleaseReconcileInput(),
+        tagEvidence: {
+          ...readyTagEvidence(),
+          dereferencedCommit: STALE_COMMIT
+        }
+      }),
+      'tag-target-mismatch',
+      validatePostReleaseReconcileEvidenceContract
+    );
+    assertBlocked(
+      buildPostReleaseReconcileEvidence({
+        ...readyPostReleaseReconcileInput(),
+        githubRelease: {
+          ...readyGithubReleaseEvidence(),
+          exists: false,
+          url: null,
+          publishedAt: null
+        }
+      }),
+      'github-release-missing',
+      validatePostReleaseReconcileEvidenceContract
+    );
+    assertBlocked(
+      buildPostReleaseReconcileEvidence({
+        ...readyPostReleaseReconcileInput(),
+        githubRelease: {
+          ...readyGithubReleaseEvidence(),
+          isDraft: true,
+          isPrerelease: true,
+          assets: [{ name: 'unexpected.zip', size: 10, url: RELEASE_URL }]
+        },
+        sourceEvidenceRefs: []
+      }),
+      'github-release-is-draft',
+      validatePostReleaseReconcileEvidenceContract
+    );
+    assertBlocked(
+      buildPostReleaseReconcileEvidence({
+        ...readyPostReleaseReconcileInput(),
+        githubRelease: {
+          ...readyGithubReleaseEvidence(),
+          targetCommitish: STALE_COMMIT
+        }
+      }),
+      'github-release-target-mismatch',
+      validatePostReleaseReconcileEvidenceContract
+    );
   });
 
   it('throws before building from raw transcript, local session, shell, or mutation source fields', () => {
@@ -453,6 +559,81 @@ function readyManualPackInput(draft) {
     repository: 'Andy20010101/multi-coding-agent-symphony',
     sourceEvidenceRefs: draft.validationCommandEvidenceRefs,
     rollbackRefs: draft.rollbackRefs
+  };
+}
+
+function readyPostReleaseReconcileInput() {
+  return {
+    generatedAt: GENERATED_AT,
+    version: 'v70',
+    targetTag: 'v70',
+    targetCommit: TARGET_COMMIT,
+    releaseBaseline: readyReleaseBaseline(),
+    openPrs: [],
+    tagEvidence: readyTagEvidence(),
+    githubRelease: readyGithubReleaseEvidence(),
+    sourceEvidenceRefs: [
+      {
+        kind: 'command-evidence',
+        ref: 'git-show-ref-tags-v70',
+        label: 'tag ref verification'
+      },
+      {
+        kind: 'command-evidence',
+        ref: 'gh-release-view-v70',
+        label: 'GitHub Release verification'
+      }
+    ],
+    rollbackRefs: [
+      {
+        kind: 'git-ref',
+        ref: 'refs/tags/v69',
+        label: 'v69 rollback tag'
+      },
+      {
+        kind: 'release-url',
+        ref: 'https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v69',
+        label: 'v69 release page'
+      }
+    ]
+  };
+}
+
+function readyTagEvidence() {
+  return {
+    tagName: 'v70',
+    exists: true,
+    tagObjectSha: '4d4a1f8fe7d519c2d109cc9f6ad2eec652be0fd5',
+    dereferencedCommit: TARGET_COMMIT,
+    annotated: true,
+    sourceRefs: [
+      {
+        kind: 'git-ref',
+        ref: 'refs/tags/v70',
+        label: 'v70 tag object'
+      }
+    ]
+  };
+}
+
+function readyGithubReleaseEvidence() {
+  return {
+    tagName: 'v70',
+    exists: true,
+    name: 'v70: Release Manager Practical Loop',
+    url: RELEASE_URL,
+    isDraft: false,
+    isPrerelease: false,
+    publishedAt: '2026-06-15T01:30:00Z',
+    targetCommitish: 'main',
+    assets: [],
+    sourceRefs: [
+      {
+        kind: 'github-release',
+        ref: 'v70',
+        label: 'v70 GitHub Release'
+      }
+    ]
   };
 }
 

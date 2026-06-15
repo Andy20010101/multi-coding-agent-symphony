@@ -1396,6 +1396,7 @@ export function projectWorkbenchContracts(results) {
     readiness: goalSupervisorData?.releaseManagerReadiness,
     evidenceDraft: goalSupervisorData?.releaseEvidenceDraft,
     manualPack: goalSupervisorData?.manualPublicationPack,
+    postReleaseReconcile: goalSupervisorData?.postReleaseReconcileEvidence,
     supervisorRoute: findProjectedRoute(routeStates, 'goalSupervisor')
   });
   const projectedStableWorkbenchRelease = projectStableWorkbenchRelease({
@@ -3733,19 +3734,28 @@ function projectReleaseManagerPractical({
   readiness,
   evidenceDraft,
   manualPack,
+  postReleaseReconcile,
   supervisorRoute
 }) {
   const hasReadiness = isPlainObject(readiness);
   const hasDraft = isPlainObject(evidenceDraft);
   const hasManualPack = isPlainObject(manualPack);
-  const hasAnyContract = hasReadiness || hasDraft || hasManualPack;
+  const hasPostReleaseReconcile = isPlainObject(postReleaseReconcile);
+  const hasAnyContract = hasReadiness || hasDraft || hasManualPack || hasPostReleaseReconcile;
+  const availableStates = [
+    hasReadiness ? readiness?.state : null,
+    hasDraft ? evidenceDraft?.state : null,
+    hasManualPack ? manualPack?.state : null,
+    hasPostReleaseReconcile ? postReleaseReconcile?.state : null
+  ].filter((state) => state !== null);
   const blockedReasons = [
     ...(Array.isArray(readiness?.blockedReasons) ? readiness.blockedReasons : []),
     ...(Array.isArray(evidenceDraft?.blockedReasons) ? evidenceDraft.blockedReasons : []),
-    ...(Array.isArray(manualPack?.blockedReasons) ? manualPack.blockedReasons : [])
+    ...(Array.isArray(manualPack?.blockedReasons) ? manualPack.blockedReasons : []),
+    ...(Array.isArray(postReleaseReconcile?.blockedReasons) ? postReleaseReconcile.blockedReasons : [])
   ];
   const state = hasAnyContract
-    ? [readiness?.state, evidenceDraft?.state, manualPack?.state].every((item) => item === 'ready')
+    ? availableStates.every((item) => item === 'ready')
       ? 'ready'
       : 'blocked'
     : 'missing';
@@ -3755,12 +3765,13 @@ function projectReleaseManagerPractical({
     readiness: projectReleaseManagerReadiness(readiness),
     evidenceDraft: projectReleaseManagerEvidenceDraft(evidenceDraft),
     manualPublicationPack: projectManualPublicationPack(manualPack),
+    postReleaseReconcileEvidence: projectPostReleaseReconcileEvidence(postReleaseReconcile),
     blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
     boundaries: Object.fromEntries(
-      Object.entries(readiness?.boundaries ?? manualPack?.boundaries ?? evidenceDraft?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+      Object.entries(readiness?.boundaries ?? manualPack?.boundaries ?? evidenceDraft?.boundaries ?? postReleaseReconcile?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
     ),
-    readOnly: valueState(readiness?.readOnly ?? evidenceDraft?.readOnly ?? manualPack?.readOnly),
-    willMutate: valueState(readiness?.willMutate ?? evidenceDraft?.willMutate ?? manualPack?.willMutate),
+    readOnly: valueState(readiness?.readOnly ?? evidenceDraft?.readOnly ?? manualPack?.readOnly ?? postReleaseReconcile?.readOnly),
+    willMutate: valueState(readiness?.willMutate ?? evidenceDraft?.willMutate ?? manualPack?.willMutate ?? postReleaseReconcile?.willMutate),
     route: {
       path: valueState(supervisorRoute?.path),
       routeState: valueState(routeStateFromRoute(supervisorRoute)),
@@ -3768,7 +3779,7 @@ function projectReleaseManagerPractical({
     },
     note: hasAnyContract
       ? 'Release Manager Practical Loop is read-only Workbench state. It shows readiness, gate evidence, copy-only manual publication commands, and post-release reconcile fields without executing merge, tag, push, or GitHub Release actions.'
-      : 'Release Manager Practical Loop is unavailable until goal-supervisor-app-read-model.v1 exposes releaseManagerReadiness.v1, releaseEvidenceDraft.v1, and manualReleasePublicationPack.v1.'
+      : 'Release Manager Practical Loop is unavailable until goal-supervisor-app-read-model.v1 exposes releaseManagerReadiness.v1, releaseEvidenceDraft.v1, manualReleasePublicationPack.v1, and postReleaseReconcileEvidence.v1.'
   };
 }
 
@@ -3972,6 +3983,32 @@ function projectManualPublicationPack(pack) {
     copyOnly: valueState(pack?.copyOnly),
     readOnly: valueState(pack?.readOnly),
     willMutate: valueState(pack?.willMutate)
+  };
+}
+
+function projectPostReleaseReconcileEvidence(evidence) {
+  const hasEvidence = isPlainObject(evidence);
+
+  return {
+    state: hasEvidence ? evidence.state ?? 'available' : 'missing',
+    contractName: valueState(evidence?.contractName),
+    contractVersion: valueState(evidence?.contractVersion),
+    generatedAt: valueState(evidence?.generatedAt),
+    version: valueState(evidence?.version),
+    targetTag: valueState(evidence?.targetTag),
+    targetCommit: valueState(evidence?.targetCommit),
+    releaseBaseline: projectReleaseManagerBaseline(evidence?.releaseBaseline),
+    tagState: projectReleaseManagerTagState(evidence?.tagState),
+    githubReleaseState: projectReleaseManagerGithubReleaseState(evidence?.githubReleaseState),
+    assetPolicy: projectReleaseManagerAssetPolicy(evidence?.assetPolicy),
+    sourceEvidenceRefs: projectChildDispatchEvidenceRefs(evidence?.sourceEvidenceRefs),
+    rollbackRefs: projectChildDispatchEvidenceRefs(evidence?.rollbackRefs),
+    blockedReasons: projectSystemGoldenPathTextItems(evidence?.blockedReasons),
+    boundaries: Object.fromEntries(
+      Object.entries(evidence?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])
+    ),
+    readOnly: valueState(evidence?.readOnly),
+    willMutate: valueState(evidence?.willMutate)
   };
 }
 
