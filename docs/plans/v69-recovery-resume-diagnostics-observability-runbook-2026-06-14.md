@@ -7,6 +7,29 @@ Start condition: v68 worker/reviewer/adoption/main-verification loop is merged, 
 
 Scope note: v69 continues the v66-v68 boundary. Browser and renderer surfaces must not become a generic terminal, local-file reader, provider-session reader, release publisher, or unsupported provider launcher. Codex remains the worker candidate and Claude Code remains the reviewer candidate. Kiro is historical compatibility. DeepSeek is only a Claude Code provider configuration detail, not a separate Workbench provider.
 
+## Start Evidence Required
+
+v69 starts only after the v68 release boundary is verified:
+
+- v68 PR chain merged through acceptance and closeout;
+- annotated tag `v68` exists and `v68^{}` dereferences to the v68 post-closeout `origin/main` commit;
+- GitHub Release `v68` exists, is non-draft, non-prerelease, and has no assets unless the v68 closeout records otherwise;
+- open PR list is empty or only contains explicitly unrelated work;
+- v68 adoption and main verification handoff is bounded to recovery, resume, diagnostics, and observability;
+- v69 tag and GitHub Release are absent before implementation starts.
+
+## Start Evidence Snapshot
+
+Checked on 2026-06-15 before opening PR-0:
+
+- `origin/main` was `926dd612026a1500d958f83768c954e28900ecc9`, the v68 closeout commit.
+- `git rev-list --left-right --count main...origin/main` returned `0 75`; local `main` was stale, but the v69 branch starts from `origin/main`.
+- Open GitHub PR list for `Andy20010101/multi-coding-agent-symphony` returned `[]`.
+- Annotated tag `v68` existed: tag object `98298b5071711d92ccf3190da80fc2fe591894ad`; `v68^{}` resolved to `926dd612026a1500d958f83768c954e28900ecc9`.
+- GitHub Release `v68` existed at `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v68`, with name `v68: Adoption and Main Verification Workbench Loop`, `isDraft=false`, `isPrerelease=false`, assets `[]`, `publishedAt=2026-06-15T00:10:29Z`, and `targetCommitish=main`.
+- `v69` tag was absent and `gh release view v69` returned `release not found`.
+- v68 closeout handoff in `docs/plans/v68-adoption-main-verification-loop-closeout-snapshot-2026-06-14.md` scopes v69 to failed, interrupted, timeout, and blocked run recovery with structured diagnostics and cost/time observability. It explicitly excludes hidden retries, raw logs, raw provider output, secrets, local session paths, arbitrary provider commands, product-level git automation, and release publication inside product code.
+
 ## Objective
 
 v69 should make the new loop durable. The operator should understand and recover from interrupted provider runs, timeouts, missing artifacts, stale plans, dirty worktrees, provider unavailable states, adoption failures, and verification failures.
