@@ -46,6 +46,81 @@ If any gate is missing, v73 remains stabilization-in-progress and must not claim
 
 Do not start v74 until v73 has merged, tagged, GitHub Release state has been verified, and the final v73 closeout says whether personal real-use MVP was reached.
 
+## Expected Timeline
+
+Minimum calendar time is 3 consecutive Asia/Shanghai days because the completion gate requires multi-day use. The normal target is 4-5 days. If the real provider smokes hit account, CLI, model, or network blockers, allow 5-7 days and record the blocker instead of forcing a pass.
+
+| Day | Target | Task package | Expected PR |
+| --- | --- | --- | --- |
+| Day 1 | Start state and docs alignment | Publish PR-0 if needed. Repair README, operator guide, install guide, and release checklist so they agree on `v72` as the latest release and `v73` as current stabilization. Choose installer policy. Record session `v73-s01`. | PR-0, PR-1 |
+| Day 2 | First real-use batch | Run one real development or release-operations task through the local app or browser fallback. Record failure, recovery, terminal escape, and evidence. If the operator approves, run Codex worker opt-in smoke. Record session `v73-s02`. | PR-2 |
+| Day 3 | Provider and repeatability check | Run another real task. Re-check local app path and browser fallback. If the operator approves, run Claude Code reviewer opt-in smoke. Record session `v73-s03`. | PR-3 or PR-4 |
+| Day 4 | Fill missing gate | Use this day only for gaps: extra real task, provider blocker recovery, repeated product blocker fix, or app open/fallback repeatability. Record `v73-s04` only if it is real work. | PR-4 |
+| Day 5 | Closeout decision | Finish acceptance and closeout only if all gates are resolved. If gates are missing, keep v73 stabilization-in-progress and name the missing evidence. | PR-5 |
+
+Fast path: 3 days if docs sync, app/fallback, Codex smoke, Claude smoke, and 3 real tasks all pass without repeated blockers.
+
+Expected path: 4-5 days because provider smokes usually need operator approval and may need environment repair.
+
+Blocked path: 5-7 days when Codex or Claude Code smoke cannot run. The closeout can still be useful, but it must say personal real-use MVP is not proven unless the operator accepts the blocker as resolved or out of scope.
+
+## Automation Plan
+
+Automation is allowed for repeatable checks and evidence scaffolding. It must not hide real failures or convert a blocked provider smoke into a pass.
+
+Automate these steps:
+
+- repository reconcile;
+- tag and GitHub Release state checks;
+- Workbench build and focused test commands;
+- browser fallback `GET /workbench/desktop/` check;
+- session Markdown template generation;
+- safe evidence field checks;
+- README/operator/install/release consistency scan;
+- PR status and CI status polling.
+
+Keep these manual or explicit opt-in:
+
+- choosing the real daily task;
+- deciding whether a session counts;
+- opening the macOS `.app` and confirming it was usable;
+- enabling `MCAS_RUN_REAL_CODEX=1`;
+- enabling `MCAS_RUN_REAL_CLAUDE=1`;
+- interpreting provider/account/model/network blockers;
+- approving merge, tag, push, or GitHub Release publication.
+
+Suggested daily automation command group:
+
+```sh
+git status --short --branch
+git rev-list --left-right --count main...origin/main
+gh pr list --state open --limit 20 --json number,title,headRefName,baseRefName,isDraft,mergeable,reviewDecision
+git show-ref --tags -d | rg 'refs/tags/v72|refs/tags/v73'
+gh release view v72 --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish
+gh release view v73 --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish
+pnpm workbench:build
+node --test tests/v72-one-week-dogfood-stabilization.test.js
+node --test tests/workbench-api-client.test.js tests/workbench-shell.test.js tests/workbench-route-smoke.test.js
+pnpm check
+git diff --check
+```
+
+Suggested browser fallback automation:
+
+```sh
+pnpm symphony console --host 127.0.0.1 --port 8765
+curl -fsS http://127.0.0.1:8765/workbench/desktop/
+```
+
+Provider smoke automation remains gated:
+
+```sh
+MCAS_RUN_REAL_CODEX=1 MCAS_REAL_CLI_PROOF_DIR=tmp/v73-real-cli-proofs pnpm smoke:codex:real
+MCAS_RUN_REAL_CLAUDE=1 MCAS_REAL_CLI_PROOF_DIR=tmp/v73-real-cli-proofs pnpm smoke:claude:real
+```
+
+Do not run the provider smoke commands in an unattended loop. Run them only after the operator confirms the env gate and expected account/provider configuration.
+
 ## Daily Controller Loop
 
 Run this loop once per counted day.
