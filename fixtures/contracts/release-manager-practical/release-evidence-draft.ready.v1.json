@@ -1,0 +1,122 @@
+{
+  "contractName": "releaseEvidenceDraft.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T01:30:00.000Z",
+  "state": "ready",
+  "version": "v70",
+  "targetTag": "v70",
+  "targetCommit": "0da5b6fd31a987aa9ac9c54c3496e8c2517c60af",
+  "readinessState": "ready",
+  "gateEvents": [
+    {
+      "gateName": "reviewer.accepted",
+      "eventType": "reviewer.accepted",
+      "state": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/qa/v70-release-manager-practical-loop-acceptance.md",
+          "label": "review acceptance"
+        }
+      ],
+      "blockedReasons": []
+    },
+    {
+      "gateName": "main.verification-passed",
+      "eventType": "main.verification-passed",
+      "state": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v70-release-manager-practical-loop-closeout-snapshot-2026-06-14.md",
+          "label": "main validation"
+        }
+      ],
+      "blockedReasons": []
+    },
+    {
+      "gateName": "release.validation-passed",
+      "eventType": "release.validation-passed",
+      "state": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "tests/v70-release-manager-practical-loop.test.js",
+          "label": "release validation"
+        }
+      ],
+      "blockedReasons": []
+    },
+    {
+      "gateName": "validation.command-passed",
+      "eventType": "validation.command-passed",
+      "state": "ready",
+      "evidenceRefs": [
+        {
+          "kind": "repo-doc",
+          "ref": "docs/plans/v70-release-manager-practical-loop-closeout-snapshot-2026-06-14.md",
+          "label": "validation command evidence"
+        }
+      ],
+      "blockedReasons": []
+    }
+  ],
+  "validationCommandEvidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "tests/v70-release-manager-practical-loop.test.js",
+      "label": "v70 focused validation"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "tests/v58-release-closeout-operator-handoff-pack.test.js",
+      "label": "release boundary regression validation"
+    }
+  ],
+  "releaseNotesDraft": {
+    "state": "ready",
+    "title": "v70: Release Manager Practical Loop",
+    "body": "Prepare release readiness, manual publication commands, and post-release reconcile without product-level publication automation.",
+    "sourceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v70-release-manager-practical-loop-runbook-2026-06-14.md",
+        "label": "v70 runbook"
+      }
+    ],
+    "blockedReasons": []
+  },
+  "knownFacts": [
+    "v70 publication remains a controller action outside product code",
+    "manual commands are copy-only and require clean reconcile before use"
+  ],
+  "rollbackRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v69-recovery-resume-diagnostics-observability-closeout-snapshot-2026-06-14.md",
+      "label": "v69 fallback state"
+    }
+  ],
+  "blockedReasons": [],
+  "boundaries": {
+    "readOnly": true,
+    "willMutate": false,
+    "shellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "rendererLocalFileReadAvailable": false,
+    "providerSessionReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "releaseReadyInferenceFromTestsAvailable": false,
+    "gitMergeAvailable": false,
+    "gitTagAvailable": false,
+    "gitPushAvailable": false,
+    "githubReleaseCreateAvailable": false,
+    "githubReleaseEditAvailable": false,
+    "githubReleaseUploadAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false
+  },
+  "readOnly": true,
+  "willMutate": false
+}
