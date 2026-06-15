@@ -1,6 +1,7 @@
 export const RELEASE_MANAGER_READINESS_CONTRACT_NAME = 'releaseManagerReadiness.v1';
 export const RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME = 'releaseEvidenceDraft.v1';
 export const MANUAL_PUBLICATION_PACK_CONTRACT_NAME = 'manualReleasePublicationPack.v1';
+export const POST_RELEASE_RECONCILE_EVIDENCE_CONTRACT_NAME = 'postReleaseReconcileEvidence.v1';
 export const RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION = 1;
 
 export const RELEASE_MANAGER_PRACTICAL_BOUNDARIES = Object.freeze({
@@ -137,6 +138,25 @@ const MANUAL_COMMAND_ALLOWED_FIELDS = new Set([
   'willMutate',
   'allowedActor',
   'requiresCleanReconcile'
+]);
+const POST_RELEASE_RECONCILE_EVIDENCE_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'generatedAt',
+  'state',
+  'version',
+  'targetTag',
+  'targetCommit',
+  'releaseBaseline',
+  'tagState',
+  'githubReleaseState',
+  'assetPolicy',
+  'sourceEvidenceRefs',
+  'rollbackRefs',
+  'blockedReasons',
+  'boundaries',
+  'readOnly',
+  'willMutate'
 ]);
 
 const STATE_SET = new Set(['ready', 'blocked']);
@@ -586,6 +606,151 @@ export function validateManualPublicationPackContract(pack) {
 
   if (pack.state === 'ready' && Array.isArray(pack.blockedReasons) && pack.blockedReasons.length > 0) {
     errors.push('ready pack must not include blockedReasons');
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function buildPostReleaseReconcileEvidence({
+  generatedAt = new Date().toISOString(),
+  version = 'v70',
+  targetTag = version,
+  targetCommit = null,
+  releaseBaseline = null,
+  openPrs = [],
+  tagEvidence = null,
+  githubRelease = null,
+  sourceEvidenceRefs = [],
+  rollbackRefs = [],
+  blockedReasons: inputBlockedReasons = []
+} = {}) {
+  const unsafeSourceField = findUnsafeFields({
+    version,
+    targetTag,
+    targetCommit,
+    releaseBaseline,
+    openPrs,
+    tagEvidence,
+    githubRelease,
+    sourceEvidenceRefs,
+    rollbackRefs,
+    inputBlockedReasons
+  }, 'source')[0];
+
+  if (unsafeSourceField !== undefined) {
+    throw new ReleaseManagerPracticalContractError(
+      'unsafe-post-release-reconcile-source',
+      'Post-release reconcile source contains raw provider output, local session refs, shell commands, or mutation routes.',
+      { reason: `${unsafeSourceField} must not contain raw provider output, local session refs, shell commands, or mutation routes` }
+    );
+  }
+
+  const normalizedGeneratedAt = toIso(generatedAt);
+  const normalizedBaseline = releaseBaselineFrom(releaseBaseline, openPrs);
+  const normalizedTargetCommit = firstNonEmptyString(
+    targetCommit,
+    normalizedBaseline.currentHead,
+    normalizedBaseline.mainHead,
+    normalizedBaseline.originMainHead
+  );
+  const normalizedTagState = tagStateFrom({
+    tagName: targetTag,
+    tagEvidence,
+    targetCommit: normalizedTargetCommit
+  });
+  const normalizedGithubReleaseState = githubReleaseStateFrom({
+    tagName: targetTag,
+    githubRelease,
+    targetCommit: normalizedTargetCommit,
+    mainHead: normalizedBaseline.mainHead,
+    originMainHead: normalizedBaseline.originMainHead
+  });
+  const normalizedAssetPolicy = assetPolicyFrom(normalizedGithubReleaseState.assets);
+  const normalizedSourceRefs = evidenceRefsFrom(sourceEvidenceRefs);
+  const normalizedRollbackRefs = evidenceRefsFrom(rollbackRefs);
+  const derivedBlockedReasons = uniqueStrings([
+    ...safeStringArray(inputBlockedReasons),
+    ...safeStringArray(normalizedBaseline.blockedReasons),
+    ...(normalizedTargetCommit === null ? ['missing-target-commit'] : []),
+    ...safeStringArray(normalizedTagState.blockedReasons),
+    ...(normalizedTagState.exists === true ? [] : ['post-release-tag-missing']),
+    ...(normalizedTagState.exists === true && normalizedTagState.annotated !== true ? ['post-release-tag-not-annotated'] : []),
+    ...(normalizedTagState.exists === true && normalizedTagState.matchesTarget !== true ? ['post-release-tag-target-mismatch'] : []),
+    ...safeStringArray(normalizedGithubReleaseState.blockedReasons),
+    ...(normalizedGithubReleaseState.exists === true ? [] : ['github-release-missing']),
+    ...(normalizedGithubReleaseState.exists === true && normalizedGithubReleaseState.publishedAt === null ? ['missing-github-release-published-at'] : []),
+    ...safeStringArray(normalizedAssetPolicy.blockedReasons),
+    ...(normalizedSourceRefs.length === 0 ? ['missing-post-release-source-evidence'] : []),
+    ...(normalizedRollbackRefs.length === 0 ? ['missing-rollback-refs'] : [])
+  ]);
+
+  return {
+    contractName: POST_RELEASE_RECONCILE_EVIDENCE_CONTRACT_NAME,
+    contractVersion: RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION,
+    generatedAt: normalizedGeneratedAt,
+    state: derivedBlockedReasons.length === 0 ? 'ready' : 'blocked',
+    version,
+    targetTag,
+    targetCommit: normalizedTargetCommit,
+    releaseBaseline: normalizedBaseline,
+    tagState: normalizedTagState,
+    githubReleaseState: normalizedGithubReleaseState,
+    assetPolicy: normalizedAssetPolicy,
+    sourceEvidenceRefs: normalizedSourceRefs,
+    rollbackRefs: normalizedRollbackRefs,
+    blockedReasons: derivedBlockedReasons,
+    boundaries: RELEASE_MANAGER_PRACTICAL_BOUNDARIES,
+    readOnly: true,
+    willMutate: false
+  };
+}
+
+export function assertPostReleaseReconcileEvidenceContract(evidence) {
+  const validation = validatePostReleaseReconcileEvidenceContract(evidence);
+
+  if (!validation.ok) {
+    throw new ReleaseManagerPracticalContractError(
+      'invalid-post-release-reconcile-evidence',
+      'Post-release reconcile evidence contract is invalid.',
+      { errors: validation.errors }
+    );
+  }
+
+  return evidence;
+}
+
+export function validatePostReleaseReconcileEvidenceContract(evidence) {
+  const errors = [];
+
+  if (!isObject(evidence)) {
+    return { ok: false, errors: ['evidence must be an object'] };
+  }
+
+  assertAllowedFields(errors, evidence, POST_RELEASE_RECONCILE_EVIDENCE_ALLOWED_FIELDS, 'evidence');
+  requireEqual(errors, evidence.contractName, POST_RELEASE_RECONCILE_EVIDENCE_CONTRACT_NAME, 'contractName');
+  requireEqual(errors, evidence.contractVersion, RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION, 'contractVersion');
+  validateIsoDate(errors, evidence.generatedAt, 'generatedAt');
+  requireSet(errors, evidence.state, STATE_SET, 'state');
+  requirePattern(errors, evidence.version, SAFE_VERSION_PATTERN, 'version');
+  requirePattern(errors, evidence.targetTag, SAFE_TAG_PATTERN, 'targetTag');
+  validateNullablePattern(errors, evidence.targetCommit, COMMIT_PATTERN, 'targetCommit');
+  validateReleaseBaseline(errors, evidence.releaseBaseline, 'releaseBaseline');
+  validateTagState(errors, evidence.tagState, 'tagState');
+  validateGithubReleaseState(errors, evidence.githubReleaseState, 'githubReleaseState');
+  validateAssetPolicy(errors, evidence.assetPolicy, 'assetPolicy');
+  validateEvidenceRefs(errors, evidence.sourceEvidenceRefs, 'sourceEvidenceRefs');
+  validateEvidenceRefs(errors, evidence.rollbackRefs, 'rollbackRefs');
+  validateTextItems(errors, evidence.blockedReasons, 'blockedReasons');
+  validateBoundaries(errors, evidence.boundaries, 'boundaries');
+  requireEqual(errors, evidence.readOnly, true, 'readOnly');
+  requireEqual(errors, evidence.willMutate, false, 'willMutate');
+
+  for (const unsafeField of findUnsafeFields(evidence, 'evidence')) {
+    errors.push(`${unsafeField} must not expose raw provider output, local session refs, shell commands, or mutation routes`);
+  }
+
+  if (evidence.state === 'ready' && Array.isArray(evidence.blockedReasons) && evidence.blockedReasons.length > 0) {
+    errors.push('ready evidence must not include blockedReasons');
   }
 
   return { ok: errors.length === 0, errors };

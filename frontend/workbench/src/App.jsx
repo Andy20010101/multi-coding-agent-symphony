@@ -2561,9 +2561,14 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
   const readiness = manager?.readiness;
   const evidenceDraft = manager?.evidenceDraft;
   const manualPack = manager?.manualPublicationPack;
+  const postReleaseReconcile = manager?.postReleaseReconcileEvidence;
   const baseline = readiness?.releaseBaseline;
   const tagState = readiness?.tagState;
   const githubReleaseState = readiness?.githubReleaseState;
+  const reconciledBaseline = postReleaseReconcile?.releaseBaseline;
+  const reconciledTagState = postReleaseReconcile?.tagState ?? tagState;
+  const reconciledGithubReleaseState = postReleaseReconcile?.githubReleaseState ?? githubReleaseState;
+  const reconciledAssetPolicy = postReleaseReconcile?.assetPolicy ?? readiness?.assetPolicy;
   const gateItems = readiness?.requiredGates?.items ?? [];
   const gateEventItems = evidenceDraft?.gateEvents?.items ?? [];
   const commandItems = manualPack?.commands?.items ?? [];
@@ -2587,9 +2592,10 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
       <div className="release-manager-practical-summary">
         <FieldList rows={[
           ['readiness contract', readiness?.contractName],
-          ['readiness state', readiness?.state],
+          ['readiness state', textValue(readiness?.state ?? '未暴露')],
           ['evidence draft', evidenceDraft?.contractName],
           ['manual pack', manualPack?.contractName],
+          ['post-release reconcile', postReleaseReconcile?.contractName],
           ['target tag', readiness?.targetTag],
           ['target commit', readiness?.targetCommit],
           ['readOnly', manager?.readOnly],
@@ -2600,6 +2606,7 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
           ['external action required', manualPack?.externalActionRequired],
           ['copy only', manualPack?.copyOnly],
           ['source evidence refs', evidenceRefsTextFromCollection(manualPack?.sourceEvidenceRefs)],
+          ['reconcile source refs', evidenceRefsTextFromCollection(postReleaseReconcile?.sourceEvidenceRefs)],
           ['blocked reasons', textValueFromItems(manager?.blockedReasons, '无')],
           ['generated at', readiness?.generatedAt]
         ]} />
@@ -2661,7 +2668,7 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
 
       <Subsection title="Manual Publication Pack">
         <FieldList rows={[
-          ['pack state', manualPack?.state],
+          ['pack state', textValue(manualPack?.state ?? '未暴露')],
           ['release title', manualPack?.releaseTitle],
           ['repository', manualPack?.repository],
           ['external action required', manualPack?.externalActionRequired],
@@ -2693,13 +2700,25 @@ function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
 
       <Subsection title="Post-release Reconcile">
         <FieldList rows={[
-          ['tag object SHA', tagState?.tagObjectSha],
-          ['tag dereferenced commit', tagState?.dereferencedCommit],
-          ['GitHub Release URL', githubReleaseState?.url],
-          ['release target commitish', githubReleaseState?.targetCommitish],
-          ['release target matches', githubReleaseState?.targetCommitMatches],
-          ['asset policy expected', readiness?.assetPolicy?.expected],
-          ['asset policy blocked reasons', textValueFromItems(readiness?.assetPolicy?.blockedReasons, '无')]
+          ['reconcile contract', postReleaseReconcile?.contractName],
+          ['reconcile state', textValue(postReleaseReconcile?.state ?? '未暴露')],
+          ['reconcile target commit', postReleaseReconcile?.targetCommit],
+          ['reconciled main head', reconciledBaseline?.mainHead],
+          ['reconciled origin main head', reconciledBaseline?.originMainHead],
+          ['reconciled open PR count', reconciledBaseline?.openPrs?.count],
+          ['tag object SHA', reconciledTagState?.tagObjectSha],
+          ['tag dereferenced commit', reconciledTagState?.dereferencedCommit],
+          ['tag annotated', reconciledTagState?.annotated],
+          ['tag target matches', reconciledTagState?.matchesTarget],
+          ['GitHub Release URL', reconciledGithubReleaseState?.url],
+          ['release target commitish', reconciledGithubReleaseState?.targetCommitish],
+          ['release target matches', reconciledGithubReleaseState?.targetCommitMatches],
+          ['release draft', reconciledGithubReleaseState?.isDraft],
+          ['release prerelease', reconciledGithubReleaseState?.isPrerelease],
+          ['release assets', releaseAssetsTextFromCollection(reconciledGithubReleaseState?.assets)],
+          ['asset policy expected', reconciledAssetPolicy?.expected],
+          ['asset policy blocked reasons', textValueFromItems(reconciledAssetPolicy?.blockedReasons, '无')],
+          ['rollback refs', evidenceRefsTextFromCollection(postReleaseReconcile?.rollbackRefs)]
         ]} />
       </Subsection>
 
