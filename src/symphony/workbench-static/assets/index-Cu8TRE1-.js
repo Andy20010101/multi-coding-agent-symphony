@@ -9962,6 +9962,13 @@ var V41_CONTROLLED_PROVIDER_RUNNER_GOAL_ID = "v41-controlled-cli-provider-runner
 var V66_WORKER_RUN_GOAL_ID = "v66-controlled-codex-worker-execution";
 var V67_REVIEWER_RUN_GOAL_ID = "v67-claude-code-reviewer-lane";
 var V68_ADOPTION_MAIN_VERIFICATION_GOAL_ID = "v68-adoption-main-verification-loop";
+var V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID = "v69-recovery-resume-diagnostics-observability";
+var OPERATION_TIMELINE_CONTRACT_NAME = "operationTimeline.v1";
+var OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME = "operationFailureClassification.v1";
+var OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME = "operationRecoveryPreview.v1";
+var OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME = "operationRecoveryConfirmation.v1";
+var OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME = "operationUsageTimeObservability.v1";
+var OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME = "operationDiagnosticsSummary.v1";
 var GOAL_EVENT_PLAN_PREVIEW_PATH = "/api/goals/<goal-id>/event-plan-preview";
 var EVIDENCE_REF_HELPER_RECENT_LIMIT = 8;
 var EVIDENCE_REF_ACCEPTED_PATTERNS = Object.freeze([
@@ -11169,6 +11176,10 @@ function projectWorkbenchContracts(results) {
 		adoptionPreview: adoptionReadinessPreviewData,
 		mainVerificationPreviewResult: results.mainVerificationPreview,
 		mainVerificationPreview: mainVerificationPreviewData,
+		operations: activeGoalOperations,
+		activeGoal: activeGoalControl
+	});
+	activeGoalControl.recoveryTimeline = projectRecoveryTimelineSurface({
 		operations: activeGoalOperations,
 		activeGoal: activeGoalControl
 	});
@@ -16111,6 +16122,196 @@ function projectLoopStep({ id, label, source, route, status, blocker, operationI
 		blocker: valueState(blocker),
 		operationId: valueState(operationId),
 		nextSafeAction: valueState(nextSafeAction)
+	};
+}
+function projectRecoveryTimelineSurface({ operations, activeGoal }) {
+	const records = (Array.isArray(operations?.runs) ? operations.runs : []).map((operation) => ({
+		operation,
+		contract: v69RecoveryContractFromOperation(operation)
+	})).filter((entry) => entry.contract !== null);
+	const timeline = latestRecoveryContract(records, OPERATION_TIMELINE_CONTRACT_NAME);
+	const classification = latestRecoveryContract(records, OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME);
+	const preview = latestRecoveryContract(records, OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME);
+	const confirmation = latestRecoveryContract(records, OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME);
+	const diagnostics = latestRecoveryContract(records, OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME);
+	const usage = diagnostics?.usage?.contractName === OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME ? diagnostics.usage : latestRecoveryContract(records, OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME);
+	const goalId = firstValue(operations?.goalId, timeline?.goal?.goalId, classification?.operationId?.startsWith("op-v69") ? V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID : void 0, activeGoal?.runbook?.goalId, activeGoal?.nextAction?.goalId);
+	const taskId = firstValue(timeline?.task?.taskId, activeGoal?.nextAction?.next?.taskId, activeGoal?.taskQueue?.nextTaskId, classification?.stepId);
+	const timelineSteps = projectRecoveryTimelineSteps({
+		timeline,
+		classification,
+		preview,
+		confirmation
+	});
+	const blockers = [...Array.isArray(classification?.resumeEligibility?.blockedReasons) ? classification.resumeEligibility.blockedReasons : [], ...Array.isArray(preview?.blockedReasons) ? preview.blockedReasons : []];
+	return {
+		state: goalId === V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID || records.length > 0 ? "available" : "inactive",
+		modelName: valueState("V69RecoveryTimelineSurface"),
+		goalId: valueState(goalId),
+		taskId: valueState(taskId),
+		timeline: {
+			status: valueState(timeline?.status),
+			operationId: valueState(timeline?.operationId ?? classification?.operationId),
+			generatedAt: valueState(timeline?.generatedAt),
+			steps: {
+				count: valueState(timelineSteps.length),
+				items: timelineSteps
+			}
+		},
+		failure: {
+			layer: valueState(classification?.failureLayer),
+			code: valueState(classification?.failureCode),
+			status: valueState(classification?.status),
+			stepId: valueState(classification?.stepId),
+			providerId: valueState(classification?.providerId),
+			retryable: valueState(classification?.retryable === true),
+			resumeEligible: valueState(classification?.resumeEligibility?.eligible === true),
+			nextSafeAction: valueState(classification?.nextSafeAction?.actionId),
+			blockedReasons: textItemCollection(blockers)
+		},
+		recoveryPreview: {
+			state: valueState(preview?.state),
+			previewId: valueState(preview?.previewId),
+			actionId: valueState(preview?.requestedAction?.actionId),
+			planHashBound: valueState(preview?.confirmation?.requiresPlanHash === true),
+			fingerprintBound: valueState(preview?.resumeBinding?.sourceFingerprint?.matches === true),
+			providerInvokedOnConfirm: valueState(preview?.confirmation?.providerInvokedOnConfirm === true),
+			hiddenRetryAllowed: valueState(preview?.confirmation?.hiddenRetryAllowed === true)
+		},
+		recoveryConfirmation: {
+			status: valueState(confirmation?.status),
+			actionId: valueState(confirmation?.actionId),
+			recoveryState: valueState(confirmation?.recoveryState),
+			providerInvoked: valueState(confirmation?.providerInvoked === true),
+			gitMutationPerformed: valueState(confirmation?.gitMutationPerformed === true),
+			rawPayloadCaptured: valueState(confirmation?.rawPayloadCaptured === true),
+			diagnosticsOnly: valueState(confirmation?.diagnosticsOnly === true)
+		},
+		usage: {
+			status: valueState(usage?.status),
+			elapsedMs: valueState(usage?.elapsedMs?.value),
+			providerCallCount: valueState(usage?.providerCallCount?.value),
+			tokenInputStatus: valueState(usage?.tokenInput?.status),
+			tokenInput: valueState(usage?.tokenInput?.value),
+			tokenOutputStatus: valueState(usage?.tokenOutput?.status),
+			tokenOutput: valueState(usage?.tokenOutput?.value),
+			costStatus: valueState(usage?.cost?.status),
+			costAmount: valueState(usage?.cost?.amount),
+			costCurrency: valueState(usage?.cost?.currency)
+		},
+		diagnostics: {
+			status: valueState(diagnostics?.status),
+			redactedCount: valueState(diagnostics?.redaction?.redactedCount),
+			copyOnly: valueState(true),
+			rawLogsIncluded: valueState(diagnostics?.redaction?.rawLogsIncluded === true),
+			rawProviderOutputIncluded: valueState(diagnostics?.redaction?.rawProviderOutputIncluded === true),
+			rawTranscriptIncluded: valueState(diagnostics?.redaction?.rawTranscriptIncluded === true),
+			localSessionPathsIncluded: valueState(diagnostics?.redaction?.localSessionPathsIncluded === true),
+			items: {
+				count: valueState(Array.isArray(diagnostics?.diagnostics) ? diagnostics.diagnostics.length : 0),
+				items: (Array.isArray(diagnostics?.diagnostics) ? diagnostics.diagnostics : []).map((item) => ({
+					kind: valueState(item?.kind),
+					label: valueState(item?.label),
+					summary: valueState(item?.summary),
+					ref: valueState(item?.ref)
+				}))
+			}
+		},
+		routes: { operations: valueState(operations?.goalId && isSafeGoalRouteSegment(operations.goalId) ? GOAL_OPERATIONS_ROUTE_TEMPLATE.path.replace("<goal-id>", encodeURIComponent(operations.goalId)) : null) },
+		safety: {
+			readOnlySurface: valueState(true),
+			backendOwnedPreviewConfirm: valueState(true),
+			planHashBound: valueState(true),
+			fingerprintBound: valueState(true),
+			copyOnlyDiagnostics: valueState(true),
+			rendererCommandExecutionAvailable: valueState(false),
+			genericShellRunnerAvailable: valueState(false),
+			frontendLocalSessionReadAvailable: valueState(false),
+			frontendProviderFolderReadAvailable: valueState(false),
+			rawProviderOutputAvailable: valueState(false),
+			rawTranscriptAvailable: valueState(false),
+			hiddenRetryAvailable: valueState(false),
+			providerInvokedFromWorkbench: valueState(false),
+			gitMutationAvailable: valueState(false),
+			githubReleaseAutomationAvailable: valueState(false)
+		},
+		note: "V69 recovery surface reads operationTimeline.v1, operationFailureClassification.v1, operationRecoveryPreview.v1, operationRecoveryConfirmation.v1, and operationDiagnosticsSummary.v1 from backend operation records only. It shows failure layer, resume eligibility, bounded recovery actions, usage/time status, and copy-only diagnostics; it does not execute commands, read local sessions, retry providers, mutate git state, or publish releases."
+	};
+}
+function v69RecoveryContractFromOperation(operation) {
+	for (const key of [
+		"runResult",
+		"result",
+		"timeline",
+		"failureClassification",
+		"recoveryPreview",
+		"recoveryConfirmation",
+		"diagnosticsSummary",
+		"usage"
+	]) {
+		const candidate = operation?.[key];
+		if (isV69RecoveryContract(candidate)) return candidate;
+	}
+	return null;
+}
+function isV69RecoveryContract(candidate) {
+	return [
+		OPERATION_TIMELINE_CONTRACT_NAME,
+		OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME,
+		OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME,
+		OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME,
+		OPERATION_USAGE_TIME_OBSERVABILITY_CONTRACT_NAME,
+		OPERATION_DIAGNOSTICS_SUMMARY_CONTRACT_NAME
+	].includes(candidate?.contractName);
+}
+function latestRecoveryContract(records, contractName) {
+	for (const entry of [...records].reverse()) if (entry.contract?.contractName === contractName) return entry.contract;
+	return null;
+}
+function projectRecoveryTimelineSteps({ timeline, classification, preview, confirmation }) {
+	if (Array.isArray(timeline?.steps) && timeline.steps.length > 0) return timeline.steps.map((step) => projectRecoveryStep({
+		id: step?.stepId,
+		label: step?.label,
+		status: step?.status,
+		source: "operationTimeline.v1",
+		failureLayer: step?.failure?.failureLayer,
+		nextSafeAction: classification?.nextSafeAction?.actionId,
+		evidenceRefs: step?.evidenceRefs
+	}));
+	return [{
+		id: valueState(classification?.stepId ?? "recovery"),
+		label: valueState(classification?.stepId ?? "Recovery"),
+		status: valueState(classification?.status ?? "missing"),
+		source: valueState("operationFailureClassification.v1"),
+		failureLayer: valueState(classification?.failureLayer),
+		nextSafeAction: valueState(preview?.requestedAction?.actionId ?? classification?.nextSafeAction?.actionId),
+		recoveryState: valueState(confirmation?.recoveryState),
+		evidenceRefs: {
+			count: valueState(Array.isArray(classification?.evidenceRefs) ? classification.evidenceRefs.length : 0),
+			items: (Array.isArray(classification?.evidenceRefs) ? classification.evidenceRefs : []).map(projectRecoveryEvidenceRef)
+		}
+	}];
+}
+function projectRecoveryStep({ id, label, status, source, failureLayer, nextSafeAction, evidenceRefs }) {
+	return {
+		id: valueState(id),
+		label: valueState(label),
+		status: valueState(status),
+		source: valueState(source),
+		failureLayer: valueState(failureLayer),
+		nextSafeAction: valueState(nextSafeAction),
+		recoveryState: valueState(null),
+		evidenceRefs: {
+			count: valueState(Array.isArray(evidenceRefs) ? evidenceRefs.length : 0),
+			items: (Array.isArray(evidenceRefs) ? evidenceRefs : []).map(projectRecoveryEvidenceRef)
+		}
+	};
+}
+function projectRecoveryEvidenceRef(ref) {
+	return {
+		kind: valueState(ref?.kind),
+		ref: valueState(ref?.ref),
+		label: valueState(ref?.label)
 	};
 }
 function latestWorkerProviderRunnerOperationForTask(operations, { goalId, taskId }) {
@@ -27597,6 +27798,11 @@ var WORKBENCH_NAV_ITEMS = Object.freeze([
 		targetId: "main-verification-readiness-panel"
 	}),
 	Object.freeze({
+		id: "recovery",
+		label: "Recovery",
+		targetId: "recovery-timeline-panel"
+	}),
+	Object.freeze({
 		id: "stable-baseline",
 		label: "Stable Baseline",
 		route: "/workbench/desktop/",
@@ -27845,6 +28051,11 @@ function WorkbenchShell({ viewState, onRefreshWorkbenchContracts = () => void 0 
 					className: "main-verification-readiness-grid",
 					"aria-label": "v68 adoption and main verification loop",
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AdoptionMainVerificationLoopPanel, { loop: model.activeGoal.adoptionMainVerificationLoop })
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", {
+					className: "main-verification-readiness-grid",
+					"aria-label": "v69 recovery timeline and diagnostics",
+					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecoveryTimelinePanel, { recovery: model.activeGoal.recoveryTimeline })
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "main-verification-readiness-grid",
@@ -34404,6 +34615,122 @@ function buildControlledProviderRunnerConfirmBody(preview) {
 		handoffRef: preview?.reviewedContext?.handoffRef?.value,
 		planId,
 		planHash
+	});
+}
+function RecoveryTimelinePanel({ recovery }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(DataPanel, {
+		id: "recovery-timeline-panel",
+		kicker: "v69 recovery",
+		title: "Recovery / Timeline",
+		state: recovery?.state ?? "missing",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+				["model", recovery?.modelName],
+				["goal", recovery?.goalId],
+				["task", recovery?.taskId],
+				["operation", recovery?.timeline?.operationId],
+				["timeline status", recovery?.timeline?.status],
+				["failure layer", recovery?.failure?.layer],
+				["failure code", recovery?.failure?.code],
+				["affected step", recovery?.failure?.stepId],
+				["provider", recovery?.failure?.providerId],
+				["retryable", recovery?.failure?.retryable],
+				["resume eligible", recovery?.failure?.resumeEligible],
+				["next safe action", recovery?.failure?.nextSafeAction],
+				["blockers", recovery?.failure?.blockedReasons?.count],
+				["operations route", recovery?.routes?.operations],
+				["read only", recovery?.safety?.readOnlySurface],
+				["backend preview/confirm", recovery?.safety?.backendOwnedPreviewConfirm],
+				["planHash bound", recovery?.safety?.planHashBound],
+				["fingerprint bound", recovery?.safety?.fingerprintBound],
+				["copy-only diagnostics", recovery?.safety?.copyOnlyDiagnostics],
+				["renderer command execution", recovery?.safety?.rendererCommandExecutionAvailable],
+				["generic shell runner", recovery?.safety?.genericShellRunnerAvailable],
+				["frontend local session read", recovery?.safety?.frontendLocalSessionReadAvailable],
+				["raw provider output", recovery?.safety?.rawProviderOutputAvailable],
+				["raw transcript", recovery?.safety?.rawTranscriptAvailable],
+				["hidden retry", recovery?.safety?.hiddenRetryAvailable],
+				["provider invoked from Workbench", recovery?.safety?.providerInvokedFromWorkbench],
+				["git mutation", recovery?.safety?.gitMutationAvailable],
+				["GitHub Release automation", recovery?.safety?.githubReleaseAutomationAvailable]
+			] }),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "operation timeline",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RecoveryStepList, { steps: recovery?.timeline?.steps })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "recovery preview",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["state", recovery?.recoveryPreview?.state],
+					["preview id", recovery?.recoveryPreview?.previewId],
+					["action", recovery?.recoveryPreview?.actionId],
+					["planHash bound", recovery?.recoveryPreview?.planHashBound],
+					["fingerprint bound", recovery?.recoveryPreview?.fingerprintBound],
+					["provider invoked on confirm", recovery?.recoveryPreview?.providerInvokedOnConfirm],
+					["hidden retry allowed", recovery?.recoveryPreview?.hiddenRetryAllowed],
+					["confirmation status", recovery?.recoveryConfirmation?.status],
+					["confirmation action", recovery?.recoveryConfirmation?.actionId],
+					["recovery state", recovery?.recoveryConfirmation?.recoveryState],
+					["provider invoked", recovery?.recoveryConfirmation?.providerInvoked],
+					["git mutation", recovery?.recoveryConfirmation?.gitMutationPerformed],
+					["raw payload captured", recovery?.recoveryConfirmation?.rawPayloadCaptured],
+					["diagnostics only", recovery?.recoveryConfirmation?.diagnosticsOnly]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "usage and diagnostics",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["usage status", recovery?.usage?.status],
+					["elapsed ms", recovery?.usage?.elapsedMs],
+					["provider calls", recovery?.usage?.providerCallCount],
+					["input tokens status", recovery?.usage?.tokenInputStatus],
+					["input tokens", recovery?.usage?.tokenInput],
+					["output tokens status", recovery?.usage?.tokenOutputStatus],
+					["output tokens", recovery?.usage?.tokenOutput],
+					["cost status", recovery?.usage?.costStatus],
+					["cost amount", recovery?.usage?.costAmount],
+					["cost currency", recovery?.usage?.costCurrency],
+					["diagnostics status", recovery?.diagnostics?.status],
+					["redacted count", recovery?.diagnostics?.redactedCount],
+					["copy only", recovery?.diagnostics?.copyOnly],
+					["raw logs included", recovery?.diagnostics?.rawLogsIncluded],
+					["raw provider output included", recovery?.diagnostics?.rawProviderOutputIncluded],
+					["raw transcript included", recovery?.diagnostics?.rawTranscriptIncluded],
+					["local session paths included", recovery?.diagnostics?.localSessionPathsIncluded]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiagnosticSummaryList, { diagnostics: recovery?.diagnostics?.items })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: recovery?.note ?? "v69 recovery surface 未暴露。"
+			})
+		]
+	});
+}
+function RecoveryStepList({ steps }) {
+	const items = steps?.items ?? [];
+	if (items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "recovery timeline 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "operation-list",
+		children: items.map((step) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: step.label?.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["status", step.status],
+			["source", step.source],
+			["failure layer", step.failureLayer],
+			["next safe action", step.nextSafeAction],
+			["recovery state", step.recoveryState],
+			["evidence refs", step.evidenceRefs?.count]
+		] })] }, step.id?.text ?? step.label?.text))
+	});
+}
+function DiagnosticSummaryList({ diagnostics }) {
+	const items = diagnostics?.items ?? [];
+	if (items.length === 0) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "diagnostics summary 未暴露。" });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+		className: "operation-list",
+		children: items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: item.label?.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+			["kind", item.kind],
+			["summary", item.summary],
+			["ref", item.ref]
+		] })] }, item.ref?.text ?? item.label?.text))
 	});
 }
 function AdoptionMainVerificationLoopPanel({ loop }) {

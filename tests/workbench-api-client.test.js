@@ -72,6 +72,14 @@ import {
   buildReviewerRunVerdict
 } from '../src/symphony/reviewer-run-contracts.js';
 import {
+  buildOperationDiagnosticsSummary,
+  buildOperationFailureClassification,
+  buildOperationRecoveryPreview,
+  buildOperationTimeline,
+  buildUsageTimeObservability,
+  confirmOperationRecoveryPreview
+} from '../src/symphony/run-recovery-contracts.js';
+import {
   buildAgentCliProviderHealthContract
 } from '../src/symphony/agent-cli-provider-health.js';
 import {
@@ -111,6 +119,7 @@ const V41_GOAL_ID = 'v41-controlled-cli-provider-runner-backend-completion';
 const V66_GOAL_ID = 'v66-controlled-codex-worker-execution';
 const V67_GOAL_ID = 'v67-claude-code-reviewer-lane';
 const V68_GOAL_ID = 'v68-adoption-main-verification-loop';
+const V69_GOAL_ID = 'v69-recovery-resume-diagnostics-observability';
 const ACTIVE_GOAL_PROGRESS_PATH = `/api/goals/${V19_GOAL_ID}/progress`;
 const ACTIVE_GOAL_EVENTS_PATH = `/api/goals/${V19_GOAL_ID}/events`;
 const BACKEND_ACTIVE_GOAL_ID = 'v20-workbench-backend-event-test';
@@ -1494,6 +1503,215 @@ describe('v15 Workbench read-only API client', () => {
     assert.equal(loop.safety.releaseReadyDeclarationAvailable.value, false);
     assert.equal(loop.safety.gitMutationAvailable.value, false);
     assert.equal(loop.safety.githubReleaseAutomationAvailable.value, false);
+  });
+
+  it('projects the v69 recovery timeline surface from bounded operation records only', () => {
+    const classification = buildOperationFailureClassification({
+      generatedAt: '2026-06-15T00:50:00.000Z',
+      operationId: 'op-v69-worker-timeout',
+      stepId: 'worker-run',
+      phase: 'worker-run',
+      status: 'timeout',
+      providerId: 'codex-cli',
+      role: 'worker',
+      failureLayer: 'provider',
+      failureCode: 'provider-timeout',
+      retryable: true,
+      evidenceRefs: [{
+        kind: 'operation-record',
+        ref: 'operation-record:v69:worker-timeout',
+        label: 'worker timeout'
+      }]
+    });
+    const timeline = buildOperationTimeline({
+      generatedAt: '2026-06-15T00:50:00.000Z',
+      operationId: 'op-v69-worker-timeout',
+      status: 'timeout',
+      goal: {
+        goalId: V69_GOAL_ID,
+        title: 'v69 Recovery, Resume, Diagnostics, and Observability',
+        state: 'active'
+      },
+      task: {
+        taskId: 'pr-4',
+        title: 'Workbench recovery surface',
+        state: 'active'
+      },
+      startedAt: '2026-06-15T00:49:00.000Z',
+      finishedAt: '2026-06-15T00:50:00.000Z',
+      failureClassification: classification,
+      steps: [{
+        stepId: 'worker-run',
+        label: 'Codex worker run',
+        phase: 'worker-run',
+        status: 'timeout',
+        startedAt: '2026-06-15T00:49:00.000Z',
+        finishedAt: '2026-06-15T00:50:00.000Z',
+        providerId: 'codex-cli',
+        role: 'worker',
+        evidenceRefs: classification.evidenceRefs
+      }]
+    });
+    const preview = buildOperationRecoveryPreview({
+      generatedAt: '2026-06-15T00:51:00.000Z',
+      classification,
+      requestedActionId: 'retry-same-provider'
+    });
+    const confirmation = confirmOperationRecoveryPreview({
+      generatedAt: '2026-06-15T00:52:00.000Z',
+      preview,
+      input: {
+        planHash: preview.planHash,
+        actionId: preview.requestedAction.actionId,
+        classificationId: preview.classificationId,
+        operationId: preview.operationId,
+        stepId: preview.stepId,
+        sourceFingerprint: preview.resumeBinding.sourceFingerprint.current
+      }
+    });
+    const usage = buildUsageTimeObservability({
+      generatedAt: '2026-06-15T00:52:00.000Z',
+      elapsedMs: 60000,
+      providerCallCount: 1,
+      tokenInput: { status: 'unknown', value: null },
+      tokenOutput: { status: 'unknown', value: null },
+      cost: { status: 'unknown', amount: null, currency: null }
+    });
+    const diagnostics = buildOperationDiagnosticsSummary({
+      generatedAt: '2026-06-15T00:53:00.000Z',
+      operationId: classification.operationId,
+      status: 'warning',
+      timeline,
+      classifications: [classification],
+      recoveryPreviews: [preview],
+      recoveryConfirmations: [confirmation],
+      usage,
+      diagnostics: [{
+        kind: 'summary',
+        label: 'worker timeout',
+        summary: 'Retry preview confirmed from bounded operation evidence.',
+        ref: 'diagnostic-ref:v69:worker-timeout'
+      }]
+    });
+    const operations = {
+      contractName: 'goal-operation-runs.v1',
+      contractVersion: 1,
+      goalId: V69_GOAL_ID,
+      operationCount: 5,
+      latestOperationId: 'op_v69_diagnostics',
+      runs: [{
+        operationId: 'op_v69_timeline',
+        goalId: V69_GOAL_ID,
+        taskId: 'pr-4',
+        status: 'confirmed',
+        runResult: timeline
+      }, {
+        operationId: 'op_v69_classification',
+        goalId: V69_GOAL_ID,
+        taskId: 'pr-4',
+        status: 'confirmed',
+        runResult: classification
+      }, {
+        operationId: 'op_v69_preview',
+        goalId: V69_GOAL_ID,
+        taskId: 'pr-4',
+        status: 'confirmed',
+        runResult: preview
+      }, {
+        operationId: 'op_v69_confirmation',
+        goalId: V69_GOAL_ID,
+        taskId: 'pr-4',
+        status: 'confirmed',
+        runResult: confirmation
+      }, {
+        operationId: 'op_v69_diagnostics',
+        goalId: V69_GOAL_ID,
+        taskId: 'pr-4',
+        status: 'confirmed',
+        runResult: diagnostics
+      }]
+    };
+    const model = projectWorkbenchContracts({
+      goalRunbook: createWorkbenchRouteResult({
+        id: 'goalRunbook',
+        label: 'Goal Runbook',
+        path: `/api/goals/${V69_GOAL_ID}/runbook`,
+        method: 'GET',
+        contractName: 'goal-runbook.v1'
+      }, {
+        contractName: 'goal-runbook.v1',
+        contractVersion: 1,
+        goalId: V69_GOAL_ID,
+        goalTitle: 'v69 Recovery, Resume, Diagnostics, and Observability',
+        tasks: [{
+          taskId: 'pr-4',
+          title: 'Workbench recovery surface',
+          roleOrder: ['worker'],
+          acceptance: [],
+          expectedEvidence: {}
+        }],
+        releaseGates: []
+      }),
+      goalNextAction: createWorkbenchRouteResult({
+        id: 'goalNextAction',
+        label: 'Goal Next Action',
+        path: `/api/goals/${V69_GOAL_ID}/next`,
+        method: 'GET',
+        contractName: 'goal-next-action.v1'
+      }, {
+        contractName: 'goal-next-action.v1',
+        contractVersion: 1,
+        goalId: V69_GOAL_ID,
+        status: 'action-required',
+        next: {
+          taskId: 'pr-4',
+          role: 'worker',
+          phase: 'recover',
+          blocked: false
+        }
+      }),
+      activeGoalOperations: createWorkbenchRouteResult({
+        id: 'activeGoalOperations',
+        label: 'Active Goal Operations',
+        path: `/api/goals/${V69_GOAL_ID}/operations`,
+        method: 'GET',
+        contractName: 'goal-operation-runs.v1'
+      }, operations)
+    });
+    const recovery = model.activeGoal.recoveryTimeline;
+
+    assert.equal(recovery.state, 'available');
+    assert.equal(recovery.modelName.value, 'V69RecoveryTimelineSurface');
+    assert.equal(recovery.goalId.value, V69_GOAL_ID);
+    assert.equal(recovery.taskId.value, 'pr-4');
+    assert.equal(recovery.timeline.status.value, 'timeout');
+    assert.equal(recovery.timeline.steps.count.value, 1);
+    assert.equal(recovery.failure.layer.value, 'provider');
+    assert.equal(recovery.failure.code.value, 'provider-timeout');
+    assert.equal(recovery.failure.resumeEligible.value, true);
+    assert.equal(recovery.recoveryPreview.actionId.value, 'retry-same-provider');
+    assert.equal(recovery.recoveryPreview.planHashBound.value, true);
+    assert.equal(recovery.recoveryPreview.providerInvokedOnConfirm.value, false);
+    assert.equal(recovery.recoveryConfirmation.recoveryState.value, 'retry-preview-confirmed');
+    assert.equal(recovery.recoveryConfirmation.providerInvoked.value, false);
+    assert.equal(recovery.recoveryConfirmation.gitMutationPerformed.value, false);
+    assert.equal(recovery.recoveryConfirmation.rawPayloadCaptured.value, false);
+    assert.equal(recovery.usage.status.value, 'observed');
+    assert.equal(recovery.usage.elapsedMs.value, 60000);
+    assert.equal(recovery.usage.costStatus.value, 'unknown');
+    assert.equal(recovery.diagnostics.copyOnly.value, true);
+    assert.equal(recovery.diagnostics.rawLogsIncluded.value, false);
+    assert.equal(recovery.diagnostics.rawProviderOutputIncluded.value, false);
+    assert.equal(recovery.diagnostics.localSessionPathsIncluded.value, false);
+    assert.equal(recovery.safety.readOnlySurface.value, true);
+    assert.equal(recovery.safety.backendOwnedPreviewConfirm.value, true);
+    assert.equal(recovery.safety.copyOnlyDiagnostics.value, true);
+    assert.equal(recovery.safety.rendererCommandExecutionAvailable.value, false);
+    assert.equal(recovery.safety.genericShellRunnerAvailable.value, false);
+    assert.equal(recovery.safety.rawProviderOutputAvailable.value, false);
+    assert.equal(recovery.safety.hiddenRetryAvailable.value, false);
+    assert.equal(recovery.safety.gitMutationAvailable.value, false);
+    assert.equal(recovery.safety.githubReleaseAutomationAvailable.value, false);
   });
 
   it('projects the v39 Schema Migration Preview panel as dry-run only', () => {
