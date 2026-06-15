@@ -130,6 +130,8 @@ describe('v72 one-week dogfood stabilization contracts', () => {
     assert.match(template, /This file is a template only/u);
     assert.match(template, /Do not claim one-week stability from same-day records/u);
     assert.match(template, /BLOCKED_REAL_DOGFOOD_EVIDENCE/u);
+    assert.match(template, /If a fresh worktree fails Workbench build or route tests because `node_modules` is missing/u);
+    assert.match(template, /pnpm install/u);
     assert.match(protocol, /No v72 dogfood session records are counted in this PR/u);
     assert.match(template, /Do not use raw transcript paths, local provider session files, `\.jsonl` files/u);
     assert.doesNotMatch(template, /\/Users\//u);

@@ -87,3 +87,13 @@ Each counted session must include:
 - Use `unknown` or `not observed` when a value was not recorded.
 - Do not claim one-week stability from same-day records.
 - Keep `BLOCKED_REAL_DOGFOOD_EVIDENCE` until at least five valid session records exist.
+
+## Dependency Recovery Note
+
+If a fresh worktree fails Workbench build or route tests because `node_modules` is missing, record that as dogfood friction and run:
+
+```sh
+pnpm install
+```
+
+Then rerun the failed validation command. Do not record missing local dependencies as a product blocker unless the install or rerun also fails.
