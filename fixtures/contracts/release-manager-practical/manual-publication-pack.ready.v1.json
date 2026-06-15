@@ -1,0 +1,106 @@
+{
+  "contractName": "manualReleasePublicationPack.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T01:30:00.000Z",
+  "state": "ready",
+  "version": "v70",
+  "targetTag": "v70",
+  "targetCommit": "0da5b6fd31a987aa9ac9c54c3496e8c2517c60af",
+  "releaseTitle": "v70: Release Manager Practical Loop",
+  "repository": "Andy20010101/multi-coding-agent-symphony",
+  "publicationMode": "manual-controller-action",
+  "externalActionRequired": true,
+  "commands": [
+    {
+      "commandId": "create-annotated-tag",
+      "label": "Prepare annotated tag after final reconcile",
+      "command": "git tag -a v70 0da5b6fd31a987aa9ac9c54c3496e8c2517c60af -m \"v70: Release Manager Practical Loop\"",
+      "copyOnly": true,
+      "willMutate": false,
+      "allowedActor": "release-controller",
+      "requiresCleanReconcile": true
+    },
+    {
+      "commandId": "push-tag",
+      "label": "Send tag ref after annotated tag verification",
+      "command": "git push origin v70",
+      "copyOnly": true,
+      "willMutate": false,
+      "allowedActor": "release-controller",
+      "requiresCleanReconcile": true
+    },
+    {
+      "commandId": "create-github-release",
+      "label": "Prepare GitHub Release after tag verification",
+      "command": "gh release create v70 --repo Andy20010101/multi-coding-agent-symphony --target main --title \"v70: Release Manager Practical Loop\" --notes-file <controller-prepared-release-notes>",
+      "copyOnly": true,
+      "willMutate": false,
+      "allowedActor": "release-controller",
+      "requiresCleanReconcile": true
+    },
+    {
+      "commandId": "view-github-release",
+      "label": "Inspect GitHub Release evidence after publication",
+      "command": "gh release view v70 --repo Andy20010101/multi-coding-agent-symphony --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish",
+      "copyOnly": true,
+      "willMutate": false,
+      "allowedActor": "release-controller",
+      "requiresCleanReconcile": true
+    }
+  ],
+  "sourceEvidenceRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "tests/v70-release-manager-practical-loop.test.js",
+      "label": "v70 focused validation"
+    },
+    {
+      "kind": "repo-doc",
+      "ref": "tests/v58-release-closeout-operator-handoff-pack.test.js",
+      "label": "release boundary regression validation"
+    }
+  ],
+  "releaseNotesDraft": {
+    "state": "ready",
+    "title": "v70: Release Manager Practical Loop",
+    "body": "Prepare release readiness, manual publication commands, and post-release reconcile without product-level publication automation.",
+    "sourceRefs": [
+      {
+        "kind": "repo-doc",
+        "ref": "docs/plans/v70-release-manager-practical-loop-runbook-2026-06-14.md",
+        "label": "v70 runbook"
+      }
+    ],
+    "blockedReasons": []
+  },
+  "rollbackRefs": [
+    {
+      "kind": "repo-doc",
+      "ref": "docs/plans/v69-recovery-resume-diagnostics-observability-closeout-snapshot-2026-06-14.md",
+      "label": "v69 fallback state"
+    }
+  ],
+  "blockedReasons": [],
+  "boundaries": {
+    "readOnly": true,
+    "willMutate": false,
+    "shellAvailable": false,
+    "arbitraryCommandExecutionAvailable": false,
+    "rendererLocalFileReadAvailable": false,
+    "providerSessionReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "releaseReadyInferenceFromTestsAvailable": false,
+    "gitMergeAvailable": false,
+    "gitTagAvailable": false,
+    "gitPushAvailable": false,
+    "githubReleaseCreateAvailable": false,
+    "githubReleaseEditAvailable": false,
+    "githubReleaseUploadAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false
+  },
+  "copyOnly": true,
+  "readOnly": true,
+  "willMutate": false
+}

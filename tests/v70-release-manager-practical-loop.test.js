@@ -5,11 +5,19 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  MANUAL_PUBLICATION_PACK_CONTRACT_NAME,
+  RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME,
   RELEASE_MANAGER_PRACTICAL_BOUNDARIES,
   RELEASE_MANAGER_READINESS_CONTRACT_NAME,
   ReleaseManagerPracticalContractError,
+  assertManualPublicationPackContract,
+  assertReleaseEvidenceDraftContract,
   assertReleaseManagerReadinessContract,
+  buildManualPublicationPack,
+  buildReleaseEvidenceDraft,
   buildReleaseManagerReadiness,
+  validateManualPublicationPackContract,
+  validateReleaseEvidenceDraftContract,
   validateReleaseManagerReadinessContract
 } from '../src/symphony/release-manager-practical-contracts.js';
 
@@ -31,6 +39,10 @@ const VALID_FIXTURES = Object.freeze([
   'release-manager-readiness.blocked-tag-wrong-commit.v1.json',
   'release-manager-readiness.blocked-release-draft-prerelease.v1.json',
   'release-manager-readiness.blocked-unexpected-assets.v1.json'
+]);
+const PR2_FIXTURES = Object.freeze([
+  'release-evidence-draft.ready.v1.json',
+  'manual-publication-pack.ready.v1.json'
 ]);
 
 describe('v70 release manager practical loop contracts', () => {
@@ -86,6 +98,25 @@ describe('v70 release manager practical loop contracts', () => {
     assertBlocked(unexpectedAssets, 'unexpected-release-assets');
   });
 
+  it('validates release evidence draft and manual publication pack fixtures', () => {
+    const draft = fixture('release-evidence-draft.ready.v1.json');
+    const pack = fixture('manual-publication-pack.ready.v1.json');
+
+    assert.deepEqual(PR2_FIXTURES.map((name) => fixture(name).contractName), [
+      RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME,
+      MANUAL_PUBLICATION_PACK_CONTRACT_NAME
+    ]);
+    assert.equal(validateReleaseEvidenceDraftContract(draft).ok, true);
+    assert.equal(validateManualPublicationPackContract(pack).ok, true);
+    assert.equal(draft.state, 'ready');
+    assert.equal(pack.state, 'ready');
+    assert.equal(pack.publicationMode, 'manual-controller-action');
+    assert.equal(pack.externalActionRequired, true);
+    assert.equal(pack.copyOnly, true);
+    assert.equal(pack.commands.length, 4);
+    assertManualCommandsAreCopyOnly(pack);
+  });
+
   it('builds ready release readiness from explicit main, gate, notes, and absent publication facts', () => {
     const readiness = buildReleaseManagerReadiness(readyInput());
 
@@ -102,6 +133,32 @@ describe('v70 release manager practical loop contracts', () => {
     assert.equal(readiness.githubReleaseState.exists, false);
     assert.deepEqual(readiness.boundaries, RELEASE_MANAGER_PRACTICAL_BOUNDARIES);
     assertNoUnsafePayload(readiness);
+  });
+
+  it('builds release evidence draft and copy-only manual publication commands from explicit gate evidence', () => {
+    const readiness = buildReleaseManagerReadiness(readyInput());
+    const draft = buildReleaseEvidenceDraft(readyEvidenceDraftInput(readiness));
+    const pack = buildManualPublicationPack(readyManualPackInput(draft));
+
+    assertReleaseEvidenceDraftContract(draft);
+    assertManualPublicationPackContract(pack);
+    assert.equal(draft.state, 'ready');
+    assert.equal(draft.gateEvents.length, 4);
+    assert.equal(draft.validationCommandEvidenceRefs.length, 2);
+    assert.equal(pack.state, 'ready');
+    assert.equal(pack.targetTag, 'v70');
+    assert.equal(pack.targetCommit, TARGET_COMMIT);
+    assert.deepEqual(pack.commands.map((command) => command.commandId), [
+      'create-annotated-tag',
+      'push-tag',
+      'create-github-release',
+      'view-github-release'
+    ]);
+    assert.ok(pack.commands[0].command.includes(`git tag -a v70 ${TARGET_COMMIT}`));
+    assert.ok(pack.commands[1].command.includes('git push origin v70'));
+    assert.ok(pack.commands[2].command.includes('gh release create v70 --repo Andy20010101/multi-coding-agent-symphony'));
+    assert.ok(pack.commands[3].command.includes('gh release view v70 --repo Andy20010101/multi-coding-agent-symphony'));
+    assertManualCommandsAreCopyOnly(pack);
   });
 
   it('blocks dirty or drifted release baselines, open PRs, missing gates, unsafe release state, and asset drift', () => {
@@ -201,6 +258,18 @@ describe('v70 release manager practical loop contracts', () => {
     );
   });
 
+  it('blocks evidence drafts without validation command evidence and packs whose source draft is not ready', () => {
+    const readiness = buildReleaseManagerReadiness(readyInput());
+    const blockedDraft = buildReleaseEvidenceDraft({
+      ...readyEvidenceDraftInput(readiness),
+      validationCommandEvidenceRefs: []
+    });
+    const blockedPack = buildManualPublicationPack(readyManualPackInput(blockedDraft));
+
+    assertBlocked(blockedDraft, 'missing-validation-command-evidence', validateReleaseEvidenceDraftContract);
+    assertBlocked(blockedPack, 'release-evidence-draft-not-ready', validateManualPublicationPackContract);
+  });
+
   it('throws before building from raw transcript, local session, shell, or mutation source fields', () => {
     assert.throws(
       () => buildReleaseManagerReadiness({
@@ -218,6 +287,19 @@ describe('v70 release manager practical loop contracts', () => {
         return true;
       }
     );
+  });
+
+  it('rejects arbitrary manual command drift even when command text is copy-only', () => {
+    const readiness = buildReleaseManagerReadiness(readyInput());
+    const draft = buildReleaseEvidenceDraft(readyEvidenceDraftInput(readiness));
+    const pack = buildManualPublicationPack(readyManualPackInput(draft));
+
+    pack.commands[0].command = 'gh release edit v70 --repo Andy20010101/multi-coding-agent-symphony --draft';
+
+    const validation = validateManualPublicationPackContract(pack);
+
+    assert.equal(validation.ok, false);
+    assert.ok(validation.errors.some((error) => error.includes('copy-only command')), validation.errors.join('; '));
   });
 
   it('rejects boundary drift in asserted readiness packs', () => {
@@ -322,13 +404,81 @@ function openPr() {
   };
 }
 
-function assertBlocked(readiness, reason) {
-  const validation = validateReleaseManagerReadinessContract(readiness);
+function readyEvidenceDraftInput(readiness) {
+  return {
+    generatedAt: GENERATED_AT,
+    readiness,
+    gateEvents: [
+      {
+        gateName: 'reviewer.accepted',
+        eventType: 'reviewer.accepted',
+        state: 'ready',
+        evidenceRefs: [repoDocEvidence('docs/qa/v70-release-manager-practical-loop-acceptance.md', 'review acceptance')]
+      },
+      {
+        gateName: 'main.verification-passed',
+        eventType: 'main.verification-passed',
+        state: 'ready',
+        evidenceRefs: [repoDocEvidence('docs/plans/v70-release-manager-practical-loop-closeout-snapshot-2026-06-14.md', 'main validation')]
+      },
+      {
+        gateName: 'release.validation-passed',
+        eventType: 'release.validation-passed',
+        state: 'ready',
+        evidenceRefs: [repoDocEvidence('tests/v70-release-manager-practical-loop.test.js', 'release validation')]
+      },
+      {
+        gateName: 'validation.command-passed',
+        eventType: 'validation.command-passed',
+        state: 'ready',
+        evidenceRefs: [repoDocEvidence('docs/plans/v70-release-manager-practical-loop-closeout-snapshot-2026-06-14.md', 'validation command evidence')]
+      }
+    ],
+    validationCommandEvidenceRefs: [
+      repoDocEvidence('tests/v70-release-manager-practical-loop.test.js', 'v70 focused validation'),
+      repoDocEvidence('tests/v58-release-closeout-operator-handoff-pack.test.js', 'release boundary regression validation')
+    ],
+    knownFacts: [
+      'v70 publication remains a controller action outside product code',
+      'manual commands are copy-only and require clean reconcile before use'
+    ],
+    rollbackRefs: [repoDocEvidence('docs/plans/v69-recovery-resume-diagnostics-observability-closeout-snapshot-2026-06-14.md', 'v69 fallback state')]
+  };
+}
+
+function readyManualPackInput(draft) {
+  return {
+    generatedAt: GENERATED_AT,
+    evidenceDraft: draft,
+    repository: 'Andy20010101/multi-coding-agent-symphony',
+    sourceEvidenceRefs: draft.validationCommandEvidenceRefs,
+    rollbackRefs: draft.rollbackRefs
+  };
+}
+
+function assertBlocked(readiness, reason, validator = validateReleaseManagerReadinessContract) {
+  const validation = validator(readiness);
 
   assert.equal(validation.ok, true, validation.errors.join('; '));
   assert.equal(readiness.state, 'blocked');
   assert.ok(readiness.blockedReasons.includes(reason), readiness.blockedReasons.join('; '));
-  assertNoUnsafePayload(readiness);
+  if (readiness.contractName !== MANUAL_PUBLICATION_PACK_CONTRACT_NAME) {
+    assertNoUnsafePayload(readiness);
+  }
+}
+
+function assertManualCommandsAreCopyOnly(pack) {
+  for (const command of pack.commands) {
+    assert.equal(command.copyOnly, true);
+    assert.equal(command.willMutate, false);
+    assert.equal(command.allowedActor, 'release-controller');
+    assert.equal(command.requiresCleanReconcile, true);
+  }
+  assert.equal(pack.boundaries.gitTagAvailable, false);
+  assert.equal(pack.boundaries.gitPushAvailable, false);
+  assert.equal(pack.boundaries.githubReleaseCreateAvailable, false);
+  assert.equal(pack.boundaries.githubReleaseEditAvailable, false);
+  assert.equal(pack.boundaries.githubReleaseUploadAvailable, false);
 }
 
 function assertNoUnsafePayload(value) {

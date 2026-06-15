@@ -1,4 +1,6 @@
 export const RELEASE_MANAGER_READINESS_CONTRACT_NAME = 'releaseManagerReadiness.v1';
+export const RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME = 'releaseEvidenceDraft.v1';
+export const MANUAL_PUBLICATION_PACK_CONTRACT_NAME = 'manualReleasePublicationPack.v1';
 export const RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION = 1;
 
 export const RELEASE_MANAGER_PRACTICAL_BOUNDARIES = Object.freeze({
@@ -85,10 +87,63 @@ const GITHUB_RELEASE_STATE_ALLOWED_FIELDS = new Set([
 ]);
 const ASSET_POLICY_ALLOWED_FIELDS = new Set(['state', 'expected', 'actualAssets', 'blockedReasons']);
 const RELEASE_ASSET_ALLOWED_FIELDS = new Set(['name', 'label', 'url', 'size']);
+const RELEASE_EVIDENCE_DRAFT_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'generatedAt',
+  'state',
+  'version',
+  'targetTag',
+  'targetCommit',
+  'readinessState',
+  'gateEvents',
+  'validationCommandEvidenceRefs',
+  'releaseNotesDraft',
+  'knownFacts',
+  'rollbackRefs',
+  'blockedReasons',
+  'boundaries',
+  'readOnly',
+  'willMutate'
+]);
+const GATE_EVENT_ALLOWED_FIELDS = new Set(['gateName', 'eventType', 'state', 'evidenceRefs', 'blockedReasons']);
+const MANUAL_PUBLICATION_PACK_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'generatedAt',
+  'state',
+  'version',
+  'targetTag',
+  'targetCommit',
+  'releaseTitle',
+  'repository',
+  'publicationMode',
+  'externalActionRequired',
+  'commands',
+  'sourceEvidenceRefs',
+  'releaseNotesDraft',
+  'rollbackRefs',
+  'blockedReasons',
+  'boundaries',
+  'copyOnly',
+  'readOnly',
+  'willMutate'
+]);
+const MANUAL_COMMAND_ALLOWED_FIELDS = new Set([
+  'commandId',
+  'label',
+  'command',
+  'copyOnly',
+  'willMutate',
+  'allowedActor',
+  'requiresCleanReconcile'
+]);
 
 const STATE_SET = new Set(['ready', 'blocked']);
 const SUBSTATE_SET = new Set(['ready', 'blocked', 'missing']);
 const GATE_STATE_SET = new Set(['ready', 'blocked', 'missing']);
+const GATE_EVENT_TYPE_SET = new Set(['reviewer.accepted', 'main.verification-passed', 'release.validation-passed', 'validation.command-passed']);
+const MANUAL_COMMAND_ID_SET = new Set(['create-annotated-tag', 'push-tag', 'create-github-release', 'view-github-release']);
 const SOURCE_REF_KIND_SET = new Set([
   'repo-doc',
   'artifact-ref',
@@ -271,6 +326,349 @@ export function validateReleaseManagerReadinessContract(readiness) {
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+export function buildReleaseEvidenceDraft({
+  generatedAt = new Date().toISOString(),
+  readiness = null,
+  version = null,
+  targetTag = null,
+  targetCommit = null,
+  gateEvents = [],
+  validationCommandEvidenceRefs = [],
+  releaseNotesDraft = null,
+  knownFacts = [],
+  rollbackRefs = [],
+  blockedReasons: inputBlockedReasons = []
+} = {}) {
+  const unsafeSourceField = findUnsafeFields({
+    readiness,
+    version,
+    targetTag,
+    targetCommit,
+    gateEvents,
+    validationCommandEvidenceRefs,
+    releaseNotesDraft,
+    knownFacts,
+    rollbackRefs,
+    inputBlockedReasons
+  }, 'source')[0];
+
+  if (unsafeSourceField !== undefined) {
+    throw new ReleaseManagerPracticalContractError(
+      'unsafe-release-evidence-draft-source',
+      'Release evidence draft source contains raw provider output, local session refs, shell commands, or mutation routes.',
+      { reason: `${unsafeSourceField} must not contain raw provider output, local session refs, shell commands, or mutation routes` }
+    );
+  }
+
+  const normalizedGeneratedAt = toIso(generatedAt);
+  const normalizedVersion = firstNonEmptyString(version, readiness?.version, 'v70');
+  const normalizedTargetTag = firstNonEmptyString(targetTag, readiness?.targetTag, normalizedVersion);
+  const normalizedTargetCommit = firstNonEmptyString(targetCommit, readiness?.targetCommit, null);
+  const normalizedGateEvents = gateEventsFrom(gateEvents);
+  const normalizedValidationRefs = evidenceRefsFrom(validationCommandEvidenceRefs);
+  const normalizedNotes = releaseNotesDraftFrom(releaseNotesDraft ?? readiness?.releaseNotesDraft);
+  const normalizedRollbackRefs = evidenceRefsFrom(rollbackRefs);
+  const readinessState = firstNonEmptyString(readiness?.state, null);
+  const derivedBlockedReasons = uniqueStrings([
+    ...safeStringArray(inputBlockedReasons),
+    ...(readinessState !== 'ready' ? ['readiness-not-ready'] : []),
+    ...(normalizedGateEvents.length === 0 ? ['missing-gate-events'] : []),
+    ...normalizedGateEvents.flatMap((event) => event.blockedReasons),
+    ...(normalizedValidationRefs.length === 0 ? ['missing-validation-command-evidence'] : []),
+    ...safeStringArray(normalizedNotes.blockedReasons),
+    ...(normalizedTargetCommit === null ? ['missing-target-commit'] : []),
+    ...(normalizedRollbackRefs.length === 0 ? ['missing-rollback-refs'] : []),
+    ...safeStringArray(readiness?.blockedReasons)
+  ]);
+
+  return {
+    contractName: RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME,
+    contractVersion: RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION,
+    generatedAt: normalizedGeneratedAt,
+    state: derivedBlockedReasons.length === 0 ? 'ready' : 'blocked',
+    version: normalizedVersion,
+    targetTag: normalizedTargetTag,
+    targetCommit: normalizedTargetCommit,
+    readinessState,
+    gateEvents: normalizedGateEvents,
+    validationCommandEvidenceRefs: normalizedValidationRefs,
+    releaseNotesDraft: normalizedNotes,
+    knownFacts: safeStringArray(knownFacts),
+    rollbackRefs: normalizedRollbackRefs,
+    blockedReasons: derivedBlockedReasons,
+    boundaries: RELEASE_MANAGER_PRACTICAL_BOUNDARIES,
+    readOnly: true,
+    willMutate: false
+  };
+}
+
+export function assertReleaseEvidenceDraftContract(draft) {
+  const validation = validateReleaseEvidenceDraftContract(draft);
+
+  if (!validation.ok) {
+    throw new ReleaseManagerPracticalContractError(
+      'invalid-release-evidence-draft',
+      'Release evidence draft contract is invalid.',
+      { errors: validation.errors }
+    );
+  }
+
+  return draft;
+}
+
+export function validateReleaseEvidenceDraftContract(draft) {
+  const errors = [];
+
+  if (!isObject(draft)) {
+    return { ok: false, errors: ['draft must be an object'] };
+  }
+
+  assertAllowedFields(errors, draft, RELEASE_EVIDENCE_DRAFT_ALLOWED_FIELDS, 'draft');
+  requireEqual(errors, draft.contractName, RELEASE_EVIDENCE_DRAFT_CONTRACT_NAME, 'contractName');
+  requireEqual(errors, draft.contractVersion, RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION, 'contractVersion');
+  validateIsoDate(errors, draft.generatedAt, 'generatedAt');
+  requireSet(errors, draft.state, STATE_SET, 'state');
+  requirePattern(errors, draft.version, SAFE_VERSION_PATTERN, 'version');
+  requirePattern(errors, draft.targetTag, SAFE_TAG_PATTERN, 'targetTag');
+  validateNullablePattern(errors, draft.targetCommit, COMMIT_PATTERN, 'targetCommit');
+  validateNullableString(errors, draft.readinessState, 'readinessState');
+  validateGateEvents(errors, draft.gateEvents, 'gateEvents');
+  validateEvidenceRefs(errors, draft.validationCommandEvidenceRefs, 'validationCommandEvidenceRefs');
+  validateReleaseNotesDraft(errors, draft.releaseNotesDraft, 'releaseNotesDraft');
+  validateTextItems(errors, draft.knownFacts, 'knownFacts');
+  validateEvidenceRefs(errors, draft.rollbackRefs, 'rollbackRefs');
+  validateTextItems(errors, draft.blockedReasons, 'blockedReasons');
+  validateBoundaries(errors, draft.boundaries, 'boundaries');
+  requireEqual(errors, draft.readOnly, true, 'readOnly');
+  requireEqual(errors, draft.willMutate, false, 'willMutate');
+
+  for (const unsafeField of findUnsafeFields(draft, 'draft')) {
+    errors.push(`${unsafeField} must not expose raw provider output, local session refs, shell commands, or mutation routes`);
+  }
+
+  if (draft.state === 'ready' && Array.isArray(draft.blockedReasons) && draft.blockedReasons.length > 0) {
+    errors.push('ready draft must not include blockedReasons');
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function buildManualPublicationPack({
+  generatedAt = new Date().toISOString(),
+  evidenceDraft = null,
+  version = null,
+  targetTag = null,
+  targetCommit = null,
+  releaseTitle = null,
+  repository = 'Andy20010101/multi-coding-agent-symphony',
+  releaseNotesDraft = null,
+  sourceEvidenceRefs = [],
+  rollbackRefs = [],
+  blockedReasons: inputBlockedReasons = []
+} = {}) {
+  const unsafeSourceField = findUnsafeFields({
+    evidenceDraft,
+    version,
+    targetTag,
+    targetCommit,
+    releaseTitle,
+    repository,
+    releaseNotesDraft,
+    sourceEvidenceRefs,
+    rollbackRefs,
+    inputBlockedReasons
+  }, 'source')[0];
+
+  if (unsafeSourceField !== undefined) {
+    throw new ReleaseManagerPracticalContractError(
+      'unsafe-manual-publication-pack-source',
+      'Manual publication pack source contains raw provider output, local session refs, shell commands, or mutation routes.',
+      { reason: `${unsafeSourceField} must not contain raw provider output, local session refs, shell commands, or mutation routes` }
+    );
+  }
+
+  const normalizedGeneratedAt = toIso(generatedAt);
+  const normalizedVersion = firstNonEmptyString(version, evidenceDraft?.version, 'v70');
+  const normalizedTargetTag = firstNonEmptyString(targetTag, evidenceDraft?.targetTag, normalizedVersion);
+  const normalizedTargetCommit = firstNonEmptyString(targetCommit, evidenceDraft?.targetCommit, null);
+  const normalizedReleaseTitle = firstNonEmptyString(releaseTitle, evidenceDraft?.releaseNotesDraft?.title, `${normalizedTargetTag} release`);
+  const normalizedNotes = releaseNotesDraftFrom(releaseNotesDraft ?? evidenceDraft?.releaseNotesDraft);
+  const normalizedSourceRefs = evidenceRefsFrom(firstNonEmptyArray(sourceEvidenceRefs, evidenceDraft?.validationCommandEvidenceRefs));
+  const normalizedRollbackRefs = evidenceRefsFrom(firstNonEmptyArray(rollbackRefs, evidenceDraft?.rollbackRefs));
+  const commands = manualPublicationCommands({
+    targetTag: normalizedTargetTag,
+    targetCommit: normalizedTargetCommit,
+    releaseTitle: normalizedReleaseTitle,
+    repository
+  });
+  const derivedBlockedReasons = uniqueStrings([
+    ...safeStringArray(inputBlockedReasons),
+    ...(evidenceDraft?.state !== 'ready' ? ['release-evidence-draft-not-ready'] : []),
+    ...(normalizedTargetCommit === null ? ['missing-target-commit'] : []),
+    ...(normalizedSourceRefs.length === 0 ? ['missing-source-evidence-refs'] : []),
+    ...(normalizedRollbackRefs.length === 0 ? ['missing-rollback-refs'] : []),
+    ...safeStringArray(normalizedNotes.blockedReasons),
+    ...safeStringArray(evidenceDraft?.blockedReasons)
+  ]);
+
+  return {
+    contractName: MANUAL_PUBLICATION_PACK_CONTRACT_NAME,
+    contractVersion: RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION,
+    generatedAt: normalizedGeneratedAt,
+    state: derivedBlockedReasons.length === 0 ? 'ready' : 'blocked',
+    version: normalizedVersion,
+    targetTag: normalizedTargetTag,
+    targetCommit: normalizedTargetCommit,
+    releaseTitle: normalizedReleaseTitle,
+    repository,
+    publicationMode: 'manual-controller-action',
+    externalActionRequired: true,
+    commands,
+    sourceEvidenceRefs: normalizedSourceRefs,
+    releaseNotesDraft: normalizedNotes,
+    rollbackRefs: normalizedRollbackRefs,
+    blockedReasons: derivedBlockedReasons,
+    boundaries: RELEASE_MANAGER_PRACTICAL_BOUNDARIES,
+    copyOnly: true,
+    readOnly: true,
+    willMutate: false
+  };
+}
+
+export function assertManualPublicationPackContract(pack) {
+  const validation = validateManualPublicationPackContract(pack);
+
+  if (!validation.ok) {
+    throw new ReleaseManagerPracticalContractError(
+      'invalid-manual-publication-pack',
+      'Manual publication pack contract is invalid.',
+      { errors: validation.errors }
+    );
+  }
+
+  return pack;
+}
+
+export function validateManualPublicationPackContract(pack) {
+  const errors = [];
+
+  if (!isObject(pack)) {
+    return { ok: false, errors: ['pack must be an object'] };
+  }
+
+  assertAllowedFields(errors, pack, MANUAL_PUBLICATION_PACK_ALLOWED_FIELDS, 'pack');
+  requireEqual(errors, pack.contractName, MANUAL_PUBLICATION_PACK_CONTRACT_NAME, 'contractName');
+  requireEqual(errors, pack.contractVersion, RELEASE_MANAGER_PRACTICAL_CONTRACT_VERSION, 'contractVersion');
+  validateIsoDate(errors, pack.generatedAt, 'generatedAt');
+  requireSet(errors, pack.state, STATE_SET, 'state');
+  requirePattern(errors, pack.version, SAFE_VERSION_PATTERN, 'version');
+  requirePattern(errors, pack.targetTag, SAFE_TAG_PATTERN, 'targetTag');
+  validateNullablePattern(errors, pack.targetCommit, COMMIT_PATTERN, 'targetCommit');
+  requireNonEmptyString(errors, pack.releaseTitle, 'releaseTitle');
+  requireNonEmptyString(errors, pack.repository, 'repository');
+  requireEqual(errors, pack.publicationMode, 'manual-controller-action', 'publicationMode');
+  requireEqual(errors, pack.externalActionRequired, true, 'externalActionRequired');
+  validateManualCommands(errors, pack.commands, 'commands');
+  validateEvidenceRefs(errors, pack.sourceEvidenceRefs, 'sourceEvidenceRefs');
+  validateReleaseNotesDraft(errors, pack.releaseNotesDraft, 'releaseNotesDraft');
+  validateEvidenceRefs(errors, pack.rollbackRefs, 'rollbackRefs');
+  validateTextItems(errors, pack.blockedReasons, 'blockedReasons');
+  validateBoundaries(errors, pack.boundaries, 'boundaries');
+  requireEqual(errors, pack.copyOnly, true, 'copyOnly');
+  requireEqual(errors, pack.readOnly, true, 'readOnly');
+  requireEqual(errors, pack.willMutate, false, 'willMutate');
+
+  for (const unsafeField of findUnsafeFields(pack, 'pack').filter((field) => !/commands\[[0-9]+\]\.command$/u.test(field))) {
+    errors.push(`${unsafeField} must not expose raw provider output, local session refs, shell commands, or mutation routes`);
+  }
+
+  if (pack.state === 'ready' && Array.isArray(pack.blockedReasons) && pack.blockedReasons.length > 0) {
+    errors.push('ready pack must not include blockedReasons');
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+function gateEventsFrom(gateEvents) {
+  if (!Array.isArray(gateEvents)) {
+    return [];
+  }
+
+  return gateEvents.map((event) => {
+    const candidate = isObject(event) ? event : {};
+    const gateName = firstNonEmptyString(candidate.gateName, null);
+    const eventType = firstNonEmptyString(candidate.eventType, gateName);
+    const evidenceRefs = evidenceRefsFrom(candidate.evidenceRefs);
+    const inputState = firstNonEmptyString(candidate.state, null);
+    const blockedReasons = uniqueStrings([
+      ...(gateName === null ? ['missing-gate-name'] : []),
+      ...(eventType === null ? ['missing-gate-event-type'] : []),
+      ...(evidenceRefs.length === 0 ? ['missing-gate-event-evidence'] : []),
+      ...(inputState !== null && inputState !== 'ready' ? [`gate-event-${inputState}`] : []),
+      ...safeStringArray(candidate.blockedReasons)
+    ]);
+
+    return {
+      gateName,
+      eventType,
+      state: blockedReasons.length === 0 ? 'ready' : 'blocked',
+      evidenceRefs,
+      blockedReasons
+    };
+  });
+}
+
+function manualPublicationCommands({
+  targetTag,
+  targetCommit,
+  releaseTitle,
+  repository
+}) {
+  const safeTargetTag = firstNonEmptyString(targetTag, '<tag>');
+  const safeTargetCommit = firstNonEmptyString(targetCommit, '<target-commit>');
+  const safeTitle = shellDoubleQuote(firstNonEmptyString(releaseTitle, safeTargetTag));
+  const safeRepository = firstNonEmptyString(repository, 'Andy20010101/multi-coding-agent-symphony');
+
+  return [
+    {
+      commandId: 'create-annotated-tag',
+      label: 'Prepare annotated tag after final reconcile',
+      command: `git tag -a ${safeTargetTag} ${safeTargetCommit} -m ${safeTitle}`,
+      copyOnly: true,
+      willMutate: false,
+      allowedActor: 'release-controller',
+      requiresCleanReconcile: true
+    },
+    {
+      commandId: 'push-tag',
+      label: 'Send tag ref after annotated tag verification',
+      command: `git push origin ${safeTargetTag}`,
+      copyOnly: true,
+      willMutate: false,
+      allowedActor: 'release-controller',
+      requiresCleanReconcile: true
+    },
+    {
+      commandId: 'create-github-release',
+      label: 'Prepare GitHub Release after tag verification',
+      command: `gh release create ${safeTargetTag} --repo ${safeRepository} --target main --title ${safeTitle} --notes-file <controller-prepared-release-notes>`,
+      copyOnly: true,
+      willMutate: false,
+      allowedActor: 'release-controller',
+      requiresCleanReconcile: true
+    },
+    {
+      commandId: 'view-github-release',
+      label: 'Inspect GitHub Release evidence after publication',
+      command: `gh release view ${safeTargetTag} --repo ${safeRepository} --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish`,
+      copyOnly: true,
+      willMutate: false,
+      allowedActor: 'release-controller',
+      requiresCleanReconcile: true
+    }
+  ];
 }
 
 function releaseBaselineFrom(releaseBaseline, openPrs) {
@@ -582,6 +980,58 @@ function validateGates(errors, gates, path) {
   });
 }
 
+function validateGateEvents(errors, gateEvents, path) {
+  if (!Array.isArray(gateEvents)) {
+    errors.push(`${path} must be an array`);
+    return;
+  }
+
+  gateEvents.forEach((event, index) => {
+    const itemPath = `${path}[${index}]`;
+
+    if (!isObject(event)) {
+      errors.push(`${itemPath} must be an object`);
+      return;
+    }
+
+    assertAllowedFields(errors, event, GATE_EVENT_ALLOWED_FIELDS, itemPath);
+    validateNullableString(errors, event.gateName, `${itemPath}.gateName`);
+    requireSet(errors, event.eventType, GATE_EVENT_TYPE_SET, `${itemPath}.eventType`);
+    requireSet(errors, event.state, GATE_STATE_SET, `${itemPath}.state`);
+    validateEvidenceRefs(errors, event.evidenceRefs, `${itemPath}.evidenceRefs`);
+    validateTextItems(errors, event.blockedReasons, `${itemPath}.blockedReasons`);
+  });
+}
+
+function validateManualCommands(errors, commands, path) {
+  if (!Array.isArray(commands)) {
+    errors.push(`${path} must be an array`);
+    return;
+  }
+
+  commands.forEach((command, index) => {
+    const itemPath = `${path}[${index}]`;
+
+    if (!isObject(command)) {
+      errors.push(`${itemPath} must be an object`);
+      return;
+    }
+
+    assertAllowedFields(errors, command, MANUAL_COMMAND_ALLOWED_FIELDS, itemPath);
+    requireSet(errors, command.commandId, MANUAL_COMMAND_ID_SET, `${itemPath}.commandId`);
+    requireNonEmptyString(errors, command.label, `${itemPath}.label`);
+    requireNonEmptyString(errors, command.command, `${itemPath}.command`);
+    requireEqual(errors, command.copyOnly, true, `${itemPath}.copyOnly`);
+    requireEqual(errors, command.willMutate, false, `${itemPath}.willMutate`);
+    requireEqual(errors, command.allowedActor, 'release-controller', `${itemPath}.allowedActor`);
+    requireEqual(errors, command.requiresCleanReconcile, true, `${itemPath}.requiresCleanReconcile`);
+
+    if (!manualCommandMatches(command)) {
+      errors.push(`${itemPath}.command is not an allowed release publication copy-only command`);
+    }
+  });
+}
+
 function validateReleaseNotesDraft(errors, notes, path) {
   if (!isObject(notes)) {
     errors.push(`${path} must be an object`);
@@ -796,6 +1246,25 @@ function validateIsoDate(errors, value, path) {
   }
 }
 
+function manualCommandMatches(command) {
+  if (!isObject(command) || !isNonEmptyString(command.command)) {
+    return false;
+  }
+
+  switch (command.commandId) {
+    case 'create-annotated-tag':
+      return /^git tag -a [a-zA-Z0-9][a-zA-Z0-9._-]* [a-f0-9]{7,64} -m "[^"]+"$/u.test(command.command);
+    case 'push-tag':
+      return /^git push origin [a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(command.command);
+    case 'create-github-release':
+      return /^gh release create [a-zA-Z0-9][a-zA-Z0-9._-]* --repo [A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+ --target main --title "[^"]+" --notes-file <controller-prepared-release-notes>$/u.test(command.command);
+    case 'view-github-release':
+      return /^gh release view [a-zA-Z0-9][a-zA-Z0-9._-]* --repo [A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+ --json tagName,name,url,isDraft,isPrerelease,publishedAt,assets,targetCommitish$/u.test(command.command);
+    default:
+      return false;
+  }
+}
+
 function findUnsafeFields(value, path, seen = new Set()) {
   const unsafe = [];
 
@@ -871,6 +1340,10 @@ function uniqueStrings(values) {
 function toIso(value) {
   const time = Date.parse(value);
   return new Date(Number.isNaN(time) ? Date.now() : time).toISOString();
+}
+
+function shellDoubleQuote(value) {
+  return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
 function isObject(value) {
