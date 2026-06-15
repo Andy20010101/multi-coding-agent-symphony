@@ -1,0 +1,139 @@
+{
+  "contractName": "operationTimeline.v1",
+  "contractVersion": 1,
+  "generatedAt": "2026-06-15T00:35:00.000Z",
+  "operationId": "op-v69-worker-timeout",
+  "goal": {
+    "goalId": "v69-recovery-resume-diagnostics-observability",
+    "title": "v69 recovery, resume, diagnostics, and observability",
+    "state": "active",
+    "sourceContract": "goalRunbook.v1",
+    "sourceRef": "docs/plans/v69-recovery-resume-diagnostics-observability-runbook-2026-06-14.md"
+  },
+  "task": {
+    "taskId": "v69-recovery-task",
+    "title": "Recover controlled execution loop",
+    "state": "active",
+    "sourceContract": "goalRunbook.v1",
+    "sourceRef": "docs/plans/v69-recovery-resume-diagnostics-observability-runbook-2026-06-14.md"
+  },
+  "status": "timeout",
+  "startedAt": "2026-06-15T00:34:00.000Z",
+  "finishedAt": "2026-06-15T00:35:00.000Z",
+  "steps": [
+    {
+      "stepId": "worker-run",
+      "label": "Codex worker run",
+      "phase": "worker-run",
+      "status": "timeout",
+      "startedAt": "2026-06-15T00:34:00.000Z",
+      "finishedAt": "2026-06-15T00:35:00.000Z",
+      "providerId": "codex-cli",
+      "role": "worker",
+      "artifactRefs": [
+        {
+          "kind": "artifact-ref",
+          "ref": "artifact-ref:v69:worker-timeout",
+          "label": "worker-timeout artifact"
+        }
+      ],
+      "evidenceRefs": [
+        {
+          "kind": "operation-record",
+          "ref": "operation-record:v69:worker-timeout",
+          "label": "worker-timeout operation record"
+        }
+      ],
+      "failure": {
+        "classificationId": "classification-v69-op-v69-worker-timeout-worker-run",
+        "failureLayer": "provider",
+        "failureCode": "provider-timeout",
+        "stepId": "worker-run",
+        "retryable": true,
+        "resumeEligible": true
+      }
+    },
+    {
+      "stepId": "reviewer-run",
+      "label": "Claude Code reviewer run",
+      "phase": "reviewer-run",
+      "status": "pending",
+      "startedAt": "2026-06-15T00:35:00.000Z",
+      "finishedAt": null,
+      "providerId": "claude-code-cli",
+      "role": "reviewer",
+      "artifactRefs": [],
+      "evidenceRefs": [
+        {
+          "kind": "operation-record",
+          "ref": "operation-record:op-v69-worker-timeout:reviewer-run",
+          "label": "Claude Code reviewer run record"
+        }
+      ],
+      "failure": null
+    }
+  ],
+  "failureClassification": {
+    "classificationId": "classification-v69-op-v69-worker-timeout-worker-run",
+    "failureLayer": "provider",
+    "failureCode": "provider-timeout",
+    "stepId": "worker-run",
+    "retryable": true,
+    "resumeEligible": true
+  },
+  "artifactRefs": [
+    {
+      "kind": "artifact-ref",
+      "ref": "artifact-ref:v69:worker-timeout",
+      "label": "worker-timeout artifact"
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "kind": "operation-record",
+      "ref": "operation-record:v69:worker-timeout",
+      "label": "worker-timeout operation record"
+    },
+    {
+      "kind": "operation-record",
+      "ref": "operation-record:op-v69-worker-timeout:reviewer-run",
+      "label": "Claude Code reviewer run record"
+    }
+  ],
+  "nextSafeAction": {
+    "actionId": "retry-same-provider",
+    "label": "Preview same-provider retry",
+    "backendOwned": true,
+    "requiresPreview": true,
+    "requiresConfirm": true,
+    "willMutate": false,
+    "allowed": true,
+    "blockedReasons": []
+  },
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "requiresPlanHashBinding": true,
+    "requiresFingerprintBinding": true,
+    "boundedDiagnosticsOnly": true,
+    "usageCostMustBeObserved": true,
+    "hiddenRetryAvailable": false,
+    "retryWithDifferentProviderWithoutPreview": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "symphonyInternalsReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "rawModelOutputAvailable": false,
+    "providerPayloadAvailable": false,
+    "providerOutputMutationAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "productGitAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
