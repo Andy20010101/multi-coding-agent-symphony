@@ -1,0 +1,108 @@
+{
+  "contractName": "operationFailureClassification.v1",
+  "contractVersion": 1,
+  "classificationId": "classification-v69-op-v69-stale-plan-hash-recovery-confirm",
+  "generatedAt": "2026-06-15T00:35:00.000Z",
+  "operationId": "op-v69-stale-plan-hash",
+  "stepId": "recovery-confirm",
+  "phase": "adoption-confirm",
+  "status": "blocked",
+  "providerId": null,
+  "role": "operator",
+  "failureLayer": "schema",
+  "failureCode": "stale-plan-hash",
+  "summary": "Recovery confirm was rejected because the submitted plan hash no longer matches the backend preview.",
+  "retryable": false,
+  "resumeEligibility": {
+    "eligible": false,
+    "reason": "Resume blocked until operator refreshes recovery preview",
+    "requiresPlanHashMatch": true,
+    "requiresFingerprintMatch": true,
+    "requiresOperatorConfirm": true,
+    "blockedReasons": [
+      "plan-hash-mismatch"
+    ]
+  },
+  "planHash": {
+    "expected": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "current": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "matches": false
+  },
+  "sourceFingerprint": {
+    "expected": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "current": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "matches": true
+  },
+  "artifactRefs": [
+    {
+      "kind": "artifact-ref",
+      "ref": "artifact-ref:v69:stale-plan-hash",
+      "label": "stale-plan-hash artifact"
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "kind": "operation-record",
+      "ref": "operation-record:v69:stale-plan-hash",
+      "label": "stale-plan-hash operation record"
+    }
+  ],
+  "recoveryActions": [
+    {
+      "actionId": "refresh-plan-preview",
+      "label": "Refresh backend recovery preview",
+      "backendOwned": true,
+      "requiresPreview": true,
+      "requiresConfirm": true,
+      "willMutate": false,
+      "allowed": true,
+      "blockedReasons": []
+    },
+    {
+      "actionId": "mark-blocked",
+      "label": "Record stale recovery plan",
+      "backendOwned": true,
+      "requiresPreview": true,
+      "requiresConfirm": true,
+      "willMutate": false,
+      "allowed": true,
+      "blockedReasons": []
+    }
+  ],
+  "nextSafeAction": {
+    "actionId": "refresh-plan-preview",
+    "label": "Refresh backend recovery preview",
+    "backendOwned": true,
+    "requiresPreview": true,
+    "requiresConfirm": true,
+    "willMutate": false,
+    "allowed": true,
+    "blockedReasons": []
+  },
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "requiresPlanHashBinding": true,
+    "requiresFingerprintBinding": true,
+    "boundedDiagnosticsOnly": true,
+    "usageCostMustBeObserved": true,
+    "hiddenRetryAvailable": false,
+    "retryWithDifferentProviderWithoutPreview": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "symphonyInternalsReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "rawModelOutputAvailable": false,
+    "providerPayloadAvailable": false,
+    "providerOutputMutationAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "productGitAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}

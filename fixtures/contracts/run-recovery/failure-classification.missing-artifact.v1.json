@@ -1,0 +1,100 @@
+{
+  "contractName": "operationFailureClassification.v1",
+  "contractVersion": 1,
+  "classificationId": "classification-v69-op-v69-missing-artifact-adoption-preview",
+  "generatedAt": "2026-06-15T00:35:00.000Z",
+  "operationId": "op-v69-missing-artifact",
+  "stepId": "adoption-preview",
+  "phase": "adoption-preview",
+  "status": "blocked",
+  "providerId": null,
+  "role": "operator",
+  "failureLayer": "artifact",
+  "failureCode": "missing-artifact",
+  "summary": "Adoption preview cannot continue because the bounded patch artifact ref is missing.",
+  "retryable": false,
+  "resumeEligibility": {
+    "eligible": false,
+    "reason": "Resume blocked until operator refreshes recovery preview",
+    "requiresPlanHashMatch": true,
+    "requiresFingerprintMatch": true,
+    "requiresOperatorConfirm": true,
+    "blockedReasons": []
+  },
+  "planHash": {
+    "expected": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "current": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "matches": true
+  },
+  "sourceFingerprint": {
+    "expected": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "current": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "matches": true
+  },
+  "artifactRefs": [],
+  "evidenceRefs": [
+    {
+      "kind": "operation-record",
+      "ref": "operation-record:v69:missing-artifact",
+      "label": "missing artifact operation record"
+    }
+  ],
+  "recoveryActions": [
+    {
+      "actionId": "inspect-adoption-journal",
+      "label": "Inspect bounded adoption journal summary",
+      "backendOwned": true,
+      "requiresPreview": true,
+      "requiresConfirm": true,
+      "willMutate": false,
+      "allowed": true,
+      "blockedReasons": []
+    },
+    {
+      "actionId": "mark-blocked",
+      "label": "Record recovery blocker",
+      "backendOwned": true,
+      "requiresPreview": true,
+      "requiresConfirm": true,
+      "willMutate": false,
+      "allowed": true,
+      "blockedReasons": []
+    }
+  ],
+  "nextSafeAction": {
+    "actionId": "inspect-adoption-journal",
+    "label": "Inspect bounded adoption journal summary",
+    "backendOwned": true,
+    "requiresPreview": true,
+    "requiresConfirm": true,
+    "willMutate": false,
+    "allowed": true,
+    "blockedReasons": []
+  },
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "requiresPlanHashBinding": true,
+    "requiresFingerprintBinding": true,
+    "boundedDiagnosticsOnly": true,
+    "usageCostMustBeObserved": true,
+    "hiddenRetryAvailable": false,
+    "retryWithDifferentProviderWithoutPreview": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "symphonyInternalsReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "rawModelOutputAvailable": false,
+    "providerPayloadAvailable": false,
+    "providerOutputMutationAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "productGitAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}

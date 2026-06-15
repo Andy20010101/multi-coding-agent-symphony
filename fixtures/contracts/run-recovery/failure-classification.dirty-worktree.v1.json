@@ -1,0 +1,106 @@
+{
+  "contractName": "operationFailureClassification.v1",
+  "contractVersion": 1,
+  "classificationId": "classification-v69-op-v69-dirty-worktree-adoption-confirm",
+  "generatedAt": "2026-06-15T00:35:00.000Z",
+  "operationId": "op-v69-dirty-worktree",
+  "stepId": "adoption-confirm",
+  "phase": "adoption-confirm",
+  "status": "blocked",
+  "providerId": null,
+  "role": "operator",
+  "failureLayer": "workspace",
+  "failureCode": "dirty-worktree",
+  "summary": "Recovery is blocked because the target worktree is dirty before adoption confirm.",
+  "retryable": false,
+  "resumeEligibility": {
+    "eligible": false,
+    "reason": "Resume blocked until operator refreshes recovery preview",
+    "requiresPlanHashMatch": true,
+    "requiresFingerprintMatch": true,
+    "requiresOperatorConfirm": true,
+    "blockedReasons": []
+  },
+  "planHash": {
+    "expected": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "current": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "matches": true
+  },
+  "sourceFingerprint": {
+    "expected": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "current": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "matches": true
+  },
+  "artifactRefs": [
+    {
+      "kind": "artifact-ref",
+      "ref": "artifact-ref:v69:dirty-worktree",
+      "label": "dirty-worktree artifact"
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "kind": "operation-record",
+      "ref": "operation-record:v69:dirty-worktree",
+      "label": "dirty-worktree operation record"
+    }
+  ],
+  "recoveryActions": [
+    {
+      "actionId": "inspect-adoption-journal",
+      "label": "Inspect bounded adoption journal summary",
+      "backendOwned": true,
+      "requiresPreview": true,
+      "requiresConfirm": true,
+      "willMutate": false,
+      "allowed": true,
+      "blockedReasons": []
+    },
+    {
+      "actionId": "mark-blocked",
+      "label": "Record recovery blocker",
+      "backendOwned": true,
+      "requiresPreview": true,
+      "requiresConfirm": true,
+      "willMutate": false,
+      "allowed": true,
+      "blockedReasons": []
+    }
+  ],
+  "nextSafeAction": {
+    "actionId": "inspect-adoption-journal",
+    "label": "Inspect bounded adoption journal summary",
+    "backendOwned": true,
+    "requiresPreview": true,
+    "requiresConfirm": true,
+    "willMutate": false,
+    "allowed": true,
+    "blockedReasons": []
+  },
+  "boundaries": {
+    "backendOwnedPreviewConfirm": true,
+    "requiresPlanHashBinding": true,
+    "requiresFingerprintBinding": true,
+    "boundedDiagnosticsOnly": true,
+    "usageCostMustBeObserved": true,
+    "hiddenRetryAvailable": false,
+    "retryWithDifferentProviderWithoutPreview": false,
+    "genericShellAvailable": false,
+    "genericTerminalAvailable": false,
+    "rendererCommandExecutionAvailable": false,
+    "frontendLocalJsonlReadAvailable": false,
+    "frontendLocalSessionReadAvailable": false,
+    "frontendProviderFolderReadAvailable": false,
+    "symphonyInternalsReadAvailable": false,
+    "rawTranscriptAvailable": false,
+    "rawProviderOutputAvailable": false,
+    "rawModelOutputAvailable": false,
+    "providerPayloadAvailable": false,
+    "providerOutputMutationAvailable": false,
+    "automaticSelfReviewAvailable": false,
+    "automaticWorktreeCreationAvailable": false,
+    "automaticNextVersionGoalAvailable": false,
+    "productGitAutomationAvailable": false,
+    "githubReleaseAutomationAvailable": false
+  }
+}
