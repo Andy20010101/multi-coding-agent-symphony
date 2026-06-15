@@ -5,6 +5,22 @@ Goal id: `v70-release-manager-practical-loop`
 Branch draft: `codex/v70-release-manager-practical-loop`
 Start condition: v69 recovery and diagnostics surface is merged and execution-loop failures have structured recovery evidence.
 
+## Start Evidence
+
+v70 starts from the v69 closeout commit and release state verified by the controller on 2026-06-15.
+
+| Check | Evidence |
+| --- | --- |
+| `origin/main` | `0da5b6fd31a987aa9ac9c54c3496e8c2517c60af` |
+| v69 tag object | `1b430dc938471cdd20395d06d2eb51b481fcbb92` |
+| `v69^{}` | `0da5b6fd31a987aa9ac9c54c3496e8c2517c60af` |
+| GitHub Release `v69` | `https://github.com/Andy20010101/multi-coding-agent-symphony/releases/tag/v69` |
+| Release flags | non-draft, non-prerelease, assets `[]`, targetCommitish `main`, publishedAt `2026-06-15T01:04:22Z` |
+| Open PRs | `[]` |
+| v70 tag/release | absent before v70 implementation |
+
+The controller checkout reported `main...origin/main = 0 87` because local `main` was stale. v70 branches must use `origin/main` and the verified v69 tag/release state as the release boundary.
+
 ## Objective
 
 v70 should make release preparation practical for the personal Workbench: verify local gates, prepare release evidence, generate manual publication commands, and reconcile tag and GitHub Release evidence after the controller publishes.
@@ -31,6 +47,8 @@ Allowed work:
 - record post-release reconcile after the controller creates the tag and GitHub Release;
 - keep publication as manual controller action or terminal-only copy command;
 - block release readiness when required gates are missing or source refs mismatch.
+
+Publication stays outside product code. Workbench may show copy-only commands and reconcile evidence, but it must not run tag, push, release creation, release edit, upload, or merge actions.
 
 Forbidden work:
 
