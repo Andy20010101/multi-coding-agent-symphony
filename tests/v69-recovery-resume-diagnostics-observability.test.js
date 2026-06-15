@@ -6,11 +6,19 @@ import { fileURLToPath } from 'node:url';
 
 import {
   OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME,
+  OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME,
+  OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME,
   OPERATION_TIMELINE_CONTRACT_NAME,
   RUN_RECOVERY_BOUNDARIES,
+  RunRecoveryContractError,
   buildOperationFailureClassification,
+  buildOperationRecoveryPreview,
   buildOperationTimeline,
+  computeOperationRecoveryPreviewPlanHash,
+  confirmOperationRecoveryPreview,
   validateOperationFailureClassificationContract,
+  validateOperationRecoveryConfirmationContract,
+  validateOperationRecoveryPreviewContract,
   validateOperationTimelineContract
 } from '../src/symphony/run-recovery-contracts.js';
 
@@ -205,6 +213,150 @@ describe('v69 Recovery, Resume, Diagnostics, and Observability contracts', () =>
       'failureClassification is required for failed, blocked, timeout, or interrupted timelines'
     );
   });
+
+  it('builds and confirms planHash-bound same-provider retry previews without invoking providers', () => {
+    const classification = fixture('failure-classification.worker-timeout.v1.json');
+    const preview = buildOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      classification,
+      requestedActionId: 'retry-same-provider'
+    });
+
+    assert.equal(preview.contractName, OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME);
+    assert.equal(preview.state, 'ready');
+    assert.equal(preview.requestedAction.actionId, 'retry-same-provider');
+    assert.equal(preview.resumeBinding.requiresSameProvider, true);
+    assert.equal(preview.resumeBinding.providerId, 'codex-cli');
+    assert.equal(preview.resumeBinding.targetProviderId, 'codex-cli');
+    assert.equal(preview.confirmation.providerInvokedOnConfirm, false);
+    assert.equal(preview.confirmation.hiddenRetryAllowed, false);
+    assert.equal(preview.planHash, computeOperationRecoveryPreviewPlanHash(preview));
+    assert.equal(validateOperationRecoveryPreviewContract(preview).ok, true);
+
+    const confirmation = confirmOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      preview,
+      input: confirmInput(preview),
+      evidenceRefs: [{
+        kind: 'operation-record',
+        ref: 'operation-record:v69:retry-confirmed',
+        label: 'retry preview confirmation'
+      }]
+    });
+
+    assert.equal(confirmation.contractName, OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME);
+    assert.equal(confirmation.status, 'confirmed');
+    assert.equal(confirmation.recoveryState, 'retry-preview-confirmed');
+    assert.equal(confirmation.providerInvoked, false);
+    assert.equal(confirmation.gitMutationPerformed, false);
+    assert.equal(confirmation.rawPayloadCaptured, false);
+    assert.equal(confirmation.diagnosticsOnly, true);
+    assert.equal(confirmation.stateTransition.providerToRun, 'codex-cli');
+    assert.equal(validateOperationRecoveryConfirmationContract(confirmation).ok, true);
+    assertNoUnsafePayload(confirmation);
+  });
+
+  it('rejects stale preview hashes and source fingerprint drift during recovery confirm', () => {
+    const preview = buildOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      classification: fixture('failure-classification.worker-timeout.v1.json'),
+      requestedActionId: 'retry-same-provider'
+    });
+
+    assert.throws(
+      () => confirmOperationRecoveryPreview({
+        generatedAt: GENERATED_AT,
+        preview,
+        input: {
+          ...confirmInput(preview),
+          planHash: HASH_B
+        }
+      }),
+      (error) => error instanceof RunRecoveryContractError && error.code === 'stale-recovery-preview'
+    );
+
+    assert.throws(
+      () => confirmOperationRecoveryPreview({
+        generatedAt: GENERATED_AT,
+        preview,
+        input: confirmInput(preview),
+        currentSourceFingerprint: HASH_B
+      }),
+      (error) => error instanceof RunRecoveryContractError && error.code === 'source-fingerprint-drift'
+    );
+  });
+
+  it('blocks unavailable continuation actions while allowing explicit mark-blocked confirm', () => {
+    const providerUnavailable = fixture('failure-classification.provider-unavailable.v1.json');
+    const retryPreview = buildOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      classification: providerUnavailable,
+      requestedActionId: 'retry-same-provider'
+    });
+
+    assert.equal(retryPreview.state, 'blocked');
+    assert.ok(retryPreview.blockedReasons.includes('requested-action-not-available'));
+    assert.ok(retryPreview.blockedReasons.includes('requested-action-blocked'));
+    assertValidationIncludes(
+      validateOperationRecoveryPreviewContract({
+        ...retryPreview,
+        blockedReasons: []
+      }),
+      'blockedReasons must not be empty when preview is blocked'
+    );
+
+    const blockedPreview = buildOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      classification: providerUnavailable,
+      requestedActionId: 'mark-blocked'
+    });
+
+    assert.equal(blockedPreview.state, 'ready');
+    assert.equal(blockedPreview.requestedAction.actionId, 'mark-blocked');
+
+    const confirmation = confirmOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      preview: blockedPreview,
+      input: confirmInput(blockedPreview)
+    });
+
+    assert.equal(confirmation.recoveryState, 'blocked-recorded');
+    assert.equal(confirmation.stateTransition.markBlockedRecorded, true);
+    assert.equal(confirmation.providerInvoked, false);
+    assert.equal(validateOperationRecoveryConfirmationContract(confirmation).ok, true);
+  });
+
+  it('rejects recovery confirmations that drift into provider execution, git writes, or captured payloads', () => {
+    const preview = buildOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      classification: fixture('failure-classification.worker-timeout.v1.json')
+    });
+    const confirmation = confirmOperationRecoveryPreview({
+      generatedAt: GENERATED_AT,
+      preview,
+      input: confirmInput(preview)
+    });
+
+    confirmation.providerInvoked = true;
+    confirmation.gitMutationPerformed = true;
+    confirmation.rawPayloadCaptured = true;
+    confirmation.evidenceRefs.push({
+      kind: 'artifact-ref',
+      ref: 'artifact-ref:v69:raw-provider-output',
+      label: 'unsafe payload'
+    });
+
+    const validation = validateOperationRecoveryConfirmationContract(confirmation);
+
+    assert.equal(validation.ok, false);
+    assertValidationIncludes(validation, 'providerInvoked must be false');
+    assertValidationIncludes(validation, 'gitMutationPerformed must be false');
+    assertValidationIncludes(validation, 'rawPayloadCaptured must be false');
+    assertValidationIncludes(
+      validation,
+      'confirmation.evidenceRefs[0].ref must not contain raw provider output'
+    );
+  });
 });
 
 function fixture(name) {
@@ -223,6 +375,17 @@ function assertNoUnsafePayload(value) {
   const unsafe = findUnsafeStrings(value);
 
   assert.deepEqual(unsafe, []);
+}
+
+function confirmInput(preview) {
+  return {
+    planHash: preview.planHash,
+    actionId: preview.requestedAction.actionId,
+    classificationId: preview.classificationId,
+    operationId: preview.operationId,
+    stepId: preview.stepId,
+    sourceFingerprint: preview.resumeBinding.sourceFingerprint.current
+  };
 }
 
 function findUnsafeStrings(value, path = 'value') {

@@ -1,5 +1,9 @@
+import { createHash } from 'node:crypto';
+
 export const OPERATION_TIMELINE_CONTRACT_NAME = 'operationTimeline.v1';
 export const OPERATION_FAILURE_CLASSIFICATION_CONTRACT_NAME = 'operationFailureClassification.v1';
+export const OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME = 'operationRecoveryPreview.v1';
+export const OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME = 'operationRecoveryConfirmation.v1';
 export const RUN_RECOVERY_CONTRACT_VERSION = 1;
 export const V69_RECOVERY_RESUME_DIAGNOSTICS_OBSERVABILITY_GOAL_ID =
   'v69-recovery-resume-diagnostics-observability';
@@ -86,6 +90,44 @@ const CLASSIFICATION_ALLOWED_FIELDS = new Set([
   'nextSafeAction',
   'boundaries'
 ]);
+const RECOVERY_PREVIEW_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'previewId',
+  'generatedAt',
+  'state',
+  'operationId',
+  'classificationId',
+  'stepId',
+  'requestedAction',
+  'sourceFailure',
+  'resumeBinding',
+  'confirmation',
+  'blockedReasons',
+  'boundaries',
+  'planHash'
+]);
+const RECOVERY_CONFIRMATION_ALLOWED_FIELDS = new Set([
+  'contractName',
+  'contractVersion',
+  'confirmationId',
+  'generatedAt',
+  'status',
+  'previewId',
+  'operationId',
+  'classificationId',
+  'stepId',
+  'actionId',
+  'input',
+  'recoveryState',
+  'providerInvoked',
+  'gitMutationPerformed',
+  'rawPayloadCaptured',
+  'diagnosticsOnly',
+  'stateTransition',
+  'evidenceRefs',
+  'boundaries'
+]);
 const GOAL_ALLOWED_FIELDS = new Set(['goalId', 'title', 'state', 'sourceContract', 'sourceRef']);
 const TASK_ALLOWED_FIELDS = new Set(['taskId', 'title', 'state', 'sourceContract', 'sourceRef']);
 const STEP_ALLOWED_FIELDS = new Set([
@@ -128,6 +170,44 @@ const ACTION_ALLOWED_FIELDS = new Set([
   'allowed',
   'blockedReasons'
 ]);
+const RESUME_BINDING_ALLOWED_FIELDS = new Set([
+  'planHash',
+  'sourceFingerprint',
+  'providerId',
+  'targetProviderId',
+  'requiresSameProvider',
+  'providerChangeRequiresPreview',
+  'resumeEligible'
+]);
+const CONFIRMATION_REQUIREMENT_ALLOWED_FIELDS = new Set([
+  'requiresPlanHash',
+  'requiredFields',
+  'previewId',
+  'actionId',
+  'classificationId',
+  'operationId',
+  'stepId',
+  'providerInvokedOnConfirm',
+  'hiddenRetryAllowed'
+]);
+const CONFIRMATION_INPUT_ALLOWED_FIELDS = new Set([
+  'planHash',
+  'actionId',
+  'classificationId',
+  'operationId',
+  'stepId',
+  'sourceFingerprint'
+]);
+const STATE_TRANSITION_ALLOWED_FIELDS = new Set([
+  'state',
+  'label',
+  'backendOwned',
+  'requiresOperatorFollowup',
+  'providerToRun',
+  'reviewerHandoffAllowed',
+  'markBlockedRecorded',
+  'verificationRerunAllowed'
+]);
 const EVIDENCE_REF_ALLOWED_FIELDS = new Set(['kind', 'ref', 'label']);
 
 const TIMELINE_STATUS_SET = new Set(['pending', 'running', 'succeeded', 'failed', 'blocked', 'timeout', 'interrupted']);
@@ -152,6 +232,18 @@ const RECOVERY_ACTION_SET = new Set([
   'request-operator-decision',
   'wait-for-provider',
   'refresh-plan-preview'
+]);
+const RECOVERY_PREVIEW_STATE_SET = new Set(['ready', 'blocked']);
+const RECOVERY_CONFIRMATION_STATUS_SET = new Set(['confirmed', 'blocked']);
+const RECOVERY_STATE_SET = new Set([
+  'retry-preview-confirmed',
+  'handoff-preview-confirmed',
+  'verification-rerun-preview-confirmed',
+  'journal-inspection-confirmed',
+  'provider-wait-recorded',
+  'blocked-recorded',
+  'preview-refresh-required',
+  'operator-decision-required'
 ]);
 const HASH_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const SAFE_TOKEN_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/u;
@@ -301,6 +393,144 @@ export function buildOperationTimeline({
   return timeline;
 }
 
+export function buildOperationRecoveryPreview({
+  generatedAt = new Date().toISOString(),
+  classification,
+  requestedActionId = null,
+  targetProviderId = null
+} = {}) {
+  assertOperationFailureClassificationContract(classification);
+
+  const requestedAction = findRequestedAction(classification, requestedActionId);
+  const blockedReasons = recoveryPreviewBlockedReasons({
+    classification,
+    requestedAction
+  });
+  const preview = {
+    contractName: OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME,
+    contractVersion: RUN_RECOVERY_CONTRACT_VERSION,
+    previewId: `recovery-preview-v69-${classification.operationId}-${requestedAction.actionId}`,
+    generatedAt: new Date(millisOrNow(generatedAt)).toISOString(),
+    state: blockedReasons.length === 0 ? 'ready' : 'blocked',
+    operationId: classification.operationId,
+    classificationId: classification.classificationId,
+    stepId: classification.stepId,
+    requestedAction,
+    sourceFailure: failureSummaryFromClassification(classification),
+    resumeBinding: {
+      planHash: { ...classification.planHash },
+      sourceFingerprint: { ...classification.sourceFingerprint },
+      providerId: classification.providerId,
+      targetProviderId: safeNullableToken(targetProviderId) ?? classification.providerId,
+      requiresSameProvider: requestedAction.actionId === 'retry-same-provider',
+      providerChangeRequiresPreview: requestedAction.actionId === 'handoff-allowed-provider',
+      resumeEligible: classification.resumeEligibility.eligible
+    },
+    confirmation: {
+      requiresPlanHash: true,
+      requiredFields: ['planHash', 'actionId', 'classificationId', 'operationId', 'stepId', 'sourceFingerprint'],
+      previewId: `recovery-preview-v69-${classification.operationId}-${requestedAction.actionId}`,
+      actionId: requestedAction.actionId,
+      classificationId: classification.classificationId,
+      operationId: classification.operationId,
+      stepId: classification.stepId,
+      providerInvokedOnConfirm: false,
+      hiddenRetryAllowed: false
+    },
+    blockedReasons,
+    boundaries: { ...RUN_RECOVERY_BOUNDARIES }
+  };
+  const withHash = {
+    ...preview,
+    planHash: computeOperationRecoveryPreviewPlanHash(preview)
+  };
+
+  assertOperationRecoveryPreviewContract(withHash);
+
+  return withHash;
+}
+
+export function computeOperationRecoveryPreviewPlanHash(preview) {
+  const copy = cloneValue(preview);
+  delete copy.generatedAt;
+  delete copy.planHash;
+  return `sha256:${createHash('sha256').update(stableJson(copy)).digest('hex')}`;
+}
+
+export function confirmOperationRecoveryPreview({
+  generatedAt = new Date().toISOString(),
+  preview,
+  input,
+  currentPlanHash = null,
+  currentSourceFingerprint = null,
+  evidenceRefs = null
+} = {}) {
+  assertOperationRecoveryPreviewContract(preview);
+
+  if (!isPlainObject(input)) {
+    throw new RunRecoveryContractError('missing-recovery-confirm-input', 'Recovery confirm input is required.');
+  }
+
+  const normalizedInput = normalizeConfirmationInput(input);
+  const effectiveCurrentPlanHash = safeHash(currentPlanHash) ?? preview.planHash;
+  const effectiveCurrentFingerprint = safeHash(currentSourceFingerprint) ?? preview.resumeBinding.sourceFingerprint.current;
+
+  if (preview.state !== 'ready') {
+    throw new RunRecoveryContractError('blocked-recovery-preview', 'Recovery preview is blocked and cannot be confirmed.', {
+      blockedReasons: preview.blockedReasons
+    });
+  }
+
+  if (normalizedInput.planHash !== preview.planHash || effectiveCurrentPlanHash !== preview.planHash) {
+    throw new RunRecoveryContractError('stale-recovery-preview', 'Recovery confirm requires the current preview planHash.');
+  }
+
+  if (normalizedInput.sourceFingerprint !== preview.resumeBinding.sourceFingerprint.current ||
+    effectiveCurrentFingerprint !== preview.resumeBinding.sourceFingerprint.current) {
+    throw new RunRecoveryContractError(
+      'source-fingerprint-drift',
+      'Recovery confirm requires the current source fingerprint.'
+    );
+  }
+
+  if (normalizedInput.actionId !== preview.requestedAction.actionId ||
+    normalizedInput.classificationId !== preview.classificationId ||
+    normalizedInput.operationId !== preview.operationId ||
+    normalizedInput.stepId !== preview.stepId) {
+    throw new RunRecoveryContractError(
+      'recovery-confirm-input-mismatch',
+      'Recovery confirm input must match the backend-owned preview.'
+    );
+  }
+
+  const stateTransition = stateTransitionForAction(preview);
+  const confirmation = {
+    contractName: OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME,
+    contractVersion: RUN_RECOVERY_CONTRACT_VERSION,
+    confirmationId: `recovery-confirmation-v69-${preview.operationId}-${preview.requestedAction.actionId}`,
+    generatedAt: new Date(millisOrNow(generatedAt)).toISOString(),
+    status: 'confirmed',
+    previewId: preview.previewId,
+    operationId: preview.operationId,
+    classificationId: preview.classificationId,
+    stepId: preview.stepId,
+    actionId: preview.requestedAction.actionId,
+    input: normalizedInput,
+    recoveryState: stateTransition.state,
+    providerInvoked: false,
+    gitMutationPerformed: false,
+    rawPayloadCaptured: false,
+    diagnosticsOnly: true,
+    stateTransition,
+    evidenceRefs: normalizeEvidenceRefs(evidenceRefs),
+    boundaries: { ...RUN_RECOVERY_BOUNDARIES }
+  };
+
+  assertOperationRecoveryConfirmationContract(confirmation);
+
+  return confirmation;
+}
+
 export function validateOperationFailureClassificationContract(classification) {
   const errors = [];
 
@@ -339,6 +569,80 @@ export function validateOperationFailureClassificationContract(classification) {
   validateBoundaries(errors, classification.boundaries, 'boundaries');
   validateClassificationConsistency(errors, classification);
   rejectUnsafeValues(errors, classification, 'classification');
+
+  return errors.length === 0 ? { ok: true, errors: [] } : { ok: false, errors };
+}
+
+export function validateOperationRecoveryPreviewContract(preview) {
+  const errors = [];
+
+  if (!isPlainObject(preview)) {
+    return invalidResult('preview must be a plain object');
+  }
+
+  for (const field of RECOVERY_PREVIEW_ALLOWED_FIELDS) {
+    if (!Object.hasOwn(preview, field)) {
+      errors.push(`${field} is required`);
+    }
+  }
+
+  validateAllowedFields(errors, preview, 'preview', RECOVERY_PREVIEW_ALLOWED_FIELDS);
+  requireExact(errors, preview.contractName, 'contractName', OPERATION_RECOVERY_PREVIEW_CONTRACT_NAME);
+  requireExact(errors, preview.contractVersion, 'contractVersion', RUN_RECOVERY_CONTRACT_VERSION);
+  requireSafeToken(errors, preview.previewId, 'previewId');
+  requireIsoTimestamp(errors, preview.generatedAt, 'generatedAt');
+  requireSetValue(errors, preview.state, 'state', RECOVERY_PREVIEW_STATE_SET);
+  requireSafeToken(errors, preview.operationId, 'operationId');
+  requireSafeToken(errors, preview.classificationId, 'classificationId');
+  requireSafeToken(errors, preview.stepId, 'stepId');
+  validateAction(errors, preview.requestedAction, 'requestedAction');
+  validateFailureSummary(errors, preview.sourceFailure, 'sourceFailure', { nullable: false });
+  validateResumeBinding(errors, preview.resumeBinding);
+  validateConfirmationRequirement(errors, preview.confirmation);
+  validateStringArray(errors, preview.blockedReasons, 'blockedReasons');
+  validateBoundaries(errors, preview.boundaries, 'boundaries');
+  requireHash(errors, preview.planHash, 'planHash');
+  validateRecoveryPreviewConsistency(errors, preview);
+  rejectUnsafeValues(errors, preview, 'preview');
+
+  return errors.length === 0 ? { ok: true, errors: [] } : { ok: false, errors };
+}
+
+export function validateOperationRecoveryConfirmationContract(confirmation) {
+  const errors = [];
+
+  if (!isPlainObject(confirmation)) {
+    return invalidResult('confirmation must be a plain object');
+  }
+
+  for (const field of RECOVERY_CONFIRMATION_ALLOWED_FIELDS) {
+    if (!Object.hasOwn(confirmation, field)) {
+      errors.push(`${field} is required`);
+    }
+  }
+
+  validateAllowedFields(errors, confirmation, 'confirmation', RECOVERY_CONFIRMATION_ALLOWED_FIELDS);
+  requireExact(errors, confirmation.contractName, 'contractName', OPERATION_RECOVERY_CONFIRMATION_CONTRACT_NAME);
+  requireExact(errors, confirmation.contractVersion, 'contractVersion', RUN_RECOVERY_CONTRACT_VERSION);
+  requireSafeToken(errors, confirmation.confirmationId, 'confirmationId');
+  requireIsoTimestamp(errors, confirmation.generatedAt, 'generatedAt');
+  requireSetValue(errors, confirmation.status, 'status', RECOVERY_CONFIRMATION_STATUS_SET);
+  requireSafeToken(errors, confirmation.previewId, 'previewId');
+  requireSafeToken(errors, confirmation.operationId, 'operationId');
+  requireSafeToken(errors, confirmation.classificationId, 'classificationId');
+  requireSafeToken(errors, confirmation.stepId, 'stepId');
+  requireSetValue(errors, confirmation.actionId, 'actionId', RECOVERY_ACTION_SET);
+  validateConfirmationInput(errors, confirmation.input);
+  requireSetValue(errors, confirmation.recoveryState, 'recoveryState', RECOVERY_STATE_SET);
+  requireExact(errors, confirmation.providerInvoked, 'providerInvoked', false);
+  requireExact(errors, confirmation.gitMutationPerformed, 'gitMutationPerformed', false);
+  requireExact(errors, confirmation.rawPayloadCaptured, 'rawPayloadCaptured', false);
+  requireExact(errors, confirmation.diagnosticsOnly, 'diagnosticsOnly', true);
+  validateStateTransition(errors, confirmation.stateTransition);
+  validateEvidenceRefs(errors, confirmation.evidenceRefs, 'evidenceRefs');
+  validateBoundaries(errors, confirmation.boundaries, 'boundaries');
+  validateRecoveryConfirmationConsistency(errors, confirmation);
+  rejectUnsafeValues(errors, confirmation, 'confirmation');
 
   return errors.length === 0 ? { ok: true, errors: [] } : { ok: false, errors };
 }
@@ -402,6 +706,30 @@ export function assertOperationTimelineContract(timeline) {
   }
 }
 
+export function assertOperationRecoveryPreviewContract(preview) {
+  const validation = validateOperationRecoveryPreviewContract(preview);
+
+  if (!validation.ok) {
+    throw new RunRecoveryContractError(
+      'invalid-operation-recovery-preview',
+      'Operation recovery preview contract is invalid.',
+      { reason: validation.errors[0], errors: validation.errors }
+    );
+  }
+}
+
+export function assertOperationRecoveryConfirmationContract(confirmation) {
+  const validation = validateOperationRecoveryConfirmationContract(confirmation);
+
+  if (!validation.ok) {
+    throw new RunRecoveryContractError(
+      'invalid-operation-recovery-confirmation',
+      'Operation recovery confirmation contract is invalid.',
+      { reason: validation.errors[0], errors: validation.errors }
+    );
+  }
+}
+
 function normalizeGoal(goal) {
   const source = isPlainObject(goal) ? goal : {};
 
@@ -411,6 +739,137 @@ function normalizeGoal(goal) {
     state: ['active', 'ready', 'blocked', 'pending', 'missing'].includes(source.state) ? source.state : 'active',
     sourceContract: safeContract(source.sourceContract) ?? 'goalRunbook.v1',
     sourceRef: safeRef(source.sourceRef) ?? 'docs/plans/v69-recovery-resume-diagnostics-observability-runbook-2026-06-14.md'
+  };
+}
+
+function findRequestedAction(classification, requestedActionId) {
+  const explicitRequest = RECOVERY_ACTION_SET.has(requestedActionId);
+  const actionId = explicitRequest ? requestedActionId : classification.nextSafeAction.actionId;
+  const requestedAction = classification.recoveryActions.find((candidate) => candidate.actionId === actionId) ??
+    (explicitRequest
+      ? action(actionId, 'Requested recovery action unavailable', false, ['requested-action-not-available'])
+      : classification.nextSafeAction);
+
+  return normalizeAction(requestedAction) ?? defaultOperatorDecisionAction();
+}
+
+function recoveryPreviewBlockedReasons({ classification, requestedAction }) {
+  const continuationAction = ['retry-same-provider', 'handoff-allowed-provider', 'rerun-verification'].includes(
+    requestedAction.actionId
+  );
+
+  return uniqueStrings([
+    ...requestedAction.blockedReasons,
+    ...(requestedAction.allowed ? [] : ['requested-action-blocked']),
+    ...(continuationAction && !classification.resumeEligibility.eligible ? ['resume-not-eligible'] : []),
+    ...(continuationAction && !classification.planHash.matches ? ['plan-hash-mismatch'] : []),
+    ...(continuationAction && !classification.sourceFingerprint.matches ? ['source-fingerprint-mismatch'] : [])
+  ]);
+}
+
+function normalizeConfirmationInput(input) {
+  const source = isPlainObject(input) ? input : {};
+
+  return {
+    planHash: safeHash(source.planHash) ?? 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    actionId: RECOVERY_ACTION_SET.has(source.actionId) ? source.actionId : 'request-operator-decision',
+    classificationId: safeToken(source.classificationId) ?? 'missing-classification',
+    operationId: safeToken(source.operationId) ?? 'missing-operation',
+    stepId: safeToken(source.stepId) ?? 'missing-step',
+    sourceFingerprint: safeHash(source.sourceFingerprint) ??
+      'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+  };
+}
+
+function stateTransitionForAction(preview) {
+  const actionId = preview.requestedAction.actionId;
+  const targetProvider = preview.resumeBinding.targetProviderId;
+
+  if (actionId === 'retry-same-provider') {
+    return transition({
+      state: 'retry-preview-confirmed',
+      label: 'Same-provider retry preview confirmed',
+      providerToRun: targetProvider,
+      requiresOperatorFollowup: true
+    });
+  }
+
+  if (actionId === 'handoff-allowed-provider') {
+    return transition({
+      state: 'handoff-preview-confirmed',
+      label: 'Allowed-provider handoff preview confirmed',
+      providerToRun: targetProvider,
+      reviewerHandoffAllowed: true,
+      requiresOperatorFollowup: true
+    });
+  }
+
+  if (actionId === 'rerun-verification') {
+    return transition({
+      state: 'verification-rerun-preview-confirmed',
+      label: 'Verification rerun preview confirmed',
+      verificationRerunAllowed: true,
+      requiresOperatorFollowup: true
+    });
+  }
+
+  if (actionId === 'inspect-adoption-journal') {
+    return transition({
+      state: 'journal-inspection-confirmed',
+      label: 'Bounded adoption journal inspection confirmed',
+      requiresOperatorFollowup: true
+    });
+  }
+
+  if (actionId === 'wait-for-provider') {
+    return transition({
+      state: 'provider-wait-recorded',
+      label: 'Provider wait recorded',
+      requiresOperatorFollowup: true
+    });
+  }
+
+  if (actionId === 'mark-blocked') {
+    return transition({
+      state: 'blocked-recorded',
+      label: 'Recovery blocker recorded',
+      markBlockedRecorded: true
+    });
+  }
+
+  if (actionId === 'refresh-plan-preview') {
+    return transition({
+      state: 'preview-refresh-required',
+      label: 'Recovery preview refresh required',
+      requiresOperatorFollowup: true
+    });
+  }
+
+  return transition({
+    state: 'operator-decision-required',
+    label: 'Operator recovery decision required',
+    requiresOperatorFollowup: true
+  });
+}
+
+function transition({
+  state,
+  label,
+  requiresOperatorFollowup = false,
+  providerToRun = null,
+  reviewerHandoffAllowed = false,
+  markBlockedRecorded = false,
+  verificationRerunAllowed = false
+}) {
+  return {
+    state,
+    label,
+    backendOwned: true,
+    requiresOperatorFollowup,
+    providerToRun: safeNullableToken(providerToRun),
+    reviewerHandoffAllowed,
+    markBlockedRecorded,
+    verificationRerunAllowed
   };
 }
 
@@ -843,6 +1302,133 @@ function validateResumeEligibility(errors, value) {
   validateStringArray(errors, value.blockedReasons, 'resumeEligibility.blockedReasons');
 }
 
+function validateResumeBinding(errors, value) {
+  if (!isPlainObject(value)) {
+    errors.push('resumeBinding must be a plain object');
+    return;
+  }
+
+  validateAllowedFields(errors, value, 'resumeBinding', RESUME_BINDING_ALLOWED_FIELDS);
+  validateMatchSet(errors, value.planHash, 'resumeBinding.planHash');
+  validateMatchSet(errors, value.sourceFingerprint, 'resumeBinding.sourceFingerprint');
+  requireNullableSafeToken(errors, value.providerId, 'resumeBinding.providerId');
+  requireNullableSafeToken(errors, value.targetProviderId, 'resumeBinding.targetProviderId');
+  requireBoolean(errors, value.requiresSameProvider, 'resumeBinding.requiresSameProvider');
+  requireBoolean(errors, value.providerChangeRequiresPreview, 'resumeBinding.providerChangeRequiresPreview');
+  requireBoolean(errors, value.resumeEligible, 'resumeBinding.resumeEligible');
+}
+
+function validateConfirmationRequirement(errors, value) {
+  if (!isPlainObject(value)) {
+    errors.push('confirmation must be a plain object');
+    return;
+  }
+
+  validateAllowedFields(errors, value, 'confirmation', CONFIRMATION_REQUIREMENT_ALLOWED_FIELDS);
+  requireExact(errors, value.requiresPlanHash, 'confirmation.requiresPlanHash', true);
+  validateStringArray(errors, value.requiredFields, 'confirmation.requiredFields');
+  requireSafeToken(errors, value.previewId, 'confirmation.previewId');
+  requireSetValue(errors, value.actionId, 'confirmation.actionId', RECOVERY_ACTION_SET);
+  requireSafeToken(errors, value.classificationId, 'confirmation.classificationId');
+  requireSafeToken(errors, value.operationId, 'confirmation.operationId');
+  requireSafeToken(errors, value.stepId, 'confirmation.stepId');
+  requireExact(errors, value.providerInvokedOnConfirm, 'confirmation.providerInvokedOnConfirm', false);
+  requireExact(errors, value.hiddenRetryAllowed, 'confirmation.hiddenRetryAllowed', false);
+}
+
+function validateConfirmationInput(errors, value) {
+  if (!isPlainObject(value)) {
+    errors.push('input must be a plain object');
+    return;
+  }
+
+  validateAllowedFields(errors, value, 'input', CONFIRMATION_INPUT_ALLOWED_FIELDS);
+  requireHash(errors, value.planHash, 'input.planHash');
+  requireSetValue(errors, value.actionId, 'input.actionId', RECOVERY_ACTION_SET);
+  requireSafeToken(errors, value.classificationId, 'input.classificationId');
+  requireSafeToken(errors, value.operationId, 'input.operationId');
+  requireSafeToken(errors, value.stepId, 'input.stepId');
+  requireHash(errors, value.sourceFingerprint, 'input.sourceFingerprint');
+}
+
+function validateStateTransition(errors, value) {
+  if (!isPlainObject(value)) {
+    errors.push('stateTransition must be a plain object');
+    return;
+  }
+
+  validateAllowedFields(errors, value, 'stateTransition', STATE_TRANSITION_ALLOWED_FIELDS);
+  requireSetValue(errors, value.state, 'stateTransition.state', RECOVERY_STATE_SET);
+  requireNonEmptyString(errors, value.label, 'stateTransition.label');
+  requireExact(errors, value.backendOwned, 'stateTransition.backendOwned', true);
+  requireBoolean(errors, value.requiresOperatorFollowup, 'stateTransition.requiresOperatorFollowup');
+  requireNullableSafeToken(errors, value.providerToRun, 'stateTransition.providerToRun');
+  requireBoolean(errors, value.reviewerHandoffAllowed, 'stateTransition.reviewerHandoffAllowed');
+  requireBoolean(errors, value.markBlockedRecorded, 'stateTransition.markBlockedRecorded');
+  requireBoolean(errors, value.verificationRerunAllowed, 'stateTransition.verificationRerunAllowed');
+}
+
+function validateRecoveryPreviewConsistency(errors, preview) {
+  if (preview.planHash !== computeOperationRecoveryPreviewPlanHash(preview)) {
+    errors.push('planHash must match recovery preview content');
+  }
+
+  if (preview.confirmation.previewId !== preview.previewId) {
+    errors.push('confirmation.previewId must match previewId');
+  }
+
+  if (preview.confirmation.actionId !== preview.requestedAction.actionId) {
+    errors.push('confirmation.actionId must match requestedAction.actionId');
+  }
+
+  if (preview.confirmation.classificationId !== preview.classificationId) {
+    errors.push('confirmation.classificationId must match classificationId');
+  }
+
+  if (preview.confirmation.operationId !== preview.operationId) {
+    errors.push('confirmation.operationId must match operationId');
+  }
+
+  if (preview.confirmation.stepId !== preview.stepId) {
+    errors.push('confirmation.stepId must match stepId');
+  }
+
+  if (preview.state === 'ready' && preview.blockedReasons.length !== 0) {
+    errors.push('blockedReasons must be empty when preview is ready');
+  }
+
+  if (preview.state === 'blocked' && preview.blockedReasons.length === 0) {
+    errors.push('blockedReasons must not be empty when preview is blocked');
+  }
+
+  if (preview.requestedAction.actionId === 'retry-same-provider' &&
+    preview.resumeBinding.targetProviderId !== preview.resumeBinding.providerId) {
+    errors.push('retry-same-provider requires targetProviderId to match providerId');
+  }
+}
+
+function validateRecoveryConfirmationConsistency(errors, confirmation) {
+  if (confirmation.input.actionId !== confirmation.actionId) {
+    errors.push('input.actionId must match actionId');
+  }
+
+  if (confirmation.input.classificationId !== confirmation.classificationId) {
+    errors.push('input.classificationId must match classificationId');
+  }
+
+  if (confirmation.input.operationId !== confirmation.operationId) {
+    errors.push('input.operationId must match operationId');
+  }
+
+  if (confirmation.input.stepId !== confirmation.stepId) {
+    errors.push('input.stepId must match stepId');
+  }
+
+  if (confirmation.status === 'confirmed' && confirmation.stateTransition.state !== confirmation.recoveryState) {
+    errors.push('stateTransition.state must match recoveryState');
+  }
+}
+
 function validateMatchSet(errors, value, path) {
   if (!isPlainObject(value)) {
     errors.push(`${path} must be a plain object`);
@@ -1118,4 +1704,27 @@ function isPlainObject(value) {
 
 function invalidResult(message) {
   return { ok: false, errors: [message] };
+}
+
+function cloneValue(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function stableJson(value) {
+  return JSON.stringify(sortForStableJson(value));
+}
+
+function sortForStableJson(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortForStableJson);
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  return Object.keys(value).sort().reduce((acc, key) => {
+    acc[key] = sortForStableJson(value[key]);
+    return acc;
+  }, {});
 }
