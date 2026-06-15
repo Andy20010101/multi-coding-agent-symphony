@@ -11305,6 +11305,12 @@ function projectWorkbenchContracts(results) {
 		contract: goalSupervisorData?.releasePublicationEvidence,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
 	});
+	const projectedReleaseManagerPractical = projectReleaseManagerPractical({
+		readiness: goalSupervisorData?.releaseManagerReadiness,
+		evidenceDraft: goalSupervisorData?.releaseEvidenceDraft,
+		manualPack: goalSupervisorData?.manualPublicationPack,
+		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
+	});
 	const projectedStableWorkbenchRelease = projectStableWorkbenchRelease({
 		contract: goalSupervisorData?.stableWorkbenchRelease,
 		supervisorRoute: findProjectedRoute(routeStates, "goalSupervisor")
@@ -11336,6 +11342,7 @@ function projectWorkbenchContracts(results) {
 		reviewGateConfirmationState: projectedReviewGateConfirmationState,
 		releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
 		releasePublicationEvidence: projectedReleasePublicationEvidence,
+		releaseManagerPractical: projectedReleaseManagerPractical,
 		stableWorkbenchRelease: projectedStableWorkbenchRelease,
 		goldenPath: projectWorkbenchGoldenPath({
 			activeGoal: activeGoalControl,
@@ -11370,6 +11377,7 @@ function projectWorkbenchContracts(results) {
 			reviewGateConfirmationState: projectedReviewGateConfirmationState,
 			releaseCloseoutHandoffPack: projectedReleaseCloseoutHandoffPack,
 			releasePublicationEvidence: projectedReleasePublicationEvidence,
+			releaseManagerPractical: projectedReleaseManagerPractical,
 			stableWorkbenchRelease: projectedStableWorkbenchRelease,
 			routeStates
 		}),
@@ -12030,7 +12038,7 @@ function snapshotRuntimeState(snapshot) {
 	if (snapshot?.runtime_health?.status === "blocked" || snapshot?.next_action?.next?.blocked === true || snapshot?.next_action?.status === "blocked") return "blocked";
 	return "healthy";
 }
-function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, personalWorkbenchSettings, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, installStatus, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, releasePublicationEvidence, stableWorkbenchRelease, routeStates }) {
+function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBinding, personalWorkbenchSettings, runtimeSnapshot, activeGoal, jobConsole, artifactRefs, artifactIndex, evidenceTimeline, releaseBundle, backupExport, restoreValidation, installStatus, diagnosticsBundle, providerHub, supervisorDashboard, systemGoldenPath, childDispatchPreview, codexProviderExecutionPreview, codexProviderRunRecovery, reviewerHandoffPreview, threadHandoffPack, reviewGatePreview, reviewGateConfirmationState, releaseCloseoutHandoffPack, releasePublicationEvidence, releaseManagerPractical, stableWorkbenchRelease, routeStates }) {
 	const projectRoute = findProjectedRoute(routeStates, "projectRegistry");
 	const recentProjectsRoute = findProjectedRoute(routeStates, "recentProjects");
 	const currentProjectBindingRoute = findProjectedRoute(routeStates, "currentProjectBinding");
@@ -12344,6 +12352,7 @@ function projectDesktopShell({ projectRegistry, recentProjects, currentProjectBi
 		reviewGateConfirmationState,
 		releaseCloseoutHandoffPack,
 		releasePublicationEvidence,
+		releaseManagerPractical,
 		stableWorkbenchRelease,
 		routeProvenance,
 		appStates: {
@@ -13369,6 +13378,218 @@ function projectReleasePublicationNextStartAudit(audit) {
 		blockedReasons: projectSystemGoldenPathTextItems(audit?.blockedReasons),
 		readOnly: valueState(audit?.readOnly),
 		willMutate: valueState(audit?.willMutate)
+	};
+}
+function projectReleaseManagerPractical({ readiness, evidenceDraft, manualPack, supervisorRoute }) {
+	const hasReadiness = isPlainObject(readiness);
+	const hasDraft = isPlainObject(evidenceDraft);
+	const hasManualPack = isPlainObject(manualPack);
+	const hasAnyContract = hasReadiness || hasDraft || hasManualPack;
+	const blockedReasons = [
+		...Array.isArray(readiness?.blockedReasons) ? readiness.blockedReasons : [],
+		...Array.isArray(evidenceDraft?.blockedReasons) ? evidenceDraft.blockedReasons : [],
+		...Array.isArray(manualPack?.blockedReasons) ? manualPack.blockedReasons : []
+	];
+	return {
+		state: hasAnyContract ? [
+			readiness?.state,
+			evidenceDraft?.state,
+			manualPack?.state
+		].every((item) => item === "ready") ? "ready" : "blocked" : "missing",
+		readiness: projectReleaseManagerReadiness(readiness),
+		evidenceDraft: projectReleaseManagerEvidenceDraft(evidenceDraft),
+		manualPublicationPack: projectManualPublicationPack(manualPack),
+		blockedReasons: projectSystemGoldenPathTextItems(blockedReasons),
+		boundaries: Object.fromEntries(Object.entries(readiness?.boundaries ?? manualPack?.boundaries ?? evidenceDraft?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(readiness?.readOnly ?? evidenceDraft?.readOnly ?? manualPack?.readOnly),
+		willMutate: valueState(readiness?.willMutate ?? evidenceDraft?.willMutate ?? manualPack?.willMutate),
+		route: {
+			path: valueState(supervisorRoute?.path),
+			routeState: valueState(routeStateFromRoute(supervisorRoute)),
+			source: valueState("goal-supervisor-app-read-model.v1 release manager practical projection")
+		},
+		note: hasAnyContract ? "Release Manager Practical Loop is read-only Workbench state. It shows readiness, gate evidence, copy-only manual publication commands, and post-release reconcile fields without executing merge, tag, push, or GitHub Release actions." : "Release Manager Practical Loop is unavailable until goal-supervisor-app-read-model.v1 exposes releaseManagerReadiness.v1, releaseEvidenceDraft.v1, and manualReleasePublicationPack.v1."
+	};
+}
+function projectReleaseManagerReadiness(readiness) {
+	return {
+		state: isPlainObject(readiness) ? readiness.state ?? "available" : "missing",
+		contractName: valueState(readiness?.contractName),
+		contractVersion: valueState(readiness?.contractVersion),
+		generatedAt: valueState(readiness?.generatedAt),
+		version: valueState(readiness?.version),
+		targetTag: valueState(readiness?.targetTag),
+		releaseTitle: valueState(readiness?.releaseTitle),
+		targetCommit: valueState(readiness?.targetCommit),
+		releaseBaseline: projectReleaseManagerBaseline(readiness?.releaseBaseline),
+		requiredGates: projectReleaseManagerGates(readiness?.requiredGates),
+		releaseEvidenceRefs: projectChildDispatchEvidenceRefs(readiness?.releaseEvidenceRefs),
+		releaseNotesDraft: projectReleaseManagerNotes(readiness?.releaseNotesDraft),
+		tagState: projectReleaseManagerTagState(readiness?.tagState),
+		githubReleaseState: projectReleaseManagerGithubReleaseState(readiness?.githubReleaseState),
+		assetPolicy: projectReleaseManagerAssetPolicy(readiness?.assetPolicy),
+		blockedReasons: projectSystemGoldenPathTextItems(readiness?.blockedReasons),
+		boundaries: Object.fromEntries(Object.entries(readiness?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		readOnly: valueState(readiness?.readOnly),
+		willMutate: valueState(readiness?.willMutate)
+	};
+}
+function projectReleaseManagerBaseline(baseline) {
+	const openPrs = Array.isArray(baseline?.openPrs) ? baseline.openPrs : [];
+	return {
+		state: valueState(baseline?.state),
+		currentBranch: valueState(baseline?.currentBranch),
+		currentHead: valueState(baseline?.currentHead),
+		mainHead: valueState(baseline?.mainHead),
+		originMainHead: valueState(baseline?.originMainHead),
+		clean: valueState(baseline?.clean),
+		openPrs: {
+			state: openPrs.length > 0 ? "available" : Array.isArray(baseline?.openPrs) ? "empty" : "missing",
+			count: valueState(openPrs.length),
+			items: openPrs.map((pr) => ({
+				number: valueState(pr?.number),
+				title: valueState(pr?.title),
+				headRefName: valueState(pr?.headRefName),
+				baseRefName: valueState(pr?.baseRefName),
+				url: valueState(pr?.url),
+				isDraft: valueState(pr?.isDraft)
+			}))
+		},
+		sourceRef: projectSystemGoldenPathSourceRef(baseline?.sourceRef),
+		blockedReasons: projectSystemGoldenPathTextItems(baseline?.blockedReasons)
+	};
+}
+function projectReleaseManagerGates(gates) {
+	const items = (Array.isArray(gates) ? gates : []).map((gate) => ({
+		gateName: valueState(gate?.gateName),
+		state: valueState(gate?.state),
+		required: valueState(gate?.required),
+		evidenceRefs: projectChildDispatchEvidenceRefs(gate?.evidenceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(gate?.blockedReasons)
+	}));
+	return {
+		state: items.length > 0 ? "available" : Array.isArray(gates) ? "empty" : "missing",
+		count: valueState(items.length),
+		items
+	};
+}
+function projectReleaseManagerNotes(notes) {
+	return {
+		state: valueState(notes?.state),
+		title: valueState(notes?.title),
+		notesText: valueState(notes?.body),
+		sourceRefs: projectChildDispatchEvidenceRefs(notes?.sourceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(notes?.blockedReasons)
+	};
+}
+function projectReleaseManagerTagState(tagState) {
+	return {
+		state: valueState(tagState?.state),
+		tagName: valueState(tagState?.tagName),
+		exists: valueState(tagState?.exists),
+		tagObjectSha: valueState(tagState?.tagObjectSha),
+		dereferencedCommit: valueState(tagState?.dereferencedCommit),
+		annotated: valueState(tagState?.annotated),
+		matchesTarget: valueState(tagState?.matchesTarget),
+		sourceRefs: projectChildDispatchEvidenceRefs(tagState?.sourceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(tagState?.blockedReasons)
+	};
+}
+function projectReleaseManagerGithubReleaseState(releaseState) {
+	return {
+		state: valueState(releaseState?.state),
+		tagName: valueState(releaseState?.tagName),
+		exists: valueState(releaseState?.exists),
+		name: valueState(releaseState?.name),
+		url: valueState(releaseState?.url),
+		isDraft: valueState(releaseState?.isDraft),
+		isPrerelease: valueState(releaseState?.isPrerelease),
+		publishedAt: valueState(releaseState?.publishedAt),
+		targetCommitish: valueState(releaseState?.targetCommitish),
+		targetCommitMatches: valueState(releaseState?.targetCommitMatches),
+		assets: projectReleasePublicationAssets(releaseState?.assets),
+		sourceRefs: projectChildDispatchEvidenceRefs(releaseState?.sourceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(releaseState?.blockedReasons)
+	};
+}
+function projectReleaseManagerAssetPolicy(assetPolicy) {
+	return {
+		state: valueState(assetPolicy?.state),
+		expected: valueState(assetPolicy?.expected),
+		actualAssets: projectReleasePublicationAssets(assetPolicy?.actualAssets),
+		blockedReasons: projectSystemGoldenPathTextItems(assetPolicy?.blockedReasons)
+	};
+}
+function projectReleaseManagerEvidenceDraft(draft) {
+	return {
+		state: isPlainObject(draft) ? draft.state ?? "available" : "missing",
+		contractName: valueState(draft?.contractName),
+		contractVersion: valueState(draft?.contractVersion),
+		generatedAt: valueState(draft?.generatedAt),
+		version: valueState(draft?.version),
+		targetTag: valueState(draft?.targetTag),
+		targetCommit: valueState(draft?.targetCommit),
+		readinessState: valueState(draft?.readinessState),
+		gateEvents: projectReleaseManagerGateEvents(draft?.gateEvents),
+		validationCommandEvidenceRefs: projectChildDispatchEvidenceRefs(draft?.validationCommandEvidenceRefs),
+		releaseNotesDraft: projectReleaseManagerNotes(draft?.releaseNotesDraft),
+		knownFacts: projectSystemGoldenPathTextItems(draft?.knownFacts),
+		rollbackRefs: projectChildDispatchEvidenceRefs(draft?.rollbackRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(draft?.blockedReasons),
+		readOnly: valueState(draft?.readOnly),
+		willMutate: valueState(draft?.willMutate)
+	};
+}
+function projectReleaseManagerGateEvents(events) {
+	const items = (Array.isArray(events) ? events : []).map((event) => ({
+		gateName: valueState(event?.gateName),
+		eventType: valueState(event?.eventType),
+		state: valueState(event?.state),
+		evidenceRefs: projectChildDispatchEvidenceRefs(event?.evidenceRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(event?.blockedReasons)
+	}));
+	return {
+		state: items.length > 0 ? "available" : Array.isArray(events) ? "empty" : "missing",
+		count: valueState(items.length),
+		items
+	};
+}
+function projectManualPublicationPack(pack) {
+	const hasPack = isPlainObject(pack);
+	const commands = Array.isArray(pack?.commands) ? pack.commands : [];
+	return {
+		state: hasPack ? pack.state ?? "available" : "missing",
+		contractName: valueState(pack?.contractName),
+		contractVersion: valueState(pack?.contractVersion),
+		generatedAt: valueState(pack?.generatedAt),
+		version: valueState(pack?.version),
+		targetTag: valueState(pack?.targetTag),
+		targetCommit: valueState(pack?.targetCommit),
+		releaseTitle: valueState(pack?.releaseTitle),
+		repository: valueState(pack?.repository),
+		publicationMode: valueState(pack?.publicationMode),
+		externalActionRequired: valueState(pack?.externalActionRequired),
+		commands: {
+			state: commands.length > 0 ? "available" : Array.isArray(pack?.commands) ? "empty" : "missing",
+			count: valueState(commands.length),
+			items: commands.map((command) => ({
+				commandId: valueState(command?.commandId),
+				label: valueState(command?.label),
+				command: valueState(command?.command),
+				copyOnly: valueState(command?.copyOnly),
+				willMutate: valueState(command?.willMutate),
+				allowedActor: valueState(command?.allowedActor),
+				requiresCleanReconcile: valueState(command?.requiresCleanReconcile)
+			}))
+		},
+		sourceEvidenceRefs: projectChildDispatchEvidenceRefs(pack?.sourceEvidenceRefs),
+		releaseNotesDraft: projectReleaseManagerNotes(pack?.releaseNotesDraft),
+		rollbackRefs: projectChildDispatchEvidenceRefs(pack?.rollbackRefs),
+		blockedReasons: projectSystemGoldenPathTextItems(pack?.blockedReasons),
+		boundaries: Object.fromEntries(Object.entries(pack?.boundaries ?? {}).map(([key, value]) => [key, valueState(value)])),
+		copyOnly: valueState(pack?.copyOnly),
+		readOnly: valueState(pack?.readOnly),
+		willMutate: valueState(pack?.willMutate)
 	};
 }
 function projectStableWorkbenchRelease({ contract, supervisorRoute }) {
@@ -23560,6 +23781,9 @@ function projectRestoreValidation({ result, restoreValidation }) {
 		note: "Restore Validation 只校验 backup manifest integrity 和兼容恢复路径。默认不覆盖现有数据，不读取任意 bundle path，不执行 restore apply。"
 	};
 }
+function isPlainObject(value) {
+	return value !== null && value !== void 0 && typeof value === "object" && !Array.isArray(value);
+}
 Object.freeze({
 	missing: MISSING_TEXT,
 	unavailable: UNAVAILABLE_TEXT,
@@ -28466,6 +28690,10 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 							children: "Publication Evidence"
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+							href: "#release-manager-practical-panel",
+							children: "Release Manager"
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
 							href: "#stable-workbench-release-panel",
 							children: "Stable Baseline"
 						}),
@@ -28538,6 +28766,7 @@ function DesktopShellRoute({ desktopShell, routeContext, onRefreshWorkbenchContr
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseCloseoutHandoffPanel, { releaseCloseoutHandoffPack: desktopShell?.releaseCloseoutHandoffPack }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleasePublicationEvidencePanel, { releasePublicationEvidence: desktopShell?.releasePublicationEvidence }),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ReleaseManagerPracticalPanel, { releaseManagerPractical: desktopShell?.releaseManagerPractical }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(StableWorkbenchReleasePanel, { stableWorkbenchRelease: desktopShell?.stableWorkbenchRelease }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopAppStateStrip, { appStates: desktopShell?.appStates }),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DesktopDevelopmentStatusStrip, {
@@ -30213,6 +30442,153 @@ function ReleasePublicationEvidencePanel({ releasePublicationEvidence }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "panel-note",
 				children: evidence?.note ?? "Release publication evidence unavailable."
+			})
+		]
+	});
+}
+function ReleaseManagerPracticalPanel({ releaseManagerPractical }) {
+	const manager = releaseManagerPractical;
+	const readiness = manager?.readiness;
+	const evidenceDraft = manager?.evidenceDraft;
+	const manualPack = manager?.manualPublicationPack;
+	const baseline = readiness?.releaseBaseline;
+	const tagState = readiness?.tagState;
+	const githubReleaseState = readiness?.githubReleaseState;
+	const gateItems = readiness?.requiredGates?.items ?? [];
+	const gateEventItems = evidenceDraft?.gateEvents?.items ?? [];
+	const commandItems = manualPack?.commands?.items ?? [];
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		id: "release-manager-practical-panel",
+		className: "release-manager-practical-panel",
+		"aria-label": "Release Manager Practical Loop",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
+				className: "release-manager-practical-header",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "section-kicker",
+					children: "v70 release manager"
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Release Manager Practical Loop" })] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+					className: `desktop-status ${desktopStatusClass(manager?.state)}`,
+					children: manager?.state ?? "missing"
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "release-manager-practical-summary",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["readiness contract", readiness?.contractName],
+					["readiness state", readiness?.state],
+					["evidence draft", evidenceDraft?.contractName],
+					["manual pack", manualPack?.contractName],
+					["target tag", readiness?.targetTag],
+					["target commit", readiness?.targetCommit],
+					["readOnly", manager?.readOnly],
+					["willMutate", manager?.willMutate]
+				] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["publication mode", manualPack?.publicationMode],
+					["external action required", manualPack?.externalActionRequired],
+					["copy only", manualPack?.copyOnly],
+					["source evidence refs", evidenceRefsTextFromCollection(manualPack?.sourceEvidenceRefs)],
+					["blocked reasons", textValueFromItems(manager?.blockedReasons, "无")],
+					["generated at", readiness?.generatedAt]
+				] })]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Readiness Checks",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["baseline state", baseline?.state],
+					["current branch", baseline?.currentBranch],
+					["main head", baseline?.mainHead],
+					["origin main head", baseline?.originMainHead],
+					["worktree clean", baseline?.clean],
+					["open PR count", baseline?.openPrs?.count],
+					["tag state", tagState?.state],
+					["tag exists", tagState?.exists],
+					["tag target matches", tagState?.matchesTarget],
+					["GitHub Release state", githubReleaseState?.state],
+					["GitHub Release exists", githubReleaseState?.exists],
+					["release draft", githubReleaseState?.isDraft],
+					["release prerelease", githubReleaseState?.isPrerelease],
+					["release assets", releaseAssetsTextFromCollection(githubReleaseState?.assets)],
+					["asset policy", readiness?.assetPolicy?.state]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "Gate Evidence",
+				children: [gateItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Required gates 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: gateItems.map((gate, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: gate.gateName.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["state", gate.state],
+						["required", gate.required],
+						["evidence refs", evidenceRefsTextFromCollection(gate.evidenceRefs)],
+						["blocked reasons", textValueFromItems(gate.blockedReasons, "无")]
+					] })] }, `${gate.gateName.text}-${index}`))
+				}), gateEventItems.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "codex-provider-source-list",
+					children: gateEventItems.map((event, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: event.eventType.text }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["gate", event.gateName],
+						["state", event.state],
+						["evidence refs", evidenceRefsTextFromCollection(event.evidenceRefs)]
+					] })] }, `${event.eventType.text}-${index}`))
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Subsection, {
+				title: "Manual Publication Pack",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["pack state", manualPack?.state],
+					["release title", manualPack?.releaseTitle],
+					["repository", manualPack?.repository],
+					["external action required", manualPack?.externalActionRequired],
+					["copy only", manualPack?.copyOnly],
+					["pack readOnly", manualPack?.readOnly],
+					["pack willMutate", manualPack?.willMutate],
+					["rollback refs", evidenceRefsTextFromCollection(manualPack?.rollbackRefs)]
+				] }), commandItems.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EmptyBlock, { copy: "Manual publication commands 未暴露。" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+					className: "release-manager-command-list",
+					children: commandItems.map((command) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+						["command id", command.commandId],
+						["label", command.label],
+						["copy only", command.copyOnly],
+						["willMutate", command.willMutate],
+						["allowed actor", command.allowedActor],
+						["requires clean reconcile", command.requiresCleanReconcile]
+					] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: command.command.text }) })] }, command.commandId.text))
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Post-release Reconcile",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["tag object SHA", tagState?.tagObjectSha],
+					["tag dereferenced commit", tagState?.dereferencedCommit],
+					["GitHub Release URL", githubReleaseState?.url],
+					["release target commitish", githubReleaseState?.targetCommitish],
+					["release target matches", githubReleaseState?.targetCommitMatches],
+					["asset policy expected", readiness?.assetPolicy?.expected],
+					["asset policy blocked reasons", textValueFromItems(readiness?.assetPolicy?.blockedReasons, "无")]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Subsection, {
+				title: "Disabled Product Actions",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FieldList, { rows: [
+					["merge automation", manager?.boundaries?.gitMergeAvailable],
+					["tag automation", manager?.boundaries?.gitTagAvailable],
+					["remote tag automation", manager?.boundaries?.gitPushAvailable],
+					["release create automation", manager?.boundaries?.githubReleaseCreateAvailable],
+					["release edit automation", manager?.boundaries?.githubReleaseEditAvailable],
+					["release upload automation", manager?.boundaries?.githubReleaseUploadAvailable],
+					["local command surface", manager?.boundaries?.shellAvailable],
+					["arbitrary command execution", manager?.boundaries?.arbitraryCommandExecutionAvailable],
+					["renderer local file read", manager?.boundaries?.rendererLocalFileReadAvailable],
+					["provider session read", manager?.boundaries?.providerSessionReadAvailable],
+					["raw transcript exposure", manager?.boundaries?.rawTranscriptAvailable],
+					["test-only release-ready inference", manager?.boundaries?.releaseReadyInferenceFromTestsAvailable],
+					["automatic self-review", manager?.boundaries?.automaticSelfReviewAvailable],
+					["automatic worktree creation", manager?.boundaries?.automaticWorktreeCreationAvailable],
+					["automatic next-version goal", manager?.boundaries?.automaticNextVersionGoalAvailable]
+				] })
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "panel-note",
+				children: manager?.note ?? "Release manager practical loop unavailable."
 			})
 		]
 	});
