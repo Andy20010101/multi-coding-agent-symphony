@@ -100,6 +100,13 @@ describe('v71 native packaging for personal use', () => {
     assert.equal(report.contractName, 'desktop-shell-smoke.v1');
     assert.equal(report.status, 'ok');
     assert.equal(report.packaging.localPersonalUseOnly, true);
+    assert.deepEqual(report.packaging.icon, {
+      path: 'desktop/shell/src-tauri/icons/icon.png',
+      width: 32,
+      height: 32,
+      colorType: 'rgba',
+      inflatedBytes: 4128
+    });
     assert.equal(report.packaging.autoUpdateAvailable, false);
     assert.equal(report.packaging.publishAvailable, false);
     assert.equal(report.packaging.signingClaimAvailable, false);
